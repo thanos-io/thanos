@@ -16,10 +16,13 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/mozillazg/go-cos"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
+	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/clientutil"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"gopkg.in/yaml.v2"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -32,13 +35,27 @@ type Bucket struct {
 	name   string
 }
 
+// DefaultConfig is the default config for an cos client. default tune the `MaxIdleConnsPerHost`.
+var DefaultConfig = Config{
+	HTTPConfig: HTTPConfig{
+		IdleConnTimeout:       model.Duration(90 * time.Second),
+		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
+		TLSHandshakeTimeout:   model.Duration(10 * time.Second),
+		ExpectContinueTimeout: model.Duration(1 * time.Second),
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		MaxConnsPerHost:       0,
+	},
+}
+
 // Config encapsulates the necessary config values to instantiate an cos client.
 type Config struct {
-	Bucket    string `yaml:"bucket"`
-	Region    string `yaml:"region"`
-	AppId     string `yaml:"app_id"`
-	SecretKey string `yaml:"secret_key"`
-	SecretId  string `yaml:"secret_id"`
+	Bucket     string     `yaml:"bucket"`
+	Region     string     `yaml:"region"`
+	AppId      string     `yaml:"app_id"`
+	SecretKey  string     `yaml:"secret_key"`
+	SecretId   string     `yaml:"secret_id"`
+	HTTPConfig HTTPConfig `yaml:"http_config"`
 }
 
 // Validate checks to see if mandatory cos config options are set.
@@ -53,14 +70,48 @@ func (conf *Config) validate() error {
 	return nil
 }
 
+// parseConfig unmarshal a buffer into a Config with default HTTPConfig values.
+func parseConfig(conf []byte) (Config, error) {
+	config := DefaultConfig
+	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return Config{}, err
+	}
+
+	return config, nil
+}
+
+// HTTPConfig stores the http.Transport configuration for the cos client.
+type HTTPConfig struct {
+	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
+	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
+	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
+	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
+	MaxIdleConns          int            `yaml:"max_idle_conns"`
+	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
+	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
+}
+
+// DefaultTransport build http.Transport from config.
+func DefaultTransport(c HTTPConfig) *http.Transport {
+	transport := exthttp.NewTransport()
+	transport.IdleConnTimeout = time.Duration(c.IdleConnTimeout)
+	transport.ResponseHeaderTimeout = time.Duration(c.ResponseHeaderTimeout)
+	transport.TLSHandshakeTimeout = time.Duration(c.TLSHandshakeTimeout)
+	transport.ExpectContinueTimeout = time.Duration(c.ExpectContinueTimeout)
+	transport.MaxIdleConns = c.MaxIdleConns
+	transport.MaxIdleConnsPerHost = c.MaxIdleConnsPerHost
+	transport.MaxConnsPerHost = c.MaxConnsPerHost
+	return transport
+}
+
 // NewBucket returns a new Bucket using the provided cos configuration.
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
-	var config Config
-	if err := yaml.Unmarshal(conf, &config); err != nil {
+	config, err := parseConfig(conf)
+	if err != nil {
 		return nil, errors.Wrap(err, "parsing cos configuration")
 	}
 	if err := config.validate(); err != nil {
@@ -78,6 +129,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 		Transport: &cos.AuthorizationTransport{
 			SecretID:  config.SecretId,
 			SecretKey: config.SecretKey,
+			Transport: DefaultTransport(config.HTTPConfig),
 		},
 	})
 
