@@ -662,7 +662,14 @@ func NewMemcached(name string) *e2e.ConcreteService {
 	return memcached
 }
 
-func NewToolsBucketWeb(name string, bucketConfig client.BucketConfig, routePrefix, externalPrefix string) (*Service, error) {
+func NewToolsBucketWeb(
+	name string,
+	bucketConfig client.BucketConfig,
+	routePrefix,
+	externalPrefix string,
+	minTime string,
+	maxTime string,
+	relabelConfig string) (*Service, error) {
 	bktConfigBytes, err := yaml.Marshal(bucketConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err, "generate tools bucket web config file: %v", bucketConfig)
@@ -680,6 +687,18 @@ func NewToolsBucketWeb(name string, bucketConfig client.BucketConfig, routePrefi
 
 	if externalPrefix != "" {
 		args = append(args, "--web.external-prefix="+externalPrefix)
+	}
+
+	if minTime != "" {
+		args = append(args, "--min-time="+minTime)
+	}
+
+	if maxTime != "" {
+		args = append(args, "--max-time="+maxTime)
+	}
+
+	if relabelConfig != "" {
+		args = append(args, "--selector.relabel-config="+relabelConfig)
 	}
 
 	args = append([]string{"bucket", "web"}, args...)

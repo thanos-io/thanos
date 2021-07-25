@@ -9,6 +9,7 @@ replace (
 	github.com/cockroachdb/cmux => github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach => github.com/cockroachdb/cockroach v0.0.0-20170608034007-84bc9597164f
 	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.2.3-0.20180520015035-48a0ecefe2e4
+	github.com/gophercloud/gophercloud => github.com/gophercloud/gophercloud v0.18.0
 	github.com/miekg/dns => github.com/miekg/dns v1.0.4
 	github.com/prometheus/client_golang => github.com/prometheus/client_golang v0.9.0-pre1.0.20180607123607-faf4ec335fe0
 	github.com/prometheus/common => github.com/prometheus/common v0.0.0-20180518154759-7600349dcfe1
