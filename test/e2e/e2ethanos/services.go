@@ -146,7 +146,7 @@ type QuerierBuilder struct {
 	metadataAddresses []string
 	targetAddresses   []string
 	exemplarAddresses []string
-	mutualTLSConfig	  []string
+	mutualTLSConfig   []string
 
 	endpointConfig []store.Config
 

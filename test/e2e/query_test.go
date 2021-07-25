@@ -151,23 +151,9 @@ func TestQuery(t *testing.T) {
 	fileSDPath, err := createSDFile(s.SharedDir(), "1", []string{sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")})
 	testutil.Ok(t, err)
 
-	queryFileSDDir := filepath.Join(s.SharedDir(), "data", "querier", "1")
-	container := filepath.Join(e2e.ContainerSharedDir, "data", "querier", "1")
-	testutil.Ok(t, cpyDir("./certs", queryFileSDDir))
-
-	args := e2e.BuildArgs(map[string]string{
-		"--grpc-client-tls-cert": filepath.Join(container, "myclient.crt"),
-		"--grpc-client-tls-key":  filepath.Join(container, "myclient.key"),
-		"--grpc-server-tls-cert": filepath.Join(container, "myserver.crt"),
-		"--grpc-server-tls-key":  filepath.Join(container, "myserver.key"),
-	})
-
-	args = append(args, "--grpc-client-tls-secure")
-	args = append(args, "--grpc-client-tls-skip-verify") // As the certs are self-signed.
-
 	// Querier. Both fileSD and directly by flags.
 	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")}).
-		WithFileSDStoreAddresses(fileSDPath).WithMutualTLS(args).Build()
+		WithFileSDStoreAddresses(fileSDPath).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -257,14 +243,31 @@ func TestQueryWithEndpointConfig(t *testing.T) {
 	fileSDPath, err := createSDFile(s.SharedDir(), "1", []string{sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")})
 	testutil.Ok(t, err)
 
+	queryFileSDDir := filepath.Join(s.SharedDir(), "data", "querier", "1")
+	container := filepath.Join(e2e.ContainerSharedDir, "data", "querier", "1")
+	testutil.Ok(t, cpyDir("./certs", queryFileSDDir))
+
+	args := e2e.BuildArgs(map[string]string{
+		"--grpc-server-tls-cert":      filepath.Join(container, "e2e_test_query_config_server.crt"),
+		"--grpc-server-tls-key":       filepath.Join(container, "testserver.key"),
+		"--grpc-server-tls-client-ca": filepath.Join(container, "testca.crt"),
+	})
+
+	args = append(args, "--grpc-client-tls-skip-verify") // As the certs are self-signed.
+
 	endpointConfig := []store.Config{
 		{
-			Name:      "one",
-			Endpoints: []string{sidecar1.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")},
+			Name: "one",
+			TLSConfig: store.TLSConfiguration{
+				CertFile:   filepath.Join(container, "e2e_test_query_config_client.crt"),
+				KeyFile:    filepath.Join(container, "testclient.key"),
+				CaCertFile: filepath.Join(container, "testca.crt"),
+			},
+			Endpoints: []string{sidecar1.InternalEndpoint("grpc")},
 		},
 		{
 			Name:      "two",
-			Endpoints: []string{sidecar2.InternalEndpoint("grpc")},
+			Endpoints: []string{sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")},
 			EndpointsSD: []file.SDConfig{
 				{
 					Files:           []string{fileSDPath},
@@ -274,7 +277,7 @@ func TestQueryWithEndpointConfig(t *testing.T) {
 		},
 	}
 
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", nil).WithEndpointConfig(endpointConfig).Build()
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", nil).WithEndpointConfig(endpointConfig).WithMutualTLS(args).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
