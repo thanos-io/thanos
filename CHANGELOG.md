@@ -15,6 +15,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#4476](https://github.com/thanos-io/thanos/pull/4476) UI: fix incorrect html escape sequence used for '>' symbol.
+
 ### Changed
 
 ## [v0.22.0](https://github.com/thanos-io/thanos/tree/release-0.22) - 2021.07.22
