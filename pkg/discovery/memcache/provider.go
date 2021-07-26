@@ -46,6 +46,7 @@ func NewProvider(logger log.Logger, reg prometheus.Registerer, dialTimeout time.
 			Name: "auto_discovery_failures_total",
 			Help: "The number of memcache auto discovery failures",
 		}),
+		logger: logger,
 	}
 	return p
 }
