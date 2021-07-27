@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/efficientgo/tools/core/pkg/backoff"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/types"
@@ -498,7 +499,22 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 // InitialSync perform blocking sync with extra step at the end to delete locally saved blocks that are no longer
 // present in the bucket. The mismatch of these can only happen between restarts, so we can do that only once per startup.
 func (s *BucketStore) InitialSync(ctx context.Context) error {
-	if err := s.SyncBlocks(ctx); err != nil {
+	// Hack but retry on error.
+	b := backoff.New(ctx, backoff.Config{
+		Min:        500 * time.Millisecond,
+		Max:        2 * time.Minute,
+		MaxRetries: 5,
+	})
+
+	var err error
+	for b.Reset(); b.Ongoing(); {
+		err = s.SyncBlocks(ctx)
+		if err == nil {
+			break
+		}
+		level.Error(s.logger).Log("err", errors.Wrap(err, "sync block").Error())
+	}
+	if err != nil {
 		return errors.Wrap(err, "sync block")
 	}
 

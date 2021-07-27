@@ -40,6 +40,7 @@ for dir in ${DIRS}; do
   # We cannot do Mstore/storepb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb,\ due to protobuf v1 bug.
   # TODO(bwplotka): Consider removing in v2.
   sed -i.bak -E 's/\"store\/storepb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/storepb\"/g' *.pb.go
+  sed -i.bak -E 's/\"store\/statspb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/statspb\"/g' *.pb.go
   sed -i.bak -E 's/\"store\/labelpb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/labelpb\"/g' *.pb.go
   sed -i.bak -E 's/\"store\/storepb\/prompb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/storepb\/prompb\"/g' *.pb.go
   rm -f *.bak
