@@ -49,7 +49,7 @@ var (
 		client.GCS:        gcs.Config{},
 		client.S3:         s3.DefaultConfig,
 		client.SWIFT:      swift.DefaultConfig,
-		client.COS:        cos.Config{},
+		client.COS:        cos.DefaultConfig,
 		client.ALIYUNOSS:  oss.Config{},
 		client.FILESYSTEM: filesystem.Config{},
 	}
