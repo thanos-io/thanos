@@ -1,0 +1,35 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+package stats;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "statspb";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+
+message Statistics {
+    string name = 1;
+    repeated Node nodes = 2;
+}
+
+message Node {
+    string name = 1;
+    repeated Node nodes = 2;
+
+    int64 samples = 3;
+    int64 series = 4;
+    int64 net_recv_bytes = 5;
+}
