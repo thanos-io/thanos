@@ -1,0 +1,41 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+package trace;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "tracepb";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+
+message Trace {
+    string origin = 1 [(gogoproto.jsontag) = "origin"];
+    repeated Span spans = 2 [(gogoproto.jsontag) = "spans", (gogoproto.nullable) = false];
+}
+
+// TODO(bwplotka): Move to more typed, method specific API?
+// Merge with tracing tooling.
+message Span {
+    repeated Span spans = 1 [(gogoproto.jsontag) = "spans", (gogoproto.nullable) = false];
+
+    // Human readable information, name and request.
+    string request = 2 [(gogoproto.jsontag) = "request"];
+    string origin = 3 [(gogoproto.jsontag) = "origin"];
+
+    int64 net_recv_bytes = 4 [(gogoproto.jsontag) = "net_recv_bytes"];
+    int64 samples = 5 [(gogoproto.jsontag) = "samples"];
+    int64 series = 6 [(gogoproto.jsontag) = "series"];
+    int64 chunks = 7 [(gogoproto.jsontag) = "chunks"];
+}

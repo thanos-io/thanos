@@ -33,6 +33,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/thanos-io/thanos/pkg/store/tracepb"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -1004,6 +1005,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 	s.mtx.RLock()
 
+	trace := &tracepb.Trace{
+		Origin: "store",
+	}
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
@@ -1035,7 +1039,13 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			// Defer all closes to the end of Series method.
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "series block")
 
+			trace.Spans = append(trace.Spans, tracepb.Span{
+				Origin:  b.meta.ULID.String(),
+				Request: fmt.Sprintf("%s", blockMatchers),
+			})
+			span := &trace.Spans[len(trace.Spans)-1]
 			g.Go(func() error {
+				span := span
 				part, pstats, err := blockSeries(
 					b.extLset,
 					indexr,
@@ -1054,6 +1064,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				mtx.Lock()
 				res = append(res, part)
 				stats = stats.merge(pstats)
+				span.Series = int64(pstats.seriesFetched)
+				span.Chunks = int64(pstats.chunksFetched)
+				// No info about samples exactly.
 				mtx.Unlock()
 
 				return nil
@@ -1141,7 +1154,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 		stats.mergeDuration = time.Since(begin)
 		s.metrics.seriesMergeDuration.Observe(stats.mergeDuration.Seconds())
-
 		err = nil
 	})
 
@@ -1149,16 +1161,17 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		var anyHints *types.Any
 
 		if anyHints, err = types.MarshalAny(resHints); err != nil {
-			err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
-			return
+			return status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
 		}
 
 		if err = srv.Send(storepb.NewHintsSeriesResponse(anyHints)); err != nil {
-			err = status.Error(codes.Unknown, errors.Wrap(err, "send series response hints").Error())
-			return
+			return status.Error(codes.Unknown, errors.Wrap(err, "send series response hints").Error())
 		}
 	}
 
+	if err = srv.Send(storepb.NewTraceSeriesResponse(trace)); err != nil {
+		return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+	}
 	return err
 }
 

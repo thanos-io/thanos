@@ -30,7 +30,7 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/statspb"
+	"github.com/thanos-io/thanos/pkg/store/tracepb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -201,6 +201,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	}
 
 	queryPrometheusSpan, ctx := tracing.StartSpan(s.Context(), "query_prometheus")
+	queryPrometheusSpan.SetBaggageItem("request", q.String())
 
 	httpResp, err := p.startPromRemoteRead(ctx, q)
 	if err != nil {
@@ -271,7 +272,6 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 	level.Debug(p.logger).Log("msg", "started handling ReadRequest_STREAMED_XOR_CHUNKS streamed read response.")
 
 	framesNum := 0
-	lastSeriesHash := uint64(0)
 
 	defer func() {
 		p.framesRead.Observe(float64(framesNum))
@@ -280,15 +280,15 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 	}()
 	defer runutil.CloseWithLogOnErr(p.logger, httpResp.Body, "prom series request body")
 
-	var (
-		data = p.getBuffer()
-	)
+	var data = p.getBuffer()
 	defer p.putBuffer(data)
 
-	stats := &statspb.Node{
-		Name: fmt.Sprintf("prometheus-remote-write%s", extLset.String()),
+	storageSpan := tracepb.Span{
+		Origin:  fmt.Sprintf("prometheus-remote-write%s", extLset.String()),
+		Request: querySpan.BaggageItem("request"),
 	}
-	bodySizer := statspb.NewSizedReadCloser(httpResp.Body)
+	bodySizer := storageSpan.AddNetRecvBytesSizer(httpResp.Body)
+	seriesCnt := storepb.NewSeriesCounter(&storageSpan)
 
 	// TODO(bwplotka): Put read limit as a flag.
 	stream := remote.NewChunkedReader(bodySizer, remote.DefaultChunkedReadLimit, *data)
@@ -308,12 +308,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 
 		framesNum++
 		for _, series := range res.ChunkedSeries {
-
-			seriesHash := labelpb.HashWithPrefix("", series.Labels)
-			if lastSeriesHash != 0 || seriesHash != lastSeriesHash {
-				lastSeriesHash = seriesHash
-				stats.Series++
-			}
+			seriesCnt.CountSeries(series.Labels)
 
 			thanosChks := make([]storepb.AggrChunk, len(series.Chunks))
 			for i, chk := range series.Chunks {
@@ -328,8 +323,8 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 						Type: storepb.Chunk_Encoding(chk.Type - 1),
 					},
 				}
-				stats.Samples += int64(thanosChks[i].Raw.XORNumSamples())
-				stats.Chunks++
+				storageSpan.Samples += int64(thanosChks[i].Raw.XORNumSamples())
+				storageSpan.Chunks++
 
 				// Drop the reference to data from non protobuf for GC.
 				series.Chunks[i].Data = nil
@@ -346,11 +341,10 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 		}
 	}
 
-	stats.NetRecvBytes = bodySizer.BytesRead()
-	if err := s.Send(storepb.NewStatsSeriesResponse(&statspb.Statistics{
+	if err := s.Send(storepb.NewTraceSeriesResponse(&tracepb.Trace{
 		// TODO(bwplotka): Get debug name?
-		Name:  fmt.Sprintf("sidecar%s", extLset.String()),
-		Nodes: []*statspb.Node{stats},
+		Origin: fmt.Sprintf("sidecar%s", extLset.String()),
+		Spans:  []tracepb.Span{storageSpan},
 	})); err != nil {
 		return err
 	}

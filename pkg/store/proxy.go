@@ -23,6 +23,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/tracepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"golang.org/x/sync/errgroup"
@@ -204,6 +205,9 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	}
 	storeMatchers, _ := storepb.PromMatchersToMatchers(matchers...) // Error would be returned by matchesExternalLabels, so skip check.
 
+	trace := &tracepb.Trace{
+		Origin: s.component.String(),
+	}
 	g, gctx := errgroup.WithContext(srv.Context())
 
 	// Allow to buffer max 10 series response.
@@ -265,10 +269,12 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 				continue
 			}
 
+			trace.Spans = append(trace.Spans, tracepb.Span{Request: r.String()})
+
 			// Schedule streamSeriesSet that translates gRPC streamed response
 			// into seriesSet (if series) or respCh if warnings.
 			seriesSet = append(seriesSet, startStreamSeriesSet(seriesCtx, reqLogger, closeSeries,
-				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout, s.metrics.emptyStreamResponses))
+				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout, s.metrics.emptyStreamResponses, &trace.Spans[len(trace.Spans)-1]))
 		}
 
 		level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
@@ -299,6 +305,9 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			if err := srv.Send(resp); err != nil {
 				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 			}
+		}
+		if err := srv.Send(storepb.NewTraceSeriesResponse(trace)); err != nil {
+			return status.Error(codes.Unknown, errors.Wrap(err, "send trace response").Error())
 		}
 		return nil
 	})
@@ -334,6 +343,9 @@ type streamSeriesSet struct {
 
 	responseTimeout time.Duration
 	closeSeries     context.CancelFunc
+
+	span              *tracepb.Span
+	spanSeriesCounter *storepb.SeriesCounter
 }
 
 type recvResponse struct {
@@ -362,17 +374,20 @@ func startStreamSeriesSet(
 	partialResponse bool,
 	responseTimeout time.Duration,
 	emptyStreamResponses prometheus.Counter,
+	span *tracepb.Span,
 ) *streamSeriesSet {
 	s := &streamSeriesSet{
-		ctx:             ctx,
-		logger:          logger,
-		closeSeries:     closeSeries,
-		stream:          stream,
-		warnCh:          warnCh,
-		recvCh:          make(chan *storepb.Series, 10),
-		name:            name,
-		partialResponse: partialResponse,
-		responseTimeout: responseTimeout,
+		ctx:               ctx,
+		logger:            logger,
+		closeSeries:       closeSeries,
+		stream:            stream,
+		warnCh:            warnCh,
+		recvCh:            make(chan *storepb.Series, 10),
+		name:              name,
+		partialResponse:   partialResponse,
+		responseTimeout:   responseTimeout,
+		span:              span,
+		spanSeriesCounter: storepb.NewSeriesCounter(span),
 	}
 
 	wg.Add(1)
@@ -424,12 +439,20 @@ func startStreamSeriesSet(
 				return
 			}
 			numResponses++
+			s.span.NetRecvBytes += int64(rr.r.Size())
+
+			if t := rr.r.GetTrace(); t != nil {
+				s.span.Origin = t.Origin
+				s.span.Spans = t.Spans
+			}
 
 			if w := rr.r.GetWarning(); w != "" {
 				s.warnCh.send(storepb.NewWarnSeriesResponse(errors.New(w)))
 			}
 
 			if series := rr.r.GetSeries(); series != nil {
+				s.spanSeriesCounter.Count(series)
+
 				select {
 				case s.recvCh <- series:
 				case <-ctx.Done():

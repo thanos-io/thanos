@@ -15,7 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/statspb"
+	"github.com/thanos-io/thanos/pkg/store/tracepb"
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -51,10 +51,10 @@ func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
 	}
 }
 
-func NewStatsSeriesResponse(stats *statspb.Statistics) *SeriesResponse {
+func NewTraceSeriesResponse(trace *tracepb.Trace) *SeriesResponse {
 	return &SeriesResponse{
-		Result: &SeriesResponse_Stats{
-			Stats: stats,
+		Result: &SeriesResponse_Trace{
+			Trace: trace,
 		},
 	}
 }
@@ -473,4 +473,57 @@ func (m *Chunk) XORNumSamples() int {
 		return int(binary.BigEndian.Uint16(m.Data))
 	}
 	return 0
+}
+
+type SeriesCounter struct {
+	lastSeriesHash uint64
+
+	span *tracepb.Span
+}
+
+func NewSeriesCounter(span *tracepb.Span) *SeriesCounter {
+	return &SeriesCounter{span: span}
+}
+
+func (c *SeriesCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
+	seriesHash := labelpb.HashWithPrefix("", seriesLabels)
+	if c.lastSeriesHash != 0 || seriesHash != c.lastSeriesHash {
+		c.lastSeriesHash = seriesHash
+		c.span.Series++
+	}
+}
+
+func (c *SeriesCounter) Count(series *Series) {
+	c.CountSeries(series.Labels)
+	for _, chk := range series.Chunks {
+		if chk.Raw == nil {
+			c.span.Chunks++
+			c.span.Samples += int64(chk.Raw.XORNumSamples())
+		}
+
+		if chk.Count == nil {
+			c.span.Chunks++
+			c.span.Samples += int64(chk.Count.XORNumSamples())
+		}
+
+		if chk.Counter == nil {
+			c.span.Chunks++
+			c.span.Samples += int64(chk.Counter.XORNumSamples())
+		}
+
+		if chk.Max == nil {
+			c.span.Chunks++
+			c.span.Samples += int64(chk.Max.XORNumSamples())
+		}
+
+		if chk.Min == nil {
+			c.span.Chunks++
+			c.span.Samples += int64(chk.Min.XORNumSamples())
+		}
+
+		if chk.Sum == nil {
+			c.span.Chunks++
+			c.span.Samples += int64(chk.Sum.XORNumSamples())
+		}
+	}
 }

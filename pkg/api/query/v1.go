@@ -41,7 +41,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/thanos-io/thanos/pkg/store/statspb"
+	"github.com/thanos-io/thanos/pkg/store/tracepb"
 
 	"github.com/prometheus/prometheus/util/stats"
 	"github.com/thanos-io/thanos/pkg/api"
@@ -196,8 +196,8 @@ type queryData struct {
 	Result     parser.Value      `json:"result"`
 	Stats      *stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
-	Warnings     []error             `json:"warnings,omitempty"`
-	StorageStats *statspb.Statistics `json:"storageStats,omitempty"`
+	Warnings     []error        `json:"warnings,omitempty"`
+	StorageStats *tracepb.Trace `json:"storageStats,omitempty"`
 }
 
 func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplication bool, _ *api.ApiError) {
@@ -337,11 +337,20 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 
 	qe := qapi.queryEngine(maxSourceResolution)
 
+	var trace *tracepb.Trace
+	var spanCreator query.SpanReporter
+	if r.FormValue(Stats) != "" {
+		trace = &tracepb.Trace{Origin: "Storage"}
+		spanCreator = func(span *tracepb.Span) {
+			trace.Spans = append(trace.Spans, *span)
+		}
+	}
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	qry, err := qe.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false), r.FormValue("query"), ts)
+	qry, err := qe.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false, spanCreator), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
@@ -373,9 +382,10 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		qs = stats.NewQueryStats(qry.Stats())
 	}
 	return &queryData{
-		ResultType: res.Value.Type(),
-		Result:     res.Value,
-		Stats:      qs,
+		ResultType:   res.Value.Type(),
+		Result:       res.Value,
+		Stats:        qs,
+		StorageStats: trace,
 	}, res.Warnings, nil
 }
 
@@ -453,12 +463,21 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	// Record the query range requested.
 	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
 
+	var trace *tracepb.Trace
+	var spanCreator query.SpanReporter
+	if r.FormValue(Stats) != "" {
+		trace = &tracepb.Trace{Origin: "Storage"}
+		spanCreator = func(span *tracepb.Span) {
+			trace.Spans = append(trace.Spans, *span)
+		}
+	}
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
 	qry, err := qe.NewRangeQuery(
-		qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false),
+		qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false, spanCreator),
 		r.FormValue("query"),
 		start,
 		end,
@@ -493,10 +512,10 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		qs = stats.NewQueryStats(qry.Stats())
 	}
 	return &queryData{
-		ResultType: res.Value.Type(),
-		Result:     res.Value,
-		Stats:      qs,
-		// TODO: inject storage Stats.
+		ResultType:   res.Value.Type(),
+		Result:       res.Value,
+		Stats:        qs,
+		StorageStats: trace,
 	}, res.Warnings, nil
 }
 
@@ -532,7 +551,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		matcherSets = append(matcherSets, matchers)
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, true).
+	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, true, nil).
 		Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
@@ -619,7 +638,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, math.MaxInt64, enablePartialResponse, true).
+	q, err := qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, math.MaxInt64, enablePartialResponse, true, nil).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
@@ -669,7 +688,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		matcherSets = append(matcherSets, matchers)
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, true).
+	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, true, nil).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}

@@ -5,6 +5,7 @@ syntax = "proto3";
 package thanos;
 
 import "store/storepb/types.proto";
+import "store/tracepb/trace.proto";
 import "gogoproto/gogo.proto";
 import "store/storepb/prompb/types.proto";
 import "store/labelpb/types.proto";
@@ -133,6 +134,9 @@ message SeriesResponse {
     /// multiple SeriesResponse frames contain hints for a single Series() request and how should they
     /// be handled in such case (ie. merged vs keep the first/last one).
     google.protobuf.Any hints = 3;
+
+    // TODO(bwplotka): Use trailers instead.
+    trace.Trace trace = 4;
   }
 }
 

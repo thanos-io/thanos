@@ -17,7 +17,7 @@ import (
 	promgate "github.com/prometheus/prometheus/pkg/gate"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/thanos-io/thanos/pkg/store/statspb"
+	"github.com/thanos-io/thanos/pkg/store/tracepb"
 
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -34,7 +34,9 @@ import (
 // replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behavior of proxy.
-type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable
+type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, spanReporter SpanReporter) storage.Queryable
+
+type SpanReporter func(s *tracepb.Span)
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy storepb.StoreServer, maxConcurrentSelects int, selectTimeout time.Duration) QueryableCreator {
@@ -42,7 +44,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 		extprom.WrapRegistererWithPrefix("concurrent_selects_", reg),
 	).NewHistogram(gate.DurationHistogramOpts)
 
-	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable {
+	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, spanReporter SpanReporter) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabels:       replicaLabels,
@@ -57,6 +59,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 			},
 			maxConcurrentSelects: maxConcurrentSelects,
 			selectTimeout:        selectTimeout,
+			spanReporter:         spanReporter,
 		}
 	}
 }
@@ -73,11 +76,13 @@ type queryable struct {
 	gateProviderFn       func() gate.Gate
 	maxConcurrentSelects int
 	selectTimeout        time.Duration
+
+	spanReporter SpanReporter
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.spanReporter), nil
 }
 
 type querier struct {
@@ -94,6 +99,7 @@ type querier struct {
 	skipChunks          bool
 	selectGate          gate.Gate
 	selectTimeout       time.Duration
+	spanReporter        SpanReporter
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -110,6 +116,7 @@ func newQuerier(
 	partialResponse, skipChunks bool,
 	selectGate gate.Gate,
 	selectTimeout time.Duration,
+	spanReporter SpanReporter,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -136,6 +143,7 @@ func newQuerier(
 		maxResolutionMillis: maxResolutionMillis,
 		partialResponse:     partialResponse,
 		skipChunks:          skipChunks,
+		spanReporter:        spanReporter,
 	}
 }
 
@@ -151,23 +159,27 @@ type seriesServer struct {
 	seriesSet []storepb.Series
 	warnings  []string
 
-	stats *statspb.Statistics
+	span              *tracepb.Span
+	spanSeriesCounter *storepb.SeriesCounter
 }
 
 func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
+	s.span.NetRecvBytes += int64(r.Size())
+
 	if r.GetWarning() != "" {
 		s.warnings = append(s.warnings, r.GetWarning())
 		return nil
 	}
 
 	if r.GetSeries() != nil {
+		s.spanSeriesCounter.Count(r.GetSeries())
 		s.seriesSet = append(s.seriesSet, *r.GetSeries())
 		return nil
 	}
 
-	if r.GetStats() != nil {
-		// Save only last one.
-		s.stats = r.GetStats()
+	if r.GetTrace() != nil {
+		s.span.Spans = r.GetTrace().Spans
+		s.span.Origin = r.GetTrace().Origin
 		return nil
 	}
 
@@ -275,9 +287,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
 
-	// TODO(bwplotka): Use inprocess gRPC.
-	resp := &seriesServer{ctx: ctx}
-	if err := q.proxy.Series(&storepb.SeriesRequest{
+	req := &storepb.SeriesRequest{
 		MinTime:                 hints.Start,
 		MaxTime:                 hints.End,
 		Matchers:                sms,
@@ -285,8 +295,19 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		Aggregates:              aggrs,
 		PartialResponseDisabled: !q.partialResponse,
 		SkipChunks:              q.skipChunks,
-	}, resp); err != nil {
+	}
+
+	s := &tracepb.Span{
+		Request: req.String(),
+	}
+	// TODO(bwplotka): Use inprocess gRPC.
+	resp := &seriesServer{ctx: ctx, span: s, spanSeriesCounter: storepb.NewSeriesCounter(s)}
+	if err := q.proxy.Series(req, resp); err != nil {
 		return nil, errors.Wrap(err, "proxy Series()")
+	}
+
+	if q.spanReporter != nil {
+		q.spanReporter(s)
 	}
 
 	var warns storage.Warnings
