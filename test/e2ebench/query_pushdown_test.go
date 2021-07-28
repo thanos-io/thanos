@@ -263,7 +263,7 @@ global:
 		sidecarHA0.InternalEndpoint("grpc"),
 		sidecarHA1.InternalEndpoint("grpc"),
 		sidecar2.InternalEndpoint("grpc"),
-	})
+	}, e2edb.WithImage("thanos:latest"))
 	testutil.Ok(t, e2e.StartAndWaitReady(query1))
 
 	// Let's start the party!

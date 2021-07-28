@@ -496,32 +496,32 @@ func (c *SeriesCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
 func (c *SeriesCounter) Count(series *Series) {
 	c.CountSeries(series.Labels)
 	for _, chk := range series.Chunks {
-		if chk.Raw == nil {
+		if chk.Raw != nil {
 			c.span.Chunks++
 			c.span.Samples += int64(chk.Raw.XORNumSamples())
 		}
 
-		if chk.Count == nil {
+		if chk.Count != nil {
 			c.span.Chunks++
 			c.span.Samples += int64(chk.Count.XORNumSamples())
 		}
 
-		if chk.Counter == nil {
+		if chk.Counter != nil {
 			c.span.Chunks++
 			c.span.Samples += int64(chk.Counter.XORNumSamples())
 		}
 
-		if chk.Max == nil {
+		if chk.Max != nil {
 			c.span.Chunks++
 			c.span.Samples += int64(chk.Max.XORNumSamples())
 		}
 
-		if chk.Min == nil {
+		if chk.Min != nil {
 			c.span.Chunks++
 			c.span.Samples += int64(chk.Min.XORNumSamples())
 		}
 
-		if chk.Sum == nil {
+		if chk.Sum != nil {
 			c.span.Chunks++
 			c.span.Samples += int64(chk.Sum.XORNumSamples())
 		}

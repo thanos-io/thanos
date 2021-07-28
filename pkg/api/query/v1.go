@@ -337,13 +337,9 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 
 	qe := qapi.queryEngine(maxSourceResolution)
 
-	var trace *tracepb.Trace
-	var spanCreator query.SpanReporter
-	if r.FormValue(Stats) != "" {
-		trace = &tracepb.Trace{Origin: "Storage"}
-		spanCreator = func(span *tracepb.Span) {
-			trace.Spans = append(trace.Spans, *span)
-		}
+	trace := &tracepb.Trace{Origin: "Storage"}
+	spanCreator := func(span *tracepb.Span) {
+		trace.Spans = append(trace.Spans, *span)
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
@@ -463,13 +459,9 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	// Record the query range requested.
 	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
 
-	var trace *tracepb.Trace
-	var spanCreator query.SpanReporter
-	if r.FormValue(Stats) != "" {
-		trace = &tracepb.Trace{Origin: "Storage"}
-		spanCreator = func(span *tracepb.Span) {
-			trace.Spans = append(trace.Spans, *span)
-		}
+	trace := &tracepb.Trace{Origin: "Storage"}
+	spanCreator := func(span *tracepb.Span) {
+		trace.Spans = append(trace.Spans, *span)
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
