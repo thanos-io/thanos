@@ -11,35 +11,35 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
-type ClusterConfig struct {
+type clusterConfig struct {
 	version int
-	nodes   []Node
+	nodes   []node
 }
 
-type Node struct {
+type node struct {
 	dns  string
 	ip   string
 	port int
 }
 
 type Resolver interface {
-	Resolve(ctx context.Context, address string) (*ClusterConfig, error)
+	Resolve(ctx context.Context, address string) (*clusterConfig, error)
 }
 
 type memcachedAutoDiscovery struct {
 	dialTimeout time.Duration
 }
 
-func (s *memcachedAutoDiscovery) Resolve(ctx context.Context, address string) (config *ClusterConfig, err error) {
+func (s *memcachedAutoDiscovery) Resolve(ctx context.Context, address string) (config *clusterConfig, err error) {
 	conn, err := net.DialTimeout("tcp", address, s.dialTimeout)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		err = conn.Close()
-	}()
+	defer runutil.CloseWithErrCapture(&err, conn, "closing connection")
 
 	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 	if _, err := fmt.Fprintf(rw, "config get cluster\n"); err != nil {
@@ -57,8 +57,8 @@ func (s *memcachedAutoDiscovery) Resolve(ctx context.Context, address string) (c
 	return config, err
 }
 
-func (s *memcachedAutoDiscovery) parseConfig(reader *bufio.Reader) (*ClusterConfig, error) {
-	clusterConfig := new(ClusterConfig)
+func (s *memcachedAutoDiscovery) parseConfig(reader *bufio.Reader) (*clusterConfig, error) {
+	clusterConfig := new(clusterConfig)
 
 	configMeta, err := reader.ReadString('\n')
 	if err != nil {
@@ -104,7 +104,7 @@ func (s *memcachedAutoDiscovery) parseConfig(reader *bufio.Reader) (*ClusterConf
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse port: %s, err: %s", dnsIpPort, err)
 		}
-		clusterConfig.nodes = append(clusterConfig.nodes, Node{dns: dnsIpPort[0], ip: dnsIpPort[1], port: port})
+		clusterConfig.nodes = append(clusterConfig.nodes, node{dns: dnsIpPort[0], ip: dnsIpPort[1], port: port})
 	}
 
 	return clusterConfig, nil

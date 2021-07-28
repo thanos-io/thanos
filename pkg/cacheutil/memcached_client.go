@@ -182,8 +182,12 @@ type memcachedClient struct {
 	dataSize   *prometheus.HistogramVec
 }
 
+// AddressProvider performs node address resolution given a list of clusters.
 type AddressProvider interface {
+	// Resolves the provided list of memcached cluster to the actual nodes
 	Resolve(context.Context, []string) error
+
+	// Returns the nodes
 	Addresses() []string
 }
 
@@ -237,7 +241,8 @@ func newMemcachedClient(
 		addressProvider = memcacheDiscovery.NewProvider(
 			logger,
 			promRegisterer,
-			2*time.Second)
+			config.Timeout,
+		)
 	} else {
 		addressProvider = dns.NewProvider(
 			logger,

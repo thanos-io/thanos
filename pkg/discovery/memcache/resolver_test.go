@@ -17,13 +17,13 @@ func TestGoodClusterConfigs(t *testing.T) {
 	resolver := memcachedAutoDiscovery{}
 	testCases := []struct {
 		content string
-		config  ClusterConfig
+		config  clusterConfig
 	}{
 		{"CONFIG cluster 0 23\r\n100\r\ndns-1|ip-1|11211\r\nEND\r\n",
-			ClusterConfig{nodes: []Node{{dns: "dns-1", ip: "ip-1", port: 11211}}, version: 100},
+			clusterConfig{nodes: []node{{dns: "dns-1", ip: "ip-1", port: 11211}}, version: 100},
 		},
 		{"CONFIG cluster 0 37\r\n0\r\ndns-1|ip-1|11211 dns-2|ip-2|8080\r\nEND\r\n",
-			ClusterConfig{nodes: []Node{{dns: "dns-1", ip: "ip-1", port: 11211}, {dns: "dns-2", ip: "ip-2", port: 8080}}, version: 0},
+			clusterConfig{nodes: []node{{dns: "dns-1", ip: "ip-1", port: 11211}, {dns: "dns-2", ip: "ip-2", port: 8080}}, version: 0},
 		},
 	}
 

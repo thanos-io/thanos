@@ -17,10 +17,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 )
 
+// Provider is a stateful cache for asynchronous memcached auto-discovery resolution. It provides a way to resolve
+// addresses and obtain them.
 type Provider struct {
 	sync.RWMutex
 	resolver       Resolver
-	clusterConfigs map[string]*ClusterConfig
+	clusterConfigs map[string]*clusterConfig
 	logger         log.Logger
 
 	configVersion         *extprom.TxGaugeVec
@@ -32,7 +34,7 @@ type Provider struct {
 func NewProvider(logger log.Logger, reg prometheus.Registerer, dialTimeout time.Duration) *Provider {
 	p := &Provider{
 		resolver:       &memcachedAutoDiscovery{dialTimeout: dialTimeout},
-		clusterConfigs: map[string]*ClusterConfig{},
+		clusterConfigs: map[string]*clusterConfig{},
 		configVersion: extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{
 			Name: "auto_discovery_config_version",
 			Help: "The current auto discovery config version",
@@ -54,8 +56,9 @@ func NewProvider(logger log.Logger, reg prometheus.Registerer, dialTimeout time.
 	return p
 }
 
+// Resolve stores a list of nodes auto-discovered from the provided addresses.
 func (p *Provider) Resolve(ctx context.Context, addresses []string) error {
-	clusterConfigs := map[string]*ClusterConfig{}
+	clusterConfigs := map[string]*clusterConfig{}
 	errs := errutil.MultiError{}
 
 	for _, address := range addresses {
@@ -96,6 +99,7 @@ func (p *Provider) Resolve(ctx context.Context, addresses []string) error {
 	return errs.Err()
 }
 
+// Addresses returns the latest addresses present in the Provider.
 func (p *Provider) Addresses() []string {
 	var result []string
 	for _, config := range p.clusterConfigs {
