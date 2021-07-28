@@ -40,7 +40,7 @@ Similarly, we want to reuse this work in Prometheus.
 * Be able to generate OpenAPI3 from protobuf.
 * Auto-generate documentation with OpenAPI3 specification.
 * Generate server code from API specification (OpenAPI3 or protobuf).
-* Define all configuration potentially in protobuf too: https://github.com/openproto/protoconfig.
+
 
 ## **Non-Goals**
 
@@ -80,6 +80,6 @@ Similarly, we want to reuse this work in Prometheus.
 ## **Action Plan**
 
 * [ ]  Experiments in rules API.
-* [ ]  Define all http APIs in Protobuf.
-* [ ]  Generate documents, client code, and server stubs from OpenAPI specification.
+* [ ]  Define all HTTP APIs in Protobuf.
+* [ ]  Generate documentation, client code, and server stubs from OpenAPI specification.
 
