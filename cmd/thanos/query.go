@@ -58,7 +58,7 @@ func registerQuery(app *extkingpin.App) {
 	cmd := app.Command(comp.String(), "Query node exposing PromQL enabled Query API with data retrieved from multiple store nodes.")
 
 	httpBindAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
-	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA, grpcMaxConnAge := extkingpin.RegisterGRPCFlags(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
 	skipVerify := cmd.Flag("grpc-client-tls-skip-verify", "Disable TLS certificate verification i.e self signed, signed by fake CA").Default("false").Bool()
@@ -220,6 +220,7 @@ func registerQuery(app *extkingpin.App) {
 			*grpcCert,
 			*grpcKey,
 			*grpcClientCA,
+			*grpcMaxConnAge,
 			*secure,
 			*skipVerify,
 			*cert,
@@ -281,6 +282,7 @@ func runQuery(
 	grpcCert string,
 	grpcKey string,
 	grpcClientCA string,
+	grpcMaxConnAge time.Duration,
 	secure bool,
 	skipVerify bool,
 	cert string,
@@ -626,6 +628,7 @@ func runQuery(
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
+			grpcserver.WithMaxConnAge(grpcMaxConnAge),
 		)
 
 		g.Add(func() error {
