@@ -430,6 +430,8 @@ func runQuery(
 			return errors.Wrap(err, "building gRPC client")
 		}
 
+		// Separate DNS provider for each endpoint config.
+		fileSDCache := cache.New()
 		dnsStoreProvider := dns.NewProvider(
 			logger,
 			extprom.WrapRegistererWith(
