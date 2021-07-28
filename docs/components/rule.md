@@ -197,14 +197,14 @@ On HTTP address Ruler exposes its UI that shows mainly Alerts and Rules page (si
 
 ## Ruler HA
 
-Ruler aims to use a similar approach to the one that Prometheus has. You can configure external labels, as well as simple relabelling.
+Ruler aims to use a similar approach to the one that Prometheus has. You can configure external labels, as well as relabelling.
 
 In case of Ruler in HA you need to make sure you have the following labelling setup:
 
 * Labels that identify the HA group ruler and replica label with different value for each ruler instance, e.g: `cluster="eu1", replica="A"` and `cluster=eu1, replica="B"` by using `--label` flag.
 * Labels that need to be dropped just before sending to alermanager in order for alertmanager to deduplicate alerts e.g `--alert.label-drop="replica"`.
 
-Full relabelling is planned to be done in future and is tracked here: https://github.com/thanos-io/thanos/issues/660
+Advanced relabelling configuration is possible with the `--alert.relabel-config` and `--alert.relabel-config-file` flags. The configuration format is identical to the [`alert_relabel_configs`](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#alert_relabel_configs) field of Prometheus. Note that Thanos Ruler drops the labels listed in `--alert.label-drop` before alert relabelling.
 
 ## Flags
 

@@ -29,6 +29,14 @@ var (
 	errEmptyConfigurationFile = errors.New("configuration file is empty")
 )
 
+type ReceiverMode string
+
+const (
+	RouterOnly     ReceiverMode = "RouterOnly"
+	IngestorOnly   ReceiverMode = "IngestorOnly"
+	RouterIngestor ReceiverMode = "RouterIngestor"
+)
+
 // HashringConfig represents the configuration for a hashring
 // a receive node knows about.
 type HashringConfig struct {

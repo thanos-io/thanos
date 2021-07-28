@@ -1,6 +1,6 @@
 # Contributing
 
-This document explain the process of contributing to the Thanos project.
+This document explains the process of contributing to the Thanos project.
 
 First of all please follow the [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) in all your interactions within the project.
 
@@ -9,9 +9,9 @@ First of all please follow the [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) in all your
 The philosophy of Thanos and our community borrows heavily from UNIX philosophy and the Golang programming language.
 
 * Each subcommand should do one thing and do it well.
-  * eg. thanos query proxies incoming calls to known store API endpoints merging the result
+  * eg. Thanos query proxies incoming calls to known store API endpoints merging the result
 * Write components that work together.
-  * e.g. blocks should be stored in native prometheus format
+  * e.g. blocks should be stored in native Prometheus format
 * Make it easy to read, write, and run components.
   * e.g. reduce complexity in system design and implementation
 
@@ -84,7 +84,7 @@ It's key to get familiarized with the style guide and mechanics of Thanos, espec
 
 * Find any directory in your system your want Thanos repo in. e.g `~/Repos` -
   * `cd ~/Repos`
-  * Make sure that the GOBIN, GOPATH and GOPROXY (useful) environment variables are set and that GOBIN is included in your PATH. For example -
+  * Make sure that the GOBIN, GOPATH and GOPROXY (useful) environment variables are set and that GOBIN is included in your PATH. You may use `GOPROXY=https://goproxy.cn` as an alternative if you cannot visit `https://proxy.golang.org`. For example -
 
     ```
     export GOBIN="~/Repos/thanos/.bin" # It's nice to have local tooling installed and stored locally.
@@ -210,7 +210,7 @@ You have to commit the changes to `go.mod` and `go.sum` before submitting the pu
 At some point during development it is useful, in addition to running unit or e2e tests, to run and play with Thanos components manually. While you can run any component manually by crafting specific flags for a test setup, there are already some nice tools and scripts available. Consider the following methods:
 
 * `make quickstart`: this command spins up a simple setup of all Thanos components.
-* `make test-e2e`: the e2e tests cover most of the setups and functionality Thanos offers. It's extremely easy to add `time.Sleep(10* time.Minutes)` at certain points in the tests (e.g for compactor [here](https://github.com/thanos-io/thanos/blob/8f492a9f073f819019dd9f044e346a1e1fa730bc/test/e2e/compact_test.go#L379)). This way when you run `make test-e2e`, the test will sleep for some time, allowing you to connect to the setup manually using the port printed in the logs. For example:
+* `make test-e2e`: the e2e tests cover most of the setups and functionality Thanos offers. It's extremely easy to add `time.Sleep(10* time.Minute)` at certain points in the tests (e.g for compactor [here](https://github.com/thanos-io/thanos/blob/8f492a9f073f819019dd9f044e346a1e1fa730bc/test/e2e/compact_test.go#L379)). This way when you run `make test-e2e`, the test will sleep for some time, allowing you to connect to the setup manually using the port printed in the logs. For example:
 
 ```bash
 querier-1: level=info name=querier-1 ts=2020-04-01T12:53:56.101029491Z caller=http.go:56 service=http/server component=query msg="listening for requests and metrics" address=:80

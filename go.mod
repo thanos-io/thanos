@@ -62,7 +62,7 @@ require (
 	go.elastic.co/apm v1.11.0
 	go.elastic.co/apm/module/apmot v1.11.0
 	go.uber.org/atomic v1.7.0
-	go.uber.org/automaxprocs v1.2.0
+	go.uber.org/automaxprocs v1.4.0
 	go.uber.org/goleak v1.1.10
 	golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a
 	golang.org/x/oauth2 v0.0.0-20210427180440-81ed05c6b58c
