@@ -21,15 +21,16 @@ option (gogoproto.goproto_sizecache_all) = false;
 
 
 message Statistics {
-    string name = 1;
-    repeated Node nodes = 2;
+    string name = 1 [(gogoproto.jsontag) = "name" ];
+    repeated Node nodes = 2 [(gogoproto.jsontag) = "nodes" ];
 }
 
 message Node {
-    string name = 1;
-    repeated Node nodes = 2;
+    string name = 1 [(gogoproto.jsontag) = "name"];
+    repeated Node nodes = 2 [(gogoproto.jsontag) = "nodes"];
 
-    int64 samples = 3;
-    int64 series = 4;
-    int64 net_recv_bytes = 5;
+    int64 net_recv_bytes = 3 [(gogoproto.jsontag) = "net_recv_bytes"];
+    int64 samples = 4 [(gogoproto.jsontag) = "samples"];
+    int64 series = 5 [(gogoproto.jsontag) = "series"];
+    int64 chunks = 6 [(gogoproto.jsontag) = "chunks"];
 }

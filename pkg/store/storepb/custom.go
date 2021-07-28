@@ -5,6 +5,7 @@ package storepb
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"sort"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/statspb"
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -45,6 +47,14 @@ func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
 	return &SeriesResponse{
 		Result: &SeriesResponse_Hints{
 			Hints: hints,
+		},
+	}
+}
+
+func NewStatsSeriesResponse(stats *statspb.Statistics) *SeriesResponse {
+	return &SeriesResponse{
+		Result: &SeriesResponse_Stats{
+			Stats: stats,
 		},
 	}
 }
@@ -455,4 +465,12 @@ func CompareLabels(a, b []Label) int {
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
 func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
 	return labelpb.ZLabelsToPromLabels(lset)
+}
+
+// XORNumSamples return number of samples. Returns 0 if it's not XOR chunk.
+func (m *Chunk) XORNumSamples() int {
+	if m.Type == Chunk_XOR {
+		return int(binary.BigEndian.Uint16(m.Data))
+	}
+	return 0
 }

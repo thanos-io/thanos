@@ -112,8 +112,8 @@ func TestQueryPushdown_Demo(t *testing.T) {
 	//	└──────────────┴──────────────────────────────────────────────────┘
 	//
 	m1 := e2edb.NewMinio(e, "minio-1", "default")
-	testutil.Ok(t, exec("cp", "-r", store1Data, filepath.Join(m1.Dir(), "bkt1")))
-	testutil.Ok(t, exec("cp", "-r", store2Data, filepath.Join(m1.Dir(), "bkt2")))
+	testutil.Ok(t, exec("cp", "-r", store1Data+"/.", filepath.Join(m1.Dir(), "bkt1")))
+	testutil.Ok(t, exec("cp", "-r", store2Data+"/.", filepath.Join(m1.Dir(), "bkt2")))
 
 	// Create two store gateways, one for each bucket (access point to long term storage).
 
@@ -188,9 +188,9 @@ func TestQueryPushdown_Demo(t *testing.T) {
 	sidecarHA1 := e2edb.NewThanosSidecar(e, "sidecar-prom-ha1", promHA1, e2edb.WithImage("thanos:latest"))
 	sidecar2 := e2edb.NewThanosSidecar(e, "sidecar2", prom2, e2edb.WithImage("thanos:latest"))
 
-	testutil.Ok(t, exec("cp", "-r", prom1Data, promHA0.Dir()))
-	testutil.Ok(t, exec("sh", "-c", "find "+prom1Data+" -maxdepth 1 -type d | tail -5 | xargs cp -r -t "+promHA1.Dir())) // Copy only 5 blocks from 9 to mimic replica 1 with partial data set.
-	testutil.Ok(t, exec("cp", "-r", prom2Data, prom2.Dir()))
+	testutil.Ok(t, exec("cp", "-r", prom1Data+"/.", promHA0.Dir()))
+	testutil.Ok(t, exec("sh", "-c", "find "+prom1Data+"/ -maxdepth 1 -type d | tail -5 | xargs cp -r -t "+promHA1.Dir())) // Copy only 5 blocks from 9 to mimic replica 1 with partial data set.
+	testutil.Ok(t, exec("cp", "-r", prom2Data+"/.", prom2.Dir()))
 
 	testutil.Ok(t, promHA0.SetConfig(`
 global:
@@ -270,6 +270,6 @@ global:
 	// Wait until we have 5 gRPC connections.
 	testutil.Ok(t, query1.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-	testutil.Ok(t, e2einteractive.OpenInBrowser(fmt.Sprintf("http://%s/%s", query1.Endpoint("http"), "graph?g0.expr=count(%7B__name__%3D~\"continuous_app_metric99\"%7D)%20by%20(replica)&g0.tab=0&g0.stacked=0&g0.range_input=2w&g0.max_source_resolution=0s&g0.deduplicate=0&g0.partial_response=0&g0.store_matches=%5B%5D&g0.end_input=2021-07-27%2000%3A00%3A00")))
+	testutil.Ok(t, e2einteractive.OpenInBrowser(fmt.Sprintf("http://%s/%s", query1.Endpoint("http"), "graph?g0.expr=sum(continuous_app_metric99)%20by%20(cluster%2C%20replica)&g0.tab=0&g0.stacked=0&g0.range_input=2w&g0.max_source_resolution=0s&g0.deduplicate=0&g0.partial_response=0&g0.store_matches=%5B%5D&g0.end_input=2021-07-27%2000%3A00%3A00")))
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }

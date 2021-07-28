@@ -17,6 +17,7 @@ import (
 	promgate "github.com/prometheus/prometheus/pkg/gate"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/thanos/pkg/store/statspb"
 
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -149,6 +150,8 @@ type seriesServer struct {
 
 	seriesSet []storepb.Series
 	warnings  []string
+
+	stats *statspb.Statistics
 }
 
 func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
@@ -159,6 +162,12 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 
 	if r.GetSeries() != nil {
 		s.seriesSet = append(s.seriesSet, *r.GetSeries())
+		return nil
+	}
+
+	if r.GetStats() != nil {
+		// Save only last one.
+		s.stats = r.GetStats()
 		return nil
 	}
 

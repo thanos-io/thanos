@@ -41,6 +41,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/thanos/pkg/store/statspb"
 
 	"github.com/prometheus/prometheus/util/stats"
 	"github.com/thanos-io/thanos/pkg/api"
@@ -195,7 +196,8 @@ type queryData struct {
 	Result     parser.Value      `json:"result"`
 	Stats      *stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
-	Warnings []error `json:"warnings,omitempty"`
+	Warnings     []error             `json:"warnings,omitempty"`
+	StorageStats *statspb.Statistics `json:"storageStats,omitempty"`
 }
 
 func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplication bool, _ *api.ApiError) {
@@ -494,6 +496,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
 		Stats:      qs,
+		// TODO: inject storage Stats.
 	}, res.Warnings, nil
 }
 

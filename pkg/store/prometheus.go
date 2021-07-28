@@ -30,6 +30,7 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/statspb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -270,6 +271,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 	level.Debug(p.logger).Log("msg", "started handling ReadRequest_STREAMED_XOR_CHUNKS streamed read response.")
 
 	framesNum := 0
+	lastSeriesHash := uint64(0)
 
 	defer func() {
 		p.framesRead.Observe(float64(framesNum))
@@ -283,8 +285,13 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 	)
 	defer p.putBuffer(data)
 
+	stats := &statspb.Node{
+		Name: fmt.Sprintf("prometheus-remote-write%s", extLset.String()),
+	}
+	bodySizer := statspb.NewSizedReadCloser(httpResp.Body)
+
 	// TODO(bwplotka): Put read limit as a flag.
-	stream := remote.NewChunkedReader(httpResp.Body, remote.DefaultChunkedReadLimit, *data)
+	stream := remote.NewChunkedReader(bodySizer, remote.DefaultChunkedReadLimit, *data)
 	for {
 		res := &prompb.ChunkedReadResponse{}
 		err := stream.NextProto(res)
@@ -301,6 +308,13 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 
 		framesNum++
 		for _, series := range res.ChunkedSeries {
+
+			seriesHash := labelpb.HashWithPrefix("", series.Labels)
+			if lastSeriesHash != 0 || seriesHash != lastSeriesHash {
+				lastSeriesHash = seriesHash
+				stats.Series++
+			}
+
 			thanosChks := make([]storepb.AggrChunk, len(series.Chunks))
 			for i, chk := range series.Chunks {
 				thanosChks[i] = storepb.AggrChunk{
@@ -314,6 +328,9 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 						Type: storepb.Chunk_Encoding(chk.Type - 1),
 					},
 				}
+				stats.Samples += int64(thanosChks[i].Raw.XORNumSamples())
+				stats.Chunks++
+
 				// Drop the reference to data from non protobuf for GC.
 				series.Chunks[i].Data = nil
 			}
@@ -328,6 +345,16 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 			}
 		}
 	}
+
+	stats.NetRecvBytes = bodySizer.BytesRead()
+	if err := s.Send(storepb.NewStatsSeriesResponse(&statspb.Statistics{
+		// TODO(bwplotka): Get debug name?
+		Name:  fmt.Sprintf("sidecar%s", extLset.String()),
+		Nodes: []*statspb.Node{stats},
+	})); err != nil {
+		return err
+	}
+
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_STREAMED_XOR_CHUNKS request.", "frames", framesNum)
 	return nil
 }
