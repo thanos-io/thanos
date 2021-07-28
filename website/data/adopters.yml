@@ -135,3 +135,9 @@ adopters:
 - name: Wise
   url: https://wise.com
   logo: wise.png
+- name: ByteDance
+  url: https://www.bytedance.com/
+  logo: bytedance.png 
+- name: Joblift
+  url: https://joblift.com/
+  logo: joblift.png

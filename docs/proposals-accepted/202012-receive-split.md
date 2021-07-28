@@ -1,8 +1,8 @@
 ---
-title: Thanos Routing Receive and Ingesting Receive
 type: proposal
-menu: proposals
+title: Thanos Routing Receive and Ingesting Receive
 status: accepted
+menu: proposals-accepted
 ---
 
 ### Related Tickets
@@ -13,8 +13,7 @@ status: accepted
 
 ### Summary
 
-This document describes the motivation and design of running **Receiver** in a stateless mode that does not have capabilities to store samples, it only routes remote write
-to further receivers based on hashring.
+This document describes the motivation and design of running **Receiver** in a stateless mode that does not have capabilities to store samples, it only routes remote write to further receivers based on hashring.
 
 This allows setting optional deployment model were only ***routing receivers*** are using hashring files and does the routing and replication. That allows ***ingesting receivers*** to not handle any routing or hashring, only receiving multi tenant writes.
 
@@ -23,7 +22,6 @@ This allows setting optional deployment model were only ***routing receivers*** 
 [@squat](https://github.com/squat):
 
 > Currently, any change to the hashring configuration file will trigger all Thanos Receive nodes to flush their multi-TSDBs, causing them to enter an unready state until the flush is complete. This unavailability during a flush allows for a clear state transition, however it can result in downtimes on the order of five minutes for every configuration change. Moreover, during configuration changes, the hashring goes through an even longer period of partial unreadiness, where some nodes begin and finish flushing before and after others. During this partial unreadiness, the hashring can expect high internal request failure rates, which cause clients to retry their requests, resulting in even higher load. Therefore, when the hashring configuration is changed due to automatic horizontal scaling of a set of Thanos Receivers, the system can expect higher than normal resource utilization, which can create a positive feedback loop that continuously scales the hashring.
-
 
 ### Goals
 
@@ -69,9 +67,9 @@ In comparison to previous proposal (as mentioned in [alternatives](#previous-pro
 #### Previous Proposal: Separate receive-route command
 
 1. Split the Receiver component into **receive-route** and **receiver** (and ensure ease of resharding events).
-1. Evaluate any effects on performance by simulating scenarios and collecting and analyzing metrics.
-1. Use ***consistent hashing*** to avoid reshuffling time series after resharding events. The exact consistent hashing mechanism to be used needs some further research.
-1. **Migration**: We document how the new architecture can be set up to have the same general deployment of the old architecture. (We run router and Receiver on the same node).
+2. Evaluate any effects on performance by simulating scenarios and collecting and analyzing metrics.
+3. Use ***consistent hashing*** to avoid reshuffling time series after resharding events. The exact consistent hashing mechanism to be used needs some further research.
+4. **Migration**: We document how the new architecture can be set up to have the same general deployment of the old architecture. (We run router and Receiver on the same node).
 
 This potentially makes the receiver more difficult to operate and understandable for Thanos users. I would argue this is however much harder in overall Thanos deployment. Otherwise, this option is exactly the same.
 

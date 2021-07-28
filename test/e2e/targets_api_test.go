@@ -99,7 +99,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 }
 
 //nolint:unused
-func targetAndAssert(t *testing.T, ctx context.Context, addr string, state string, want *targetspb.TargetDiscovery) {
+func targetAndAssert(t *testing.T, ctx context.Context, addr, state string, want *targetspb.TargetDiscovery) {
 	t.Helper()
 
 	fmt.Println("targetAndAssert: Waiting for results for targets state", state)

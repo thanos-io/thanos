@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/logging"
 
@@ -54,6 +55,9 @@ func registerReceive(app *extkingpin.App) {
 			return errors.Wrap(err, "parse labels")
 		}
 
+		if !model.LabelName.IsValid(model.LabelName(conf.tenantLabelName)) {
+			return errors.Errorf("unsupported format for tenant label name, got %s", conf.tenantLabelName)
+		}
 		if len(lset) == 0 {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
@@ -70,11 +74,11 @@ func registerReceive(app *extkingpin.App) {
 			NoLockfile:             conf.noLockFile,
 			WALCompression:         conf.walCompression,
 			AllowOverlappingBlocks: conf.tsdbAllowOverlappingBlocks,
+			MaxExemplars:           conf.tsdbMaxExemplars,
 		}
 
-		// Enable ingestion if endpoint is specified or if both the hashrings configs are empty.
-		// Otherwise, run the receiver exclusively as a distributor.
-		enableIngestion := conf.endpoint != "" || (conf.hashringsFileContent == "" && conf.hashringsFilePath == "")
+		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
+		receiveMode := conf.determineMode()
 
 		return runReceive(
 			g,
@@ -86,7 +90,7 @@ func registerReceive(app *extkingpin.App) {
 			lset,
 			component.Receive,
 			metadata.HashFunc(conf.hashFunc),
-			enableIngestion,
+			receiveMode,
 			conf,
 		)
 	})
@@ -103,15 +107,12 @@ func runReceive(
 	lset labels.Labels,
 	comp component.SourceStoreAPI,
 	hashFunc metadata.HashFunc,
-	enableIngestion bool,
+	receiveMode receive.ReceiverMode,
 	conf *receiveConfig,
 ) error {
 	logger = log.With(logger, "component", "receive")
-	level.Warn(logger).Log("msg", "setting up receive")
 
-	if !enableIngestion {
-		level.Info(logger).Log("msg", "ingestion is disabled for receiver")
-	}
+	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
 
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA)
 	if err != nil {
@@ -122,8 +123,8 @@ func runReceive(
 		logger,
 		reg,
 		tracer,
-		conf.rwServerCert != "",
-		conf.rwServerClientCA == "",
+		*conf.grpcCert != "",
+		*conf.grpcClientCA == "",
 		conf.rwClientCert,
 		conf.rwClientKey,
 		conf.rwClientServerCA,
@@ -138,6 +139,9 @@ func runReceive(
 	if err != nil {
 		return err
 	}
+
+	// Has this thanos receive instance been configured to ingest metrics into a local TSDB?
+	enableIngestion := receiveMode == receive.IngestorOnly || receiveMode == receive.RouterIngestor
 
 	upload := len(confContentYaml) > 0
 	if enableIngestion {
@@ -187,6 +191,7 @@ func runReceive(
 		DefaultTenantID:   conf.defaultTenantID,
 		ReplicaHeader:     conf.replicaHeader,
 		ReplicationFactor: conf.replicationFactor,
+		ReceiverMode:      receiveMode,
 		Tracer:            tracer,
 		TLSConfig:         rwTLSConfig,
 		DialOpts:          dialOpts,
@@ -319,6 +324,7 @@ func setupAndRunGRPCServer(g *run.Group,
 			s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 				grpcserver.WithServer(store.RegisterStoreServer(rw)),
 				grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
+				grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
 				grpcserver.WithListen(*conf.grpcBindAddr),
 				grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
 				grpcserver.WithTLSConfig(tlsCfg),
@@ -678,8 +684,8 @@ type receiveConfig struct {
 	refreshInterval   *model.Duration
 	endpoint          string
 	tenantHeader      string
-	defaultTenantID   string
 	tenantLabelName   string
+	defaultTenantID   string
 	replicaHeader     string
 	replicationFactor uint64
 	forwardTimeout    *model.Duration
@@ -687,6 +693,7 @@ type receiveConfig struct {
 	tsdbMinBlockDuration       *model.Duration
 	tsdbMaxBlockDuration       *model.Duration
 	tsdbAllowOverlappingBlocks bool
+	tsdbMaxExemplars           int
 
 	walCompression bool
 	noLockFile     bool
@@ -760,6 +767,12 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").BoolVar(&rc.noLockFile)
 
+	cmd.Flag("tsdb.max-exemplars",
+		"Enables support for ingesting exemplars and sets the maximum number of exemplars that will be stored per tenant."+
+			" In case the exemplar storage becomes full (number of stored exemplars becomes equal to max-exemplars),"+
+			" ingesting a new exemplar will evict the oldest exemplar from storage. 0 (or less) value of this flag disables exemplars storage.").
+		Default("0").IntVar(&rc.tsdbMaxExemplars)
+
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")
 
@@ -772,4 +785,25 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").Hidden().BoolVar(&rc.allowOutOfOrderUpload)
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
+}
+
+// determineMode returns the ReceiverMode that this receiver is configured to run in.
+// This is used to configure this Receiver's forwarding and ingesting behavior at runtime.
+func (rc *receiveConfig) determineMode() receive.ReceiverMode {
+	// Has the user provided some kind of hashring configuration?
+	hashringSpecified := rc.hashringsFileContent != "" || rc.hashringsFilePath != ""
+	// Has the user specified the --receive.local-endpoint flag?
+	localEndpointSpecified := rc.endpoint != ""
+
+	switch {
+	case hashringSpecified && localEndpointSpecified:
+		return receive.RouterIngestor
+	case hashringSpecified && !localEndpointSpecified:
+		// Be careful - if the hashring contains an address that routes to itself and does not specify a local
+		// endpoint - you've just created an infinite loop / fork bomb :)
+		return receive.RouterOnly
+	default:
+		// hashring configuration has not been provided so we ingest all metrics locally.
+		return receive.IngestorOnly
+	}
 }

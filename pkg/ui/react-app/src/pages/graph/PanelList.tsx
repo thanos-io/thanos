@@ -152,12 +152,16 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
   const [enableLinter, setEnableLinter] = useLocalStorage('enable-linter', true);
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
-  const { response: storesRes, error: storesErr, isLoading: storesLoading } = useFetch<StoreListProps>(
-    `${pathPrefix}/api/v1/stores`
-  );
-  const { response: flagsRes, error: flagsErr, isLoading: flagsLoading } = useFetch<FlagMap>(
-    `${pathPrefix}/api/v1/status/flags`
-  );
+  const {
+    response: storesRes,
+    error: storesErr,
+    isLoading: storesLoading,
+  } = useFetch<StoreListProps>(`${pathPrefix}/api/v1/stores`);
+  const {
+    response: flagsRes,
+    error: flagsErr,
+    isLoading: flagsLoading,
+  } = useFetch<FlagMap>(`${pathPrefix}/api/v1/status/flags`);
   const defaultStep = flagsRes?.data?.['query.default-step'] || '1s';
 
   const browserTime = new Date().getTime() / 1000;

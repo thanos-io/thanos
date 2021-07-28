@@ -1,6 +1,6 @@
 ---
-title: Tracing
 type: docs
+title: Tracing
 menu: thanos
 ---
 
@@ -12,8 +12,7 @@ All clients are configured using `--tracing.config-file` to reference to the con
 
 ## How to use `config` flags?
 
-You can either pass YAML file defined below in `--tracing.config-file` or pass the YAML content directly using `--tracing.config`.
-We recommend the latter as it gives an explicit static view of configuration for each component. It also saves you the fuss of creating and managing additional file.
+You can either pass YAML file defined below in `--tracing.config-file` or pass the YAML content directly using `--tracing.config`. We recommend the latter as it gives an explicit static view of configuration for each component. It also saves you the fuss of creating and managing additional file.
 
 Don't be afraid of multiline flags!
 
@@ -40,8 +39,8 @@ In Kubernetes it is as easy as (on Thanos sidecar example):
 
 1. Create new directory under `pkg/tracing/<provider>`
 2. Implement `opentracing.Tracer` interface
-3. Add client implementation to the factory in [factory](/pkg/tracing/client/factory.go) code. (Using as small amount of flags as possible in every command)
-4. Add client struct config to [cfggen](/scripts/cfggen/main.go) to allow config auto generation.
+3. Add client implementation to the factory in [factory](../pkg/tracing/client/factory.go) code. (Using as small amount of flags as possible in every command)
+4. Add client struct config to [cfggen](../scripts/cfggen/main.go) to allow config auto generation.
 
 At that point, anyone can use your provider by spec.
 
@@ -53,8 +52,7 @@ Current tracing supported backends:
 
 Client for https://github.com/jaegertracing/jaeger tracing.
 
-[embedmd]:# (flags/config_tracing_jaeger.txt yaml)
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=jaeger.Config"
 type: JAEGER
 config:
   service_name: ""
@@ -80,20 +78,19 @@ config:
 
 Client for https://cloud.google.com/trace/ tracing.
 
-[embedmd]:# (flags/config_tracing_stackdriver.txt yaml)
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=stackdriver.Config"
 type: STACKDRIVER
 config:
   service_name: ""
   project_id: ""
   sample_factor: 0
 ```
+
 ### Elastic APM
 
 Client for https://www.elastic.co/products/apm tracing.
 
-[embedmd]:# (flags/config_tracing_elastic_apm.txt yaml)
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=elasticapm.Config"
 type: ELASTIC_APM
 config:
   service_name: ""
@@ -108,8 +105,7 @@ Client for [Lightstep](https://lightstep.com).
 
 In order to configure Thanos to interact with Lightstep you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-use-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
 
-[embedmd]:# (flags/config_tracing_lightstep.txt yaml)
-```yaml
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=lightstep.Config"
 type: LIGHTSTEP
 config:
   access_token: ""

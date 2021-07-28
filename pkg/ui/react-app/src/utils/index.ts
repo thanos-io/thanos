@@ -278,7 +278,9 @@ export const mapObjEntries = <T, key extends keyof T, Z>(
   cb: ([k, v]: [string, T[key]], i: number, arr: [string, T[key]][]) => Z
 ) => Object.entries(o).map(cb);
 
-export const callAll = (...fns: Array<(...args: any) => void>) => (...args: any) => {
-  // eslint-disable-next-line prefer-spread
-  fns.filter(Boolean).forEach((fn) => fn.apply(null, args));
-};
+export const callAll =
+  (...fns: Array<(...args: any) => void>) =>
+  (...args: any) => {
+    // eslint-disable-next-line prefer-spread
+    fns.filter(Boolean).forEach((fn) => fn.apply(null, args));
+  };

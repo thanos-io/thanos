@@ -20,6 +20,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
@@ -61,6 +63,7 @@ func RunDownsample(
 	httpTLSConfig string,
 	httpGracePeriod time.Duration,
 	dataDir string,
+	downsampleConcurrency int,
 	objStoreConfig *extflag.PathOrContent,
 	comp component.Component,
 	hashFunc metadata.HashFunc,
@@ -115,7 +118,7 @@ func RunDownsample(
 				metrics.downsamples.WithLabelValues(groupKey)
 				metrics.downsampleFailures.WithLabelValues(groupKey)
 			}
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, hashFunc); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downsampleConcurrency, hashFunc); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -124,7 +127,7 @@ func RunDownsample(
 			if err != nil {
 				return errors.Wrap(err, "sync before second pass of downsampling")
 			}
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, hashFunc); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downsampleConcurrency, hashFunc); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -162,6 +165,7 @@ func downsampleBucket(
 	bkt objstore.Bucket,
 	metas map[ulid.ULID]*metadata.Meta,
 	dir string,
+	downsampleConcurrency int,
 	hashFunc metadata.HashFunc,
 ) (rerr error) {
 	if err := os.MkdirAll(dir, 0750); err != nil {
@@ -218,57 +222,89 @@ func downsampleBucket(
 		return metasULIDS[i].Compare(metasULIDS[j]) < 0
 	})
 
-	for _, mk := range metasULIDS {
-		m := metas[mk]
+	var (
+		eg errgroup.Group
+		ch = make(chan *metadata.Meta, downsampleConcurrency)
+	)
 
-		switch m.Thanos.Downsample.Resolution {
-		case downsample.ResLevel0:
-			missing := false
-			for _, id := range m.Compaction.Sources {
-				if _, ok := sources5m[id]; !ok {
-					missing = true
-					break
+	level.Debug(logger).Log("msg", "downsampling bucket", "concurrency", downsampleConcurrency)
+	for i := 0; i < downsampleConcurrency; i++ {
+		eg.Go(func() error {
+			for m := range ch {
+				resolution := downsample.ResLevel1
+				errMsg := "downsampling to 5 min"
+				if m.Thanos.Downsample.Resolution == downsample.ResLevel1 {
+					resolution = downsample.ResLevel2
+					errMsg = "downsampling to 60 min"
+				}
+				if err := processDownsampling(ctx, logger, bkt, m, dir, resolution, hashFunc); err != nil {
+					metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
+					return errors.Wrap(err, errMsg)
+				}
+				metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
+			}
+			return nil
+		})
+	}
+
+	// Workers scheduled, distribute blocks.
+	eg.Go(func() error {
+		defer close(ch)
+		for _, mk := range metasULIDS {
+			m := metas[mk]
+
+			switch m.Thanos.Downsample.Resolution {
+			case downsample.ResLevel2:
+				continue
+
+			case downsample.ResLevel0:
+				missing := false
+				for _, id := range m.Compaction.Sources {
+					if _, ok := sources5m[id]; !ok {
+						missing = true
+						break
+					}
+				}
+				if !missing {
+					continue
+				}
+				// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
+				// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
+				// blocks. Otherwise we may never downsample some data.
+				if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
+					continue
+				}
+
+			case downsample.ResLevel1:
+				missing := false
+				for _, id := range m.Compaction.Sources {
+					if _, ok := sources1h[id]; !ok {
+						missing = true
+						break
+					}
+				}
+				if !missing {
+					continue
+				}
+				// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
+				// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
+				// blocks. Otherwise we may never downsample some data.
+				if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
+					continue
 				}
 			}
-			if !missing {
-				continue
-			}
-			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
-			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
-			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
-				continue
-			}
 
-			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel1, hashFunc); err != nil {
-				metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
-				return errors.Wrap(err, "downsampling to 5 min")
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ch <- m:
 			}
-			metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
-
-		case downsample.ResLevel1:
-			missing := false
-			for _, id := range m.Compaction.Sources {
-				if _, ok := sources1h[id]; !ok {
-					missing = true
-					break
-				}
-			}
-			if !missing {
-				continue
-			}
-			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
-			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
-			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
-				continue
-			}
-			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel2, hashFunc); err != nil {
-				metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
-				return errors.Wrap(err, "downsampling to 60 min")
-			}
-			metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
 		}
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		return errors.Wrap(err, "downsample bucket")
 	}
 	return nil
 }
