@@ -230,19 +230,6 @@ func TestQueryWithEndpointConfig(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(receiver))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
-	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
-	testutil.Ok(t, err)
-	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "ha1", defaultPromConfig("prom-ha", 0, "", filepath.Join(e2e.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage())
-	testutil.Ok(t, err)
-	prom4, sidecar4, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "ha2", defaultPromConfig("prom-ha", 1, "", filepath.Join(e2e.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage())
-	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
-
-	fileSDPath, err := createSDFile(s.SharedDir(), "1", []string{sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")})
-	testutil.Ok(t, err)
-
 	queryFileSDDir := filepath.Join(s.SharedDir(), "data", "querier", "1")
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "querier", "1")
 	testutil.Ok(t, cpyDir("./certs", queryFileSDDir))
@@ -253,21 +240,33 @@ func TestQueryWithEndpointConfig(t *testing.T) {
 		"--grpc-server-tls-client-ca": filepath.Join(container, "testca.crt"),
 	})
 
-	args = append(args, "--grpc-client-tls-skip-verify") // As the certs are self-signed.
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage(), args)
+	testutil.Ok(t, err)
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage(), args)
+	testutil.Ok(t, err)
+	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "ha1", defaultPromConfig("prom-ha", 0, "", filepath.Join(e2e.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage(), nil)
+	testutil.Ok(t, err)
+	prom4, sidecar4, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "ha2", defaultPromConfig("prom-ha", 1, "", filepath.Join(e2e.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage(), nil)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
+
+	fileSDPath, err := createSDFile(s.SharedDir(), "1", []string{sidecar3.GRPCNetworkEndpoint(), sidecar4.GRPCNetworkEndpoint()})
+	testutil.Ok(t, err)
 
 	endpointConfig := []store.Config{
 		{
-			Name: "one",
+			Name: "withTLS",
 			TLSConfig: store.TLSConfiguration{
 				CertFile:   filepath.Join(container, "e2e_test_query_config_client.crt"),
 				KeyFile:    filepath.Join(container, "testclient.key"),
 				CaCertFile: filepath.Join(container, "testca.crt"),
+				ServerName: "e2e_test_query_config-sidecar-alone",
 			},
-			Endpoints: []string{sidecar1.InternalEndpoint("grpc")},
+			Endpoints: []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")},
 		},
 		{
-			Name:      "two",
-			Endpoints: []string{sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")},
+			Name:      "withoutTLS",
+			Endpoints: []string{receiver.InternalEndpoint("grpc")},
 			EndpointsSD: []file.SDConfig{
 				{
 					Files:           []string{fileSDPath},

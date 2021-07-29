@@ -32,6 +32,7 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 		"prom1",
 		defaultPromConfig("ha", 0, "", "", "localhost:9090", "sidecar-prom1:8080"),
 		e2ethanos.DefaultPrometheusImage(),
+		nil,
 	)
 	testutil.Ok(t, err)
 
@@ -40,6 +41,7 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 		"prom2",
 		defaultPromConfig("ha", 1, "", "", "localhost:9090", "sidecar-prom2:8080"),
 		e2ethanos.DefaultPrometheusImage(),
+		nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))

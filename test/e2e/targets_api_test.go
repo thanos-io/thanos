@@ -39,6 +39,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 		"prom1",
 		defaultPromConfig("ha", 0, "", "", "localhost:9090", "localhost:80"),
 		e2ethanos.DefaultPrometheusImage(),
+		nil,
 	)
 	testutil.Ok(t, err)
 	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
@@ -46,6 +47,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 		"prom2",
 		defaultPromConfig("ha", 1, "", "", "localhost:9090", "localhost:80"),
 		e2ethanos.DefaultPrometheusImage(),
+		nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))

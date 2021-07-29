@@ -111,20 +111,24 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, config, promIm
 		return nil, nil, err
 	}
 
+	args := e2e.BuildArgs(map[string]string{
+		"--debug.name":        fmt.Sprintf("sidecar-%v", name),
+		"--grpc-address":      ":9091",
+		"--grpc-grace-period": "0s",
+		"--http-address":      ":8080",
+		"--prometheus.url":    "http://" + prom.NetworkEndpointFor(netName, 9090),
+		"--tsdb.path":         dataDir,
+		"--log.level":         infoLogLevel,
+	})
+
+	args = append(args, tlsConfig...)
+
 	sidecar := NewService(
 		e,
 		fmt.Sprintf("sidecar-%s", name),
-		sidecarImage,
-		e2e.NewCommand("sidecar", e2e.BuildArgs(map[string]string{
-			"--debug.name":        fmt.Sprintf("sidecar-%v", name),
-			"--grpc-address":      ":9091",
-			"--grpc-grace-period": "0s",
-			"--http-address":      ":8080",
-			"--prometheus.url":    "http://" + prom.InternalEndpoint("http"),
-			"--tsdb.path":         dataDir,
-			"--log.level":         infoLogLevel,
-		})...),
-		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		DefaultImage(),
+		e2e.NewCommand("sidecar", args...),
+		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
@@ -342,8 +346,6 @@ func (q *QuerierBuilder) Build() (*Service, error) {
 		}
 		args = append(args, "--endpoint.config="+string(endpointCfgBytes))
 	}
-
-	args = append(args, q.mutualTLSConfig...)
 
 	querier := NewService(
 		fmt.Sprintf("querier-%v", q.name),
