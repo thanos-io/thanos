@@ -7,24 +7,7 @@ info:
     description: / Rules represents API that is responsible for gathering rules and their statuses.
     version: 0.0.1
 paths:
-    /api/v1/rules:
-        get:
-            summary: Gets rules. User can pass "rules?type=record" to get rule record instead of full rules.
-            operationId: Rules_GetRules
-            parameters:
-                - name: type
-                  in: query
-                  description: / The type to request.
-                  schema:
-                    type: string
-            responses:
-                "200":
-                    description: OK
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RuleGroups'
-    /api/v1_test/alerts:
+    /api/v1/alerts:
         get:
             summary: Gets alerts. No parameters will be processed.
             operationId: Rules_GetRulesAlert
@@ -35,6 +18,23 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Alert'
+    /api/v1/rules:
+        get:
+            summary: Gets rules. User can pass "rules?type=record" to get rule record instead of full rules.
+            operationId: Rules_GetRules
+            parameters:
+                - name: type
+                  in: query
+                  description: / The type to request.
+                  schema:
+                      type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RuleGroups'
 components:
     schemas:
         Alert:

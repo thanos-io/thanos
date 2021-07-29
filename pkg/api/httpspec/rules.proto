@@ -36,7 +36,7 @@ service Rules {
     // Gets alerts. No parameters will be processed.
     rpc GetRulesAlert(google.protobuf.Empty) returns (Alert){
         option (google.api.http) = {
-            get: "/api/v1_test/alerts"
+            get: "/api/v1/alerts"
         };
     }
 
