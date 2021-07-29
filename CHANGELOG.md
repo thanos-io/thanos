@@ -11,15 +11,18 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Added
+- [#4453](https://github.com/thanos-io/thanos/pull/4453) Tools: Add flag `--selector.relabel-config-file` / `--selector.relabel-config` / `--max-time` / `--min-time` to filter served blocks.
+- [#4482](https://github.com/thanos-io/thanos/pull/4482) COS: Add http_config for cos object store client.
 
 ### Fixed
 
 - [#4442](https://github.com/thanos-io/thanos/pull/4442) rule: fix reload signal not working
-- [#4468] (https://github.com/thanos-io/thanos/pull/4468) Rule: Fix temporary rule filename composition issue
+- [#4468](https://github.com/thanos-io/thanos/pull/4468) Rule: Fix temporary rule filename composition issue
+- [#4476](https://github.com/thanos-io/thanos/pull/4476) UI: fix incorrect html escape sequence used for '>' symbol.
 
 ### Changed
 
-## [v0.22.0 - in progress](https://github.com/thanos-io/thanos/tree/release-0.22)
+## [v0.22.0](https://github.com/thanos-io/thanos/tree/release-0.22) - 2021.07.22
 
 ### Added
 
@@ -39,6 +42,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4384](https://github.com/thanos-io/thanos/pull/4384) Fix the experimental PromQL editor when used on multiple line.
 - [#4342](https://github.com/thanos-io/thanos/pull/4342) ThanosSidecarUnhealthy doesn't fire if the sidecar is never healthy
 - [#4388](https://github.com/thanos-io/thanos/pull/4388) Receive: fix bug in forwarding remote-write requests within the hashring via gRPC when TLS is enabled on the HTTP server but not on the gRPC server.
+- [#4442](https://github.com/thanos-io/thanos/pull/4442) Ruler: fix SIGHUP reload signal not working.
 
 ### Changed
 

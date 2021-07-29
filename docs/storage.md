@@ -389,6 +389,14 @@ config:
   app_id: ""
   secret_key: ""
   secret_id: ""
+  http_config:
+    idle_conn_timeout: 1m30s
+    response_header_timeout: 2m
+    tls_handshake_timeout: 10s
+    expect_continue_timeout: 1s
+    max_idle_conns: 100
+    max_idle_conns_per_host: 100
+    max_conns_per_host: 0
 ```
 
 Set the flags `--objstore.config-file` to reference to the configuration file.
