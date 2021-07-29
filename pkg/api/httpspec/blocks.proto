@@ -1,0 +1,161 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+package thanos;
+
+import "store/labelpb/types.proto";
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "google/api/annotations.proto";
+
+option go_package = "./;blockspb";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+service Blocks{
+  // Get Block info
+  rpc GetBlocks(google.protobuf.Empty) returns (BlocksInfo){
+    option (google.api.http) = {
+      get: "/api/v1/blocks"
+    };
+  }
+}
+
+message BlocksInfo {
+  string label = 1 [(gogoproto.jsontag) = "label"];
+  repeated Meta blocks = 2 [(gogoproto.jsontag) = "blocks"];
+  google.protobuf.Timestamp refreshed_at = 3 [(gogoproto.jsontag) = "lastEvaluation", (gogoproto.stdtime) = true, (gogoproto.nullable) = false ];
+  string error  = 4 [(gogoproto.jsontag) = "err"];
+}
+
+message Meta{
+  BlockMeta block_meta = 1[(gogoproto.jsontag) = "blockMeta"];
+  Thanos thanos = 2[(gogoproto.jsontag) = "thanos"];
+}
+
+message BlockMeta{
+  // Unique identifier for the block and its contents. Changes on compaction.
+  ULID ulid = 1[(gogoproto.jsontag) = "ulid"];
+
+  // min_time and max_time specify the time range all samples
+  // in the block are in.
+  int64 min_time = 2 [(gogoproto.jsontag) = "minTIme"];
+  int64 max_time = 3 [(gogoproto.jsontag) = "maxTime"];
+
+  // Stats about the contents of the block.
+  BlockStats block_stats = 4 [(gogoproto.jsontag) = "stats,omitempty"];
+
+  // Information on compactions the block was created from.
+  BlockMetaCompaction block_meta_compaction = 5 [(gogoproto.jsontag) = "compaction"];
+
+  // Version of the index format.
+  int32  Version = 6 [(gogoproto.jsontag) = "version"];
+
+}
+
+// BlockStats contains stats about contents of a block.
+message BlockStats{
+  uint64 NumSamples = 1 [(gogoproto.jsontag) = "numSamples,omitempty"];
+  uint64 NumSeries = 2 [(gogoproto.jsontag) = "numSamples,omitempty"];
+  uint64 NumChunks = 3 [(gogoproto.jsontag) = "numChunks,omitempty"];
+  uint64 NumTombstones = 4 [(gogoproto.jsontag) = "numTombstones,omitempty"];
+}
+
+// BlockMetaCompaction holds information about compactions a block went through.
+message BlockMetaCompaction{
+  // Maximum number of compaction cycles any source block has
+  // gone through.
+  int32  level = 1 [(gogoproto.jsontag) = "level"];
+
+  // ULIDs of all source head blocks that went into the block.
+  repeated bytes sources = 2 [(gogoproto.jsontag) = "sources,omitempty"];
+
+  // Indicates that during compaction it resulted in a block without any samples
+  // so it should be deleted on the next reloadBlocks.
+  bool deletable = 3 [(gogoproto.jsontag) = "deletable,omitempty"];
+
+  // Short descriptions of the direct blocks that were used to create
+  // this block.
+  repeated BlockDesc parents = 4 [(gogoproto.jsontag) = "parents,omitempty"];
+  bool failed = 5 [(gogoproto.jsontag) = "failed,omitempty"];
+}
+
+// BlockDesc describes a block by ULID and time range.
+message  BlockDesc{
+  ULID  ulid = 1 [(gogoproto.jsontag) = "ulid"];
+  int64 min_time = 2 [(gogoproto.jsontag) = "minTime"];
+  int64 max_time = 3 [(gogoproto.jsontag) = "maxTime"];
+}
+
+message Thanos{
+  // Version of Thanos meta file. If none specified, 1 is assumed (since first version did not have explicit version specified).
+  int32 version = 1 [(gogoproto.jsontag) = "version,omitempty"];
+
+  // Labels are the external labels identifying the producer as well as tenant.
+  // See https://thanos.io/tip/thanos/storage.md#external-labels for details.
+  LabelSet labels = 2 [(gogoproto.jsontag) = "labels"];
+  ThanosDownsample downsample = 3 [(gogoproto.jsontag) = "downsample"];
+
+  // Source is a real upload source of the block.
+  SourceType source = 4 [(gogoproto.jsontag) = "source"];
+
+  // List of segment files (in chunks directory), in sorted order. Optional.
+  // Deprecated. Use Files instead.
+  repeated string  segment_files = 5 [(gogoproto.jsontag) = "segment_files,omitempty"];
+
+  // File is a sorted (by rel path) list of all files in block directory of this block known to TSDB.
+  // Sorted by relative path.
+  // Useful to avoid API call to get size of each file, as well as for debugging purposes.
+  repeated File files = 6 [(gogoproto.jsontag) = "files,omitempty"];
+
+  // Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
+  repeated Rewrite rewrites = 7  [(gogoproto.jsontag) = "rewrites,omitempty"];
+}
+
+message ThanosDownsample{
+  int64 resolution = 1 [(gogoproto.jsontag) = "version,omitempty"];
+}
+
+message SourceType{
+  string source_type = 1 [(gogoproto.jsontag) = "sourceType"];
+}
+
+// ObjectHash stores the hash of an object in the object storage.
+message ObjectHash  {
+  string  hash_func = 1 [(gogoproto.jsontag) = "hashFunc"];
+  string value = 2 [(gogoproto.jsontag) = "value"];
+
+}
+
+message  File  {
+  string rel_path = 1 [(gogoproto.jsontag) = "rel_path"];
+
+  // SizeBytes is optional (e.g meta.json does not show size).
+  int64  size_bytes = 2 [(gogoproto.jsontag) = "size_bytes,omitempty"];
+
+  // Hash is an optional hash of this file. Used for potentially avoiding an extra download.
+  ObjectHash hash = 3 [(gogoproto.jsontag) = "hash,omitempty"];
+
+}
+
+message  Rewrite {
+  repeated ULID  sources = 1 [(gogoproto.jsontag) = "sources,omitempty"];
+  //TODO: fields not finished
+}
+
+
+
+message  ULID{
+  bytes  ulid = 1 [(gogoproto.jsontag) = "ulid"];
+}

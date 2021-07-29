@@ -1,0 +1,183 @@
+# Generated with protoc-gen-openapi
+# https://github.com/googleapis/gnostic/tree/master/apps/protoc-gen-openapi
+
+openapi: 3.0.3
+info:
+    title: Blocks
+    version: 0.0.1
+paths:
+    /api/v1/blocks:
+        get:
+            summary: Get Block info
+            operationId: Blocks_GetBlocks
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BlocksInfo'
+components:
+    schemas:
+        BlockDesc:
+            properties:
+                ulid:
+                    $ref: '#/components/schemas/ULID'
+                min_time:
+                    type: integer
+                    format: int64
+                max_time:
+                    type: integer
+                    format: int64
+            description: BlockDesc describes a block by ULID and time range.
+        BlockMeta:
+            properties:
+                ulid:
+                    $ref: '#/components/schemas/ULID'
+                min_time:
+                    type: integer
+                    description: "min_time and max_time specify the time range all samples\r in the block are in."
+                    format: int64
+                max_time:
+                    type: integer
+                    format: int64
+                block_stats:
+                    $ref: '#/components/schemas/BlockStats'
+                block_meta_compaction:
+                    $ref: '#/components/schemas/BlockMetaCompaction'
+                Version:
+                    type: integer
+                    description: Version of the index format.
+                    format: int32
+        BlockMetaCompaction:
+            properties:
+                level:
+                    type: integer
+                    description: "Maximum number of compaction cycles any source block has\r gone through."
+                    format: int32
+                sources:
+                    type: array
+                    items:
+                        type: string
+                    description: ULIDs of all source head blocks that went into the block.
+                deletable:
+                    type: boolean
+                    description: "Indicates that during compaction it resulted in a block without any samples\r so it should be deleted on the next reloadBlocks."
+                parents:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BlockDesc'
+                    description: "Short descriptions of the direct blocks that were used to create\r this block."
+                failed:
+                    type: boolean
+            description: BlockMetaCompaction holds information about compactions a block went through.
+        BlockStats:
+            properties:
+                NumSamples:
+                    type: integer
+                    format: uint64
+                NumSeries:
+                    type: integer
+                    format: uint64
+                NumChunks:
+                    type: integer
+                    format: uint64
+                NumTombstones:
+                    type: integer
+                    format: uint64
+            description: BlockStats contains stats about contents of a block.
+        BlocksInfo:
+            properties:
+                label:
+                    type: string
+                blocks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Meta'
+                refreshed_at:
+                    type: string
+                    format: RFC3339
+                error:
+                    type: string
+        File:
+            properties:
+                rel_path:
+                    type: string
+                size_bytes:
+                    type: integer
+                    description: SizeBytes is optional (e.g meta.json does not show size).
+                    format: int64
+                hash:
+                    $ref: '#/components/schemas/ObjectHash'
+        Label:
+            properties:
+                name:
+                    type: string
+                value:
+                    type: string
+        LabelSet:
+            properties:
+                labels:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Label'
+        Meta:
+            properties:
+                block_meta:
+                    $ref: '#/components/schemas/BlockMeta'
+                thanos:
+                    $ref: '#/components/schemas/Thanos'
+        ObjectHash:
+            properties:
+                hash_func:
+                    type: string
+                value:
+                    type: string
+            description: ObjectHash stores the hash of an object in the object storage.
+        Rewrite:
+            properties:
+                sources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ULID'
+        SourceType:
+            properties:
+                source_type:
+                    type: string
+        Thanos:
+            properties:
+                version:
+                    type: integer
+                    description: Version of Thanos meta file. If none specified, 1 is assumed (since first version did not have explicit version specified).
+                    format: int32
+                labels:
+                    $ref: '#/components/schemas/LabelSet'
+                downsample:
+                    $ref: '#/components/schemas/ThanosDownsample'
+                source:
+                    $ref: '#/components/schemas/SourceType'
+                segment_files:
+                    type: array
+                    items:
+                        type: string
+                    description: "List of segment files (in chunks directory), in sorted order. Optional.\r Deprecated. Use Files instead."
+                files:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/File'
+                    description: "File is a sorted (by rel path) list of all files in block directory of this block known to TSDB.\r Sorted by relative path.\r Useful to avoid API call to get size of each file, as well as for debugging purposes."
+                rewrites:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Rewrite'
+                    description: Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
+        ThanosDownsample:
+            properties:
+                resolution:
+                    type: integer
+                    format: int64
+        ULID:
+            properties:
+                ulid:
+                    type: string
+                    format: bytes
