@@ -16,6 +16,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#4468](https://github.com/thanos-io/thanos/pull/4468) Rule: Fix temporary rule filename composition issue.
 - [#4476](https://github.com/thanos-io/thanos/pull/4476) UI: fix incorrect html escape sequence used for '>' symbol.
 
 ### Changed
