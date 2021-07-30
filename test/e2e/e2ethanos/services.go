@@ -150,7 +150,6 @@ type QuerierBuilder struct {
 	metadataAddresses []string
 	targetAddresses   []string
 	exemplarAddresses []string
-	mutualTLSConfig   []string
 
 	endpointConfig []store.Config
 
@@ -259,11 +258,6 @@ func (q *QuerierBuilder) Build() (*e2e.InstrumentedRunnable, error) {
 func (q *QuerierBuilder) collectArgs() ([]string, error) {
 func (q *QuerierBuilder) WithEndpointConfig(endpointConfig []store.Config) *QuerierBuilder {
 	q.endpointConfig = endpointConfig
-	return q
-}
-
-func (q *QuerierBuilder) WithMutualTLS(mutualTLSConfig []string) *QuerierBuilder {
-	q.mutualTLSConfig = mutualTLSConfig
 	return q
 }
 

@@ -54,8 +54,7 @@ func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 		reg.MustRegister(grpcMets)
 	}
 
-	// Insecure if secure is false and no TLS config is supplied.
-	if !secure && (tlsConfig == store.TLSConfiguration{}) {
+	if !secure {
 		return append(dialOpts, grpc.WithInsecure()), nil
 	}
 

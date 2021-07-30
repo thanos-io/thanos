@@ -222,8 +222,8 @@ func registerQuery(app *extkingpin.App) {
 			return err
 		}
 
-		if (len(*fileSDFiles) != 0 || len(*stores) != 0) && len(endpointConfigYAML) != 0 {
-			return errors.Errorf("--sore/--store.sd-files and --endpoint.config parameters cannot be defined at the same time")
+		if (len(*fileSDFiles) != 0 || len(*stores) != 0 || *secure) && len(endpointConfigYAML) != 0 {
+			return errors.Errorf("--sore/--store.sd-files/--grpc-client-tls-secure and --endpoint.config parameters cannot be defined at the same time")
 		}
 
 		var fileSDConfig *file.SDConfig
@@ -375,15 +375,6 @@ func runQuery(
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
 
-	// TLSConfig for endpoints provided in --endpoint, --endpoint.sd-files and --endpoint-strict.
-	var TLSConfig store.TLSConfiguration
-	if secure && len(endpointConfigYAML) == 0 {
-		TLSConfig.CertFile = cert
-		TLSConfig.KeyFile = key
-		TLSConfig.CaCertFile = caCert
-		TLSConfig.ServerName = serverName
-	}
-
 	var endpointConfig []store.Config
 	var err error
 	if len(endpointConfigYAML) > 0 {
@@ -392,6 +383,14 @@ func runQuery(
 			return errors.Wrap(err, "loading endpoint config")
 		}
 	} else {
+		// TLSConfig for endpoints provided in --endpoint, --endpoint.sd-files and --endpoint-strict.
+		var TLSConfig store.TLSConfiguration
+		if secure {
+			TLSConfig.CertFile = cert
+			TLSConfig.KeyFile = key
+			TLSConfig.CaCertFile = caCert
+			TLSConfig.ServerName = serverName
+		}
 		endpointConfig, err = store.NewConfig(storeAddrs, strictStores, fileSDConfig, TLSConfig)
 		if err != nil {
 			return errors.Wrap(err, "initializing endpoint config from individual flags")
@@ -425,6 +424,7 @@ func runQuery(
 	var storeSets []*query.EndpointSet
 	fileSDCache := cache.New()
 	for _, config := range endpointConfig {
+		secure = !(config.TLSConfig == store.TLSConfiguration{})
 		dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, config.Name, secure, skipVerify, config.TLSConfig)
 		if err != nil {
 			return errors.Wrap(err, "building gRPC client")

@@ -234,15 +234,15 @@ func TestQueryWithEndpointConfig(t *testing.T) {
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "querier", "1")
 	testutil.Ok(t, cpyDir("./certs", queryFileSDDir))
 
-	args := e2e.BuildArgs(map[string]string{
+	tlsConfig := e2e.BuildArgs(map[string]string{
 		"--grpc-server-tls-cert":      filepath.Join(container, "e2e_test_query_config_server.crt"),
 		"--grpc-server-tls-key":       filepath.Join(container, "testserver.key"),
 		"--grpc-server-tls-client-ca": filepath.Join(container, "testca.crt"),
 	})
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage(), args)
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage(), tlsConfig)
 	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage(), args)
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage(), tlsConfig)
 	testutil.Ok(t, err)
 	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_query_config", "ha1", defaultPromConfig("prom-ha", 0, "", filepath.Join(e2e.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage(), nil)
 	testutil.Ok(t, err)
@@ -276,7 +276,7 @@ func TestQueryWithEndpointConfig(t *testing.T) {
 		},
 	}
 
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", nil).WithEndpointConfig(endpointConfig).WithMutualTLS(args).Build()
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", nil).WithEndpointConfig(endpointConfig).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
