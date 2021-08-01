@@ -412,6 +412,21 @@ config:
 
 Use --objstore.config-file to reference to this configuration file.
 
+#### Baidu BOS
+
+In order to use Baidu BOS object storage, you should apply for a Baidu Account and create an object storage bucket first. Refer to [Baidu Cloud Documents](https://cloud.baidu.com/doc/BOS/index.html) for more details.
+To use Baidu BOS object storage, please specify the following yaml configuration file in `--objstore.config*` flag.
+
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=bos.Config"
+type: BOS
+config:
+  bucket: ""
+  endpoint: ""
+  access_key: ""
+  secret_key: ""
+```
+
+
 #### Filesystem
 
 This storage type is used when user wants to store and access the bucket in the local filesystem. We treat filesystem the same way we would treat object storage, so all optimization for remote bucket applies even though, we might have the files locally.
