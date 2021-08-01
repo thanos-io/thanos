@@ -61,12 +61,5 @@ transformations:
         menu: contributing
         lastmod: "{{ .Origin.LastMod }}"
   
-  # TODO(saswatamcode): add a new file just via mdox
-  # - glob: "README.md"
-  #   path: /thanos/_index.md
-  #   frontMatter:
-  #     template: |
-  #       title: "{{ .Origin.FirstHeader }}"
-
   - glob: "*.md"
     path: /thanos/*
