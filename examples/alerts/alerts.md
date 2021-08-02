@@ -296,16 +296,6 @@ rules:
 ```yaml mdox-exec="cat examples/tmp/thanos-sidecar.yaml"
 name: thanos-sidecar
 rules:
-- alert: ThanosSidecarPrometheusDown
-  annotations:
-    description: Thanos Sidecar {{$labels.instance}} cannot connect to Prometheus.
-    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarprometheusdown
-    summary: Thanos Sidecar cannot connect to Prometheus
-  expr: |
-    thanos_sidecar_prometheus_up{job=~".*thanos-sidecar.*"} == 0
-  for: 5m
-  labels:
-    severity: critical
 - alert: ThanosSidecarBucketOperationsFailed
   annotations:
     description: Thanos Sidecar {{$labels.instance}} bucket operations are failing
