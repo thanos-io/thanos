@@ -456,3 +456,24 @@ func CompareLabels(a, b []Label) int {
 func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
 	return labelpb.ZLabelsToPromLabels(lset)
 }
+
+// SeriesResponseZeroMarshal is a struct that holds a series response
+// and who always marshals to the provided byte slice.
+type SeriesResponseZeroMarshal struct {
+	Resp *SeriesResponse
+	buf  []byte
+}
+
+// NewSeriesResponseZeroMarshal initializes a new zero-alloc marshaler.
+// initialBuf should be taken from a sync.Pool.
+func NewSeriesResponseZeroMarshal(s *SeriesResponse, initialBuf []byte) *SeriesResponseZeroMarshal {
+	return &SeriesResponseZeroMarshal{Resp: s, buf: initialBuf}
+}
+
+func (s *SeriesResponseZeroMarshal) Marshal() ([]byte, error) {
+	n, err := s.Resp.MarshalToSizedBuffer(s.buf)
+	if err != nil {
+		return nil, err
+	}
+	return s.buf[len(s.buf)-n:], nil
+}

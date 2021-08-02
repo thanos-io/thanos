@@ -296,6 +296,9 @@ type BucketStore struct {
 
 	// Enables hints in the Series() response.
 	enableSeriesResponseHints bool
+
+	// respBufferPool is a buffer.Bytes pool for Series() responses.
+	respBufferPool *sync.Pool
 }
 
 type noopCache struct{}
@@ -396,6 +399,11 @@ func NewBucketStore(
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		enableSeriesResponseHints:   enableSeriesResponseHints,
+		respBufferPool: &sync.Pool{
+			New: func() interface{} {
+				return &bytes.Buffer{}
+			},
+		},
 	}
 
 	for _, option := range options {
@@ -1096,6 +1104,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
 		begin := time.Now()
 
+		respBuf := s.respBufferPool.Get().(*bytes.Buffer)
+		defer func() {
+			respBuf.Reset()
+			s.respBufferPool.Put(respBuf)
+		}()
+
 		// NOTE: We "carefully" assume series and chunks are sorted within each SeriesSet. This should be guaranteed by
 		// blockSeries method. In worst case deduplication logic won't deduplicate correctly, which will be accounted later.
 		set := storepb.MergeSeriesSets(res...)
@@ -1114,7 +1128,14 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
 			}
 			series.Labels = labelpb.ZLabelsFromPromLabels(lset)
-			if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
+
+			resp := storepb.NewSeriesResponse(&series)
+			respSize := resp.Size()
+			respBuf.Grow(respSize)
+
+			respActual := storepb.NewSeriesResponseZeroMarshal(resp, respBuf.Bytes()[:respSize])
+
+			if err = srv.SendMsg(respActual); err != nil {
 				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 				return
 			}

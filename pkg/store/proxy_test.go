@@ -1547,17 +1547,30 @@ type storeSeriesServer struct {
 	SeriesSet []storepb.Series
 	Warnings  []string
 	HintsSet  []*types.Any
-
-	Size int64
 }
 
 func newStoreSeriesServer(ctx context.Context) *storeSeriesServer {
 	return &storeSeriesServer{ctx: ctx}
 }
 
-func (s *storeSeriesServer) Send(r *storepb.SeriesResponse) error {
-	s.Size += int64(r.Size())
+func (s *storeSeriesServer) SendMsg(m interface{}) error {
+	r := m.(*storepb.SeriesResponseZeroMarshal)
 
+	_, err := r.Marshal()
+	if err != nil {
+		return err
+	}
+	return s.Send(r.Resp)
+}
+
+func (s *storeSeriesServer) Send(r *storepb.SeriesResponse) error {
+	/*
+	   Uncomment here for a fair comparison pre-SeriesResponseZeroMarshal.
+	   _, err := r.Marshal()
+	   if err != nil {
+	           return err
+	   }
+	*/
 	if r.GetWarning() != "" {
 		s.Warnings = append(s.Warnings, r.GetWarning())
 		return nil
