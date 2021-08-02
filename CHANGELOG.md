@@ -47,6 +47,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#4354](https://github.com/thanos-io/thanos/pull/4354) Receive: use the S2 library for decoding Snappy data; saves about 5-7% of CPU time in the Receive component when handling incoming remote write requests
 - [#4369](https://github.com/thanos-io/thanos/pull/4354) Build: do not upgrade apline version
+- [#4512](https://github.com/thanos-io/thanos/pull/4512) Store: reuse same buffer for Series() responses. On bigger queries this reduces Thanos Store memory usage by up to 25%.
 
 ## [v0.21.1](https://github.com/thanos-io/thanos/releases/tag/v0.21.1) - 2021.06.04
 
