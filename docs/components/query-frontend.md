@@ -74,6 +74,7 @@ config:
   max_item_size: 0
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
+  auto_discovery: false
   expiration: 0s
 ```
 
