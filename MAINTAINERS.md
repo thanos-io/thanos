@@ -4,7 +4,7 @@
 |-----------------------|------------------------|--------------------------|----------------------------------------------|---------------|
 | Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)     | Red Hat       |
 | Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)         | Polar Signals |
-| Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)   | AdForm        |
+| Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)   | Vinted        |
 | Kemal Akkoyun         | kakkoyun@gmail.com     | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)     | Polar Signals |
 | Lucas Servén Marín    | lserven@gmail.com      | `@squat`                 | [@squat](https://github.com/squat)           | Red Hat       |
 | Prem Saraswat         | prmsrswt@gmail.com     | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)         | Red Hat       |
