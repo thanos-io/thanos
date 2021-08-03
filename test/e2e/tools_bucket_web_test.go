@@ -112,7 +112,7 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	t.Parallel()
 
-	s, err := e2e.NewScenario("e2e_test_tools_bucket_web_external_prefix_and_route_prefix")
+	s, err := e2e.NewScenario("e2e_test_tools_bucket_web_and_route_prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, s))
 
