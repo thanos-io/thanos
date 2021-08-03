@@ -5,10 +5,9 @@
 | Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)     | Red Hat       |
 | Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)         | Polar Signals |
 | Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)   | AdForm        |
-| Kemal Akkoyun         | kakkoyun@gmail.com     | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)     | Red Hat       |
+| Kemal Akkoyun         | kakkoyun@gmail.com     | `@kakkoyun`              | [@kakkoyun](https://github.com/kakkoyun)     | Polar Signals |
 | Lucas Servén Marín    | lserven@gmail.com      | `@squat`                 | [@squat](https://github.com/squat)           | Red Hat       |
 | Prem Saraswat         | prmsrswt@gmail.com     | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)         | Red Hat       |
-| Marco Pracucci        | marco@pracucci.com     | `@pracucci`              | [@pracucci](https://github.com/pracucci)     | Grafana Labs  |
 | Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze) | Polar Signals |
 | Ben Ye                | yb532204897@gmail.com  | `@yeya24`                | [@yeya24](https://github.com/yeya24)         | ByteDance     |
 
@@ -102,4 +101,4 @@ Fabian Reinartz @fabxc and Bartłomiej Płotka @bwplotka
 
 ## Previous Maintainers
 
-Dominic Green, Povilas Versockas
+Dominic Green, Povilas Versockas, Marco Pracucci

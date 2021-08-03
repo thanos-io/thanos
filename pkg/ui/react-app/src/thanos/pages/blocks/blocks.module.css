@@ -2,6 +2,8 @@
   display: flex;
   --top: 72px;
   min-height: calc(100vh - var(--top));
+  position: relative;
+  z-index: 1;
 }
 
 .grid {

@@ -238,7 +238,7 @@ func NewTestBucketFromConfig(t testing.TB, c Config, reuseBucket bool) (objstore
 	if c.Bucket == "" {
 		src := rand.NewSource(time.Now().UnixNano())
 
-		bktToCreate := strings.Replace(fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()), "_", "-", -1)
+		bktToCreate := strings.ReplaceAll(fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()), "_", "-")
 		if len(bktToCreate) >= 63 {
 			bktToCreate = bktToCreate[:63]
 		}
