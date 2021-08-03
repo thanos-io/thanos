@@ -50,6 +50,7 @@ single_flight: true
 		return nil
 	})
 
+	// We need to wait until the previous goroutine has spawned and blocked on the Fetch() call. In practice, this will take only a few nano/milliseconds, so we wait for that to happen.
 	time.Sleep(1 * time.Second)
 	// This unblocks the other goroutine.
 	c.Store(ctx, map[string][]byte{testKey: []byte("aa")}, 1*time.Minute)
@@ -90,6 +91,7 @@ single_flight: true
 		return nil
 	})
 
+	// We need to wait until c.Fetch() has been called. In practice, we should only wait for a millisecond or so but a second is here to be on the safe side.
 	time.Sleep(1 * time.Second)
 	c.Store(context.Background(), map[string][]byte{testKeys[0]: []byte("foobar")}, 1*time.Minute)
 	time.Sleep(1 * time.Second)

@@ -348,6 +348,11 @@ func (c *InMemoryCache) Fetch(ctx context.Context, keys []string) map[string][]b
 			continue
 		}
 
+		// Singleflight works via contexts. If a context already exists and it has expired
+		// then it means that it is our turn to get the resource.
+		// If it has not expired yet then it means that we will be able to get results.
+		// In the worst case, the old context could expire after we check but that's OK,
+		// it only means that some data will need to be fetched.
 		c.mu.Lock()
 		if _, ok := c.subs[key]; !ok {
 			c.subs[key] = &pubsub{originalCtx: ctx}
