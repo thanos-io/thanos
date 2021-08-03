@@ -1685,14 +1685,14 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 
 func TestProxySeries(t *testing.T) {
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, false, func(t testutil.TB, samplesPerSeries, series int, singleflight bool, throughput float64) {
 		benchProxySeries(t, samplesPerSeries, series)
 	})
 }
 
 func BenchmarkProxySeries(b *testing.B) {
 	tb := testutil.NewTB(b)
-	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, false, func(t testutil.TB, samplesPerSeries, series int, singleflight bool, throughput float64) {
 		benchProxySeries(t, samplesPerSeries, series)
 	})
 }

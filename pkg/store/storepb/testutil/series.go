@@ -190,7 +190,7 @@ func (s *SeriesServer) Context() context.Context {
 	return s.ctx
 }
 
-func RunSeriesInterestingCases(t testutil.TB, maxSamples, maxSeries int, f func(t testutil.TB, samplesPerSeries, series int)) {
+func RunSeriesInterestingCases(t testutil.TB, maxSamples, maxSeries int, runSlowTests bool, f func(t testutil.TB, samplesPerSeries, series int, singleflight bool, throughput float64)) {
 	for _, tc := range []struct {
 		samplesPerSeries int
 		series           int
@@ -208,12 +208,23 @@ func RunSeriesInterestingCases(t testutil.TB, maxSamples, maxSeries int, f func(
 			series:           1,
 		},
 	} {
-		if ok := t.Run(fmt.Sprintf("%dSeriesWith%dSamples", tc.series, tc.samplesPerSeries), func(t testutil.TB) {
-			f(t, tc.samplesPerSeries, tc.series)
-		}); !ok {
-			return
+		for _, sf := range []bool{true, false} {
+			throughputList := []float64{0, 2 * 1024 * 1024}
+			if !runSlowTests {
+				throughputList = []float64{0}
+			}
+			// Bytes/sec throughput to be used in tests. 0 means unlimited.
+			for _, throughput := range throughputList {
+				if ok := t.Run(fmt.Sprintf("%dSeriesWith%dSamples,Singleflight=%v,Throughput=%v", tc.series, tc.samplesPerSeries, sf, throughput), func(t testutil.TB) {
+					f(t, tc.samplesPerSeries, tc.series, sf, throughput)
+				}); !ok {
+					return
+				}
+				runtime.GC()
+			}
+
 		}
-		runtime.GC()
+
 	}
 }
 

@@ -48,6 +48,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 	"github.com/thanos-io/thanos/pkg/pool"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
+
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -1158,43 +1159,49 @@ func benchmarkExpandedPostings(
 
 func TestBucketSeries(t *testing.T) {
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
-		benchBucketSeries(t, false, samplesPerSeries, series, 1)
+	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, false, func(t testutil.TB, samplesPerSeries, series int, singleflight bool, throughput float64) {
+		benchBucketSeries(t, false, samplesPerSeries, series, singleflight, throughput, 1)
 	})
 }
 
 func TestBucketSkipChunksSeries(t *testing.T) {
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
-		benchBucketSeries(t, true, samplesPerSeries, series, 1)
+	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, false, func(t testutil.TB, samplesPerSeries, series int, singleflight bool, throughput float64) {
+		benchBucketSeries(t, true, samplesPerSeries, series, singleflight, throughput, 1)
 	})
 }
 
 func BenchmarkBucketSeries(b *testing.B) {
 	tb := testutil.NewTB(b)
 	// 10e6 samples = ~1736 days with 15s scrape
-	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, func(t testutil.TB, samplesPerSeries, series int) {
-		benchBucketSeries(t, false, samplesPerSeries, series, 1/100e6, 1/10e4, 1)
+	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, true, func(t testutil.TB, samplesPerSeries, series int, singleflight bool, throughput float64) {
+		benchBucketSeries(t, false, samplesPerSeries, series, singleflight, throughput, 1/100e6, 1/10e4, 1)
 	})
 }
 
 func BenchmarkBucketSkipChunksSeries(b *testing.B) {
 	tb := testutil.NewTB(b)
 	// 10e6 samples = ~1736 days with 15s scrape
-	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, func(t testutil.TB, samplesPerSeries, series int) {
-		benchBucketSeries(t, true, samplesPerSeries, series, 1/100e6, 1/10e4, 1)
+	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, false, func(t testutil.TB, samplesPerSeries, series int, singleflight bool, throughput float64) {
+		benchBucketSeries(t, true, samplesPerSeries, series, singleflight, throughput, 1/100e6, 1/10e4, 1)
 	})
 }
 
-func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSeries int, requestedRatios ...float64) {
+func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSeries int, singleflight bool, throughput float64, requestedRatios ...float64) {
 	const numOfBlocks = 4
 
 	tmpDir, err := ioutil.TempDir("", "testorbench-bucketseries")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
-	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	var bkt objstore.Bucket
+
+	bkt, err = filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
 	testutil.Ok(t, err)
+
+	if throughput != 0 {
+		bkt = objstore.NewLaggyBucket(throughput, bkt)
+	}
 	defer func() { testutil.Ok(t, bkt.Close()) }()
 
 	var (
@@ -1246,6 +1253,16 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 	}
 
 	ibkt := objstore.WithNoopInstr(bkt)
+
+	if singleflight {
+		const config = `type: IN-MEMORY
+config:
+  single_flight: true`
+		ibkt, err = storecache.NewCachingBucketFromYaml([]byte(config), bkt, logger, nil)
+		testutil.Ok(t, err)
+
+	}
+
 	f, err := block.NewRawMetaFetcher(logger, ibkt)
 	testutil.Ok(t, err)
 

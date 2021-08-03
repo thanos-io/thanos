@@ -28,7 +28,7 @@ func TestMultiTSDBSeries(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, false, func(t testutil.TB, samplesPerSeries, series int, singleflight bool, throughput float64) {
 		if ok := t.Run("headOnly", func(t testutil.TB) {
 			benchMultiTSDBSeries(t, samplesPerSeries, series, false)
 		}); !ok {
@@ -42,7 +42,7 @@ func TestMultiTSDBSeries(t *testing.T) {
 
 func BenchmarkMultiTSDBSeries(b *testing.B) {
 	tb := testutil.NewTB(b)
-	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, false, func(t testutil.TB, samplesPerSeries, series int, singleflight bool, throughput float64) {
 		if ok := t.Run("headOnly", func(t testutil.TB) {
 			benchMultiTSDBSeries(t, samplesPerSeries, series, false)
 		}); !ok {

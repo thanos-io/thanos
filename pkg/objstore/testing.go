@@ -6,6 +6,7 @@ package objstore
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"sort"
@@ -15,7 +16,124 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"golang.org/x/time/rate"
 )
+
+const burstLimit = 1000 * 1000 * 1000
+
+// Adopted from https://github.com/fujiwara/shapeio
+// Converted to use io.ReadCloser.
+type RateLimitedReader struct {
+	r       io.ReadCloser
+	limiter *rate.Limiter
+	ctx     context.Context
+}
+
+// NewReader returns a reader that implements io.ReadCloser with rate limiting.
+func NewReader(r io.ReadCloser) *RateLimitedReader {
+	return &RateLimitedReader{
+		r:   r,
+		ctx: context.Background(),
+	}
+}
+
+// NewReaderWithContext returns a reader that implements io.ReadCloser with rate limiting.
+func NewReaderWithContext(r io.ReadCloser, ctx context.Context) *RateLimitedReader {
+	return &RateLimitedReader{
+		r:   r,
+		ctx: ctx,
+	}
+}
+
+// SetRateLimit sets rate limit (bytes/sec) to the reader.
+func (s *RateLimitedReader) SetRateLimit(bytesPerSec float64) {
+	s.limiter = rate.NewLimiter(rate.Limit(bytesPerSec), burstLimit)
+	s.limiter.AllowN(time.Now(), burstLimit) // spend initial burst
+}
+
+// Read reads bytes into p.
+func (s *RateLimitedReader) Read(p []byte) (int, error) {
+	if s.limiter == nil {
+		return s.r.Read(p)
+	}
+	n, err := s.r.Read(p)
+	if err != nil {
+		return n, err
+	}
+	if err := s.limiter.WaitN(s.ctx, n); err != nil {
+		return n, err
+	}
+	return n, nil
+}
+
+func (s *RateLimitedReader) Close() error {
+	return s.r.Close()
+}
+
+// LaggyBucket is a Bucket that wraps another one and limits
+// the throughput via io.Reader.
+type LaggyBucket struct {
+	throughput float64
+	wrappedBkt Bucket
+}
+
+func NewLaggyBucket(throughput float64, bkt Bucket) Bucket {
+	return &LaggyBucket{throughput: throughput, wrappedBkt: bkt}
+}
+
+func (b *LaggyBucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	return b.wrappedBkt.Upload(ctx, name, r)
+}
+
+func (b *LaggyBucket) Delete(ctx context.Context, name string) error {
+	return b.wrappedBkt.Delete(ctx, name)
+
+}
+
+func (b *LaggyBucket) Name() string {
+	return b.wrappedBkt.Name()
+}
+
+func (b *LaggyBucket) Close() error {
+	return b.wrappedBkt.Close()
+}
+
+func (b *LaggyBucket) Iter(ctx context.Context, dir string, f func(string) error, options ...IterOption) error {
+	return b.wrappedBkt.Iter(ctx, dir, f, options...)
+}
+
+func (b *LaggyBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
+	rc, err := b.wrappedBkt.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	reader := NewReader(rc)
+	reader.SetRateLimit(b.throughput)
+	return reader, nil
+}
+
+func (b *LaggyBucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	rc, err := b.wrappedBkt.GetRange(ctx, name, off, length)
+	if err != nil {
+		return nil, err
+	}
+	reader := NewReader(rc)
+	reader.SetRateLimit(b.throughput)
+	return reader, nil
+
+}
+
+func (b *LaggyBucket) Exists(ctx context.Context, name string) (bool, error) {
+	return b.wrappedBkt.Exists(ctx, name)
+}
+
+func (b *LaggyBucket) IsObjNotFoundErr(err error) bool {
+	return b.wrappedBkt.IsObjNotFoundErr(err)
+}
+
+func (b *LaggyBucket) Attributes(ctx context.Context, name string) (ObjectAttributes, error) {
+	return b.wrappedBkt.Attributes(ctx, name)
+}
 
 func CreateTemporaryTestBucketName(t testing.TB) string {
 	src := rand.NewSource(time.Now().UnixNano())
