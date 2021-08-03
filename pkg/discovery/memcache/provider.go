@@ -101,6 +101,9 @@ func (p *Provider) Resolve(ctx context.Context, addresses []string) error {
 
 // Addresses returns the latest addresses present in the Provider.
 func (p *Provider) Addresses() []string {
+	p.RLock()
+	defer p.RUnlock()
+
 	var result []string
 	for _, config := range p.clusterConfigs {
 		for _, node := range config.nodes {
