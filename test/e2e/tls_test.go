@@ -53,8 +53,8 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	certSrv := filepath.Join(tmpDirSrv, "cert")
 	keySrv := filepath.Join(tmpDirSrv, "key")
 
-	genCerts(t, certSrv, keySrv, caClt, serverName)
-	genCerts(t, certClt, keyClt, caSrv, serverName)
+	genCerts(t, certSrv, keySrv, caClt)
+	genCerts(t, certClt, keyClt, caSrv)
 
 	configSrv, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv)
 	testutil.Ok(t, err)
@@ -90,8 +90,8 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	testutil.Equals(t, expMessage, resp.Message)
 
 	// Reload certs and check for a good state.
-	genCerts(t, certSrv, keySrv, caClt, serverName)
-	genCerts(t, certClt, keyClt, caSrv, serverName)
+	genCerts(t, certSrv, keySrv, caClt)
+	genCerts(t, certClt, keyClt, caSrv)
 	time.Sleep(50 * time.Millisecond) // Wait for the server MaxConnectionAge to expire.
 	resp, err = clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
 	testutil.Ok(t, err)
@@ -119,7 +119,7 @@ var cert = &x509.Certificate{
 // genCerts generates certificates and writes those to the provided paths.
 // When the CA file already exists it is not overwritten and
 // it is used to sign the certificates.
-func genCerts(t *testing.T, certPath, privkeyPath, caPath, serverName string) {
+func genCerts(t *testing.T, certPath, privkeyPath, caPath string) {
 	var (
 		err       error
 		caPrivKey *rsa.PrivateKey
