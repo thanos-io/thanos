@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -67,12 +68,16 @@ type serverTLSManager struct {
 	srvCertPath string
 	srvKeyPath  string
 
+	mtx            sync.Mutex
 	srvCert        *tls.Certificate
 	srvCertModTime time.Time
 	srvKeyModTime  time.Time
 }
 
 func (m *serverTLSManager) getCertificate(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
 	statCert, err := os.Stat(m.srvCertPath)
 	if err != nil {
 		return nil, err
@@ -149,12 +154,16 @@ type clientTLSManager struct {
 	certPath string
 	keyPath  string
 
+	mtx         sync.Mutex
 	cert        *tls.Certificate
 	certModTime time.Time
 	keyModTime  time.Time
 }
 
 func (m *clientTLSManager) getClientCertificate(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
 	statCert, err := os.Stat(m.certPath)
 	if err != nil {
 		return nil, err
