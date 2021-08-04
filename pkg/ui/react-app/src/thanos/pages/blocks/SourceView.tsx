@@ -15,18 +15,10 @@ export const BlocksRow: FC<{
 
   return (
     <div className={styles.row}>
-      {blocks.map<JSX.Element | undefined>((b) => {
-        if (b.ulid === blockSearchValue || blockSearch === '') {
-          return (
-            <BlockSpan
-              selectBlock={selectBlock}
-              block={b}
-              gridMaxTime={gridMaxTime}
-              gridMinTime={gridMinTime}
-              key={b.ulid}
-            />
-          );
-        }
+      {blockSearchValue.map<JSX.Element>((b) => {
+        return (
+          <BlockSpan selectBlock={selectBlock} block={b} gridMaxTime={gridMaxTime} gridMinTime={gridMinTime} key={b.ulid} />
+        );
       })}
     </div>
   );

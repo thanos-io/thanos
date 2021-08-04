@@ -105,16 +105,18 @@ export const download = (blob: Block): string => {
   return url;
 };
 
-export const getBlockByUlid = (blocks: Block[], ulid: string): string => {
+export const getBlockByUlid = (blocks: Block[], ulid: string): Block[] => {
+  if (ulid === '') {
+    return blocks;
+  }
+
   const ulidArray = blocks.map((block) => block.ulid);
   const fuz = new Fuzzy({ caseSensitive: true });
 
   const result: FuzzyResult[] = fuz.filter(ulid, ulidArray);
 
-  if (result.length > 0) {
-    let index = result[0].index;
-    return blocks[index].ulid;
-  }
+  const resultIndex = result.map((value) => value.index);
 
-  return '';
+  const blockResult = blocks.filter((block, index) => resultIndex.includes(index));
+  return blockResult;
 };
