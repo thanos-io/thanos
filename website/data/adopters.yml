@@ -1,5 +1,8 @@
 ---
 adopters:
+- name: Infinite Devices
+  url: https://infinimesh.io
+  logo: infdevlogo.png
 - name: Monzo
   url: https://www.monzo.com
   logo: monzo.png
