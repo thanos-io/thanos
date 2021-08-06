@@ -201,7 +201,7 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			resp.Chunks = append(resp.Chunks, series.Chunks[ci])
 		}
 
-		if err := srv.Send(storepb.NewSeriesResponse(resp)); err != nil {
+		if err := srv.Send(storepb.NewSeriesResponse(resp, nil, nil)); err != nil {
 			return status.Error(codes.Aborted, err.Error())
 		}
 	}

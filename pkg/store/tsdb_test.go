@@ -785,7 +785,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			Random:           random,
 		})
 		for i := 0; i < len(created); i++ {
-			resps[j] = append(resps[j], storepb.NewSeriesResponse(created[i]))
+			resps[j] = append(resps[j], storepb.NewSeriesResponse(created[i], nil, nil))
 		}
 
 		_ = createBlockFromHead(t, tmpDir, head)
@@ -807,7 +807,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 	})
 
 	for i := 0; i < len(created); i++ {
-		resps[3] = append(resps[3], storepb.NewSeriesResponse(created[i]))
+		resps[3] = append(resps[3], storepb.NewSeriesResponse(created[i], nil, nil))
 	}
 
 	db, err := tsdb.OpenDBReadOnly(tmpDir, logger)

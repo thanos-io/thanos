@@ -1680,7 +1680,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 
 		s.Chunks = append(s.Chunks, ch)
 	}
-	return storepb.NewSeriesResponse(&s)
+	return storepb.NewSeriesResponse(&s, nil, nil)
 }
 
 func TestProxySeries(t *testing.T) {
@@ -1728,7 +1728,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 		testutil.Ok(t, head.Close())
 
 		for i := 0; i < len(created); i++ {
-			resps = append(resps, storepb.NewSeriesResponse(created[i]))
+			resps = append(resps, storepb.NewSeriesResponse(created[i], nil, nil))
 		}
 
 		clients[j] = &testClient{

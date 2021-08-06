@@ -296,6 +296,9 @@ type BucketStore struct {
 
 	// Enables hints in the Series() response.
 	enableSeriesResponseHints bool
+
+	// respPool is a sync.Pool for marshaling Series() responses.
+	respPool sync.Pool
 }
 
 type noopCache struct{}
@@ -396,6 +399,14 @@ func NewBucketStore(
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		enableSeriesResponseHints:   enableSeriesResponseHints,
+		respPool: sync.Pool{
+			New: func() interface{} {
+				// TODO(GiedriusS): we could calibrate the default
+				// size here.
+				b := make([]byte, 32)
+				return &b
+			},
+		},
 	}
 
 	for _, option := range options {
@@ -1092,6 +1103,13 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.seriesGetAllDuration.Observe(stats.getAllDuration.Seconds())
 		s.metrics.seriesBlocksQueried.Observe(float64(stats.blocksQueried))
 	}
+
+	var respBuf *[]byte
+	if resHints.Len() > 0 || len(res) > 0 {
+		respBuf = s.respPool.Get().(*[]byte)
+		defer s.respPool.Put(respBuf)
+	}
+
 	// Merge the sub-results from each selected block.
 	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
 		begin := time.Now()
@@ -1114,7 +1132,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
 			}
 			series.Labels = labelpb.ZLabelsFromPromLabels(lset)
-			if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
+
+			resp := storepb.NewSeriesResponse(&series, &respBuf, &s.respPool)
+			if err = srv.Send(resp); err != nil {
 				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 				return
 			}
@@ -1137,7 +1157,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			return
 		}
 
-		if err = srv.Send(storepb.NewHintsSeriesResponse(anyHints)); err != nil {
+		if err = srv.Send(storepb.NewHintsSeriesResponse(anyHints, &respBuf, &s.respPool)); err != nil {
 			err = status.Error(codes.Unknown, errors.Wrap(err, "send series response hints").Error())
 			return
 		}

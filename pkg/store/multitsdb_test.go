@@ -103,7 +103,7 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 			SkipChunks:       t.IsBenchmark(),
 		})
 		for i := 0; i < len(created); i++ {
-			resps[j] = append(resps[j], storepb.NewSeriesResponse(created[i]))
+			resps[j] = append(resps[j], storepb.NewSeriesResponse(created[i], nil, nil))
 		}
 
 		if flushToBlocks {

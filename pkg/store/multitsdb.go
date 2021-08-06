@@ -247,7 +247,7 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 			respSender.send(storepb.NewSeriesResponse(&storepb.Series{
 				Labels: labelpb.ZLabelsFromPromLabels(lset),
 				Chunks: chks,
-			}))
+			}, nil, nil))
 		}
 		return mergedSet.Err()
 	})

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
@@ -33,16 +34,30 @@ func NewWarnSeriesResponse(err error) *SeriesResponse {
 	}
 }
 
-func NewSeriesResponse(series *Series) *SeriesResponse {
+func NewSeriesResponse(series *Series, respBuf **[]byte, respPool *sync.Pool) *SeriesResponse {
+	if respPool == nil {
+		buf := []byte{}
+		bufPtr := &buf
+		respBuf = &bufPtr
+	}
 	return &SeriesResponse{
+		respPool: respPool,
+		respBuf:  respBuf,
 		Result: &SeriesResponse_Series{
 			Series: series,
 		},
 	}
 }
 
-func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
+func NewHintsSeriesResponse(hints *types.Any, respBuf **[]byte, respPool *sync.Pool) *SeriesResponse {
+	if respPool == nil {
+		buf := []byte{}
+		bufPtr := &buf
+		respBuf = &bufPtr
+	}
 	return &SeriesResponse{
+		respPool: respPool,
+		respBuf:  respBuf,
 		Result: &SeriesResponse_Hints{
 			Hints: hints,
 		},
@@ -455,4 +470,115 @@ func CompareLabels(a, b []Label) int {
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
 func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
 	return labelpb.ZLabelsToPromLabels(lset)
+}
+
+// Type alias because protoc-go-inject-field does not support
+// managing imports.
+type syncPool = sync.Pool
+
+// The following were copied/pasted from gogoprotobuf generated code with changes
+// to make it work with sync.Pool / []byte slice.
+func (m *SeriesResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+
+	if cap(**m.respBuf) < size {
+		if m.respPool != nil {
+			m.respPool.Put(*m.respBuf)
+		}
+		buf := make([]byte, size)
+		*m.respBuf = &buf
+	}
+	respBuf := **m.respBuf
+
+	marshalBuf := respBuf[:size]
+	n, err := m.MarshalToSizedBuffer(marshalBuf)
+	if err != nil {
+		return nil, err
+	}
+	return marshalBuf[len(marshalBuf)-n:], nil
+}
+
+func (m *SeriesResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+type marshaler interface {
+	MarshalTo([]byte) (int, error)
+}
+
+func (m *SeriesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+
+	if m.Result != nil {
+		{
+			size := m.Result.Size()
+			i -= size
+
+			if _, err := m.Result.(marshaler).MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *SeriesResponse_Series) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SeriesResponse_Series) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Series != nil {
+		{
+			size, err := m.Series.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintRpc(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+func (m *SeriesResponse_Warning) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SeriesResponse_Warning) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	i -= len(m.Warning)
+	copy(dAtA[i:], m.Warning)
+	i = encodeVarintRpc(dAtA, i, uint64(len(m.Warning)))
+	i--
+	dAtA[i] = 0x12
+	return len(dAtA) - i, nil
+}
+func (m *SeriesResponse_Hints) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SeriesResponse_Hints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Hints != nil {
+		{
+			size, err := m.Hints.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintRpc(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	return len(dAtA) - i, nil
 }

@@ -76,7 +76,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 				expectedSeries = append(expectedSeries, lset)
 			}
 
-			resps = append(resps, storepb.NewSeriesResponse(created[i]))
+			resps = append(resps, storepb.NewSeriesResponse(created[i], nil, nil))
 		}
 
 	}
