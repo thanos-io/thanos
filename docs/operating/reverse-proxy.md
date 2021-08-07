@@ -1,8 +1,8 @@
 ---
-title: Running Thanos behind a reverse proxy
 type: docs
-menu: operating
+title: Running Thanos behind a reverse proxy
 slug: /reverse-proxy.md
+menu: operating
 ---
 
 # Running Thanos behind a reverse proxy
