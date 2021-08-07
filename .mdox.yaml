@@ -24,7 +24,7 @@ transformations:
         type: docs
         menu: thanos
         lastmod: "{{ .Origin.LastMod }}"
-    backMatter:
+    backMatter: &externalGlobBackMatter
       template: |
         Found a typo, inconsistency or missing information in our docs?
         Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/{{ .Origin.Filename }}) :heart:
@@ -37,10 +37,7 @@ transformations:
         type: docs
         menu: thanos
         lastmod: "{{ .Origin.LastMod }}"
-    backMatter:
-      template: |
-        Found a typo, inconsistency or missing information in our docs?
-        Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/{{ .Origin.Filename }}) :heart:
+    backMatter: *externalGlobBackMatter
 
   - glob: "../SECURITY.md"
     path: /thanos/SECURITY.md
@@ -50,10 +47,7 @@ transformations:
         type: docs
         menu: thanos
         lastmod: "{{ .Origin.LastMod }}"
-    backMatter:
-      template: |
-        Found a typo, inconsistency or missing information in our docs?
-        Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/{{ .Origin.Filename }}) :heart:
+    backMatter: *externalGlobBackMatter
 
   - glob: "../CODE_OF_CONDUCT.md"
     path: /contributing/CODE_OF_CONDUCT.md
@@ -63,10 +57,7 @@ transformations:
         type: docs
         menu: contributing
         lastmod: "{{ .Origin.LastMod }}"
-    backMatter:
-      template: |
-        Found a typo, inconsistency or missing information in our docs?
-        Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/{{ .Origin.Filename }}) :heart:
+    backMatter: *externalGlobBackMatter
 
   - glob: "../CONTRIBUTING.md"
     path: /contributing/CONTRIBUTING.md
@@ -76,17 +67,14 @@ transformations:
         type: docs
         menu: contributing
         lastmod: "{{ .Origin.LastMod }}"
-    backMatter:
-      template: |
-        Found a typo, inconsistency or missing information in our docs?
-        Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/{{ .Origin.Filename }}) :heart:
+    backMatter: *externalGlobBackMatter
   
   - glob: "**/README.md"
     path: _index.md
-    frontMatter:
+    frontMatter: &justTitleFrontMatter
       template: |
         title: "{{ .Origin.FirstHeader }}"
-    backMatter:
+    backMatter: &docsGlobBackMatter
       template: |
         Found a typo, inconsistency or missing information in our docs?
         Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/docs/{{ .Origin.Filename }}) :heart:
@@ -94,52 +82,30 @@ transformations:
   - glob: "getting-started.md"
     path: /thanos/getting-started.md
     popHeader: false
-    frontMatter:
+    frontMatter: &weightOneFrontMatter
       template: |
         type: docs
         title: "{{ .Origin.FirstHeader }}"
         menu: thanos
         weight: 1
         lastmod: "{{ .Origin.LastMod }}"
-    backMatter:
-      template: |
-        Found a typo, inconsistency or missing information in our docs?
-        Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/docs/{{ .Origin.Filename }}) :heart:
+    backMatter: *docsGlobBackMatter
 
   - glob: "quick-tutorial.md"
     path: /thanos/quick-tutorial.md
     popHeader: false
-    frontMatter:
-      template: |
-        type: docs
-        title: "{{ .Origin.FirstHeader }}"
-        menu: thanos
-        weight: 1
-        lastmod: "{{ .Origin.LastMod }}"
-    backMatter:
-      template: |
-        Found a typo, inconsistency or missing information in our docs?
-        Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/docs/{{ .Origin.Filename }}) :heart:
+    frontMatter: *weightOneFrontMatter
+    backMatter: *docsGlobBackMatter
 
   - glob: "proposals-*/README.md"
     path: /proposals-*/_index.md
-    frontMatter:
-      template: |
-        title: "{{ .Origin.FirstHeader }}"
-    backMatter:
-      template: |
-        Found a typo, inconsistency or missing information in our docs?
-        Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/docs/{{ .Origin.Filename }}) :heart:
+    frontMatter: *justTitleFrontMatter
+    backMatter: *docsGlobBackMatter
 
   - glob: "README.md"
     path: /thanos/_index.md
-    frontMatter:
-      template: |
-        title: "{{ .Origin.FirstHeader }}"
-    backMatter:
-      template: |
-        Found a typo, inconsistency or missing information in our docs?
-        Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/docs/{{ .Origin.Filename }}) :heart:
+    frontMatter: *justTitleFrontMatter
+    backMatter: *docsGlobBackMatter
 
   - glob: "*.md"
     path: /thanos/*
@@ -150,10 +116,7 @@ transformations:
         title: "{{ .Origin.FirstHeader }}"
         menu: thanos
         lastmod: "{{ .Origin.LastMod }}"
-    backMatter:
-      template: |
-        Found a typo, inconsistency or missing information in our docs?
-        Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/docs/{{ .Origin.Filename }}) :heart:
+    backMatter: *docsGlobBackMatter
 
   - glob: "operating/*.md"
     path: /operating/*
@@ -193,9 +156,3 @@ transformations:
       template: |
         Found a typo, inconsistency or missing information in our docs?
         Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/docs/components/{{ .Origin.Filename }}) :heart:
-
-
-
-
-
-
