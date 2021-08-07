@@ -1,7 +1,6 @@
-
 ---
-title: Multi-Tenancy
 type: docs
+title: Multi-Tenancy
 menu: operating
 ---
 
