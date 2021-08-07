@@ -1,37 +1,22 @@
 <p align="center"><img src="docs/img/Thanos-logo_fullmedium.png" alt="Thanos Logo"></p>
 
-[![Latest Release](https://img.shields.io/github/release/thanos-io/thanos.svg?style=flat-square)](https://github.com/thanos-io/thanos/releases/latest)
-[![Go Report Card](https://goreportcard.com/badge/github.com/thanos-io/thanos)](https://goreportcard.com/report/github.com/thanos-io/thanos)
-[![Go Code reference](https://img.shields.io/badge/code%20reference-go.dev-darkblue.svg)](https://pkg.go.dev/github.com/thanos-io/thanos?tab=subdirectories)
-[![Slack](https://img.shields.io/badge/join%20slack-%23thanos-brightgreen.svg)](https://slack.cncf.io/)
-[![Netlify Status](https://api.netlify.com/api/v1/badges/664a5091-934c-4b0e-a7b6-bc12f822a590/deploy-status)](https://app.netlify.com/sites/thanos-io/deploys)
-[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/3048/badge)](https://bestpractices.coreinfrastructure.org/projects/3048)
+[![Latest Release](https://img.shields.io/github/release/thanos-io/thanos.svg?style=flat-square)](https://github.com/thanos-io/thanos/releases/latest) [![Go Report Card](https://goreportcard.com/badge/github.com/thanos-io/thanos)](https://goreportcard.com/report/github.com/thanos-io/thanos) [![Go Code reference](https://img.shields.io/badge/code%20reference-go.dev-darkblue.svg)](https://pkg.go.dev/github.com/thanos-io/thanos?tab=subdirectories) [![Slack](https://img.shields.io/badge/join%20slack-%23thanos-brightgreen.svg)](https://slack.cncf.io/) [![Netlify Status](https://api.netlify.com/api/v1/badges/664a5091-934c-4b0e-a7b6-bc12f822a590/deploy-status)](https://app.netlify.com/sites/thanos-io/deploys) [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/3048/badge)](https://bestpractices.coreinfrastructure.org/projects/3048)
 
-[![CI](https://github.com/thanos-io/thanos/workflows/CI/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3ACI)
-[![CI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos)
-[![go](https://github.com/thanos-io/thanos/workflows/go/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Ago)
-[![react](https://github.com/thanos-io/thanos/workflows/react/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Areact)
-[![docs](https://github.com/thanos-io/thanos/workflows/docs/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Adocs)
-[![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos)
+[![CI](https://github.com/thanos-io/thanos/workflows/CI/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3ACI) [![CI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos) [![go](https://github.com/thanos-io/thanos/workflows/go/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Ago) [![react](https://github.com/thanos-io/thanos/workflows/react/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Areact) [![docs](https://github.com/thanos-io/thanos/workflows/docs/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Adocs) [![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos)
 
 ## Overview
 
-Thanos is a set of components that can be composed into a highly available metric
-system with unlimited storage capacity, which can be added seamlessly on top of existing
-Prometheus deployments.
+Thanos is a set of components that can be composed into a highly available metric system with unlimited storage capacity, which can be added seamlessly on top of existing Prometheus deployments.
 
 Thanos is a [CNCF](https://www.cncf.io/) Incubating project.
 
-Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric
-data in any object storage while retaining fast query latencies. Additionally, it provides
-a global query view across all Prometheus installations and can merge data from Prometheus
-HA pairs on the fly.
+Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric data in any object storage while retaining fast query latencies. Additionally, it provides a global query view across all Prometheus installations and can merge data from Prometheus HA pairs on the fly.
 
 Concretely the aims of the project are:
 
 1. Global query view of metrics.
-1. Unlimited retention of metrics.
-1. High availability of components, including Prometheus.
+2. Unlimited retention of metrics.
+3. High availability of components, including Prometheus.
 
 ## Getting Started
 
@@ -91,8 +76,7 @@ Contributions are very welcome! See our [CONTRIBUTING.md](CONTRIBUTING.md) for m
 
 ## Community
 
-Thanos is an open source project and we value and welcome new contributors and members
-of the community. Here are ways to get in touch with the community:
+Thanos is an open source project and we value and welcome new contributors and members of the community. Here are ways to get in touch with the community:
 
 * Slack: [#thanos](https://slack.cncf.io/)
 * Issue Tracker: [GitHub Issues](https://github.com/thanos-io/thanos/issues)

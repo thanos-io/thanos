@@ -1,19 +1,17 @@
 ---
-title: Tools
 type: docs
+title: Tools
 menu: components
 ---
 
 # Tools
 
-The `thanos tools` subcommand of Thanos is a set of additional CLI, short-living tools that
-are meant to be ran for development or debugging purposes.
+The `thanos tools` subcommand of Thanos is a set of additional CLI, short-living tools that are meant to be ran for development or debugging purposes.
 
 All commands added as tools should land in `tools.go` or file with `tools_` prefix.
 
 ## Flags
 
-[embedmd]:# (flags/tools.txt $)
 ```$
 usage: thanos tools <command> [<args> ...]
 
@@ -90,8 +88,7 @@ Subcommands:
 
 ## Bucket
 
-The `thanos tools bucket` subcommand of Thanos is a set of commands to inspect data in object storage buckets.
-It is normally run as a standalone command to aid with troubleshooting.
+The `thanos tools bucket` subcommand of Thanos is a set of commands to inspect data in object storage buckets. It is normally run as a standalone command to aid with troubleshooting.
 
 Example:
 
@@ -107,10 +104,8 @@ config:
   bucket: example-bucket
 ```
 
-Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets
-by adding a new command within [`/cmd/thanos/tools_bucket.go`](/cmd/thanos/tools_bucket.go)  .
+Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets by adding a new command within [`/cmd/thanos/tools_bucket.go`](../../cmd/thanos/tools_bucket.go)  .
 
-[embedmd]:# (flags/tools_bucket.txt $)
 ```$
 usage: thanos tools bucket [<flags>] <command> [<args> ...]
 
@@ -197,7 +192,7 @@ Subcommands:
 
 This will start local webserver that will periodically update the view with given refresh.
 
-<img src="../img/bucket-web.jpg" class="img-fluid" alt="web" />
+<img src="../img/bucket-web.jpg" class="img-fluid" alt="web"/>
 
 Example:
 
@@ -205,7 +200,6 @@ Example:
 thanos tools bucket web --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/tools_bucket_web.txt $)
 ```$
 usage: thanos tools bucket web [<flags>]
 
@@ -287,7 +281,6 @@ thanos tools bucket verify --objstore.config-file="..."
 
 When using the `--repair` option, make sure that the compactor job is disabled first.
 
-[embedmd]:# (flags/tools_bucket_verify.txt $)
 ```$
 usage: thanos tools bucket verify [<flags>]
 
@@ -368,7 +361,6 @@ Example:
 thanos tools bucket ls -o json --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/tools_bucket_ls.txt $)
 ```$
 usage: thanos tools bucket ls [<flags>]
 
@@ -414,7 +406,6 @@ Example:
 thanos tools bucket inspect -l environment=\"prod\" --objstore.config-file="..."
 ```
 
-[embedmd]:# (flags/tools_bucket_inspect.txt $)
 ```$
 usage: thanos tools bucket inspect [<flags>]
 
@@ -465,11 +456,11 @@ Flags:
 NOTE: Currently it works only with Thanos blocks (meta.json has to have Thanos metadata).
 
 Example:
+
 ```
 thanos tools bucket replicate --objstore.config-file="..." --objstore-to.config="..."
 ```
 
-[embedmd]:# (flags/tools_bucket_replicate.txt $)
 ```$
 usage: thanos tools bucket replicate [<flags>]
 
@@ -551,8 +542,7 @@ Flags:
 
 ### Bucket downsample
 
-`tools bucket downsample` is used to downsample blocks in an object store bucket as a service.
-It implements the downsample API on top of historical data in an object storage bucket.
+`tools bucket downsample` is used to downsample blocks in an object store bucket as a service. It implements the downsample API on top of historical data in an object storage bucket.
 
 ```bash
 thanos tools bucket downsample \
@@ -568,7 +558,6 @@ config:
   bucket: example-bucket
 ```
 
-[embedmd]:# (flags/tools_bucket_downsample.txt $)
 ```$
 usage: thanos tools bucket downsample [<flags>]
 
@@ -635,7 +624,6 @@ config:
   bucket: example-bucket
 ```
 
-[embedmd]:# (flags/tools_bucket_mark.txt $)
 ```$
 usage: thanos tools bucket mark --id=ID --marker=MARKER --details=DETAILS
 
@@ -699,7 +687,6 @@ By default, rewrite also produces `change.log` in the tmp local dir. Look for lo
 ts=2020-11-09T00:40:13.703322181Z caller=level.go:63 level=info msg="changelog will be available" file=/tmp/thanos-rewrite/01EPN74E401ZD2SQXS4SRY6DZX/change.log`
 ```
 
-[embedmd]:# (flags/tools_bucket_rewrite.txt $)
 ```$
 usage: thanos tools bucket rewrite --id=ID [<flags>]
 
@@ -781,8 +768,7 @@ The `tools rules-check` subcommand contains tools for validation of Prometheus r
 
 This is allowing to check the rules with the same validation as is used by the Thanos Ruler node.
 
-NOTE: The check is equivalent to the `promtool check rules` with addition of Thanos Ruler extended rules file syntax,
-which includes `partial_response_strategy` field which `promtool` does not allow.
+NOTE: The check is equivalent to the `promtool check rules` with addition of Thanos Ruler extended rules file syntax, which includes `partial_response_strategy` field which `promtool` does not allow.
 
 If the check fails the command fails with exit code `1`, otherwise `0`.
 
@@ -792,7 +778,6 @@ Example:
 ./thanos tools rules-check --rules cmd/thanos/testdata/rules-files/*.yaml
 ```
 
-[embedmd]:# (flags/tools_rules-check.txt $)
 ```$
 usage: thanos tools rules-check --rules=RULES
 

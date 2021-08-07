@@ -1,8 +1,8 @@
 ---
-title: Unified Endpoint Discovery
 type: proposal
-menu: proposals
+title: Unified Endpoint Discovery
 status: XXX
+menu: proposals
 ---
 
 ### Related Tickets
@@ -15,7 +15,7 @@ We want to propose a new flag called `--endpoint=<address>` that will be passed 
 
 ### Motivation
 
-Currently, in Thanos Query, the discovery of rules APIs happens via Store API's Info method. This makes it harder if we ever want to not have a coupling to the Store API (which is already planned for [scalable ruler proposal](https://github.com/thanos-io/thanos/blob/master/docs/proposals/202005_scalable-rule-storage.md)).
+Currently, in Thanos Query, the discovery of rules APIs happens via Store API's Info method. This makes it harder if we ever want to not have a coupling to the Store API (which is already planned for [scalable ruler proposal](https://thanos.io/tip/proposals-accepted/202005-scalable-rule-storage.md/)).
 
 We also require passing two different flags to the Thanos Query component `--store=<address>` and `--rule=<address>`. If users use both flags, the Query component performs DNS discovery on often the same address multiple times, this can cause occasional DNS issues as this resolving happens so frequently. This is especially confusing when one works and the other doesn't.
 
@@ -32,6 +32,7 @@ Add a new flag called `--endpoint` to Thanos query, and auto-discover what servi
 Each component will expose an Info API, that includes various metadata listed below. Discovery of endpoints will happen via this Info API, there might be a case that the discovery of gRPC will also have to happen via [gRPC reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md), this will be shown when implemention starts.
 
 Info API metadata would include the following fields regardless of the type:
+
 ```
 info:
   external_labels: blah_1, blah_2, ...
