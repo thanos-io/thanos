@@ -1,13 +1,12 @@
 ---
-title: Store
 type: docs
+title: Store
 menu: components
 ---
 
 # Store
 
-The `thanos store` command (also known as Store Gateway) implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need significant amounts of local disk space. It joins a Thanos cluster on startup and advertises the data it can access.
-It keeps a small amount of information about all remote blocks on local disk and keeps it in sync with the bucket. This data is generally safe to delete across restarts at the cost of increased startup times.
+The `thanos store` command (also known as Store Gateway) implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need significant amounts of local disk space. It joins a Thanos cluster on startup and advertises the data it can access. It keeps a small amount of information about all remote blocks on local disk and keeps it in sync with the bucket. This data is generally safe to delete across restarts at the cost of increased startup times.
 
 ```bash
 thanos store \
@@ -27,7 +26,6 @@ In general about 1MB of local disk space is required per TSDB block stored in th
 
 ## Flags
 
-[embedmd]:# (flags/store.txt $)
 ```$
 usage: thanos store [<flags>]
 
@@ -231,7 +229,7 @@ Check more [here](https://thanos.io/tip/thanos/sharding.md/).
 
 Thanos Store Gateway supports an index cache to speed up postings and series lookups from TSDB blocks indexes. Two types of caches are supported:
 
-- `in-memory` (_default_)
+- `in-memory` (*default*)
 - `memcached`
 
 ### In-memory index cache
@@ -240,7 +238,6 @@ The `in-memory` index cache is enabled by default and its max size can be config
 
 Alternatively, the `in-memory` index cache can also by configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
 
-[embedmd]:# (../flags/config_index_cache_in_memory.txt yaml)
 ```yaml
 type: IN-MEMORY
 config:
@@ -257,7 +254,6 @@ All the settings are **optional**:
 
 The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
 
-[embedmd]:# (../flags/config_index_cache_memcached.txt yaml)
 ```yaml
 type: MEMCACHED
 config:
@@ -274,7 +270,7 @@ config:
 
 The **required** settings are:
 
-- `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md/#dns-service-discovery) provider.
+- `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md#dns-service-discovery) provider.
 
 While the remaining settings are **optional**:
 

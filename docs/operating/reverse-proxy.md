@@ -1,6 +1,6 @@
 ---
-title: Running Thanos behind a reverse proxy
 type: docs
+title: Running Thanos behind a reverse proxy
 menu: operating
 ---
 
