@@ -1,9 +1,9 @@
 ---
-title: Thanos Query store nodes healthiness handling
 type: proposal
-menu: proposals
+title: Thanos Query store nodes healthiness handling
 status: complete
 owner: GiedriusS
+menu: proposals
 ---
 
 ### Related Tickets

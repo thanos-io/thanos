@@ -1,5 +1,5 @@
 ---
-title: "Proposals:"
+title: 'Proposals:'
 ---
 
 List of current proposals.

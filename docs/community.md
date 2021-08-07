@@ -1,6 +1,6 @@
 ---
-title: Community
 type: docs
+title: Community
 menu: contributing
 ---
 
@@ -12,8 +12,7 @@ Thanos is an open source project and we value and welcome new contributors and m
 
 Thanos Community Meeting is a **public** and **recorded** monthly meeting every second Wednesday 12:00 UTC ([Time zone converter](https://www.thetimezoneconverter.com/?t=12%3A00%20pm&tz=UTC%20(Coordinated%20Universal%20Time)&)).
 
-Thanos maintainers & the community meet to discuss open issues, features and other Thanos related things.
-Everyone is welcome to join & add items to the agenda. The meeting happens in Zoom. Right now meeting is in a Webinar format, where only small amount of people will have ability to speak and video share, due to recent [Zoombombing](https://en.wikipedia.org/wiki/Zoombombing) issues.
+Thanos maintainers & the community meet to discuss open issues, features and other Thanos related things. Everyone is welcome to join & add items to the agenda. The meeting happens in Zoom. Right now meeting is in a Webinar format, where only small amount of people will have ability to speak and video share, due to recent [Zoombombing](https://en.wikipedia.org/wiki/Zoombombing) issues.
 
 * When: Monthly, every second Wednesday 12:00 UTC ([Time zone converter](https://www.thetimezoneconverter.com/?t=12%3A00%20pm&tz=UTC%20(Coordinated%20Universal%20Time)&)).
 * Google Calendar: [Google Calendar](https://calendar.google.com/calendar/embed?src=go39q7eu71vvu3gfrkbup6b254%40group.calendar.google.com)
@@ -35,5 +34,3 @@ The Prometheus & The Ecosystem community meeting is intended to provide a holist
 Thanos Maintainers regularly join and give announcements and updates.
 
 Meeting details: [https://bit.ly/prometheus-community-agenda](https://bit.ly/prometheus-community-agenda)
-
-
