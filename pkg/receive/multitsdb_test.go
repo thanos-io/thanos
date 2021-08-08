@@ -5,8 +5,10 @@ package receive
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -139,6 +141,50 @@ func TestMultiTSDB(t *testing.T) {
 		testutil.Ok(t, err)
 
 		testMulitTSDBSeries(t, m)
+	})
+}
+
+func TestMultiTSDBGetOrLoadTenant(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test")
+	testutil.Ok(t, err)
+	dir = "/tmp/thanos"
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+	logger := log.NewLogfmtLogger(os.Stderr)
+	t.Run("run on concurrent getOrLoadTenant", func(t *testing.T) {
+		m := NewMultiTSDB(
+			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+				RetentionDuration: (6 * time.Hour).Milliseconds(),
+				NoLockfile:        true,
+			},
+			labels.FromStrings("replica", "01"),
+			"tenant_id",
+			nil,
+			false,
+			metadata.NoneFunc,
+		)
+		defer func() {
+			testutil.Ok(t, m.Close())
+		}()
+
+		wg := sync.WaitGroup{}
+		ctx := context.Background()
+
+		for i := 0; i < 3; i++ {
+			wg.Add(1)
+			go func(index int) {
+				if tenant, err := m.getOrLoadTenant("foo", true); err == nil {
+					_, nerr := tenant.readyStorage().Appender(ctx)
+					testutil.Ok(t, nerr, fmt.Sprintf("[i:%d]", index))
+				} else {
+					testutil.Ok(t, err)
+				}
+				wg.Done()
+			}(i)
+		}
+		wg.Wait()
 	})
 }
 

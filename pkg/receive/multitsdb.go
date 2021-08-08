@@ -329,7 +329,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 
 	tenant = newTenant()
 	t.tenants[tenantID] = tenant
-	t.mtx.Unlock()
+	defer t.mtx.Unlock()
 
 	logger := log.With(t.logger, "tenant", tenantID)
 	if !blockingStart {
