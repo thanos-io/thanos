@@ -344,7 +344,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 }
 
 func (t *MultiTSDB) TenantAppendable(tenantID string) (Appendable, error) {
-	tenant, err := t.getOrLoadTenant(tenantID, false)
+	tenant, err := t.getOrLoadTenant(tenantID, true)
 	if err != nil {
 		return nil, err
 	}
