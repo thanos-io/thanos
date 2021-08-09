@@ -325,7 +325,7 @@ type SeriesResponse struct {
 	Result isSeriesResponse_Result `protobuf_oneof:"result"`
 
 	// custom fields
-	respBuf **[]byte
+	respBuf  **[]byte
 	respPool *syncPool
 }
 
@@ -333,13 +333,13 @@ type SeriesResponse struct {
 func (m *SeriesResponse) RespBuf() **[]byte {
 	return m.respBuf
 }
-func (m *SeriesResponse) SetRespBuf(in **[]byte){
+func (m *SeriesResponse) SetRespBuf(in **[]byte) {
 	m.respBuf = in
 }
 func (m *SeriesResponse) RespPool() *syncPool {
 	return m.respPool
 }
-func (m *SeriesResponse) SetRespPool(in *syncPool){
+func (m *SeriesResponse) SetRespPool(in *syncPool) {
 	m.respPool = in
 }
 
