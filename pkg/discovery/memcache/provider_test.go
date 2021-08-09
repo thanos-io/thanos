@@ -29,6 +29,7 @@ func TestProviderUpdatesAddresses(t *testing.T) {
 
 	testutil.Ok(t, provider.Resolve(ctx, clusters))
 	addresses := provider.Addresses()
+	sort.Strings(addresses)
 	testutil.Equals(t, []string{"dns-1:11211", "dns-2:8080"}, addresses)
 
 	resolver.configs = map[string]*clusterConfig{
