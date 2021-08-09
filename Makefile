@@ -314,6 +314,7 @@ sync/atomic=go.uber.org/atomic" ./...
 	@go run ./scripts/copyright
 	@echo ">> ensuring generated proto files are up to date"
 	@$(MAKE) proto
+	@$(MAKE) format
 	$(call require_clean_work_tree,'detected files without copyright, run make lint and commit changes')
 
 .PHONY: shell-lint
