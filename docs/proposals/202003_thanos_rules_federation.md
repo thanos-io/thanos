@@ -1,9 +1,9 @@
 ---
-title: Global / Federated Rules API
 type: proposal
-menu: proposals
+title: Global / Federated Rules API
 status: accepted
 owner: s-urbaniak
+menu: proposals
 ---
 
 ### Related Tickets
@@ -27,10 +27,10 @@ Pitfalls of current solutions:
 ## Goals
 
 * Present other Prometheus/Thanos Resources in a global view.
-    * This also means an up-to-date view (e.g statuses)
+  * This also means an up-to-date view (e.g statuses)
 * Simple to run if you already run Thanos.
-    * Use consistent protocols (if we suddenly switch to pure HTTP from gRPC it will break user’s proxies for auth, routing, monitoring, rate limiting, etc)
-    * Potentially use the same connections, discovered targets by Querier.
+  * Use consistent protocols (if we suddenly switch to pure HTTP from gRPC it will break user’s proxies for auth, routing, monitoring, rate limiting, etc)
+  * Potentially use the same connections, discovered targets by Querier.
 
 ## Verification
 
@@ -72,20 +72,18 @@ Generally the deduplication logic is less complex than with time series, specifi
 
 are being used as the deduplication identifier. Disjunct entries are simply merged by adding them to the result set.
 
-Thanos Querier presents the result of the fan-out on a `/api/v1/rules` endpoint which is compatible with the Prometheus' rules API endpoint.
-Additionally Thanos Querier gains a new `--rule.replica-label` command line argument which falls back to `--query.replica-label` if unset. The replica labels refer to the same labels as specified in the `external_labels` section of Prometheus and the `--label` command line argument of Thanos Ruler.
+Thanos Querier presents the result of the fan-out on a `/api/v1/rules` endpoint which is compatible with the Prometheus' rules API endpoint. Additionally Thanos Querier gains a new `--rule.replica-label` command line argument which falls back to `--query.replica-label` if unset. The replica labels refer to the same labels as specified in the `external_labels` section of Prometheus and the `--label` command line argument of Thanos Ruler.
 
 #### Examples
 
-A stream of alerting rules is merged from different Thanos Ruler API instances.
-These may be remote Thanos Ruler, Prometheus Sidecar, or even Thanos Querier instances.
-The merging Thanos Querier has `--rule.replica-label=replica`
+A stream of alerting rules is merged from different Thanos Ruler API instances. These may be remote Thanos Ruler, Prometheus Sidecar, or even Thanos Querier instances. The merging Thanos Querier has `--rule.replica-label=replica`
 
 Scenario 1:
 
 As specified, the rule type and then rule name is used for deduplication.
 
 Given the following stream of incoming rule groups and containing recording/alerting rules:
+
 ```text
 group: a
    recording:<name:"r1" last_evaluation:<seconds:1 > >
@@ -97,6 +95,7 @@ group: a
 ```
 
 The output becomes:
+
 ```text
 group: a
    alert:    <name:"a1" last_evaluation:<seconds:1 > >
@@ -110,10 +109,10 @@ Note in the example above how the recording rule `r1` is not deduplicated as it 
 
 Scenario 2:
 
-The next level of deduplication is governed by the label/value set of the underlying recording/alerting rule while respecting the replica label.
-For a given conflict, the youngest is preferred. For alerting rules, the youngest firing rule is preferred.
+The next level of deduplication is governed by the label/value set of the underlying recording/alerting rule while respecting the replica label. For a given conflict, the youngest is preferred. For alerting rules, the youngest firing rule is preferred.
 
 Given the following stream of incoming recording rules:
+
 ```text
 group: a
    recording:<name:"r1" labels:<labels:<name:"replica" value:"thanos-ruler-1" > > last_evaluation:<2006-01-02T10:00:00> >
@@ -122,12 +121,14 @@ group: a
 ```
 
 The output becomes:
+
 ```text
 group: a
    recording:<name:"r1" labels:<labels:<name:"replica" value:"thanos-ruler-2" > > last_evaluation:<2006-01-02T10:01:00> >
 ```
 
 Given the following stream of incoming alerting rules:
+
 ```text
 group: a
    alert:<state:FIRING name:"a1" labels:<labels:<name:"replica" value:"thanos-ruler-1" > > last_evaluation:<2006-01-02T10:00:00> >
@@ -136,6 +137,7 @@ group: a
 ```
 
 The output becomes:
+
 ```text
 group: a
    alert:<state:FIRING name:"a1" labels:<labels:<name:"replica" value:"thanos-ruler-1" > > last_evaluation:<2006-01-02T10:00:00> >
@@ -148,6 +150,7 @@ Scenario 3:
 If, under the above conditions a rule is a candidate for deduplication, finally the rule `expr` and `for` fields are being considered for deduplication.
 
 Given the following stream of incoming alerting rules will also result in two independent alerting rules as both the `expr` and `for` fields differ:
+
 ```text
   - alert: KubeAPIErrorBudgetBurn
     annotations:
@@ -176,6 +179,7 @@ Scenario 4:
 As specified, the group name and file fields are used for deduplication.
 
 Given the following stream of incoming rule groups:
+
 ```text
 group: a/file1
 group: b/file1
@@ -183,6 +187,7 @@ group: a/file2
 ```
 
 The output becomes:
+
 ```text
 group: a/file1
 group: a/file2
@@ -210,35 +215,35 @@ These changes are suggestions which we will need to be discussed in future and a
 
 Currently, `Info` is shared between the `RulesAPI` proposed here and the existing `StoreAPI` services. To accommodate for future additional APIs the following changes of the protobuf `Info` and `Type` structures are suggested.
 
- The current `StoreType` enum is renamed to `Type`. This retains binary compatibility with older clients:
+The current `StoreType` enum is renamed to `Type`. This retains binary compatibility with older clients:
 
- ```diff
+```diff
 -enum StoreType {
 +enum Type {
-   UNKNOWN = 0;
-   QUERY = 1;
-   RULE = 2;
+  UNKNOWN = 0;
+  QUERY = 1;
+  RULE = 2;
 ```
 
- The current fields in `InfoResponse` connected to Store APIs are deprecated and dedicated new API sub types are proposed:
+The current fields in `InfoResponse` connected to Store APIs are deprecated and dedicated new API sub types are proposed:
 
- ```diff
- message InfoResponse {
-   // Deprecated. Use label_sets instead.
-   repeated Label labels = 1 [(gogoproto.nullable) = false];
+```diff
+message InfoResponse {
+  // Deprecated. Use label_sets instead.
+  repeated Label labels = 1 [(gogoproto.nullable) = false];
 +  // Deprecated. Will be removed in favor of StoreInfoResponse in the future.
-   int64 min_time = 2;
+  int64 min_time = 2;
 +  // Deprecated. Will be removed in favor of StoreInfoResponse in the future.
-   int64 max_time = 3;
+  int64 max_time = 3;
 -  StoreType storeType  = 4;
 +  Type type  = 4;
-   // label_sets is an unsorted list of `LabelSet`s.
+  // label_sets is an unsorted list of `LabelSet`s.
 +  // Deprecated. Will be removed in favor of StoreInfoResponse in the future.
-   repeated LabelSet label_sets = 5 [(gogoproto.nullable) = false];
+  repeated LabelSet label_sets = 5 [(gogoproto.nullable) = false];
 +
 +  StoreInfoResponse store = 6;
 +  RulesInfoResponse rules = 7;
- }
+}
 ```
 
 ### Independent `--rule` and `--store` endpoints configuration

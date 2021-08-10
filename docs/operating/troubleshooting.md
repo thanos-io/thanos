@@ -1,6 +1,6 @@
 ---
-title: Troubleshooting
 type: docs
+title: Troubleshooting
 menu: operating
 ---
 
@@ -31,7 +31,7 @@ Checking producers log for such ULID, and checking meta.json (e.g if sample stat
 - Misconfiguraiton of sidecar/ruler: Same external labels or no external labels across many block producers.
 - Running multiple compactors for single block "stream", even for short duration.
 - Manually uploading blocks to the bucket.
-- Eventually consistent block storage until we fully implement [RW for bucket](https://thanos.io/tip/proposals/201901-read-write-operations-bucket.md)
+- Eventually consistent block storage until we fully implement [RW for bucket](https://thanos.io/tip/proposals-done/201901-read-write-operations-bucket.md/)
 
 ### Solutions
 
@@ -56,7 +56,6 @@ level=warn ts=2020-04-18T03:07:00.512902927Z caller=intrumentation.go:54 msg="ch
 ### Possible Solution
 
 * Make sure that prometheus is running while thanos is started. The `connection_refused` states that there is no server running in the `localhost:9090`, which is the address for prometheus in this case.
-
 
 ## Thanos not identifying Prometheus
 
