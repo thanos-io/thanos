@@ -38,6 +38,7 @@ import (
 type DownsampleMetrics struct {
 	downsamples        *prometheus.CounterVec
 	downsampleFailures *prometheus.CounterVec
+	downsampleDuration *prometheus.Histogram
 }
 
 func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
@@ -51,6 +52,11 @@ func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
 		Name: "thanos_compact_downsample_failures_total",
 		Help: "Total number of failed downsampling attempts.",
 	}, []string{"group"})
+	m.downsampleDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_compact_downsample_duration_seconds",
+		Help:    "Duration of downsample runs",
+		Buckets: []float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192},
+	})
 
 	return m
 }
@@ -237,7 +243,7 @@ func downsampleBucket(
 					resolution = downsample.ResLevel2
 					errMsg = "downsampling to 60 min"
 				}
-				if err := processDownsampling(ctx, logger, bkt, m, dir, resolution, hashFunc); err != nil {
+				if err := processDownsampling(ctx, logger, bkt, m, dir, resolution, hashFunc, metrics); err != nil {
 					metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
 					return errors.Wrap(err, errMsg)
 				}
@@ -309,7 +315,16 @@ func downsampleBucket(
 	return nil
 }
 
-func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *metadata.Meta, dir string, resolution int64, hashFunc metadata.HashFunc) error {
+func processDownsampling(
+	ctx context.Context,
+	logger log.Logger,
+	bkt objstore.Bucket,
+	m *metadata.Meta,
+	dir string,
+	resolution int64,
+	hashFunc metadata.HashFunc,
+	metrics *DownsampleMetrics,
+) error {
 	begin := time.Now()
 	bdir := filepath.Join(dir, m.ULID.String())
 
@@ -346,6 +361,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 
 	level.Info(logger).Log("msg", "downsampled block",
 		"from", m.ULID, "to", id, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
+	metrics.downsampleDuration.Observe(time.Since(begin).Seconds())
 
 	if err := block.VerifyIndex(logger, filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
 		return errors.Wrap(err, "output block index not valid")
