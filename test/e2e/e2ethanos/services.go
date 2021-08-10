@@ -121,7 +121,7 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, config, promIm
 		"--log.level":         infoLogLevel,
 	})
 
-	args = append(args, tlsConfig...)
+	args = append(args, extraArgs...)
 
 	sidecar := NewService(
 		e,

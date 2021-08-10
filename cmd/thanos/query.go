@@ -222,8 +222,8 @@ func registerQuery(app *extkingpin.App) {
 			return err
 		}
 
-		if (len(*fileSDFiles) != 0 || len(*stores) != 0 || *secure) && len(endpointConfigYAML) != 0 {
-			return errors.Errorf("--sore/--store.sd-files/--grpc-client-tls-secure and --endpoint.config parameters cannot be defined at the same time")
+		if *secure && len(endpointConfigYAML) != 0 {
+			return errors.Errorf("deprecated flags --grpc-client-tls* and new --endpoint.config flag cannot be specified at the same time; use either of those")
 		}
 
 		var fileSDConfig *file.SDConfig
@@ -378,7 +378,7 @@ func runQuery(
 	var endpointConfig []store.Config
 	var err error
 	if len(endpointConfigYAML) > 0 {
-		endpointConfig, err = store.LoadConfig(endpointConfigYAML)
+		endpointConfig, err = store.LoadConfig(endpointConfigYAML, storeAddrs, fileSDConfig)
 		if err != nil {
 			return errors.Wrap(err, "loading endpoint config")
 		}

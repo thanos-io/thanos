@@ -42,30 +42,30 @@ const (
 func NewConfig(endpointAddrs []string, strictEndpointAddrs []string, fileSDConfig *file.SDConfig, TLSConfig TLSConfiguration) ([]Config, error) {
 	var endpointConfig []Config
 
-	// Adding --endpoint, --endpoint.sd-files info to []endpointConfig, if provided.
+	// Adding --endpoint, --endpoint.sd-files to []endpointConfig, if provided.
 	if len(endpointAddrs) > 0 || fileSDConfig != nil {
-		cfg1 := Config{}
-		cfg1.TLSConfig = TLSConfig
-		cfg1.Endpoints = endpointAddrs
+		cfg := Config{}
+		cfg.TLSConfig = TLSConfig
+		cfg.Endpoints = endpointAddrs
 		if fileSDConfig != nil {
-			cfg1.EndpointsSD = []file.SDConfig{*fileSDConfig}
+			cfg.EndpointsSD = []file.SDConfig{*fileSDConfig}
 		}
-		endpointConfig = append(endpointConfig, cfg1)
+		endpointConfig = append(endpointConfig, cfg)
 	}
 
 	// Adding --endpoint-strict endpoints if provided.
 	if len(strictEndpointAddrs) > 0 {
-		cfg2 := Config{}
-		cfg2.TLSConfig = TLSConfig
-		cfg2.Endpoints = strictEndpointAddrs
-		cfg2.Mode = StrictEndpointMode
-		endpointConfig = append(endpointConfig, cfg2)
+		cfg := Config{}
+		cfg.TLSConfig = TLSConfig
+		cfg.Endpoints = strictEndpointAddrs
+		cfg.Mode = StrictEndpointMode
+		endpointConfig = append(endpointConfig, cfg)
 	}
 	return endpointConfig, nil
 }
 
 // LoadConfig returns list of per-endpoint TLS config.
-func LoadConfig(confYAML []byte) ([]Config, error) {
+func LoadConfig(confYAML []byte, endpointAddrs []string, fileSDConfig *file.SDConfig) ([]Config, error) {
 	var endpointConfig []Config
 
 	if err := yaml.UnmarshalStrict(confYAML, &endpointConfig); err != nil {
@@ -84,6 +84,16 @@ func LoadConfig(confYAML []byte) ([]Config, error) {
 		if config.Mode == StrictEndpointMode && len(config.EndpointsSD) != 0 {
 			return nil, errors.Errorf("no sd-files allowed in strict mode")
 		}
+	}
+
+	// Adding --endpoint, --endpoint.sd-files with NO-TLS to []endpointConfig, if provided.
+	if len(endpointAddrs) > 0 || fileSDConfig != nil {
+		cfg := Config{}
+		cfg.Endpoints = endpointAddrs
+		if fileSDConfig != nil {
+			cfg.EndpointsSD = []file.SDConfig{*fileSDConfig}
+		}
+		endpointConfig = append(endpointConfig, cfg)
 	}
 
 	// Checking if some endpoints are inputted more than once.
