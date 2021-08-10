@@ -26,7 +26,7 @@
             },
           },
           {
-            alert: 'ThanosSidecarUnhealthy',
+            alert: 'ThanosSidecarNoConnectionToStartedPrometheus',
             annotations: {
               description: 'Thanos Sidecar {{$labels.instance}}%s is unhealthy for more than {{$value}} seconds.' % location,
               summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.',
