@@ -1,6 +1,6 @@
 ---
-title: Developer Onboarding
 type: docs
+title: Developer Onboarding
 menu: contributing
 ---
 
@@ -11,12 +11,21 @@ This document would help new developers who want to get up and running with Than
 Since this is a live document, please feel free to submit a PR for a component whose detailed explanation is missing / or could be improved.
 
 # Getting up and running with Thanos
+
 # Resources for the design and internal working for Thanos
+
 # Prometheus TSDB Blocks
+
 # Step by step flow of command for Thanos
+
 # Sidecar
+
 # Compact
+
 # Bucket
+
 # Store Gateway
+
 # Querier
+
 # Ruler

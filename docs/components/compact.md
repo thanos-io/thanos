@@ -1,13 +1,12 @@
 ---
-title: Compactor
 type: docs
+title: Compactor
 menu: components
 ---
 
 # Compactor
 
-The `thanos compact` command applies the compaction procedure of the Prometheus 2.0 storage engine to block data stored in object storage.
-It is generally not semantically concurrency safe and must be deployed as a singleton against a bucket.
+The `thanos compact` command applies the compaction procedure of the Prometheus 2.0 storage engine to block data stored in object storage. It is generally not semantically concurrency safe and must be deployed as a singleton against a bucket.
 
 It is also responsible for downsampling of data:
 
@@ -28,8 +27,7 @@ config:
   bucket: example-bucket
 ```
 
-The compactor needs local disk space to store intermediate data for its processing. Generally, about 100GB are recommended for it to keep working as the compacted time ranges grow over time.
-On-disk data is safe to delete between restarts and should be the first attempt to get crash-looping compactors unstuck.
+The compactor needs local disk space to store intermediate data for its processing. Generally, about 100GB are recommended for it to keep working as the compacted time ranges grow over time. On-disk data is safe to delete between restarts and should be the first attempt to get crash-looping compactors unstuck.
 
 ## Downsampling, Resolution and Retention
 
@@ -57,26 +55,20 @@ In fact, downsampling doesn't save you any space but instead it adds 2 more bloc
 
 ## Groups
 
-The compactor groups blocks using the external_labels added by the Prometheus who produced the block.
-The labels must be both _unique_ and _persistent_ across different Prometheus instances.
+The compactor groups blocks using the external_labels added by the Prometheus who produced the block. The labels must be both *unique* and *persistent* across different Prometheus instances.
 
-By _unique_, we mean that the set of labels in a Prometheus instance must be different from all other sets of labels of
-your Prometheus instances, so that the compactor will be able to group blocks by Prometheus instance.
+By *unique*, we mean that the set of labels in a Prometheus instance must be different from all other sets of labels of your Prometheus instances, so that the compactor will be able to group blocks by Prometheus instance.
 
-By _persistent_, we mean that one Prometheus instance must keep the same labels if it restarts, so that the compactor will keep
-compacting blocks from an instance even when a Prometheus instance goes down for some time.
+By *persistent*, we mean that one Prometheus instance must keep the same labels if it restarts, so that the compactor will keep compacting blocks from an instance even when a Prometheus instance goes down for some time.
 
 ## Block Deletion
 
-Depending on the Object Storage provider like S3, GCS, Ceph etc; we can divide the storages into strongly consistent or eventually consistent.
-Since there are no consistency guarantees provided by some Object Storage providers, we have to make sure that we have a consistent lock-free way of dealing with Object Storage irrespective of the choice of object storage.
+Depending on the Object Storage provider like S3, GCS, Ceph etc; we can divide the storages into strongly consistent or eventually consistent. Since there are no consistency guarantees provided by some Object Storage providers, we have to make sure that we have a consistent lock-free way of dealing with Object Storage irrespective of the choice of object storage.
 
-In order to achieve this co-ordination, blocks are not deleted directly. Instead, blocks are marked for deletion by uploading
-`deletion-mark.json` file for the block that was chosen to be deleted. This file contains unix time of when the block was marked for deletion.
+In order to achieve this co-ordination, blocks are not deleted directly. Instead, blocks are marked for deletion by uploading `deletion-mark.json` file for the block that was chosen to be deleted. This file contains unix time of when the block was marked for deletion.
 
 ## Flags
 
-[embedmd]:# (flags/compact.txt $)
 ```$
 usage: thanos compact [<flags>]
 

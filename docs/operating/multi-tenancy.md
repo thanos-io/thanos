@@ -1,9 +1,8 @@
-
 ---
-title: Multi-Tenancy
 type: docs
-menu: operating
+title: Multi-Tenancy
 slug: /multi-tenancy.md
+menu: operating
 ---
 
 # Multi-Tenancy
