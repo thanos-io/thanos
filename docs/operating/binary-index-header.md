@@ -1,6 +1,6 @@
 ---
-title: Binary index-header
 type: docs
+title: Binary index-header
 menu: operating
 ---
 
@@ -11,13 +11,11 @@ In order to query series inside blocks from object storage, [Store Gateway](../c
 - symbols table to unintern string values
 - postings offset for posting lookup
 
-In order to achieve so, on startup for each block `index-header` is built from pieces of original block's index and stored on disk.
-Such `index-header` file is then mmaped and used by Store Gateway, but never uploaded back to the object storage.
+In order to achieve so, on startup for each block `index-header` is built from pieces of original block's index and stored on disk. Such `index-header` file is then mmaped and used by Store Gateway, but never uploaded back to the object storage.
 
 ## Format (version 1)
 
-The following describes the format of the `index-header` file found in each block store gateway local directory.
-It is terminated by a table of contents which serves as an entry point into the index.
+The following describes the format of the `index-header` file found in each block store gateway local directory. It is terminated by a table of contents which serves as an entry point into the index.
 
 ```
 ┌─────────────────────────────┬───────────────────────────────┐
@@ -49,8 +47,7 @@ See [Posting Offset Table](https://github.com/prometheus/prometheus/blob/d782387
 
 ### TOC
 
-The table of contents serves as an entry point to the entire index and points to various sections in the file.
-If a reference is zero, it indicates the respective section does not exist and empty results should be returned upon lookup.
+The table of contents serves as an entry point to the entire index and points to various sections in the file. If a reference is zero, it indicates the respective section does not exist and empty results should be returned upon lookup.
 
 ```
 ┌─────────────────────────────────────────┐
