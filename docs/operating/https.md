@@ -1,6 +1,6 @@
 ---
-title: Running Thanos with HTTPS and basic auth
 type: docs
+title: Running Thanos with HTTPS and basic auth
 menu: operating
 ---
 
@@ -8,13 +8,11 @@ menu: operating
 
 Thanos supports basic authentication and TLS. This is **experimental** and might change in the future.
 
-To specify which HTTP TLS configuration file to load, use the `--http.config` flag.
-The file is written in [YAML format](https://en.wikipedia.org/wiki/YAML), defined by the scheme described below.
+To specify which HTTP TLS configuration file to load, use the `--http.config` flag. The file is written in [YAML format](https://en.wikipedia.org/wiki/YAML), defined by the scheme described below.
 
 ## Scheme
 
-Brackets indicate that a parameter is optional. For non-list parameters the value is set to the specified default.
-The file is read upon every http request, such as any change in the configuration and the certificates is picked up immediately.
+Brackets indicate that a parameter is optional. For non-list parameters the value is set to the specified default. The file is read upon every http request, such as any change in the configuration and the certificates is picked up immediately.
 
 Generic placeholders are defined as follows:
 

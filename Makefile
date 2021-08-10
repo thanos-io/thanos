@@ -1,5 +1,7 @@
 include .bingo/Variables.mk
 FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
+MD_FILES_TO_FORMAT = $(shell find docs -name "*.md") $(shell ls *.md)
+MDOX_VALIDATE_CONFIG ?= .mdox.validate.yaml
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
@@ -166,22 +168,18 @@ docker-push:
 	@docker tag "thanos" "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
 	@docker push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
 
+
 .PHONY: docs
-docs: ## Regenerates flags in docs for all thanos commands.
-docs: $(EMBEDMD) build
+docs: ## Regenerates flags in docs for all thanos commands localise links, ensure GitHub format.
+docs: $(MDOX) build
 	@echo ">> generating docs"
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos"  scripts/genflagdocs.sh
-	@echo ">> cleaning white noise"
-	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+	PATH=${PATH}:$(GOBIN) $(MDOX) fmt -l --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) --links.localize.address-regex="https://thanos.io/.*" $(MD_FILES_TO_FORMAT)
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
-check-docs: $(EMBEDMD) build
-	@echo ">> checking docs generation"
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
-	@echo ">> checking links (DISABLED for now)"
-	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
-	$(call require_clean_work_tree,'run make docs and commit changes')
+check-docs: $(MDOX) build
+	@echo ">> checking local links"
+	PATH=${PATH}:$(GOBIN) $(MDOX) fmt --check -l --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) --links.localize.address-regex="https://thanos.io/.*" $(MD_FILES_TO_FORMAT)
 
 .PHONY:shell-format
 shell-format: $(SHFMT)

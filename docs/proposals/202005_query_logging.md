@@ -1,9 +1,9 @@
 ---
-title: Query Logging for Thanos
 type: proposal
-menu: proposals
+title: Query Logging for Thanos
 status: approved
 owner: yashrsharma44
+menu: proposals
 ---
 
 ### Related Tickets
@@ -83,7 +83,8 @@ Another requirement is using **Audit and Adaptive Logging** in Thanos. This is a
     }
 Taken from - https://cloud.google.com/logging/docs/audit/understanding-audit-logs
 ```
-_Example of an audit logging_
+
+*Example of an audit logging*
 
 **Adaptive Logging** is quite useful, as we can log all queries based upon fulfilling a certain criteria/filters, and later those can be used for inspecting abnormal queries and improving the user experience overall.
 
@@ -137,12 +138,11 @@ For HTTP, all these nice middlewares are not present, so we need to code up our 
 * So we would generally have request logging and options:
   1. No request logging.
   2. Log Finish call of the request.
-  4. Log start and finish call - Audit Log.
+  3. Log start and finish call - Audit Log.
 
 #### Request Logging
 
-**Query Logging** in Thanos would be implemented as a one logger, **Request Logger**. This is done in considering that Adaptive is a specific case of Audit Logging, and would make sense to keep the similar logical components together, rather than creating another distinction between them.
-We might however discuss the specific sub-cases of the request logging, namely adaptive and audit logging for enumerating the purpose of it.
+**Query Logging** in Thanos would be implemented as a one logger, **Request Logger**. This is done in considering that Adaptive is a specific case of Audit Logging, and would make sense to keep the similar logical components together, rather than creating another distinction between them. We might however discuss the specific sub-cases of the request logging, namely adaptive and audit logging for enumerating the purpose of it.
 
 #### Use case 1: Audit Logging
 
@@ -172,8 +172,7 @@ From a developer’s perspective, audit logs can keep you sane by giving you som
 
 #### Common Use case to all
 
-* **Tracking queries across different components**
-The current implementation provides addition for tracking requests across different components of **Thanos**. Since we are logging the queries at the **StoreAPI** level, and those queries are flowing from one component to another, the only way to track them would be to have a request-id, which would help in tracking the logs of an individual query between different component. Another use-case would be to have a correlation of logs based on queries, so the request-id also serves the same purpose.
+* **Tracking queries across different components** The current implementation provides addition for tracking requests across different components of **Thanos**. Since we are logging the queries at the **StoreAPI** level, and those queries are flowing from one component to another, the only way to track them would be to have a request-id, which would help in tracking the logs of an individual query between different component. Another use-case would be to have a correlation of logs based on queries, so the request-id also serves the same purpose.
 
 * **Implementation**
 
@@ -200,8 +199,7 @@ This proposal adds in a new feature for Thanos, so there isn't any alternative u
 * This provides ample of insights about possible bottle-neck of individual components of Thanos.
 * Active Query Logging -
 
-_Currently, the implementation of Active Query Logging seems flaky, as it is quite difficult to achieve a consistent logging of active queries after a forced shutdown. Considering the probability of logs correctly getting logged, the cons of the logging outweighs the pros, and hence would be sensible to discuss the implementation after the initial goals are achieved._
-
+*Currently, the implementation of Active Query Logging seems flaky, as it is quite difficult to achieve a consistent logging of active queries after a forced shutdown. Considering the probability of logs correctly getting logged, the cons of the logging outweighs the pros, and hence would be sensible to discuss the implementation after the initial goals are achieved.*
 
 As the name suggests, this logger logs all the current active logs that are running in a component. This type of logging is aimed at providing logs of the active queries that are running currently in an component. This logger would be **local** **to each component**, and would run as a **standalone for each component** in contrast to the other two loggers. This logger would help in debugging queries which led to the component instanced *OOM* killed, or helping in tracking queries which are taking too long. The purpose of this logger can clash with the above two, but this logger is solely focused on providing active queries that are running, much like Prometheus does.
 
@@ -213,17 +211,15 @@ As the name suggests, this logger logs all the current active logs that are runn
 type ActiveQueryLogging struct {
 
 	// mmapped file to store the queries.
-     mmappedFile    []byte
-     // channel to generate the next available index, much like Python’s generator indexing
-	getNextIndex   chan int
-     // logger, different from the usual one
-     logger         log.Logger
-
+	mmappedFile []byte
+	// channel to generate the next available index, much like Python’s generator indexing
+	getNextIndex chan int
+	// logger, different from the usual one
+	logger log.Logger
 }
 ```
 
-This interface is designed with some ideas from a similar interface designed for *Prometheus Query Logger*[[2]](https://prometheus.io/docs/guides/query-log/).
-Here is a rough algorithm that would implement the Query Logging in Thanos -
+This interface is designed with some ideas from a similar interface designed for *Prometheus Query Logger*[[2]](https://prometheus.io/docs/guides/query-log/). Here is a rough algorithm that would implement the Query Logging in Thanos -
 
 ```txt
 1) Thanos receives a query.
@@ -233,12 +229,11 @@ Here is a rough algorithm that would implement the Query Logging in Thanos -
 
 This algorithm has been heavily derived from this pull request[[3]](https://github.com/prometheus/prometheus/pull/5794) and would suggest referring this for the implementation of the same.
 
-
 ## Work Plan
 
-0. Complete the proposal.
-1. Roll out grpc-middlewareV2.
-2. Implement a grpc-interceptor for Store API currently(this might be extended for other APIs as well).
-3. Write up the grpc logging middleware along with the policies.
-4. Write up an equivalent http middleware for the logging of requests in http APIs.
-5. Finish up with the tests if required.
+1. Complete the proposal.
+2. Roll out grpc-middlewareV2.
+3. Implement a grpc-interceptor for Store API currently(this might be extended for other APIs as well).
+4. Write up the grpc logging middleware along with the policies.
+5. Write up an equivalent http middleware for the logging of requests in http APIs.
+6. Finish up with the tests if required.
