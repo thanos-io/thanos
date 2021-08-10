@@ -1,13 +1,12 @@
 ---
-title: Query Frontend
 type: docs
+title: Query Frontend
 menu: components
 ---
 
 # Query Frontend
 
-The `thanos query-frontend` command implements a service that can be put in front of Thanos Queriers to improve the read path. It is
-based on the [Cortex Query Frontend](https://cortexmetrics.io/docs/architecture/#query-frontend) component so you can find some common features like `Splitting` and `Results Caching`.
+The `thanos query-frontend` command implements a service that can be put in front of Thanos Queriers to improve the read path. It is based on the [Cortex Query Frontend](https://cortexmetrics.io/docs/architecture/#query-frontend) component so you can find some common features like `Splitting` and `Results Caching`.
 
 Query Frontend is fully stateless and horizontally scalable.
 
@@ -19,17 +18,15 @@ thanos query-frontend \
     --query-frontend.downstream-url="<thanos-querier>:<querier-http-port>"
 ```
 
-_**NOTE:** Currently only range queries (`/api/v1/query_range` API call) are actually processed through Query Frontend. All other
-API calls just directly go to the downstream Querier, which means only range queries are split and cached. But we are planning to support instant queries as well.
+_**NOTE:** Currently only range queries (`/api/v1/query_range` API call) are actually processed through Query Frontend. All other API calls just directly go to the downstream Querier, which means only range queries are split and cached. But we are planning to support instant queries as well.
 
-For more information please check out [initial design proposal](https://thanos.io/tip/proposals/202004_embedd_cortex_frontend.md/).
+For more information please check out [initial design proposal](https://thanos.io/tip/proposals-done/202004-embedd-cortex-frontend.md/).
 
 ## Features
 
 ### Splitting
 
-Query Frontend splits a long query into multiple short queries based on the configured `--query-range.split-interval` flag. The default value of `--query-range.split-interval`
-is `24h`. When caching is enabled it should be greater than `0`.
+Query Frontend splits a long query into multiple short queries based on the configured `--query-range.split-interval` flag. The default value of `--query-range.split-interval` is `24h`. When caching is enabled it should be greater than `0`.
 
 There are some benefits from query splitting:
 
@@ -43,14 +40,10 @@ Query Frontend supports a retry mechanism to retry query when HTTP requests are 
 
 ### Caching
 
-Query Frontend supports caching query results and reuses them on subsequent queries. If the cached results are incomplete,
-Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers.
-Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results.
-Currently, in-memory cache (fifo cache) and memcached are supported.
+Query Frontend supports caching query results and reuses them on subsequent queries. If the cached results are incomplete, Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers. Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results. Currently, in-memory cache (fifo cache) and memcached are supported.
 
 #### In-memory
 
-[embedmd]:# (../flags/config_response_cache_in_memory.txt yaml)
 ```yaml
 type: IN-MEMORY
 config:
@@ -58,18 +51,17 @@ config:
   max_size_items: 0
   validity: 0s
 ```
+
 `max_size: ` Maximum memory size of the cache in bytes. A unit suffix (KB, MB, GB) may be applied.
 
 **_NOTE:** If both `max_size` and `max_size_items` are not set, then the *cache* would not be created.
 
-If either of `max_size` or `max_size_items` is set, then there is not limit on other field.
-For example - only set `max_size_item` to 1000, then `max_size` is unlimited. Similarly, if only `max_size` is set, then `max_size_items` is unlimited.
+If either of `max_size` or `max_size_items` is set, then there is not limit on other field. For example - only set `max_size_item` to 1000, then `max_size` is unlimited. Similarly, if only `max_size` is set, then `max_size_items` is unlimited.
 
 Example configuration: [kube-thanos](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-query-frontend-deployment.yaml#L50-L54)
 
 #### Memcached
 
-[embedmd]:# (../flags/config_response_cache_memcached.txt yaml)
 ```yaml
 type: MEMCACHED
 config:
@@ -87,7 +79,7 @@ config:
 
 `expiration` specifies memcached cache valid time , If set to 0s, so using a default of 24 hours expiration time
 
-Other cache configuration parameters, you can refer to [memcached-index-cache]( https://thanos.io/tip/components/store.md/#memcached-index-cache).
+Other cache configuration parameters, you can refer to [memcached-index-cache](https://thanos.io/tip/components/store.md/#memcached-index-cache).
 
 The default memcached config is:
 
@@ -115,7 +107,6 @@ Naming is hard :) Please check [here](https://github.com/thanos-io/thanos/pull/2
 
 ## Flags
 
-[embedmd]:# (flags/query-frontend.txt $)
 ```$
 usage: thanos query-frontend [<flags>]
 

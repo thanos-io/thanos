@@ -1,12 +1,11 @@
 ---
-title: 'Building A Versioning Plugin For Thanos'
 type: proposal
-menu: proposals
+title: Building A Versioning Plugin For Thanos
 status: complete
 owner: thisisobate
+menu: proposals
 Date: May 2020
 ---
-
 
 ## Problem
 
@@ -21,7 +20,6 @@ This proposal aims to solve this by:
 ## Motivation
 
 Many users (mostly developers) often want to look through the docs of previous releases, but searching for them manually by looking through the entire GitHub repository is time-consuming and ineffective. The site is built by rendering the markdown files from the tip of master of the Thanos repository, which causes confusion for users, as breaking changes are often merged into master. The versioning plugin allows the user to access the docs of both latest and previous releases on the Thanos documentation page, and it also allows the developer to fetch, write, and fix the docs of both latest and previous releases.
-
 
 ## Requirements
 
@@ -39,9 +37,11 @@ Many users (mostly developers) often want to look through the docs of previous r
 #### Use Case
 
 ##### Users
+
 Thanos developers, Hugo developers, and general users.
 
 ##### Precondition
+
 The user visits the Thanos documentation page.
 
 ##### Basic Course Of Events
@@ -62,8 +62,7 @@ Currently, the documentation resides under the docs/ folder of the Thanos reposi
 
 #### 2. Documentation Structure
 
-We want to propose a method called "Directory Sub Branching".
-Directory Sub branching means creating different sub branches in the `versioned` folder of the Thanos repository. Since the current architecture of the Thanos website is this:
+We want to propose a method called "Directory Sub Branching". Directory Sub branching means creating different sub branches in the `versioned` folder of the Thanos repository. Since the current architecture of the Thanos website is this:
 
 ```|- website
     |- archetypes
@@ -75,6 +74,7 @@ Directory Sub branching means creating different sub branches in the `versioned`
         |- public
         |- docs-pre-processed
 ```
+
 We want to add an additional `versioned` folder within the website's `tmp` directory. For example:
 
 ```|- website
@@ -92,13 +92,12 @@ We want to add an additional `versioned` folder within the website's `tmp` direc
                 |- version 0.12.2
                 |- other-folder-for-other-releases
 ```
-_NOTE: `tmp` directory is not committed, just temporarily built. The current version of docs lives in the `master` folder_
 
+*NOTE: `tmp` directory is not committed, just temporarily built. The current version of docs lives in the `master` folder*
 
 #### 3. Building a versioning plugin
 
 Creating a plugin that can automate these processes would save us a lot of development time and stress. This approach promises to be useful when it comes to versioning different release in the Thanos website.
-
 
 ##### Workflow
 
@@ -108,7 +107,7 @@ Creating a plugin that can automate these processes would save us a lot of devel
 4. Before anything, CI generates the docs and places them in a `versioned` tmp folder.
 5. the rest of the web command is executed.
 
-_NOTE: generated docs are not committed, just temporarily built._
+*NOTE: generated docs are not committed, just temporarily built.*
 
 ## FAQ
 
@@ -127,15 +126,16 @@ We hope to have a single, flexible configuration file (`docs.yaml`) that will he
      release-0.12:
      - docs/storage2221241.md
 ```
+
 ##### Alternative path
 
 We could have this file on master, so the current `make web` will
 
 1. Parse `docs.yaml` from master and use this as a default.
-1. Check out each release (e.g. `release-0.10`)
-1. Is there docs.yaml?
-    * Yes - parse the file and use it
-    * No - use docs.yaml from master
+2. Check out each release (e.g. `release-0.10`)
+3. Is there docs.yaml?
+   * Yes - parse the file and use it
+   * No - use docs.yaml from master
 
 The design of docs.yaml will look like this:
 
@@ -143,6 +143,7 @@ The design of docs.yaml will look like this:
    - docs/components/*.md
    - docs/storage2221241.md
 ```
+
 ##### What would the plugin look like?
 
 CLI (`make generate-versioned-docs`)
