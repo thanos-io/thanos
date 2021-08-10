@@ -168,7 +168,7 @@ Those metrics are important for vanilla Prometheus as well, but even more import
 
 // TODO(bwplotka): Rereview them after recent changes in metrics.
 
-See [alerts](/examples/alerts/alerts.md#Ruler) for more example alerts for ruler.
+See [alerts](../../examples/alerts/alerts.md#ruler) for more example alerts for ruler.
 
 NOTE: It is also recommended to set a mocked Alert on Ruler that checks if Query is up. This might be something simple like `vector(1)` query, just to check if Querier is live.
 
