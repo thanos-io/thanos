@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
@@ -56,8 +55,8 @@ func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
 	m.downsampleDuration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "thanos_compact_downsample_duration_seconds",
 		Help:    "Duration of downsample runs",
-		Buckets: []float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192},
-	}, []string{"resolution"})
+		Buckets: []float64{64, 128, 256, 512, 1024, 2048, 4096, 8192}, // or 1m, 5m, 15m, 30m, 60m, 120m, 240m
+	}, []string{"group"})
 
 	return m
 }
@@ -363,7 +362,7 @@ func processDownsampling(
 	downsampleDuration := time.Since(begin)
 	level.Info(logger).Log("msg", "downsampled block",
 		"from", m.ULID, "to", id, "duration", downsampleDuration, "duration_ms", downsampleDuration.Milliseconds())
-	metrics.downsampleDuration.WithLabelValues(strconv.FormatInt(resolution, 10)).Observe(downsampleDuration.Seconds())
+	metrics.downsampleDuration.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Observe(downsampleDuration.Seconds())
 
 	if err := block.VerifyIndex(logger, filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
 		return errors.Wrap(err, "output block index not valid")
