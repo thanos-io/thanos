@@ -35,11 +35,6 @@ func NewWarnSeriesResponse(err error) *SeriesResponse {
 }
 
 func NewSeriesResponse(series *Series, respBuf **[]byte, respPool *sync.Pool) *SeriesResponse {
-	if respPool == nil {
-		buf := []byte{}
-		bufPtr := &buf
-		respBuf = &bufPtr
-	}
 	return &SeriesResponse{
 		respPool: respPool,
 		respBuf:  respBuf,
@@ -50,11 +45,6 @@ func NewSeriesResponse(series *Series, respBuf **[]byte, respPool *sync.Pool) *S
 }
 
 func NewHintsSeriesResponse(hints *types.Any, respBuf **[]byte, respPool *sync.Pool) *SeriesResponse {
-	if respPool == nil {
-		buf := []byte{}
-		bufPtr := &buf
-		respBuf = &bufPtr
-	}
 	return &SeriesResponse{
 		respPool: respPool,
 		respBuf:  respBuf,
@@ -481,14 +471,19 @@ type syncPool = sync.Pool
 func (m *SeriesResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 
-	if cap(**m.respBuf) < size {
-		if m.respPool != nil {
-			m.respPool.Put(*m.respBuf)
+	var respBuf []byte
+	if m.respBuf == nil {
+		respBuf = make([]byte, size)
+	} else {
+		if cap(**m.respBuf) < size {
+			if m.respPool != nil {
+				m.respPool.Put(*m.respBuf)
+			}
+			buf := make([]byte, size)
+			*m.respBuf = &buf
 		}
-		buf := make([]byte, size)
-		*m.respBuf = &buf
+		respBuf = **m.respBuf
 	}
-	respBuf := **m.respBuf
 
 	marshalBuf := respBuf[:size]
 	n, err := m.MarshalToSizedBuffer(marshalBuf)
