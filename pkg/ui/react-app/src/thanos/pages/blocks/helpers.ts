@@ -39,7 +39,7 @@ const splitOverlappingBlocks = (blocks: Block[]): Block[][] => {
   return rows;
 };
 
-const sortBlocksInRows = (blocks: Block[], findOverlapBlocks: boolean): BlocksPool => {
+const sortBlocksInRows = (blocks: Block[], findOverlappingBlocks: boolean): BlocksPool => {
   const poolWithOverlaps: { [key: string]: Block[] } = {};
 
   blocks
@@ -62,7 +62,7 @@ const sortBlocksInRows = (blocks: Block[], findOverlapBlocks: boolean): BlocksPo
   const pool: BlocksPool = {};
 
   Object.entries(poolWithOverlaps).forEach(([key, blks]) => {
-    if (findOverlapBlocks) {
+    if (findOverlappingBlocks) {
       let maxTime = 0;
       const filteredOverlap = blks.filter((value, index) => {
         const isOverlap = maxTime > value.minTime;
@@ -80,7 +80,11 @@ const sortBlocksInRows = (blocks: Block[], findOverlapBlocks: boolean): BlocksPo
   return pool;
 };
 
-export const sortBlocks = (blocks: Block[], label: string, findOverlapBlocks: boolean): { [source: string]: BlocksPool } => {
+export const sortBlocks = (
+  blocks: Block[],
+  label: string,
+  findOverlappingBlocks: boolean
+): { [source: string]: BlocksPool } => {
   const titles: { [key: string]: string } = {};
   const pool: { [key: string]: Block[] } = {};
 
@@ -107,7 +111,7 @@ export const sortBlocks = (blocks: Block[], label: string, findOverlapBlocks: bo
 
   const sortedPool: { [source: string]: BlocksPool } = {};
   Object.keys(pool).forEach((k) => {
-    sortedPool[k] = sortBlocksInRows(pool[k], findOverlapBlocks);
+    sortedPool[k] = sortBlocksInRows(pool[k], findOverlappingBlocks);
   });
   return sortedPool;
 };
