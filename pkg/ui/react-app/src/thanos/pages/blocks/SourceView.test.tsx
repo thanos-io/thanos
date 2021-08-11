@@ -4,7 +4,7 @@ import { SourceView, SourceViewProps, BlocksRow } from './SourceView';
 import { sampleAPIResponse } from './__testdata__/testdata';
 import { sortBlocks } from './helpers';
 
-const sorted = sortBlocks(sampleAPIResponse.data.blocks, sampleAPIResponse.data.label);
+const sorted = sortBlocks(sampleAPIResponse.data.blocks, sampleAPIResponse.data.label, false);
 const source = 'prometheus_one';
 
 describe('Blocks SourceView', () => {

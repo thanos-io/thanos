@@ -10,8 +10,8 @@ const stringify = (map: LabelSet): string => {
 };
 
 export const isOverlapping = (a: Block, b: Block): boolean => {
-  if (a.minTime <= b.minTime) return b.minTime < a.maxTime;
-  else return a.minTime < b.maxTime;
+  if (a?.minTime <= b?.minTime) return b?.minTime < a?.maxTime;
+  else return a?.minTime < b?.maxTime;
 };
 
 const determineRow = (block: Block, rows: Block[][], startWithRow: number): number => {
@@ -39,7 +39,7 @@ const splitOverlappingBlocks = (blocks: Block[]): Block[][] => {
   return rows;
 };
 
-const sortBlocksInRows = (blocks: Block[]): BlocksPool => {
+const sortBlocksInRows = (blocks: Block[], findOverlappingBlocks: boolean): BlocksPool => {
   const poolWithOverlaps: { [key: string]: Block[] } = {};
 
   blocks
@@ -60,14 +60,31 @@ const sortBlocksInRows = (blocks: Block[]): BlocksPool => {
     });
 
   const pool: BlocksPool = {};
+
   Object.entries(poolWithOverlaps).forEach(([key, blks]) => {
-    pool[key] = splitOverlappingBlocks(blks);
+    if (findOverlappingBlocks) {
+      let maxTime = 0;
+      const filteredOverlap = blks.filter((value, index) => {
+        const isOverlap = maxTime > value.minTime;
+        if (value.maxTime > maxTime) {
+          maxTime = value.maxTime;
+        }
+        return isOverlap || isOverlapping(blks[index], blks[index + 1]);
+      });
+      pool[key] = splitOverlappingBlocks(filteredOverlap);
+    } else {
+      pool[key] = splitOverlappingBlocks(blks);
+    }
   });
 
   return pool;
 };
 
-export const sortBlocks = (blocks: Block[], label: string): { [source: string]: BlocksPool } => {
+export const sortBlocks = (
+  blocks: Block[],
+  label: string,
+  findOverlappingBlocks: boolean
+): { [source: string]: BlocksPool } => {
   const titles: { [key: string]: string } = {};
   const pool: { [key: string]: Block[] } = {};
 
@@ -94,7 +111,7 @@ export const sortBlocks = (blocks: Block[], label: string): { [source: string]: 
 
   const sortedPool: { [source: string]: BlocksPool } = {};
   Object.keys(pool).forEach((k) => {
-    sortedPool[k] = sortBlocksInRows(pool[k]);
+    sortedPool[k] = sortBlocksInRows(pool[k], findOverlappingBlocks);
   });
   return sortedPool;
 };
