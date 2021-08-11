@@ -99,6 +99,7 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
                     selectBlock={selectBlock}
                     gridMinTime={viewMinTime}
                     gridMaxTime={viewMaxTime}
+                    blockSearch={blockSearch}
                   />
                 ))}
               </div>
