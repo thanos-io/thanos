@@ -39,7 +39,7 @@ const splitOverlappingBlocks = (blocks: Block[]): Block[][] => {
   return rows;
 };
 
-const sortBlocksInRows = (blocks: Block[]): BlocksPool => {
+const sortBlocksInRows = (blocks: Block[], findOverlapBlocks: boolean): BlocksPool => {
   const poolWithOverlaps: { [key: string]: Block[] } = {};
 
   blocks
@@ -60,14 +60,27 @@ const sortBlocksInRows = (blocks: Block[]): BlocksPool => {
     });
 
   const pool: BlocksPool = {};
+
   Object.entries(poolWithOverlaps).forEach(([key, blks]) => {
-    pool[key] = splitOverlappingBlocks(blks);
+    if (findOverlapBlocks) {
+      let maxTime = 0;
+      const filteredOverlap = blks.filter((value, index) => {
+        const isOverlap = maxTime > value.minTime;
+        if (value.maxTime > maxTime) {
+          maxTime = value.maxTime;
+        }
+        return isOverlap || isOverlapping(blks[index], blks[index + 1]);
+      });
+      pool[key] = splitOverlappingBlocks(filteredOverlap);
+    } else {
+      pool[key] = splitOverlappingBlocks(blks);
+    }
   });
 
   return pool;
 };
 
-export const sortBlocks = (blocks: Block[], label: string): { [source: string]: BlocksPool } => {
+export const sortBlocks = (blocks: Block[], label: string, findOverlapBlocks: boolean): { [source: string]: BlocksPool } => {
   const titles: { [key: string]: string } = {};
   const pool: { [key: string]: Block[] } = {};
 
@@ -94,7 +107,7 @@ export const sortBlocks = (blocks: Block[], label: string): { [source: string]: 
 
   const sortedPool: { [source: string]: BlocksPool } = {};
   Object.keys(pool).forEach((k) => {
-    sortedPool[k] = sortBlocksInRows(pool[k]);
+    sortedPool[k] = sortBlocksInRows(pool[k], findOverlapBlocks);
   });
   return sortedPool;
 };
@@ -119,29 +132,4 @@ export const getBlockByUlid = (blocks: Block[], ulid: string): Block[] => {
 
   const blockResult = blocks.filter((block, index) => resultIndex.includes(index));
   return blockResult;
-};
-
-export const getOverlappingBlocks = (blockPools: { [source: string]: BlocksPool }): Set<string> => {
-  let result: Set<string> = new Set();
-
-  Object.keys(blockPools).forEach((pk) => {
-    let blocks = Object.values(blockPools[pk]);
-    for (let i = 0; i < blocks.length; i++) {
-      if (blocks[i].length <= 1) {
-        continue;
-      }
-      for (let j = 0; j < blocks[i].length - 1; j++) {
-        for (let k = 0; k < blocks[i][j].length; k++) {
-          for (let l = 0; l < blocks[i][j + 1].length; l++) {
-            if (isOverlapping(blocks[i][j][k], blocks[i][j + 1][l])) {
-              result.add(blocks[i][j][k].ulid);
-              result.add(blocks[i][j + 1][l].ulid);
-            }
-          }
-        }
-      }
-    }
-  });
-
-  return result;
 };
