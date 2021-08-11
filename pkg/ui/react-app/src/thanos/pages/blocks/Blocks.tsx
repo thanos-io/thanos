@@ -93,7 +93,7 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
             }}
             defaultChecked={findOverlappingBlocks}
           >
-            Enable find overlapping blocks
+            Enable finding overlapping blocks
           </Checkbox>
           <div className={styles.container}>
             <div className={styles.grid}>
