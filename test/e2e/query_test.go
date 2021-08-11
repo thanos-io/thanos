@@ -6,15 +6,14 @@ package e2e_test
 import (
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -232,7 +231,14 @@ func TestQueryWithEndpointConfig(t *testing.T) {
 
 	queryFileSDDir := filepath.Join(s.SharedDir(), "data", "querier", "1")
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "querier", "1")
-	testutil.Ok(t, cpyDir("./certs", queryFileSDDir))
+	err = os.MkdirAll(queryFileSDDir, 0750)
+	testutil.Ok(t, err)
+
+	// Generate certificates from ./test/e2e/certs/create.sh
+	cmd := exec.Command("/bin/bash", "../../../../certs/create.sh")
+	cmd.Dir = queryFileSDDir
+	_, err = cmd.Output()
+	testutil.Ok(t, err)
 
 	tlsConfig := e2e.BuildArgs(map[string]string{
 		"--grpc-server-tls-cert":      filepath.Join(container, "e2e_test_query_config_server.crt"),
@@ -260,7 +266,7 @@ func TestQueryWithEndpointConfig(t *testing.T) {
 				CertFile:   filepath.Join(container, "e2e_test_query_config_client.crt"),
 				KeyFile:    filepath.Join(container, "testclient.key"),
 				CaCertFile: filepath.Join(container, "testca.crt"),
-				ServerName: "e2e_test_query_config-sidecar-alone",
+				ServerName: "e2e_test_query_config-sidecar",
 			},
 			Endpoints: []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")},
 		},
@@ -874,66 +880,4 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 
 		return nil
 	}))
-}
-
-func cpyDir(scrDir, dest string) error {
-	entries, err := ioutil.ReadDir(scrDir)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		sourcePath := filepath.Join(scrDir, entry.Name())
-		destPath := filepath.Join(dest, entry.Name())
-
-		fileInfo, err := os.Stat(sourcePath)
-		if err != nil {
-			return err
-		}
-
-		stat, ok := fileInfo.Sys().(*syscall.Stat_t)
-		if !ok {
-			return fmt.Errorf("failed to get raw syscall.Stat_t data for '%s'", sourcePath)
-		}
-
-		switch fileInfo.Mode() & os.ModeType {
-		case os.ModeDir:
-			if err := os.MkdirAll(destPath, 0755); err != nil {
-				return err
-			}
-			if err := cpyDir(sourcePath, destPath); err != nil {
-				return err
-			}
-		case os.ModeSymlink:
-			return errors.New("symlink copy is not supported")
-		default:
-			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-				return err
-			}
-			if err := cpyFile(sourcePath, destPath); err != nil {
-				return err
-			}
-		}
-		if err := os.Lchown(destPath, int(stat.Uid), int(stat.Gid)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func cpyFile(srcFile, dstFile string) (err error) {
-	out, err := os.Create(dstFile)
-	if err != nil {
-		return err
-	}
-
-	defer runutil.CloseWithErrCapture(&err, out, "close dst")
-
-	in, err := os.Open(srcFile)
-	defer runutil.CloseWithErrCapture(&err, in, "close src")
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(out, in)
-	return err
 }

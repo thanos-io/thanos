@@ -15,13 +15,13 @@ openssl genrsa -out testclient.key 2048
 openssl req \
   -new \
   -key testserver.key \
-  -subj "/CN=e2e_test_query_config-sidecar-alone" \
+  -subj "/CN=e2e_test_query_config-sidecar" \
   -out e2e_test_query_config_server.csr
 
 openssl req \
   -new \
   -key testclient.key \
-  -subj "/CN=e2e_test_query_config-querier-1" \
+  -subj "/CN=e2e_test_query_config-querier" \
   -out e2e_test_query_config_client.csr
 
 openssl x509 \
@@ -42,7 +42,7 @@ keyUsage = critical, digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
 subjectAltName = @alt_names
 [alt_names]
-DNS.1 = e2e_test_query_config-sidecar-alone
+DNS.1 = e2e_test_query_config-sidecar
 EOF
   ) \
   -out e2e_test_query_config_server.crt
@@ -65,7 +65,7 @@ keyUsage = critical, digitalSignature, keyEncipherment
 extendedKeyUsage = clientAuth
 subjectAltName = @alt_names
 [alt_names]
-DNS.1 = e2e_test_query_config-querier-1
+DNS.1 = e2e_test_query_config-querier
 EOF
   ) \
   -out e2e_test_query_config_client.crt
