@@ -11,11 +11,9 @@ export const BlocksRow: FC<{
 }> = ({ blocks, gridMinTime, gridMaxTime, selectBlock }) => {
   return (
     <div className={styles.row}>
-      {blocks.map<JSX.Element>((b) => {
-        return (
-          <BlockSpan selectBlock={selectBlock} block={b} gridMaxTime={gridMaxTime} gridMinTime={gridMinTime} key={b.ulid} />
-        );
-      })}
+      {blocks.map<JSX.Element>((b) => (
+        <BlockSpan selectBlock={selectBlock} block={b} gridMaxTime={gridMaxTime} gridMinTime={gridMinTime} key={b.ulid} />
+      ))}
     </div>
   );
 };
