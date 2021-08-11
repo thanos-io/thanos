@@ -7,6 +7,7 @@ package http
 import (
 	"context"
 	"fmt"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"net/http"
 	"net/url"
 	"path"
@@ -35,6 +36,8 @@ type ClientConfig struct {
 	ProxyURL string `yaml:"proxy_url"`
 	// TLSConfig to use to connect to the targets.
 	TLSConfig TLSConfig `yaml:"tls_config"`
+
+	ClientMetrics *extpromhttp.ClientMetrics
 }
 
 // TLSConfig configures TLS connections.
@@ -99,7 +102,15 @@ func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	client.Transport = &userAgentRoundTripper{name: ThanosUserAgent, rt: client.Transport}
+
+	tripper := client.Transport
+
+	if cfg.ClientMetrics != nil {
+		tripper = extpromhttp.InstrumentedRoundTripper(tripper, cfg.ClientMetrics)
+	}
+
+	client.Transport = &userAgentRoundTripper{name: ThanosUserAgent, rt: tripper}
+
 	return client, nil
 }
 

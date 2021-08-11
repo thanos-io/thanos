@@ -303,8 +303,10 @@ func runRule(
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
 	var queryClients []*http_util.Client
+	queryClientMetrics := extpromhttp.NewClientMetrics(reg, "thanos_rule_query")
 	for _, cfg := range queryCfg {
-		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "query")
+		cfg.HTTPClientConfig.ClientMetrics = queryClientMetrics
+		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig,"query")
 		if err != nil {
 			return err
 		}
@@ -374,7 +376,9 @@ func runRule(
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
 	var alertmgrs []*alert.Alertmanager
+	amClientMetrics := extpromhttp.NewClientMetrics(reg, "thanos_rule_alertmanager")
 	for _, cfg := range alertingCfg.Alertmanagers {
+		cfg.HTTPClientConfig.ClientMetrics = amClientMetrics
 		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
 		if err != nil {
 			return err
