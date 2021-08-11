@@ -9,6 +9,7 @@ import { Block } from './block';
 import { SourceView } from './SourceView';
 import { BlockDetails } from './BlockDetails';
 import { BlockSearchInput } from './BlockSearchInput';
+import { BlockFilterCompaction } from './BlockFilterCompaction';
 import { sortBlocks } from './helpers';
 import styles from './blocks.module.css';
 import TimeRange from './TimeRange';
@@ -24,6 +25,10 @@ export interface BlockListProps {
 export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
   const [selectedBlock, selectBlock] = useState<Block>();
   const [searchState, setSearchState] = useState<string>('');
+  const [filterCompaction, setFilterCompaction] = useState<boolean>(false);
+  const [compactionLevel, setCompactionLevel] = useState<number>(0);
+  const [compactionLevelInput, setCompactionLevelInput] = useState<string>('0');
+
   const { blocks, label, err } = data;
 
   const [gridMinTime, gridMaxTime] = useMemo(() => {
@@ -95,6 +100,25 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
           >
             Enable finding overlapping blocks
           </Checkbox>
+          <BlockFilterCompaction
+            id="filter-compaction-checkbox"
+            defaultChecked={filterCompaction}
+            onChangeCheckbox={({ target }) => {
+              setFilterCompaction(target.checked);
+              if (target.checked) {
+                setCompactionLevel(parseInt(compactionLevelInput));
+              } else {
+                setCompactionLevel(0);
+              }
+            }}
+            onChangeInput={({ target }: ChangeEvent<HTMLInputElement>): void => {
+              if (filterCompaction) {
+                setCompactionLevel(parseInt(target.value));
+              }
+              setCompactionLevelInput(target.value);
+            }}
+            defaultValue={compactionLevelInput}
+          />
           <div className={styles.container}>
             <div className={styles.grid}>
               <div className={styles.sources}>
@@ -107,6 +131,7 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
                     gridMinTime={viewMinTime}
                     gridMaxTime={viewMaxTime}
                     blockSearch={blockSearch}
+                    compactionLevel={compactionLevel}
                   />
                 ))}
               </div>
