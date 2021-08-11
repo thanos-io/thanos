@@ -38,7 +38,7 @@ import (
 type DownsampleMetrics struct {
 	downsamples        *prometheus.CounterVec
 	downsampleFailures *prometheus.CounterVec
-	downsampleDuration *prometheus.Histogram
+	downsampleDuration prometheus.Histogram
 }
 
 func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
