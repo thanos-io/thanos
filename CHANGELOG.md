@@ -16,6 +16,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4487](https://github.com/thanos-io/thanos/pull/4487) Query: Add memcached auto discovery support.
 - [#4444](https://github.com/thanos-io/thanos/pull/4444) UI: Add search block UI.
 - [#4509](https://github.com/thanos-io/thanos/pull/4509) Logging: Adds duration_ms in int64 to the logs.
+- [#4552](https://github.com/thanos-io/thanos/pull/4552) Compactor: Adds `thanos_compact_downsample_duration_seconds` histogram.
 
 ### Fixed
 
