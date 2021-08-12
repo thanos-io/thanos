@@ -42,7 +42,10 @@ components:
                 state:
                     type: integer
                     description: / state returns the maximum state of alert instances for this rule.
-                    format: enum
+                    enum:
+                        - 0
+                        - 1
+                        - 2
                 name:
                     type: string
                 query:
@@ -76,7 +79,10 @@ components:
                     $ref: '#/components/schemas/ZLabelSet'
                 state:
                     type: integer
-                    format: enum
+                    enum:
+                        - 0
+                        - 1
+                        - 2
                 active_at:
                     type: string
                     format: RFC3339
@@ -85,7 +91,9 @@ components:
                 PartialResponseStrategy:
                     type: integer
                     description: Thanos specific. Used mainly for alert API purposes.
-                    format: enum
+                    enum:
+                        - 0
+                        - 1
         Label:
             properties:
                 name:
@@ -138,7 +146,9 @@ components:
                 PartialResponseStrategy:
                     type: integer
                     description: Thanos specific.
-                    format: enum
+                    enum:
+                        - 0
+                        - 1
             description: / RuleGroup has info for rules which are part of a group.
         RuleGroups:
             properties:
