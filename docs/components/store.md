@@ -290,11 +290,12 @@ config:
   max_item_size: 0
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
+  auto_discovery: false
 ```
 
 The **required** settings are:
 
-- `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md/#dns-service-discovery) provider.
+- `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md/#dns-service-discovery) provider. If your cluster supports auto-discovery, you should use the flag `auto_discovery` instead and only point to *one of* the memcached servers. This typically means that there should be only one address specified that resolves to any of the alive memcached servers. Use this for Amazon ElastiCache and other similar services.
 
 While the remaining settings are **optional**:
 
@@ -306,6 +307,7 @@ While the remaining settings are **optional**:
 - `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
 - `max_item_size`: maximum size of an item to be stored in memcached. This option should be set to the same value of memcached `-I` flag (defaults to 1MB) in order to avoid wasting network round trips to store items larger than the max item size allowed in memcached. If set to `0`, the item size is unlimited.
 - `dns_provider_update_interval`: the DNS discovery update interval.
+- `auto_discovery`: whether to use the auto-discovery mechanism for memcached.
 
 ## Caching Bucket
 

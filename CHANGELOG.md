@@ -13,12 +13,18 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 - [#4453](https://github.com/thanos-io/thanos/pull/4453) Tools: Add flag `--selector.relabel-config-file` / `--selector.relabel-config` / `--max-time` / `--min-time` to filter served blocks.
 - [#4482](https://github.com/thanos-io/thanos/pull/4482) COS: Add http_config for cos object store client.
+- [#4487](https://github.com/thanos-io/thanos/pull/4487) Query: Add memcached auto discovery support.
+- [#4444](https://github.com/thanos-io/thanos/pull/4444) UI: Add search block UI.
+- [#4509](https://github.com/thanos-io/thanos/pull/4509) Logging: Adds duration_ms in int64 to the logs.
+- [#4462](https://github.com/thanos-io/thanos/pull/4462) UI: Add find overlap block UI
 
 ### Fixed
 
+- [#4468](https://github.com/thanos-io/thanos/pull/4468) Rule: Fix temporary rule filename composition issue.
 - [#4476](https://github.com/thanos-io/thanos/pull/4476) UI: fix incorrect html escape sequence used for '>' symbol.
 
 ### Changed
+- [#4519](https://github.com/thanos-io/thanos/pull/4519) Query: switch to miekgdns DNS resolver as the default one.
 
 ## [v0.22.0](https://github.com/thanos-io/thanos/tree/release-0.22) - 2021.07.22
 

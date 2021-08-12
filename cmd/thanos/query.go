@@ -127,7 +127,7 @@ func registerQuery(app *extkingpin.App) {
 		Default("30s"))
 
 	dnsSDResolver := cmd.Flag("store.sd-dns-resolver", fmt.Sprintf("Resolver to use. Possible options: [%s, %s]", dns.GolangResolverType, dns.MiekgdnsResolverType)).
-		Default(string(dns.GolangResolverType)).Hidden().String()
+		Default(string(dns.MiekgdnsResolverType)).Hidden().String()
 
 	unhealthyStoreTimeout := extkingpin.ModelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
 
