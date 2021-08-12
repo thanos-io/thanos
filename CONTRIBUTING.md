@@ -68,7 +68,7 @@ The following section explains various suggestions and procedures to note during
 
 * It is strongly recommended that you use Linux distributions systems or OSX for development.
 * Go 1.13.9 or newer installed.
-* For React UI, you will need a working NodeJS environment and the Yarn package manager to compile the Web UI assets.
+* For React UI, you will need a working NodeJS environment and the npm package manager to compile the Web UI assets.
 
 ### First Steps
 
