@@ -11,6 +11,8 @@ import (
 )
 
 // Config represents the configuration of a set of Store API endpoints.
+// If `tls_config` is omitted then TLS will not be used.
+// Configs must have a name and they must be unique.
 type Config struct {
 	Name        string           `yaml:"name"`
 	TLSConfig   TLSConfiguration `yaml:"tls_config"`
@@ -39,7 +41,7 @@ const (
 )
 
 // NewConfig returns list of per-endpoint TLS config from individual flags.
-func NewConfig(endpointAddrs []string, strictEndpointAddrs []string, fileSDConfig *file.SDConfig, TLSConfig TLSConfiguration) ([]Config, error) {
+func NewConfig(endpointAddrs, strictEndpointAddrs []string, fileSDConfig *file.SDConfig, TLSConfig TLSConfiguration) ([]Config, error) {
 	var endpointConfig []Config
 
 	// Adding --endpoint, --endpoint.sd-files to []endpointConfig, if provided.
@@ -65,7 +67,7 @@ func NewConfig(endpointAddrs []string, strictEndpointAddrs []string, fileSDConfi
 }
 
 // LoadConfig returns list of per-endpoint TLS config.
-func LoadConfig(confYAML []byte, endpointAddrs []string, fileSDConfig *file.SDConfig) ([]Config, error) {
+func LoadConfig(confYAML []byte, endpointAddrs, strictEndpointAddrs []string, fileSDConfig *file.SDConfig) ([]Config, error) {
 	var endpointConfig []Config
 
 	if err := yaml.UnmarshalStrict(confYAML, &endpointConfig); err != nil {
@@ -86,13 +88,21 @@ func LoadConfig(confYAML []byte, endpointAddrs []string, fileSDConfig *file.SDCo
 		}
 	}
 
-	// Adding --endpoint, --endpoint.sd-files with NO-TLS to []endpointConfig, if provided.
+	// Adding --endpoint, --endpoint.sd-files with NO-TLS, if provided.
 	if len(endpointAddrs) > 0 || fileSDConfig != nil {
 		cfg := Config{}
 		cfg.Endpoints = endpointAddrs
 		if fileSDConfig != nil {
 			cfg.EndpointsSD = []file.SDConfig{*fileSDConfig}
 		}
+		endpointConfig = append(endpointConfig, cfg)
+	}
+
+	// Adding --endpoint-strict endpoints with NO-TLS, if provided.
+	if len(strictEndpointAddrs) > 0 {
+		cfg := Config{}
+		cfg.Endpoints = strictEndpointAddrs
+		cfg.Mode = StrictEndpointMode
 		endpointConfig = append(endpointConfig, cfg)
 	}
 

@@ -149,7 +149,7 @@ func newStoreSetNodeCollector(configInstance string) *storeSetNodeCollector {
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
-			[]string{"external_labels", "store_type"}, map[string]string{"config_instance": configInstance},
+			[]string{"external_labels", "store_type"}, map[string]string{"config_provider_name": configInstance},
 		),
 	}
 }

@@ -378,7 +378,7 @@ func runQuery(
 	var endpointConfig []store.Config
 	var err error
 	if len(endpointConfigYAML) > 0 {
-		endpointConfig, err = store.LoadConfig(endpointConfigYAML, storeAddrs, fileSDConfig)
+		endpointConfig, err = store.LoadConfig(endpointConfigYAML, storeAddrs, strictStores, fileSDConfig)
 		if err != nil {
 			return errors.Wrap(err, "loading endpoint config")
 		}
@@ -422,7 +422,6 @@ func runQuery(
 	)
 
 	var storeSets []*query.EndpointSet
-	fileSDCache := cache.New()
 	for _, config := range endpointConfig {
 		secure = !(config.TLSConfig == store.TLSConfiguration{})
 		dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, config.Name, secure, skipVerify, config.TLSConfig)
@@ -578,6 +577,8 @@ func runQuery(
 	}
 
 	var (
+		// Adding separate for loop for each client func() below because storeSets is being populated in a go-routine and this code executes before it.
+		// Implemented as a part of https://github.com/thanos-io/thanos/blob/main/docs/proposals-accepted/202106-automated-per-endpoint-mTLS.md
 		allClients = func() []store.Client {
 			var get []store.Client
 			for _, ss := range storeSets {
