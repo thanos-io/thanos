@@ -502,78 +502,73 @@ type marshaler interface {
 	MarshalTo([]byte) (int, error)
 }
 
-func (m *SeriesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
+func (m *SeriesResponse) MarshalToSizedBuffer(data []byte) (int, error) {
+	i := len(data)
 
 	if m.Result != nil {
-		{
-			size := m.Result.Size()
-			i -= size
+		size := m.Result.Size()
+		i -= size
 
-			if _, err := m.Result.(marshaler).MarshalTo(dAtA[i:]); err != nil {
-				return 0, err
-			}
+		if _, err := m.Result.(marshaler).MarshalTo(data[i:]); err != nil {
+			return 0, err
 		}
 	}
-	return len(dAtA) - i, nil
+	return len(data) - i, nil
 }
 
-func (m *SeriesResponse_Series) MarshalTo(dAtA []byte) (int, error) {
+func (m *SeriesResponse_Series) MarshalTo(data []byte) (int, error) {
 	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
+	return m.MarshalToSizedBuffer(data[:size])
 }
 
-func (m *SeriesResponse_Series) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
+func (m *SeriesResponse_Series) MarshalToSizedBuffer(data []byte) (int, error) {
+	i := len(data)
 	if m.Series != nil {
 		{
-			size, err := m.Series.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.Series.MarshalToSizedBuffer(data[:i])
 			if err != nil {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVarintRpc(data, i, uint64(size))
 		}
 		i--
-		dAtA[i] = 0xa
+		data[i] = 0xa
 	}
-	return len(dAtA) - i, nil
+	return len(data) - i, nil
 }
-func (m *SeriesResponse_Warning) MarshalTo(dAtA []byte) (int, error) {
+func (m *SeriesResponse_Warning) MarshalTo(data []byte) (int, error) {
 	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
+	return m.MarshalToSizedBuffer(data[:size])
 }
 
-func (m *SeriesResponse_Warning) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
+func (m *SeriesResponse_Warning) MarshalToSizedBuffer(data []byte) (int, error) {
+	i := len(data)
 	i -= len(m.Warning)
-	copy(dAtA[i:], m.Warning)
-	i = encodeVarintRpc(dAtA, i, uint64(len(m.Warning)))
+	copy(data[i:], m.Warning)
+	i = encodeVarintRpc(data, i, uint64(len(m.Warning)))
 	i--
-	dAtA[i] = 0x12
-	return len(dAtA) - i, nil
+	data[i] = 0x12
+	return len(data) - i, nil
 }
-func (m *SeriesResponse_Hints) MarshalTo(dAtA []byte) (int, error) {
+func (m *SeriesResponse_Hints) MarshalTo(data []byte) (int, error) {
 	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
+	return m.MarshalToSizedBuffer(data[:size])
 }
 
-func (m *SeriesResponse_Hints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
+func (m *SeriesResponse_Hints) MarshalToSizedBuffer(data []byte) (int, error) {
+	i := len(data)
 	if m.Hints != nil {
 		{
-			size, err := m.Hints.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.Hints.MarshalToSizedBuffer(data[:i])
 			if err != nil {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVarintRpc(data, i, uint64(size))
 		}
 		i--
-		dAtA[i] = 0x1a
+		data[i] = 0x1a
 	}
-	return len(dAtA) - i, nil
+	return len(data) - i, nil
 }
