@@ -20,9 +20,13 @@ This design doc is proposing a design for Thanos HTTP API defined in protobuf an
 
 ## **Motivations**
 
-To improve Thanos usage for users, we would like to define our HTTP APIs in protobuf/OpenAPI and expose those in the repository. OpenAPI is a language for describing REST APIs with a widely-used tooling ecosystem. With OpenAPI, developers can generate live documentation, validate APIs and even generate client and server stubs from OpenAPI to use our APIs efficiently. Also, the auto-generated documentation problem prevent documentation errors (Prometheus#7192, Prometheus#5567). Protocol Buffers (a.k.a., protobuf) is well-known as a mechanism for serializing structured data, and it's usually used to define gRPC APIs. Also, protobuf specification could be used to define REST API. We hope to use protobuf to define our APIs for consistency, while we also want to leverage the tooling ecosystem of OpenAPI.
+To improve Thanos usage for users, we would like to define our HTTP APIs in protobuf/OpenAPI and expose those in the repository. OpenAPI is a language for describing REST APIs with a widely-used tooling ecosystem. With OpenAPI, developers can generate live documentation, validate APIs and even generate client and server stubs from OpenAPI to use our APIs efficiently. Also, the auto-generated documentation problem prevent documentation errors (Prometheus#7192, Prometheus#5567). 
+
+Protocol Buffers (a.k.a., protobuf) is well-known as a mechanism for serializing structured data, and it's usually used to define gRPC APIs. Also, protobuf specification could be used to define REST API. We hope to use protobuf to define our APIs for consistency, while we also want to leverage the tooling ecosystem of OpenAPI.
 
 So, we want to define REST APIs in protobuf, generate OpenAPI definition from protobuf with [gnostic](https://github.com/google/gnostic). This would allow users to use tools for documentation, validation, type checking, and even interface code generation to use our APIs efficiently.
+
+Also, the [gRPC Transcoding feature](https://github.com/googleapis/googleapis/blob/master/google/api/http.proto) defined in protobuf allows developers to build a single API service that supports both gRPC APIs and REST APIs. Particularly, we can reuse the protobuf definition for gRPC in our project. 
 
 Similarly, we want to reuse this work in Prometheus.
 
@@ -42,7 +46,7 @@ Similarly, we want to reuse this work in Prometheus.
 
 ## **Non-Goals**
 
-* Don't mix gRPC with HTTP APIs in the same protobuf package
+* Don't mix gRPC with HTTP APIs in the same protobuf package, we're sure that we cannot 
 
 ## **How**
 
@@ -57,10 +61,12 @@ Similarly, we want to reuse this work in Prometheus.
 
 1. Pros:
    1. There are might be some complexity, edge case and extra tooling to make the 3-step process (proto -> OpenAPI -> documentation to work.
-
+   2. We 
 2. Cons:
    1. We write API definitions in protobuf for consistency. OpenAPI is less consistent compared to protobuf in a project built on Golang.
    2. Protobuf definition is more concise to write.
+   3. Protobuf is type-safe, easier to edit in IDE.
+   4. Protobuf is designed forward/backward compatible. 
 
 ## **Define APIs in gRPC and have RESTful APIs alongside with grpc - gateway**
 
