@@ -403,7 +403,8 @@ func NewBucketStore(
 	}
 
 	// Depend on the options
-	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, extprom.WrapRegistererWithPrefix("thanos_bucket_store_", s.reg))
+	indexReaderPoolMetrics := indexheader.NewReaderPoolMetrics(extprom.WrapRegistererWithPrefix("thanos_bucket_store_", s.reg))
+	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, indexReaderPoolMetrics)
 	s.metrics = newBucketStoreMetrics(s.reg) // TODO(metalmatze): Might be possible via Option too
 
 	if err := os.MkdirAll(dir, 0750); err != nil {
