@@ -20,7 +20,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.qpsErrTotalPanel(
             'thanos_replicate_replication_runs_total{result="error", %s}' % thanos.bucket_replicate.dashboard.selector,
             'thanos_replicate_replication_runs_total{%s}' % thanos.bucket_replicate.dashboard.selector,
-            thanos.rule.dashboard.dimensions
+            thanos.bucket_replicate.dashboard.dimensions
           )
         )
         .addPanel(
@@ -37,7 +37,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.latencyPanel(
             'thanos_replicate_replication_run_duration_seconds',
             'result="success",  %s' % thanos.bucket_replicate.dashboard.selector,
-            thanos.rule.dashboard.dimensions
+            thanos.bucket_replicate.dashboard.dimensions
           )
         )
       )
