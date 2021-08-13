@@ -229,20 +229,19 @@ func defaultGroupKey(res int64, lbls labels.Labels) string {
 // DefaultGrouper is the Thanos built-in grouper. It groups blocks based on downsample
 // resolution and block's labels.
 type DefaultGrouper struct {
-	bkt                            objstore.Bucket
-	logger                         log.Logger
-	acceptMalformedIndex           bool
-	enableVerticalCompaction       bool
-	compactions                    *prometheus.CounterVec
-	compactionRunsStarted          *prometheus.CounterVec
-	compactionRunsCompleted        *prometheus.CounterVec
-	compactionFailures             *prometheus.CounterVec
-	verticalCompactions            *prometheus.CounterVec
-	garbageCollectedBlocks         prometheus.Counter
-	blocksMarkedForDeletion        prometheus.Counter
-	blocksMarkedForNoCompact       prometheus.Counter
-	hashFunc                       metadata.HashFunc
-	skipChunksWithOutOfOrderBlocks bool
+	bkt                      objstore.Bucket
+	logger                   log.Logger
+	acceptMalformedIndex     bool
+	enableVerticalCompaction bool
+	compactions              *prometheus.CounterVec
+	compactionRunsStarted    *prometheus.CounterVec
+	compactionRunsCompleted  *prometheus.CounterVec
+	compactionFailures       *prometheus.CounterVec
+	verticalCompactions      *prometheus.CounterVec
+	garbageCollectedBlocks   prometheus.Counter
+	blocksMarkedForDeletion  prometheus.Counter
+	blocksMarkedForNoCompact prometheus.Counter
+	hashFunc                 metadata.HashFunc
 }
 
 // NewDefaultGrouper makes a new DefaultGrouper.
@@ -256,7 +255,6 @@ func NewDefaultGrouper(
 	garbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
-	skipChunksWithOutOfOrderBlocks bool,
 ) *DefaultGrouper {
 	return &DefaultGrouper{
 		bkt:                      bkt,
@@ -283,11 +281,10 @@ func NewDefaultGrouper(
 			Name: "thanos_compact_group_vertical_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 		}, []string{"group"}),
-		blocksMarkedForNoCompact:       blocksMarkedForNoCompact,
-		garbageCollectedBlocks:         garbageCollectedBlocks,
-		blocksMarkedForDeletion:        blocksMarkedForDeletion,
-		hashFunc:                       hashFunc,
-		skipChunksWithOutOfOrderBlocks: skipChunksWithOutOfOrderBlocks,
+		blocksMarkedForNoCompact: blocksMarkedForNoCompact,
+		garbageCollectedBlocks:   garbageCollectedBlocks,
+		blocksMarkedForDeletion:  blocksMarkedForDeletion,
+		hashFunc:                 hashFunc,
 	}
 }
 
@@ -317,7 +314,6 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.blocksMarkedForDeletion,
 				g.blocksMarkedForNoCompact,
 				g.hashFunc,
-				g.skipChunksWithOutOfOrderBlocks,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
@@ -338,25 +334,24 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 // Group captures a set of blocks that have the same origin labels and downsampling resolution.
 // Those blocks generally contain the same series and can thus efficiently be compacted.
 type Group struct {
-	logger                         log.Logger
-	bkt                            objstore.Bucket
-	key                            string
-	labels                         labels.Labels
-	resolution                     int64
-	mtx                            sync.Mutex
-	metasByMinTime                 []*metadata.Meta
-	acceptMalformedIndex           bool
-	enableVerticalCompaction       bool
-	compactions                    prometheus.Counter
-	compactionRunsStarted          prometheus.Counter
-	compactionRunsCompleted        prometheus.Counter
-	compactionFailures             prometheus.Counter
-	verticalCompactions            prometheus.Counter
-	groupGarbageCollectedBlocks    prometheus.Counter
-	blocksMarkedForDeletion        prometheus.Counter
-	blocksMarkedForNoCompact       prometheus.Counter
-	hashFunc                       metadata.HashFunc
-	skipChunksWithOutofOrderBlocks bool
+	logger                      log.Logger
+	bkt                         objstore.Bucket
+	key                         string
+	labels                      labels.Labels
+	resolution                  int64
+	mtx                         sync.Mutex
+	metasByMinTime              []*metadata.Meta
+	acceptMalformedIndex        bool
+	enableVerticalCompaction    bool
+	compactions                 prometheus.Counter
+	compactionRunsStarted       prometheus.Counter
+	compactionRunsCompleted     prometheus.Counter
+	compactionFailures          prometheus.Counter
+	verticalCompactions         prometheus.Counter
+	groupGarbageCollectedBlocks prometheus.Counter
+	blocksMarkedForDeletion     prometheus.Counter
+	blocksMarkedForNoCompact    prometheus.Counter
+	hashFunc                    metadata.HashFunc
 }
 
 // NewGroup returns a new compaction group.
@@ -377,29 +372,27 @@ func NewGroup(
 	blocksMarkedForDeletion prometheus.Counter,
 	blockMakredForNoCopmact prometheus.Counter,
 	hashFunc metadata.HashFunc,
-	skipChunksWithOutOfOrderChunks bool,
 ) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	g := &Group{
-		logger:                         logger,
-		bkt:                            bkt,
-		key:                            key,
-		labels:                         lset,
-		resolution:                     resolution,
-		acceptMalformedIndex:           acceptMalformedIndex,
-		enableVerticalCompaction:       enableVerticalCompaction,
-		compactions:                    compactions,
-		compactionRunsStarted:          compactionRunsStarted,
-		compactionRunsCompleted:        compactionRunsCompleted,
-		compactionFailures:             compactionFailures,
-		verticalCompactions:            verticalCompactions,
-		groupGarbageCollectedBlocks:    groupGarbageCollectedBlocks,
-		blocksMarkedForDeletion:        blocksMarkedForDeletion,
-		blocksMarkedForNoCompact:       blockMakredForNoCopmact,
-		hashFunc:                       hashFunc,
-		skipChunksWithOutofOrderBlocks: skipChunksWithOutOfOrderChunks,
+		logger:                      logger,
+		bkt:                         bkt,
+		key:                         key,
+		labels:                      lset,
+		resolution:                  resolution,
+		acceptMalformedIndex:        acceptMalformedIndex,
+		enableVerticalCompaction:    enableVerticalCompaction,
+		compactions:                 compactions,
+		compactionRunsStarted:       compactionRunsStarted,
+		compactionRunsCompleted:     compactionRunsCompleted,
+		compactionFailures:          compactionFailures,
+		verticalCompactions:         verticalCompactions,
+		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
+		blocksMarkedForDeletion:     blocksMarkedForDeletion,
+		blocksMarkedForNoCompact:    blockMakredForNoCopmact,
+		hashFunc:                    hashFunc,
 	}
 	return g, nil
 }
@@ -783,7 +776,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			return false, ulid.ULID{}, halt(errors.Wrapf(err, "block with not healthy index found %s; Compaction level %v; Labels: %v", bdir, meta.Compaction.Level, meta.Thanos.Labels))
 		}
 
-		if err := stats.OutOfOrderChunksErr(); cg.skipChunksWithOutofOrderBlocks && err != nil {
+		if err := stats.OutOfOrderChunksErr(); err != nil {
 			return false, ulid.ULID{}, outOfOrderChunkError(errors.Wrapf(err, "blocks with out-of-order chunks are dropped from compaction:  %s", bdir), meta.ULID)
 		}
 
@@ -890,14 +883,15 @@ func (cg *Group) deleteBlock(id ulid.ULID, bdir string) error {
 
 // BucketCompactor compacts blocks in a bucket.
 type BucketCompactor struct {
-	logger      log.Logger
-	sy          *Syncer
-	grouper     Grouper
-	comp        Compactor
-	planner     Planner
-	compactDir  string
-	bkt         objstore.Bucket
-	concurrency int
+	logger                         log.Logger
+	sy                             *Syncer
+	grouper                        Grouper
+	comp                           Compactor
+	planner                        Planner
+	compactDir                     string
+	bkt                            objstore.Bucket
+	concurrency                    int
+	skipBlocksWithOutOfOrderChunks bool
 }
 
 // NewBucketCompactor creates a new bucket compactor.
@@ -910,19 +904,21 @@ func NewBucketCompactor(
 	compactDir string,
 	bkt objstore.Bucket,
 	concurrency int,
+	skipBlocksWithOutOfOrderChunks bool,
 ) (*BucketCompactor, error) {
 	if concurrency <= 0 {
 		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
 	}
 	return &BucketCompactor{
-		logger:      logger,
-		sy:          sy,
-		grouper:     grouper,
-		planner:     planner,
-		comp:        comp,
-		compactDir:  compactDir,
-		bkt:         bkt,
-		concurrency: concurrency,
+		logger:                         logger,
+		sy:                             sy,
+		grouper:                        grouper,
+		planner:                        planner,
+		comp:                           comp,
+		compactDir:                     compactDir,
+		bkt:                            bkt,
+		concurrency:                    concurrency,
+		skipBlocksWithOutOfOrderChunks: skipBlocksWithOutOfOrderChunks,
 	}, nil
 }
 
@@ -977,8 +973,10 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 							continue
 						}
 					}
-					// if block has out of order chunk, mark the block for no compaction and continue.
-					if IsOutOfOrderChunkError(err) {
+					// If block has out of order chunk and it has been configured to skip it,
+					// then we can mark the block for no compaction so that the next compaction run
+					// will skip it.
+					if IsOutOfOrderChunkError(err) && c.skipBlocksWithOutOfOrderChunks {
 						if err := block.MarkForNoCompact(
 							ctx,
 							c.logger,
