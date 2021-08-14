@@ -18,6 +18,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4509](https://github.com/thanos-io/thanos/pull/4509) Logging: Adds duration_ms in int64 to the logs.
 - [#4462](https://github.com/thanos-io/thanos/pull/4462) UI: Add find overlap block UI
 - [#4469](https://github.com/thanos-io/thanos/pull/4469) Compact: Add flag `compact.skip-block-with-out-of-order-chunks` to skip blocks with out-of-order chunks during compaction instead of halting
+- [#4568](https://github.com/thanos-io/thanos/pull/4568) Thanos Rule Add note about Rule needs to be part of store list of Query
+
 
 ### Fixed
 
