@@ -7,11 +7,12 @@ package http
 import (
 	"context"
 	"fmt"
-	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"net/http"
 	"net/url"
 	"path"
 	"sync"
+
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 
 	"github.com/go-kit/kit/log"
 	config_util "github.com/prometheus/common/config"

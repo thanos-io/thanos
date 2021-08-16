@@ -306,7 +306,7 @@ func runRule(
 	queryClientMetrics := extpromhttp.NewClientMetrics(reg, "thanos_rule_query")
 	for _, cfg := range queryCfg {
 		cfg.HTTPClientConfig.ClientMetrics = queryClientMetrics
-		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig,"query")
+		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "query")
 		if err != nil {
 			return err
 		}

@@ -1,10 +1,14 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package http
 
 import (
+	"net/http"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"net/http"
 )
 
 // ClientMetrics holds a collection of metrics that can be used to instrument a http client.
@@ -44,7 +48,7 @@ func NewClientMetrics(reg prometheus.Registerer, namespace string) *ClientMetric
 			Subsystem: "http_client",
 			Name:      "dns_duration_seconds",
 			Help:      "Trace dns latency histogram.",
-			Buckets:   prometheus.DefBuckets,
+			Buckets:   []float64{0.025, .05, .1, .5, 1, 5, 10},
 		},
 		[]string{"event"},
 	)
@@ -55,7 +59,7 @@ func NewClientMetrics(reg prometheus.Registerer, namespace string) *ClientMetric
 			Subsystem: "http_client",
 			Name:      "tls_duration_seconds",
 			Help:      "Trace tls latency histogram.",
-			Buckets:   prometheus.DefBuckets,
+			Buckets:   []float64{0.025, .05, .1, .5, 1, 5, 10},
 		},
 		[]string{"event"},
 	)
@@ -66,7 +70,7 @@ func NewClientMetrics(reg prometheus.Registerer, namespace string) *ClientMetric
 			Subsystem: "http_client",
 			Name:      "request_duration_seconds",
 			Help:      "A histogram of request latencies.",
-			Buckets:   prometheus.DefBuckets,
+			Buckets:   []float64{0.025, .05, .1, .5, 1, 5, 10},
 		},
 		[]string{},
 	)
