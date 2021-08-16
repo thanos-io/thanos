@@ -1067,5 +1067,5 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 
 		s.Chunks = append(s.Chunks, ch)
 	}
-	return storepb.NewSeriesResponse(&s, nil, nil)
+	return storepb.NewSeriesResponse(&s)
 }

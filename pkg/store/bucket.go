@@ -1133,7 +1133,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			}
 			series.Labels = labelpb.ZLabelsFromPromLabels(lset)
 
-			resp := storepb.NewSeriesResponse(&series, &respBuf, &s.respPool)
+			resp := storepb.NewSeriesResponseWithPool(&series, &respBuf, &s.respPool)
 			if err = srv.Send(resp); err != nil {
 				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 				return
@@ -1157,7 +1157,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			return
 		}
 
-		if err = srv.Send(storepb.NewHintsSeriesResponse(anyHints, &respBuf, &s.respPool)); err != nil {
+		if err = srv.Send(storepb.NewHintsSeriesResponseWithPool(anyHints, &respBuf, &s.respPool)); err != nil {
 			err = status.Error(codes.Unknown, errors.Wrap(err, "send series response hints").Error())
 			return
 		}

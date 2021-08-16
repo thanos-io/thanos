@@ -95,16 +95,16 @@ func TestServerAsClient(t *testing.T) {
 						NewSeriesResponse(&Series{
 							Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}},
 							Chunks: []AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
-						}, nil, nil),
+						}),
 						NewSeriesResponse(&Series{
 							Labels: []labelpb.ZLabel{{Name: "a", Value: "b1"}},
 							Chunks: []AggrChunk{{MinTime: 1231, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
-						}, nil, nil),
+						}),
 						NewWarnSeriesResponse(errors.New("yolo")),
 						NewSeriesResponse(&Series{
 							Labels: []labelpb.ZLabel{{Name: "a", Value: "b3"}},
 							Chunks: []AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 124554, MaxTime: 14124}},
-						}, nil, nil),
+						}),
 					}}
 				t.Run("ok", func(t *testing.T) {
 					for i := 0; i < 20; i++ {

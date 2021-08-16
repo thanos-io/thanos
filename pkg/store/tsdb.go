@@ -132,7 +132,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		series := set.At()
 		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendSortedLabels(series.Labels(), s.extLset))}
 		if r.SkipChunks {
-			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries, nil, nil)); err != nil {
+			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
 			}
 			continue
@@ -169,7 +169,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 			if frameBytesLeft > 0 && isNext {
 				continue
 			}
-			if err := srv.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: storeSeries.Labels, Chunks: seriesChunks}, nil, nil)); err != nil {
+			if err := srv.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: storeSeries.Labels, Chunks: seriesChunks})); err != nil {
 				return status.Error(codes.Aborted, err.Error())
 			}
 

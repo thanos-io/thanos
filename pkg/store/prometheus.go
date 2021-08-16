@@ -173,7 +173,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			sort.Slice(lset, func(i, j int) bool {
 				return lset[i].Name < lset[j].Name
 			})
-			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset}, nil, nil)); err != nil {
+			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
 				return err
 			}
 		}
@@ -258,7 +258,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_Series
 		if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
 			Labels: labelpb.ZLabelsFromPromLabels(lset),
 			Chunks: aggregatedChunks,
-		}, nil, nil)); err != nil {
+		})); err != nil {
 			return err
 		}
 	}
@@ -323,7 +323,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 					labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(series.Labels), extLset),
 				),
 				Chunks: thanosChks,
-			}, nil, nil)); err != nil {
+			})); err != nil {
 				return err
 			}
 		}

@@ -34,7 +34,15 @@ func NewWarnSeriesResponse(err error) *SeriesResponse {
 	}
 }
 
-func NewSeriesResponse(series *Series, respBuf **[]byte, respPool *sync.Pool) *SeriesResponse {
+func NewSeriesResponse(series *Series) *SeriesResponse {
+	return &SeriesResponse{
+		Result: &SeriesResponse_Series{
+			Series: series,
+		},
+	}
+}
+
+func NewSeriesResponseWithPool(series *Series, respBuf **[]byte, respPool *sync.Pool) *SeriesResponse {
 	return &SeriesResponse{
 		respPool: respPool,
 		respBuf:  respBuf,
@@ -44,10 +52,18 @@ func NewSeriesResponse(series *Series, respBuf **[]byte, respPool *sync.Pool) *S
 	}
 }
 
-func NewHintsSeriesResponse(hints *types.Any, respBuf **[]byte, respPool *sync.Pool) *SeriesResponse {
+func NewHintsSeriesResponseWithPool(hints *types.Any, respBuf **[]byte, respPool *sync.Pool) *SeriesResponse {
 	return &SeriesResponse{
 		respPool: respPool,
 		respBuf:  respBuf,
+		Result: &SeriesResponse_Hints{
+			Hints: hints,
+		},
+	}
+}
+
+func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
+	return &SeriesResponse{
 		Result: &SeriesResponse_Hints{
 			Hints: hints,
 		},
