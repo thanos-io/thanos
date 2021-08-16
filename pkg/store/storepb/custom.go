@@ -42,20 +42,18 @@ func NewSeriesResponse(series *Series) *SeriesResponse {
 	}
 }
 
-func NewSeriesResponseWithPool(series *Series, respBuf **[]byte, respPool *sync.Pool) *SeriesResponse {
+func NewSeriesResponseWithPool(series *Series, respPool *sync.Pool) *SeriesResponse {
 	return &SeriesResponse{
 		respPool: respPool,
-		respBuf:  respBuf,
 		Result: &SeriesResponse_Series{
 			Series: series,
 		},
 	}
 }
 
-func NewHintsSeriesResponseWithPool(hints *types.Any, respBuf **[]byte, respPool *sync.Pool) *SeriesResponse {
+func NewHintsSeriesResponseWithPool(hints *types.Any, respPool *sync.Pool) *SeriesResponse {
 	return &SeriesResponse{
 		respPool: respPool,
-		respBuf:  respBuf,
 		Result: &SeriesResponse_Hints{
 			Hints: hints,
 		},
@@ -482,23 +480,47 @@ func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
 // managing imports.
 type syncPool = sync.Pool
 
+// Close returns the memory used for marshaling, if any.
+func (m *SeriesResponse) Close() {
+	if m == nil || m.respBuf == nil {
+		return
+	}
+
+	m.respPool.Put(m.respBuf)
+	m.respBuf = nil
+}
+
 // The following were copied/pasted from gogoprotobuf generated code with changes
 // to make it work with sync.Pool / []byte slice.
 func (m *SeriesResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 
 	var respBuf []byte
-	if m.respBuf == nil {
+
+	// No pool defined, allocate directly.
+	if m.respPool == nil {
 		respBuf = make([]byte, size)
 	} else {
-		if cap(**m.respBuf) < size {
-			if m.respPool != nil {
-				m.respPool.Put(*m.respBuf)
+		if m.respBuf == nil {
+			poolBuf := m.respPool.Get()
+			if poolBuf == nil {
+				respBuf = make([]byte, size)
+				m.respBuf = &respBuf
+			} else {
+				m.respBuf = poolBuf.(*[]byte)
+				respBuf = *m.respBuf
 			}
-			buf := make([]byte, size)
-			*m.respBuf = &buf
+		} else {
+			if cap(*m.respBuf) < size {
+				if m.respPool != nil {
+					m.respPool.Put(m.respBuf)
+				}
+				respBuf = make([]byte, size)
+				m.respBuf = &respBuf
+			} else {
+				respBuf = *m.respBuf
+			}
 		}
-		respBuf = **m.respBuf
 	}
 
 	marshalBuf := respBuf[:size]

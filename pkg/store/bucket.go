@@ -399,14 +399,7 @@ func NewBucketStore(
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		enableSeriesResponseHints:   enableSeriesResponseHints,
-		respPool: sync.Pool{
-			New: func() interface{} {
-				// TODO(GiedriusS): we could calibrate the default
-				// size here.
-				b := make([]byte, 32)
-				return &b
-			},
-		},
+		respPool:                    sync.Pool{},
 	}
 
 	for _, option := range options {
@@ -1104,14 +1097,16 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.seriesBlocksQueried.Observe(float64(stats.blocksQueried))
 	}
 
-	var respBuf *[]byte
-	if resHints.Len() > 0 || len(res) > 0 {
-		respBuf = s.respPool.Get().(*[]byte)
-		defer s.respPool.Put(respBuf)
-	}
+	var resp *storepb.SeriesResponse
+	defer func(r **storepb.SeriesResponse) {
+		if *r != nil {
+			(*r).Close()
+		}
+	}(&resp)
 
 	// Merge the sub-results from each selected block.
 	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
+
 		begin := time.Now()
 
 		// NOTE: We "carefully" assume series and chunks are sorted within each SeriesSet. This should be guaranteed by
@@ -1133,7 +1128,13 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			}
 			series.Labels = labelpb.ZLabelsFromPromLabels(lset)
 
-			resp := storepb.NewSeriesResponseWithPool(&series, &respBuf, &s.respPool)
+			if resp == nil {
+				resp = storepb.NewSeriesResponseWithPool(&series, &s.respPool)
+			} else {
+				resp.Result = &storepb.SeriesResponse_Series{
+					Series: &series,
+				}
+			}
 			if err = srv.Send(resp); err != nil {
 				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 				return
@@ -1157,7 +1158,15 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			return
 		}
 
-		if err = srv.Send(storepb.NewHintsSeriesResponseWithPool(anyHints, &respBuf, &s.respPool)); err != nil {
+		if resp == nil {
+			resp = storepb.NewHintsSeriesResponseWithPool(anyHints, &s.respPool)
+		} else {
+			resp.Result = &storepb.SeriesResponse_Hints{
+				Hints: anyHints,
+			}
+		}
+
+		if err = srv.Send(resp); err != nil {
 			err = status.Error(codes.Unknown, errors.Wrap(err, "send series response hints").Error())
 			return
 		}

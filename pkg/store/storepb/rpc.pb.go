@@ -315,7 +315,7 @@ func (m *SeriesRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SeriesRequest proto.InternalMessageInfo
 
-// @inject_field: respBuf **[]byte
+// @inject_field: respBuf *[]byte
 // @inject_field: respPool *syncPool
 type SeriesResponse struct {
 	// Types that are valid to be assigned to Result:
@@ -325,21 +325,21 @@ type SeriesResponse struct {
 	Result isSeriesResponse_Result `protobuf_oneof:"result"`
 
 	// custom fields
-	respBuf  **[]byte
+	respBuf *[]byte
 	respPool *syncPool
 }
 
 // custom fields getter/setter
-func (m *SeriesResponse) RespBuf() **[]byte {
+func (m *SeriesResponse) RespBuf() *[]byte {
 	return m.respBuf
 }
-func (m *SeriesResponse) SetRespBuf(in **[]byte) {
+func (m *SeriesResponse) SetRespBuf(in *[]byte){
 	m.respBuf = in
 }
 func (m *SeriesResponse) RespPool() *syncPool {
 	return m.respPool
 }
-func (m *SeriesResponse) SetRespPool(in *syncPool) {
+func (m *SeriesResponse) SetRespPool(in *syncPool){
 	m.respPool = in
 }
 

@@ -1482,12 +1482,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		queryGate:            gate.NewNoop(),
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
 		seriesLimiterFactory: NewSeriesLimiterFactory(0),
-		respPool: sync.Pool{
-			New: func() interface{} {
-				b := make([]byte, 32)
-				return &b
-			},
-		},
+		respPool:             sync.Pool{},
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
