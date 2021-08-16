@@ -135,6 +135,12 @@ $(PROTOC_GEN_GOGOFAST): $(BINGO_DIR)/protoc-gen-gogofast.mod
 	@echo "(re)installing $(GOBIN)/protoc-gen-gogofast-v1.3.2"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=protoc-gen-gogofast.mod -o=$(GOBIN)/protoc-gen-gogofast-v1.3.2 "github.com/gogo/protobuf/protoc-gen-gogofast"
 
+PROTOC_GO_INJECT_FIELD := $(GOBIN)/protoc-go-inject-field-v0.0.0-20170110051745-00204be12496
+$(PROTOC_GO_INJECT_FIELD): $(BINGO_DIR)/protoc-go-inject-field.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/protoc-go-inject-field-v0.0.0-20170110051745-00204be12496"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=protoc-go-inject-field.mod -o=$(GOBIN)/protoc-go-inject-field-v0.0.0-20170110051745-00204be12496 "github.com/favadi/protoc-go-inject-field"
+
 SHFMT := $(GOBIN)/shfmt-v3.1.2
 $(SHFMT): $(BINGO_DIR)/shfmt.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
