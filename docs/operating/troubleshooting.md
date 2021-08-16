@@ -25,7 +25,7 @@ Checking producers log for such ULID, and checking meta.json (e.g if sample stat
 - Misconfiguraiton of sidecar/ruler: Same external labels or no external labels across many block producers.
 - Running multiple compactors for single block "stream", even for short duration.
 - Manually uploading blocks to the bucket.
-- Eventually consistent block storage until we fully implement [RW for bucket](https://thanos.io/tip/proposals-done/201901-read-write-operations-bucket.md)
+- Eventually consistent block storage until we fully implement [RW for bucket](../proposals-done/201901-read-write-operations-bucket.md)
 
 ### Solutions
 
