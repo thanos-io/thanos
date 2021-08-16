@@ -36,7 +36,8 @@ type ClientConfig struct {
 	ProxyURL string `yaml:"proxy_url"`
 	// TLSConfig to use to connect to the targets.
 	TLSConfig TLSConfig `yaml:"tls_config"`
-
+	// ClientMetrics contains metrics that will be used to instrument
+	// the client that will be created with this config.
 	ClientMetrics *extpromhttp.ClientMetrics
 }
 

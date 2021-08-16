@@ -7,6 +7,8 @@ import (
 	"net/http"
 )
 
+// ClientMetrics holds a collection of metrics that can be used to instrument a http client.
+// By setting this field in HTTPClientConfig, NewHTTPClient will create an instrumented client.
 type ClientMetrics struct {
 	inFlightGauge            prometheus.Gauge
 	requestTotalCount        *prometheus.CounterVec
@@ -15,6 +17,10 @@ type ClientMetrics struct {
 	requestDurationHistogram *prometheus.HistogramVec
 }
 
+// NewClientMetrics creates a new instance of ClientMetrics.
+// It will also register the metrics with the included register.
+// This ClientMetrics should be re-used for diff clients with the same purpose.
+// e.g. 1 ClientMetrics should be used for all the clients that talk to Alertmanager.
 func NewClientMetrics(reg prometheus.Registerer, namespace string) *ClientMetrics {
 	var m ClientMetrics
 
@@ -68,6 +74,8 @@ func NewClientMetrics(reg prometheus.Registerer, namespace string) *ClientMetric
 	return &m
 }
 
+// InstrumentedRoundTripper instruments the given roundtripper with metrics that are
+// registered in the provided ClientMetrics.
 func InstrumentedRoundTripper(tripper http.RoundTripper, m *ClientMetrics) http.RoundTripper {
 	if m == nil {
 		return tripper
