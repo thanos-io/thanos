@@ -352,7 +352,6 @@ func runCompact(
 		compactMetrics.garbageCollectedBlocks,
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
 		metadata.HashFunc(conf.hashFunc),
-		conf.skipBlockWithOutOfOrderChunks,
 	)
 	planner := compact.WithLargeTotalIndexSizeFilter(
 		compact.NewPlanner(logger, levels, noCompactMarkerFilter),
@@ -370,6 +369,7 @@ func runCompact(
 		compactDir,
 		bkt,
 		conf.compactionConcurrency,
+		conf.skipBlockWithOutOfOrderChunks,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create bucket compactor")
