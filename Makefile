@@ -27,6 +27,7 @@ endif
 GOPATH            ?= $(shell go env GOPATH)
 TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
+export GOBIN
 
 # Promu is using this exact variable name, do not rename.
 PREFIX  ?= $(GOBIN)
@@ -55,6 +56,9 @@ JSONNET_VENDOR_DIR      ?= mixin/vendor
 
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
+MDOX_VALIDATE_CONFIG ?= .mdox.validate.yaml
+# for website pre process
+export MDOX
 PUBLIC_DIR        ?= $(WEB_DIR)/public
 ME                ?= $(shell whoami)
 
@@ -88,8 +92,8 @@ help: ## Displays help.
 .PHONY: all
 all: format build
 
-$(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)/yarn.lock
-	   cd $(REACT_APP_PATH) && yarn --frozen-lockfile
+$(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)/package-lock.json
+	   cd $(REACT_APP_PATH) && npm ci
 
 $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES)
 	   @echo ">> building React app"
@@ -107,22 +111,22 @@ assets: $(GO_BINDATA) $(REACT_APP_OUTPUT_DIR)
 .PHONY: react-app-lint
 react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
 	   @echo ">> running React app linting"
-	   cd $(REACT_APP_PATH) && yarn lint:ci
+	   cd $(REACT_APP_PATH) && npm run lint:ci
 
 .PHONY: react-app-lint-fix
 react-app-lint-fix:
 	@echo ">> running React app linting and fixing errors where possible"
-	cd $(REACT_APP_PATH) && yarn lint
+	cd $(REACT_APP_PATH) && npm run lint
 
 .PHONY: react-app-test
 react-app-test: | $(REACT_APP_NODE_MODULES_PATH) react-app-lint
 	@echo ">> running React app tests"
-	cd $(REACT_APP_PATH) && export CI=true && yarn test --no-watch
+	cd $(REACT_APP_PATH) && export CI=true && npm test --no-watch
 
 .PHONY: react-app-start
 react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 	@echo ">> running React app"
-	cd $(REACT_APP_PATH) && yarn start
+	cd $(REACT_APP_PATH) && npm start
 
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
@@ -171,13 +175,13 @@ docker-push:
 docs: ## Regenerates flags in docs for all thanos commands localise links, ensure GitHub format.
 docs: $(MDOX) build
 	@echo ">> generating docs"
-	PATH=${PATH}:$(GOBIN) $(MDOX) fmt --links.localize.address-regex="https://thanos.io/.*" $(MD_FILES_TO_FORMAT)
+	PATH=${PATH}:$(GOBIN) $(MDOX) fmt -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(MD_FILES_TO_FORMAT)
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
 check-docs: $(MDOX) build
-	@echo ">> checking local links"
-	PATH=${PATH}:$(GOBIN) $(MDOX) fmt --check --links.localize.address-regex="https://thanos.io/.*" $(MD_FILES_TO_FORMAT)
+	@echo ">> checking formatting and local/remote links"
+	PATH=${PATH}:$(GOBIN) $(MDOX) fmt --check -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(MD_FILES_TO_FORMAT)
 	$(call require_clean_work_tree,'run make docs and commit changes')
 
 .PHONY: shell-format
@@ -199,8 +203,8 @@ go-format: $(GOIMPORTS)
 
 .PHONY: proto
 proto: ## Generates Go files from Thanos proto files.
-proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST)
-	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" scripts/genproto.sh
+proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST) $(PROTOC_GO_INJECT_FIELD)
+	@PROTOC_GO_INJECT_FIELD_BIN="$(PROTOC_GO_INJECT_FIELD)" GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" scripts/genproto.sh
 
 .PHONY: tarballs-release
 tarballs-release: ## Build tarballs.
@@ -265,7 +269,7 @@ else
 endif
 
 .PHONY: web-pre-process
-web-pre-process:
+web-pre-process: $(MDOX)
 	@echo ">> running documentation website pre processing"
 	scripts/website/websitepreprocess.sh
 
@@ -314,6 +318,7 @@ sync/atomic=go.uber.org/atomic" ./...
 	@go run ./scripts/copyright
 	@echo ">> ensuring generated proto files are up to date"
 	@$(MAKE) proto
+	@$(MAKE) format
 	$(call require_clean_work_tree,'detected files without copyright, run make lint and commit changes')
 
 .PHONY: shell-lint
