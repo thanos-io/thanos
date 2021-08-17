@@ -90,6 +90,8 @@ labels:
   [ <labelname>: <labelvalue> ]
 ```
 
+Note: If you make use of recording rules, make sure that you expose your Ruler instance as a store in the Thanos Querier so that the new time series can be queried as part of Thanos Query. One of the ways you can do this is by adding a new `--store <thanos-ruler-ip>` command-line argument to the Thanos Query command.
+
 ### Alerting Rules
 
 The syntax for alerting rules is:
