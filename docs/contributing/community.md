@@ -48,8 +48,8 @@ Meeting details: [https://bit.ly/prometheus-community-agenda](https://bit.ly/pro
 
 ### Mentorships
 
-We participate in periodic mentorship programs. Read more [here](https://thanos.io/tip/contributing/mentorship.md/).
+We participate in periodic mentorship programs. Read more [here](mentorship.md).
 
 ### Further Questions
 
-Feel free to contact any of the [Maintainers](https://thanos.io/tip/thanos/maintainers.md/)
+Feel free to contact any of the [Maintainers](../../MAINTAINERS.md)
