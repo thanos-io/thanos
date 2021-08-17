@@ -89,11 +89,11 @@ $(JSONNETFMT): $(BINGO_DIR)/jsonnetfmt.mod
 	@echo "(re)installing $(GOBIN)/jsonnetfmt-v0.17.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnetfmt.mod -o=$(GOBIN)/jsonnetfmt-v0.17.0 "github.com/google/go-jsonnet/cmd/jsonnetfmt"
 
-MDOX := $(GOBIN)/mdox-v0.2.2-0.20210617084122-22b44c491197
+MDOX := $(GOBIN)/mdox-v0.2.2-0.20210810104227-dd2d81061a27
 $(MDOX): $(BINGO_DIR)/mdox.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/mdox-v0.2.2-0.20210617084122-22b44c491197"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=mdox.mod -o=$(GOBIN)/mdox-v0.2.2-0.20210617084122-22b44c491197 "github.com/bwplotka/mdox"
+	@echo "(re)installing $(GOBIN)/mdox-v0.2.2-0.20210810104227-dd2d81061a27"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=mdox.mod -o=$(GOBIN)/mdox-v0.2.2-0.20210810104227-dd2d81061a27 "github.com/bwplotka/mdox"
 
 MINIO := $(GOBIN)/minio-v0.0.0-20200527010300-cccf2de129da
 $(MINIO): $(BINGO_DIR)/minio.mod
@@ -134,6 +134,12 @@ $(PROTOC_GEN_GOGOFAST): $(BINGO_DIR)/protoc-gen-gogofast.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
 	@echo "(re)installing $(GOBIN)/protoc-gen-gogofast-v1.3.2"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=protoc-gen-gogofast.mod -o=$(GOBIN)/protoc-gen-gogofast-v1.3.2 "github.com/gogo/protobuf/protoc-gen-gogofast"
+
+PROTOC_GO_INJECT_FIELD := $(GOBIN)/protoc-go-inject-field-v0.0.0-20170110051745-00204be12496
+$(PROTOC_GO_INJECT_FIELD): $(BINGO_DIR)/protoc-go-inject-field.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/protoc-go-inject-field-v0.0.0-20170110051745-00204be12496"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=protoc-go-inject-field.mod -o=$(GOBIN)/protoc-go-inject-field-v0.0.0-20170110051745-00204be12496 "github.com/favadi/protoc-go-inject-field"
 
 SHFMT := $(GOBIN)/shfmt-v3.1.2
 $(SHFMT): $(BINGO_DIR)/shfmt.mod

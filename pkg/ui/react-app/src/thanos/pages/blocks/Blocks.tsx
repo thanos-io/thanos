@@ -1,7 +1,7 @@
 import React, { ChangeEvent, FC, useMemo, useState } from 'react';
 import { RouteComponentProps } from '@reach/router';
 import { UncontrolledAlert } from 'reactstrap';
-import { useQueryParams, withDefault, NumberParam, StringParam } from 'use-query-params';
+import { useQueryParams, withDefault, NumberParam, StringParam, BooleanParam } from 'use-query-params';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
 import PathPrefixProps from '../../../types/PathPrefixProps';
@@ -12,6 +12,8 @@ import { BlockSearchInput } from './BlockSearchInput';
 import { sortBlocks } from './helpers';
 import styles from './blocks.module.css';
 import TimeRange from './TimeRange';
+import Checkbox from '../../../components/Checkbox';
+
 export interface BlockListProps {
   blocks: Block[];
   err: string | null;
@@ -22,10 +24,8 @@ export interface BlockListProps {
 export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
   const [selectedBlock, selectBlock] = useState<Block>();
   const [searchState, setSearchState] = useState<string>('');
-
   const { blocks, label, err } = data;
 
-  const blockPools = useMemo(() => sortBlocks(blocks, label), [blocks, label]);
   const [gridMinTime, gridMaxTime] = useMemo(() => {
     if (!err && blocks.length > 0) {
       let gridMinTime = blocks[0].minTime;
@@ -43,13 +43,20 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
     return [0, 0];
   }, [blocks, err]);
 
-  const [{ 'min-time': viewMinTime, 'max-time': viewMaxTime, ulid: blockSearchParam }, setQuery] = useQueryParams({
+  const [
+    { 'min-time': viewMinTime, 'max-time': viewMaxTime, ulid: blockSearchParam, 'find-overlapping': findOverlappingParam },
+    setQuery,
+  ] = useQueryParams({
     'min-time': withDefault(NumberParam, gridMinTime),
     'max-time': withDefault(NumberParam, gridMaxTime),
     ulid: withDefault(StringParam, ''),
+    'find-overlapping': withDefault(BooleanParam, false),
   });
 
+  const [findOverlappingBlocks, setFindOverlappingBlocks] = useState<boolean>(findOverlappingParam);
   const [blockSearch, setBlockSearch] = useState<string>(blockSearchParam);
+
+  const blockPools = useMemo(() => sortBlocks(blocks, label, findOverlappingBlocks), [blocks, label, findOverlappingBlocks]);
 
   const setViewTime = (times: number[]): void => {
     setQuery({
@@ -76,6 +83,18 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
             onClick={() => setBlockSearchInput(searchState)}
             defaultValue={blockSearchParam}
           />
+          <Checkbox
+            id="find-overlap-block-checkbox"
+            onChange={({ target }) => {
+              setQuery({
+                'find-overlapping': target.checked,
+              });
+              setFindOverlappingBlocks(target.checked);
+            }}
+            defaultChecked={findOverlappingBlocks}
+          >
+            Enable finding overlapping blocks
+          </Checkbox>
           <div className={styles.container}>
             <div className={styles.grid}>
               <div className={styles.sources}>
