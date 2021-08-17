@@ -35,8 +35,9 @@ const (
 )
 
 type StoreSpec interface {
-	// Addr returns StoreAPI Address for the store spec. It is used as ID for store.
-	Addr() string
+	// StoreAddrSpec Addr returns StoreAPI Address for the store spec. It is used as ID for store.
+	StoreAddrSpec
+
 	// Metadata returns current labels, store type and min, max ranges for store.
 	// It can change for every call for this method.
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
@@ -48,24 +49,29 @@ type StoreSpec interface {
 	StrictStatic() bool
 }
 
-type RuleSpec interface {
-	// Addr returns RulesAPI Address for the rules spec. It is used as its ID.
+type StoreAddrSpec interface {
+	// Addr returns Store address for the rules spec. It is used as its ID.
 	Addr() string
+}
+
+type RuleSpec interface {
+	// StoreAddrSpec Addr returns StoreAPI Address for the store spec. It is used as ID for store.
+	StoreAddrSpec
 }
 
 type TargetSpec interface {
-	// Addr returns TargetsAPI Address for the targets spec. It is used as its ID.
-	Addr() string
+	// StoreAddrSpec Addr returns StoreAPI Address for the store spec. It is used as ID for store.
+	StoreAddrSpec
 }
 
 type MetadataSpec interface {
-	// Addr returns MetadataAPI Address for the metadata spec. It is used as its ID.
-	Addr() string
+	// StoreAddrSpec Addr returns StoreAPI Address for the store spec. It is used as ID for store.
+	StoreAddrSpec
 }
 
 type ExemplarSpec interface {
-	// Addr returns ExemplarsAPI Address for the exemplars spec. It is used as its ID.
-	Addr() string
+	// StoreAddrSpec Addr returns StoreAPI Address for the store spec. It is used as ID for store.
+	StoreAddrSpec
 }
 
 // stringError forces the error to be a string
