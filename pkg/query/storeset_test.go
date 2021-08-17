@@ -235,8 +235,8 @@ func TestStoreSet_Update(t *testing.T) {
 	// Check stats.
 	expected := newStoreAPIStats()
 	expected[component.Sidecar] = map[string]int{
-		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredStoreAddr[0]): 1,
-		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredStoreAddr[1]): 1,
+		fmt.Sprintf(`{a="b"},{addr="%s"}`, discoveredStoreAddr[0]): 1,
+		fmt.Sprintf(`{a="b"},{addr="%s"}`, discoveredStoreAddr[1]): 1,
 	}
 	testutil.Equals(t, expected, storeSet.storesMetric.storeNodes)
 
@@ -247,7 +247,7 @@ func TestStoreSet_Update(t *testing.T) {
 	testutil.Equals(t, 2, len(storeSet.storeStatuses))
 
 	stores.CloseOne(discoveredStoreAddr[0])
-	delete(expected[component.Sidecar], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredStoreAddr[0]))
+	delete(expected[component.Sidecar], fmt.Sprintf(`{a="b"},{addr="%s"}`, discoveredStoreAddr[0]))
 
 	// We expect Update to tear down store client for closed store server.
 	storeSet.Update(context.Background())
@@ -483,22 +483,22 @@ func TestStoreSet_Update(t *testing.T) {
 	// Check stats.
 	expected = newStoreAPIStats()
 	expected[component.UnknownStoreAPI] = map[string]int{
-		"{l1=\"no-store-type\", l2=\"v3\"}": 1,
+		`{l1="no-store-type", l2="v3"}`: 1,
 	}
 	expected[component.Query] = map[string]int{
-		"{l1=\"v2\", l2=\"v3\"}":             1,
-		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 2,
+		`{l1="v2", l2="v3"}`:           1,
+		`{l1="v2", l2="v3"},{l3="v4"}`: 2,
 	}
 	expected[component.Rule] = map[string]int{
-		"{l1=\"v2\", l2=\"v3\"}": 2,
+		`{l1="v2", l2="v3"}`: 2,
 	}
 	expected[component.Sidecar] = map[string]int{
-		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredStoreAddr[1]): 1,
-		"{l1=\"v2\", l2=\"v3\"}": 2,
+		fmt.Sprintf(`{a="b"},{addr="%s"}`, discoveredStoreAddr[1]): 1,
+		`{l1="v2", l2="v3"}`: 2,
 	}
 	expected[component.Store] = map[string]int{
-		"":                                   2,
-		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 3,
+		``:                             2,
+		`{l1="v2", l2="v3"},{l3="v4"}`: 3,
 	}
 	testutil.Equals(t, expected, storeSet.storesMetric.storeNodes)
 
