@@ -19,12 +19,12 @@ export const BlockFilterCompaction: FC<BlockFilterCompactionProps> = ({
   defaultValue,
 }) => {
   return (
-    <div className={styles.blockFilter}>
+    <div className={styles.blockFilter} style={{ marginLeft: '24px' }}>
       <Checkbox style={{ marginRight: '4px' }} id={id} defaultChecked={defaultChecked} onChange={onChangeCheckbox} />
       <p style={{ marginRight: '4px' }}>Filter by compaction level</p>
       <Input
         type="number"
-        style={{ width: '100px', marginBottom: '1rem' }}
+        style={{ width: '80px', marginBottom: '1rem' }}
         onChange={onChangeInput}
         defaultValue={defaultValue}
         min={0}
