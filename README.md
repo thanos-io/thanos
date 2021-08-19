@@ -24,7 +24,7 @@ Concretely the aims of the project are:
 * [Design](https://thanos.io/tip/thanos/design.md/)
 * [Blog posts](docs/getting-started.md#blog-posts)
 * [Talks](docs/getting-started.md#talks)
-* [Proposals](docs/proposals)
+* [Proposals](docs/proposals-done)
 * [Integrations](docs/integrations.md)
 
 ## Features
@@ -80,6 +80,10 @@ Thanos is an open source project and we value and welcome new contributors and m
 
 * Slack: [#thanos](https://slack.cncf.io/)
 * Issue Tracker: [GitHub Issues](https://github.com/thanos-io/thanos/issues)
+
+## Adopters
+
+See [`Adopters List`](website/data/adopters.yml).
 
 ## Maintainers
 

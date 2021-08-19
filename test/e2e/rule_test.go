@@ -72,7 +72,37 @@ groups:
     annotations:
       summary: "I always complain and I have been loaded via /-/reload."
 `
+	testAlertRuleAddedLaterSignal = `
+groups:
+- name: example
+  interval: 1s
+  partial_response_strategy: "WARN"
+  rules:
+  - alert: TestAlert_HasBeenLoadedViaWebHandler
+    # It must be based on actual metric, otherwise call to StoreAPI would be not involved.
+    expr: absent(some_metric)
+    labels:
+      severity: page
+    annotations:
+      summary: "I always complain and I have been loaded via sighup signal."
+- name: example2
+  interval: 1s
+  partial_response_strategy: "WARN"
+  rules:
+  - alert: TestAlert_HasBeenLoadedViaWebHandler
+    # It must be based on actual metric, otherwise call to StoreAPI would be not involved.
+    expr: absent(some_metric)
+    labels:
+      severity: page
+    annotations:
+      summary: "I always complain and I have been loaded via sighup signal."
+`
 )
+
+type rulesResp struct {
+	Status string
+	Data   *rulespb.RuleGroups
+}
 
 func createRuleFile(t *testing.T, path, content string) {
 	t.Helper()
@@ -97,6 +127,30 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 	testutil.Equals(t, 200, resp.StatusCode)
 }
 
+func reloadRulesSignal(t *testing.T, r *e2ethanos.Service) {
+	c := e2e.NewCommand("kill", "-1", "1")
+	_, _, err := r.Exec(c)
+	testutil.Ok(t, err)
+}
+
+func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, expectedRulegroupCount int) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
+	testutil.Ok(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	testutil.Ok(t, err)
+	testutil.Equals(t, 200, resp.StatusCode)
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	testutil.Ok(t, resp.Body.Close())
+
+	var data = rulesResp{}
+
+	testutil.Ok(t, json.Unmarshal(body, &data))
+	testutil.Equals(t, "success", data.Status)
+
+	testutil.Assert(t, len(data.Data.Groups) == expectedRulegroupCount, fmt.Sprintf("expected there to be %d rule groups", expectedRulegroupCount))
+}
+
 func rulegroupCorrectData(t *testing.T, ctx context.Context, endpoint string) {
 	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
 	testutil.Ok(t, err)
@@ -108,10 +162,7 @@ func rulegroupCorrectData(t *testing.T, ctx context.Context, endpoint string) {
 	body, err := ioutil.ReadAll(resp.Body)
 	testutil.Ok(t, err)
 
-	var data struct {
-		Status string
-		Data   *rulespb.RuleGroups
-	}
+	var data = rulesResp{}
 
 	testutil.Ok(t, json.Unmarshal(body, &data))
 	testutil.Equals(t, "success", data.Status)
@@ -317,12 +368,18 @@ func TestRule(t *testing.T) {
 		rulegroupCorrectData(t, ctx, r.HTTPEndpoint())
 	})
 
-	t.Run("reload works", func(t *testing.T) {
-		// Add a new rule via /-/reload.
-		// TODO(GiedriusS): add a test for reloading via SIGHUP. Need to extend e2e framework to expose PIDs.
+	t.Run("signal reload works", func(t *testing.T) {
+		// Add a new rule via sending sighup
+		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLaterSignal)
+		reloadRulesSignal(t, r)
+		checkReloadSuccessful(t, ctx, r.HTTPEndpoint(), 4)
+	})
 
+	t.Run("http reload works", func(t *testing.T) {
+		// Add a new rule via /-/reload.
 		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLaterWebHandler)
 		reloadRulesHTTP(t, ctx, r.HTTPEndpoint())
+		checkReloadSuccessful(t, ctx, r.HTTPEndpoint(), 3)
 	})
 
 	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "ALERTS", promclient.QueryOptions{

@@ -1,9 +1,3 @@
----
-type: docs
-title: Community
-menu: contributing
----
-
 # Community
 
 Thanos is an open source project from the very first commit. We always value and welcome new contributors and members of the community. Here are ways to get in touch with the community:
@@ -48,8 +42,8 @@ Meeting details: [https://bit.ly/prometheus-community-agenda](https://bit.ly/pro
 
 ### Mentorships
 
-We participate in periodic mentorship programs. Read more [here](https://thanos.io/tip/contributing/mentorship.md/).
+We participate in periodic mentorship programs. Read more [here](mentorship.md).
 
 ### Further Questions
 
-Feel free to contact any of the [Maintainers](https://thanos.io/tip/thanos/maintainers.md/)
+Feel free to contact any of the [Maintainers](../../MAINTAINERS.md)
