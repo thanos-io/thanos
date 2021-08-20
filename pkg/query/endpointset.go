@@ -46,7 +46,7 @@ type EndpointSpec interface {
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
 	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
 	// given store connection.
-	Metadata(ctx context.Context, client infopb.InfoClient) (*endpointMetadata, error)
+	Metadata(ctx context.Context, client *endpointClients) (*endpointMetadata, error)
 
 	// IsStrictStatic returns true if the endpoint has been statically defined and it is under a strict mode.
 	IsStrictStatic() bool
@@ -75,15 +75,36 @@ func (es *grpcEndpointSpec) Addr() string {
 
 // Metadata method for gRPC endpoint tries to call InfoAPI exposed by Thanos components until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (es *grpcEndpointSpec) Metadata(ctx context.Context, client infopb.InfoClient) (metadata *endpointMetadata, err error) {
-	resp, err := client.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
+func (es *grpcEndpointSpec) Metadata(ctx context.Context, client *endpointClients) (*endpointMetadata, error) {
+	resp, err := client.info.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
 	if err != nil {
-		return &endpointMetadata{&infopb.InfoResponse{
-			ComponentType: component.UnknownStoreAPI.String(),
-		}}, errors.Wrapf(err, "fetching info from %s", es.addr)
+		// Call Info method of StoreAPI, this way querier will be able to discovery old components not exposing InfoAPI.
+		metadata, err := es.getMetadataUsingStoreAPI(ctx, client.store)
+		if err != nil {
+			return nil, errors.Wrapf(err, "fetching info from %s", es.addr)
+		}
+		return metadata, nil
 	}
 
 	return &endpointMetadata{resp}, nil
+}
+
+func (es *grpcEndpointSpec) getMetadataUsingStoreAPI(ctx context.Context, client storepb.StoreClient) (*endpointMetadata, error) {
+	resp, err := client.Info(ctx, &storepb.InfoRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &endpointMetadata{
+		&infopb.InfoResponse{
+			LabelSets:     resp.LabelSets,
+			ComponentType: component.FromProto(resp.StoreType).String(),
+			Store: &infopb.StoreInfo{
+				MinTime: resp.MinTime,
+				MaxTime: resp.MaxTime,
+			},
+		},
+	}, nil
 }
 
 // stringError forces the error to be a string
@@ -290,18 +311,18 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	e.endpoints = endpoints
 	e.endpointsMtx.Unlock()
 
-	e.cleanUpStoreStatuses(endpoints)
+	e.cleanUpEndpointStatuses(endpoints)
 }
 
 // GetStoreClients returns a list of all active stores.
-func (e *EndpointSet) GetStoreClients() []storepb.StoreClient {
+func (e *EndpointSet) GetStoreClients() []store.Client {
 	e.endpointsMtx.RLock()
 	defer e.endpointsMtx.RUnlock()
 
-	stores := make([]storepb.StoreClient, 0, len(e.endpoints))
+	stores := make([]store.Client, 0, len(e.endpoints))
 	for _, er := range e.endpoints {
 		if er.HasStoreAPI() {
-			stores = append(stores, er.clients.store)
+			stores = append(stores, er)
 		}
 	}
 	return stores
@@ -412,17 +433,21 @@ func (e *EndpointSet) getActiveEndpoints(ctx context.Context, endpoints map[stri
 					return
 				}
 
+				// Assume that StoreAPI is also exposed because if call to info service fails we will call info method of storeAPI.
+				// It will be overwritten to null if not present.
 				er = &endpointRef{
-					cc:     conn,
-					addr:   addr,
-					logger: e.logger,
+					cc:          conn,
+					addr:        addr,
+					logger:      e.logger,
+					StoreClient: storepb.NewStoreClient(conn),
 					clients: &endpointClients{
-						info: infopb.NewInfoClient(conn),
+						info:  infopb.NewInfoClient(conn),
+						store: storepb.NewStoreClient(conn),
 					},
 				}
 			}
 
-			metadata, err := spec.Metadata(ctx, er.clients.info)
+			metadata, err := spec.Metadata(ctx, er.clients)
 			if err != nil {
 				if !seenAlready && !spec.IsStrictStatic() {
 					// Close only if new and not a strict static node.
@@ -440,9 +465,13 @@ func (e *EndpointSet) getActiveEndpoints(ctx context.Context, endpoints map[stri
 				// Still keep it around if static & strict mode enabled.
 				// Assume that it expose storeAPI and cover all complete possible time range.
 				if !seenAlready {
-					metadata.Store = &infopb.StoreInfo{
-						MinTime: MinTime,
-						MaxTime: MaxTime,
+					metadata = &endpointMetadata{
+						&infopb.InfoResponse{
+							Store: &infopb.StoreInfo{
+								MinTime: MinTime,
+								MaxTime: MaxTime,
+							},
+						},
 					}
 					er.Update(metadata)
 				}
@@ -497,7 +526,7 @@ func (e *EndpointSet) updateEndpointStatus(er *endpointRef, err error) {
 	e.endpointStatuses[er.addr] = &status
 }
 
-func (e *EndpointSet) GetStoreStatus() []EndpointStatus {
+func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 	e.endpointsStatusesMtx.RLock()
 	defer e.endpointsStatusesMtx.RUnlock()
 
@@ -512,7 +541,7 @@ func (e *EndpointSet) GetStoreStatus() []EndpointStatus {
 	return statuses
 }
 
-func (e *EndpointSet) cleanUpStoreStatuses(endpoints map[string]*endpointRef) {
+func (e *EndpointSet) cleanUpEndpointStatuses(endpoints map[string]*endpointRef) {
 	e.endpointsStatusesMtx.Lock()
 	defer e.endpointsStatusesMtx.Unlock()
 
@@ -530,6 +559,8 @@ func (e *EndpointSet) cleanUpStoreStatuses(endpoints map[string]*endpointRef) {
 
 // TODO(bwplotka): Consider moving storeRef out of this package and renaming it, as it also supports rules API.
 type endpointRef struct {
+	storepb.StoreClient
+
 	mtx  sync.RWMutex
 	cc   *grpc.ClientConn
 	addr string
@@ -550,6 +581,10 @@ func (er *endpointRef) Update(metadata *endpointMetadata) {
 
 	if metadata.Store != nil {
 		clients.store = storepb.NewStoreClient(er.cc)
+		er.StoreClient = clients.store
+	} else {
+		er.clients.store = nil
+		er.StoreClient = nil
 	}
 
 	if metadata.Rules != nil {

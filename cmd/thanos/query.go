@@ -375,60 +375,94 @@ func runQuery(
 	)
 
 	var (
-		stores = query.NewStoreSet(
+		endpoints = query.NewEndpointSet(
 			logger,
 			reg,
-			func() (specs []query.StoreSpec) {
-
+			func() (specs []query.EndpointSpec) {
 				// Add strict & static nodes.
 				for _, addr := range strictStores {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, true))
+					specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
 				}
-				// Add DNS resolved addresses from static flags and file SD.
+
 				for _, addr := range dnsStoreProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+					specs = append(specs, query.NewGRPCEndpointSpec(addr, false))
 				}
-				return removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
-			},
-			func() (specs []query.RuleSpec) {
+
 				for _, addr := range dnsRuleProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+					specs = append(specs, query.NewGRPCEndpointSpec(addr, false))
 				}
 
-				// NOTE(s-urbaniak): No need to remove duplicates, as rule apis are a subset of store apis.
-				// hence, any duplicates will be tracked in the store api set.
-
-				return specs
-			},
-			func() (specs []query.TargetSpec) {
 				for _, addr := range dnsTargetProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+					specs = append(specs, query.NewGRPCEndpointSpec(addr, false))
 				}
 
-				return specs
-			},
-			func() (specs []query.MetadataSpec) {
 				for _, addr := range dnsMetadataProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+					specs = append(specs, query.NewGRPCEndpointSpec(addr, false))
 				}
 
-				return specs
-			},
-			func() (specs []query.ExemplarSpec) {
 				for _, addr := range dnsExemplarProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+					specs = append(specs, query.NewGRPCEndpointSpec(addr, false))
 				}
 
-				return specs
+				return removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
 			},
 			dialOpts,
 			unhealthyStoreTimeout,
 		)
-		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, storeResponseTimeout)
-		rulesProxy       = rules.NewProxy(logger, stores.GetRulesClients)
-		targetsProxy     = targets.NewProxy(logger, stores.GetTargetsClients)
-		metadataProxy    = metadata.NewProxy(logger, stores.GetMetadataClients)
-		exemplarsProxy   = exemplars.NewProxy(logger, stores.GetExemplarsStores, selectorLset)
+		// stores = query.NewStoreSet(
+		// 	logger,
+		// 	reg,
+		// 	func() (specs []query.StoreSpec) {
+
+		// 		// Add strict & static nodes.
+		// 		for _, addr := range strictStores {
+		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, true))
+		// 		}
+		// 		// Add DNS resolved addresses from static flags and file SD.
+		// 		for _, addr := range dnsStoreProvider.Addresses() {
+		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+		// 		}
+		// 		return removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
+		// 	},
+		// 	func() (specs []query.RuleSpec) {
+		// 		for _, addr := range dnsRuleProvider.Addresses() {
+		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+		// 		}
+
+		// 		// NOTE(s-urbaniak): No need to remove duplicates, as rule apis are a subset of store apis.
+		// 		// hence, any duplicates will be tracked in the store api set.
+
+		// 		return specs
+		// 	},
+		// 	func() (specs []query.TargetSpec) {
+		// 		for _, addr := range dnsTargetProvider.Addresses() {
+		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+		// 		}
+
+		// 		return specs
+		// 	},
+		// 	func() (specs []query.MetadataSpec) {
+		// 		for _, addr := range dnsMetadataProvider.Addresses() {
+		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+		// 		}
+
+		// 		return specs
+		// 	},
+		// 	func() (specs []query.ExemplarSpec) {
+		// 		for _, addr := range dnsExemplarProvider.Addresses() {
+		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+		// 		}
+
+		// 		return specs
+		// 	},
+		// 	dialOpts,
+		// 	unhealthyStoreTimeout,
+		// )
+		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout)
+		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
+		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
+		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)
+		exemplarsProxy   = exemplars.NewProxy(logger, endpoints.GetExemplarsStores, selectorLset)
 		queryableCreator = query.NewQueryableCreator(
 			logger,
 			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
@@ -454,12 +488,12 @@ func runQuery(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
-				stores.Update(ctx)
+				endpoints.Update(ctx)
 				return nil
 			})
 		}, func(error) {
 			cancel()
-			stores.Close()
+			endpoints.Close()
 		})
 	}
 	// Run File Service Discovery and update the store set when the files are modified.
@@ -486,7 +520,7 @@ func runQuery(
 						continue
 					}
 					fileSDCache.Update(update)
-					stores.Update(ctxUpdate)
+					endpoints.Update(ctxUpdate)
 
 					if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
 						level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
@@ -562,11 +596,11 @@ func runQuery(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
+		ui.NewQueryUI(logger, endpoints, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
 		api := v1.NewQueryAPI(
 			logger,
-			stores,
+			endpoints,
 			engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta),
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
@@ -644,8 +678,8 @@ func runQuery(
 	return nil
 }
 
-func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.StoreSpec) []query.StoreSpec {
-	set := make(map[string]query.StoreSpec)
+func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.EndpointSpec) []query.EndpointSpec {
+	set := make(map[string]query.EndpointSpec)
 	for _, spec := range specs {
 		addr := spec.Addr()
 		if _, ok := set[addr]; ok {
@@ -654,7 +688,7 @@ func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Co
 		}
 		set[addr] = spec
 	}
-	deduplicated := make([]query.StoreSpec, 0, len(set))
+	deduplicated := make([]query.EndpointSpec, 0, len(set))
 	for _, value := range set {
 		deduplicated = append(deduplicated, value)
 	}

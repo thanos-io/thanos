@@ -253,6 +253,7 @@ func TestEndpointSet_Update(t *testing.T) {
 
 	// Initial update.
 	endpointSet.Update(context.Background())
+	testutil.Equals(t, 3, len(endpointSet.endpoints))
 
 	// Start with one not available.
 	endpoints.CloseOne(discoveredEndpointAddr[2])
