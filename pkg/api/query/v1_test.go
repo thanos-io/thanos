@@ -703,7 +703,7 @@ func TestMetadataEndpoints(t *testing.T) {
 
 	opts := tsdb.DefaultOptions()
 	opts.RetentionDuration = math.MaxInt64
-	db, err := tsdb.Open(dir, nil, nil, opts)
+	db, err := tsdb.Open(dir, nil, nil, opts, nil)
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 

@@ -82,7 +82,7 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = opts.TSDBDir
-	h, err := tsdb.NewHead(nil, nil, w, headOpts)
+	h, err := tsdb.NewHead(nil, nil, w, headOpts, nil)
 	testutil.Ok(t, err)
 
 	app := h.Appender(context.Background())

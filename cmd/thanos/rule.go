@@ -318,7 +318,7 @@ func runRule(
 		addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
 	}
 
-	db, err := tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
+	db, err := tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
 	if err != nil {
 		return errors.Wrap(err, "open TSDB")
 	}
@@ -436,6 +436,10 @@ func runRule(
 			},
 			queryFuncCreator(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod),
 			conf.lset,
+			// In our case the querying URL is the external URL because in Prometheus
+			// --web.external-url points to it i.e. it points at something where the user
+			// could execute the alert or recording rule's expression and get results.
+			conf.alertQueryURL.String(),
 		)
 
 		// Schedule rule manager that evaluates rules.

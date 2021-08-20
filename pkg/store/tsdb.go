@@ -204,7 +204,12 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label names")
 
-	res, _, err := q.LabelNames()
+	promMatchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	res, _, err := q.LabelNames(promMatchers...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
