@@ -4,6 +4,7 @@
 package queryfrontend
 
 import (
+	"github.com/thanos-io/thanos/vendor/github.com/opentracing/opentracing-go"
 	"time"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
@@ -144,7 +145,6 @@ func (r *ThanosLabelsRequest) LogToSpan(sp opentracing.Span) {
 		otlog.String("start", timestamp.Time(r.GetStart()).String()),
 		otlog.String("end", timestamp.Time(r.GetEnd()).String()),
 		otlog.Bool("partial_response", r.PartialResponse),
-		otlog.String("label", r.Label),
 		otlog.Object("matchers", r.Matchers),
 		otlog.Object("storeMatchers", r.StoreMatchers),
 	}
