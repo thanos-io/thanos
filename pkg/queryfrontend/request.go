@@ -4,7 +4,6 @@
 package queryfrontend
 
 import (
-	"github.com/thanos-io/thanos/vendor/github.com/opentracing/opentracing-go"
 	"time"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
