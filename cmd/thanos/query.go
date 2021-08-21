@@ -409,55 +409,6 @@ func runQuery(
 			dialOpts,
 			unhealthyStoreTimeout,
 		)
-		// stores = query.NewStoreSet(
-		// 	logger,
-		// 	reg,
-		// 	func() (specs []query.StoreSpec) {
-
-		// 		// Add strict & static nodes.
-		// 		for _, addr := range strictStores {
-		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, true))
-		// 		}
-		// 		// Add DNS resolved addresses from static flags and file SD.
-		// 		for _, addr := range dnsStoreProvider.Addresses() {
-		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, false))
-		// 		}
-		// 		return removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
-		// 	},
-		// 	func() (specs []query.RuleSpec) {
-		// 		for _, addr := range dnsRuleProvider.Addresses() {
-		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, false))
-		// 		}
-
-		// 		// NOTE(s-urbaniak): No need to remove duplicates, as rule apis are a subset of store apis.
-		// 		// hence, any duplicates will be tracked in the store api set.
-
-		// 		return specs
-		// 	},
-		// 	func() (specs []query.TargetSpec) {
-		// 		for _, addr := range dnsTargetProvider.Addresses() {
-		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, false))
-		// 		}
-
-		// 		return specs
-		// 	},
-		// 	func() (specs []query.MetadataSpec) {
-		// 		for _, addr := range dnsMetadataProvider.Addresses() {
-		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, false))
-		// 		}
-
-		// 		return specs
-		// 	},
-		// 	func() (specs []query.ExemplarSpec) {
-		// 		for _, addr := range dnsExemplarProvider.Addresses() {
-		// 			specs = append(specs, query.NewGRPCStoreSpec(addr, false))
-		// 		}
-
-		// 		return specs
-		// 	},
-		// 	dialOpts,
-		// 	unhealthyStoreTimeout,
-		// )
 		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout)
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)

@@ -103,6 +103,7 @@ func (es *grpcEndpointSpec) getMetadataUsingStoreAPI(ctx context.Context, client
 				MinTime: resp.MinTime,
 				MaxTime: resp.MaxTime,
 			},
+			Rules: &infopb.RulesInfo{},
 		},
 	}, nil
 }
