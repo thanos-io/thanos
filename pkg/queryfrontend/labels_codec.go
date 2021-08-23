@@ -139,6 +139,9 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 			"end":                        []string{encodeTime(thanosReq.End)},
 			queryv1.PartialResponseParam: []string{strconv.FormatBool(thanosReq.PartialResponse)},
 		}
+		if len(thanosReq.Matchers) > 0 {
+			params[queryv1.MatcherParam] = matchersToStringSlice(thanosReq.Matchers)
+		}
 		if len(thanosReq.StoreMatchers) > 0 {
 			params[queryv1.StoreMatcherParam] = matchersToStringSlice(thanosReq.StoreMatchers)
 		}
@@ -274,6 +277,11 @@ func (c labelsCodec) parseLabelsRequest(r *http.Request, op string) (queryrange.
 		err    error
 	)
 	result.Start, result.End, err = parseMetadataTimeRange(r, c.defaultMetadataTimeRange)
+	if err != nil {
+		return nil, err
+	}
+
+	result.Matchers, err = parseMatchersParam(r.Form, queryv1.MatcherParam)
 	if err != nil {
 		return nil, err
 	}

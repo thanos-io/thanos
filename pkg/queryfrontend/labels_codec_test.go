@@ -91,19 +91,20 @@ func TestLabelsCodec_DecodeRequest(t *testing.T) {
 		},
 		{
 			name:            "label_names partial_response default to true",
-			url:             "/api/v1/labels?start=123&end=456",
+			url:             `/api/v1/labels?start=123&end=456&match[]={foo="bar"}`,
 			partialResponse: true,
 			expectedRequest: &ThanosLabelsRequest{
 				Path:            "/api/v1/labels",
 				Start:           123000,
 				End:             456000,
 				PartialResponse: true,
+				Matchers:        [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
 				StoreMatchers:   [][]*labels.Matcher{},
 			},
 		},
 		{
 			name:            "label_values partial_response default to true",
-			url:             "/api/v1/label/__name__/values?start=123&end=456",
+			url:             `/api/v1/label/__name__/values?start=123&end=456&match[]={foo="bar"}`,
 			partialResponse: true,
 			expectedRequest: &ThanosLabelsRequest{
 				Path:            "/api/v1/label/__name__/values",
@@ -111,6 +112,7 @@ func TestLabelsCodec_DecodeRequest(t *testing.T) {
 				End:             456000,
 				PartialResponse: true,
 				Label:           "__name__",
+				Matchers:        [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
 				StoreMatchers:   [][]*labels.Matcher{},
 			},
 		},
@@ -130,13 +132,14 @@ func TestLabelsCodec_DecodeRequest(t *testing.T) {
 		},
 		{
 			name:            "partial_response default to false, but set to true in query",
-			url:             "/api/v1/labels?start=123&end=456&partial_response=true",
+			url:             `/api/v1/labels?start=123&end=456&partial_response=true&match[]={foo="bar"}`,
 			partialResponse: false,
 			expectedRequest: &ThanosLabelsRequest{
 				Path:            "/api/v1/labels",
 				Start:           123000,
 				End:             456000,
 				PartialResponse: true,
+				Matchers:        [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
 				StoreMatchers:   [][]*labels.Matcher{},
 			},
 		},
@@ -145,9 +148,10 @@ func TestLabelsCodec_DecodeRequest(t *testing.T) {
 			url:             `/api/v1/labels?start=123&end=456&storeMatch[]={__address__="localhost:10901", cluster="test"}`,
 			partialResponse: false,
 			expectedRequest: &ThanosLabelsRequest{
-				Path:  "/api/v1/labels",
-				Start: 123000,
-				End:   456000,
+				Path:     "/api/v1/labels",
+				Start:    123000,
+				End:      456000,
+				Matchers: [][]*labels.Matcher{},
 				StoreMatchers: [][]*labels.Matcher{
 					{
 						labels.MustNewMatcher(labels.MatchEqual, "__address__", "localhost:10901"),
