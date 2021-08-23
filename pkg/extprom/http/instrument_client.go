@@ -25,18 +25,16 @@ type ClientMetrics struct {
 // It will also register the metrics with the included register.
 // This ClientMetrics should be re-used for diff clients with the same purpose.
 // e.g. 1 ClientMetrics should be used for all the clients that talk to Alertmanager.
-func NewClientMetrics(reg prometheus.Registerer, namespace string) *ClientMetrics {
+func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 	var m ClientMetrics
 
 	m.inFlightGauge = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-		Namespace: namespace,
 		Subsystem: "http_client",
 		Name:      "in_flight_requests",
 		Help:      "A gauge of in-flight requests.",
 	})
 
 	m.requestTotalCount = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Namespace: namespace,
 		Subsystem: "http_client",
 		Name:      "request_total",
 		Help:      "",
@@ -44,7 +42,6 @@ func NewClientMetrics(reg prometheus.Registerer, namespace string) *ClientMetric
 
 	m.dnsLatencyHistogram = promauto.With(reg).NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: namespace,
 			Subsystem: "http_client",
 			Name:      "dns_duration_seconds",
 			Help:      "Trace dns latency histogram.",
@@ -55,7 +52,6 @@ func NewClientMetrics(reg prometheus.Registerer, namespace string) *ClientMetric
 
 	m.tlsLatencyHistogram = promauto.With(reg).NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: namespace,
 			Subsystem: "http_client",
 			Name:      "tls_duration_seconds",
 			Help:      "Trace tls latency histogram.",
@@ -66,7 +62,6 @@ func NewClientMetrics(reg prometheus.Registerer, namespace string) *ClientMetric
 
 	m.requestDurationHistogram = promauto.With(reg).NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: namespace,
 			Subsystem: "http_client",
 			Name:      "request_duration_seconds",
 			Help:      "A histogram of request latencies.",
