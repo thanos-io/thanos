@@ -1144,11 +1144,11 @@ func benchmarkExpandedPostings(
 				partitioner:       NewGapBasedPartitioner(PartitionerMaxGapSize),
 			}
 
-			indexr := newBucketIndexReader(context.Background(), b)
+			indexr := newBucketIndexReader(b)
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
-				p, err := indexr.ExpandedPostings(c.matchers)
+				p, err := indexr.ExpandedPostings(context.Background(), c.matchers)
 				testutil.Ok(t, err)
 				testutil.Equals(t, c.expectedLen, len(p))
 			}
@@ -2225,8 +2225,6 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 }
 
 func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMeta *metadata.Meta, blk *bucketBlock, aggrs []storepb.Aggr) {
-	ctx := context.Background()
-
 	// Run the same number of queries per goroutine.
 	queriesPerWorker := b.N / concurrency
 
@@ -2263,10 +2261,10 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				// must be called only from the goroutine running the Benchmark function.
 				testutil.Ok(b, err)
 
-				indexReader := blk.indexReader(ctx)
-				chunkReader := blk.chunkReader(ctx)
+				indexReader := blk.indexReader()
+				chunkReader := blk.chunkReader()
 
-				seriesSet, _, err := blockSeries(nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates)
+				seriesSet, _, err := blockSeries(context.Background(), nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates)
 				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).
