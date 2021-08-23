@@ -497,32 +497,45 @@ func (m *SeriesResponse) Marshal() (dAtA []byte, err error) {
 
 	var respBuf []byte
 
-	// No pool defined, allocate directly.
+	// Slow path with no sync.Pool.
 	if m.respPool == nil {
 		respBuf = make([]byte, size)
-	} else {
-		if m.respBuf == nil {
-			poolBuf := m.respPool.Get()
-			if poolBuf == nil {
-				respBuf = make([]byte, size)
-				m.respBuf = &respBuf
-			} else {
-				m.respBuf = poolBuf.(*[]byte)
-				respBuf = *m.respBuf
-			}
-		} else {
-			if cap(*m.respBuf) < size {
-				if m.respPool != nil {
-					m.respPool.Put(m.respBuf)
-				}
-				respBuf = make([]byte, size)
-				m.respBuf = &respBuf
-			} else {
-				respBuf = *m.respBuf
-			}
+		m.respBuf = nil
+
+		n, err := m.MarshalToSizedBuffer(respBuf)
+		if err != nil {
+			return nil, err
 		}
+		return respBuf[len(respBuf)-n:], nil
 	}
 
+	// Fast path with sync.Pool.
+	// m.respBuf must not be nil so that it would be returned to the pool.
+
+	// If no pre-allocated buffer has been passed then try to get a new one.
+	if m.respBuf == nil {
+		poolBuf := m.respPool.Get()
+		// No previous buffer found in the pool, try to allocate.
+		if poolBuf == nil {
+			respBuf = make([]byte, size)
+		} else {
+			// Found something, let's see if it is big enough.
+			respBuf = *(poolBuf.(*[]byte))
+		}
+	} else {
+		respBuf = *m.respBuf
+	}
+
+	// Last sanity check of the size before the marshaling.
+	if cap(respBuf) < size {
+		if m.respPool != nil {
+			m.respPool.Put(&respBuf)
+		}
+		respBuf = make([]byte, size)
+	}
+	m.respBuf = &respBuf
+
+	// Possibly trim it so that there wouldn't be left-over "garbage" in the slice.
 	marshalBuf := respBuf[:size]
 	n, err := m.MarshalToSizedBuffer(marshalBuf)
 	if err != nil {
