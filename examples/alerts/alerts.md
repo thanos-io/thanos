@@ -4,8 +4,7 @@ Here are some example alerts configured for Kubernetes environment.
 
 ## Compaction
 
-[embedmd]:# (../tmp/thanos-compact.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-compact.yaml"
 name: thanos-compact
 rules:
 - alert: ThanosCompactMultipleRunning
@@ -74,8 +73,7 @@ rules:
 
 For Thanos Ruler we run some alerts in local Prometheus, to make sure that Thanos Ruler is working:
 
-[embedmd]:# (../tmp/thanos-rule.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-rule.yaml"
 name: thanos-rule
 rules:
 - alert: ThanosRuleQueueIsDroppingAlerts
@@ -226,8 +224,7 @@ rules:
 
 ## Store Gateway
 
-[embedmd]:# (../tmp/thanos-store.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-store.yaml"
 name: thanos-store
 rules:
 - alert: ThanosStoreGrpcErrorRate
@@ -296,8 +293,7 @@ rules:
 
 ## Sidecar
 
-[embedmd]:# (../tmp/thanos-sidecar.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-sidecar.yaml"
 name: thanos-sidecar
 rules:
 - alert: ThanosSidecarPrometheusDown
@@ -335,8 +331,7 @@ rules:
 
 ## Query
 
-[embedmd]:# (../tmp/thanos-query.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-query.yaml"
 name: thanos-query
 rules:
 - alert: ThanosQueryHttpRequestQueryErrorRateHigh
@@ -449,8 +444,7 @@ rules:
 
 ## Receive
 
-[embedmd]:# (../tmp/thanos-receive.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-receive.yaml"
 name: thanos-receive
 rules:
 - alert: ThanosReceiveHttpRequestErrorRateHigh
@@ -584,8 +578,7 @@ rules:
 
 ## Replicate
 
-[embedmd]:# (../tmp/thanos-bucket-replicate.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-bucket-replicate.yaml"
 name: thanos-bucket-replicate
 rules:
 - alert: ThanosBucketReplicateErrorRate
@@ -624,8 +617,7 @@ rules:
 
 ### Absent Rules
 
-[embedmd]:# (../tmp/thanos-component-absent.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-component-absent.yaml"
 name: thanos-component-absent
 rules:
 - alert: ThanosBucketReplicateIsDown

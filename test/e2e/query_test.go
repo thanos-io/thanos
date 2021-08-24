@@ -418,7 +418,7 @@ func mustURLParse(t *testing.T, addr string) *url.URL {
 	return u
 }
 
-func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
+func instantQuery(t *testing.T, ctx context.Context, addr, q string, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
 	t.Helper()
 
 	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q)
@@ -446,7 +446,7 @@ func instantQuery(t *testing.T, ctx context.Context, addr string, q string, opts
 	return result
 }
 
-func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expected []model.Metric) {
+func queryAndAssertSeries(t *testing.T, ctx context.Context, addr, q string, opts promclient.QueryOptions, expected []model.Metric) {
 	t.Helper()
 
 	result := instantQuery(t, ctx, addr, q, opts, len(expected))
@@ -455,7 +455,7 @@ func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q stri
 	}
 }
 
-func queryAndAssert(t *testing.T, ctx context.Context, addr string, q string, opts promclient.QueryOptions, expected model.Vector) {
+func queryAndAssert(t *testing.T, ctx context.Context, addr, q string, opts promclient.QueryOptions, expected model.Vector) {
 	t.Helper()
 
 	sortResults(expected)
@@ -503,7 +503,7 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers
 	}))
 }
 
-func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start int64, end int64, check func(res []map[string]string) bool) {
+func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.Matcher, start, end int64, check func(res []map[string]string) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
@@ -522,7 +522,7 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.M
 }
 
 //nolint:unparam
-func rangeQuery(t *testing.T, ctx context.Context, addr string, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) bool) {
+func rangeQuery(t *testing.T, ctx context.Context, addr, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
@@ -545,7 +545,7 @@ func rangeQuery(t *testing.T, ctx context.Context, addr string, q string, start,
 	}))
 }
 
-func queryExemplars(t *testing.T, ctx context.Context, addr string, q string, start, end int64, check func(data []*exemplarspb.ExemplarData) bool) {
+func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, end int64, check func(data []*exemplarspb.ExemplarData) bool) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)

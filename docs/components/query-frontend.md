@@ -1,9 +1,3 @@
----
-type: docs
-title: Query Frontend
-menu: components
----
-
 # Query Frontend
 
 The `thanos query-frontend` command implements a service that can be put in front of Thanos Queriers to improve the read path. It is based on the [Cortex Query Frontend](https://cortexmetrics.io/docs/architecture/#query-frontend) component so you can find some common features like `Splitting` and `Results Caching`.
@@ -20,7 +14,7 @@ thanos query-frontend \
 
 _**NOTE:** Currently only range queries (`/api/v1/query_range` API call) are actually processed through Query Frontend. All other API calls just directly go to the downstream Querier, which means only range queries are split and cached. But we are planning to support instant queries as well.
 
-For more information please check out [initial design proposal](https://thanos.io/tip/proposals/202004_embedd_cortex_frontend.md/).
+For more information please check out [initial design proposal](../proposals-done/202004-embedd-cortex-frontend.md).
 
 ## Features
 
@@ -74,6 +68,7 @@ config:
   max_item_size: 0
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
+  auto_discovery: false
   expiration: 0s
 ```
 
@@ -81,7 +76,7 @@ config:
 
 If a `set` operation is skipped because of the item size is larger than `max_item_size`, this event is tracked by a counter metric `cortex_memcache_client_set_skip_total`.
 
-Other cache configuration parameters, you can refer to [memcached-index-cache](https://thanos.io/tip/components/store.md/#memcached-index-cache).
+Other cache configuration parameters, you can refer to [memcached-index-cache](store.md#memcached-index-cache).
 
 The default memcached config is:
 

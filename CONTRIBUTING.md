@@ -1,6 +1,6 @@
 # Contributing
 
-This document explain the process of contributing to the Thanos project.
+This document explains the process of contributing to the Thanos project.
 
 First of all please follow the [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) in all your interactions within the project.
 
@@ -9,9 +9,9 @@ First of all please follow the [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) in all your
 The philosophy of Thanos and our community borrows heavily from UNIX philosophy and the Golang programming language.
 
 * Each subcommand should do one thing and do it well.
-  * eg. thanos query proxies incoming calls to known store API endpoints merging the result
+  * eg. Thanos query proxies incoming calls to known store API endpoints merging the result
 * Write components that work together.
-  * e.g. blocks should be stored in native prometheus format
+  * e.g. blocks should be stored in native Prometheus format
 * Make it easy to read, write, and run components.
   * e.g. reduce complexity in system design and implementation
 
@@ -20,7 +20,7 @@ The philosophy of Thanos and our community borrows heavily from UNIX philosophy 
 If you encounter any issue or you have an idea to improve, please:
 
 * Search through Google and [existing open and closed GitHub Issues](https://github.com/thanos-io/thanos/issues) for the answer first. If you find a relevant topic, please comment on the issue.
-* If none of the issues are relevant, please add an issue to [GitHub issues](https://github.com/thanos-io/thanos/issues). Please provide any relevant information as suggested by the Pull Request template.
+* If none of the issues are relevant, please add an issue to [GitHub issues](https://github.com/thanos-io/thanos/issues). Please provide any relevant information as suggested by the Issue template.
 * If you have a quick question you might want to also ask on #thanos or #thanos-dev slack channel in the CNCF workspace. We recommend using GitHub issues for issues and feedback, because GitHub issues are trackable.
 
 If you encounter a security vulnerability, please refer to [Reporting a Vulnerability process](SECURITY.md#reporting-a-vulnerability)
@@ -29,7 +29,7 @@ If you encounter a security vulnerability, please refer to [Reporting a Vulnerab
 
 When contributing a complex change to Thanos repository, please discuss the change you wish to make within a Github issue, in Slack, or by another method with the owners of this repository before making the change.
 
-Adding a large new feature or/and component to Thanos should be done by first creating a [proposal](docs/contributing/proposal-process.md) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
+Adding a large new feature or/and component to Thanos should be done by first creating a [proposal](docs/proposals-done) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
 
 ## General Naming
 
@@ -68,7 +68,7 @@ The following section explains various suggestions and procedures to note during
 
 * It is strongly recommended that you use Linux distributions systems or OSX for development.
 * Go 1.13.9 or newer installed.
-* For React UI, you will need a working NodeJS environment and the Yarn package manager to compile the Web UI assets.
+* For React UI, you will need a working NodeJS environment and the npm package manager to compile the Web UI assets.
 
 ### First Steps
 
@@ -84,7 +84,7 @@ It's key to get familiarized with the style guide and mechanics of Thanos, espec
 
 * Find any directory in your system your want Thanos repo in. e.g `~/Repos` -
   * `cd ~/Repos`
-  * Make sure that the GOBIN, GOPATH and GOPROXY (useful) environment variables are set and that GOBIN is included in your PATH. For example -
+  * Make sure that the GOBIN, GOPATH and GOPROXY (useful) environment variables are set and that GOBIN is included in your PATH. You may use `GOPROXY=https://goproxy.cn` as an alternative if you cannot visit `https://proxy.golang.org`. For example -
 
     ```
     export GOBIN="~/Repos/thanos/.bin" # It's nice to have local tooling installed and stored locally.
@@ -210,7 +210,7 @@ You have to commit the changes to `go.mod` and `go.sum` before submitting the pu
 At some point during development it is useful, in addition to running unit or e2e tests, to run and play with Thanos components manually. While you can run any component manually by crafting specific flags for a test setup, there are already some nice tools and scripts available. Consider the following methods:
 
 * `make quickstart`: this command spins up a simple setup of all Thanos components.
-* `make test-e2e`: the e2e tests cover most of the setups and functionality Thanos offers. It's extremely easy to add `time.Sleep(10* time.Minutes)` at certain points in the tests (e.g for compactor [here](https://github.com/thanos-io/thanos/blob/8f492a9f073f819019dd9f044e346a1e1fa730bc/test/e2e/compact_test.go#L379)). This way when you run `make test-e2e`, the test will sleep for some time, allowing you to connect to the setup manually using the port printed in the logs. For example:
+* `make test-e2e`: the e2e tests cover most of the setups and functionality Thanos offers. It's extremely easy to add `time.Sleep(10* time.Minute)` at certain points in the tests (e.g for compactor [here](https://github.com/thanos-io/thanos/blob/8f492a9f073f819019dd9f044e346a1e1fa730bc/test/e2e/compact_test.go#L379)). This way when you run `make test-e2e`, the test will sleep for some time, allowing you to connect to the setup manually using the port printed in the logs. For example:
 
 ```bash
 querier-1: level=info name=querier-1 ts=2020-04-01T12:53:56.101029491Z caller=http.go:56 service=http/server component=query msg="listening for requests and metrics" address=:80

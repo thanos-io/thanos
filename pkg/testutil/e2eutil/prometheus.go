@@ -128,7 +128,7 @@ func NewPrometheusOnPath(prefix string) (*Prometheus, error) {
 	return newPrometheus("", prefix)
 }
 
-func newPrometheus(binPath string, prefix string) (*Prometheus, error) {
+func newPrometheus(binPath, prefix string) (*Prometheus, error) {
 	if binPath == "" {
 		binPath = PrometheusBinary()
 	}
@@ -297,7 +297,7 @@ func (p *Prometheus) Appender() storage.Appender {
 
 // CreateEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.
 // (Prometheus pre v2.7.0).
-func CreateEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels, resolution int64) (ulid.ULID, error) {
+func CreateEmptyBlock(dir string, mint, maxt int64, extLset labels.Labels, resolution int64) (ulid.ULID, error) {
 	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
 	uid := ulid.MustNew(ulid.Now(), entropy)
 
