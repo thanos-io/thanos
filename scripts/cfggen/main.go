@@ -15,9 +15,11 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/query"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/objstore/bos"
+	"github.com/thanos-io/thanos/pkg/query"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
@@ -52,6 +54,7 @@ var (
 		client.COS:        cos.DefaultConfig,
 		client.ALIYUNOSS:  oss.Config{},
 		client.FILESYSTEM: filesystem.Config{},
+		client.BOS:        bos.Config{},
 	}
 
 	tracingConfigs = map[trclient.TracingProvider]interface{}{
