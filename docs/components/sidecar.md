@@ -130,21 +130,21 @@ Flags:
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --prometheus.http-client=<content>
+      --prometheus.http-client=<content>  
                                  Alternative to 'prometheus.http-client-file'
                                  flag (mutually exclusive). Content of YAML file
                                  or string with http client configs. see Format
                                  details : ...
-      --prometheus.http-client-file=<file-path>
+      --prometheus.http-client-file=<file-path>  
                                  Path to YAML file or string with http client
                                  configs. see Format details : ...
-      --prometheus.ready_timeout=10m
+      --prometheus.ready_timeout=10m  
                                  Maximum time to wait for the Prometheus
                                  instance to start up
       --prometheus.url=http://localhost:9090  
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.
-      --reloader.config-envsubst-file=""
+      --reloader.config-envsubst-file=""  
                                  Output file for environment variable
                                  substituted config file.
       --reloader.config-file=""  Config file watched by the reloader.

@@ -100,6 +100,5 @@ func RegisterHTTPConfigFlags(cmd FlagClause) *extflag.PathOrContent {
 		cmd,
 		"prometheus.http-client",
 		"YAML file or string with http client configs. see Format details : ...",
-		false,
 	)
 }
