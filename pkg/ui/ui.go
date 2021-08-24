@@ -126,7 +126,7 @@ func (bu *BaseUI) getTemplate(name string) (string, error) {
 	return string(baseTmpl) + string(menuTmpl) + string(pageTmpl), nil
 }
 
-func (bu *BaseUI) executeTemplate(w http.ResponseWriter, name string, prefix string, data interface{}) {
+func (bu *BaseUI) executeTemplate(w http.ResponseWriter, name, prefix string, data interface{}) {
 	text, err := bu.getTemplate(name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

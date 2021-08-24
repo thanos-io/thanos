@@ -76,7 +76,7 @@ type endpointTestCase struct {
 type responeCompareFunction func(interface{}, interface{}) bool
 
 // Checks if both responses have Stats present or not.
-func lookupStats(a interface{}, b interface{}) bool {
+func lookupStats(a, b interface{}) bool {
 	ra := a.(*queryData)
 	rb := b.(*queryData)
 	return (ra.Stats == nil && rb.Stats == nil) || (ra.Stats != nil && rb.Stats != nil)

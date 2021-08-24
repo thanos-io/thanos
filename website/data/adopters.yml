@@ -1,5 +1,8 @@
 ---
 adopters:
+- name: Infinite Devices
+  url: https://infinimesh.io
+  logo: infdevlogo.png
 - name: Monzo
   url: https://www.monzo.com
   logo: monzo.png
@@ -125,16 +128,25 @@ adopters:
   logo: nos.png
 - name: Truphone
   url: https://www.truphone.com
-  logo: truphone.png  
+  logo: truphone.png
 - name: de Volksbank
   url: https://www.devolksbank.nl/
-  logo: devolksbank.png  
+  logo: devolksbank.png
 - name: Fullstaq
   url: https://fullstaq.com/
-  logo: fullstaq.png  
+  logo: fullstaq.png
 - name: Wise
   url: https://wise.com
   logo: wise.png
 - name: ByteDance
   url: https://www.bytedance.com/
   logo: bytedance.png
+- name: Joblift
+  url: https://joblift.com/
+  logo: joblift.png
+- name: Civo
+  url: https://civo.com/
+  logo: civo.png
+- name: Stackhero
+  url: https://www.stackhero.io/
+  logo: stackhero.png

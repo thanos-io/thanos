@@ -76,6 +76,7 @@ type Options struct {
 	ReplicaHeader     string
 	Endpoint          string
 	ReplicationFactor uint64
+	ReceiverMode      ReceiverMode
 	Tracer            opentracing.Tracer
 	TLSConfig         *tls.Config
 	DialOpts          []grpc.DialOption
@@ -90,11 +91,12 @@ type Handler struct {
 	options  *Options
 	listener net.Listener
 
-	mtx        sync.RWMutex
-	hashring   Hashring
-	peers      *peerGroup
-	expBackoff backoff.Backoff
-	peerStates map[string]*retryState
+	mtx          sync.RWMutex
+	hashring     Hashring
+	peers        *peerGroup
+	expBackoff   backoff.Backoff
+	peerStates   map[string]*retryState
+	receiverMode ReceiverMode
 
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
@@ -107,11 +109,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h := &Handler{
-		logger:  logger,
-		writer:  o.Writer,
-		router:  route.New(),
-		options: o,
-		peers:   newPeerGroup(o.DialOpts...),
+		logger:       logger,
+		writer:       o.Writer,
+		router:       route.New(),
+		options:      o,
+		peers:        newPeerGroup(o.DialOpts...),
+		receiverMode: o.ReceiverMode,
 		expBackoff: backoff.Backoff{
 			Factor: 2,
 			Min:    100 * time.Millisecond,
@@ -256,6 +259,15 @@ type replica struct {
 }
 
 func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
+	// This replica value is used to detect cycles in cyclic topologies.
+	// A non-zero value indicates that the request has already been replicated by a previous receive instance.
+	// For almost all users, this is only used in fully connected topologies of IngestorRouter instances.
+	// For acyclic topologies that use RouterOnly and IngestorOnly instances, this causes issues when replicating data.
+	// See discussion in: https://github.com/thanos-io/thanos/issues/4359
+	if h.receiverMode == RouterOnly || h.receiverMode == IngestorOnly {
+		rep = 0
+	}
+
 	// The replica value in the header is one-indexed, thus we need >.
 	if rep > h.options.ReplicationFactor {
 		level.Error(h.logger).Log("err", errBadReplica, "msg", "write request rejected",
@@ -323,7 +335,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tenant := r.Header.Get(h.options.TenantHeader)
-	if len(tenant) == 0 {
+	if tenant == "" {
 		tenant = h.options.DefaultTenantID
 	}
 

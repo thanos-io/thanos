@@ -35,8 +35,9 @@ const (
 )
 
 type StoreSpec interface {
-	// Addr returns StoreAPI Address for the store spec. It is used as ID for store.
-	Addr() string
+	// StoreAddrSpec Addr returns StoreAPI Address for the store spec. It is used as ID for store.
+	StoreAddrSpec
+
 	// Metadata returns current labels, store type and min, max ranges for store.
 	// It can change for every call for this method.
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
@@ -48,24 +49,29 @@ type StoreSpec interface {
 	StrictStatic() bool
 }
 
-type RuleSpec interface {
-	// Addr returns RulesAPI Address for the rules spec. It is used as its ID.
+type StoreAddrSpec interface {
+	// Addr returns Store address for the rules spec. It is used as its ID.
 	Addr() string
+}
+
+type RuleSpec interface {
+	// StoreAddrSpec Addr returns StoreAPI Address for the store spec. It is used as ID for store.
+	StoreAddrSpec
 }
 
 type TargetSpec interface {
-	// Addr returns TargetsAPI Address for the targets spec. It is used as its ID.
-	Addr() string
+	// StoreAddrSpec Addr returns StoreAPI Address for the store spec. It is used as ID for store.
+	StoreAddrSpec
 }
 
 type MetadataSpec interface {
-	// Addr returns MetadataAPI Address for the metadata spec. It is used as its ID.
-	Addr() string
+	// StoreAddrSpec Addr returns StoreAPI Address for the store spec. It is used as ID for store.
+	StoreAddrSpec
 }
 
 type ExemplarSpec interface {
-	// Addr returns ExemplarsAPI Address for the exemplars spec. It is used as its ID.
-	Addr() string
+	// StoreAddrSpec Addr returns StoreAPI Address for the store spec. It is used as ID for store.
+	StoreAddrSpec
 }
 
 // stringError forces the error to be a string
@@ -117,7 +123,7 @@ func (s *grpcStoreSpec) Addr() string {
 
 // Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []labels.Labels, mint int64, maxt int64, Type component.StoreAPI, err error) {
+func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []labels.Labels, mint, maxt int64, Type component.StoreAPI, err error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.WaitForReady(true))
 	if err != nil {
 		return nil, 0, 0, nil, errors.Wrapf(err, "fetching store info from %s", s.addr)
@@ -298,7 +304,7 @@ type storeRef struct {
 	logger log.Logger
 }
 
-func (s *storeRef) Update(labelSets []labels.Labels, minTime int64, maxTime int64, storeType component.StoreAPI, rule rulespb.RulesClient, target targetspb.TargetsClient, metadata metadatapb.MetadataClient, exemplar exemplarspb.ExemplarsClient) {
+func (s *storeRef) Update(labelSets []labels.Labels, minTime, maxTime int64, storeType component.StoreAPI, rule rulespb.RulesClient, target targetspb.TargetsClient, metadata metadatapb.MetadataClient, exemplar exemplarspb.ExemplarsClient) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -365,7 +371,7 @@ func (s *storeRef) LabelSets() []labels.Labels {
 	return labelSet
 }
 
-func (s *storeRef) TimeRange() (mint int64, maxt int64) {
+func (s *storeRef) TimeRange() (mint, maxt int64) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 

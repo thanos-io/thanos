@@ -876,7 +876,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 	}
 }
 
-func expectedTouchedBlockOps(all []ulid.ULID, expected []ulid.ULID, cached []ulid.ULID) []string {
+func expectedTouchedBlockOps(all, expected, cached []ulid.ULID) []string {
 	var ops []string
 	for _, id := range all {
 		blockCached := false
@@ -1470,7 +1470,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		bkt:             objstore.WithNoopInstr(bkt),
 		logger:          logger,
 		indexCache:      indexCache,
-		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0, nil),
+		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0, indexheader.NewReaderPoolMetrics(nil)),
 		metrics:         newBucketStoreMetrics(nil),
 		blockSets: map[uint64]*bucketBlockSet{
 			labels.Labels{{Name: "ext1", Value: "1"}}.Hash(): {blocks: [][]*bucketBlock{{b1, b2}}},
@@ -1482,6 +1482,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		queryGate:            gate.NewNoop(),
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
 		seriesLimiterFactory: NewSeriesLimiterFactory(0),
+		respPool:             sync.Pool{},
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
@@ -1818,7 +1819,7 @@ func TestBigEndianPostingsCount(t *testing.T) {
 	testutil.Equals(t, count, c)
 }
 
-func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Labels, blockIndex int, totalSamples int, random *rand.Rand, step int64) ulid.ULID {
+func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Labels, blockIndex, totalSamples int, random *rand.Rand, step int64) ulid.ULID {
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = dir
 	headOpts.ChunkRange = int64(totalSamples) * step

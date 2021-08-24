@@ -52,7 +52,7 @@ func (r *ThanosQueryRangeRequest) GetCachingOptions() queryrange.CachingOptions 
 }
 
 // WithStartEnd clone the current request with different start and end timestamp.
-func (r *ThanosQueryRangeRequest) WithStartEnd(start int64, end int64) queryrange.Request {
+func (r *ThanosQueryRangeRequest) WithStartEnd(start, end int64) queryrange.Request {
 	q := *r
 	q.Start = start
 	q.End = end
@@ -103,6 +103,7 @@ type ThanosLabelsRequest struct {
 	End             int64
 	Label           string
 	Path            string
+	Matchers        [][]*labels.Matcher
 	StoreMatchers   [][]*labels.Matcher
 	PartialResponse bool
 	CachingOptions  queryrange.CachingOptions
@@ -124,7 +125,7 @@ func (r *ThanosLabelsRequest) GetQuery() string { return "" }
 func (r *ThanosLabelsRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
 
 // WithStartEnd clone the current request with different start and end timestamp.
-func (r *ThanosLabelsRequest) WithStartEnd(start int64, end int64) queryrange.Request {
+func (r *ThanosLabelsRequest) WithStartEnd(start, end int64) queryrange.Request {
 	q := *r
 	q.Start = start
 	q.End = end
@@ -143,6 +144,7 @@ func (r *ThanosLabelsRequest) LogToSpan(sp opentracing.Span) {
 		otlog.String("start", timestamp.Time(r.GetStart()).String()),
 		otlog.String("end", timestamp.Time(r.GetEnd()).String()),
 		otlog.Bool("partial_response", r.PartialResponse),
+		otlog.Object("matchers", r.Matchers),
 		otlog.Object("storeMatchers", r.StoreMatchers),
 	}
 	if r.Label != "" {
@@ -194,7 +196,7 @@ func (r *ThanosSeriesRequest) GetQuery() string { return "" }
 func (r *ThanosSeriesRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
 
 // WithStartEnd clone the current request with different start and end timestamp.
-func (r *ThanosSeriesRequest) WithStartEnd(start int64, end int64) queryrange.Request {
+func (r *ThanosSeriesRequest) WithStartEnd(start, end int64) queryrange.Request {
 	q := *r
 	q.Start = start
 	q.End = end
