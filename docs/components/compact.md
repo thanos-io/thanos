@@ -274,20 +274,20 @@ usage: thanos compact [<flags>]
 Continuously compacts blocks in an object store bucket.
 
 Flags:
-      --block-meta-fetch-concurrency=32  
+      --block-meta-fetch-concurrency=32
                                 Number of goroutines to use when fetching block
                                 metadata from object storage.
-      --block-sync-concurrency=20  
+      --block-sync-concurrency=20
                                 Number of goroutines to use when syncing block
                                 metadata from object storage.
-      --block-viewer.global.sync-block-interval=1m  
+      --block-viewer.global.sync-block-interval=1m
                                 Repeat interval for syncing the blocks between
                                 local and remote view for /global Block Viewer
                                 UI.
-      --bucket-web-label=BUCKET-WEB-LABEL  
+      --bucket-web-label=BUCKET-WEB-LABEL
                                 Prometheus label to use as timeline title in the
                                 bucket web UI
-      --compact.cleanup-interval=5m  
+      --compact.cleanup-interval=5m
                                 How often we should clean up partially uploaded
                                 blocks and blocks with deletion mark in the
                                 background when --wait has been enabled. Setting
@@ -310,7 +310,7 @@ Flags:
                                 algorithm will be used. At least one replica
                                 label has to be set via
                                 --deduplication.replica-label flag.
-      --deduplication.replica-label=DEDUPLICATION.REPLICA-LABEL ...  
+      --deduplication.replica-label=DEDUPLICATION.REPLICA-LABEL ...
                                 Label to treat as a replica indicator of blocks
                                 that can be deduplicated (repeated flag). This
                                 will merge multiple replica blocks into one.
@@ -336,7 +336,7 @@ Flags:
                                 loaded, or compactor is ignoring the deletion
                                 because it's compacting the block at the same
                                 time.
-      --downsample.concurrency=1  
+      --downsample.concurrency=1
                                 Number of goroutines to use when downsampling
                                 blocks.
       --downsampling.disable    Disables downsampling. This is not recommended
@@ -352,7 +352,7 @@ Flags:
                                 values are: "", "SHA256".
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
-      --http-address="0.0.0.0:10902"  
+      --http-address="0.0.0.0:10902"
                                 Listen host:port for HTTP endpoints.
       --http-grace-period=2m    Time to wait after an interrupt received for
                                 HTTP Server.
@@ -362,29 +362,29 @@ Flags:
       --log.format=logfmt       Log format to use. Possible options: logfmt or
                                 json.
       --log.level=info          Log filtering level.
-      --objstore.config=<content>  
+      --objstore.config=<content>
                                 Alternative to 'objstore.config-file' flag
                                 (mutually exclusive). Content of YAML file that
                                 contains object store configuration. See format
                                 details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>  
+      --objstore.config-file=<file-path>
                                 Path to YAML file that contains object store
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
-      --retention.resolution-1h=0d  
+      --retention.resolution-1h=0d
                                 How long to retain samples of resolution 2 (1
                                 hour) in bucket. Setting this to 0d will retain
                                 samples of this resolution forever
-      --retention.resolution-5m=0d  
+      --retention.resolution-5m=0d
                                 How long to retain samples of resolution 1 (5
                                 minutes) in bucket. Setting this to 0d will
                                 retain samples of this resolution forever
-      --retention.resolution-raw=0d  
+      --retention.resolution-raw=0d
                                 How long to retain raw samples in bucket.
                                 Setting this to 0d will retain samples of this
                                 resolution forever
-      --selector.relabel-config=<content>  
+      --selector.relabel-config=<content>
                                 Alternative to 'selector.relabel-config-file'
                                 flag (mutually exclusive). Content of YAML file
                                 that contains relabeling configuration that
@@ -392,18 +392,18 @@ Flags:
                                 Prometheus relabel-config syntax. See format
                                 details:
                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
-      --selector.relabel-config-file=<file-path>  
+      --selector.relabel-config-file=<file-path>
                                 Path to YAML file that contains relabeling
                                 configuration that allows selecting blocks. It
                                 follows native Prometheus relabel-config syntax.
                                 See format details:
                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
-      --tracing.config=<content>  
+      --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag
                                 (mutually exclusive). Content of YAML file with
                                 tracing configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>  
+      --tracing.config-file=<file-path>
                                 Path to YAML file with tracing configuration.
                                 See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
