@@ -529,7 +529,7 @@ func TestMatchersToString_Translate(t *testing.T) {
 
 // Tests whether the Marshal() function properly checks the size
 // of a slice returned from a sync.Pool.
-// Reference: https://github.com/thanos-io/thanos/issues/4591.
+// Regression test against https://github.com/thanos-io/thanos/issues/4591.
 func TestMarshalChecksSize(t *testing.T) {
 	var s Series
 
