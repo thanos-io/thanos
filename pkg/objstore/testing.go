@@ -4,6 +4,7 @@
 package objstore
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -245,4 +246,7 @@ func AcceptanceTest(t *testing.T, bkt Bucket) {
 	sort.Strings(expected)
 	sort.Strings(seen)
 	testutil.Equals(t, expected, seen)
+
+	testutil.Ok(t, bkt.Upload(ctx, "obj_6.som", bytes.NewReader(make([]byte, 1024*1024*200))))
+	testutil.Ok(t, bkt.Delete(ctx, "obj_6.som"))
 }
