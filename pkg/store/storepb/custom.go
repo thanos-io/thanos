@@ -500,7 +500,6 @@ func (m *SeriesResponse) Marshal() (dAtA []byte, err error) {
 	// Slow path with no sync.Pool.
 	if m.respPool == nil {
 		respBuf = make([]byte, size)
-		m.respBuf = nil
 
 		n, err := m.MarshalToSizedBuffer(respBuf)
 		if err != nil {
@@ -536,6 +535,7 @@ func (m *SeriesResponse) Marshal() (dAtA []byte, err error) {
 	m.respBuf = &respBuf
 
 	// Possibly trim it so that there wouldn't be left-over "garbage" in the slice.
+	// TODO: check if it is needed to always trim this.
 	marshalBuf := respBuf[:size]
 	n, err := m.MarshalToSizedBuffer(marshalBuf)
 	if err != nil {
