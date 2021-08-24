@@ -103,6 +103,7 @@ type ThanosLabelsRequest struct {
 	End             int64
 	Label           string
 	Path            string
+	Matchers        [][]*labels.Matcher
 	StoreMatchers   [][]*labels.Matcher
 	PartialResponse bool
 	CachingOptions  queryrange.CachingOptions
@@ -143,6 +144,7 @@ func (r *ThanosLabelsRequest) LogToSpan(sp opentracing.Span) {
 		otlog.String("start", timestamp.Time(r.GetStart()).String()),
 		otlog.String("end", timestamp.Time(r.GetEnd()).String()),
 		otlog.Bool("partial_response", r.PartialResponse),
+		otlog.Object("matchers", r.Matchers),
 		otlog.Object("storeMatchers", r.StoreMatchers),
 	}
 	if r.Label != "" {
