@@ -37,7 +37,7 @@ func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 	m.requestTotalCount = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Subsystem: "http_client",
 		Name:      "request_total",
-		Help:      "",
+		Help:      "Total http client request by code and method.",
 	}, []string{"code", "method"})
 
 	m.dnsLatencyHistogram = promauto.With(reg).NewHistogramVec(
@@ -67,7 +67,7 @@ func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 			Help:      "A histogram of request latencies.",
 			Buckets:   []float64{0.025, .05, .1, .5, 1, 5, 10},
 		},
-		[]string{},
+		[]string{"code", "method"},
 	)
 
 	return &m

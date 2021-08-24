@@ -39,7 +39,7 @@ type ClientConfig struct {
 	TLSConfig TLSConfig `yaml:"tls_config"`
 	// ClientMetrics contains metrics that will be used to instrument
 	// the client that will be created with this config.
-	ClientMetrics *extpromhttp.ClientMetrics
+	ClientMetrics *extpromhttp.ClientMetrics `yaml:"-"`
 }
 
 // TLSConfig configures TLS connections.
