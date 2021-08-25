@@ -87,6 +87,7 @@ replace (
 
 	// TODO(bwplotka): Remove when dev finishes.
 	github.com/efficientgo/e2e => github.com/efficientgo/e2e v0.10.0
+	github.com/efficientgo/tools/core => github.com/efficientgo/tools/core v0.0.0-20210731122119-5d4a0645ce9a
 	// Update to v1.1.1 to make sure windows CI pass.
 	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
 
