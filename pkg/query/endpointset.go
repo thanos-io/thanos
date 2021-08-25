@@ -79,9 +79,9 @@ func (es *grpcEndpointSpec) Metadata(ctx context.Context, client *endpointClient
 	resp, err := client.info.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
 	if err != nil {
 		// Call Info method of StoreAPI, this way querier will be able to discovery old components not exposing InfoAPI.
-		metadata, err := es.getMetadataUsingStoreAPI(ctx, client.store)
-		if err != nil {
-			return nil, errors.Wrapf(err, "fetching info from %s", es.addr)
+		metadata, merr := es.getMetadataUsingStoreAPI(ctx, client.store)
+		if merr != nil {
+			return nil, errors.Wrapf(merr, "fallback fetching info from %s after err: %v", es.addr, err)
 		}
 		return metadata, nil
 	}
@@ -198,8 +198,8 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 type EndpointSet struct {
 	logger log.Logger
 
-	// Endpoint specifications can change dynamically. If some store is missing from the list, we assuming it is no longer
-	// accessible and we close gRPC client for it.
+	// Endpoint specifications can change dynamically. If some component is missing from the list, we assume it is no longer
+	// accessible and we close gRPC client for it, unless it is strict.
 	endpointSpec        func() []EndpointSpec
 	dialOpts            []grpc.DialOption
 	gRPCInfoCallTimeout time.Duration
@@ -223,7 +223,7 @@ func NewEndpointSet(
 	reg *prometheus.Registry,
 	endpointSpecs func() []EndpointSpec,
 	dialOpts []grpc.DialOption,
-	unhealthyStoreTimeout time.Duration,
+	unhealthyEndpointTimeout time.Duration,
 ) *EndpointSet {
 	endpointsMetric := newEndpointSetNodeCollector()
 	if reg != nil {
@@ -245,7 +245,7 @@ func NewEndpointSet(
 		gRPCInfoCallTimeout:      5 * time.Second,
 		endpoints:                make(map[string]*endpointRef),
 		endpointStatuses:         make(map[string]*EndpointStatus),
-		unhealthyEndpointTimeout: unhealthyStoreTimeout,
+		unhealthyEndpointTimeout: unhealthyEndpointTimeout,
 		endpointSpec:             endpointSpecs,
 	}
 	return es
@@ -558,7 +558,6 @@ func (e *EndpointSet) cleanUpEndpointStatuses(endpoints map[string]*endpointRef)
 	}
 }
 
-// TODO(bwplotka): Consider moving storeRef out of this package and renaming it, as it also supports rules API.
 type endpointRef struct {
 	storepb.StoreClient
 
