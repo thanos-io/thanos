@@ -258,15 +258,15 @@ Flags:
       --endpoint.config=<content>  
                                  Alternative to 'endpoint.config-file' flag
                                  (mutually exclusive). Content of YAML file that
-                                 contains store API servers configuration.
-                                 Either use this option or separate endpoint
-                                 options (endpoint, endpoint.sd-files,
-                                 endpoint.srict).
+                                 contains set of endpoints (e.g Store API) with
+                                 optional TLS options. To enable TLS either use
+                                 this option or deprecated ones
+                                 --grpc-client-tls* .
       --endpoint.config-file=<file-path>  
-                                 Path to YAML file that contains store API
-                                 servers configuration. Either use this option
-                                 or separate endpoint options (endpoint,
-                                 endpoint.sd-files, endpoint.srict).
+                                 Path to YAML file that contains set of
+                                 endpoints (e.g Store API) with optional TLS
+                                 options. To enable TLS either use this option
+                                 or deprecated ones --grpc-client-tls* .
       --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable

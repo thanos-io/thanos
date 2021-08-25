@@ -132,7 +132,7 @@ func registerQuery(app *extkingpin.App) {
 	fileSDInterval := extkingpin.ModelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
 		Default("5m"))
 
-	endpointConfig := extflag.RegisterPathOrContent(cmd, "endpoint.config", "YAML file that contains store API servers configuration. Either use this option or separate endpoint options (endpoint, endpoint.sd-files, endpoint.srict).", extflag.WithEnvSubstitution())
+	endpointConfig := extflag.RegisterPathOrContent(cmd, "endpoint.config", "YAML file that contains set of endpoints (e.g Store API) with optional TLS options. To enable TLS either use this option or deprecated ones --grpc-client-tls* .", extflag.WithEnvSubstitution())
 
 	// TODO(bwplotka): Grab this from TTL at some point.
 	dnsSDInterval := extkingpin.ModelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
@@ -423,7 +423,7 @@ func runQuery(
 
 	var storeSets []*query.EndpointSet
 	for _, config := range endpointConfig {
-		secure = !(config.TLSConfig == store.TLSConfiguration{})
+		secure = (config.TLSConfig != store.TLSConfiguration{})
 		dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, config.Name, secure, skipVerify, config.TLSConfig)
 		if err != nil {
 			return errors.Wrap(err, "building gRPC client")
