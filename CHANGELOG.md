@@ -20,6 +20,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4469](https://github.com/thanos-io/thanos/pull/4469) Compact: Add flag `compact.skip-block-with-out-of-order-chunks` to skip blocks with out-of-order chunks during compaction instead of halting
 - [#4506](https://github.com/thanos-io/thanos/pull/4506) `Baidu BOS` object storage, see [documents](docs/storage.md#baidu-bos) for further information.
 - [#4552](https://github.com/thanos-io/thanos/pull/4552) Compact: Adds `thanos_compact_downsample_duration_seconds` histogram.
+- [#4594](https://github.com/thanos-io/thanos/pull/4594) reloader: Expose metrics in config reloader to give info on the last operation.
 
 ### Fixed
 
