@@ -3,12 +3,13 @@ module github.com/thanos-io/thanos
 require (
 	cloud.google.com/go v0.81.0
 	cloud.google.com/go/storage v1.10.0
-	github.com/Azure/azure-pipeline-go v0.2.2
-	github.com/Azure/azure-storage-blob-go v0.8.0
+	github.com/Azure/azure-pipeline-go v0.2.3
+	github.com/Azure/azure-storage-blob-go v0.13.0
 	github.com/Azure/go-autorest/autorest/azure/auth v0.5.8
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/alecthomas/units v0.0.0-20210208195552-ff826a37aa15
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
+	github.com/baidubce/bce-sdk-go v0.9.81
 	github.com/blang/semver/v4 v4.0.0
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
@@ -17,10 +18,12 @@ require (
 	github.com/chromedp/chromedp v0.5.3
 	github.com/cortexproject/cortex v1.8.1-0.20210422151339-cf1c444e0905
 	github.com/davecgh/go-spew v1.1.1
+	github.com/efficientgo/e2e v0.9.0
 	github.com/efficientgo/tools/extkingpin v0.0.0-20210609125236-d73259166f20
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
 	github.com/felixge/fgprof v0.9.1
+	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/go-kit/kit v0.10.0
 	github.com/go-openapi/strfmt v0.20.1
@@ -81,6 +84,9 @@ replace (
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
+
+	// TODO(bwplotka): Remove when dev finishes.
+	github.com/efficientgo/e2e => github.com/efficientgo/e2e v0.10.0
 	// Update to v1.1.1 to make sure windows CI pass.
 	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
 

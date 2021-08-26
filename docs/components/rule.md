@@ -1,9 +1,3 @@
----
-type: docs
-title: Rule
-menu: components
----
-
 # Rule (aka Ruler)
 
 ***NOTE:** It is recommended to keep deploying rules inside the relevant Prometheus servers locally. Use ruler only on specific cases. Read details [below](#risk) why.*
@@ -96,6 +90,8 @@ labels:
   [ <labelname>: <labelvalue> ]
 ```
 
+Note: If you make use of recording rules, make sure that you expose your Ruler instance as a store in the Thanos Querier so that the new time series can be queried as part of Thanos Query. One of the ways you can do this is by adding a new `--store <thanos-ruler-ip>` command-line argument to the Thanos Query command.
+
 ### Alerting Rules
 
 The syntax for alerting rules is:
@@ -168,7 +164,7 @@ Those metrics are important for vanilla Prometheus as well, but even more import
 
 // TODO(bwplotka): Rereview them after recent changes in metrics.
 
-See [alerts](/examples/alerts/alerts.md#Ruler) for more example alerts for ruler.
+See [alerts](https://github.com/thanos-io/thanos/blob/e3b0baf7de9dde1887253b1bb19d78ae71a01bf8/examples/alerts/alerts.md#ruler) for more example alerts for ruler.
 
 NOTE: It is also recommended to set a mocked Alert on Ruler that checks if Query is up. This might be something simple like `vector(1)` query, just to check if Querier is live.
 

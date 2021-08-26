@@ -216,7 +216,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 	for i := 1; ; i++ {
 		var (
 			blobPrefixes []blob.BlobPrefix
-			blobItems    []blob.BlobItem
+			blobItems    []blob.BlobItemInternal
 		)
 
 		if params.Recursive {
@@ -299,7 +299,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 		return nil, errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
 	}
 	var props *blob.BlobGetPropertiesResponse
-	props, err = blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
+	props, err = blobURL.GetProperties(ctx, blob.BlobAccessConditions{}, blob.ClientProvidedKeyOptions{})
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot get properties for container: %s", name)
 	}
@@ -351,7 +351,7 @@ func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAt
 	}
 
 	var props *blob.BlobGetPropertiesResponse
-	props, err = blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
+	props, err = blobURL.GetProperties(ctx, blob.BlobAccessConditions{}, blob.ClientProvidedKeyOptions{})
 	if err != nil {
 		return objstore.ObjectAttributes{}, err
 	}
@@ -370,7 +370,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 		return false, errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
 	}
 
-	if _, err = blobURL.GetProperties(ctx, blob.BlobAccessConditions{}); err != nil {
+	if _, err = blobURL.GetProperties(ctx, blob.BlobAccessConditions{}, blob.ClientProvidedKeyOptions{}); err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}

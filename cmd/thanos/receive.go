@@ -328,6 +328,7 @@ func setupAndRunGRPCServer(g *run.Group,
 				grpcserver.WithListen(*conf.grpcBindAddr),
 				grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
 				grpcserver.WithTLSConfig(tlsCfg),
+				grpcserver.WithMaxConnAge(*conf.grpcMaxConnAge),
 			)
 			startGRPCListening <- struct{}{}
 		}
@@ -662,6 +663,7 @@ type receiveConfig struct {
 	grpcCert        *string
 	grpcKey         *string
 	grpcClientCA    *string
+	grpcMaxConnAge  *time.Duration
 
 	rwAddress          string
 	rwServerCert       string
@@ -708,7 +710,7 @@ type receiveConfig struct {
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.httpBindAddr, rc.httpGracePeriod, rc.httpTLSConfig = extkingpin.RegisterHTTPFlags(cmd)
-	rc.grpcBindAddr, rc.grpcGracePeriod, rc.grpcCert, rc.grpcKey, rc.grpcClientCA = extkingpin.RegisterGRPCFlags(cmd)
+	rc.grpcBindAddr, rc.grpcGracePeriod, rc.grpcCert, rc.grpcKey, rc.grpcClientCA, rc.grpcMaxConnAge = extkingpin.RegisterGRPCFlags(cmd)
 
 	cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
 		Default("0.0.0.0:19291").StringVar(&rc.rwAddress)

@@ -20,7 +20,7 @@ The philosophy of Thanos and our community borrows heavily from UNIX philosophy 
 If you encounter any issue or you have an idea to improve, please:
 
 * Search through Google and [existing open and closed GitHub Issues](https://github.com/thanos-io/thanos/issues) for the answer first. If you find a relevant topic, please comment on the issue.
-* If none of the issues are relevant, please add an issue to [GitHub issues](https://github.com/thanos-io/thanos/issues). Please provide any relevant information as suggested by the Pull Request template.
+* If none of the issues are relevant, please add an issue to [GitHub issues](https://github.com/thanos-io/thanos/issues). Please provide any relevant information as suggested by the Issue template.
 * If you have a quick question you might want to also ask on #thanos or #thanos-dev slack channel in the CNCF workspace. We recommend using GitHub issues for issues and feedback, because GitHub issues are trackable.
 
 If you encounter a security vulnerability, please refer to [Reporting a Vulnerability process](SECURITY.md#reporting-a-vulnerability)
@@ -29,7 +29,7 @@ If you encounter a security vulnerability, please refer to [Reporting a Vulnerab
 
 When contributing a complex change to Thanos repository, please discuss the change you wish to make within a Github issue, in Slack, or by another method with the owners of this repository before making the change.
 
-Adding a large new feature or/and component to Thanos should be done by first creating a [proposal](docs/contributing/proposal-process.md) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
+Adding a large new feature or/and component to Thanos should be done by first creating a [proposal](docs/proposals-done) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
 
 ## General Naming
 
@@ -68,7 +68,7 @@ The following section explains various suggestions and procedures to note during
 
 * It is strongly recommended that you use Linux distributions systems or OSX for development.
 * Go 1.13.9 or newer installed.
-* For React UI, you will need a working NodeJS environment and the Yarn package manager to compile the Web UI assets.
+* For React UI, you will need a working NodeJS environment and the npm package manager to compile the Web UI assets.
 
 ### First Steps
 
