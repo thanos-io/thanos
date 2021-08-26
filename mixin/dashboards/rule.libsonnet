@@ -129,7 +129,7 @@ local utils = import '../lib/utils.libsonnet';
         g.resourceUtilizationRow(thanos.rule.dashboard.selector, thanos.rule.dashboard.dimensions)
       ),
 
-    __overviewRows__+:: [
+    __overviewRows__+:: if thanos.rule == null then [] else [
       g.row('Rule')
       .addPanel(
         g.panel('Alert Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +

@@ -174,7 +174,7 @@ local utils = import '../lib/utils.libsonnet';
         g.resourceUtilizationRow(thanos.compact.dashboard.selector, thanos.compact.dashboard.dimensions)
       ),
 
-    __overviewRows__+:: [
+    __overviewRows__+:: if thanos.compact == null then [] else [
       g.row('Compact')
       .addPanel(
         g.panel(

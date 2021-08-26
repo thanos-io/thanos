@@ -225,7 +225,7 @@ local utils = import '../lib/utils.libsonnet';
         g.resourceUtilizationRow(thanos.store.dashboard.selector, thanos.store.dashboard.dimensions)
       ),
 
-    __overviewRows__+:: [
+    __overviewRows__+:: if thanos.store == null then [] else [
       g.row('Store')
       .addPanel(
         g.panel('gPRC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
