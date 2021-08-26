@@ -95,17 +95,70 @@ func (es *grpcEndpointSpec) getMetadataUsingStoreAPI(ctx context.Context, client
 		return nil, err
 	}
 
+	infoResp := es.fillExpectedAPIs(component.FromProto(resp.StoreType), resp.MinTime, resp.MaxTime)
+	infoResp.LabelSets = resp.LabelSets
+	infoResp.ComponentType = component.FromProto(resp.StoreType).String()
+
 	return &endpointMetadata{
-		&infopb.InfoResponse{
-			LabelSets:     resp.LabelSets,
-			ComponentType: component.FromProto(resp.StoreType).String(),
+		&infoResp,
+	}, nil
+}
+
+func (es *grpcEndpointSpec) fillExpectedAPIs(componentType component.Component, mintime, maxTime int64) infopb.InfoResponse {
+
+	switch componentType {
+	case component.Sidecar:
+		return infopb.InfoResponse{
 			Store: &infopb.StoreInfo{
-				MinTime: resp.MinTime,
-				MaxTime: resp.MaxTime,
+				MinTime: mintime,
+				MaxTime: maxTime,
+			},
+			Rules:          &infopb.RulesInfo{},
+			Targets:        &infopb.TargetsInfo{},
+			MetricMetadata: &infopb.MetricMetadataInfo{},
+			Exemplars:      &infopb.ExemplarsInfo{},
+		}
+	case component.Query:
+		{
+			return infopb.InfoResponse{
+				Store: &infopb.StoreInfo{
+					MinTime: mintime,
+					MaxTime: maxTime,
+				},
+				Rules:          &infopb.RulesInfo{},
+				Targets:        &infopb.TargetsInfo{},
+				MetricMetadata: &infopb.MetricMetadataInfo{},
+				Exemplars:      &infopb.ExemplarsInfo{},
+			}
+		}
+	case component.Receive:
+		{
+			return infopb.InfoResponse{
+				Store: &infopb.StoreInfo{
+					MinTime: mintime,
+					MaxTime: maxTime,
+				},
+				Exemplars: &infopb.ExemplarsInfo{},
+			}
+		}
+	case component.Store:
+		return infopb.InfoResponse{
+			Store: &infopb.StoreInfo{
+				MinTime: mintime,
+				MaxTime: maxTime,
+			},
+		}
+	case component.Rule:
+		return infopb.InfoResponse{
+			Store: &infopb.StoreInfo{
+				MinTime: mintime,
+				MaxTime: maxTime,
 			},
 			Rules: &infopb.RulesInfo{},
-		},
-	}, nil
+		}
+	default:
+		return infopb.InfoResponse{}
+	}
 }
 
 // stringError forces the error to be a string
@@ -583,6 +636,9 @@ func (er *endpointRef) Update(metadata *endpointMetadata) {
 		clients.store = storepb.NewStoreClient(er.cc)
 		er.StoreClient = clients.store
 	} else {
+		// When we see the endpoint for the first time we assume the StoreAPI is exposed by that endpoint (which may not be true for some ruler)
+		// and we create a store API client because as a fallback we might have to call info method of storeAPI.
+		// In this step,we are setting it to null when we find out that the store API is not exposed.
 		er.clients.store = nil
 		er.StoreClient = nil
 	}
