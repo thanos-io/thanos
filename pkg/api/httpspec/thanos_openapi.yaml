@@ -1,0 +1,1152 @@
+openapi: 3.0.1
+info:
+  title: Thanos  HTTP API
+  description: |
+    The current stable HTTP API is reachable under /api/v1 on a Thanos server. 
+  version: v1
+servers:
+  - url: /api/v1
+tags:
+  - name: Query
+    description: |
+      Query API exposed by Thanos is guaranteed to be compatible with Prometheus 2.x. API.
+    x-displayName: Query
+
+  - name: Rules
+    description: |
+      Rule results are written back to disk in the Prometheus 2.0 storage format.
+    x-displayName: Rules
+
+  - name: Blocks
+    x-displayName: Blocks
+
+
+paths:
+  /alerts:
+    get:
+      tags:
+        - Rules
+      summary: Gets alerts. No parameters will be processed.
+      operationId: Rules_GetRulesAlert
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+  /rules:
+    get:
+      tags:
+        - Rules
+      summary: Gets rules. User can pass "rules?type=record" to get rule record instead of full rules.
+      operationId: Rules_GetRules
+      parameters:
+        - name: type
+          in: query
+          description: / The type to request.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleGroups'
+  /blocks:
+    get:
+      tags:
+        - Blocks
+      summary: Get Block info
+      operationId: Blocks_GetBlocks
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlocksInfo'
+
+  /label/{label_name}/values:
+    get:
+      tags:
+        - Query
+      summary: Returns label values
+      description: |
+      operationId: labelValuesGET
+      parameters:
+        - name: label_name
+          in: path
+          description: |
+            Label name
+            Example: ```/label/job/values```
+          required: true
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: |
+            Start timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: end
+          in: query
+          description: |
+            End timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: match[]
+          in: query
+          description: |
+            Repeated series selector argument that selects the series from which to read the label values. Optional.
+          schema:
+            type: string
+            format: series_selector
+      responses:
+        200:
+          description: |
+            Success
+            This example queries for all label values for the job label
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/responseLabelValues'
+              example:
+                status: success
+                data:
+                  - node
+                  - Thanos
+                  -
+  /labels:
+    get:
+      tags:
+        - Query
+      summary: Returns label names
+      description: |
+        The following endpoint returns a list of label names
+        The ```data``` section of the JSON response is a list of string label names.
+      operationId: labelNamesGET
+      parameters:
+        - name: start
+          in: query
+          description: |
+            Start timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: end
+          in: query
+          description: |
+            End timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: match[]
+          in: query
+          description: |
+            Repeated series selector argument that selects the series from which to read the label values. Optional.
+          schema:
+            type: string
+            format: series_selector
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/responseLabelNames'
+              example:
+                status: success
+                data:
+                  - __name__
+                  - call
+                  - code
+                  - config
+                  - dialer_name
+                  - endpoint
+                  - event
+                  - goversion
+                  - handler
+                  - instance
+                  - interval
+                  - job
+                  - le
+                  - listener_name
+                  - name
+                  - quantile
+                  - reason
+                  - role
+                  - scrape_job
+                  - slice
+                  - version
+    post:
+      tags:
+        - Query
+      summary: Returns label names
+      description: |
+        The following endpoint returns a list of label names
+        The ```data``` section of the JSON response is a list of string label names.
+      operationId: labelNamesPOST
+      parameters:
+        - name: start
+          in: query
+          description: |
+            Start timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: end
+          in: query
+          description: |
+            End timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: match[]
+          in: query
+          description: |
+            Repeated series selector argument that selects the series from which to read the label values. Optional.
+          schema:
+            type: string
+            format: series_selector
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/responseLabelNames'
+              example:
+                status: success
+                data:
+                  - __name__
+                  - call
+                  - code
+                  - config
+                  - dialer_name
+                  - endpoint
+                  - event
+                  - goversion
+                  - handler
+                  - instance
+                  - interval
+                  - job
+                  - le
+                  - listener_name
+                  - name
+                  - quantile
+                  - reason
+                  - role
+                  - scrape_job
+                  - slice
+                  - version
+  /metadata:
+    get:
+      tags:
+        - Query
+      summary: Returns metric metadata
+      description: |
+        It returns metadata about metrics currently scrapped from targets. However, it does not provide any target information. This is considered experimental and might change in the future.
+        The data section of the query result consists of an object where each key is a metric name and each value is a list of unique metadata objects, as exposed for that metric name across all targets.
+      operationId: metricMetadataGET
+      parameters:
+        - name: limit
+          in: query
+          description: |
+            Maximum number of metrics to return.
+            Example: ```?limit=2```
+          required: true
+          schema:
+            type: number
+        - name: metric
+          in: query
+          description: |
+            A metric name to filter metadata for. All metric metadata is retrieved if left empty.
+            Example: ```?metric=http_requests_total```
+          schema:
+            type: string
+      responses:
+        200:
+          description: |
+            Success
+            The following example returns two metrics. Note that the metric ```http_requests_total``` has more than one object in the list. At least one target has a value for ```HELP``` that do not match with the rest.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/responseMetadata'
+              example:
+                status: success
+                data:
+                  cortex_ring_tokens:
+                    - type: gauge
+                      help: Number of tokens in the ring
+                      unit: ""
+                  http_requests_total:
+                    - type: counter
+                      help: Number of HTTP requests
+                      unit: ""
+                    - type: counter
+                      help: Amount of HTTP requests
+                      unit: ""
+        201:
+          description: |
+            Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/responseMetadata'
+              example:
+                status: success
+                data:
+                  http_requests_total:
+                    - type: counter
+                      help: Number of HTTP requests
+                      unit: ""
+                    - type: counter
+                      help: Amount of HTTP requests
+                      unit: ""
+  /query:
+    get:
+      tags:
+        - Query
+      summary: Evaluates instant query
+      description: "The query component implements the Prometheus HTTP v1 API to query data in a Thanos cluster via PromQL."
+      operationId: queryGET
+      responses:
+        200:
+          description: |
+            Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/queryData'
+    post:
+      tags:
+        - Query
+      summary: Evaluates instant query
+      operationId: queryPOST
+      parameters:
+        - name: query
+          in: query
+          description: |
+            query.
+            Example: ```?query=up```
+          required: true
+          schema:
+            type: string
+        - name: time
+          in: query
+          description: |
+            time.
+            Example: ```?metric=http_requests_total```
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: timeout
+          in: query
+          description: |
+            timeout.
+            Example: ```?metric=http_requests_total```
+          schema:
+            type: string
+            format: duration
+      responses:
+        200:
+          description: |
+            Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/queryData'
+  /query_exemplars:
+    get:
+      tags:
+        - Query
+      summary: Returns list of Exemplars
+      description: |
+        Query Examplars 
+      operationId: queryExemplarsGET
+      parameters:
+        - name: query
+          in: query
+          description: |
+            query
+          required: true
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: |
+            Start timestamp.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: end
+          in: query
+          description: |
+            End timestamp.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/responseQuery_exemplars"
+    post:
+      tags:
+        - Query
+      summary: Returns list of Exemplars
+      description: |
+        query examplars post
+      operationId: queryExemplarsPOST
+      parameters:
+        - name: query
+          in: query
+          description: |
+            expression query string.
+          required: true
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: |
+            Start timestamp.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: end
+          in: query
+          description: |
+            End timestamp.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/responseQuery_exemplars"
+
+  /query_range:
+    get:
+      tags:
+        - Query
+      summary: Evaluates query over range of time.
+      description: |
+        query range
+      operationId: queryRangeGET
+      parameters:
+        - name: query
+          in: query
+          description: |
+            Prometheus expression query string.
+          required: true
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: |
+            Start timestamp.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: end
+          in: query
+          description: |
+            End timestamp.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: step
+          in: query
+          description: |
+            step
+          schema:
+            type: string
+            format: duration | float
+        - name: timeout
+          in: query
+          description: |
+            timeout
+          schema:
+            type: string
+            format: duration
+      responses:
+        200:
+          description: |
+            Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/responseQuery_range"
+    post:
+      tags:
+        - Query
+      summary: Evaluates query over range of time.
+      description: |
+        query range get
+      operationId: queryRangePOST
+      parameters:
+        - name: query
+          in: query
+          description: |
+            query string.
+          required: true
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: |
+            Start timestamp.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: end
+          in: query
+          description: |
+            End timestamp.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: step
+          in: query
+          description: |
+            query step
+          schema:
+            type: string
+            format: duration | float
+        - name: timeout
+          in: query
+          description: |
+            timeout
+          schema:
+            type: string
+            format: duration
+      responses:
+        200:
+          description: |
+            Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/responseQuery_range"
+
+  /series:
+    get:
+      tags:
+        - Query
+      summary: Returns time series
+      description: |
+        Series 
+      operationId: seriesGET
+      parameters:
+        - name: start
+          in: query
+          description: |
+            Start timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: end
+          in: query
+          description: |
+            End timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: match[]
+          in: query
+          description: |
+            query match
+          required: true
+          schema:
+            type: string
+            format: series_selector
+      responses:
+        200:
+          description: |
+            Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/responseSeries'
+
+    post:
+      tags:
+        - Query
+      summary: Returns time series
+      description: |
+        series 
+      operationId: seriesPOST
+      parameters:
+        - name: start
+          in: query
+          description: |
+            Start timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: end
+          in: query
+          description: |
+            End timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: match[]
+          in: query
+          description: |
+          required: true
+          schema:
+            type: string
+            format: series_selector
+      responses:
+        200:
+          description: |
+            Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/responseSeries'
+
+    delete:
+      tags:
+        - Query
+      summary: Returns time series
+      description: |
+      operationId: seriesDELETE
+      parameters:
+        - name: start
+          in: query
+          description: |
+            Start timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: end
+          in: query
+          description: |
+            End timestamp. Optional.
+          schema:
+            type: string
+            format: rfc3339 | unix_timestamp
+        - name: match[]
+          in: query
+          description: |
+          required: true
+          schema:
+            type: string
+            format: series_selector
+      responses:
+        200:
+          description: |
+            Success
+            application/json:
+              schema:
+                $ref: '#/components/schemas/responseSeries'
+  /targets:
+    get:
+      tags:
+        - Query
+      summary: Returns current target discovery.
+      description: |
+      operationId: targetsGET
+      parameters:
+        - name: state
+          in: query
+          description: |
+          schema:
+            type: string
+            enum:
+              - active
+              - dropped
+              - any
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetDiscovery'
+        201:
+          description: |
+            Success
+            Example: ?state=active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetDiscovery'
+              example:
+                status: success
+
+
+components:
+  schemas:
+    DiscoveredLabels:
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          type: string
+      description: Labels before any processing.
+    DroppedTarget:
+      type: object
+      properties:
+        DiscoveredLabels:
+          $ref: '#/components/schemas/DiscoveredLabels'
+      description: DroppedTarget has the information for one target that was dropped
+        during relabelling.
+    Label:
+      type: object
+      properties:
+        Name:
+          type: string
+        Value:
+          type: string
+      description: Label is a key/value pair of strings.
+    Labels:
+      type: array
+      description: |-
+        Labels is a sorted set of labels. Order has to be guaranteed upon
+        instantiation.
+      items:
+        $ref: '#/components/schemas/Label'
+    MetricType:
+      type: string
+      description: MetricType represents metric type values.
+    RuleGroup:
+      type: object
+      properties:
+        EvaluationTime:
+          type: number
+          format: float64
+        File:
+          type: string
+        Interval:
+          type: number
+          format: float64
+        LastEvaluation:
+          type: string
+          format: "rfc3339 | unix_timestamp"
+        Name:
+          type: string
+        Rules:
+          type: array
+          description: |-
+            In order to preserve rule ordering, while exposing type (alerting or recording)
+            specific properties, both alerting and recording rules are exposed in the
+            same array.
+          items:
+            $ref: '#/components/schemas/Rule'
+      description: RuleGroup has info for rules which are part of a group
+    Target:
+      type: object
+      properties:
+        DiscoveredLabels:
+          $ref: '#/components/schemas/DiscoveredLabels'
+        Labels:
+          $ref: '#/components/schemas/Labels'
+        ScrapePool:
+          type: string
+        ScrapeURL:
+          type: string
+        GlobalURL:
+          type: string
+        LastError:
+          type: string
+        LastScrape:
+          type: string
+          format: "rfc3339 | unix_timestamp"
+        LastScrapeDuration:
+          type: number
+          format: float64
+        Health:
+          $ref: '#/components/schemas/TargetHealth'
+      description: Target has the information for one target.
+    TargetDiscovery:
+      type: object
+      properties:
+        ActiveTargets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Target'
+        DroppedTargets:
+          type: array
+          items:
+            $ref: '#/components/schemas/DroppedTarget'
+      description: TargetDiscovery has all the active targets.
+    TargetHealth:
+      type: string
+      description: TargetHealth describes the health state of a target.
+    metadata:
+      type: object
+      properties:
+        Help:
+          type: string
+        Type:
+          $ref: '#/components/schemas/MetricType'
+        Unit:
+          type: string
+    queryData:
+      type: object
+      properties:
+        Result:
+          type: object
+          properties:
+            metric:
+              type: object
+              properties:
+                __name__:
+                  type: string
+                job:
+                  type: string
+                instance:
+                  type: string
+            value:
+              type: array
+              items:
+                oneOf:
+                  - type: string
+                    format: "unix_timestamp"
+                  - type: string
+                    format: "sample_value"
+        ResultType:
+          type: string
+          enum:
+            - matrix
+            - vector
+            - scalar
+            - string
+    responseSeries:
+      type: array
+      description: a list of objects that contain the label name/value pairs which
+        identify each series
+      items:
+        type: object
+        properties:
+          __name__:
+            type: string
+          job:
+            type: string
+          instance:
+            type: string
+    responseQuery_exemplars:
+      type: object
+      properties:
+        seriesLabels:
+          type: object
+          properties:
+            __name__:
+              type: string
+            job:
+              type: string
+            instance:
+              type: string
+            service:
+              type: string
+        exemplars:
+          type: object
+          properties:
+            labels:
+              type: object
+              properties:
+                traceID:
+                  type: string
+            values:
+              type: string
+            timestamp:
+              type: string
+              format: "unix_timestamp"
+    responseQuery_range:
+      type: object
+      properties:
+        resultType:
+          type: string
+        result:
+          type: object
+          properties:
+            metric:
+              type: object
+              properties:
+                __name__:
+                  type: string
+                job:
+                  type: string
+                instance:
+                  type: string
+            values:
+              type: array
+              items:
+                oneOf:
+                  - type: string
+                    format: "unix_timestamp"
+                  - type: string
+                    format: "sample_value"
+    responseMetadata:
+      type: object
+      properties:
+        metric name:
+          type: string
+      additionalProperties:
+        $ref: '#/components/schemas/metadata'
+      description: a (key, object) map. `metric name`is an example key
+    responseLabelValues:
+      type: array
+      description: a list of string label values
+      items:
+        type: string
+    responseLabelNames:
+      type: array
+      description: a list of string label names
+      items:
+        type: string
+    Alert:
+      properties:
+        state:
+          type: integer
+          description: / state returns the maximum state of alert instances for this rule.
+          format: enum
+        name:
+          type: string
+        query:
+          type: string
+        duration_seconds:
+          type: number
+          format: double
+        labels:
+          $ref: '#/components/schemas/ZLabelSet'
+        annotations:
+          $ref: '#/components/schemas/ZLabelSet'
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertInstance'
+        health:
+          type: string
+        last_error:
+          type: string
+        evaluation_duration_seconds:
+          type: number
+          format: double
+        last_evaluation:
+          type: string
+          format: RFC3339
+    AlertInstance:
+      properties:
+        labels:
+          $ref: '#/components/schemas/ZLabelSet'
+        annotations:
+          $ref: '#/components/schemas/ZLabelSet'
+        state:
+          type: string
+          enum: [ INACTIVE, PENDING, FIRING]
+        active_at:
+          type: string
+          format: RFC3339
+        value:
+          type: string
+        PartialResponseStrategy:
+          type: string
+          description: Thanos specific. Used mainly for alert API purposes.
+          enum: [WARN, ABORT]
+    RecordingRule:
+      properties:
+        name:
+          type: string
+        query:
+          type: string
+        labels:
+          $ref: '#/components/schemas/ZLabelSet'
+        health:
+          type: string
+        last_error:
+          type: string
+        evaluation_duration_seconds:
+          type: number
+          format: double
+        last_evaluation:
+          type: string
+          format: RFC3339
+    Rule:
+      properties:
+        recording:
+          $ref: '#/components/schemas/RecordingRule'
+        alert:
+          $ref: '#/components/schemas/Alert'
+    RuleGroups:
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleGroup'
+      description: '/ RuleGroups is set of rule groups./ This and below APIs are meant to be used for unmarshaling and marshsaling rules from/to Prometheus API./ That''s why json tag has to be customized and matching https://github.com/prometheus/prometheus/blob/c530b4b456cc5f9ec249f771dff187eb7715dc9b/web/api/v1/api.go#L955/ NOTE: See rules_custom_test.go for compatibility tests.// For rule parsing from YAML configuration other struct is used: https://github.com/prometheus/prometheus/blob/20b1f596f6fb16107ef0c244d240b0ad6da36829/pkg/rulefmt/rulefmt.go#L105'
+    ZLabelSet:
+      properties:
+        labels:
+          type: array
+          items:
+            $ref: '#/components/schemas/Label'
+    BlockDesc:
+      properties:
+        ulid:
+          $ref: '#/components/schemas/ULID'
+        min_time:
+          type: integer
+          format: int64
+        max_time:
+          type: integer
+          format: int64
+      description: BlockDesc describes a block by ULID and time range.
+    BlockMeta:
+      properties:
+        ulid:
+          $ref: '#/components/schemas/ULID'
+        min_time:
+          type: integer
+          description: "min_time and max_time specify the time range all samples\r in the block are in."
+          format: int64
+        max_time:
+          type: integer
+          format: int64
+        block_stats:
+          $ref: '#/components/schemas/BlockStats'
+        block_meta_compaction:
+          $ref: '#/components/schemas/BlockMetaCompaction'
+        Version:
+          type: integer
+          description: Version of the index format.
+          format: int32
+    BlockMetaCompaction:
+      properties:
+        level:
+          type: integer
+          description: "Maximum number of compaction cycles any source block has\r gone through."
+          format: int32
+        sources:
+          type: array
+          items:
+            type: string
+          description: ULIDs of all source head blocks that went into the block.
+        deletable:
+          type: boolean
+          description: "Indicates that during compaction it resulted in a block without any samples\r so it should be deleted on the next reloadBlocks."
+        parents:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockDesc'
+          description: "Short descriptions of the direct blocks that were used to create\r this block."
+        failed:
+          type: boolean
+      description: BlockMetaCompaction holds information about compactions a block went through.
+    BlockStats:
+      properties:
+        NumSamples:
+          type: integer
+          format: uint64
+        NumSeries:
+          type: integer
+          format: uint64
+        NumChunks:
+          type: integer
+          format: uint64
+        NumTombstones:
+          type: integer
+          format: uint64
+      description: BlockStats contains stats about contents of a block.
+    BlocksInfo:
+      properties:
+        label:
+          type: string
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Meta'
+        refreshed_at:
+          type: string
+          format: RFC3339
+        error:
+          type: string
+    File:
+      properties:
+        rel_path:
+          type: string
+        size_bytes:
+          type: integer
+          description: SizeBytes is optional (e.g meta.json does not show size).
+          format: int64
+        hash:
+          $ref: '#/components/schemas/ObjectHash'
+    LabelSet:
+      properties:
+        labels:
+          type: array
+          items:
+            $ref: '#/components/schemas/Label'
+    Meta:
+      properties:
+        block_meta:
+          $ref: '#/components/schemas/BlockMeta'
+        thanos:
+          $ref: '#/components/schemas/Thanos'
+    ObjectHash:
+      properties:
+        hash_func:
+          type: string
+        value:
+          type: string
+      description: ObjectHash stores the hash of an object in the object storage.
+    Rewrite:
+      properties:
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ULID'
+    SourceType:
+      properties:
+        source_type:
+          type: string
+    Thanos:
+      properties:
+        version:
+          type: integer
+          description: Version of Thanos meta file. If none specified, 1 is assumed (since first version did not have explicit version specified).
+          format: int32
+        labels:
+          $ref: '#/components/schemas/LabelSet'
+        downsample:
+          $ref: '#/components/schemas/ThanosDownsample'
+        source:
+          $ref: '#/components/schemas/SourceType'
+        segment_files:
+          type: array
+          items:
+            type: string
+          description: "List of segment files (in chunks directory), in sorted order. Optional.\r Deprecated. Use Files instead."
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/File'
+          description: "File is a sorted (by rel path) list of all files in block directory of this block known to TSDB.\r Sorted by relative path.\r Useful to avoid API call to get size of each file, as well as for debugging purposes."
+        rewrites:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rewrite'
+          description: Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
+    ThanosDownsample:
+      properties:
+        resolution:
+          type: integer
+          format: int64
+    ULID:
+      properties:
+        ulid:
+          type: string
+          format: bytes
