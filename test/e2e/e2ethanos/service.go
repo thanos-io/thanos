@@ -4,35 +4,48 @@
 package e2ethanos
 
 import (
-	"github.com/cortexproject/cortex/integration/e2e"
+	"os"
+	"strconv"
+
+	"github.com/efficientgo/e2e"
 )
 
-type Service struct {
-	*e2e.HTTPService
-
-	grpc int
+type Port struct {
+	name      string
+	portNum   int
+	isMetrics bool
 }
 
 func NewService(
+	e e2e.Environment,
 	name string,
 	image string,
-	command *e2e.Command,
+	command e2e.Command,
 	readiness *e2e.HTTPReadinessProbe,
 	http, grpc int,
-	otherPorts ...int,
-) *Service {
-	return &Service{
-		HTTPService: e2e.NewHTTPService(name, image, command, readiness, http, append(otherPorts, grpc)...),
-		grpc:        grpc,
+	otherPorts ...Port,
+) *e2e.InstrumentedRunnable {
+	metricsPorts := "http"
+	ports := map[string]int{
+		"http": http,
+		"grpc": grpc,
 	}
-}
 
-func (s *Service) GRPCEndpoint() string { return s.Endpoint(s.grpc) }
+	for _, op := range otherPorts {
+		ports[op.name] = op.portNum
 
-func (s *Service) GRPCNetworkEndpoint() string {
-	return s.NetworkEndpoint(s.grpc)
-}
+		if op.isMetrics {
+			metricsPorts = op.name
+		}
+	}
 
-func (s *Service) GRPCNetworkEndpointFor(networkName string) string {
-	return s.NetworkEndpointFor(networkName, s.grpc)
+	return e2e.NewInstrumentedRunnable(e, name, ports, metricsPorts).Init(
+		e2e.StartOptions{
+			Image:            image,
+			Command:          command,
+			Readiness:        readiness,
+			User:             strconv.Itoa(os.Getuid()),
+			WaitReadyBackoff: &defaultBackoffConfig,
+		},
+	)
 }

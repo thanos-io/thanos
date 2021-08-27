@@ -13,8 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cortexproject/cortex/integration/e2e"
-	"github.com/cortexproject/cortex/pkg/util"
+	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
+	"github.com/efficientgo/tools/core/pkg/backoff"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -28,12 +29,15 @@ import (
 	"github.com/thanos-io/thanos/pkg/receive"
 )
 
-const infoLogLevel = "info"
+const (
+	infoLogLevel       = "info"
+	ContainerSharedDir = "/shared"
+)
 
 // Same as default for now.
-var defaultBackoffConfig = util.BackoffConfig{
-	MinBackoff: 300 * time.Millisecond,
-	MaxBackoff: 600 * time.Millisecond,
+var defaultBackoffConfig = backoff.Config{
+	Min:        300 * time.Millisecond,
+	Max:        600 * time.Millisecond,
 	MaxRetries: 50,
 }
 
@@ -60,9 +64,9 @@ func DefaultImage() string {
 	return "thanos"
 }
 
-func NewPrometheus(sharedDir, name, config, promImage string, enableFeatures ...string) (*e2e.HTTPService, string, error) {
-	dir := filepath.Join(sharedDir, "data", "prometheus", name)
-	container := filepath.Join(e2e.ContainerSharedDir, "data", "prometheus", name)
+func NewPrometheus(e e2e.Environment, name, config, promImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, string, error) {
+	dir := filepath.Join(e.SharedDir(), "data", "prometheus", name)
+	container := filepath.Join(ContainerSharedDir, "data", "prometheus", name)
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, "", errors.Wrap(err, "create prometheus dir")
 	}
@@ -82,27 +86,31 @@ func NewPrometheus(sharedDir, name, config, promImage string, enableFeatures ...
 	if len(enableFeatures) > 0 {
 		args = append(args, fmt.Sprintf("--enable-feature=%s", strings.Join(enableFeatures, ",")))
 	}
-	prom := e2e.NewHTTPService(
+	prom := e2e.NewInstrumentedRunnable(
+		e,
 		fmt.Sprintf("prometheus-%s", name),
-		promImage,
-		e2e.NewCommandWithoutEntrypoint("prometheus", args...),
-		e2e.NewHTTPReadinessProbe(9090, "/-/ready", 200, 200),
-		9090,
+		map[string]int{"http": 9090},
+		"http").Init(
+		e2e.StartOptions{
+			Image:            promImage,
+			Command:          e2e.NewCommandWithoutEntrypoint("prometheus", args...),
+			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+			User:             strconv.Itoa(os.Getuid()),
+			WaitReadyBackoff: &defaultBackoffConfig,
+		},
 	)
-	prom.SetUser(strconv.Itoa(os.Getuid()))
-	prom.SetBackoff(defaultBackoffConfig)
 
 	return prom, container, nil
 }
 
-func NewPrometheusWithSidecar(sharedDir, netName, name, config, promImage string, enableFeatures ...string) (*e2e.HTTPService, *Service, error) {
-	prom, dataDir, err := NewPrometheus(sharedDir, name, config, promImage, enableFeatures...)
+func NewPrometheusWithSidecar(e e2e.Environment, netName, name, config, promImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
+	prom, dataDir, err := NewPrometheus(e, name, config, promImage, enableFeatures...)
 	if err != nil {
 		return nil, nil, err
 	}
-	prom.SetBackoff(defaultBackoffConfig)
 
 	sidecar := NewService(
+		e,
 		fmt.Sprintf("sidecar-%s", name),
 		DefaultImage(),
 		e2e.NewCommand("sidecar", e2e.BuildArgs(map[string]string{
@@ -110,21 +118,20 @@ func NewPrometheusWithSidecar(sharedDir, netName, name, config, promImage string
 			"--grpc-address":      ":9091",
 			"--grpc-grace-period": "0s",
 			"--http-address":      ":8080",
-			"--prometheus.url":    "http://" + prom.NetworkEndpointFor(netName, 9090),
+			"--prometheus.url":    "http://" + prom.InternalEndpoint("http"),
 			"--tsdb.path":         dataDir,
 			"--log.level":         infoLogLevel,
 		})...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
-	sidecar.SetUser(strconv.Itoa(os.Getuid()))
-	sidecar.SetBackoff(defaultBackoffConfig)
 
 	return prom, sidecar, nil
 }
 
 type QuerierBuilder struct {
+	environment    e2e.Environment
 	sharedDir      string
 	name           string
 	routePrefix    string
@@ -140,9 +147,10 @@ type QuerierBuilder struct {
 	tracingConfig string
 }
 
-func NewQuerierBuilder(sharedDir, name string, storeAddresses []string) *QuerierBuilder {
+func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses []string) *QuerierBuilder {
 	return &QuerierBuilder{
-		sharedDir:      sharedDir,
+		environment:    e,
+		sharedDir:      e.SharedDir(),
 		name:           name,
 		storeAddresses: storeAddresses,
 	}
@@ -188,7 +196,7 @@ func (q *QuerierBuilder) WithTracingConfig(tracingConfig string) *QuerierBuilder
 	return q
 }
 
-func (q *QuerierBuilder) Build() (*Service, error) {
+func (q *QuerierBuilder) Build() (*e2e.InstrumentedRunnable, error) {
 	const replicaLabel = "replica"
 
 	args := e2e.BuildArgs(map[string]string{
@@ -224,7 +232,7 @@ func (q *QuerierBuilder) Build() (*Service, error) {
 
 	if len(q.fileSDStoreAddresses) > 0 {
 		queryFileSDDir := filepath.Join(q.sharedDir, "data", "querier", q.name)
-		container := filepath.Join(e2e.ContainerSharedDir, "data", "querier", q.name)
+		container := filepath.Join(ContainerSharedDir, "data", "querier", q.name)
 		if err := os.MkdirAll(queryFileSDDir, 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
 		}
@@ -259,15 +267,14 @@ func (q *QuerierBuilder) Build() (*Service, error) {
 	}
 
 	querier := NewService(
+		q.environment,
 		fmt.Sprintf("querier-%v", q.name),
 		DefaultImage(),
 		e2e.NewCommand("query", args...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
-	querier.SetUser(strconv.Itoa(os.Getuid()))
-	querier.SetBackoff(defaultBackoffConfig)
 
 	return querier, nil
 }
@@ -275,16 +282,18 @@ func (q *QuerierBuilder) Build() (*Service, error) {
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
 
 // NewRoutingAndIngestingReceiver creates a Thanos Receive instances that is configured both for ingesting samples and routing samples to other receivers.
-func NewRoutingAndIngestingReceiver(sharedDir, networkName, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
-
-	localEndpoint := NewService(fmt.Sprintf("receive-%v", name), "", e2e.NewCommand("", ""), nil, 8080, 9091, 8081).GRPCNetworkEndpointFor(networkName)
+func NewRoutingAndIngestingReceiver(e e2e.Environment, networkName, name string, replicationFactor int, hashring ...receive.HashringConfig) (*e2e.InstrumentedRunnable, error) {
+	var localEndpoint string
 	if len(hashring) == 0 {
+		localEndpoint = "0.0.0.0:9091"
 		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
+	} else {
+		localEndpoint = networkName + fmt.Sprintf("-receive-%v", name) + ":9091"
 	}
 
-	dir := filepath.Join(sharedDir, "data", "receive", name)
+	dir := filepath.Join(e.SharedDir(), "data", "receive", name)
 	dataDir := filepath.Join(dir, "data")
-	container := filepath.Join(e2e.ContainerSharedDir, "data", "receive", name)
+	container := filepath.Join(ContainerSharedDir, "data", "receive", name)
 	if err := os.MkdirAll(dataDir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create receive dir")
 	}
@@ -293,7 +302,7 @@ func NewRoutingAndIngestingReceiver(sharedDir, networkName, name string, replica
 		return nil, errors.Wrapf(err, "generate hashring file: %v", hashring)
 	}
 
-	receiver := NewService(
+	receiver := NewService(e,
 		fmt.Sprintf("receive-%v", name),
 		DefaultImage(),
 		// TODO(bwplotka): BuildArgs should be interface.
@@ -310,27 +319,25 @@ func NewRoutingAndIngestingReceiver(sharedDir, networkName, name string, replica
 			"--receive.local-endpoint":     localEndpoint,
 			"--receive.hashrings":          string(b),
 		})...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
-		8081,
+		Port{name: "remote-write", portNum: 8081},
 	)
-	receiver.SetUser(strconv.Itoa(os.Getuid()))
-	receiver.SetBackoff(defaultBackoffConfig)
 
 	return receiver, nil
 }
 
 // NewRoutingReceiver creates a Thanos Receive instance that is only configured to route to other receive instances. It has no local storage.
-func NewRoutingReceiver(sharedDir, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
+func NewRoutingReceiver(e e2e.Environment, name string, replicationFactor int, hashring ...receive.HashringConfig) (*e2e.InstrumentedRunnable, error) {
 
 	if len(hashring) == 0 {
 		return nil, errors.New("hashring should not be empty for receive-distributor mode")
 	}
 
-	dir := filepath.Join(sharedDir, "data", "receive", name)
+	dir := filepath.Join(e.SharedDir(), "data", "receive", name)
 	dataDir := filepath.Join(dir, "data")
-	container := filepath.Join(e2e.ContainerSharedDir, "data", "receive", name)
+	container := filepath.Join(ContainerSharedDir, "data", "receive", name)
 	if err := os.MkdirAll(dataDir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create receive dir")
 	}
@@ -340,6 +347,7 @@ func NewRoutingReceiver(sharedDir, name string, replicationFactor int, hashring 
 	}
 
 	receiver := NewService(
+		e,
 		fmt.Sprintf("receive-%v", name),
 		DefaultImage(),
 		// TODO(bwplotka): BuildArgs should be interface.
@@ -355,26 +363,24 @@ func NewRoutingReceiver(sharedDir, name string, replicationFactor int, hashring 
 			"--receive.replication-factor": strconv.Itoa(replicationFactor),
 			"--receive.hashrings":          string(b),
 		})...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
-		8081,
+		Port{name: "remote-write", portNum: 8081},
 	)
-	receiver.SetUser(strconv.Itoa(os.Getuid()))
-	receiver.SetBackoff(defaultBackoffConfig)
 
 	return receiver, nil
 }
 
 // NewIngestingReceiver creates a Thanos Receive instance that is only configured to ingest, not route to other receivers.
-func NewIngestingReceiver(sharedDir, name string) (*Service, error) {
-	dir := filepath.Join(sharedDir, "data", "receive", name)
+func NewIngestingReceiver(e e2e.Environment, name string) (*e2e.InstrumentedRunnable, error) {
+	dir := filepath.Join(e.SharedDir(), "data", "receive", name)
 	dataDir := filepath.Join(dir, "data")
-	container := filepath.Join(e2e.ContainerSharedDir, "data", "receive", name)
+	container := filepath.Join(ContainerSharedDir, "data", "receive", name)
 	if err := os.MkdirAll(dataDir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create receive dir")
 	}
-	receiver := NewService(
+	receiver := NewService(e,
 		fmt.Sprintf("receive-%v", name),
 		DefaultImage(),
 		// TODO(bwplotka): BuildArgs should be interface.
@@ -388,26 +394,27 @@ func NewIngestingReceiver(sharedDir, name string) (*Service, error) {
 			"--tsdb.path":            filepath.Join(container, "data"),
 			"--log.level":            infoLogLevel,
 		})...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
-		8081,
+		Port{name: "remote-write", portNum: 8081},
 	)
-	receiver.SetUser(strconv.Itoa(os.Getuid()))
-	receiver.SetBackoff(defaultBackoffConfig)
 
 	return receiver, nil
 }
 
-func NewRoutingAndIngestingReceiverWithConfigWatcher(sharedDir, networkName, name string, replicationFactor int, hashring ...receive.HashringConfig) (*Service, error) {
-	localEndpoint := NewService(fmt.Sprintf("receive-%v", name), "", e2e.NewCommand("", ""), nil, 8080, 9091, 8081).GRPCNetworkEndpointFor(networkName)
+func NewRoutingAndIngestingReceiverWithConfigWatcher(e e2e.Environment, networkName, name string, replicationFactor int, hashring ...receive.HashringConfig) (*e2e.InstrumentedRunnable, error) {
+	var localEndpoint string
 	if len(hashring) == 0 {
+		localEndpoint = "0.0.0.0:9091"
 		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
+	} else {
+		localEndpoint = networkName + fmt.Sprintf("-receive-%v", name) + ":9091"
 	}
 
-	dir := filepath.Join(sharedDir, "data", "receive", name)
+	dir := filepath.Join(e.SharedDir(), "data", "receive", name)
 	dataDir := filepath.Join(dir, "data")
-	container := filepath.Join(e2e.ContainerSharedDir, "data", "receive", name)
+	container := filepath.Join(ContainerSharedDir, "data", "receive", name)
 	if err := os.MkdirAll(dataDir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create receive dir")
 	}
@@ -420,7 +427,7 @@ func NewRoutingAndIngestingReceiverWithConfigWatcher(sharedDir, networkName, nam
 		return nil, errors.Wrap(err, "creating receive config")
 	}
 
-	receiver := NewService(
+	receiver := NewService(e,
 		fmt.Sprintf("receive-%v", name),
 		DefaultImage(),
 		// TODO(bwplotka): BuildArgs should be interface.
@@ -438,20 +445,18 @@ func NewRoutingAndIngestingReceiverWithConfigWatcher(sharedDir, networkName, nam
 			"--receive.hashrings-file":                  filepath.Join(container, "hashrings.json"),
 			"--receive.hashrings-file-refresh-interval": "5s",
 		})...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
-		8081,
+		Port{name: "remote-write", portNum: 8081},
 	)
-	receiver.SetUser(strconv.Itoa(os.Getuid()))
-	receiver.SetBackoff(defaultBackoffConfig)
 
 	return receiver, nil
 }
 
-func NewRuler(sharedDir, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []query.Config) (*Service, error) {
-	dir := filepath.Join(sharedDir, "data", "rule", name)
-	container := filepath.Join(e2e.ContainerSharedDir, "data", "rule", name)
+func NewRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []query.Config) (*e2e.InstrumentedRunnable, error) {
+	dir := filepath.Join(e.SharedDir(), "data", "rule", name)
+	container := filepath.Join(ContainerSharedDir, "data", "rule", name)
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create rule dir")
 	}
@@ -468,7 +473,7 @@ func NewRuler(sharedDir, name, ruleSubDir string, amCfg []alert.AlertmanagerConf
 		return nil, errors.Wrapf(err, "generate query file: %v", queryCfg)
 	}
 
-	ruler := NewService(
+	ruler := NewService(e,
 		fmt.Sprintf("rule-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("rule", e2e.BuildArgs(map[string]string{
@@ -478,7 +483,7 @@ func NewRuler(sharedDir, name, ruleSubDir string, amCfg []alert.AlertmanagerConf
 			"--http-address":                  ":8080",
 			"--label":                         fmt.Sprintf(`replica="%s"`, name),
 			"--data-dir":                      container,
-			"--rule-file":                     filepath.Join(e2e.ContainerSharedDir, ruleSubDir, "*.yaml"),
+			"--rule-file":                     filepath.Join(ContainerSharedDir, ruleSubDir, "*.yaml"),
 			"--eval-interval":                 "3s",
 			"--alertmanagers.config":          string(amCfgBytes),
 			"--alertmanagers.sd-dns-interval": "1s",
@@ -487,19 +492,17 @@ func NewRuler(sharedDir, name, ruleSubDir string, amCfg []alert.AlertmanagerConf
 			"--query.sd-dns-interval":         "1s",
 			"--resend-delay":                  "5s",
 		})...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
-	ruler.SetUser(strconv.Itoa(os.Getuid()))
-	ruler.SetBackoff(defaultBackoffConfig)
 
 	return ruler, nil
 }
 
-func NewAlertmanager(sharedDir, name string) (*e2e.HTTPService, error) {
-	dir := filepath.Join(sharedDir, "data", "am", name)
-	container := filepath.Join(e2e.ContainerSharedDir, "data", "am", name)
+func NewAlertmanager(e e2e.Environment, name string) (*e2e.InstrumentedRunnable, error) {
+	dir := filepath.Join(e.SharedDir(), "data", "am", name)
+	container := filepath.Join(ContainerSharedDir, "data", "am", name)
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create am dir")
 	}
@@ -516,29 +519,30 @@ receivers:
 		return nil, errors.Wrap(err, "creating alertmanager config file failed")
 	}
 
-	s := e2e.NewHTTPService(
-		fmt.Sprintf("alertmanager-%v", name),
-		DefaultAlertmanagerImage(),
-		e2e.NewCommandWithoutEntrypoint("/bin/alertmanager", e2e.BuildArgs(map[string]string{
-			"--config.file":         filepath.Join(container, "config.yaml"),
-			"--web.listen-address":  "0.0.0.0:8080",
-			"--log.level":           infoLogLevel,
-			"--storage.path":        container,
-			"--web.get-concurrency": "1",
-			"--web.timeout":         "2m",
-		})...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
-		8080,
+	s := e2e.NewInstrumentedRunnable(
+		e, fmt.Sprintf("alertmanager-%v", name), map[string]int{"http": 8080}, "http").Init(
+		e2e.StartOptions{
+			Image: DefaultAlertmanagerImage(),
+			Command: e2e.NewCommandWithoutEntrypoint("/bin/alertmanager", e2e.BuildArgs(map[string]string{
+				"--config.file":         filepath.Join(container, "config.yaml"),
+				"--web.listen-address":  "0.0.0.0:8080",
+				"--log.level":           infoLogLevel,
+				"--storage.path":        container,
+				"--web.get-concurrency": "1",
+				"--web.timeout":         "2m",
+			})...),
+			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+			User:             strconv.Itoa(os.Geteuid()),
+			WaitReadyBackoff: &defaultBackoffConfig,
+		},
 	)
-	s.SetUser(strconv.Itoa(os.Getuid()))
-	s.SetBackoff(defaultBackoffConfig)
 
 	return s, nil
 }
 
-func NewStoreGW(sharedDir, name string, bucketConfig client.BucketConfig, relabelConfig ...relabel.Config) (*Service, error) {
-	dir := filepath.Join(sharedDir, "data", "store", name)
-	container := filepath.Join(e2e.ContainerSharedDir, "data", "store", name)
+func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, relabelConfig ...relabel.Config) (*e2e.InstrumentedRunnable, error) {
+	dir := filepath.Join(e.SharedDir(), "data", "store", name)
+	container := filepath.Join(ContainerSharedDir, "data", "store", name)
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create store dir")
 	}
@@ -554,6 +558,7 @@ func NewStoreGW(sharedDir, name string, bucketConfig client.BucketConfig, relabe
 	}
 
 	store := NewService(
+		e,
 		fmt.Sprintf("store-gw-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("store", e2e.BuildArgs(map[string]string{
@@ -571,19 +576,17 @@ func NewStoreGW(sharedDir, name string, bucketConfig client.BucketConfig, relabe
 			"--selector.relabel-config":           string(relabelConfigBytes),
 			"--consistency-delay":                 "30m",
 		})...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
-	store.SetUser(strconv.Itoa(os.Getuid()))
-	store.SetBackoff(defaultBackoffConfig)
 
 	return store, nil
 }
 
-func NewCompactor(sharedDir, name string, bucketConfig client.BucketConfig, relabelConfig []relabel.Config, extArgs ...string) (*e2e.HTTPService, error) {
-	dir := filepath.Join(sharedDir, "data", "compact", name)
-	container := filepath.Join(e2e.ContainerSharedDir, "data", "compact", name)
+func NewCompactor(e e2e.Environment, name string, bucketConfig client.BucketConfig, relabelConfig []relabel.Config, extArgs ...string) (*e2e.InstrumentedRunnable, error) {
+	dir := filepath.Join(e.SharedDir(), "data", "compact", name)
+	container := filepath.Join(ContainerSharedDir, "data", "compact", name)
 
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create compact dir")
@@ -599,29 +602,30 @@ func NewCompactor(sharedDir, name string, bucketConfig client.BucketConfig, rela
 		return nil, errors.Wrapf(err, "generate compact relabel file: %v", relabelConfig)
 	}
 
-	compactor := e2e.NewHTTPService(
-		fmt.Sprintf("compact-%s", name),
-		DefaultImage(),
-		e2e.NewCommand("compact", append(e2e.BuildArgs(map[string]string{
-			"--debug.name":              fmt.Sprintf("compact-%s", name),
-			"--log.level":               infoLogLevel,
-			"--data-dir":                container,
-			"--objstore.config":         string(bktConfigBytes),
-			"--http-address":            ":8080",
-			"--block-sync-concurrency":  "20",
-			"--selector.relabel-config": string(relabelConfigBytes),
-			"--wait":                    "",
-		}), extArgs...)...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
-		8080,
+	compactor := e2e.NewInstrumentedRunnable(
+		e, fmt.Sprintf("compact-%s", name), map[string]int{"http": 8080}, "http").Init(
+		e2e.StartOptions{
+			Image: DefaultImage(),
+			Command: e2e.NewCommand("compact", append(e2e.BuildArgs(map[string]string{
+				"--debug.name":              fmt.Sprintf("compact-%s", name),
+				"--log.level":               infoLogLevel,
+				"--data-dir":                container,
+				"--objstore.config":         string(bktConfigBytes),
+				"--http-address":            ":8080",
+				"--block-sync-concurrency":  "20",
+				"--selector.relabel-config": string(relabelConfigBytes),
+				"--wait":                    "",
+			}), extArgs...)...),
+			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+			User:             strconv.Itoa(os.Getuid()),
+			WaitReadyBackoff: &defaultBackoffConfig,
+		},
 	)
-	compactor.SetUser(strconv.Itoa(os.Getuid()))
-	compactor.SetBackoff(defaultBackoffConfig)
 
 	return compactor, nil
 }
 
-func NewQueryFrontend(name, downstreamURL string, cacheConfig queryfrontend.CacheProviderConfig) (*e2e.HTTPService, error) {
+func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, cacheConfig queryfrontend.CacheProviderConfig) (*e2e.InstrumentedRunnable, error) {
 	cacheConfigBytes, err := yaml.Marshal(cacheConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err, "marshal response cache config file: %v", cacheConfig)
@@ -635,41 +639,117 @@ func NewQueryFrontend(name, downstreamURL string, cacheConfig queryfrontend.Cach
 		"--query-range.response-cache-config": string(cacheConfigBytes),
 	})
 
-	queryFrontend := e2e.NewHTTPService(
-		fmt.Sprintf("query-frontend-%s", name),
-		DefaultImage(),
-		e2e.NewCommand("query-frontend", args...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
-		8080,
+	queryFrontend := e2e.NewInstrumentedRunnable(
+		e, fmt.Sprintf("query-frontend-%s", name), map[string]int{"http": 8080}, "http").Init(
+		e2e.StartOptions{
+			Image:            DefaultImage(),
+			Command:          e2e.NewCommand("query-frontend", args...),
+			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+			User:             strconv.Itoa(os.Getuid()),
+			WaitReadyBackoff: &defaultBackoffConfig,
+		},
 	)
-	queryFrontend.SetUser(strconv.Itoa(os.Getuid()))
-	queryFrontend.SetBackoff(defaultBackoffConfig)
 
 	return queryFrontend, nil
 }
 
-func NewMemcached(name string) *e2e.ConcreteService {
-	memcached := e2e.NewConcreteService(
-		fmt.Sprintf("memcached-%s", name),
-		"docker.io/memcached:1.6.3-alpine",
-		e2e.NewCommand("memcached", []string{"-m 1024", "-I 1m", "-c 1024", "-v"}...),
-		nil,
-		11211,
+func NewReverseProxy(e e2e.Environment, name, tenantID, target string) (*e2e.InstrumentedRunnable, error) {
+	conf := fmt.Sprintf(`
+events {
+	worker_connections  1024;
+}
+
+http {
+	server {
+		listen 80;
+		server_name _;
+
+		location / {
+			proxy_set_header THANOS-TENANT %s;
+			proxy_pass %s;
+		}
+	}
+}
+`, tenantID, target)
+
+	dir := filepath.Join(e.SharedDir(), "data", "nginx", name)
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return nil, errors.Wrap(err, "create store dir")
+	}
+
+	if err := ioutil.WriteFile(filepath.Join(dir, "nginx.conf"), []byte(conf), 0600); err != nil {
+		return nil, errors.Wrap(err, "creating nginx config file failed")
+	}
+
+	nginx := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("nginx-%s", name), map[string]int{"http": 80}, "http").Init(
+		e2e.StartOptions{
+			Image:            "docker.io/nginx:1.21.1-alpine",
+			Volumes:          []string{filepath.Join(dir, "/nginx.conf") + ":/etc/nginx/nginx.conf:ro"},
+			WaitReadyBackoff: &defaultBackoffConfig,
+		},
 	)
-	memcached.SetUser(strconv.Itoa(os.Getuid()))
-	memcached.SetBackoff(defaultBackoffConfig)
+
+	return nginx, nil
+}
+
+// NewMinio returns minio server, used as a local replacement for S3.
+// TODO(@matej-g): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/11
+func NewMinio(env e2e.Environment, name, bktName string) *e2e.InstrumentedRunnable {
+	image := "minio/minio:RELEASE.2019-12-30T05-45-39Z"
+	minioKESGithubContent := "https://raw.githubusercontent.com/minio/kes/master"
+	commands := []string{
+		"curl -sSL --tlsv1.2 -O '%s/root.key'	-O '%s/root.cert'",
+		"mkdir -p /data/%s && minio server --address :%v --quiet /data",
+	}
+
+	return e2e.NewInstrumentedRunnable(
+		env,
+		name,
+		map[string]int{"http": 8090},
+		"http").Init(
+		e2e.StartOptions{
+			Image: image,
+			// Create the required bucket before starting minio.
+			Command:   e2e.NewCommandWithoutEntrypoint("sh", "-c", fmt.Sprintf(strings.Join(commands, " && "), minioKESGithubContent, minioKESGithubContent, bktName, 8090)),
+			Readiness: e2e.NewHTTPReadinessProbe("http", "/minio/health/ready", 200, 200),
+			EnvVars: map[string]string{
+				"MINIO_ACCESS_KEY": e2edb.MinioAccessKey,
+				"MINIO_SECRET_KEY": e2edb.MinioSecretKey,
+				"MINIO_BROWSER":    "off",
+				"ENABLE_HTTPS":     "0",
+				// https://docs.min.io/docs/minio-kms-quickstart-guide.html
+				"MINIO_KMS_KES_ENDPOINT":  "https://play.min.io:7373",
+				"MINIO_KMS_KES_KEY_FILE":  "root.key",
+				"MINIO_KMS_KES_CERT_FILE": "root.cert",
+				"MINIO_KMS_KES_KEY_NAME":  "my-minio-key",
+			},
+		},
+	)
+}
+
+func NewMemcached(e e2e.Environment, name string) *e2e.InstrumentedRunnable {
+	memcached := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("memcached-%s", name), map[string]int{"memcached": 11211}, "memcached").Init(
+		e2e.StartOptions{
+			Image:            "docker.io/memcached:1.6.3-alpine",
+			Command:          e2e.NewCommand("memcached", []string{"-m 1024", "-I 1m", "-c 1024", "-v"}...),
+			User:             strconv.Itoa(os.Getuid()),
+			WaitReadyBackoff: &defaultBackoffConfig,
+		},
+	)
 
 	return memcached
 }
 
 func NewToolsBucketWeb(
+	e e2e.Environment,
 	name string,
 	bucketConfig client.BucketConfig,
 	routePrefix,
 	externalPrefix string,
 	minTime string,
 	maxTime string,
-	relabelConfig string) (*Service, error) {
+	relabelConfig string,
+) (*e2e.InstrumentedRunnable, error) {
 	bktConfigBytes, err := yaml.Marshal(bucketConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err, "generate tools bucket web config file: %v", bucketConfig)
@@ -703,16 +783,14 @@ func NewToolsBucketWeb(
 
 	args = append([]string{"bucket", "web"}, args...)
 
-	toolsBucketWeb := NewService(
+	toolsBucketWeb := NewService(e,
 		fmt.Sprintf("toolsBucketWeb-%s", name),
 		DefaultImage(),
 		e2e.NewCommand("tools", args...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
-	toolsBucketWeb.SetUser(strconv.Itoa(os.Getuid()))
-	toolsBucketWeb.SetBackoff(defaultBackoffConfig)
 
 	return toolsBucketWeb, nil
 }
