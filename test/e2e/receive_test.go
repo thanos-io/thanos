@@ -8,23 +8,16 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 	"testing"
 	"time"
 
-	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/efficientgo/e2e"
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
-
-type ReverseProxyConfig struct {
-	tenantId string
-	port     string
-	target   string
-}
 
 type DebugTransport struct{}
 
@@ -34,19 +27,6 @@ func (DebugTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	return http.DefaultTransport.RoundTrip(r)
-}
-
-func generateProxy(conf ReverseProxyConfig) {
-	targetURL, _ := url.Parse(conf.target)
-	proxy := httputil.NewSingleHostReverseProxy(targetURL)
-	d := proxy.Director
-	proxy.Director = func(r *http.Request) {
-		d(r) // call default director
-		r.Header.Add("THANOS-TENANT", conf.tenantId)
-	}
-	proxy.ErrorHandler = ErrorHandler
-	proxy.Transport = DebugTransport{}
-	log.Fatal(http.ListenAndServe(conf.port, proxy))
 }
 
 func ErrorHandler(_ http.ResponseWriter, _ *http.Request, err error) {
@@ -74,32 +54,34 @@ func TestReceive(t *testing.T) {
 			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
 		*/
 
+		netName := "e2e_receive_single_ingestor"
+
 		t.Parallel()
-		s, err := e2e.NewScenario("e2e_receive_single_ingestor")
+		e, err := e2e.NewDockerEnvironment(netName)
 		testutil.Ok(t, err)
-		t.Cleanup(e2ethanos.CleanScenario(t, s))
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup Router Ingestor.
-		i, err := e2ethanos.NewIngestingReceiver(s.SharedDir(), "ingestor")
+		i, err := e2ethanos.NewIngestingReceiver(e, "ingestor")
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(i))
+		testutil.Ok(t, e2e.StartAndWaitReady(i))
 
 		// Setup Prometheus
-		prom, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(i.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(i.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(prom))
+		testutil.Ok(t, e2e.StartAndWaitReady(prom))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{i.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{i.InternalEndpoint("grpc")}).Build()
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(q))
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
 		// We expect the data from each Prometheus instance to be replicated twice across our ingesting instances
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
@@ -143,51 +125,51 @@ func TestReceive(t *testing.T) {
 		*/
 
 		t.Parallel()
-		s, err := e2e.NewScenario("e2e_receive_router_replication")
+		e, err := e2e.NewDockerEnvironment("e2e_receive_router_replication")
 		testutil.Ok(t, err)
-		t.Cleanup(e2ethanos.CleanScenario(t, s))
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup 3 ingestors.
-		i1, err := e2ethanos.NewIngestingReceiver(s.SharedDir(), "i1")
+		i1, err := e2ethanos.NewIngestingReceiver(e, "i1")
 		testutil.Ok(t, err)
-		i2, err := e2ethanos.NewIngestingReceiver(s.SharedDir(), "i2")
+		i2, err := e2ethanos.NewIngestingReceiver(e, "i2")
 		testutil.Ok(t, err)
-		i3, err := e2ethanos.NewIngestingReceiver(s.SharedDir(), "i3")
+		i3, err := e2ethanos.NewIngestingReceiver(e, "i3")
 		testutil.Ok(t, err)
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				i1.GRPCNetworkEndpointFor(s.NetworkName()),
-				i2.GRPCNetworkEndpointFor(s.NetworkName()),
-				i3.GRPCNetworkEndpointFor(s.NetworkName()),
+				i1.InternalEndpoint("grpc"),
+				i2.InternalEndpoint("grpc"),
+				i3.InternalEndpoint("grpc"),
 			},
 		}
 
 		// Setup 1 distributor
-		r1, err := e2ethanos.NewRoutingReceiver(s.SharedDir(), "r1", 2, h)
+		r1, err := e2ethanos.NewRoutingReceiver(e, "r1", 2, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(i1, i2, i3, r1))
+		testutil.Ok(t, e2e.StartAndWaitReady(i1, i2, i3, r1))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom2, _, err := e2ethanos.NewPrometheus(e, "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom3, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom3, _, err := e2ethanos.NewPrometheus(e, "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
+		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{i1.GRPCNetworkEndpoint(), i2.GRPCNetworkEndpoint(), i3.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{i1.InternalEndpoint("grpc"), i2.InternalEndpoint("grpc"), i3.InternalEndpoint("grpc")}).Build()
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(q))
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
 		expectedReplicationFactor := 2.0
 
-		queryAndAssert(t, ctx, q.HTTPEndpoint(), "count(up) by (prometheus)", promclient.QueryOptions{
+		queryAndAssert(t, ctx, q.Endpoint("http"), "count(up) by (prometheus)", promclient.QueryOptions{
 			Deduplicate: false,
 		}, model.Vector{
 			&model.Sample{
@@ -250,57 +232,57 @@ func TestReceive(t *testing.T) {
 		*/
 
 		t.Parallel()
-		s, err := e2e.NewScenario("e2e_receive_routing_tree")
+		e, err := e2e.NewDockerEnvironment("e2e_receive_routing_tree")
 		testutil.Ok(t, err)
-		t.Cleanup(e2ethanos.CleanScenario(t, s))
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup ingestors.
-		i1, err := e2ethanos.NewIngestingReceiver(s.SharedDir(), "i1")
+		i1, err := e2ethanos.NewIngestingReceiver(e, "i1")
 		testutil.Ok(t, err)
-		i2, err := e2ethanos.NewIngestingReceiver(s.SharedDir(), "i2")
+		i2, err := e2ethanos.NewIngestingReceiver(e, "i2")
 		testutil.Ok(t, err)
-		i3, err := e2ethanos.NewIngestingReceiver(s.SharedDir(), "i3")
+		i3, err := e2ethanos.NewIngestingReceiver(e, "i3")
 		testutil.Ok(t, err)
 
 		// Setup distributors
-		r2, err := e2ethanos.NewRoutingReceiver(s.SharedDir(), "r2", 2, receive.HashringConfig{
+		r2, err := e2ethanos.NewRoutingReceiver(e, "r2", 2, receive.HashringConfig{
 			Endpoints: []string{
-				i2.GRPCNetworkEndpointFor(s.NetworkName()),
-				i3.GRPCNetworkEndpointFor(s.NetworkName()),
+				i2.InternalEndpoint("grpc"),
+				i3.InternalEndpoint("grpc"),
 			},
 		})
 		testutil.Ok(t, err)
 
-		r1, err := e2ethanos.NewRoutingReceiver(s.SharedDir(), "r1", 2, receive.HashringConfig{
+		r1, err := e2ethanos.NewRoutingReceiver(e, "r1", 2, receive.HashringConfig{
 			Endpoints: []string{
-				r2.GRPCNetworkEndpointFor(s.NetworkName()),
-				i1.GRPCNetworkEndpointFor(s.NetworkName()),
+				i1.InternalEndpoint("grpc"),
+				r2.InternalEndpoint("grpc"),
 			},
 		})
 		testutil.Ok(t, err)
 
-		testutil.Ok(t, s.StartAndWaitReady(i1, i2, i3, r1, r2))
+		testutil.Ok(t, e2e.StartAndWaitReady(i1, i2, i3, r1, r2))
 
 		//Setup Prometheuses
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom2, _, err := e2ethanos.NewPrometheus(e, "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2))
+		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2))
 
 		//Setup Querier
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{i1.GRPCNetworkEndpoint(), i2.GRPCNetworkEndpoint(), i3.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{i1.InternalEndpoint("grpc"), i2.InternalEndpoint("grpc"), i3.InternalEndpoint("grpc")}).Build()
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(q))
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
 		expectedReplicationFactor := 3.0
 
-		queryAndAssert(t, ctx, q.HTTPEndpoint(), "count(up) by (prometheus)", promclient.QueryOptions{
+		queryAndAssert(t, ctx, q.Endpoint("http"), "count(up) by (prometheus)", promclient.QueryOptions{
 			Deduplicate: false,
 		}, model.Vector{
 			&model.Sample{
@@ -355,52 +337,48 @@ func TestReceive(t *testing.T) {
 			                      └───────┘
 		*/
 		t.Parallel()
-		s, err := e2e.NewScenario("e2e_test_receive_hashring")
-		testutil.Ok(t, err)
-		t.Cleanup(e2ethanos.CleanScenario(t, s))
 
-		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		netName := "e2e_test_receive_hashring"
+
+		e, err := e2e.NewDockerEnvironment(netName)
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "2", 1)
-		testutil.Ok(t, err)
-		r3, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "3", 1)
-		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				r1.GRPCNetworkEndpointFor(s.NetworkName()),
-				r2.GRPCNetworkEndpointFor(s.NetworkName()),
-				r3.GRPCNetworkEndpointFor(s.NetworkName()),
+				netName + "-receive-1:9091",
+				netName + "-receive-2:9091",
+				netName + "-receive-3:9091",
 			},
 		}
 
-		// Recreate again, but with hashring config.
-		r1, err = e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "1", 1, h)
+		// Create with hashring config.
+		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "1", 1, h)
 		testutil.Ok(t, err)
-		r2, err = e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "2", 1, h)
+		r2, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "2", 1, h)
 		testutil.Ok(t, err)
-		r3, err = e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "3", 1, h)
+		r3, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "3", 1, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
+		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2, r3))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom2, _, err := e2ethanos.NewPrometheus(e, "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom3, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom3, _, err := e2ethanos.NewPrometheus(e, "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
+		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")}).Build()
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(q))
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
@@ -430,53 +408,48 @@ func TestReceive(t *testing.T) {
 	t.Run("hashring with config watcher", func(t *testing.T) {
 		t.Parallel()
 
-		s, err := e2e.NewScenario("e2e_test_receive_hashring_config_watcher")
-		testutil.Ok(t, err)
-		t.Cleanup(e2ethanos.CleanScenario(t, s))
+		netName := "e2e_test_receive_hashring_config_watcher"
 
-		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		e, err := e2e.NewDockerEnvironment(netName)
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "2", 1)
-		testutil.Ok(t, err)
-		r3, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "3", 1)
-		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				r1.GRPCNetworkEndpointFor(s.NetworkName()),
-				r2.GRPCNetworkEndpointFor(s.NetworkName()),
-				r3.GRPCNetworkEndpointFor(s.NetworkName()),
+				netName + "-receive-1:9091",
+				netName + "-receive-2:9091",
+				netName + "-receive-3:9091",
 			},
 		}
 
-		// Recreate again, but with hashring config.
+		// Create with hashring config.
 		// TODO(kakkoyun): Update config file and wait config watcher to reconcile hashring.
-		r1, err = e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(s.SharedDir(), s.NetworkName(), "1", 1, h)
+		r1, err := e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(e, netName, "1", 1, h)
 		testutil.Ok(t, err)
-		r2, err = e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(s.SharedDir(), s.NetworkName(), "2", 1, h)
+		r2, err := e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(e, netName, "2", 1, h)
 		testutil.Ok(t, err)
-		r3, err = e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(s.SharedDir(), s.NetworkName(), "3", 1, h)
+		r3, err := e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(e, netName, "3", 1, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
+		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2, r3))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom2, _, err := e2ethanos.NewPrometheus(e, "2", defaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom3, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom3, _, err := e2ethanos.NewPrometheus(e, "3", defaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
+		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")}).Build()
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(q))
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
@@ -506,52 +479,48 @@ func TestReceive(t *testing.T) {
 	t.Run("replication", func(t *testing.T) {
 		t.Parallel()
 
-		s, err := e2e.NewScenario("e2e_test_receive_replication")
+		netName := "e2e_test_receive_replication"
+
+		e, err := e2e.NewDockerEnvironment(netName)
 		testutil.Ok(t, err)
-		t.Cleanup(e2ethanos.CleanScenario(t, s))
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// The replication suite creates three receivers but only one
 		// receives Prometheus remote-written data. The querier queries all
 		// receivers and the test verifies that the time series are
 		// replicated to all of the nodes.
-		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "1", 3)
-		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "2", 3)
-		testutil.Ok(t, err)
-		r3, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "3", 3)
-		testutil.Ok(t, err)
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				r1.GRPCNetworkEndpointFor(s.NetworkName()),
-				r2.GRPCNetworkEndpointFor(s.NetworkName()),
-				r3.GRPCNetworkEndpointFor(s.NetworkName()),
+				netName + "-receive-1:9091",
+				netName + "-receive-2:9091",
+				netName + "-receive-3:9091",
 			},
 		}
 
-		// Recreate again, but with hashring config.
-		r1, err = e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "1", 3, h)
+		// Create with hashring config.
+		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "1", 3, h)
 		testutil.Ok(t, err)
-		r2, err = e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "2", 3, h)
+		r2, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "2", 3, h)
 		testutil.Ok(t, err)
-		r3, err = e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "3", 3, h)
+		r3, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "3", 3, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(r1, r2, r3))
+		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2, r3))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(prom1))
+		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")}).Build()
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(q))
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
@@ -581,49 +550,45 @@ func TestReceive(t *testing.T) {
 	t.Run("replication_with_outage", func(t *testing.T) {
 		t.Parallel()
 
-		s, err := e2e.NewScenario("e2e_test_receive_replication_with_outage")
+		netName := "e2e_test_receive_replication_with_outage"
+
+		e, err := e2e.NewDockerEnvironment(netName)
 		testutil.Ok(t, err)
-		t.Cleanup(e2ethanos.CleanScenario(t, s))
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// The replication suite creates a three-node hashring but one of the
 		// receivers is dead. In this case, replication should still
 		// succeed and the time series should be replicated to the other nodes.
-		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "1", 3)
-		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "2", 3)
-		testutil.Ok(t, err)
-		notRunningR3, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "3", 3)
-		testutil.Ok(t, err)
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				r1.GRPCNetworkEndpointFor(s.NetworkName()),
-				r2.GRPCNetworkEndpointFor(s.NetworkName()),
-				notRunningR3.GRPCNetworkEndpointFor(s.NetworkName()),
+				netName + "-receive-1:9091",
+				netName + "-receive-2:9091",
+				netName + "-receive-3:9091",
 			},
 		}
 
-		// Recreate again, but with hashring config.
-		r1, err = e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "1", 3, h)
+		// Create with hashring config.
+		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "1", 3, h)
 		testutil.Ok(t, err)
-		r2, err = e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "2", 3, h)
+		r2, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "2", 3, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(r1, r2))
+		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2))
 
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.NetworkEndpoint(8081)), ""), e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(prom1))
+		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")}).Build()
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(q))
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
@@ -646,57 +611,42 @@ func TestReceive(t *testing.T) {
 	t.Run("multitenancy", func(t *testing.T) {
 		t.Parallel()
 
-		s, err := e2e.NewScenario("e2e_test_for_multitenancy")
-		testutil.Ok(t, err)
-		t.Cleanup(e2ethanos.CleanScenario(t, s))
+		netName := "e2e_test_for_multitenancy"
 
-		// The replication suite creates a three-node hashring but one of the
-		// receivers is dead. In this case, replication should still
-		// succeed and the time series should be replicated to the other nodes.
-		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "1", 1)
+		e, err := e2e.NewDockerEnvironment(netName)
 		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				r1.GRPCNetworkEndpointFor(s.NetworkName()),
+				netName + "-receive-1:9091",
 			},
 		}
 
-		// Recreate again, but with hashring config.
-		r1, err = e2ethanos.NewRoutingAndIngestingReceiver(s.SharedDir(), s.NetworkName(), "1", 1, h)
+		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "1", 1, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(r1))
-		testutil.Ok(t, err)
+		testutil.Ok(t, e2e.StartAndWaitReady(r1))
 
-		conf1 := ReverseProxyConfig{
-			tenantId: "tenant-1",
-			port:     ":9097",
-			target:   "http://" + r1.Endpoint(8081),
-		}
-		conf2 := ReverseProxyConfig{
-			tenantId: "tenant-2",
-			port:     ":9098",
-			target:   "http://" + r1.Endpoint(8081),
-		}
-
-		go generateProxy(conf1)
-		go generateProxy(conf2)
-
-		prom1, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "1", defaultPromConfig("prom1", 0, "http://172.17.0.1:9097/api/v1/receive", ""), e2ethanos.DefaultPrometheusImage())
+		rp1, err := e2ethanos.NewReverseProxy(e, "1", "tenant-1", "http://"+r1.InternalEndpoint("remote-write"))
 		testutil.Ok(t, err)
-		prom2, _, err := e2ethanos.NewPrometheus(s.SharedDir(), "2", defaultPromConfig("prom1", 0, "http://172.17.0.1:9098/api/v1/receive", ""), e2ethanos.DefaultPrometheusImage())
+		rp2, err := e2ethanos.NewReverseProxy(e, "2", "tenant-2", "http://"+r1.InternalEndpoint("remote-write"))
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(prom1))
-		testutil.Ok(t, s.StartAndWaitReady(prom2))
+		testutil.Ok(t, e2e.StartAndWaitReady(rp1, rp2))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint()}).Build()
+		prom1, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, "http://"+rp1.InternalEndpoint("http")+"/api/v1/receive", ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(q))
+		prom2, _, err := e2ethanos.NewPrometheus(e, "2", defaultPromConfig("prom2", 0, "http://"+rp2.InternalEndpoint("http")+"/api/v1/receive", ""), e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, err)
+		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2))
+
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{r1.InternalEndpoint("grpc")}).Build()
+		testutil.Ok(t, err)
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), queryUpWithoutInstance, promclient.QueryOptions{
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
@@ -708,7 +658,7 @@ func TestReceive(t *testing.T) {
 			},
 			{
 				"job":        "myself",
-				"prometheus": "prom1",
+				"prometheus": "prom2",
 				"receive":    "1",
 				"replica":    "0",
 				"tenant_id":  "tenant-2",

@@ -693,7 +693,8 @@ http {
 }
 
 // NewMinio returns minio server, used as a local replacement for S3.
-// TODO(@matej-g): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/11
+// TODO(@matej-g): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/11;
+// after this is addresses fixed all calls should be replaced with e2edb.NewMinio.
 func NewMinio(env e2e.Environment, name, bktName string) *e2e.InstrumentedRunnable {
 	image := "minio/minio:RELEASE.2019-12-30T05-45-39Z"
 	minioKESGithubContent := "https://raw.githubusercontent.com/minio/kes/master"

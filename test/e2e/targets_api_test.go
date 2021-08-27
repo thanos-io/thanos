@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/efficientgo/e2e"
 	"github.com/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -29,13 +29,13 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 
 	netName := "e2e_test_targets_fanout"
 
-	s, err := e2e.NewScenario(netName)
+	e, err := e2e.NewDockerEnvironment(netName)
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	// 2x Prometheus.
 	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
-		s.SharedDir(),
+		e,
 		netName,
 		"prom1",
 		defaultPromConfig("ha", 0, "", "", "localhost:9090", "localhost:80"),
@@ -43,28 +43,28 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	)
 	testutil.Ok(t, err)
 	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
-		s.SharedDir(),
+		e,
 		netName,
 		"prom2",
 		defaultPromConfig("ha", 1, "", "", "localhost:9090", "localhost:80"),
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
-	stores := []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint()}
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "query", stores).
+	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")}
+	q, err := e2ethanos.NewQuerierBuilder(e, "query", stores).
 		WithTargetAddresses(stores).
 		Build()
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(q))
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-	targetAndAssert(t, ctx, q.HTTPEndpoint(), "", &targetspb.TargetDiscovery{
+	targetAndAssert(t, ctx, q.Endpoint("http"), "", &targetspb.TargetDiscovery{
 		ActiveTargets: []*targetspb.ActiveTarget{
 			{
 				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
