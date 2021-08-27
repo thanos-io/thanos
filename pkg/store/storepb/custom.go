@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
@@ -38,24 +37,6 @@ func NewSeriesResponse(series *Series) *SeriesResponse {
 	return &SeriesResponse{
 		Result: &SeriesResponse_Series{
 			Series: series,
-		},
-	}
-}
-
-func NewSeriesResponseWithPool(series *Series, respPool *sync.Pool) *SeriesResponse {
-	return &SeriesResponse{
-		respPool: respPool,
-		Result: &SeriesResponse_Series{
-			Series: series,
-		},
-	}
-}
-
-func NewHintsSeriesResponseWithPool(hints *types.Any, respPool *sync.Pool) *SeriesResponse {
-	return &SeriesResponse{
-		respPool: respPool,
-		Result: &SeriesResponse_Hints{
-			Hints: hints,
 		},
 	}
 }
@@ -474,152 +455,4 @@ func CompareLabels(a, b []Label) int {
 // TODO(bwplotka): Remove this once Cortex dep will stop using it.
 func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
 	return labelpb.ZLabelsToPromLabels(lset)
-}
-
-// Type alias because protoc-go-inject-field does not support
-// managing imports.
-type syncPool = sync.Pool
-
-// Close returns the memory used for marshaling, if any.
-func (m *SeriesResponse) Close() {
-	if m == nil || m.respBuf == nil {
-		return
-	}
-
-	m.respPool.Put(m.respBuf)
-	m.respBuf = nil
-}
-
-// The following were copied/pasted from gogoprotobuf generated code with changes
-// to make it work with sync.Pool / []byte slice.
-func (m *SeriesResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-
-	var respBuf []byte
-
-	// Slow path with no sync.Pool.
-	if m.respPool == nil {
-		respBuf = make([]byte, size)
-
-		n, err := m.MarshalToSizedBuffer(respBuf)
-		if err != nil {
-			return nil, err
-		}
-		return respBuf[len(respBuf)-n:], nil
-	}
-
-	// Fast path with sync.Pool.
-	// m.respBuf must not be nil so that it would be returned to the pool.
-
-	// If no pre-allocated buffer has been passed then try to get a new one.
-	if m.respBuf == nil {
-		poolBuf := m.respPool.Get()
-		// No previous buffer found in the pool, try to allocate.
-		if poolBuf == nil {
-			respBuf = make([]byte, size)
-		} else {
-			// Found something, let's see if it is big enough.
-			respBuf = *(poolBuf.(*[]byte))
-		}
-	} else {
-		respBuf = *m.respBuf
-	}
-
-	// Last sanity check of the size before the marshaling.
-	if cap(respBuf) < size {
-		if m.respPool != nil {
-			m.respPool.Put(&respBuf)
-		}
-		respBuf = make([]byte, size)
-	}
-	m.respBuf = &respBuf
-
-	// Possibly trim it so that there wouldn't be left-over "garbage" in the slice.
-	// TODO: check if it is needed to always trim this.
-	marshalBuf := respBuf[:size]
-	n, err := m.MarshalToSizedBuffer(marshalBuf)
-	if err != nil {
-		return nil, err
-	}
-	return marshalBuf[len(marshalBuf)-n:], nil
-}
-
-func (m *SeriesResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-type marshaler interface {
-	MarshalTo([]byte) (int, error)
-}
-
-func (m *SeriesResponse) MarshalToSizedBuffer(data []byte) (int, error) {
-	i := len(data)
-
-	if m.Result != nil {
-		size := m.Result.Size()
-		i -= size
-
-		if _, err := m.Result.(marshaler).MarshalTo(data[i:]); err != nil {
-			return 0, err
-		}
-	}
-	return len(data) - i, nil
-}
-
-func (m *SeriesResponse_Series) MarshalTo(data []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(data[:size])
-}
-
-func (m *SeriesResponse_Series) MarshalToSizedBuffer(data []byte) (int, error) {
-	i := len(data)
-	if m.Series != nil {
-		{
-			size, err := m.Series.MarshalToSizedBuffer(data[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintRpc(data, i, uint64(size))
-		}
-		i--
-		data[i] = 0xa
-	}
-	return len(data) - i, nil
-}
-func (m *SeriesResponse_Warning) MarshalTo(data []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(data[:size])
-}
-
-func (m *SeriesResponse_Warning) MarshalToSizedBuffer(data []byte) (int, error) {
-	i := len(data)
-	i -= len(m.Warning)
-	copy(data[i:], m.Warning)
-	i = encodeVarintRpc(data, i, uint64(len(m.Warning)))
-	i--
-	data[i] = 0x12
-	return len(data) - i, nil
-}
-func (m *SeriesResponse_Hints) MarshalTo(data []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(data[:size])
-}
-
-func (m *SeriesResponse_Hints) MarshalToSizedBuffer(data []byte) (int, error) {
-	i := len(data)
-	if m.Hints != nil {
-		{
-			size, err := m.Hints.MarshalToSizedBuffer(data[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintRpc(data, i, uint64(size))
-		}
-		i--
-		data[i] = 0x1a
-	}
-	return len(data) - i, nil
 }

@@ -118,11 +118,7 @@ enum Aggr {
   COUNTER = 5;
 }
 
-// @inject_field: respBuf *[]byte
-// @inject_field: respPool *syncPool
 message SeriesResponse {
-  option (gogoproto.marshaler) = false;
-
   oneof result {
     /// series contains 1 response series. The series labels are sorted by name.
     Series series = 1;

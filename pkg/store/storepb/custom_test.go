@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
-	"sync"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -525,48 +524,4 @@ func TestMatchersToString_Translate(t *testing.T) {
 		})
 
 	}
-}
-
-// Tests whether the Marshal() function properly checks the size
-// of a slice returned from a sync.Pool.
-// Regression test against https://github.com/thanos-io/thanos/issues/4591.
-func TestMarshalChecksSize(t *testing.T) {
-	var s Series
-
-	rawData := []rawSeries{
-		{
-			lset: labels.Labels{labels.Label{Name: "a", Value: "c"}},
-			chunks: [][]sample{
-				{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
-				{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}},
-				{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 22}, {t: 24, v: 24}},
-				{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
-				{{t: 15, v: 15}, {t: 16, v: 16}, {t: 17, v: 17}, {t: 18, v: 18}},
-				{{t: 20, v: 20}, {t: 21, v: 21}, {t: 22, v: 23}, {t: 24, v: 24}},
-				{{t: 11, v: 11}, {t: 12, v: 12}, {t: 13, v: 13}, {t: 14, v: 14}},
-			},
-		},
-	}
-
-	listSS := newListSeriesSet(t, rawData)
-	lset, chks := listSS.At()
-
-	s.Chunks = chks
-	s.Labels = labelpb.ZLabelsFromPromLabels(lset)
-
-	resp := NewSeriesResponse(&s)
-
-	smallPool := sync.Pool{
-		New: func() interface{} {
-			b := make([]byte, 1)
-			return &b
-		},
-	}
-	resp.respPool = &smallPool
-
-	d, err := resp.Marshal()
-	testutil.Ok(t, err)
-	testutil.Assert(t, d != nil)
-
-	resp.Close()
 }
