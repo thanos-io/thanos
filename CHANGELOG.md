@@ -24,6 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#3539](https://github.com/thanos-io/thanos/pull/3539) Query: Queries timeout based on lower value out of global Query timeout and per-request timeout specified as part of the query API.
 - [#4468](https://github.com/thanos-io/thanos/pull/4468) Rule: Fix temporary rule filename composition issue.
 - [#4476](https://github.com/thanos-io/thanos/pull/4476) UI: fix incorrect html escape sequence used for '>' symbol.
 - [#4532](https://github.com/thanos-io/thanos/pull/4532) Mixin: Fixed "all jobs" selector in thanos mixin dashboards.
