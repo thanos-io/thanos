@@ -290,6 +290,32 @@ func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Dura
 	return d, nil
 }
 
+func (qapi *QueryAPI) checkDurationAndSteps(stmt parser.Statement, maxSourceResolution int64) (_ *api.ApiError) {
+        err := 0
+        switch s := stmt.(type) {
+        case *parser.EvalStmt:
+                parser.Inspect(s.Expr, func(node parser.Node, path []parser.Node) error {
+                        switch n := node.(type) {
+                        case *parser.MatrixSelector:
+                                if n.Range < time.Duration(maxSourceResolution)*time.Millisecond {
+                                        err = 1
+                                }
+                        case *parser.SubqueryExpr:
+                                if n.Range < time.Duration(maxSourceResolution)*time.Millisecond {
+                                        err = 1
+                                }
+                        }
+                        return nil
+                })
+        }
+        if err == 1 {
+                return &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("duration mismatch with maxSourceResolution")}
+        }
+        return nil
+}
+
+
+
 func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError) {
 	ts, err := parseTimeParam(r, "time", qapi.baseAPI.Now())
 	if err != nil {
@@ -464,6 +490,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+	
+	apiErr = qapi.checkDurationAndSteps(qry.Statement(), maxSourceResolution)
+	if apiErr != nil {
+			return nil, nil, apiErr
 	}
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
