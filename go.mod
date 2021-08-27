@@ -19,6 +19,7 @@ require (
 	github.com/cortexproject/cortex v1.8.1-0.20210422151339-cf1c444e0905
 	github.com/davecgh/go-spew v1.1.1
 	github.com/efficientgo/e2e v0.9.0
+	github.com/efficientgo/tools/core v0.0.0-20210129205121-421d0828c9a6
 	github.com/efficientgo/tools/extkingpin v0.0.0-20210609125236-d73259166f20
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
@@ -86,7 +87,7 @@ replace (
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
 
 	// TODO(bwplotka): Remove when dev finishes.
-	github.com/efficientgo/e2e => github.com/efficientgo/e2e v0.10.0
+	github.com/efficientgo/e2e => github.com/efficientgo/e2e v0.11.1-0.20210825193253-b28b6c291075
 	github.com/efficientgo/tools/core => github.com/efficientgo/tools/core v0.0.0-20210731122119-5d4a0645ce9a
 	// Update to v1.1.1 to make sure windows CI pass.
 	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
