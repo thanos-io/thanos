@@ -8,7 +8,6 @@ set -u
 PROTOC_BIN=${PROTOC_BIN:-protoc}
 GOIMPORTS_BIN=${GOIMPORTS_BIN:-goimports}
 PROTOC_GEN_GOGOFAST_BIN=${PROTOC_GEN_GOGOFAST_BIN:-protoc-gen-gogofast}
-PROTOC_GO_INJECT_FIELD_BIN=${PROTOC_GO_INJECT_FIELD_BIN:-protoc-go-inject-field}
 
 if ! [[ "scripts/genproto.sh" =~ $0 ]]; then
   echo "must be run from repository root"
@@ -45,7 +44,6 @@ for dir in ${DIRS}; do
   sed -i.bak -E 's/\"store\/storepb\/prompb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/storepb\/prompb\"/g' *.pb.go
   rm -f *.bak
   ${GOIMPORTS_BIN} -w *.pb.go
-  ${PROTOC_GO_INJECT_FIELD_BIN} -input *.pb.go
   popd
 done
 popd

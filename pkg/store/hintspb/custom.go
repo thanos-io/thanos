@@ -5,10 +5,6 @@ package hintspb
 
 import "github.com/oklog/ulid"
 
-func (m *SeriesResponseHints) Len() int {
-	return len(m.QueriedBlocks)
-}
-
 func (m *SeriesResponseHints) AddQueriedBlock(id ulid.ULID) {
 	m.QueriedBlocks = append(m.QueriedBlocks, Block{
 		Id: id.String(),

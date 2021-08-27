@@ -29,7 +29,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 - [#4519](https://github.com/thanos-io/thanos/pull/4519) Query: switch to miekgdns DNS resolver as the default one.
-- [#4535](https://github.com/thanos-io/thanos/pull/4535) Store: Reuse same buffer for Series() responses. On bigger queries this reduces Thanos Store memory usage by up to 50%.
 
 ## [v0.22.0](https://github.com/thanos-io/thanos/tree/release-0.22) - 2021.07.22
 
