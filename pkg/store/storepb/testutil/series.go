@@ -157,6 +157,8 @@ type SeriesServer struct {
 	SeriesSet []*storepb.Series
 	Warnings  []string
 	HintsSet  []*types.Any
+
+	Size int64
 }
 
 func NewSeriesServer(ctx context.Context) *SeriesServer {
@@ -164,12 +166,7 @@ func NewSeriesServer(ctx context.Context) *SeriesServer {
 }
 
 func (s *SeriesServer) Send(r *storepb.SeriesResponse) error {
-	// Test marshaling speed.
-	msg, err := r.Marshal()
-	if err != nil {
-		return err
-	}
-	var _ = msg
+	s.Size += int64(r.Size())
 
 	if r.GetWarning() != "" {
 		s.Warnings = append(s.Warnings, r.GetWarning())

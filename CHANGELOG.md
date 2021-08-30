@@ -16,17 +16,21 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4487](https://github.com/thanos-io/thanos/pull/4487) Query: Add memcached auto discovery support.
 - [#4444](https://github.com/thanos-io/thanos/pull/4444) UI: Add search block UI.
 - [#4509](https://github.com/thanos-io/thanos/pull/4509) Logging: Adds duration_ms in int64 to the logs.
-- [#4462](https://github.com/thanos-io/thanos/pull/4462) UI: Add find overlap block UI
+- [#4462](https://github.com/thanos-io/thanos/pull/4462) UI: Add find overlap block UI.
 - [#4469](https://github.com/thanos-io/thanos/pull/4469) Compact: Add flag `compact.skip-block-with-out-of-order-chunks` to skip blocks with out-of-order chunks during compaction instead of halting
+- [#4506](https://github.com/thanos-io/thanos/pull/4506) `Baidu BOS` object storage, see [documents](docs/storage.md#baidu-bos) for further information.
+- [#4552](https://github.com/thanos-io/thanos/pull/4552) Compact: Adds `thanos_compact_downsample_duration_seconds` histogram.
+- [#4594](https://github.com/thanos-io/thanos/pull/4594) reloader: Expose metrics in config reloader to give info on the last operation.
 
 ### Fixed
 
 - [#4468](https://github.com/thanos-io/thanos/pull/4468) Rule: Fix temporary rule filename composition issue.
 - [#4476](https://github.com/thanos-io/thanos/pull/4476) UI: fix incorrect html escape sequence used for '>' symbol.
+- [#4532](https://github.com/thanos-io/thanos/pull/4532) Mixin: Fixed "all jobs" selector in thanos mixin dashboards.
+- [#4607](https://github.com/thanos-io/thanos/pull/4607) Azure: Fix Azure MSI Rate Limit
 
 ### Changed
 - [#4519](https://github.com/thanos-io/thanos/pull/4519) Query: switch to miekgdns DNS resolver as the default one.
-- [#4535](https://github.com/thanos-io/thanos/pull/4535) Store: Reuse same buffer for Series() responses. On bigger queries this reduces Thanos Store memory usage by up to 50%.
 
 ## [v0.22.0](https://github.com/thanos-io/thanos/tree/release-0.22) - 2021.07.22
 
