@@ -75,6 +75,7 @@ func registerReceive(app *extkingpin.App) {
 			WALCompression:         conf.walCompression,
 			AllowOverlappingBlocks: conf.tsdbAllowOverlappingBlocks,
 			MaxExemplars:           conf.tsdbMaxExemplars,
+			EnableExemplarStorage:  true,
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
