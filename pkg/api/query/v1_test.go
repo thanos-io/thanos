@@ -1286,7 +1286,7 @@ func TestQueryEndpointsForQueryTimeout(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode())); !ok {
+		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode()), reflect.DeepEqual); !ok {
 			return
 		}
 	}
