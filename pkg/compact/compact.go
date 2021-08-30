@@ -370,7 +370,7 @@ func NewGroup(
 	verticalCompactions prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForDeletion prometheus.Counter,
-	blockMakredForNoCopmact prometheus.Counter,
+	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
 ) (*Group, error) {
 	if logger == nil {
@@ -391,7 +391,7 @@ func NewGroup(
 		verticalCompactions:         verticalCompactions,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
 		blocksMarkedForDeletion:     blocksMarkedForDeletion,
-		blocksMarkedForNoCompact:    blockMakredForNoCopmact,
+		blocksMarkedForNoCompact:    blocksMarkedForNoCompact,
 		hashFunc:                    hashFunc,
 	}
 	return g, nil

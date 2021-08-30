@@ -7,7 +7,7 @@ local utils = import '../lib/utils.libsonnet';
     selector: error 'must provide selector for Thanos Receive dashboard',
     title: error 'must provide title for Thanos Receive dashboard',
     dashboard:: {
-      selector: std.join(', ', thanos.dashboard.selector + ['job="$job"']),
+      selector: std.join(', ', thanos.dashboard.selector + ['job=~"$job"']),
       dimensions: std.join(', ', thanos.dashboard.dimensions + ['job']),
     },
   },
@@ -137,7 +137,7 @@ local utils = import '../lib/utils.libsonnet';
         g.resourceUtilizationRow(thanos.receive.dashboard.selector, thanos.receive.dashboard.dimensions)
       ),
 
-    __overviewRows__+:: [
+    __overviewRows__+:: if thanos.receive == null then [] else [
       g.row('Receive')
       .addPanel(
         g.panel('Incoming Requests Rate', 'Shows rate of incoming requests.') +

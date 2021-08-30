@@ -156,12 +156,8 @@ func createContainer(ctx context.Context, conf Config) (blob.ContainerURL, error
 	return c, err
 }
 
-func getBlobURL(ctx context.Context, conf Config, blobName string) (blob.BlockBlobURL, error) {
-	c, err := getContainerURL(ctx, conf)
-	if err != nil {
-		return blob.BlockBlobURL{}, err
-	}
-	return c.NewBlockBlobURL(blobName), nil
+func getBlobURL(blobName string, c blob.ContainerURL) blob.BlockBlobURL {
+	return c.NewBlockBlobURL(blobName)
 }
 
 func parseError(errorCode string) string {

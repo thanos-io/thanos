@@ -7,7 +7,7 @@
 // Reloader type is useful when you want to:
 //
 // 	* Watch on changes against certain file e.g (`cfgFile`).
-// 	* Optionally, specify different different output file for watched `cfgFile` (`cfgOutputFile`).
+// 	* Optionally, specify different output file for watched `cfgFile` (`cfgOutputFile`).
 // 	This will also try decompress the `cfgFile` if needed and substitute ALL the envvars using Kubernetes substitution format: (`$(var)`)
 // 	* Watch on changes against certain directories (`watchedDirs`).
 //
@@ -95,10 +95,12 @@ type Reloader struct {
 	lastCfgHash         []byte
 	lastWatchedDirsHash []byte
 
-	reloads           prometheus.Counter
-	reloadErrors      prometheus.Counter
-	configApplyErrors prometheus.Counter
-	configApply       prometheus.Counter
+	reloads                    prometheus.Counter
+	reloadErrors               prometheus.Counter
+	lastReloadSuccess          prometheus.Gauge
+	lastReloadSuccessTimestamp prometheus.Gauge
+	configApplyErrors          prometheus.Counter
+	configApply                prometheus.Counter
 }
 
 // Options bundles options for the Reloader.
@@ -152,6 +154,18 @@ func New(logger log.Logger, reg prometheus.Registerer, o *Options) *Reloader {
 			prometheus.CounterOpts{
 				Name: "reloader_reloads_failed_total",
 				Help: "Total number of reload requests that failed.",
+			},
+		),
+		lastReloadSuccess: promauto.With(reg).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "reloader_last_reload_successful",
+				Help: "Whether the last reload attempt was successful",
+			},
+		),
+		lastReloadSuccessTimestamp: promauto.With(reg).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "reloader_last_reload_success_timestamp_seconds",
+				Help: "Timestamp of the last successful reload",
 			},
 		),
 		configApply: promauto.With(reg).NewCounter(
@@ -243,6 +257,7 @@ func (r *Reloader) Watch(ctx context.Context) error {
 		if err := r.apply(applyCtx); err != nil {
 			r.configApplyErrors.Inc()
 			level.Error(r.logger).Log("msg", "apply error", "err", err)
+			continue
 		}
 	}
 }
@@ -347,6 +362,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		r.reloads.Inc()
 		if err := r.triggerReload(ctx); err != nil {
 			r.reloadErrors.Inc()
+			r.lastReloadSuccess.Set(0)
 			return errors.Wrap(err, "trigger reload")
 		}
 
@@ -357,6 +373,8 @@ func (r *Reloader) apply(ctx context.Context) error {
 			"cfg_in", r.cfgFile,
 			"cfg_out", r.cfgOutputFile,
 			"watched_dirs", strings.Join(r.watchedDirs, ", "))
+		r.lastReloadSuccess.Set(1)
+		r.lastReloadSuccessTimestamp.SetToCurrentTime()
 		return nil
 	}); err != nil {
 		level.Error(r.logger).Log("msg", "Failed to trigger reload. Retrying.", "err", err)

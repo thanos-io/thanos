@@ -20,7 +20,7 @@ The philosophy of Thanos and our community borrows heavily from UNIX philosophy 
 If you encounter any issue or you have an idea to improve, please:
 
 * Search through Google and [existing open and closed GitHub Issues](https://github.com/thanos-io/thanos/issues) for the answer first. If you find a relevant topic, please comment on the issue.
-* If none of the issues are relevant, please add an issue to [GitHub issues](https://github.com/thanos-io/thanos/issues). Please provide any relevant information as suggested by the Pull Request template.
+* If none of the issues are relevant, please add an issue to [GitHub issues](https://github.com/thanos-io/thanos/issues). Please provide any relevant information as suggested by the Issue template.
 * If you have a quick question you might want to also ask on #thanos or #thanos-dev slack channel in the CNCF workspace. We recommend using GitHub issues for issues and feedback, because GitHub issues are trackable.
 
 If you encounter a security vulnerability, please refer to [Reporting a Vulnerability process](SECURITY.md#reporting-a-vulnerability)

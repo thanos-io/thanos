@@ -80,7 +80,7 @@ If you want to add yourself to this list, let us know!
 
 ## Operating
 
-See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mixin/README.md) We also have example Grafana dashboards [here](../examples/dashboards/dashboards.md) and some [alerts](../examples/alerts/alerts.md) to get you started.
+See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mixin/README.md) We also have example Grafana dashboards [here](https://github.com/thanos-io/thanos/blob/main/examples/dashboards/dashboards.md) and some [alerts](https://github.com/thanos-io/thanos/blob/main/examples/alerts/alerts.md) to get you started.
 
 ## Talks
 
