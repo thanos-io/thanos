@@ -720,11 +720,11 @@ func NewToolsBucketWeb(
 func NewPrometheusAndSidecarWithBasicAuth(sharedDir string, netName string, name string, promConfig, webConfig, promImage string) (*e2e.HTTPService, *Service, error) {
 	dir := filepath.Join(sharedDir, "data", "prometheus", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "prometheus", name)
-	if err := os.MkdirAll(dir, 0777); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, nil, errors.Wrap(err, "create prometheus dir")
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(dir, "prometheus.yml"), []byte(promConfig), 0666); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(dir, "prometheus.yml"), []byte(promConfig), 0600); err != nil {
 		return nil, nil, errors.Wrap(err, "creating prom config failed")
 	}
 
