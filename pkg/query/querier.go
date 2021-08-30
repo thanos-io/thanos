@@ -365,7 +365,8 @@ func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]strin
 	return resp.Values, warns, nil
 }
 
-// LabelNames returns all the unique label names present in the block in sorted order.
+// LabelNames returns all the unique label names present in the block in sorted order constrained
+// by the given matchers.
 func (q *querier) LabelNames(matchers ...*labels.Matcher) ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_names")
 	defer span.Finish()
