@@ -4,13 +4,25 @@
 package compact
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path"
 	"testing"
+	"time"
 
+	"github.com/go-kit/kit/log"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -124,4 +136,41 @@ func TestGroupMaxMinTime(t *testing.T) {
 
 	testutil.Equals(t, int64(0), g.MinTime())
 	testutil.Equals(t, int64(30), g.MaxTime())
+}
+
+func BenchmarkGatherNoCompactionMarkFilter_Filter(b *testing.B) {
+	ctx := context.TODO()
+	logger := log.NewLogfmtLogger(os.Stderr)
+
+	m := extprom.NewTxGaugeVec(nil, prometheus.GaugeOpts{}, []string{"state"})
+
+	for blocksNum := 10; blocksNum <= 10000; blocksNum *= 10 {
+		bkt := objstore.NewInMemBucket()
+
+		metas := make(map[ulid.ULID]*metadata.Meta, blocksNum)
+
+		for i := 0; i < blocksNum; i++ {
+			var meta metadata.Meta
+			meta.Version = 1
+			meta.ULID = ulid.MustNew(uint64(i), nil)
+			metas[meta.ULID] = &meta
+
+			var buf bytes.Buffer
+			testutil.Ok(b, json.NewEncoder(&buf).Encode(&meta))
+			testutil.Ok(b, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+		}
+
+		for i := 10; i <= 60; i += 10 {
+			b.Run(fmt.Sprintf("Bench-%d-%d", blocksNum, i), func(b *testing.B) {
+				b.ResetTimer()
+
+				for n := 0; n <= b.N; n++ {
+					slowBucket := objstore.WithNoopInstr(objstore.WithDelay(bkt, time.Millisecond*2))
+					f := NewGatherNoCompactionMarkFilter(logger, slowBucket, i)
+					testutil.Ok(b, f.Filter(ctx, metas, m))
+				}
+			})
+		}
+	}
+
 }
