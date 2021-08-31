@@ -463,7 +463,6 @@ func (e *EndpointSet) getActiveEndpoints(ctx context.Context, endpoints map[stri
 	// Gather healthy endpoints map concurrently using info API. Build new clients if does not exist already.
 	for _, es := range e.endpointSpec() {
 		if _, ok := endpointAddrSet[es.Addr()]; ok {
-			level.Warn(e.logger).Log("msg", "duplicated address in nodes", "address", es.Addr())
 			continue
 		}
 		endpointAddrSet[es.Addr()] = struct{}{}

@@ -384,27 +384,17 @@ func runQuery(
 					specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
 				}
 
-				for _, addr := range dnsStoreProvider.Addresses() {
-					specs = append(specs, query.NewGRPCEndpointSpec(addr, false))
+				for _, dnsProvider := range []*dns.Provider{dnsStoreProvider, dnsRuleProvider, dnsExemplarProvider, dnsMetadataProvider, dnsTargetProvider} {
+					var tmpSpecs []query.EndpointSpec
+
+					for _, addr := range dnsProvider.Addresses() {
+						tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpec(addr, false))
+					}
+					tmpSpecs = removeDuplicateEndpointSpecs(logger, duplicatedStores, tmpSpecs)
+					specs = append(specs, tmpSpecs...)
 				}
 
-				for _, addr := range dnsRuleProvider.Addresses() {
-					specs = append(specs, query.NewGRPCEndpointSpec(addr, false))
-				}
-
-				for _, addr := range dnsTargetProvider.Addresses() {
-					specs = append(specs, query.NewGRPCEndpointSpec(addr, false))
-				}
-
-				for _, addr := range dnsMetadataProvider.Addresses() {
-					specs = append(specs, query.NewGRPCEndpointSpec(addr, false))
-				}
-
-				for _, addr := range dnsExemplarProvider.Addresses() {
-					specs = append(specs, query.NewGRPCEndpointSpec(addr, false))
-				}
-
-				return removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
+				return specs
 			},
 			dialOpts,
 			unhealthyStoreTimeout,
@@ -629,7 +619,7 @@ func runQuery(
 	return nil
 }
 
-func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.EndpointSpec) []query.EndpointSpec {
+func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.EndpointSpec) []query.EndpointSpec {
 	set := make(map[string]query.EndpointSpec)
 	for _, spec := range specs {
 		addr := spec.Addr()
