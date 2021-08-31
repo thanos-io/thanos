@@ -657,13 +657,13 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr
 	}
 
-	var matcherSets []*labels.Matcher
+	var matcherSets [][]*labels.Matcher
 	for _, s := range r.Form[MatcherParam] {
 		matchers, err := parser.ParseMetricSelector(s)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}
-		matcherSets = append(matcherSets, matchers...)
+		matcherSets = append(matcherSets, matchers)
 	}
 
 	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, true).
@@ -678,7 +678,29 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		warnings storage.Warnings
 	)
 
-	names, warnings, err = q.LabelNames(matcherSets...)
+	if len(matcherSets) > 0 {
+		var callWarnings storage.Warnings
+		labelNamesSet := make(map[string]struct{})
+		for _, matchers := range matcherSets {
+			names, callWarnings, err = q.LabelNames(matchers...)
+			if err != nil {
+				return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+			}
+			warnings = append(warnings, callWarnings...)
+			for _, val := range names {
+				labelNamesSet[val] = struct{}{}
+			}
+		}
+
+		names = make([]string, 0, len(labelNamesSet))
+		for name := range labelNamesSet {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+	} else {
+		names, warnings, err = q.LabelNames()
+	}
+
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
 	}

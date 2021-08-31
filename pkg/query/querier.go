@@ -343,7 +343,7 @@ func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]strin
 
 	pbMatchers, err := storepb.PromMatchersToMatchers(matchers...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "convert matchers")
+		return nil, nil, errors.Wrap(err, "converting prom matchers to storepb matchers")
 	}
 
 	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
