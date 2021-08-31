@@ -635,9 +635,9 @@ func (er *endpointRef) Update(metadata *endpointMetadata) {
 		clients.store = storepb.NewStoreClient(er.cc)
 		er.StoreClient = clients.store
 	} else {
-		// When we see the endpoint for the first time we assume the StoreAPI is exposed by that endpoint (which may not be true for some ruler)
+		// When we see the endpoint for the first time we assume the StoreAPI is exposed by that endpoint (which may not be true for some component, e.g. ruler)
 		// and we create a store API client because as a fallback we might have to call info method of storeAPI.
-		// In this step,we are setting it to null when we find out that the store API is not exposed.
+		// In this step, we are setting it to null when we find out that the store API is not exposed.
 		er.clients.store = nil
 		er.StoreClient = nil
 	}
