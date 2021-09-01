@@ -89,6 +89,7 @@ groups:
 			}
 		},
 		labels.FromStrings("replica", "1"),
+		"http://localhost",
 	)
 	testutil.Ok(t, thanosRuleMgr.Update(1*time.Second, []string{filepath.Join(dir, "rule.yaml")}))
 
@@ -187,6 +188,7 @@ groups:
 			}
 		},
 		labels.FromStrings("replica", "1"),
+		"http://localhost",
 	)
 	err = thanosRuleMgr.Update(10*time.Second, []string{
 		filepath.Join(dir, "no_strategy.yaml"),
@@ -333,6 +335,7 @@ func TestManager_Rules(t *testing.T) {
 			}
 		},
 		labels.FromStrings("replica", "test1"),
+		"http://localhost",
 	)
 	testutil.Ok(t, thanosRuleMgr.Update(60*time.Second, []string{
 		filepath.Join(curr, "../../examples/alerts/alerts.yaml"),
@@ -374,6 +377,7 @@ groups:
 			}
 		},
 		nil,
+		"http://localhost",
 	)
 
 	// We need to run the underlying rule managers to update them more than

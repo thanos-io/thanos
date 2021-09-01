@@ -568,6 +568,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 				PartialResponseDisabled: r.PartialResponseDisabled,
 				Start:                   r.Start,
 				End:                     r.End,
+				Matchers:                r.Matchers,
 			})
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label names from store %s", st)

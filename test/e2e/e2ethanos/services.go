@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
-	"github.com/cortexproject/cortex/pkg/util"
+	"github.com/grafana/dskit/backoff"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -31,7 +31,7 @@ import (
 const infoLogLevel = "info"
 
 // Same as default for now.
-var defaultBackoffConfig = util.BackoffConfig{
+var defaultBackoffConfig = backoff.Config{
 	MinBackoff: 300 * time.Millisecond,
 	MaxBackoff: 600 * time.Millisecond,
 	MaxRetries: 50,

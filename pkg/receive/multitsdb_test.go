@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -36,11 +37,12 @@ func TestMultiTSDB(t *testing.T) {
 	t.Run("run fresh", func(t *testing.T) {
 		m := NewMultiTSDB(
 			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-				RetentionDuration: (6 * time.Hour).Milliseconds(),
-				NoLockfile:        true,
-				MaxExemplars:      100,
+				MinBlockDuration:      (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
+				RetentionDuration:     (6 * time.Hour).Milliseconds(),
+				NoLockfile:            true,
+				MaxExemplars:          100,
+				EnableExemplarStorage: true,
 			},
 			labels.FromStrings("replica", "01"),
 			"tenant_id",
@@ -349,12 +351,12 @@ OuterE:
 			if !ok {
 				break OuterE
 			}
-			checkExemplarsResponse(t, expectedFooRespExemplars, r)
+			checkExemplarsResponse(t, "foo", expectedFooRespExemplars, r)
 		case r, ok := <-respBar:
 			if !ok {
 				break OuterE
 			}
-			checkExemplarsResponse(t, expectedBarRespExemplars, r)
+			checkExemplarsResponse(t, "bar", expectedBarRespExemplars, r)
 		}
 	}
 	testutil.Ok(t, err)
@@ -398,7 +400,8 @@ func (s *exemplarsServer) Context() context.Context {
 	return s.ctx
 }
 
-func checkExemplarsResponse(t *testing.T, expected, data []exemplarspb.ExemplarData) {
+func checkExemplarsResponse(t *testing.T, name string, expected, data []exemplarspb.ExemplarData) {
+	fmt.Printf("checking %s\n", name)
 	testutil.Equals(t, len(expected), len(data))
 	for i := range data {
 		testutil.Equals(t, expected[i].SeriesLabels, data[i].SeriesLabels)

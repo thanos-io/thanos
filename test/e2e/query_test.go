@@ -280,7 +280,9 @@ func TestQueryLabelNames(t *testing.T) {
 
 	labelNames(t, ctx, q.HTTPEndpoint(), []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
 		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
-			// Expected result: [__name__, instance, job, prometheus, replica]
+			// Expected result: [__name__, instance, job, prometheus, replica, receive, tenant_id]
+			// Pre-labelnames pushdown we've done Select() over all series and picked out the label names hence they all had external labels.
+			// With labelnames pushdown we had to extend the LabelNames() call to enrich the response with the external labelset when there is more than one label.
 			return len(res) == 7
 		},
 	)

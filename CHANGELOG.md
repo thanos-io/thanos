@@ -30,7 +30,9 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4607](https://github.com/thanos-io/thanos/pull/4607) Azure: Fix Azure MSI Rate Limit
 
 ### Changed
+
 - [#4519](https://github.com/thanos-io/thanos/pull/4519) Query: switch to miekgdns DNS resolver as the default one.
+- [#4586](https://github.com/thanos-io/thanos/pull/4586) Update Prometheus/Cortex dependencies and implement LabelNames() pushdown as a result; provides massive speed-up for the labels API in Thanos Query.
 
 ## [v0.22.0](https://github.com/thanos-io/thanos/tree/release-0.22) - 2021.07.22
 

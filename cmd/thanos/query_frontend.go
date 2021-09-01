@@ -191,7 +191,7 @@ func runQueryFrontend(
 	}
 
 	// Create a downstream roundtripper.
-	roundTripper, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL)
+	roundTripper, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, http.DefaultTransport)
 	if err != nil {
 		return errors.Wrap(err, "setup downstream roundtripper")
 	}

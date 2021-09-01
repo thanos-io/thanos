@@ -301,6 +301,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		logger,
 		&UnRegisterer{Registerer: reg},
 		&opts,
+		nil,
 	)
 	if err != nil {
 		t.mtx.Lock()
