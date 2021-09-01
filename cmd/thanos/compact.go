@@ -257,7 +257,7 @@ func runCompact(
 			"/loaded",
 			component,
 		)
-		api = blocksAPI.NewBlocksAPI(logger, conf.webConf.disableCORS, conf.label, flagsMap)
+		api = blocksAPI.NewBlocksAPI(logger, conf.webConf.disableCORS, conf.label, flagsMap, bkt)
 		sy  *compact.Syncer
 	)
 	{
