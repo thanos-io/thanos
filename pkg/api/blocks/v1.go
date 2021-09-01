@@ -4,7 +4,6 @@
 package v1
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -64,7 +63,7 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 	instr := api.GetInstr(tracer, logger, ins, logMiddleware, bapi.disableCORS)
 
 	r.Get("/blocks", instr("blocks", bapi.blocks))
-	r.Post("/blocks/mark", instr("blocks", bapi.markBlock))
+	r.Post("/blocks/mark", instr("blocks_mark", bapi.markBlock))
 }
 
 func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.ApiError) {
