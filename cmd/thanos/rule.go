@@ -303,7 +303,9 @@ func runRule(
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
 	var queryClients []*http_util.Client
+	queryClientMetrics := extpromhttp.NewClientMetrics(extprom.WrapRegistererWith(prometheus.Labels{"client": "query"}, reg))
 	for _, cfg := range queryCfg {
+		cfg.HTTPClientConfig.ClientMetrics = queryClientMetrics
 		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "query")
 		if err != nil {
 			return err
@@ -374,7 +376,11 @@ func runRule(
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
 	var alertmgrs []*alert.Alertmanager
+	amClientMetrics := extpromhttp.NewClientMetrics(
+		extprom.WrapRegistererWith(prometheus.Labels{"client": "alertmanager"}, reg),
+	)
 	for _, cfg := range alertingCfg.Alertmanagers {
+		cfg.HTTPClientConfig.ClientMetrics = amClientMetrics
 		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
 		if err != nil {
 			return err
