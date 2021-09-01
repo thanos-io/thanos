@@ -42,7 +42,7 @@ See [this issue](https://github.com/thanos-io/thanos/issues/1972) to check our p
 
 ## Usage
 
-Once tracing is enabled and sampling per backend is configured Thanos will generate traces for all gRPC and HTTP APIs thanks to generic "middlewares". Some more interesting to observe APIs like `query` or `query_range` have more low-level spans with focused metadata showing latency for important functionalities. For example Jaeger view of HTTP query_range API call might look as follows:
+Once tracing is enabled and sampling per backend is configured, Thanos will generate traces for all gRPC and HTTP APIs thanks to generic "middlewares". Some more interesting to observe APIs like `query` or `query_range` have more low-level spans with focused metadata showing latency for important functionalities. For example, Jaeger view of HTTP query_range API call might look as follows:
 
 ![view](img/tracing2.png)
 
