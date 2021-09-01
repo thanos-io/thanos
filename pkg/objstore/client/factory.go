@@ -6,7 +6,7 @@ package client
 import (
 	"context"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/objstore/ks3"
+
 	"strings"
 
 	"github.com/go-kit/kit/log"
@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 	"github.com/thanos-io/thanos/pkg/objstore/gcs"
+	"github.com/thanos-io/thanos/pkg/objstore/ks3"
 	"github.com/thanos-io/thanos/pkg/objstore/oss"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"

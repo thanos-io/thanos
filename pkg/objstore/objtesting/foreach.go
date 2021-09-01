@@ -4,7 +4,6 @@
 package objtesting
 
 import (
-	"github.com/thanos-io/thanos/pkg/objstore/ks3"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
 	"github.com/thanos-io/thanos/pkg/objstore/gcs"
+	"github.com/thanos-io/thanos/pkg/objstore/ks3"
 	"github.com/thanos-io/thanos/pkg/objstore/oss"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
