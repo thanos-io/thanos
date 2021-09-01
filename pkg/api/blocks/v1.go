@@ -53,7 +53,7 @@ func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap ma
 			Label:  label,
 		},
 		disableCORS: disableCORS,
-		bkt: bkt,
+		bkt:         bkt,
 	}
 }
 
@@ -83,20 +83,20 @@ func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.Ap
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("ULID %q is not valid: %v", idParam, err)}
 	}
-		
+
 	switch actionParam {
-		case "DELETION":
-			err := block.MarkForDeletion(r.Context(), bapi.logger, bapi.bkt, id, detailParam, promauto.With(nil).NewCounter(prometheus.CounterOpts{}))
-			if err != nil {
-				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-			}
-		case "NO COMPACTION":
-			err := block.MarkForNoCompact(r.Context(), bapi.logger, bapi.bkt, id, metadata.ManualNoCompactReason, detailParam, promauto.With(nil).NewCounter(prometheus.CounterOpts{}))
-			if err != nil {
-				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
-			}
-		default:
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("not supported marker %v", actionParam)}
+	case "DELETION":
+		err := block.MarkForDeletion(r.Context(), bapi.logger, bapi.bkt, id, detailParam, promauto.With(nil).NewCounter(prometheus.CounterOpts{}))
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		}
+	case "NO COMPACTION":
+		err := block.MarkForNoCompact(r.Context(), bapi.logger, bapi.bkt, id, metadata.ManualNoCompactReason, detailParam, promauto.With(nil).NewCounter(prometheus.CounterOpts{}))
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		}
+	default:
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("not supported marker %v", actionParam)}
 	}
 	return nil, nil, nil
 }
