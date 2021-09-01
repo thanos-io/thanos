@@ -344,7 +344,7 @@ Flags:
                                  (repeatable).
       --query.sd-interval=5m     Refresh interval to re-read file SD files.
                                  (used as a fallback)
-      --remote-write.config=<content>
+      --remote-write.config=<content>  
                                  Alternative to 'remote-write.config-file' flag
                                  (mutually exclusive). Content of YAML config
                                  for the remote-write server where samples
@@ -353,7 +353,7 @@ Flags:
                                  stored in the ruler's TSDB. If an empty config
                                  (or file) is provided, the flag is ignored and
                                  ruler is run with its own TSDB.
-      --remote-write.config-file=<file-path>
+      --remote-write.config-file=<file-path>  
                                  Path to YAML config for the remote-write server
                                  where samples should be sent to. This
                                  automatically enables stateless mode for ruler
@@ -361,7 +361,7 @@ Flags:
                                  TSDB. If an empty config (or file) is provided,
                                  the flag is ignored and ruler is run with its
                                  own TSDB.
-      --request.logging-config=<content>
+      --request.logging-config=<content>  
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content of YAML file
                                  with request logging configuration. See format
