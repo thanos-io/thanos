@@ -122,7 +122,7 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 		Key:    &name,
 	}
 	if _, err := b.ks3client.DeleteObject(input); err != nil {
-		return errors.Wrap(err, "delete ks3 object")
+		return fmt.Errorf("delete ks3 object failed, name:%v", name)
 	}
 	return nil
 }
@@ -237,7 +237,11 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 
 	if dir == "" {
 		marker := ""
-		delimiter := "/"
+		delimiter := objstore.DirDelim
+		if objstore.ApplyIterOptions(options...).Recursive {
+			delimiter = ""
+		}
+
 		for {
 			objects, _ := b.ks3client.ListObjects(&s3.ListObjectsInput{
 				Bucket:    &b.name,
@@ -266,6 +270,10 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 		if dir != "" {
 			dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 		}
+		delimiter := objstore.DirDelim
+		if objstore.ApplyIterOptions(options...).Recursive {
+			delimiter = ""
+		}
 
 		for {
 			marker := ""
@@ -273,10 +281,16 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 				Bucket: &b.name,
 				Prefix: &dir,
 				Marker: &marker,
+				Delimiter: &delimiter,
 			})
 			for _, object := range objects.Contents {
 				if err := f(*object.Key); err != nil {
 					return errors.Wrapf(err, "callback func invoke for object %s failed ", *object.Key)
+				}
+			}
+			for _, object := range objects.CommonPrefixes {
+				if err := f(*object.Prefix); err != nil {
+					return errors.Wrapf(err, "callback func invoke for directory %s failed", *object.Prefix)
 				}
 			}
 			if !*objects.IsTruncated {
@@ -477,8 +491,8 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 
 	}
 
-	AccessKeyID := os.Getenv("AccessKeyID")
-	AccessKeySecret := os.Getenv("AccessKeySecret")
+	AccessKeyID := c.AccessKeyID
+	AccessKeySecret := c.AccessKeySecret
 	credentials := credentials.NewStaticCredentials(AccessKeyID, AccessKeySecret, "")
 	client := s3.New(&aws.Config{
 		Region:           location,
