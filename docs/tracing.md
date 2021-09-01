@@ -68,7 +68,7 @@ Every request against any Thanos component's API with header `X-Thanos-Force-Tra
 
 ## Configuration
 
-Currently supported tracing supported backends:
+Currently supported tracing backends:
 
 ### Jaeger
 
