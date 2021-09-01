@@ -21,6 +21,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4506](https://github.com/thanos-io/thanos/pull/4506) `Baidu BOS` object storage, see [documents](docs/storage.md#baidu-bos) for further information.
 - [#4552](https://github.com/thanos-io/thanos/pull/4552) Compact: Adds `thanos_compact_downsample_duration_seconds` histogram.
 - [#4594](https://github.com/thanos-io/thanos/pull/4594) reloader: Expose metrics in config reloader to give info on the last operation.
+- [#4623](https://github.com/thanos-io/thanos/pull/4623) query-frontend: made HTTP downstream tripper (client) configurable via parameters `--query-range.downstream-tripper-config` and `--query-range.downstream-tripper-config-file`. If your downstream URL is localhost or 127.0.0.1 then it is strongly recommended to bump `max_idle_conns_per_host` to at least 100 so that `query-frontend` could properly use HTTP keep-alive connections and thus reduce the latency of `query-frontend` by about 20%.
 
 ### Fixed
 
