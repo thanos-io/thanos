@@ -282,6 +282,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.setOptions({ storeMatches: selectedStores || [] });
   };
 
+  handleToggleAlert = (): void => {
+    this.setState({ error: null });
+  };
+
   render() {
     const { pastQueries, metricNames, options, id, stores } = this.props;
     return (
@@ -317,7 +321,11 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           </Col>
         </Row>
         <Row>
-          <Col>{this.state.error && <UncontrolledAlert color="danger">{this.state.error}</UncontrolledAlert>}</Col>
+          <Col>
+            <UncontrolledAlert isOpen={this.state.error || false} toggle={this.handleToggleAlert} color="danger">
+              {this.state.error}
+            </UncontrolledAlert>
+          </Col>
         </Row>
         <Row>
           <Col>
