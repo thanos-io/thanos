@@ -102,10 +102,24 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
             </a>
           </div>
           <div style={{ marginTop: '12px' }}>
-            <Button onClick={() => setModalAction('DELETION')}>Mark Deletion</Button>
+            <Button
+              onClick={() => {
+                setModalAction('DELETION');
+                setDetailValue('');
+              }}
+            >
+              Mark Deletion
+            </Button>
           </div>
           <div style={{ marginTop: '12px' }}>
-            <Button onClick={() => setModalAction('NO COMPACTION')}>Mark No Compaction</Button>
+            <Button
+              onClick={() => {
+                setModalAction('NO COMPACTION');
+                setDetailValue('');
+              }}
+            >
+              Mark No Compaction
+            </Button>
           </div>
           <Modal isOpen={modalAction ? true : false}>
             <ModalBody>
