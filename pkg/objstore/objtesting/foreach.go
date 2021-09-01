@@ -4,6 +4,7 @@
 package objtesting
 
 import (
+	"github.com/thanos-io/thanos/pkg/objstore/ks3"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -154,6 +155,19 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 	if !IsObjStoreSkipped(t, client.BOS) {
 		t.Run("Baidu BOS", func(t *testing.T) {
 			bkt, closeFn, err := bos.NewTestBucket(t)
+			testutil.Ok(t, err)
+
+			t.Parallel()
+			defer closeFn()
+
+			testFn(t, bkt)
+		})
+	}
+
+	// Optional KS3.
+	if !IsObjStoreSkipped(t, client.KS3) {
+		t.Run("KsYun ks3", func(t *testing.T) {
+			bkt, closeFn, err := ks3.NewTestBucket(t, "BEIJING")
 			testutil.Ok(t, err)
 
 			t.Parallel()
