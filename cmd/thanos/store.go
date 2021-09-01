@@ -361,18 +361,17 @@ func runStore(
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 			level.Info(logger).Log("msg", "initializing bucket store")
-			// note(someshkoli): flag required to input interval duration ?
-			if err := runutil.RetryWithLog(logger, time.Second*2, ctx.Done(), func() error {
+			begin := time.Now()
+
+			if err := runutil.RetryWithTimeout(logger, time.Second*2, time.Minute*5, ctx.Done(), func() error {
 				if err := bs.InitialSync(ctx); err != nil {
 					return errors.Wrap(err, "bucket store initial sync")
 				}
 				return nil
 			}); err != nil {
 				runutil.CloseWithLogOnErr(logger, bs, "bucket store")
-				return err
+				return errors.Wrap(err, "bucket store initial sync")
 			}
-
-			begin := time.Now()
 
 			level.Info(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
 			close(bucketStoreReady)

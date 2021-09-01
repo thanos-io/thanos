@@ -107,6 +107,26 @@ func RetryWithLog(logger log.Logger, interval time.Duration, stopc <-chan struct
 	}
 }
 
+func RetryWithTimeout(logger log.Logger, interval time.Duration, timeout time.Duration, stopc <-chan struct{}, f func() error) error {
+	tick := time.NewTicker(interval)
+	till := time.After(timeout)
+
+	var err error
+	for {
+		if err = f(); err == nil {
+			return nil
+		}
+		level.Error(logger).Log("msg", "function failed. Retrying in next tick", "err", err)
+		select {
+		case <-stopc:
+			return err
+		case <-till:
+			return fmt.Errorf("Timeout")
+		case <-tick.C:
+		}
+	}
+}
+
 // CloseWithLogOnErr is making sure we log every error, even those from best effort tiny closers.
 func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...interface{}) {
 	err := closer.Close()
