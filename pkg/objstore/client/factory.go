@@ -6,7 +6,6 @@ package client
 import (
 	"context"
 	"fmt"
-
 	"strings"
 
 	"github.com/go-kit/kit/log"
