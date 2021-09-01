@@ -10,7 +10,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+## v0.23.0 - In Progress
+
 ### Added
+
 - [#4453](https://github.com/thanos-io/thanos/pull/4453) Tools: Add flag `--selector.relabel-config-file` / `--selector.relabel-config` / `--max-time` / `--min-time` to filter served blocks.
 - [#4482](https://github.com/thanos-io/thanos/pull/4482) COS: Add http_config for cos object store client.
 - [#4487](https://github.com/thanos-io/thanos/pull/4487) Query: Add memcached auto discovery support.
