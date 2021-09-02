@@ -124,7 +124,7 @@ A sample of the configuration of tenants and their respective infrastructure:
 ]
 ```
 
-To start, exact matches of tenant IDs will be used to distribute requests to receive endpoints. Should it be necessary, more sophisticated mechanisms can be added later. When a request is received, the tenant specified in the request is tested against the configured allowed tenants for each hashring until an exact match is found. If a hashring specifies no explicit tenants, then any tenant is considered a valid match; this allows for a cluster to provide soft-tenancy. Requests whose tenant ID matches no other hashring explicitly, will automatically land in this soft tenancy hashring. If no matching hashring is found and no soft tenancy is configured, the receiver responds with an error.
+Hashrings are processed in the order they are defined in the configuration. Exact matches of tenant IDs will be used to distribute requests to receive endpoints in the first matching hashring. If a hashring specifies no explicit tenants, then any tenant is considered a valid match; this allows for a cluster to provide soft tenancy. Should it be necessary, more sophisticated mechanisms can be added later. When a request is received, the tenant specified in the request is tested against the configured allowed tenants for each hashring until an exact match or until a soft tenant is found.  If no matching hashring is found and no soft tenancy is configured, the receiver responds with an error.
 
 ```
                                   Soft tenant hashring
