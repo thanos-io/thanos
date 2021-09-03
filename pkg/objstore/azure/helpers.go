@@ -39,26 +39,7 @@ func init() {
 
 func getAzureStorageCredentials(logger log.Logger, conf Config) (blob.Credential, error) {
 	if conf.MSIResource != "" || conf.UserAssignedID != "" {
-		resource := conf.MSIResource
-		if resource == "" {
-			resource = fmt.Sprintf("https://%s.%s", conf.StorageAccountName, conf.Endpoint)
-		}
-
-		var (
-			spt *adal.ServicePrincipalToken
-			err error
-		)
-
-		if conf.UserAssignedID != "" {
-			level.Debug(logger).Log("msg", "using user assigned identity:", conf.UserAssignedID)
-			spt, err = adal.NewServicePrincipalTokenFromMSIWithUserAssignedID("", resource, conf.UserAssignedID)
-		} else {
-			level.Debug(logger).Log("msg", "using system assigned identity")
-			msiConfig := auth.NewMSIConfig()
-			msiConfig.Resource = conf.MSIResource
-			spt, err = msiConfig.ServicePrincipalToken()
-		}
-
+		spt, err := getServicePrincipalToken(logger, conf)
 		if err != nil {
 			return nil, err
 		}
@@ -83,6 +64,23 @@ func getAzureStorageCredentials(logger log.Logger, conf Config) (blob.Credential
 		return nil, err
 	}
 	return credential, nil
+}
+
+func getServicePrincipalToken(logger log.Logger, conf Config) (*adal.ServicePrincipalToken, error) {
+	resource := conf.MSIResource
+	if resource == "" {
+		resource = fmt.Sprintf("https://%s.%s", conf.StorageAccountName, conf.Endpoint)
+	}
+
+	if conf.UserAssignedID != "" {
+		level.Debug(logger).Log("msg", "using user assigned identity:", conf.UserAssignedID)
+		return adal.NewServicePrincipalTokenFromMSIWithUserAssignedID("", resource, conf.UserAssignedID)
+	}
+
+	level.Debug(logger).Log("msg", "using system assigned identity")
+	msiConfig := auth.NewMSIConfig()
+	msiConfig.Resource = conf.MSIResource
+	return msiConfig.ServicePrincipalToken()
 }
 
 func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.ContainerURL, error) {
