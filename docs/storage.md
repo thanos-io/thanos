@@ -314,6 +314,7 @@ config:
   endpoint: ""
   max_retries: 0
   msi_resource: ""
+  user_assigned_id: ""
   pipeline_config:
     max_tries: 0
     try_timeout: 0s
@@ -333,7 +334,11 @@ config:
     disable_compression: false
 ```
 
-If `msi_resource` is used, authentication is done via ServicePrincipalToken. The value for Azure should be `https://<storage-account-name>.blob.core.windows.net`. The generic `max_retries` will be used as value for the `pipeline_config`'s `max_tries` and `reader_config`'s `max_retry_requests`. For more control, `max_retries` could be ignored (0) and one could set specific retry values.
+If `msi_resource` is used, authentication is done via system-assigned managed identity. The value for Azure should be `https://<storage-account-name>.blob.core.windows.net`.
+
+If `user_assigned_id` is used, authentication is done via user-assigned managed identity. When using `user_assigned_id` the `msi_resource` defaults to `https://<storage_account>.<endpoint>`
+
+The generic `max_retries` will be used as value for the `pipeline_config`'s `max_tries` and `reader_config`'s `max_retry_requests`. For more control, `max_retries` could be ignored (0) and one could set specific retry values.
 
 #### OpenStack Swift
 
