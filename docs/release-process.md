@@ -12,7 +12,7 @@ We aim for regular and strict one release per *6 weeks*. 6 weeks is counter from
 
 No feature should block release.
 
-Additionally we (obviously) aim for `main` branch being stable.
+Additionally, we (obviously) aim for `main` branch being stable.
 
 We are assigning a release shepherd for each minor release.
 
@@ -24,8 +24,8 @@ Release shepherd responsibilities:
 | Release | Time of first RC     | Shepherd (GitHub handle)    |
 |---------|----------------------|-----------------------------|
 | v0.24.0 | (planned) 2021.09.28 | No one ATM                  |
-| v0.23.0 | (planned) 2021.08.17 | `@bwplotka`                 |
-| v0.22.0 | (planned) 2021.07.06 | `@GiedriusS`                |
+| v0.23.0 | 2021.09.01           | `@bwplotka`                 |
+| v0.22.0 | 2021.07.06           | `@GiedriusS`                |
 | v0.21.0 | 2021.05.28           | `@metalmatze` and `@onprem` |
 | v0.20.0 | 2021.04.23           | `@kakkoyun`                 |
 | v0.19.0 | 2021.03.02           | `@bwplotka`                 |

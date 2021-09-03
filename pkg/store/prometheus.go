@@ -6,7 +6,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,7 +21,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -200,6 +198,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	}
 
 	queryPrometheusSpan, ctx := tracing.StartSpan(s.Context(), "query_prometheus")
+	queryPrometheusSpan.SetTag("query.request", q.String())
 
 	httpResp, err := p.startPromRemoteRead(ctx, q)
 	if err != nil {
@@ -220,7 +219,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	return p.handleStreamedPrometheusResponse(s, httpResp, queryPrometheusSpan, extLset)
 }
 
-func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_SeriesServer, httpResp *http.Response, querySpan opentracing.Span, extLset labels.Labels) error {
+func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_SeriesServer, httpResp *http.Response, querySpan tracing.Span, extLset labels.Labels) error {
 	ctx := s.Context()
 
 	level.Debug(p.logger).Log("msg", "started handling ReadRequest_SAMPLED response type.")
@@ -266,7 +265,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_Series
 	return nil
 }
 
-func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_SeriesServer, httpResp *http.Response, querySpan opentracing.Span, extLset labels.Labels) error {
+func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_SeriesServer, httpResp *http.Response, querySpan tracing.Span, extLset labels.Labels) error {
 	level.Debug(p.logger).Log("msg", "started handling ReadRequest_STREAMED_XOR_CHUNKS streamed read response.")
 
 	framesNum := 0
@@ -278,13 +277,14 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 	}()
 	defer runutil.CloseWithLogOnErr(p.logger, httpResp.Body, "prom series request body")
 
-	var (
-		data = p.getBuffer()
-	)
+	var data = p.getBuffer()
 	defer p.putBuffer(data)
 
+	bodySizer := NewBytesRead(httpResp.Body)
+	seriesStats := &storepb.SeriesStatsCounter{}
+
 	// TODO(bwplotka): Put read limit as a flag.
-	stream := remote.NewChunkedReader(httpResp.Body, remote.DefaultChunkedReadLimit, *data)
+	stream := remote.NewChunkedReader(bodySizer, remote.DefaultChunkedReadLimit, *data)
 	for {
 		res := &prompb.ChunkedReadResponse{}
 		err := stream.NextProto(res)
@@ -301,6 +301,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 
 		framesNum++
 		for _, series := range res.ChunkedSeries {
+			seriesStats.CountSeries(series.Labels)
 			thanosChks := make([]storepb.AggrChunk, len(series.Chunks))
 			for i, chk := range series.Chunks {
 				thanosChks[i] = storepb.AggrChunk{
@@ -314,6 +315,9 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 						Type: storepb.Chunk_Encoding(chk.Type - 1),
 					},
 				}
+				seriesStats.Samples += thanosChks[i].Raw.XORNumSamples()
+				seriesStats.Chunks++
+
 				// Drop the reference to data from non protobuf for GC.
 				series.Chunks[i].Data = nil
 			}
@@ -328,8 +332,32 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 			}
 		}
 	}
+
+	querySpan.SetTag("processed.series", seriesStats.Series)
+	querySpan.SetTag("processed.chunks", seriesStats.Chunks)
+	querySpan.SetTag("processed.samples", seriesStats.Samples)
+	querySpan.SetTag("processed.bytes", bodySizer.BytesCount())
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_STREAMED_XOR_CHUNKS request.", "frames", framesNum)
 	return nil
+}
+
+type BytesCounter struct {
+	io.ReadCloser
+	bytesCount int
+}
+
+func NewBytesRead(rc io.ReadCloser) *BytesCounter {
+	return &BytesCounter{ReadCloser: rc}
+}
+
+func (s *BytesCounter) Read(p []byte) (n int, err error) {
+	n, err = s.ReadCloser.Read(p)
+	s.bytesCount += n
+	return n, err
+}
+
+func (s *BytesCounter) BytesCount() int {
+	return s.bytesCount
 }
 
 func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.Response) (_ *prompb.ReadResponse, err error) {
@@ -392,18 +420,13 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 	return chks, nil
 }
 
-func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Query) (presp *http.Response, _ error) {
+func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Query) (presp *http.Response, err error) {
 	reqb, err := proto.Marshal(&prompb.ReadRequest{
 		Queries:               []*prompb.Query{q},
 		AcceptedResponseTypes: p.remoteReadAcceptableResponses,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal read request")
-	}
-
-	qjson, err := json.Marshal(q)
-	if err != nil {
-		return nil, errors.Wrap(err, "json encode query for tracing")
 	}
 
 	u := *p.base
@@ -418,10 +441,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 	preq.Header.Set("X-Prometheus-Remote-Read-Version", "0.1.0")
 
 	preq.Header.Set("User-Agent", thanoshttp.ThanosUserAgent)
-	tracing.DoInSpan(ctx, "query_prometheus_request", func(ctx context.Context) {
-		preq = preq.WithContext(ctx)
-		presp, err = p.client.Do(preq)
-	}, opentracing.Tag{Key: "prometheus.query", Value: string(qjson)})
+	presp, err = p.client.Do(preq.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "send request")
 	}
@@ -487,7 +507,7 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encodin
 
 // LabelNames returns all known label names.
 func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
-	lbls, err := p.client.LabelNamesInGRPC(ctx, p.base, nil, r.Start, r.End)
+	lbls, err := p.client.LabelNamesInGRPC(ctx, p.base, r.Matchers, r.Start, r.End)
 	if err != nil {
 		return nil, err
 	}

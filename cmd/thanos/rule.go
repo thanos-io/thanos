@@ -303,7 +303,9 @@ func runRule(
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
 	var queryClients []*http_util.Client
+	queryClientMetrics := extpromhttp.NewClientMetrics(extprom.WrapRegistererWith(prometheus.Labels{"client": "query"}, reg))
 	for _, cfg := range queryCfg {
+		cfg.HTTPClientConfig.ClientMetrics = queryClientMetrics
 		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "query")
 		if err != nil {
 			return err
@@ -318,7 +320,7 @@ func runRule(
 		addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
 	}
 
-	db, err := tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
+	db, err := tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
 	if err != nil {
 		return errors.Wrap(err, "open TSDB")
 	}
@@ -374,7 +376,11 @@ func runRule(
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
 	var alertmgrs []*alert.Alertmanager
+	amClientMetrics := extpromhttp.NewClientMetrics(
+		extprom.WrapRegistererWith(prometheus.Labels{"client": "alertmanager"}, reg),
+	)
 	for _, cfg := range alertingCfg.Alertmanagers {
+		cfg.HTTPClientConfig.ClientMetrics = amClientMetrics
 		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
 		if err != nil {
 			return err
@@ -436,6 +442,10 @@ func runRule(
 			},
 			queryFuncCreator(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod),
 			conf.lset,
+			// In our case the querying URL is the external URL because in Prometheus
+			// --web.external-url points to it i.e. it points at something where the user
+			// could execute the alert or recording rule's expression and get results.
+			conf.alertQueryURL.String(),
 		)
 
 		// Schedule rule manager that evaluates rules.

@@ -677,15 +677,26 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		names    []string
 		warnings storage.Warnings
 	)
-	// TODO(yeya24): push down matchers to Store level.
+
 	if len(matcherSets) > 0 {
-		// Get all series which match matchers.
-		var sets []storage.SeriesSet
-		for _, mset := range matcherSets {
-			s := q.Select(false, nil, mset...)
-			sets = append(sets, s)
+		var callWarnings storage.Warnings
+		labelNamesSet := make(map[string]struct{})
+		for _, matchers := range matcherSets {
+			names, callWarnings, err = q.LabelNames(matchers...)
+			if err != nil {
+				return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+			}
+			warnings = append(warnings, callWarnings...)
+			for _, val := range names {
+				labelNamesSet[val] = struct{}{}
+			}
 		}
-		names, warnings, err = labelNamesByMatchers(sets)
+
+		names = make([]string, 0, len(labelNamesSet))
+		for name := range labelNamesSet {
+			names = append(names, name)
+		}
+		sort.Strings(names)
 	} else {
 		names, warnings, err = q.LabelNames()
 	}
@@ -898,31 +909,6 @@ func parseDuration(s string) (time.Duration, error) {
 		return time.Duration(d), nil
 	}
 	return 0, errors.Errorf("cannot parse %q to a valid duration", s)
-}
-
-// Modified from https://github.com/eklockare/prometheus/blob/6178-matchers-with-label-values/web/api/v1/api.go#L571-L591.
-// labelNamesByMatchers uses matchers to filter out matching series, then label names are extracted.
-func labelNamesByMatchers(sets []storage.SeriesSet) ([]string, storage.Warnings, error) {
-	set := storage.NewMergeSeriesSet(sets, storage.ChainedSeriesMerge)
-	labelNamesSet := make(map[string]struct{})
-	for set.Next() {
-		series := set.At()
-		for _, lb := range series.Labels() {
-			labelNamesSet[lb.Name] = struct{}{}
-		}
-	}
-
-	warnings := set.Warnings()
-	if set.Err() != nil {
-		return nil, warnings, set.Err()
-	}
-	// Convert the map to an array.
-	labelNames := make([]string, 0, len(labelNamesSet))
-	for key := range labelNamesSet {
-		labelNames = append(labelNames, key)
-	}
-	sort.Strings(labelNames)
-	return labelNames, warnings, nil
 }
 
 // NewMetricMetadataHandler creates handler compatible with HTTP /api/v1/metadata https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metric-metadata
