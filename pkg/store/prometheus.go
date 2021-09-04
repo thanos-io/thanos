@@ -56,7 +56,8 @@ type PrometheusStore struct {
 	framesRead prometheus.Histogram
 }
 
-// LabelValues call with matchers is supported for Prometheus versions >= 2.24.0 .
+// Label{Values,Names} call with matchers is supported for Prometheus versions >= 2.24.0.
+// https://github.com/prometheus/prometheus/commit/caa173d2aac4c390546b1f78302104b1ccae0878.
 var baseVer, _ = semver.Make("2.24.0")
 
 const initialBufSize = 32 * 1024 // 32KB seems like a good minimum starting size for sync pool size.
@@ -505,12 +506,45 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encodin
 	return storepb.Chunk_XOR, c.Bytes(), nil
 }
 
-// LabelNames returns all known label names.
+// LabelNames returns all known label names of series that match the given matchers.
 func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
-	lbls, err := p.client.LabelNamesInGRPC(ctx, p.base, r.Matchers, r.Start, r.End)
-	if err != nil {
-		return nil, err
+	lnc := false
+	v := p.promVersion()
+	lbls := []string{}
+
+	version, err := semver.Parse(v)
+	if err == nil && version.GTE(baseVer) {
+		lnc = true
 	}
+
+	if lnc || len(r.Matchers) == 0 {
+		lbls, err = p.client.LabelNamesInGRPC(ctx, p.base, r.Matchers, r.Start, r.End)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		sers, err := p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
+		if err != nil {
+			return nil, err
+		}
+
+		// Using set to handle duplicate values.
+		labelNamesSet := make(map[string]struct{})
+		for _, s := range sers {
+			for labelName := range s {
+				labelNamesSet[labelName] = struct{}{}
+			}
+		}
+
+		for key := range labelNamesSet {
+			lbls = append(lbls, key)
+		}
+	}
+
 	return &storepb.LabelNamesResponse{Names: lbls}, nil
 }
 
