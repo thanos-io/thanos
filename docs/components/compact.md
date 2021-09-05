@@ -68,7 +68,7 @@ In Prometheus, this can be triggered by setting hidden flag in Prometheus and pu
 
 In Thanos, it works similarly, but on bigger scale and using external labels for grouping as explained in [Compaction section](#compaction).
 
-In both systems, series with the same labels are merged together. In prometheus, merging samples is **naive**. It works by deduplicating samples within exactly the same timestamps. Otherwise samples are added in sorted by time order. Thanos also support a new penalty based samples merger and it is explained in [Deduplication](#Vertical Compaction Use Cases).
+In both systems, series with the same labels are merged together. In prometheus, merging samples is **naive**. It works by deduplicating samples within exactly the same timestamps. Otherwise samples are added in sorted by time order. Thanos also support a new penalty based samples merger and it is explained in [Deduplication](#vertical-compaction-use-cases).
 
 > **NOTE:** Both Prometheus and Thanos default behaviour is to fail compaction if any overlapping blocks are spotted. (For Thanos, within the same external labels).
 
