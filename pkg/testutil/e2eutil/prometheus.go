@@ -94,7 +94,7 @@ func NewTSDB() (*tsdb.DB, error) {
 	}
 	opts := tsdb.DefaultOptions()
 	opts.RetentionDuration = math.MaxInt64
-	return tsdb.Open(dir, nil, nil, opts)
+	return tsdb.Open(dir, nil, nil, opts, nil)
 }
 
 func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
@@ -430,7 +430,7 @@ func createBlock(
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = filepath.Join(dir, "chunks")
 	headOpts.ChunkRange = 10000000000
-	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}

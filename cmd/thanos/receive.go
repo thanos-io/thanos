@@ -75,6 +75,7 @@ func registerReceive(app *extkingpin.App) {
 			WALCompression:         conf.walCompression,
 			AllowOverlappingBlocks: conf.tsdbAllowOverlappingBlocks,
 			MaxExemplars:           conf.tsdbMaxExemplars,
+			EnableExemplarStorage:  true,
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -695,7 +696,7 @@ type receiveConfig struct {
 	tsdbMinBlockDuration       *model.Duration
 	tsdbMaxBlockDuration       *model.Duration
 	tsdbAllowOverlappingBlocks bool
-	tsdbMaxExemplars           int
+	tsdbMaxExemplars           int64
 
 	walCompression bool
 	noLockFile     bool
@@ -773,7 +774,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"Enables support for ingesting exemplars and sets the maximum number of exemplars that will be stored per tenant."+
 			" In case the exemplar storage becomes full (number of stored exemplars becomes equal to max-exemplars),"+
 			" ingesting a new exemplar will evict the oldest exemplar from storage. 0 (or less) value of this flag disables exemplars storage.").
-		Default("0").IntVar(&rc.tsdbMaxExemplars)
+		Default("0").Int64Var(&rc.tsdbMaxExemplars)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")

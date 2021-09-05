@@ -10,7 +10,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+## v0.23.0 - In Progress
+
 ### Added
+
 - [#4453](https://github.com/thanos-io/thanos/pull/4453) Tools: Add flag `--selector.relabel-config-file` / `--selector.relabel-config` / `--max-time` / `--min-time` to filter served blocks.
 - [#4482](https://github.com/thanos-io/thanos/pull/4482) COS: Add http_config for cos object store client.
 - [#4487](https://github.com/thanos-io/thanos/pull/4487) Query: Add memcached auto discovery support.
@@ -21,6 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4506](https://github.com/thanos-io/thanos/pull/4506) `Baidu BOS` object storage, see [documents](docs/storage.md#baidu-bos) for further information.
 - [#4552](https://github.com/thanos-io/thanos/pull/4552) Compact: Adds `thanos_compact_downsample_duration_seconds` histogram.
 - [#4594](https://github.com/thanos-io/thanos/pull/4594) reloader: Expose metrics in config reloader to give info on the last operation.
+- [#4623](https://github.com/thanos-io/thanos/pull/4623) query-frontend: made HTTP downstream tripper (client) configurable via parameters `--query-range.downstream-tripper-config` and `--query-range.downstream-tripper-config-file`. If your downstream URL is localhost or 127.0.0.1 then it is strongly recommended to bump `max_idle_conns_per_host` to at least 100 so that `query-frontend` could properly use HTTP keep-alive connections and thus reduce the latency of `query-frontend` by about 20%.
 
 ### Fixed
 
@@ -30,7 +34,9 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4607](https://github.com/thanos-io/thanos/pull/4607) Azure: Fix Azure MSI Rate Limit
 
 ### Changed
+
 - [#4519](https://github.com/thanos-io/thanos/pull/4519) Query: switch to miekgdns DNS resolver as the default one.
+- [#4586](https://github.com/thanos-io/thanos/pull/4586) Update Prometheus/Cortex dependencies and implement LabelNames() pushdown as a result; provides massive speed-up for the labels API in Thanos Query.
 
 ## [v0.22.0](https://github.com/thanos-io/thanos/tree/release-0.22) - 2021.07.22
 

@@ -103,6 +103,22 @@ Query Frontend supports `--query-frontend.log-queries-longer-than` flag to log q
 
 Naming is hard :) Please check [here](https://github.com/thanos-io/thanos/pull/2434#discussion_r408300683) to see why we chose `query-frontend` as the name.
 
+## Recommended Downstream Tripper Configuration
+
+You can configure the parameters of the HTTP client that `query-frontend` uses for the downstream URL with parameters `--query-range.downstream-tripper-config` and `--query-range.downstream-tripper-config-file`. If it is pointing to a single host, most likely a load-balancer, then it is highly recommended to increase `max_idle_conns_per_host` via these parameters to at least 100 because otherwise `query-frontend` will not be able to leverage HTTP keep-alive connections, and the latency will be 10 - 20% higher. By default, the Go HTTP client will only keep two idle connections per each host.
+
+Keys which denote a duration are strings that can end with `s` or `m` to indicate seconds or minutes respectively. All of the other keys are integers. Supported keys are:
+
+* `idle_conn_timeout` - timeout of idle connections (string);
+* `response_header_timeout` - maximum duration to wait for a response header (string);
+* `tls_handshake_timeout` - maximum duration of a TLS handshake (string);
+* `expect_continue_timeout` - [Go source code](https://github.com/golang/go/blob/912f0750472dd4f674b69ca1616bfaf377af1805/src/net/http/transport.go#L220-L226) (string);
+* `max_idle_conns` - maximum number of idle connections to all hosts (integer);
+* `max_idle_conns_per_host` - maximum number of idle connections to each host (integer);
+* `max_conns_per_host` - maximum number of connections to each host (integer);
+
+You can find the default values [here](https://github.com/thanos-io/thanos/blob/55cb8ca38b3539381dc6a781e637df15c694e50a/pkg/exthttp/transport.go#L12-L27).
+
 ## Flags
 
 ```$ mdox-exec="thanos query-frontend --help"
@@ -170,6 +186,21 @@ Flags:
                                  Disable request logging.
       --query-frontend.compress-responses  
                                  Compress HTTP responses.
+      --query-frontend.downstream-tripper-config=<content>  
+                                 Alternative to
+                                 'query-frontend.downstream-tripper-config-file'
+                                 flag (mutually exclusive). Content of YAML file
+                                 that contains downstream tripper configuration.
+                                 If your downstream URL is localhost or
+                                 127.0.0.1 then it is highly recommended to
+                                 increase max_idle_conns_per_host to at least
+                                 100.
+      --query-frontend.downstream-tripper-config-file=<file-path>  
+                                 Path to YAML file that contains downstream
+                                 tripper configuration. If your downstream URL
+                                 is localhost or 127.0.0.1 then it is highly
+                                 recommended to increase max_idle_conns_per_host
+                                 to at least 100.
       --query-frontend.downstream-url="http://localhost:9090"  
                                  URL of downstream Prometheus Query compatible
                                  API.

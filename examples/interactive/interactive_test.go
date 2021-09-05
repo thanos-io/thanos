@@ -18,6 +18,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	tracingclient "github.com/thanos-io/thanos/pkg/tracing/client"
+	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"gopkg.in/yaml.v2"
 )
 
@@ -84,7 +86,8 @@ func createData() (perr error) {
 	return nil
 }
 
-// Test args: -test.timeout 9999m
+// TestReadOnlyThanosSetup runs read only Thanos setup that has data from `maxTimeFresh - 2w` to `maxTimeOld`, with extra monitoring and tracing for full playground experience.
+// Run with test args `-test.timeout 9999m`.
 func TestReadOnlyThanosSetup(t *testing.T) {
 	t.Skip("This is interactive test - it will until you will kill it or curl 'finish' endpoint. Uncomment and run as normal test to use it!")
 
@@ -121,6 +124,21 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	testutil.Ok(t, exec("cp", "-r", store1Data+"/.", filepath.Join(m1.Dir(), "bkt1")))
 	testutil.Ok(t, exec("cp", "-r", store2Data+"/.", filepath.Join(m1.Dir(), "bkt2")))
 
+	// Setup Jaeger.
+	j := e.Runnable("tracing").WithPorts(map[string]int{"http-front": 16686, "jaeger.thrift": 14268}).Init(e2e.StartOptions{Image: "jaegertracing/all-in-one:1.25"})
+	testutil.Ok(t, e2e.StartAndWaitReady(j))
+
+	jaegerConfig, err := yaml.Marshal(tracingclient.TracingConfig{
+		Type: tracingclient.JAEGER,
+		Config: jaeger.Config{
+			ServiceName:  "thanos",
+			SamplerType:  "const",
+			SamplerParam: 1,
+			Endpoint:     "http://" + j.InternalEndpoint("jaeger.thrift") + "/api/traces",
+		},
+	})
+	testutil.Ok(t, err)
+
 	// Create two store gateways, one for each bucket (access point to long term storage).
 	//	                    ┌───────────┐
 	//	                    │           │
@@ -144,7 +162,13 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 		},
 	})
 	testutil.Ok(t, err)
-	store1 := e2edb.NewThanosStore(e, "store1", bkt1Config, e2edb.WithImage("thanos:latest"))
+	store1 := e2edb.NewThanosStore(
+		e,
+		"store1",
+		bkt1Config,
+		e2edb.WithImage("thanos:latest"),
+		e2edb.WithFlagOverride(map[string]string{"--tracing.config": string(jaegerConfig)}),
+	)
 
 	bkt2Config, err := yaml.Marshal(client.BucketConfig{
 		Type: client.S3,
@@ -157,7 +181,14 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 		},
 	})
 	testutil.Ok(t, err)
-	store2 := e2edb.NewThanosStore(e, "store2", bkt2Config, e2edb.WithImage("thanos:latest"))
+
+	store2 := e2edb.NewThanosStore(
+		e,
+		"store2",
+		bkt2Config,
+		e2edb.WithImage("thanos:latest"),
+		e2edb.WithFlagOverride(map[string]string{"--tracing.config": string(jaegerConfig)}),
+	)
 
 	// Create two Prometheus replicas in HA, and one separate one (short term storage + scraping).
 	// Add a Thanos sidecar.
@@ -189,8 +220,8 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	promHA1 := e2edb.NewPrometheus(e, "prom-ha1")
 	prom2 := e2edb.NewPrometheus(e, "prom2")
 
-	sidecarHA0 := e2edb.NewThanosSidecar(e, "sidecar-prom-ha0", promHA0, e2edb.WithImage("thanos:latest"))
-	sidecarHA1 := e2edb.NewThanosSidecar(e, "sidecar-prom-ha1", promHA1, e2edb.WithImage("thanos:latest"))
+	sidecarHA0 := e2edb.NewThanosSidecar(e, "sidecar-prom-ha0", promHA0, e2edb.WithImage("thanos:latest"), e2edb.WithFlagOverride(map[string]string{"--tracing.config": string(jaegerConfig)}))
+	sidecarHA1 := e2edb.NewThanosSidecar(e, "sidecar-prom-ha1", promHA1, e2edb.WithImage("thanos:latest"), e2edb.WithFlagOverride(map[string]string{"--tracing.config": string(jaegerConfig)}))
 	sidecar2 := e2edb.NewThanosSidecar(e, "sidecar2", prom2, e2edb.WithImage("thanos:latest"))
 
 	testutil.Ok(t, exec("cp", "-r", prom1Data+"/.", promHA0.Dir()))
@@ -273,7 +304,9 @@ global:
 			sidecarHA0.InternalEndpoint("grpc"),
 			sidecarHA1.InternalEndpoint("grpc"),
 			sidecar2.InternalEndpoint("grpc"),
-		}, e2edb.WithImage("thanos:latest"),
+		},
+		e2edb.WithImage("thanos:latest"),
+		e2edb.WithFlagOverride(map[string]string{"--tracing.config": string(jaegerConfig)}),
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(query1))
 
@@ -285,6 +318,9 @@ global:
 	testutil.Ok(t, e2einteractive.OpenInBrowser(fmt.Sprintf("http://%s/%s", query1.Endpoint("http"), path)))
 	testutil.Ok(t, e2einteractive.OpenInBrowser(fmt.Sprintf("http://%s/%s", prom2.Endpoint("http"), path)))
 
+	// Tracing endpoint.
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+j.Endpoint("http-front")))
+	// Monitoring Endpoint.
 	testutil.Ok(t, m.OpenUserInterfaceInBrowser())
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
