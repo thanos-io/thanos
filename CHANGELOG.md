@@ -13,6 +13,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 - [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: add `exemplar.partial-response` flag to control partial response.
 
+### Fixed
+
+- [#4508](https://github.com/thanos-io/thanos/pull/4508) Adjust and rename `ThanosSidecarUnhealthy` to `ThanosSidecarNoConnectionToStartedPrometheus`; Remove `ThanosSidecarPrometheusDown` alert; Remove unused `thanos_sidecar_last_heartbeat_success_time_seconds` metrics.
+
 ## v0.23.0 - In Progress
 
 ### Added
@@ -36,7 +40,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4476](https://github.com/thanos-io/thanos/pull/4476) UI: fix incorrect html escape sequence used for '>' symbol.
 - [#4532](https://github.com/thanos-io/thanos/pull/4532) Mixin: Fixed "all jobs" selector in thanos mixin dashboards.
 - [#4607](https://github.com/thanos-io/thanos/pull/4607) Azure: Fix Azure MSI Rate Limit
-- [#4508](https://github.com/thanos-io/thanos/pull/4508) Adjust and rename `ThanosSidecarUnhealthy` to `ThanosSidecarNoConnectionToStartedPrometheus`; Remove `ThanosSidecarPrometheusDown`.
 
 ### Changed
 
