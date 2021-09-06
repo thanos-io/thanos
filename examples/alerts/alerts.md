@@ -306,14 +306,18 @@ rules:
   for: 5m
   labels:
     severity: critical
-- alert: ThanosSidecarUnhealthy
+- alert: ThanosSidecarNoConnectionToStartedPrometheus
   annotations:
     description: Thanos Sidecar {{$labels.instance}} is unhealthy for more than {{$value}}
       seconds.
-    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy
-    summary: Thanos Sidecar is unhealthy.
+    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus
+    summary: Thanos Sidecar cannot access Prometheus, even though Prometheus seems
+      healthy and has reloaded WAL.
   expr: |
-    time() - max by (job, instance) (thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}) >= 240
+    time() - max by (pod, job, instance) (thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}) >= 240
+    AND on (pod) (
+    min by (pod) (prometheus_tsdb_data_replay_duration_seconds) != 0
+    )
   for: 5m
   labels:
     severity: critical

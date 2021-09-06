@@ -46,7 +46,7 @@
   },
   sidecar+:: {
     selector: 'job=~".*thanos-sidecar.*"',
-    thanosPrometheusCommonDimensions: 'pod',
+    thanosPrometheusCommonDimensions: 'namespace, pod',
     title: '%(prefix)sSidecar' % $.dashboard.prefix,
   },
   // TODO(kakkoyun): Fix naming convention: bucketReplicate

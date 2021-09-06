@@ -28,14 +28,13 @@
           {
             alert: 'ThanosSidecarNoConnectionToStartedPrometheus',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}}%s is unhealthy for more than {{$value}} seconds.' % location,
+              description: 'Thanos Sidecar {{$labels.instance}}%s is unhealthy.' % location,
               summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.',
             },
             expr: |||
-              time() - max by (%(thanosPrometheusCommonDimensions)s, %(dimensions)s) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 240
-              AND on (%(thanosPrometheusCommonDimensions)s) (
-              min by (%(thanosPrometheusCommonDimensions)s) (prometheus_tsdb_data_replay_duration_seconds) != 0
-              )
+              thanos_sidecar_prometheus_up{%(selector)s} == 0
+              AND on (%(thanosPrometheusCommonDimensions)s)
+              prometheus_tsdb_data_replay_duration_seconds != 0
             ||| % thanos.sidecar,
             'for': '5m',
             labels: {
