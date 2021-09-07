@@ -1,6 +1,6 @@
 # Interactive Example
 
-The interactive example in `examples/interactive` can be run by Linux users. It is not yet supported for MacOS users.   
+The interactive example in `examples/interactive` can be run by Linux users. It is not yet supported for MacOS users. Refer to [#4642](https://github.com/thanos-io/thanos/issues/4642) to track the status of this issue.   
 
 To run the example, run the following commands:
 1. Navigate to the `examples/interactive` directory.
