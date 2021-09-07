@@ -210,7 +210,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 	// We want to prevent this from happening for the async store API calls we make while preserving tracing context.
 	ctx := tracing.CopyTraceContext(context.Background(), q.ctx)
 	// The timeout value at q.ctx would contain least of {global Query timeout, per-request timeout}.
-	// For q.ctx, 'per-request timeout' is set pkg/api/query/v1.go (query(),query_range()) and later in call chain 'global Query timeout' is set at prometheus/promql/engine.go (exec()).
+	// For q.ctx, 'per-request timeout' is set by Thanos Query component and later replaced by 'global Query timeout' at downstream promql package of upstream Prometheus.
 	requestCancelTime, _ := q.ctx.Deadline()
 	requestTimeOut := time.Until(requestCancelTime)
 	ctx, cancel := context.WithTimeout(ctx, requestTimeOut)
