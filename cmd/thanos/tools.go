@@ -25,6 +25,7 @@ type toolsConfig struct {
 func registerTools(app *extkingpin.App) {
 	cmd := app.Command("tools", "Tools utility commands")
 
+	registerBucket(cmd)
 	registerCheckRules(cmd)
 }
 

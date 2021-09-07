@@ -74,6 +74,49 @@ var (
 	inspectColumns = []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-DOWN", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "LABELS", "RESOLUTION", "SOURCE"}
 )
 
+type toolsBucketConfig struct {
+	repair                bool
+	issuesToVerify        []string
+	ids                   []string
+	output                string
+	blockIDs              []string
+	tmpDir                string
+	selector              []string
+	timeout               time.Duration
+	webRoutePrefix        string
+	webExternalPrefix     string
+	webPrefixHeaderName   string
+	webDisableCORS        bool
+	interval              time.Duration
+	label                 string
+	resolutions           []time.Duration
+	compactions           []int
+	matcherStrs           []string
+	singleRun             bool
+	downsampleConcurrency int
+	dataDir               string
+}
+
+func (tbc *toolsBucketConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+	cmd.Flag("repair", "Attempt to repair blocks for which issues were detected").
+		Short('r').Default("false").BoolVar(&tbc.repair)
+
+	cmd.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). "+
+		"Possible issue to verify, without repair: %v; Possible issue to verify and repair: %v",
+		issuesVerifiersRegistry.VerifiersIDs(), issuesVerifiersRegistry.VerifierRepairersIDs())).
+		Short('i').Default(verifier.IndexKnownIssues{}.IssueID(), verifier.OverlappedBlocksIssue{}.IssueID()).StringsVar(&tbc.issuesToVerify)
+
+	cmd.Flag("id", "Block IDs to verify (and optionally repair) only. "+
+		"If none is specified, all blocks will be verified. Repeated field").StringsVar(&tbc.ids)
+	return tbc
+}
+
+func (tbc *toolsBucketConfig) registerBucketLsFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+	cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
+		Short('o').Default("").StringVar(&tbc.output)
+	return tbc
+}
+
 func registerBucket(app extkingpin.AppClause) {
 	cmd := app.Command("bucket", "Bucket utility commands")
 
@@ -93,14 +136,10 @@ func registerBucket(app extkingpin.AppClause) {
 func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command("verify", "Verify all blocks in the bucket against specified issues. NOTE: Depending on issue this might take time and will need downloading all specified blocks to disk.")
 	objStoreBackupConfig := extkingpin.RegisterCommonObjStoreFlags(cmd, "-backup", false, "Used for repair logic to backup blocks before removal.")
-	repair := cmd.Flag("repair", "Attempt to repair blocks for which issues were detected").
-		Short('r').Default("false").Bool()
-	issuesToVerify := cmd.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). "+
-		"Possible issue to verify, without repair: %v; Possible issue to verify and repair: %v",
-		issuesVerifiersRegistry.VerifiersIDs(), issuesVerifiersRegistry.VerifierRepairersIDs())).
-		Short('i').Default(verifier.IndexKnownIssues{}.IssueID(), verifier.OverlappedBlocksIssue{}.IssueID()).Strings()
-	ids := cmd.Flag("id", "Block IDs to verify (and optionally repair) only. "+
-		"If none is specified, all blocks will be verified. Repeated field").Strings()
+
+	tbc := &toolsBucketConfig{}
+	tbc.registerBucketVerifyFlag(cmd)
+
 	deleteDelay := extkingpin.ModelDuration(cmd.Flag("delete-delay", "Duration after which blocks marked for deletion would be deleted permanently from source bucket by compactor component. "+
 		"If delete-delay is non zero, blocks will be marked for deletion and compactor component is required to delete blocks from source bucket. "+
 		"If delete-delay is 0, blocks will be deleted straight away. Use this if you want to get rid of or move the block immediately. "+
@@ -126,7 +165,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 
 		var backupBkt objstore.Bucket
 		if len(backupconfContentYaml) == 0 {
-			if *repair {
+			if tbc.repair {
 				return errors.New("repair is specified, so backup client is required")
 			}
 		} else {
@@ -142,7 +181,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 
-		r, err := issuesVerifiersRegistry.SubstractByIDs(*issuesToVerify, *repair)
+		r, err := issuesVerifiersRegistry.SubstractByIDs(tbc.issuesToVerify, (tbc.repair))
 		if err != nil {
 			return err
 		}
@@ -153,9 +192,9 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		}
 
 		var idMatcher func(ulid.ULID) bool = nil
-		if len(*ids) > 0 {
+		if len(tbc.ids) > 0 {
 			idsMap := map[string]struct{}{}
-			for _, bid := range *ids {
+			for _, bid := range tbc.ids {
 				id, err := ulid.Parse(bid)
 				if err != nil {
 					return errors.Wrap(err, "invalid ULID found in --id flag")
@@ -172,7 +211,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		}
 
 		v := verifier.NewManager(reg, logger, bkt, backupBkt, fetcher, time.Duration(*deleteDelay), r)
-		if *repair {
+		if tbc.repair {
 			return v.VerifyAndRepair(context.Background(), idMatcher)
 		}
 
@@ -182,8 +221,10 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 
 func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command("ls", "List all blocks in the bucket.")
-	output := cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
-		Short('o').Default("").String()
+
+	tbc := &toolsBucketConfig{}
+	tbc.registerBucketLsFlag(cmd)
+
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
@@ -209,7 +250,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 		defer cancel()
 
 		var (
-			format     = *output
+			format     = tbc.output
 			objects    = 0
 			printBlock func(m *metadata.Meta) error
 		)
