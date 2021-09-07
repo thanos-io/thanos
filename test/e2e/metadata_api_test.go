@@ -49,8 +49,8 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	stores := []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint()}
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "query", stores).
-		WithMetadataAddresses(stores).
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "query", stores...).
+		WithMetadataAddresses(stores...).
 		Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
