@@ -72,14 +72,17 @@ func getServicePrincipalToken(logger log.Logger, conf Config) (*adal.ServicePrin
 		resource = fmt.Sprintf("https://%s.%s", conf.StorageAccountName, conf.Endpoint)
 	}
 
-	if conf.UserAssignedID != "" {
-		level.Debug(logger).Log("msg", "using user assigned identity:", conf.UserAssignedID)
-		return adal.NewServicePrincipalTokenFromMSIWithUserAssignedID("", resource, conf.UserAssignedID)
+	msiConfig := auth.MSIConfig{
+		Resource: resource,
 	}
 
-	level.Debug(logger).Log("msg", "using system assigned identity")
-	msiConfig := auth.NewMSIConfig()
-	msiConfig.Resource = conf.MSIResource
+	if conf.UserAssignedID != "" {
+		level.Debug(logger).Log("msg", "using user assigned identity", "clientId", conf.UserAssignedID)
+		msiConfig.ClientID = conf.UserAssignedID
+	} else {
+		level.Debug(logger).Log("msg", "using system assigned identity")
+	}
+
 	return msiConfig.ServicePrincipalToken()
 }
 
