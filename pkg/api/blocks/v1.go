@@ -39,6 +39,25 @@ type BlocksInfo struct {
 	Err         error           `json:"err"`
 }
 
+type ActionType int32
+
+const (
+	Deletion ActionType = iota
+	NoCompaction
+	Unknown
+)
+
+func parse(s string) ActionType {
+    switch s {
+	case "DELETION":
+		return Deletion
+	case "NO COMPACTION":
+		return NoCompaction
+	default:
+		return Unknown
+	}
+}
+
 // NewBlocksAPI creates a simple API to be used by Thanos Block Viewer.
 func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap map[string]string, bkt objstore.Bucket) *BlocksAPI {
 	return &BlocksAPI{
@@ -84,13 +103,14 @@ func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("ULID %q is not valid: %v", idParam, err)}
 	}
 
-	switch actionParam {
-	case "DELETION":
+	actionType := parse(actionParam)
+	switch actionType {
+	case Deletion:
 		err := block.MarkForDeletion(r.Context(), bapi.logger, bapi.bkt, id, detailParam, promauto.With(nil).NewCounter(prometheus.CounterOpts{}))
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}
-	case "NO COMPACTION":
+	case NoCompaction:
 		err := block.MarkForNoCompact(r.Context(), bapi.logger, bapi.bkt, id, metadata.ManualNoCompactReason, detailParam, promauto.With(nil).NewCounter(prometheus.CounterOpts{}))
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
