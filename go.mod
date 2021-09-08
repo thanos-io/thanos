@@ -60,6 +60,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/opentracing/basictracer-go v1.0.0
 	github.com/opentracing/opentracing-go v1.2.0
+	github.com/oracle/oci-go-sdk/v65 v65.13.0
 	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/alertmanager v0.23.1-0.20210914172521-e35efbddb66a
@@ -150,6 +151,7 @@ require (
 	github.com/gobwas/httphead v0.0.0-20180130184737-2c6c146eadee // indirect
 	github.com/gobwas/pool v0.2.0 // indirect
 	github.com/gobwas/ws v1.0.2 // indirect
+	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/gogo/googleapis v1.4.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.4.1 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
@@ -189,7 +191,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema v1.2.4 // indirect
 	github.com/sercand/kuberesolver v2.4.0+incompatible // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
-	github.com/sony/gobreaker v0.4.1 // indirect
+	github.com/sony/gobreaker v0.5.0 // indirect
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/weaveworks/promrus v1.2.0 // indirect

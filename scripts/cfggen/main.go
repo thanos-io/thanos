@@ -29,6 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 	"github.com/thanos-io/thanos/pkg/objstore/gcs"
+	"github.com/thanos-io/thanos/pkg/objstore/oci"
 	"github.com/thanos-io/thanos/pkg/objstore/oss"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
@@ -54,6 +55,7 @@ var (
 		client.ALIYUNOSS:  oss.Config{},
 		client.FILESYSTEM: filesystem.Config{},
 		client.BOS:        bos.Config{},
+		client.OCI:        oci.Config{},
 	}
 
 	tracingConfigs = map[trclient.TracingProvider]interface{}{
