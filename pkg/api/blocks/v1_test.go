@@ -25,6 +25,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
+
 func TestMain(m *testing.M) {
 	testutil.TolerantVerifyLeakMain(m)
 }
@@ -138,7 +139,7 @@ func TestMarkBlockEndpoint(t *testing.T) {
 		{
 			endpoint: api.markBlock,
 			query: url.Values{
-				"id": []string{ulid.MustNew(1, nil).String()},
+				"id":     []string{ulid.MustNew(1, nil).String()},
 				"action": []string{""},
 			},
 			errType: baseAPI.ErrorBadData,
@@ -147,7 +148,7 @@ func TestMarkBlockEndpoint(t *testing.T) {
 		{
 			endpoint: api.markBlock,
 			query: url.Values{
-				"id": []string{"invalid_id"},
+				"id":     []string{"invalid_id"},
 				"action": []string{"DELETION"},
 			},
 			errType: baseAPI.ErrorBadData,
@@ -156,7 +157,7 @@ func TestMarkBlockEndpoint(t *testing.T) {
 		{
 			endpoint: api.markBlock,
 			query: url.Values{
-				"id": []string{ulid.MustNew(2, nil).String()},
+				"id":     []string{ulid.MustNew(2, nil).String()},
 				"action": []string{"INVALID_ACTION"},
 			},
 			errType: baseAPI.ErrorBadData,
@@ -164,7 +165,7 @@ func TestMarkBlockEndpoint(t *testing.T) {
 		{
 			endpoint: api.markBlock,
 			query: url.Values{
-				"id": []string{b1.String()},
+				"id":     []string{b1.String()},
 				"action": []string{"DELETION"},
 			},
 			response: nil,

@@ -48,7 +48,7 @@ const (
 )
 
 func parse(s string) ActionType {
-    switch s {
+	switch s {
 	case "DELETION":
 		return Deletion
 	case "NO COMPACTION":
