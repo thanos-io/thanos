@@ -74,40 +74,72 @@ var (
 	inspectColumns = []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-DOWN", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "LABELS", "RESOLUTION", "SOURCE"}
 )
 
-type toolsBucketConfig struct {
-	repair                bool
-	issuesToVerify        []string
-	ids                   []string
-	output                string
-	blockIDs              []string
-	tmpDir                string
-	selector              []string
-	timeout               time.Duration
-	webRoutePrefix        string
-	webExternalPrefix     string
-	webPrefixHeaderName   string
-	webDisableCORS        bool
-	interval              time.Duration
-	label                 string
-	resolutions           []time.Duration
-	compactions           []int
-	matcherStrs           []string
-	singleRun             bool
-	downsampleConcurrency int
-	dataDir               string
-	dryRun                bool
-	promBlocks            bool
-	deleteBlocks          bool
-	deleteDelay           time.Duration
-	consistencyDelay      time.Duration
-	blockSyncConcurrency  int
-	hashFunc              string
-	sortBy                []string
-	details               string
-	marker                string
+type bucketRewriteConfig struct {
+	blockIDs     []string
+	tmpDir       string
+	dryRun       bool
+	promBlocks   bool
+	deleteBlocks bool
 }
 
-func (tbc *toolsBucketConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+type bucketInspectConfig struct {
+	selector []string
+	sortBy   []string
+	timeout  time.Duration
+}
+
+type bucketVerifyConfig struct {
+	repair         bool
+	ids            []string
+	issuesToVerify []string
+}
+
+type bucketLsConfig struct {
+	output string
+}
+
+type bucketWebConfig struct {
+	webRoutePrefix      string
+	webExternalPrefix   string
+	webPrefixHeaderName string
+	webDisableCORS      bool
+	interval            time.Duration
+	label               string
+	timeout             time.Duration
+}
+
+type bucketReplicateConfig struct {
+	resolutions []time.Duration
+	compactions []int
+	matcherStrs []string
+	singleRun   bool
+}
+
+type bucketDownsampleConfig struct {
+	downsampleConcurrency int
+	dataDir               string
+	hashFunc              string
+}
+
+type bucketCleanupConfig struct {
+	consistencyDelay     time.Duration
+	blockSyncConcurrency int
+	deleteDelay          time.Duration
+}
+
+type bucketRetentionConfig struct {
+	consistencyDelay     time.Duration
+	blockSyncConcurrency int
+	deleteDelay          time.Duration
+}
+
+type bucketMarkBlockConfig struct {
+	details  string
+	marker   string
+	blockIDs []string
+}
+
+func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *bucketVerifyConfig {
 	cmd.Flag("repair", "Attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").BoolVar(&tbc.repair)
 
@@ -121,13 +153,13 @@ func (tbc *toolsBucketConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause
 	return tbc
 }
 
-func (tbc *toolsBucketConfig) registerBucketLsFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+func (tbc *bucketLsConfig) registerBucketLsFlag(cmd extkingpin.FlagClause) *bucketLsConfig {
 	cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
 		Short('o').Default("").StringVar(&tbc.output)
 	return tbc
 }
 
-func (tbc *toolsBucketConfig) registerBucketInspectFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+func (tbc *bucketInspectConfig) registerBucketInspectFlag(cmd extkingpin.FlagClause) *bucketInspectConfig {
 	cmd.Flag("selector", "Selects blocks based on label, e.g. '-l key1=\\\"value1\\\" -l key2=\\\"value2\\\"'. All key value pairs must match.").Short('l').
 		PlaceHolder("<name>=\\\"<value>\\\"").StringsVar(&tbc.selector)
 	cmd.Flag("sort-by", "Sort by columns. It's also possible to sort by multiple columns, e.g. '--sort-by FROM --sort-by UNTIL'. I.e., if the 'FROM' value is equal the rows are then further sorted by the 'UNTIL' value.").
@@ -137,7 +169,7 @@ func (tbc *toolsBucketConfig) registerBucketInspectFlag(cmd extkingpin.FlagClaus
 	return tbc
 }
 
-func (tbc *toolsBucketConfig) registerBucketWebFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+func (tbc *bucketWebConfig) registerBucketWebFlag(cmd extkingpin.FlagClause) *bucketWebConfig {
 	cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Prometheus.").Default("").StringVar(&tbc.webRoutePrefix)
 
 	cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").StringVar(&tbc.webExternalPrefix)
@@ -154,7 +186,7 @@ func (tbc *toolsBucketConfig) registerBucketWebFlag(cmd extkingpin.FlagClause) *
 	return tbc
 }
 
-func (tbc *toolsBucketConfig) registerBucketReplicateFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.FlagClause) *bucketReplicateConfig {
 	cmd.Flag("resolution", "Only blocks with these resolutions will be replicated. Repeated flag.").Default("0s", "5m", "1h").HintAction(listResLevel).DurationListVar(&tbc.resolutions)
 
 	cmd.Flag("compaction", "Only blocks with these compaction levels will be replicated. Repeated flag.").Default("1", "2", "3", "4").IntsVar(&tbc.compactions)
@@ -166,7 +198,7 @@ func (tbc *toolsBucketConfig) registerBucketReplicateFlag(cmd extkingpin.FlagCla
 	return tbc
 }
 
-func (tbc *toolsBucketConfig) registerBucketRewriteFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+func (tbc *bucketRewriteConfig) registerBucketRewriteFlag(cmd extkingpin.FlagClause) *bucketRewriteConfig {
 	cmd.Flag("id", "ID (ULID) of the blocks for rewrite (repeated flag).").Required().StringsVar(&tbc.blockIDs)
 	cmd.Flag("tmp.dir", "Working directory for temporary files").Default(filepath.Join(os.TempDir(), "thanos-rewrite")).StringVar(&tbc.tmpDir)
 	cmd.Flag("dry-run", "Prints the series changes instead of doing them. Defaults to true, for user to double check. (: Pass --no-dry-run to skip this.").Default("true").BoolVar(&tbc.dryRun)
@@ -176,7 +208,7 @@ func (tbc *toolsBucketConfig) registerBucketRewriteFlag(cmd extkingpin.FlagClaus
 	return tbc
 }
 
-func (tbc *toolsBucketConfig) registerBucketDownsampleFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+func (tbc *bucketDownsampleConfig) registerBucketDownsampleFlag(cmd extkingpin.FlagClause) *bucketDownsampleConfig {
 	cmd.Flag("downsample.concurrency", "Number of goroutines to use when downsampling blocks.").
 		Default("1").IntVar(&tbc.downsampleConcurrency)
 	cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
@@ -187,7 +219,7 @@ func (tbc *toolsBucketConfig) registerBucketDownsampleFlag(cmd extkingpin.FlagCl
 	return tbc
 }
 
-func (tbc *toolsBucketConfig) registerBucketMarkBlockFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+func (tbc *bucketMarkBlockConfig) registerBucketMarkBlockFlag(cmd extkingpin.FlagClause) *bucketMarkBlockConfig {
 	cmd.Flag("id", "ID (ULID) of the blocks to be marked for deletion (repeated flag)").Required().StringsVar(&tbc.blockIDs)
 	cmd.Flag("marker", "Marker to be put.").Required().EnumVar(&tbc.marker, metadata.DeletionMarkFilename, metadata.NoCompactMarkFilename)
 	cmd.Flag("details", "Human readable details to be put into marker.").Required().StringVar(&tbc.details)
@@ -195,7 +227,7 @@ func (tbc *toolsBucketConfig) registerBucketMarkBlockFlag(cmd extkingpin.FlagCla
 	return tbc
 }
 
-func (tbc *toolsBucketConfig) registerBucketCleanupFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+func (tbc *bucketCleanupConfig) registerBucketCleanupFlag(cmd extkingpin.FlagClause) *bucketCleanupConfig {
 	cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket.").Default("48h").DurationVar(&tbc.deleteDelay)
 	cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %v will be removed.", compact.PartialUploadThresholdAge)).
 		Default("30m").DurationVar(&tbc.consistencyDelay)
@@ -204,7 +236,7 @@ func (tbc *toolsBucketConfig) registerBucketCleanupFlag(cmd extkingpin.FlagClaus
 	return tbc
 }
 
-func (tbc *toolsBucketConfig) registerBucketRetentionFlag(cmd extkingpin.FlagClause) *toolsBucketConfig {
+func (tbc *bucketRetentionConfig) registerBucketRetentionFlag(cmd extkingpin.FlagClause) *bucketRetentionConfig {
 	cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket.").Default("48h").DurationVar(&tbc.deleteDelay)
 	cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %v will be removed.", compact.PartialUploadThresholdAge)).
 		Default("30m").DurationVar(&tbc.consistencyDelay)
@@ -234,7 +266,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 	cmd := app.Command("verify", "Verify all blocks in the bucket against specified issues. NOTE: Depending on issue this might take time and will need downloading all specified blocks to disk.")
 	objStoreBackupConfig := extkingpin.RegisterCommonObjStoreFlags(cmd, "-backup", false, "Used for repair logic to backup blocks before removal.")
 
-	tbc := &toolsBucketConfig{}
+	tbc := &bucketVerifyConfig{}
 	tbc.registerBucketVerifyFlag(cmd)
 
 	deleteDelay := extkingpin.ModelDuration(cmd.Flag("delete-delay", "Duration after which blocks marked for deletion would be deleted permanently from source bucket by compactor component. "+
@@ -278,7 +310,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 
-		r, err := issuesVerifiersRegistry.SubstractByIDs(tbc.issuesToVerify, (tbc.repair))
+		r, err := issuesVerifiersRegistry.SubstractByIDs(tbc.issuesToVerify, tbc.repair)
 		if err != nil {
 			return err
 		}
@@ -319,7 +351,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command("ls", "List all blocks in the bucket.")
 
-	tbc := &toolsBucketConfig{}
+	tbc := &bucketLsConfig{}
 	tbc.registerBucketLsFlag(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -410,7 +442,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command("inspect", "Inspect all blocks in the bucket in detailed, table-like way.")
 
-	tbc := &toolsBucketConfig{}
+	tbc := &bucketInspectConfig{}
 	tbc.registerBucketInspectFlag(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -464,7 +496,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 	cmd := app.Command("web", "Web interface for remote storage bucket.")
 	httpBindAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
 
-	tbc := &toolsBucketConfig{}
+	tbc := &bucketWebConfig{}
 	tbc.registerBucketWebFlag(cmd)
 
 	filterConf := &store.FilterConfig{}
@@ -622,7 +654,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 	httpBindAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
 	toObjStoreConfig := extkingpin.RegisterCommonObjStoreFlags(cmd, "-to", false, "The object storage which replicate data to.")
 
-	tbc := &toolsBucketConfig{}
+	tbc := &bucketReplicateConfig{}
 	tbc.registerBucketReplicateFlag(cmd)
 
 	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to replicate. Thanos Replicate will replicate only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
@@ -676,7 +708,7 @@ func registerBucketDownsample(app extkingpin.AppClause, objStoreConfig *extflag.
 	cmd := app.Command(component.Downsample.String(), "Continuously downsamples blocks in an object store bucket.")
 	httpAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
 
-	tbc := &toolsBucketConfig{}
+	tbc := &bucketDownsampleConfig{}
 	tbc.registerBucketDownsampleFlag(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -687,7 +719,7 @@ func registerBucketDownsample(app extkingpin.AppClause, objStoreConfig *extflag.
 func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command(component.Cleanup.String(), "Cleans up all blocks marked for deletion.")
 
-	tbc := &toolsBucketConfig{}
+	tbc := &bucketCleanupConfig{}
 	tbc.registerBucketCleanupFlag(cmd)
 
 	selectorRelabelConf := extkingpin.RegisterSelectorRelabelFlags(cmd)
@@ -911,7 +943,7 @@ func compare(s1, s2 string) bool {
 func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command(component.Mark.String(), "Mark block for deletion or no-compact in a safe way. NOTE: If the compactor is currently running compacting same block, this operation would be potentially a noop.")
 
-	tbc := &toolsBucketConfig{}
+	tbc := &bucketMarkBlockConfig{}
 	tbc.registerBucketMarkBlockFlag(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -970,7 +1002,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		"After rewrite, it's caller responsibility to delete or mark source block for deletion to avoid overlaps. "+
 		"WARNING: This procedure is *IRREVERSIBLE* after certain time (delete delay), so do backup your blocks first.")
 
-	tbc := &toolsBucketConfig{}
+	tbc := &bucketRewriteConfig{}
 	tbc.registerBucketRewriteFlag(cmd)
 
 	hashFunc := cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
@@ -1148,7 +1180,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 
 	cmd := app.Command("retention", "Retention applies retention policies on the given bucket. Please make sure no compactor is running on the same bucket at the same time.")
 
-	tbc := &toolsBucketConfig{}
+	tbc := &bucketRetentionConfig{}
 	tbc.registerBucketRetentionFlag(cmd)
 
 	selectorRelabelConf := extkingpin.RegisterSelectorRelabelFlags(cmd)

@@ -41,7 +41,7 @@ func registerCheckRules(app extkingpin.AppClause) {
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
-		return checkRulesFiles(logger, &(tc.rulesFiles))
+		return checkRulesFiles(logger, &tc.rulesFiles)
 	})
 }
 
