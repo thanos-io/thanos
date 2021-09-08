@@ -105,7 +105,6 @@ func (es *grpcEndpointSpec) getMetadataUsingStoreAPI(ctx context.Context, client
 }
 
 func (es *grpcEndpointSpec) fillExpectedAPIs(componentType component.Component, mintime, maxTime int64) infopb.InfoResponse {
-
 	switch componentType {
 	case component.Sidecar:
 		return infopb.InfoResponse{
