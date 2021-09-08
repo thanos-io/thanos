@@ -86,7 +86,7 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 	})
 }
 
-func TestCheckDeletion(t *testing.T) {
+func TestMarkBlockEndpoint(t *testing.T) {
 	ctx := context.Background()
 	tmpDir, err := ioutil.TempDir("", "test-read-mark")
 
