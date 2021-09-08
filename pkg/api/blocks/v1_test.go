@@ -7,11 +7,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
-	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
@@ -89,6 +90,7 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 func TestMarkBlockEndpoint(t *testing.T) {
 	ctx := context.Background()
 	tmpDir, err := ioutil.TempDir("", "test-read-mark")
+	testutil.Ok(t, err)
 
 	// create block
 	b1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
@@ -159,6 +161,14 @@ func TestMarkBlockEndpoint(t *testing.T) {
 			},
 			errType: baseAPI.ErrorBadData,
 		},
+		{
+			endpoint: api.markBlock,
+			query: url.Values{
+				"id": []string{b1.String()},
+				"action": []string{"DELETION"},
+			},
+			response: nil,
+		},
 	}
 
 	for i, test := range tests {
@@ -166,4 +176,8 @@ func TestMarkBlockEndpoint(t *testing.T) {
 			return
 		}
 	}
+
+	file := path.Join(tmpDir, b1.String())
+	_, err = os.Stat(file)
+	testutil.Ok(t, err)
 }
