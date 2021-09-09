@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/pkg/errors"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -34,7 +35,7 @@ func TestQueryFrontend(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(prom, sidecar))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", sidecar.GRPCNetworkEndpoint()).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -107,8 +108,11 @@ func TestQueryFrontend(t *testing.T) {
 			timestamp.FromTime(now.Add(time.Hour)),
 			14,
 			promclient.QueryOptions{},
-			func(res model.Matrix) bool {
-				return len(res) > 0
+			func(res model.Matrix) error {
+				if len(res) > 0 {
+					return errors.Errorf("expected some results, got nothing")
+				}
+				return nil
 			},
 		)
 
@@ -146,8 +150,11 @@ func TestQueryFrontend(t *testing.T) {
 			timestamp.FromTime(now.Add(time.Hour)),
 			14,
 			promclient.QueryOptions{},
-			func(res model.Matrix) bool {
-				return len(res) > 0
+			func(res model.Matrix) error {
+				if len(res) > 0 {
+					return errors.Errorf("expected some results, got nothing")
+				}
+				return nil
 			},
 		)
 
@@ -188,8 +195,11 @@ func TestQueryFrontend(t *testing.T) {
 			timestamp.FromTime(now.Add(24*time.Hour)),
 			14,
 			promclient.QueryOptions{},
-			func(res model.Matrix) bool {
-				return len(res) > 0
+			func(res model.Matrix) error {
+				if len(res) > 0 {
+					return errors.Errorf("expected some results, got nothing")
+				}
+				return nil
 			},
 		)
 
@@ -388,7 +398,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(prom, sidecar))
 
-	q, err := e2ethanos.NewQuerier(s.SharedDir(), "1", []string{sidecar.GRPCNetworkEndpoint()}, nil, nil, nil, nil, nil, "", "")
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", sidecar.GRPCNetworkEndpoint()).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -448,8 +458,11 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		timestamp.FromTime(now.Add(time.Hour)),
 		14,
 		promclient.QueryOptions{},
-		func(res model.Matrix) bool {
-			return len(res) > 0
+		func(res model.Matrix) error {
+			if len(res) > 0 {
+				return errors.Errorf("expected some results, got nothing")
+			}
+			return nil
 		},
 	)
 
@@ -475,8 +488,11 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		timestamp.FromTime(now.Add(time.Hour)),
 		14,
 		promclient.QueryOptions{},
-		func(res model.Matrix) bool {
-			return len(res) > 0
+		func(res model.Matrix) error {
+			if len(res) > 0 {
+				return errors.Errorf("expected some results, got nothing")
+			}
+			return nil
 		},
 	)
 

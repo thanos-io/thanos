@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 
 	http_util "github.com/thanos-io/thanos/pkg/http"
@@ -70,19 +71,10 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	r2, err := e2ethanos.NewRuler(s.SharedDir(), "rule2", thanosRulesSubDir, nil, nil)
 	testutil.Ok(t, err)
 
-	q, err := e2ethanos.NewQuerier(
-		s.SharedDir(),
-		"query",
-		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.NetworkEndpointFor(s.NetworkName(), 9091), r2.NetworkEndpointFor(s.NetworkName(), 9091)},
-		nil,
-		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.NetworkEndpointFor(s.NetworkName(), 9091), r2.NetworkEndpointFor(s.NetworkName(), 9091)},
-		nil,
-		nil,
-		nil,
-		"",
-		"",
-	)
-
+	stores := []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.NetworkEndpointFor(s.NetworkName(), 9091), r2.NetworkEndpointFor(s.NetworkName(), 9091)}
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "query", stores...).
+		WithRuleAddresses(stores...).
+		Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -154,19 +146,22 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	})
 }
 
-func ruleAndAssert(t *testing.T, ctx context.Context, addr string, typ string, want []*rulespb.RuleGroup) {
+func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*rulespb.RuleGroup) {
 	t.Helper()
 
 	fmt.Println("ruleAndAssert: Waiting for results for rules type", typ)
 	var result []*rulespb.RuleGroup
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
 		res, err := promclient.NewDefaultClient().RulesInGRPC(ctx, mustURLParse(t, "http://"+addr), typ)
 		if err != nil {
 			return err
 		}
 
 		if len(result) != len(res) {
-			fmt.Println("ruleAndAssert: New result:", res)
+			fmt.Println("ruleAndAssert: new result:", res)
+			result = res
 		}
 
 		if len(res) != len(want) {

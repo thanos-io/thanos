@@ -1,5 +1,6 @@
 include .bingo/Variables.mk
 FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
+MD_FILES_TO_FORMAT = $(shell find docs -name "*.md") $(shell find examples -name "*.md") $(filter-out mixin/runbook.md, $(shell find mixin -name "*.md")) $(shell ls *.md)
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
@@ -26,6 +27,7 @@ endif
 GOPATH            ?= $(shell go env GOPATH)
 TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
+export GOBIN
 
 # Promu is using this exact variable name, do not rename.
 PREFIX  ?= $(GOBIN)
@@ -54,6 +56,9 @@ JSONNET_VENDOR_DIR      ?= mixin/vendor
 
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
+MDOX_VALIDATE_CONFIG ?= .mdox.validate.yaml
+# for website pre process
+export MDOX
 PUBLIC_DIR        ?= $(WEB_DIR)/public
 ME                ?= $(shell whoami)
 
@@ -87,8 +92,8 @@ help: ## Displays help.
 .PHONY: all
 all: format build
 
-$(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)/yarn.lock
-	   cd $(REACT_APP_PATH) && yarn --frozen-lockfile
+$(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)/package-lock.json
+	   cd $(REACT_APP_PATH) && npm ci
 
 $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES)
 	   @echo ">> building React app"
@@ -106,22 +111,22 @@ assets: $(GO_BINDATA) $(REACT_APP_OUTPUT_DIR)
 .PHONY: react-app-lint
 react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
 	   @echo ">> running React app linting"
-	   cd $(REACT_APP_PATH) && yarn lint:ci
+	   cd $(REACT_APP_PATH) && npm run lint:ci
 
 .PHONY: react-app-lint-fix
 react-app-lint-fix:
 	@echo ">> running React app linting and fixing errors where possible"
-	cd $(REACT_APP_PATH) && yarn lint
+	cd $(REACT_APP_PATH) && npm run lint
 
 .PHONY: react-app-test
 react-app-test: | $(REACT_APP_NODE_MODULES_PATH) react-app-lint
 	@echo ">> running React app tests"
-	cd $(REACT_APP_PATH) && export CI=true && yarn test --no-watch
+	cd $(REACT_APP_PATH) && export CI=true && npm test --no-watch
 
 .PHONY: react-app-start
 react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 	@echo ">> running React app"
-	cd $(REACT_APP_PATH) && yarn start
+	cd $(REACT_APP_PATH) && npm start
 
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
@@ -167,28 +172,24 @@ docker-push:
 	@docker push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
 
 .PHONY: docs
-docs: ## Regenerates flags in docs for all thanos commands.
-docs: $(EMBEDMD) build
+docs: ## Regenerates flags in docs for all thanos commands localise links, ensure GitHub format.
+docs: build examples $(MDOX)
 	@echo ">> generating docs"
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos"  scripts/genflagdocs.sh
-	@echo ">> cleaning white noise"
-	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+	PATH=${PATH}:$(GOBIN) $(MDOX) fmt -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(MD_FILES_TO_FORMAT)
 
 .PHONY: check-docs
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
-check-docs: $(EMBEDMD) build
-	@echo ">> checking docs generation"
-	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" THANOS_BIN="$(GOBIN)/thanos" scripts/genflagdocs.sh check
-	@echo ">> checking links (DISABLED for now)"
-	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+check-docs: build examples $(MDOX)
+	@echo ">> checking formatting and local/remote links"
+	PATH=${PATH}:$(GOBIN) $(MDOX) fmt --check -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(MD_FILES_TO_FORMAT)
 	$(call require_clean_work_tree,'run make docs and commit changes')
 
-.PHONY:shell-format
+.PHONY: shell-format
 shell-format: $(SHFMT)
 	@echo ">> formatting shell scripts"
 	@$(SHFMT) -i 2 -ci -w -s $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*")
 
-.PHONY:format
+.PHONY: format
 format: ## Formats code including imports and cleans up white noise.
 format: go-format shell-format
 	@SED_BIN="$(SED)" scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
@@ -221,12 +222,12 @@ test: export THANOS_TEST_PROMETHEUS_PATHS= $(PROMETHEUS_ARRAY)
 test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
-	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
+	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
 	@go test $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
 
 .PHONY: test-local
 test-local: ## Runs test excluding tests for ALL  object storage integrations.
-test-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS
+test-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS
 test-local:
 	$(MAKE) test
 
@@ -244,7 +245,7 @@ test-e2e: docker
 
 .PHONY: test-e2e-local
 test-e2e-local: ## Runs all thanos e2e tests locally.
-test-e2e-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS
+test-e2e-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS
 test-e2e-local:
 	$(MAKE) test-e2e
 
@@ -268,7 +269,7 @@ else
 endif
 
 .PHONY: web-pre-process
-web-pre-process:
+web-pre-process: $(MDOX)
 	@echo ">> running documentation website pre processing"
 	scripts/website/websitepreprocess.sh
 
@@ -276,9 +277,14 @@ web-pre-process:
 web: ## Builds our website.
 web: web-pre-process $(HUGO)
 	@echo ">> building documentation website"
-	# TODO(bwplotka): Make it --gc
 	@rm -rf "$(WEB_DIR)/public"
 	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
+
+.PHONY: web-serve
+web-serve: ## Builds and serves Thanos website on localhost.
+web-serve: web-pre-process $(HUGO)
+	@echo ">> serving documentation website"
+	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
 .PHONY:lint
 lint: ## Runs various static analysis against our code.
@@ -314,22 +320,14 @@ sync/atomic=go.uber.org/atomic" ./...
 	@$(MAKE) proto
 	$(call require_clean_work_tree,'detected files without copyright, run make lint and commit changes')
 
-.PHONY:shell-lint
+.PHONY: shell-lint
 shell-lint: ## Runs static analysis against our shell scripts.
 shell-lint: $(SHELLCHECK)
 	@echo ">> linting all of the shell script files"
 	@$(SHELLCHECK) --severity=error -o all -s bash $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*" -not -path "*node_modules*")
 
-.PHONY: web-serve
-web-serve: ## Builds and serves Thanos website on localhost.
-web-serve: web-pre-process $(HUGO)
-	@echo ">> serving documentation website"
-	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
-
 .PHONY: examples
-examples: jsonnet-vendor jsonnet-format $(EMBEDMD) ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp mixin/runbook.md
-	$(EMBEDMD) -w examples/alerts/alerts.md
-	$(EMBEDMD) -w ${THANOS_MIXIN}/README.md
+examples: jsonnet-vendor jsonnet-format ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp mixin/runbook.md
 
 .PHONY: examples/tmp
 examples/tmp:

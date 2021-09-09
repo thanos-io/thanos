@@ -473,7 +473,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 		return metas, resp.partial, errors.Wrap(resp.metaErrs.Err(), "incomplete view")
 	}
 
-	level.Info(f.logger).Log("msg", "successfully synchronized block metadata", "duration", time.Since(start).String(), "cached", len(f.cached), "returned", len(metas), "partial", len(resp.partial))
+	level.Info(f.logger).Log("msg", "successfully synchronized block metadata", "duration", time.Since(start).String(), "duration_ms", time.Since(start).Milliseconds(), "cached", len(f.cached), "returned", len(metas), "partial", len(resp.partial))
 	return metas, resp.partial, nil
 }
 
@@ -646,7 +646,7 @@ func (f *DeduplicateFilter) DuplicateIDs() []ulid.ULID {
 	return f.duplicateIDs
 }
 
-func addNodeBySources(root *Node, add *Node) bool {
+func addNodeBySources(root, add *Node) bool {
 	var rootNode *Node
 	for _, node := range root.Children {
 		parentSources := node.Compaction.Sources
@@ -674,7 +674,7 @@ func addNodeBySources(root *Node, add *Node) bool {
 	return addNodeBySources(rootNode, add)
 }
 
-func contains(s1 []ulid.ULID, s2 []ulid.ULID) bool {
+func contains(s1, s2 []ulid.ULID) bool {
 	for _, a := range s2 {
 		found := false
 		for _, e := range s1 {

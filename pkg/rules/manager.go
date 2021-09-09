@@ -116,8 +116,9 @@ type Manager struct {
 	mgrs    map[storepb.PartialResponseStrategy]*rules.Manager
 	extLset labels.Labels
 
-	mtx       sync.RWMutex
-	ruleFiles map[string]string
+	mtx         sync.RWMutex
+	ruleFiles   map[string]string
+	externalURL string
 }
 
 // NewManager creates new Manager.
@@ -129,12 +130,14 @@ func NewManager(
 	baseOpts rules.ManagerOptions,
 	queryFuncCreator func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc,
 	extLset labels.Labels,
+	externalURL string,
 ) *Manager {
 	m := &Manager{
-		workDir:   filepath.Join(dataDir, tmpRuleDir),
-		mgrs:      make(map[storepb.PartialResponseStrategy]*rules.Manager),
-		extLset:   extLset,
-		ruleFiles: make(map[string]string),
+		workDir:     filepath.Join(dataDir, tmpRuleDir),
+		mgrs:        make(map[storepb.PartialResponseStrategy]*rules.Manager),
+		extLset:     extLset,
+		ruleFiles:   make(map[string]string),
+		externalURL: externalURL,
 	}
 	for _, strategy := range storepb.PartialResponseStrategy_value {
 		s := storepb.PartialResponseStrategy(strategy)
@@ -356,7 +359,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 
 			// Use full file name appending to work dir, so we can differentiate between different dirs and same filenames(!).
 			// This will be also used as key for file group name.
-			newFn := filepath.Join(m.workDir, s.String(), strings.TrimLeft(fn, m.workDir))
+			newFn := filepath.Join(m.workDir, s.String(), fn)
 			if err := os.MkdirAll(filepath.Dir(newFn), os.ModePerm); err != nil {
 				errs.Add(errors.Wrapf(err, "create %s", filepath.Dir(newFn)))
 				continue
@@ -378,7 +381,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 			continue
 		}
 		// We add external labels in `pkg/alert.Queue`.
-		if err := mgr.Update(evalInterval, fs, nil); err != nil {
+		if err := mgr.Update(evalInterval, fs, nil, m.externalURL); err != nil {
 			// TODO(bwplotka): Prometheus logs all error details. Fix it upstream to have consistent error handling.
 			errs.Add(errors.Wrapf(err, "strategy %s, update rules", s))
 			continue

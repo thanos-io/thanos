@@ -11,7 +11,7 @@ docker stop querier-fruit && docker stop querier-veggie
 ```
 docker run -d --net=host --rm \
     --name querier-multi \
-    quay.io/thanos/thanos:v0.20.0 \
+    quay.io/thanos/thanos:v0.22.0 \
     query \
     --http-address 0.0.0.0:29090 \
     --grpc-address 0.0.0.0:29190 \
@@ -46,11 +46,10 @@ So why not we start something like this in front of our "Tomato" Querier?
 ```
 docker run -d --net=host --rm \
     --name prom-label-proxy \
-    quay.io/thanos/prom-label-proxy:v0.3.0-rc.0-ext1 \
+    quay.io/prometheuscommunity/prom-label-proxy:v0.3.0 \
     -label tenant \
     -upstream http://127.0.0.1:29090 \
     -insecure-listen-address 0.0.0.0:39090 \
-    -non-api-path-passthrough \
     -enable-label-apis && echo "Started prom-label-proxy"
 ```{{execute}}
 
@@ -97,8 +96,21 @@ At the end we should have setup as on following diagram:
 
 Let's check if our read isolation works:
 
-* [Query for Fruit Team through Caddy 39091 port](https://[[HOST_SUBDOMAIN]]-39091-[[KATACODA_HOST]].environments.katacoda.com/)
-* [Query for Veggie Team through Caddy 39092 port](https://[[HOST_SUBDOMAIN]]-39092-[[KATACODA_HOST]].environments.katacoda.com/)
+#### Team Fruit
+
+Firstly for `Team Fruit`, let's make a query for some data:
+```
+curl -g 'http://127.0.0.1:39091/api/v1/query?query=up'
+```{{execute}}
+Inspecting the output we should only see metrics with `"tenant":"team-fruit"`.
+
+#### Team Veggie
+
+Secondly for `Team Veggie`, let's make the same query to the other port:
+```
+curl -g 'http://127.0.0.1:39092/api/v1/query?query=up'
+```{{execute}}
+ Inspecting the output we should only see metrics with `"tenant":"team-veggie"`.
 
 Feel free to play around, you will see that we can only see Fruit or Veggie data depends where we go!
 

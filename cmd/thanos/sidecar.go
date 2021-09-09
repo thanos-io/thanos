@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -25,7 +26,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
-	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -391,7 +391,7 @@ func (s *promMetadata) UpdateLabels(ctx context.Context) error {
 	return nil
 }
 
-func (s *promMetadata) UpdateTimestamps(mint int64, maxt int64) {
+func (s *promMetadata) UpdateTimestamps(mint, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -410,7 +410,7 @@ func (s *promMetadata) Labels() labels.Labels {
 	return s.labels
 }
 
-func (s *promMetadata) Timestamps() (mint int64, maxt int64) {
+func (s *promMetadata) Timestamps() (mint, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 

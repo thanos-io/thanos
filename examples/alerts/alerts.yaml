@@ -328,7 +328,8 @@ groups:
       runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy
       summary: Thanos Sidecar is unhealthy.
     expr: |
-      time() - max by (job, instance) (timestamp(thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"})) >= 240
+      time() - max by (job, instance) (thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}) >= 240
+    for: 5m
     labels:
       severity: critical
 - name: thanos-store

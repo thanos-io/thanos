@@ -6,12 +6,14 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -52,19 +54,10 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
-	q, err := e2ethanos.NewQuerier(
-		s.SharedDir(),
-		"query",
-		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint()},
-		nil,
-		nil,
-		[]string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint()},
-		nil,
-		nil,
-		"",
-		"",
-	)
-
+	stores := []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint()}
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "query", stores...).
+		WithTargetAddresses(stores...).
+		Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -107,13 +100,13 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	})
 }
 
-//nolint:unused
-func targetAndAssert(t *testing.T, ctx context.Context, addr string, state string, want *targetspb.TargetDiscovery) {
+func targetAndAssert(t *testing.T, ctx context.Context, addr, state string, want *targetspb.TargetDiscovery) {
 	t.Helper()
 
 	fmt.Println("targetAndAssert: Waiting for results for targets state", state)
 
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+	logger := log.NewLogfmtLogger(os.Stdout)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
 		res, err := promclient.NewDefaultClient().TargetsInGRPC(ctx, mustURLParse(t, "http://"+addr), state)
 		if err != nil {
 			return err

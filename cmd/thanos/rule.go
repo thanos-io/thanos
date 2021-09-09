@@ -35,12 +35,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/thanos-io/thanos/pkg/alert"
 	v1 "github.com/thanos-io/thanos/pkg/api/rule"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
-	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	http_util "github.com/thanos-io/thanos/pkg/http"
@@ -80,7 +80,6 @@ type ruleConfig struct {
 	ruleFiles      []string
 	objStoreConfig *extflag.PathOrContent
 	dataDir        string
-	reloadSignal   <-chan struct{}
 	lset           labels.Labels
 }
 
@@ -195,6 +194,7 @@ func registerRule(app *extkingpin.App) {
 			tracer,
 			comp,
 			*conf,
+			reload,
 			getFlagsMap(cmd.Flags()),
 			httpLogOpts,
 			grpcLogOpts,
@@ -257,6 +257,7 @@ func runRule(
 	tracer opentracing.Tracer,
 	comp component.Component,
 	conf ruleConfig,
+	reloadSignal <-chan struct{},
 	flagsMap map[string]string,
 	httpLogOpts []logging.Option,
 	grpcLogOpts []grpc_logging.Option,
@@ -302,7 +303,9 @@ func runRule(
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
 	var queryClients []*http_util.Client
+	queryClientMetrics := extpromhttp.NewClientMetrics(extprom.WrapRegistererWith(prometheus.Labels{"client": "query"}, reg))
 	for _, cfg := range queryCfg {
+		cfg.HTTPClientConfig.ClientMetrics = queryClientMetrics
 		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "query")
 		if err != nil {
 			return err
@@ -317,7 +320,7 @@ func runRule(
 		addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
 	}
 
-	db, err := tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
+	db, err := tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
 	if err != nil {
 		return errors.Wrap(err, "open TSDB")
 	}
@@ -373,7 +376,11 @@ func runRule(
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
 	var alertmgrs []*alert.Alertmanager
+	amClientMetrics := extpromhttp.NewClientMetrics(
+		extprom.WrapRegistererWith(prometheus.Labels{"client": "alertmanager"}, reg),
+	)
 	for _, cfg := range alertingCfg.Alertmanagers {
+		cfg.HTTPClientConfig.ClientMetrics = amClientMetrics
 		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
 		if err != nil {
 			return err
@@ -435,6 +442,10 @@ func runRule(
 			},
 			queryFuncCreator(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod),
 			conf.lset,
+			// In our case the querying URL is the external URL because in Prometheus
+			// --web.external-url points to it i.e. it points at something where the user
+			// could execute the alert or recording rule's expression and get results.
+			conf.alertQueryURL.String(),
 		)
 
 		// Schedule rule manager that evaluates rules.
@@ -483,7 +494,7 @@ func runRule(
 			}
 			for {
 				select {
-				case <-conf.reloadSignal:
+				case <-reloadSignal:
 					if err := reloadRules(logger, conf.ruleFiles, ruleMgr, conf.evalInterval, metrics); err != nil {
 						level.Error(logger).Log("msg", "reload rules by sighup failed", "err", err)
 					}
@@ -655,7 +666,7 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 		if len(parts) != 2 {
 			return nil, errors.Errorf("unrecognized label %q", l)
 		}
-		if !model.LabelName.IsValid(model.LabelName(string(parts[0]))) {
+		if !model.LabelName.IsValid(model.LabelName(parts[0])) {
 			return nil, errors.Errorf("unsupported format for label %s", l)
 		}
 		val, err := strconv.Unquote(parts[1])

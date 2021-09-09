@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/units"
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -23,14 +24,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -144,9 +147,10 @@ func newCompactMetrics(reg *prometheus.Registry, deleteDelay time.Duration) *com
 	m.blocksMarked = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_blocks_marked_total",
 		Help: "Total number of blocks marked in compactor.",
-	}, []string{"marker"})
-	m.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename)
-	m.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename)
+	}, []string{"marker", "reason"})
+	m.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason)
+	m.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.IndexSizeExceedingNoCompactReason)
+	m.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")
 
 	m.garbageCollectedBlocks = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collected_blocks_total",
@@ -278,7 +282,7 @@ func runCompact(
 			cf,
 			duplicateBlocksFilter,
 			ignoreDeletionMarkFilter,
-			compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
+			compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
 			compactMetrics.garbageCollectedBlocks,
 			conf.blockSyncConcurrency)
 		if err != nil {
@@ -302,9 +306,25 @@ func runCompact(
 			cancel()
 		}
 	}()
+
+	var mergeFunc storage.VerticalChunkSeriesMergeFunc
+	switch conf.dedupFunc {
+	case compact.DedupAlgorithmPenalty:
+		mergeFunc = dedup.NewChunkSeriesMerger()
+
+		if len(conf.dedupReplicaLabels) == 0 {
+			return errors.New("penalty based deduplication needs at least one replica label specified")
+		}
+	case "":
+		mergeFunc = storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)
+
+	default:
+		return errors.Errorf("unsupported deduplication func, got %s", conf.dedupFunc)
+	}
+
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
-	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), nil)
+	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), mergeFunc)
 	if err != nil {
 		return errors.Wrap(err, "create compactor")
 	}
@@ -328,15 +348,16 @@ func runCompact(
 		conf.acceptMalformedIndex,
 		enableVerticalCompaction,
 		reg,
-		compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
+		compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
 		compactMetrics.garbageCollectedBlocks,
+		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
 		metadata.HashFunc(conf.hashFunc),
 	)
 	planner := compact.WithLargeTotalIndexSizeFilter(
 		compact.NewPlanner(logger, levels, noCompactMarkerFilter),
 		bkt,
 		int64(conf.maxBlockIndexSize),
-		compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename),
+		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.IndexSizeExceedingNoCompactReason),
 	)
 	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
 	compactor, err := compact.NewBucketCompactor(
@@ -348,6 +369,7 @@ func runCompact(
 		compactDir,
 		bkt,
 		conf.compactionConcurrency,
+		conf.skipBlockWithOutOfOrderChunks,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create bucket compactor")
@@ -408,7 +430,7 @@ func runCompact(
 				downsampleMetrics.downsamples.WithLabelValues(groupKey)
 				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir, metadata.HashFunc(conf.hashFunc)); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir, conf.downsampleConcurrency, metadata.HashFunc(conf.hashFunc)); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
@@ -416,7 +438,7 @@ func runCompact(
 			if err := sy.SyncMetas(ctx); err != nil {
 				return errors.Wrap(err, "sync before second pass of downsampling")
 			}
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir, metadata.HashFunc(conf.hashFunc)); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir, conf.downsampleConcurrency, metadata.HashFunc(conf.hashFunc)); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
 			level.Info(logger).Log("msg", "downsampling iterations done")
@@ -429,7 +451,7 @@ func runCompact(
 			return errors.Wrap(err, "sync before first pass of downsampling")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename)); err != nil {
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")); err != nil {
 			return errors.Wrap(err, "retention failed")
 		}
 
@@ -556,6 +578,7 @@ type compactConfig struct {
 	blockViewerSyncBlockInterval                   time.Duration
 	cleanupBlocksInterval                          time.Duration
 	compactionConcurrency                          int
+	downsampleConcurrency                          int
 	deleteDelay                                    model.Duration
 	dedupReplicaLabels                             []string
 	selectorRelabelConf                            extflag.PathOrContent
@@ -564,6 +587,8 @@ type compactConfig struct {
 	maxBlockIndexSize                              units.Base2Bytes
 	hashFunc                                       string
 	enableVerticalCompaction                       bool
+	dedupFunc                                      string
+	skipBlockWithOutOfOrderChunks                  bool
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -614,6 +639,8 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").IntVar(&cc.compactionConcurrency)
+	cmd.Flag("downsample.concurrency", "Number of goroutines to use when downsampling blocks.").
+		Default("1").IntVar(&cc.downsampleConcurrency)
 
 	cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket. "+
 		"If delete-delay is non zero, blocks will be marked for deletion and compactor component will delete blocks marked for deletion from the bucket. "+
@@ -622,16 +649,21 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
 		Default("48h").SetValue(&cc.deleteDelay)
 
-	cmd.Flag("compact.enable-vertical-compaction", "Experimental. When set to true, compactor will allow overlaps and perform **irreversible** vertical compaction. See https://thanos.io/tip/components/compact.md/#vertical-compactions to read more."+
-		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
+	cmd.Flag("compact.enable-vertical-compaction", "Experimental. When set to true, compactor will allow overlaps and perform **irreversible** vertical compaction. See https://thanos.io/tip/components/compact.md/#vertical-compactions to read more. "+
+		"Please note that by default this uses a NAIVE algorithm for merging. If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func."+
 		"NOTE: This flag is ignored and (enabled) when --deduplication.replica-label flag is set.").
 		Hidden().Default("false").BoolVar(&cc.enableVerticalCompaction)
 
+	cmd.Flag("deduplication.func", "Experimental. Deduplication algorithm for merging overlapping blocks. "+
+		"Possible values are: \"\", \"penalty\". If no value is specified, the default compact deduplication merger is used, which performs 1:1 deduplication for samples. "+
+		"When set to penalty, penalty based deduplication algorithm will be used. At least one replica label has to be set via --deduplication.replica-label flag.").
+		Default("").EnumVar(&cc.dedupFunc, compact.DedupAlgorithmPenalty, "")
+
 	cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
-		"Experimental. When it is set to true, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
-		"Please note that this uses a NAIVE algorithm for merging (no smart replica deduplication, just chaining samples together)."+
-		"This works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication.").
-		Hidden().StringsVar(&cc.dedupReplicaLabels)
+		"Experimental. When one or more labels are set, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
+		"Please note that by default this uses a NAIVE algorithm for merging which works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication."+
+		"If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func.").
+		StringsVar(&cc.dedupReplicaLabels)
 
 	// TODO(bwplotka): This is short term fix for https://github.com/thanos-io/thanos/issues/1424, replace with vertical block sharding https://github.com/thanos-io/thanos/pull/3390.
 	cmd.Flag("compact.block-max-index-size", "Maximum index size for the resulted block during any compaction. Note that"+
@@ -639,6 +671,9 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"block is marked for no compaction (no-compact-mark.json is uploaded) which causes this block to be excluded from any compaction. "+
 		"Default is due to https://github.com/thanos-io/thanos/issues/1424, but it's overall recommended to keeps block size to some reasonable size.").
 		Hidden().Default("64GB").BytesVar(&cc.maxBlockIndexSize)
+
+	cmd.Flag("compact.skip-block-with-out-of-order-chunks", "When set to true, mark blocks containing index with out-of-order chunks for no compact instead of halting the compaction").
+		Hidden().Default("false").BoolVar(&cc.skipBlockWithOutOfOrderChunks)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&cc.hashFunc, "SHA256", "")

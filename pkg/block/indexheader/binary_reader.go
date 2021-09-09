@@ -653,7 +653,7 @@ func (r *BinaryReader) IndexVersion() (int, error) {
 }
 
 // TODO(bwplotka): Get advantage of multi value offset fetch.
-func (r *BinaryReader) PostingsOffset(name string, value string) (index.Range, error) {
+func (r *BinaryReader) PostingsOffset(name, value string) (index.Range, error) {
 	rngs, err := r.postingsOffset(name, value)
 	if err != nil {
 		return index.Range{}, err
