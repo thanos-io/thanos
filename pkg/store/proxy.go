@@ -302,14 +302,18 @@ func (b *broadcastingSeriesServer) SetHeader(m metadata.MD) error  { return b.sr
 func (b *broadcastingSeriesServer) SendHeader(m metadata.MD) error { return b.srv.SendHeader(m) }
 func (b *broadcastingSeriesServer) SetTrailer(m metadata.MD)       { b.srv.SetTrailer(m) }
 
-func generateListenerKey(stores []Client, r *storepb.SeriesRequest) string {
+// findMostMatchingKey generates a most fitting listener key. Must be called under
+// a lock.
+func findMostMatchingKey(stores []Client, r *storepb.SeriesRequest, listeners *lru.LRU) string {
 	var sb strings.Builder
+
+	const marker rune = 0xffff
 
 	for _, st := range stores {
 		fmt.Fprint(&sb, st.String())
 	}
 
-	fmt.Fprintf(&sb, "%d%d%v%v%v%v%v", r.MaxTime, r.MinTime, r.Matchers, r.MaxResolutionWindow, r.PartialResponseStrategy, r.PartialResponseDisabled, r.Hints.String())
+	fmt.Fprintf(&sb, "%d%d%v%v%v%v", r.MaxTime, r.MinTime, r.MaxResolutionWindow, r.PartialResponseStrategy, r.PartialResponseDisabled, r.Hints.String())
 
 	// For RAW data it doesn't matter what the aggregates are.
 	// TODO(GiedriusS): remove this once query push-down becomes a reality.
@@ -317,7 +321,37 @@ func generateListenerKey(stores []Client, r *storepb.SeriesRequest) string {
 		fmt.Fprintf(&sb, "%v", r.Aggregates)
 	}
 
-	return sb.String()
+	fmt.Fprintf(&sb, "%c", marker)
+
+	markers := 0
+	if len(r.Matchers) > 0 {
+		markers = len(r.Matchers) - 1
+	}
+	markerPositions := make([]int, markers)
+
+	for i, m := range r.Matchers {
+		if i > 0 {
+			markerPositions = append(markerPositions, sb.Len())
+		}
+		fmt.Fprintf(&sb, "%s%c%s%c", m.Name, marker, m.Value, marker)
+	}
+
+	_, ok := listeners.Get(sb.String())
+	// Easy path - direct match.
+	if ok {
+		return sb.String()
+	}
+
+	originalKey := sb.String()
+
+	for _, markerPos := range markerPositions {
+		currentKey := originalKey[:markerPos]
+		_, ok := listeners.Get(currentKey)
+		if ok {
+			return currentKey
+		}
+	}
+	return originalKey
 }
 
 // Memoized version of realSeries() - it doesn't perform any Series() call unless such a request
@@ -331,9 +365,9 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		g               *errgroup.Group
 	)
 	stores := s.stores()
-	listenerKey := generateListenerKey(stores, r)
 
 	s.requestListenersLock.Lock()
+	listenerKey := findMostMatchingKey(stores, r, s.requestListenersLRU)
 	val, ok := s.requestListenersLRU.Get(listenerKey)
 	if !ok {
 		val = &requestListenerVal{
@@ -351,9 +385,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	rlk.valLock.Unlock()
 
 	if shouldSendQuery {
-		gr, gctx := errgroup.WithContext(ctx)
-		ctx = gctx
-		g = gr
+		g, ctx = errgroup.WithContext(ctx)
 
 		bss := &broadcastingSeriesServer{
 			ctx,

@@ -1913,3 +1913,55 @@ func TestProxyStore_storeMatchMetadata(t *testing.T) {
 	testutil.Assert(t, ok)
 	testutil.Equals(t, "", reason)
 }
+
+// TestProxyStore_MatchingKey tests that a subkey matches the upper
+// key since it queries for a subset of the key.
+func TestProxyStore_MatchingKey(t *testing.T) {
+	listeners, err := lru.NewLRU(100, nil)
+	testutil.Ok(t, err)
+
+	testKey := findMostMatchingKey(nil, &storepb.SeriesRequest{
+		MinTime: 123,
+		MaxTime: 123,
+		Matchers: []storepb.LabelMatcher{
+			{
+				Type:  storepb.LabelMatcher_EQ,
+				Name:  "test",
+				Value: "test",
+			},
+		},
+	}, listeners)
+
+	listeners.Add(testKey, "test")
+	testSubkey := findMostMatchingKey(nil, &storepb.SeriesRequest{
+		MinTime: 123,
+		MaxTime: 123,
+		Matchers: []storepb.LabelMatcher{
+			{
+				Type:  storepb.LabelMatcher_EQ,
+				Name:  "test",
+				Value: "test",
+			},
+			{
+				Type:  storepb.LabelMatcher_EQ,
+				Name:  "test",
+				Value: "test123",
+			},
+		},
+	}, listeners)
+
+	testNotMatchingKey := findMostMatchingKey(nil, &storepb.SeriesRequest{
+		MinTime: 123,
+		MaxTime: 123,
+		Matchers: []storepb.LabelMatcher{
+			{
+				Type:  storepb.LabelMatcher_EQ,
+				Name:  "test",
+				Value: "test123",
+			},
+		},
+	}, listeners)
+
+	testutil.Assert(t, testKey == testSubkey)
+	testutil.Assert(t, testNotMatchingKey != testKey)
+}
