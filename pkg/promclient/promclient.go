@@ -702,7 +702,7 @@ func (c *Client) SeriesInGRPC(ctx context.Context, base *url.URL, matchers []*la
 	return m.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_series HTTP[client]", &u, &m)
 }
 
-// LabelNames returns all known label names. It uses gRPC errors.
+// LabelNames returns all known label names constrained by the given matchers. It uses gRPC errors.
 // NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
 func (c *Client) LabelNamesInGRPC(ctx context.Context, base *url.URL, matchers []storepb.LabelMatcher, startTime, endTime int64) ([]string, error) {
 	u := *base

@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
+	prommodel "github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/model"
 )
@@ -138,10 +139,24 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 	}
 }
 
+// DownstreamTripperConfig stores the http.Transport configuration for query-frontend's HTTP downstream tripper.
+type DownstreamTripperConfig struct {
+	IdleConnTimeout       prommodel.Duration `yaml:"idle_conn_timeout"`
+	ResponseHeaderTimeout prommodel.Duration `yaml:"response_header_timeout"`
+	TLSHandshakeTimeout   prommodel.Duration `yaml:"tls_handshake_timeout"`
+	ExpectContinueTimeout prommodel.Duration `yaml:"expect_continue_timeout"`
+	MaxIdleConns          *int               `yaml:"max_idle_conns"`
+	MaxIdleConnsPerHost   *int               `yaml:"max_idle_conns_per_host"`
+	MaxConnsPerHost       *int               `yaml:"max_conns_per_host"`
+
+	CachePathOrContent extflag.PathOrContent
+}
+
 // Config holds the query frontend configs.
 type Config struct {
 	QueryRangeConfig
 	LabelsConfig
+	DownstreamTripperConfig
 
 	CortexHandlerConfig    *transport.HandlerConfig
 	CompressResponses      bool

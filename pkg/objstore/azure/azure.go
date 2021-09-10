@@ -174,7 +174,7 @@ func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket
 	}
 
 	ctx := context.Background()
-	container, err := createContainer(ctx, conf)
+	container, err := createContainer(ctx, logger, conf)
 	if err != nil {
 		ret, ok := err.(blob.StorageError)
 		if !ok {
@@ -182,7 +182,7 @@ func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket
 		}
 		if ret.ServiceCode() == "ContainerAlreadyExists" {
 			level.Debug(logger).Log("msg", "Getting connection to existing Azure blob container", "container", conf.ContainerName)
-			container, err = getContainer(ctx, conf)
+			container, err = getContainer(ctx, logger, conf)
 			if err != nil {
 				return nil, errors.Wrapf(err, "cannot get existing Azure blob container: %s", container)
 			}

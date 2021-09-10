@@ -104,6 +104,10 @@ func NewPrometheus(e e2e.Environment, name, config, promImage string, enableFeat
 }
 
 func NewPrometheusWithSidecar(e e2e.Environment, netName, name, config, promImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
+	return NewPrometheusWithSidecarCustomImage(e, netName, name, config, promImage, DefaultImage(), enableFeatures...)
+}
+
+func NewPrometheusWithSidecarCustomImage(e e2e.Environment, netName, name, config, promImage string, sidecarImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
 	prom, dataDir, err := NewPrometheus(e, name, config, promImage, enableFeatures...)
 	if err != nil {
 		return nil, nil, err
@@ -112,7 +116,7 @@ func NewPrometheusWithSidecar(e e2e.Environment, netName, name, config, promImag
 	sidecar := NewService(
 		e,
 		fmt.Sprintf("sidecar-%s", name),
-		DefaultImage(),
+		sidecarImage,
 		e2e.NewCommand("sidecar", e2e.BuildArgs(map[string]string{
 			"--debug.name":        fmt.Sprintf("sidecar-%v", name),
 			"--grpc-address":      ":9091",
@@ -136,6 +140,7 @@ type QuerierBuilder struct {
 	name           string
 	routePrefix    string
 	externalPrefix string
+	image          string
 
 	storeAddresses       []string
 	fileSDStoreAddresses []string
@@ -147,36 +152,42 @@ type QuerierBuilder struct {
 	tracingConfig string
 }
 
-func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses []string) *QuerierBuilder {
+func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string) *QuerierBuilder {
 	return &QuerierBuilder{
 		environment:    e,
 		sharedDir:      e.SharedDir(),
 		name:           name,
 		storeAddresses: storeAddresses,
+		image:          DefaultImage(),
 	}
 }
 
-func (q *QuerierBuilder) WithFileSDStoreAddresses(fileSDStoreAddresses []string) *QuerierBuilder {
+func (q *QuerierBuilder) WithImage(image string) *QuerierBuilder {
+	q.image = image
+	return q
+}
+
+func (q *QuerierBuilder) WithFileSDStoreAddresses(fileSDStoreAddresses ...string) *QuerierBuilder {
 	q.fileSDStoreAddresses = fileSDStoreAddresses
 	return q
 }
 
-func (q *QuerierBuilder) WithRuleAddresses(ruleAddresses []string) *QuerierBuilder {
+func (q *QuerierBuilder) WithRuleAddresses(ruleAddresses ...string) *QuerierBuilder {
 	q.ruleAddresses = ruleAddresses
 	return q
 }
 
-func (q *QuerierBuilder) WithTargetAddresses(targetAddresses []string) *QuerierBuilder {
+func (q *QuerierBuilder) WithTargetAddresses(targetAddresses ...string) *QuerierBuilder {
 	q.targetAddresses = targetAddresses
 	return q
 }
 
-func (q *QuerierBuilder) WithExemplarAddresses(exemplarAddresses []string) *QuerierBuilder {
+func (q *QuerierBuilder) WithExemplarAddresses(exemplarAddresses ...string) *QuerierBuilder {
 	q.exemplarAddresses = exemplarAddresses
 	return q
 }
 
-func (q *QuerierBuilder) WithMetadataAddresses(metadataAddresses []string) *QuerierBuilder {
+func (q *QuerierBuilder) WithMetadataAddresses(metadataAddresses ...string) *QuerierBuilder {
 	q.metadataAddresses = metadataAddresses
 	return q
 }
@@ -269,7 +280,7 @@ func (q *QuerierBuilder) Build() (*e2e.InstrumentedRunnable, error) {
 	querier := NewService(
 		q.environment,
 		fmt.Sprintf("querier-%v", q.name),
-		DefaultImage(),
+		q.image,
 		e2e.NewCommand("query", args...),
 		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,

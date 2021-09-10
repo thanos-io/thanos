@@ -23,6 +23,10 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -115,8 +119,8 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
 	// Querier. Both fileSD and directly by flags.
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")}).
-		WithFileSDStoreAddresses([]string{sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")}).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")).
+		WithFileSDStoreAddresses(sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -191,7 +195,7 @@ func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 
 	externalPrefix := "test"
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", nil).
+	q, err := e2ethanos.NewQuerierBuilder(e, "1").
 		WithExternalPrefix(externalPrefix).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
@@ -208,7 +212,7 @@ func TestQueryExternalPrefix(t *testing.T) {
 
 	externalPrefix := "thanos"
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", nil).
+	q, err := e2ethanos.NewQuerierBuilder(e, "1").
 		WithExternalPrefix(externalPrefix).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
@@ -231,7 +235,7 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 	externalPrefix := "thanos"
 	routePrefix := "test"
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", nil).
+	q, err := e2ethanos.NewQuerierBuilder(e, "1").
 		WithRoutePrefix(routePrefix).
 		WithExternalPrefix(externalPrefix).
 		Build()
@@ -265,7 +269,7 @@ func TestQueryLabelNames(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")}).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -284,7 +288,9 @@ func TestQueryLabelNames(t *testing.T) {
 
 	labelNames(t, ctx, q.Endpoint("http"), []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
 		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
-			// Expected result: [__name__, instance, job, prometheus, replica]
+			// Expected result: [__name__, instance, job, prometheus, replica, receive, tenant_id]
+			// Pre-labelnames pushdown we've done Select() over all series and picked out the label names hence they all had external labels.
+			// With labelnames pushdown we had to extend the LabelNames() call to enrich the response with the external labelset when there is more than one label.
 			return len(res) == 7
 		},
 	)
@@ -316,7 +322,7 @@ func TestQueryLabelValues(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")}).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -344,6 +350,190 @@ func TestQueryLabelValues(t *testing.T) {
 			return len(res) == 0
 		},
 	)
+}
+
+func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
+	t.Parallel()
+
+	for i, tcase := range []struct {
+		queryImage   string
+		sidecarImage string
+	}{
+		{
+			queryImage:   e2ethanos.DefaultImage(),
+			sidecarImage: "quay.io/thanos/thanos:v0.22.0", // Thanos components from version before 0.23 does not have new InfoAPI.
+		},
+		{
+			queryImage:   "quay.io/thanos/thanos:v0.22.0", // Thanos querier from version before 0.23 did not know about InfoAPI.
+			sidecarImage: e2ethanos.DefaultImage(),
+		},
+	} {
+		i := i
+		t.Run(fmt.Sprintf("%+v", tcase), func(t *testing.T) {
+			netName := fmt.Sprintf("e2e_test_query_comp_query_%d", i)
+
+			e, err := e2e.NewDockerEnvironment(netName)
+			testutil.Ok(t, err)
+			t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+			promRulesSubDir := filepath.Join("rules")
+			testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), promRulesSubDir), os.ModePerm))
+			// Create the abort_on_partial_response alert for Prometheus.
+			// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.
+			createRuleFile(t, filepath.Join(e.SharedDir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
+
+			p1, s1, err := e2ethanos.NewPrometheusWithSidecarCustomImage(
+				e,
+				netName,
+				"p1",
+				defaultPromConfig("p1", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml"), "localhost:9090", netName+"-querier-1:8080"), // TODO(bwplotka): Use newer e2e lib to handle this in type safe manner.
+				e2ethanos.DefaultPrometheusImage(),
+				tcase.sidecarImage,
+				e2ethanos.FeatureExemplarStorage,
+			)
+			testutil.Ok(t, err)
+			testutil.Ok(t, e2e.StartAndWaitReady(p1, s1))
+
+			// Newest querier with old --rules --meta etc flags.
+			q, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).
+				WithMetadataAddresses(s1.InternalEndpoint("grpc")).
+				WithExemplarAddresses(s1.InternalEndpoint("grpc")).
+				WithTargetAddresses(s1.InternalEndpoint("grpc")).
+				WithRuleAddresses(s1.InternalEndpoint("grpc")).
+				WithTracingConfig(fmt.Sprintf(`type: JAEGER
+config:
+  sampler_type: const
+  sampler_param: 1
+  service_name: %s`, netName+"-query")). // Use fake tracing config to trigger exemplar.
+				WithImage(tcase.queryImage).
+				Build()
+			testutil.Ok(t, err)
+			testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+			t.Cleanup(cancel)
+
+			// We should have single TCP connection, since all APIs are against the same server.
+			testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+
+			queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
+				Deduplicate: false,
+			}, []model.Metric{
+				{
+					"job":        "myself",
+					"prometheus": "p1",
+					"replica":    "0",
+				},
+			})
+
+			// We expect rule and other APIs to work.
+
+			// Metadata.
+			{
+				var promMeta map[string][]metadatapb.Meta
+				// Wait metadata response to be ready as Prometheus gets metadata after scrape.
+				testutil.Ok(t, runutil.Retry(3*time.Second, ctx.Done(), func() error {
+					promMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, mustURLParse(t, "http://"+p1.Endpoint("http")), "", -1)
+					testutil.Ok(t, err)
+					if len(promMeta) > 0 {
+						return nil
+					}
+					return fmt.Errorf("empty metadata response from Prometheus")
+				}))
+
+				thanosMeta, err := promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, mustURLParse(t, "http://"+q.Endpoint("http")), "", -1)
+				testutil.Ok(t, err)
+				testutil.Assert(t, len(thanosMeta) > 0, "got empty metadata response from Thanos")
+
+				// Metadata response from Prometheus and Thanos Querier should be the same after deduplication.
+				metadataEqual(t, thanosMeta, promMeta)
+			}
+
+			// Exemplars.
+			{
+				now := time.Now()
+				start := timestamp.FromTime(now.Add(-time.Hour))
+				end := timestamp.FromTime(now.Add(time.Hour))
+
+				// Send HTTP requests to thanos query to trigger exemplars.
+				labelNames(t, ctx, q.Endpoint("http"), nil, start, end, func(res []string) bool {
+					return true
+				})
+
+				queryExemplars(t, ctx, q.Endpoint("http"), `http_request_duration_seconds_bucket{handler="label_names"}`, start, end, exemplarsOnExpectedSeries(map[string]string{
+					"__name__":   "http_request_duration_seconds_bucket",
+					"handler":    "label_names",
+					"job":        "myself",
+					"method":     "get",
+					"prometheus": "p1",
+				}))
+			}
+
+			// Targets.
+			{
+				targetAndAssert(t, ctx, q.Endpoint("http"), "", &targetspb.TargetDiscovery{
+					ActiveTargets: []*targetspb.ActiveTarget{
+						{
+							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "__address__", Value: fmt.Sprintf("e2e_test_query_comp_query_%d-querier-1:8080", i)},
+								{Name: "__metrics_path__", Value: "/metrics"},
+								{Name: "__scheme__", Value: "http"},
+								{Name: "job", Value: "myself"},
+								{Name: "prometheus", Value: "p1"},
+							}},
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "instance", Value: fmt.Sprintf("e2e_test_query_comp_query_%d-querier-1:8080", i)},
+								{Name: "job", Value: "myself"},
+								{Name: "prometheus", Value: "p1"},
+							}},
+							ScrapePool: "myself",
+							ScrapeUrl:  fmt.Sprintf("http://e2e_test_query_comp_query_%d-querier-1:8080/metrics", i),
+							Health:     targetspb.TargetHealth_UP,
+						},
+						{
+							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "__address__", Value: "localhost:9090"},
+								{Name: "__metrics_path__", Value: "/metrics"},
+								{Name: "__scheme__", Value: "http"},
+								{Name: "job", Value: "myself"},
+								{Name: "prometheus", Value: "p1"},
+							}},
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "instance", Value: "localhost:9090"},
+								{Name: "job", Value: "myself"},
+								{Name: "prometheus", Value: "p1"},
+							}},
+							ScrapePool: "myself",
+							ScrapeUrl:  "http://localhost:9090/metrics",
+							Health:     targetspb.TargetHealth_UP,
+						},
+					},
+					DroppedTargets: []*targetspb.DroppedTarget{},
+				})
+			}
+
+			// Rules.
+			{
+				ruleAndAssert(t, ctx, q.Endpoint("http"), "", []*rulespb.RuleGroup{
+					{
+						Name: "example_abort",
+						File: "/shared/rules/rules.yaml",
+						Rules: []*rulespb.Rule{
+							rulespb.NewAlertingRule(&rulespb.Alert{
+								Name:  "TestAlert_AbortOnPartialResponse",
+								State: rulespb.AlertState_FIRING,
+								Query: "absent(some_metric)",
+								Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+									{Name: "prometheus", Value: "p1"},
+									{Name: "severity", Value: "page"},
+								}},
+							}),
+						},
+					},
+				})
+			}
+		})
+	}
 }
 
 func checkNetworkRequests(t *testing.T, addr string) {
@@ -489,7 +679,7 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.M
 }
 
 //nolint:unparam
-func rangeQuery(t *testing.T, ctx context.Context, addr, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) bool) {
+func rangeQuery(t *testing.T, ctx context.Context, addr, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) error) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
@@ -504,15 +694,15 @@ func rangeQuery(t *testing.T, ctx context.Context, addr, q string, start, end, s
 			return errors.Errorf("unexpected warnings %s", warnings)
 		}
 
-		if check(res) {
-			return nil
+		if err := check(res); err != nil {
+			return errors.Wrap(err, "result check failed")
 		}
 
-		return errors.Errorf("unexpected results size %d", len(res))
+		return nil
 	}))
 }
 
-func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, end int64, check func(data []*exemplarspb.ExemplarData) bool) {
+func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, end int64, check func(data []*exemplarspb.ExemplarData) error) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
@@ -524,10 +714,10 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 			return err
 		}
 
-		if check(res) {
-			return nil
+		if err := check(res); err != nil {
+			return errors.Wrap(err, "exemplar check failed")
 		}
 
-		return errors.Errorf("unexpected results size %d", len(res))
+		return nil
 	}))
 }

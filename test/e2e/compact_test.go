@@ -458,7 +458,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{str.InternalEndpoint("grpc")}).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", str.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 

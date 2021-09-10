@@ -11,9 +11,11 @@ import (
 
 	"github.com/efficientgo/e2e"
 	"github.com/efficientgo/e2e/matchers"
+	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
@@ -36,7 +38,7 @@ func TestQueryFrontend(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{sidecar.InternalEndpoint("grpc")}).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -110,8 +112,11 @@ func TestQueryFrontend(t *testing.T) {
 			timestamp.FromTime(now.Add(time.Hour)),
 			14,
 			promclient.QueryOptions{},
-			func(res model.Matrix) bool {
-				return len(res) > 0
+			func(res model.Matrix) error {
+				if len(res) > 0 {
+					return errors.Errorf("expected some results, got nothing")
+				}
+				return nil
 			},
 		)
 
@@ -149,8 +154,11 @@ func TestQueryFrontend(t *testing.T) {
 			timestamp.FromTime(now.Add(time.Hour)),
 			14,
 			promclient.QueryOptions{},
-			func(res model.Matrix) bool {
-				return len(res) > 0
+			func(res model.Matrix) error {
+				if len(res) > 0 {
+					return errors.Errorf("expected some results, got nothing")
+				}
+				return nil
 			},
 		)
 
@@ -191,8 +199,11 @@ func TestQueryFrontend(t *testing.T) {
 			timestamp.FromTime(now.Add(24*time.Hour)),
 			14,
 			promclient.QueryOptions{},
-			func(res model.Matrix) bool {
-				return len(res) > 0
+			func(res model.Matrix) error {
+				if len(res) > 0 {
+					return errors.Errorf("expected some results, got nothing")
+				}
+				return nil
 			},
 		)
 
@@ -393,7 +404,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{sidecar.InternalEndpoint("grpc")}).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -453,8 +464,11 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		timestamp.FromTime(now.Add(time.Hour)),
 		14,
 		promclient.QueryOptions{},
-		func(res model.Matrix) bool {
-			return len(res) > 0
+		func(res model.Matrix) error {
+			if len(res) > 0 {
+				return errors.Errorf("expected some results, got nothing")
+			}
+			return nil
 		},
 	)
 
@@ -480,8 +494,11 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		timestamp.FromTime(now.Add(time.Hour)),
 		14,
 		promclient.QueryOptions{},
-		func(res model.Matrix) bool {
-			return len(res) > 0
+		func(res model.Matrix) error {
+			if len(res) > 0 {
+				return errors.Errorf("expected some results, got nothing")
+			}
+			return nil
 		},
 	)
 

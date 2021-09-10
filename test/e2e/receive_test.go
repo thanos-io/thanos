@@ -71,7 +71,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{i.InternalEndpoint("grpc")}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -158,7 +158,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{i1.InternalEndpoint("grpc"), i2.InternalEndpoint("grpc"), i3.InternalEndpoint("grpc")}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", i1.InternalEndpoint("grpc"), i2.InternalEndpoint("grpc"), i3.InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -271,7 +271,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2))
 
 		//Setup Querier
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{i1.InternalEndpoint("grpc"), i2.InternalEndpoint("grpc"), i3.InternalEndpoint("grpc")}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", i1.InternalEndpoint("grpc"), i2.InternalEndpoint("grpc"), i3.InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -369,7 +369,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -440,7 +440,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -511,7 +511,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -579,7 +579,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -639,7 +639,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{r1.InternalEndpoint("grpc")}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

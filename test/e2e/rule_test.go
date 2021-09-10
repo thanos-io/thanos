@@ -256,7 +256,7 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{r.InternalEndpoint("grpc")}).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", r.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 
 	http_util "github.com/thanos-io/thanos/pkg/http"
@@ -65,8 +66,8 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), netName + "-rule-rule1:9091", netName + "-rule-rule2:9091"}
-	q, err := e2ethanos.NewQuerierBuilder(e, "query", stores).
-		WithRuleAddresses(stores).
+	q, err := e2ethanos.NewQuerierBuilder(e, "query", stores...).
+		WithRuleAddresses(stores...).
 		Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
@@ -144,14 +145,17 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 
 	fmt.Println("ruleAndAssert: Waiting for results for rules type", typ)
 	var result []*rulespb.RuleGroup
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
 		res, err := promclient.NewDefaultClient().RulesInGRPC(ctx, mustURLParse(t, "http://"+addr), typ)
 		if err != nil {
 			return err
 		}
 
 		if len(result) != len(res) {
-			fmt.Println("ruleAndAssert: New result:", res)
+			fmt.Println("ruleAndAssert: new result:", res)
+			result = res
 		}
 
 		if len(res) != len(want) {

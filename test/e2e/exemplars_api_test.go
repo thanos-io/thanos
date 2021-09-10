@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -45,8 +47,8 @@ config:
 
 	stores := []string{netName + "-" + "sidecar-prom1:9091", netName + "-" + "sidecar-prom2:9091"}
 	q, err := e2ethanos.NewQuerierBuilder(
-		e, "query", stores).
-		WithExemplarAddresses(stores).
+		e, "query", stores...).
+		WithExemplarAddresses(stores...).
 		WithTracingConfig(tracingCfg).
 		Build()
 	testutil.Ok(t, err)
@@ -84,88 +86,65 @@ config:
 	end := timestamp.FromTime(now.Add(time.Hour))
 
 	// Send HTTP requests to thanos query to trigger exemplars.
-	labelNames(t, ctx, q.Endpoint("http"), nil, start, end, func(res []string) bool {
-		return true
-	})
+	labelNames(t, ctx, q.Endpoint("http"), nil, start, end, func(res []string) bool { return true })
 
 	t.Run("Basic exemplars query", func(t *testing.T) {
-		requiredSeriesLabels := map[string]string{
+		queryExemplars(t, ctx, q.Endpoint("http"), `http_request_duration_seconds_bucket{handler="label_names"}`, start, end, exemplarsOnExpectedSeries(map[string]string{
 			"__name__":   "http_request_duration_seconds_bucket",
 			"handler":    "label_names",
 			"job":        "myself",
 			"method":     "get",
 			"prometheus": "ha",
-		}
-		queryExemplars(t, ctx, q.Endpoint("http"), `http_request_duration_seconds_bucket{handler="label_names"}`,
-			start, end, func(data []*exemplarspb.ExemplarData) bool {
-				if len(data) != 1 {
-					return false
-				}
-
-				// Compare series labels.
-				seriesLabels := labelpb.ZLabelSetsToPromLabelSets(data[0].SeriesLabels)
-				for _, lbls := range seriesLabels {
-					for k, v := range requiredSeriesLabels {
-						if lbls.Get(k) != v {
-							return false
-						}
-					}
-				}
-
-				// Make sure the exemplar contains the correct traceID label.
-				for _, exemplar := range data[0].Exemplars {
-					for _, lbls := range labelpb.ZLabelSetsToPromLabelSets(exemplar.Labels) {
-						if !lbls.Has(traceIDLabel) {
-							return false
-						}
-					}
-				}
-				return true
-			})
+		}))
 	})
 
 	t.Run("Exemplars query with matched external label", func(t *testing.T) {
-		requiredSeriesLabels := map[string]string{
+		// Here replica is an external label.
+		queryExemplars(t, ctx, q.Endpoint("http"), `http_request_duration_seconds_bucket{handler="label_names", replica="0"}`, start, end, exemplarsOnExpectedSeries(map[string]string{
 			"__name__":   "http_request_duration_seconds_bucket",
 			"handler":    "label_names",
 			"job":        "myself",
 			"method":     "get",
 			"prometheus": "ha",
-		}
-		// Here replica is an external label.
-		queryExemplars(t, ctx, q.Endpoint("http"), `http_request_duration_seconds_bucket{handler="label_names", replica="0"}`,
-			start, end, func(data []*exemplarspb.ExemplarData) bool {
-				if len(data) != 1 {
-					return false
-				}
-
-				// Compare series labels.
-				seriesLabels := labelpb.ZLabelSetsToPromLabelSets(data[0].SeriesLabels)
-				for _, lbls := range seriesLabels {
-					for k, v := range requiredSeriesLabels {
-						if lbls.Get(k) != v {
-							return false
-						}
-					}
-				}
-
-				// Make sure the exemplar contains the correct traceID label.
-				for _, exemplar := range data[0].Exemplars {
-					for _, lbls := range labelpb.ZLabelSetsToPromLabelSets(exemplar.Labels) {
-						if !lbls.Has(traceIDLabel) {
-							return false
-						}
-					}
-				}
-				return true
-			})
+		}))
 	})
 
 	t.Run("Exemplars query doesn't match external label", func(t *testing.T) {
 		// Here replica is an external label, but it doesn't match.
 		queryExemplars(t, ctx, q.Endpoint("http"), `http_request_duration_seconds_bucket{handler="label_names", replica="foo"}`,
-			start, end, func(data []*exemplarspb.ExemplarData) bool {
-				return len(data) == 0
+			start, end, func(data []*exemplarspb.ExemplarData) error {
+				if len(data) > 0 {
+					return errors.Errorf("expected no examplers, got %v", data)
+				}
+				return nil
 			})
 	})
+}
+
+func exemplarsOnExpectedSeries(requiredSeriesLabels map[string]string) func(data []*exemplarspb.ExemplarData) error {
+	return func(data []*exemplarspb.ExemplarData) error {
+		if len(data) != 1 {
+			return errors.Errorf("unexpected result size, expected 1, got: %v", len(data))
+		}
+
+		// Compare series labels.
+		seriesLabels := labelpb.ZLabelSetsToPromLabelSets(data[0].SeriesLabels)
+		for _, lbls := range seriesLabels {
+			for k, v := range requiredSeriesLabels {
+				if lbls.Get(k) != v {
+					return errors.Errorf("unexpected labels in result, expected %v, got: %v", requiredSeriesLabels, seriesLabels)
+				}
+			}
+		}
+
+		// Make sure the exemplar contains the correct traceID label.
+		for _, exemplar := range data[0].Exemplars {
+			for _, lbls := range labelpb.ZLabelSetsToPromLabelSets(exemplar.Labels) {
+				if !lbls.Has(traceIDLabel) {
+					return errors.Errorf("unexpected labels in exemplar, expected %v, got: %v", traceIDLabel, exemplar.Labels)
+				}
+			}
+		}
+		return nil
+	}
 }

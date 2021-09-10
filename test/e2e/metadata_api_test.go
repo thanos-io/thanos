@@ -50,8 +50,8 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 
 	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")}
 	q, err := e2ethanos.NewQuerierBuilder(
-		e, "query", stores).
-		WithMetadataAddresses(stores).
+		e, "query", stores...).
+		WithMetadataAddresses(stores...).
 		Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
