@@ -18,7 +18,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules"
 )
 
-type toolsConfig struct {
+type checkRulesConfig struct {
 	rulesFiles []string
 }
 
@@ -29,19 +29,19 @@ func registerTools(app *extkingpin.App) {
 	registerCheckRules(cmd)
 }
 
-func (tc *toolsConfig) registerFlag(cmd extkingpin.FlagClause) *toolsConfig {
+func (tc *checkRulesConfig) registerFlag(cmd extkingpin.FlagClause) *checkRulesConfig {
 	cmd.Flag("rules", "The rule files glob to check (repeated).").Required().StringsVar(&tc.rulesFiles)
 	return tc
 }
 
 func registerCheckRules(app extkingpin.AppClause) {
 	cmd := app.Command("rules-check", "Check if the rule files are valid or not.")
-	tc := &toolsConfig{}
-	tc.registerFlag(cmd)
+	crc := &checkRulesConfig{}
+	crc.registerFlag(cmd)
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
-		return checkRulesFiles(logger, &tc.rulesFiles)
+		return checkRulesFiles(logger, &crc.rulesFiles)
 	})
 }
 
