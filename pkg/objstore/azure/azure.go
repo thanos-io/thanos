@@ -18,6 +18,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -37,7 +38,7 @@ var DefaultConfig = Config{
 	ReaderConfig: ReaderConfig{
 		MaxRetryRequests: 0,
 	},
-	HTTPConfig: HTTPConfig{
+	HTTPConfig: exthttp.HTTPConfig{
 		IdleConnTimeout:       model.Duration(90 * time.Second),
 		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
 		TLSHandshakeTimeout:   model.Duration(10 * time.Second),
@@ -51,15 +52,15 @@ var DefaultConfig = Config{
 
 // Config Azure storage configuration.
 type Config struct {
-	StorageAccountName string         `yaml:"storage_account"`
-	StorageAccountKey  string         `yaml:"storage_account_key"`
-	ContainerName      string         `yaml:"container"`
-	Endpoint           string         `yaml:"endpoint"`
-	MaxRetries         int            `yaml:"max_retries"`
-	MSIResource        string         `yaml:"msi_resource"`
-	PipelineConfig     PipelineConfig `yaml:"pipeline_config"`
-	ReaderConfig       ReaderConfig   `yaml:"reader_config"`
-	HTTPConfig         HTTPConfig     `yaml:"http_config"`
+	StorageAccountName string             `yaml:"storage_account"`
+	StorageAccountKey  string             `yaml:"storage_account_key"`
+	ContainerName      string             `yaml:"container"`
+	Endpoint           string             `yaml:"endpoint"`
+	MaxRetries         int                `yaml:"max_retries"`
+	MSIResource        string             `yaml:"msi_resource"`
+	PipelineConfig     PipelineConfig     `yaml:"pipeline_config"`
+	ReaderConfig       ReaderConfig       `yaml:"reader_config"`
+	HTTPConfig         exthttp.HTTPConfig `yaml:"http_config"`
 }
 
 type ReaderConfig struct {
@@ -71,19 +72,6 @@ type PipelineConfig struct {
 	TryTimeout    model.Duration `yaml:"try_timeout"`
 	RetryDelay    model.Duration `yaml:"retry_delay"`
 	MaxRetryDelay model.Duration `yaml:"max_retry_delay"`
-}
-
-type HTTPConfig struct {
-	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
-	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
-	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
-
-	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
-	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
-	MaxIdleConns          int            `yaml:"max_idle_conns"`
-	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
-	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
-	DisableCompression    bool           `yaml:"disable_compression"`
 }
 
 // Bucket implements the store.Bucket interface against Azure APIs.

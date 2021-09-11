@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/model"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -38,7 +39,7 @@ http_config:
 `),
 			},
 			want: Config{
-				HTTPConfig: HTTPConfig{
+				HTTPConfig: exthttp.HTTPConfig{
 					IdleConnTimeout:       model.Duration(90 * time.Second),
 					ResponseHeaderTimeout: model.Duration(2 * time.Minute),
 					TLSHandshakeTimeout:   model.Duration(10 * time.Second),

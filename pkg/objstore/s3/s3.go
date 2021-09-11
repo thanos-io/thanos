@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"gopkg.in/yaml.v2"
@@ -57,7 +58,7 @@ const (
 
 var DefaultConfig = Config{
 	PutUserMetadata: map[string]string{},
-	HTTPConfig: HTTPConfig{
+	HTTPConfig: exthttp.HTTPConfig{
 		IdleConnTimeout:       model.Duration(90 * time.Second),
 		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
 		TLSHandshakeTimeout:   model.Duration(10 * time.Second),
@@ -71,17 +72,17 @@ var DefaultConfig = Config{
 
 // Config stores the configuration for s3 bucket.
 type Config struct {
-	Bucket             string            `yaml:"bucket"`
-	Endpoint           string            `yaml:"endpoint"`
-	Region             string            `yaml:"region"`
-	AccessKey          string            `yaml:"access_key"`
-	Insecure           bool              `yaml:"insecure"`
-	SignatureV2        bool              `yaml:"signature_version2"`
-	SecretKey          string            `yaml:"secret_key"`
-	PutUserMetadata    map[string]string `yaml:"put_user_metadata"`
-	HTTPConfig         HTTPConfig        `yaml:"http_config"`
-	TraceConfig        TraceConfig       `yaml:"trace"`
-	ListObjectsVersion string            `yaml:"list_objects_version"`
+	Bucket             string             `yaml:"bucket"`
+	Endpoint           string             `yaml:"endpoint"`
+	Region             string             `yaml:"region"`
+	AccessKey          string             `yaml:"access_key"`
+	Insecure           bool               `yaml:"insecure"`
+	SignatureV2        bool               `yaml:"signature_version2"`
+	SecretKey          string             `yaml:"secret_key"`
+	PutUserMetadata    map[string]string  `yaml:"put_user_metadata"`
+	HTTPConfig         exthttp.HTTPConfig `yaml:"http_config"`
+	TraceConfig        TraceConfig        `yaml:"trace"`
+	ListObjectsVersion string             `yaml:"list_objects_version"`
 	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
 	// NOTE we need to make sure this number does not produce more parts than 10 000.
 	PartSize  uint64    `yaml:"part_size"`
@@ -99,22 +100,6 @@ type SSEConfig struct {
 
 type TraceConfig struct {
 	Enable bool `yaml:"enable"`
-}
-
-// HTTPConfig stores the http.Transport configuration for the s3 minio client.
-type HTTPConfig struct {
-	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
-	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
-	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
-
-	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
-	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
-	MaxIdleConns          int            `yaml:"max_idle_conns"`
-	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
-	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
-
-	// Allow upstream callers to inject a round tripper
-	Transport http.RoundTripper `yaml:"-"`
 }
 
 // DefaultTransport - this default transport is based on the Minio
@@ -238,7 +223,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	if config.HTTPConfig.Transport != nil {
 		rt = config.HTTPConfig.Transport
 	} else {
-		rt = DefaultTransport(config)
+		rt = exthttp.DefaultTransport(config.HTTPConfig)
 	}
 
 	client, err := minio.New(config.Endpoint, &minio.Options{

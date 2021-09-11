@@ -5,9 +5,7 @@ package azure
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -18,6 +16,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -100,7 +99,7 @@ func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.
 		HTTPSender: pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 			return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
 				client := http.Client{
-					Transport: DefaultTransport(conf),
+					Transport: exthttp.DefaultTransport(conf.HTTPConfig),
 				}
 
 				resp, err := client.Do(request.WithContext(ctx))
@@ -116,28 +115,6 @@ func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.
 	service := blob.NewServiceURL(*u, p)
 
 	return service.NewContainerURL(conf.ContainerName), nil
-}
-
-func DefaultTransport(config Config) *http.Transport {
-	return &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-
-		MaxIdleConns:          config.HTTPConfig.MaxIdleConns,
-		MaxIdleConnsPerHost:   config.HTTPConfig.MaxIdleConnsPerHost,
-		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
-		MaxConnsPerHost:       config.HTTPConfig.MaxConnsPerHost,
-		TLSHandshakeTimeout:   time.Duration(config.HTTPConfig.TLSHandshakeTimeout),
-		ExpectContinueTimeout: time.Duration(config.HTTPConfig.ExpectContinueTimeout),
-
-		ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
-		DisableCompression:    config.HTTPConfig.DisableCompression,
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
-	}
 }
 
 func getContainer(ctx context.Context, logger log.Logger, conf Config) (blob.ContainerURL, error) {
