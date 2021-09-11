@@ -45,7 +45,6 @@ require (
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.42
 	github.com/minio/minio-go/v7 v7.0.10
-	github.com/mozillazg/go-cos v0.13.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/ncw/swift v1.0.52
 	github.com/oklog/run v1.1.0
@@ -61,6 +60,7 @@ require (
 	github.com/prometheus/common v0.29.0
 	github.com/prometheus/exporter-toolkit v0.6.0
 	github.com/prometheus/prometheus v1.8.2-0.20210720123808-b1ed4a0a663d
+	github.com/tencentyun/cos-go-sdk-v5 v0.7.31
 	github.com/uber/jaeger-client-go v2.29.1+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
 	github.com/weaveworks/common v0.0.0-20210722103813-e649eff5ab4a
