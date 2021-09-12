@@ -176,7 +176,9 @@ func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labe
 	if err := json.Unmarshal(body, &d); err != nil {
 		return nil, errors.Wrapf(err, "unmarshal response: %v", string(body))
 	}
-	var cfg config.Config
+	var cfg struct {
+		GlobalConfig config.GlobalConfig `yaml:"global"`
+	}
 	if err := yaml.Unmarshal([]byte(d.Data.YAML), &cfg); err != nil {
 		return nil, errors.Wrapf(err, "parse Prometheus config: %v", d.Data.YAML)
 	}
