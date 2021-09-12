@@ -109,7 +109,7 @@ func TestQueryFrontend(t *testing.T) {
 			14,
 			promclient.QueryOptions{},
 			func(res model.Matrix) error {
-				if len(res) > 0 {
+				if len(res) == 0 {
 					return errors.Errorf("expected some results, got nothing")
 				}
 				return nil
@@ -151,7 +151,7 @@ func TestQueryFrontend(t *testing.T) {
 			14,
 			promclient.QueryOptions{},
 			func(res model.Matrix) error {
-				if len(res) > 0 {
+				if len(res) == 0 {
 					return errors.Errorf("expected some results, got nothing")
 				}
 				return nil
@@ -196,7 +196,7 @@ func TestQueryFrontend(t *testing.T) {
 			14,
 			promclient.QueryOptions{},
 			func(res model.Matrix) error {
-				if len(res) > 0 {
+				if len(res) == 0 {
 					return errors.Errorf("expected some results, got nothing")
 				}
 				return nil
@@ -459,7 +459,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		14,
 		promclient.QueryOptions{},
 		func(res model.Matrix) error {
-			if len(res) > 0 {
+			if len(res) == 0 {
 				return errors.Errorf("expected some results, got nothing")
 			}
 			return nil
@@ -489,7 +489,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		14,
 		promclient.QueryOptions{},
 		func(res model.Matrix) error {
-			if len(res) > 0 {
+			if len(res) == 0 {
 				return errors.Errorf("expected some results, got nothing")
 			}
 			return nil
