@@ -8,7 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"path"
 	"testing"
 	"time"
@@ -140,7 +140,7 @@ func TestGroupMaxMinTime(t *testing.T) {
 
 func BenchmarkGatherNoCompactionMarkFilter_Filter(b *testing.B) {
 	ctx := context.TODO()
-	logger := log.NewLogfmtLogger(os.Stderr)
+	logger := log.NewLogfmtLogger(ioutil.Discard)
 
 	m := extprom.NewTxGaugeVec(nil, prometheus.GaugeOpts{}, []string{"state"})
 
