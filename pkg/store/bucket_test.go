@@ -1025,7 +1025,7 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = tmpDir
 	headOpts.ChunkRange = 1000
-	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 	testutil.Ok(t, err)
 	defer func() {
 		testutil.Ok(t, h.Close())
@@ -1144,11 +1144,11 @@ func benchmarkExpandedPostings(
 				partitioner:       NewGapBasedPartitioner(PartitionerMaxGapSize),
 			}
 
-			indexr := newBucketIndexReader(context.Background(), b)
+			indexr := newBucketIndexReader(b)
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
-				p, err := indexr.ExpandedPostings(c.matchers)
+				p, err := indexr.ExpandedPostings(context.Background(), c.matchers)
 				testutil.Ok(t, err)
 				testutil.Equals(t, c.expectedLen, len(p))
 			}
@@ -1391,7 +1391,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	// This allows to pick time range that will correspond to number of series picked 1:1.
 	{
 		// Block 1.
-		h, err := tsdb.NewHead(nil, nil, nil, headOpts)
+		h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1430,7 +1430,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	var b2 *bucketBlock
 	{
 		// Block 2, do not load this block yet.
-		h, err := tsdb.NewHead(nil, nil, nil, headOpts)
+		h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1482,7 +1482,6 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		queryGate:            gate.NewNoop(),
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
 		seriesLimiterFactory: NewSeriesLimiterFactory(0),
-		respPool:             sync.Pool{},
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
@@ -1676,7 +1675,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	headOpts.ChunkDirRoot = filepath.Join(tmpDir, "block")
 	headOpts.ChunkRange = 10000000000
 
-	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1823,7 +1822,7 @@ func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Lab
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = dir
 	headOpts.ChunkRange = int64(totalSamples) * step
-	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -2226,8 +2225,6 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 }
 
 func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMeta *metadata.Meta, blk *bucketBlock, aggrs []storepb.Aggr) {
-	ctx := context.Background()
-
 	// Run the same number of queries per goroutine.
 	queriesPerWorker := b.N / concurrency
 
@@ -2264,10 +2261,10 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				// must be called only from the goroutine running the Benchmark function.
 				testutil.Ok(b, err)
 
-				indexReader := blk.indexReader(ctx)
-				chunkReader := blk.chunkReader(ctx)
+				indexReader := blk.indexReader()
+				chunkReader := blk.chunkReader()
 
-				seriesSet, _, err := blockSeries(nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates)
+				seriesSet, _, err := blockSeries(context.Background(), nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates)
 				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).

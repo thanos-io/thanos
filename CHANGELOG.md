@@ -10,7 +10,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+## v0.23.0 - In Progress
+
 ### Added
+
 - [#4453](https://github.com/thanos-io/thanos/pull/4453) Tools: Add flag `--selector.relabel-config-file` / `--selector.relabel-config` / `--max-time` / `--min-time` to filter served blocks.
 - [#4482](https://github.com/thanos-io/thanos/pull/4482) COS: Add http_config for cos object store client.
 - [#4487](https://github.com/thanos-io/thanos/pull/4487) Query: Add memcached auto discovery support.
@@ -22,16 +25,19 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4552](https://github.com/thanos-io/thanos/pull/4552) Compact: Adds `thanos_compact_downsample_duration_seconds` histogram.
 - [#4594](https://github.com/thanos-io/thanos/pull/4594) reloader: Expose metrics in config reloader to give info on the last operation.
 - [#4608](https://github.com/thanos-io/thanos/pull/4608) query:thanos-query return error when promql duration mismatch with max_source_resolution
+- [#4623](https://github.com/thanos-io/thanos/pull/4623) query-frontend: made HTTP downstream tripper (client) configurable via parameters `--query-range.downstream-tripper-config` and `--query-range.downstream-tripper-config-file`. If your downstream URL is localhost or 127.0.0.1 then it is strongly recommended to bump `max_idle_conns_per_host` to at least 100 so that `query-frontend` could properly use HTTP keep-alive connections and thus reduce the latency of `query-frontend` by about 20%.
 
 ### Fixed
 
 - [#4468](https://github.com/thanos-io/thanos/pull/4468) Rule: Fix temporary rule filename composition issue.
 - [#4476](https://github.com/thanos-io/thanos/pull/4476) UI: fix incorrect html escape sequence used for '>' symbol.
 - [#4532](https://github.com/thanos-io/thanos/pull/4532) Mixin: Fixed "all jobs" selector in thanos mixin dashboards.
+- [#4607](https://github.com/thanos-io/thanos/pull/4607) Azure: Fix Azure MSI Rate Limit
 
 ### Changed
+
 - [#4519](https://github.com/thanos-io/thanos/pull/4519) Query: switch to miekgdns DNS resolver as the default one.
-- [#4535](https://github.com/thanos-io/thanos/pull/4535) Store: Reuse same buffer for Series() responses. On bigger queries this reduces Thanos Store memory usage by up to 50%.
+- [#4586](https://github.com/thanos-io/thanos/pull/4586) Update Prometheus/Cortex dependencies and implement LabelNames() pushdown as a result; provides massive speed-up for the labels API in Thanos Query.
 
 ## [v0.22.0](https://github.com/thanos-io/thanos/tree/release-0.22) - 2021.07.22
 

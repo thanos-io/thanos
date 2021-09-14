@@ -343,7 +343,7 @@ func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]strin
 
 	pbMatchers, err := storepb.PromMatchersToMatchers(matchers...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "convert matchers")
+		return nil, nil, errors.Wrap(err, "converting prom matchers to storepb matchers")
 	}
 
 	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -365,18 +365,25 @@ func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]strin
 	return resp.Values, warns, nil
 }
 
-// LabelNames returns all the unique label names present in the block in sorted order.
-func (q *querier) LabelNames() ([]string, storage.Warnings, error) {
+// LabelNames returns all the unique label names present in the block in sorted order constrained
+// by the given matchers.
+func (q *querier) LabelNames(matchers ...*labels.Matcher) ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_names")
 	defer span.Finish()
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
 
+	pbMatchers, err := storepb.PromMatchersToMatchers(matchers...)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "converting prom matchers to storepb matchers")
+	}
+
 	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
 		PartialResponseDisabled: !q.partialResponse,
 		Start:                   q.mint,
 		End:                     q.maxt,
+		Matchers:                pbMatchers,
 	})
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "proxy LabelNames()")
