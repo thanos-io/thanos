@@ -351,7 +351,8 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	}
 }
 
-func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
+// Tests retrieving label names and their values via the gRPC API.
+func TestPrometheusStore_LabelAPIs_e2e(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
@@ -361,52 +362,7 @@ func TestPrometheusStore_LabelNames_e2e(t *testing.T) {
 	a := p.Appender()
 	_, err = a.Append(0, labels.FromStrings("a", "b"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "c"), 0, 1)
-	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "a"), 0, 1)
-	testutil.Ok(t, err)
-	testutil.Ok(t, a.Commit())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	testutil.Ok(t, p.Start())
-
-	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
-	testutil.Ok(t, err)
-
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar, getExternalLabels, nil, nil)
-	testutil.Ok(t, err)
-
-	resp, err := proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
-		Start: timestamp.FromTime(minTime),
-		End:   timestamp.FromTime(maxTime),
-	})
-	testutil.Ok(t, err)
-	testutil.Equals(t, []string(nil), resp.Warnings)
-	testutil.Equals(t, []string{"a"}, resp.Names)
-
-	// Outside time range.
-	resp, err = proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
-		Start: timestamp.FromTime(maxTime.Add(-time.Second)),
-		End:   timestamp.FromTime(maxTime),
-	})
-	testutil.Ok(t, err)
-	testutil.Equals(t, []string(nil), resp.Warnings)
-	testutil.Equals(t, []string{}, resp.Names)
-}
-
-func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
-
-	p, err := e2eutil.NewPrometheus()
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, p.Stop()) }()
-
-	a := p.Appender()
-	_, err = a.Append(0, labels.FromStrings("a", "b"), 0, 1)
-	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "c"), 0, 1)
+	_, err = a.Append(0, labels.FromStrings("bb", "c"), 0, 1)
 	testutil.Ok(t, err)
 	_, err = a.Append(0, labels.FromStrings("a", "a"), 0, 1)
 	testutil.Ok(t, err)
@@ -427,27 +383,53 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 		func() string { return version })
 	testutil.Ok(t, err)
 
-	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+	// All values/names.
+	respValues, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label: "a",
 		Start: timestamp.FromTime(minTime),
 		End:   timestamp.FromTime(maxTime),
 	})
 	testutil.Ok(t, err)
-	testutil.Equals(t, []string(nil), resp.Warnings)
-	testutil.Equals(t, []string{"a", "b", "c"}, resp.Values)
+	testutil.Equals(t, []string(nil), respValues.Warnings)
+	testutil.Equals(t, []string{"a", "b"}, respValues.Values)
+
+	respValues, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "bb",
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), respValues.Warnings)
+	testutil.Equals(t, []string{"c"}, respValues.Values)
+
+	respNames, err := proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), respNames.Warnings)
+	testutil.Equals(t, []string{"a", "bb"}, respNames.Names)
 
 	// Outside time range.
-	resp, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+	respValues, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label: "a",
 		Start: timestamp.FromTime(maxTime.Add(-time.Second)),
 		End:   timestamp.FromTime(maxTime),
 	})
 	testutil.Ok(t, err)
-	testutil.Equals(t, []string(nil), resp.Warnings)
-	testutil.Equals(t, []string{}, resp.Values)
+	testutil.Equals(t, []string(nil), respValues.Warnings)
+	testutil.Equals(t, []string{}, respValues.Values)
 
-	// check label value matcher
-	resp, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+	respNames, err = proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
+		Start: timestamp.FromTime(maxTime.Add(-time.Second)),
+		End:   timestamp.FromTime(maxTime),
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), respNames.Warnings)
+	testutil.Equals(t, []string{}, respNames.Names)
+
+	// With a matching matcher.
+	respValues, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label: "a",
 		Start: timestamp.FromTime(minTime),
 		End:   timestamp.FromTime(maxTime),
@@ -456,11 +438,46 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 		},
 	})
 	testutil.Ok(t, err)
-	testutil.Equals(t, []string(nil), resp.Warnings)
-	testutil.Equals(t, []string{"b"}, resp.Values)
+	testutil.Equals(t, []string(nil), respValues.Warnings)
+	testutil.Equals(t, []string{"b"}, respValues.Values)
 
-	// check another label value matcher
-	resp, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+	respValues, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "bb",
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "bb", Value: "c"},
+		},
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), respValues.Warnings)
+	testutil.Equals(t, []string{"c"}, respValues.Values)
+
+	respValues, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "a",
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "a"},
+		},
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), respValues.Warnings)
+	testutil.Equals(t, []string{"a"}, respValues.Values)
+
+	respNames, err = proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+		},
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), respNames.Warnings)
+	testutil.Equals(t, []string{"a"}, respNames.Names)
+
+	// A matcher that does not match anything.
+	respValues, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label: "a",
 		Start: timestamp.FromTime(minTime),
 		End:   timestamp.FromTime(maxTime),
@@ -469,8 +486,19 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 		},
 	})
 	testutil.Ok(t, err)
-	testutil.Equals(t, []string(nil), resp.Warnings)
-	testutil.Equals(t, []string{}, resp.Values)
+	testutil.Equals(t, []string(nil), respValues.Warnings)
+	testutil.Equals(t, []string{}, respValues.Values)
+
+	respNames, err = proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
+		Start: timestamp.FromTime(minTime),
+		End:   timestamp.FromTime(maxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "d"},
+		},
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string(nil), respNames.Warnings)
+	testutil.Equals(t, []string{}, respNames.Names)
 }
 
 // Test to check external label values retrieve.

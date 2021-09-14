@@ -43,7 +43,7 @@ Current object storage client implementations:
 | [AWS/S3](#s3) (and all S3-compatible storages e.g disk-based [Minio](https://min.io/)) | Stable             | Production Usage      | yes               | @bwplotka               |
 | [Azure Storage Account](#azure)                                                        | Stable             | Production Usage      | no                | @vglafirov              |
 | [OpenStack Swift](#openstack-swift)                                                    | Beta (working PoC) | Production Usage      | yes               | @FUSAKLA                |
-| [Tencent COS](#tencent-cos)                                                            | Beta               | Production Usage      | no                | @jojohappy              |
+| [Tencent COS](#tencent-cos)                                                            | Beta               | Production Usage      | no                | @jojohappy,@hanjm       |
 | [AliYun OSS](#aliyun-oss)                                                              | Beta               | Production Usage      | no                | @shaulboozhiao,@wujinhu |
 | [Local Filesystem](#filesystem)                                                        | Stable             | Testing and Demo only | yes               | @bwplotka               |
 
