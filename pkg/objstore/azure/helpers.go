@@ -15,6 +15,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	blob "github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -37,11 +38,8 @@ func init() {
 }
 
 func getAzureStorageCredentials(logger log.Logger, conf Config) (blob.Credential, error) {
-	if conf.MSIResource != "" {
-		msiConfig := auth.NewMSIConfig()
-		msiConfig.Resource = conf.MSIResource
-
-		spt, err := msiConfig.ServicePrincipalToken()
+	if conf.MSIResource != "" || conf.UserAssignedID != "" {
+		spt, err := getServicePrincipalToken(logger, conf)
 		if err != nil {
 			return nil, err
 		}
@@ -66,6 +64,26 @@ func getAzureStorageCredentials(logger log.Logger, conf Config) (blob.Credential
 		return nil, err
 	}
 	return credential, nil
+}
+
+func getServicePrincipalToken(logger log.Logger, conf Config) (*adal.ServicePrincipalToken, error) {
+	resource := conf.MSIResource
+	if resource == "" {
+		resource = fmt.Sprintf("https://%s.%s", conf.StorageAccountName, conf.Endpoint)
+	}
+
+	msiConfig := auth.MSIConfig{
+		Resource: resource,
+	}
+
+	if conf.UserAssignedID != "" {
+		level.Debug(logger).Log("msg", "using user assigned identity", "clientId", conf.UserAssignedID)
+		msiConfig.ClientID = conf.UserAssignedID
+	} else {
+		level.Debug(logger).Log("msg", "using system assigned identity")
+	}
+
+	return msiConfig.ServicePrincipalToken()
 }
 
 func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.ContainerURL, error) {

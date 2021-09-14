@@ -140,6 +140,25 @@ pipeline_config:
 		wantFailParse:    false,
 		wantFailValidate: false,
 	},
+	{
+		name: "Valid User Assigned Identity Config without Resource",
+		config: []byte(`storage_account: "myAccount"
+storage_account_key: ""
+user_assigned_id: "1234-56578678-655"
+container: "MyContainer"`),
+		wantFailParse:    false,
+		wantFailValidate: false,
+	},
+	{
+		name: "Valid User Assigned Identity Config with Resource",
+		config: []byte(`storage_account: "myAccount"
+storage_account_key: ""
+user_assigned_id: "1234-56578678-655"
+msi_resource: "https://example.blob.core.windows.net"
+container: "MyContainer"`),
+		wantFailParse:    false,
+		wantFailValidate: false,
+	},
 }
 
 func TestConfig_validate(t *testing.T) {
