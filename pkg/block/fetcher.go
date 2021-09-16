@@ -162,9 +162,11 @@ type BaseFetcher struct {
 
 	// Optional local directory to cache meta.json files.
 	cacheDir string
-	cached   map[ulid.ULID]*metadata.Meta
 	syncs    prometheus.Counter
 	g        singleflight.Group
+
+	mtx    sync.Mutex
+	cached map[ulid.ULID]*metadata.Meta
 }
 
 // NewBaseFetcher constructs BaseFetcher.
@@ -386,7 +388,10 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	for id, m := range resp.metas {
 		cached[id] = m
 	}
+
+	f.mtx.Lock()
 	f.cached = cached
+	f.mtx.Unlock()
 
 	// Best effort cleanup of disk-cached metas.
 	if f.cacheDir != "" {
@@ -473,8 +478,15 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 		return metas, resp.partial, errors.Wrap(resp.metaErrs.Err(), "incomplete view")
 	}
 
-	level.Info(f.logger).Log("msg", "successfully synchronized block metadata", "duration", time.Since(start).String(), "duration_ms", time.Since(start).Milliseconds(), "cached", len(f.cached), "returned", len(metas), "partial", len(resp.partial))
+	level.Info(f.logger).Log("msg", "successfully synchronized block metadata", "duration", time.Since(start).String(), "duration_ms", time.Since(start).Milliseconds(), "cached", f.countCached(), "returned", len(metas), "partial", len(resp.partial))
 	return metas, resp.partial, nil
+}
+
+func (f *BaseFetcher) countCached() int {
+	f.mtx.Lock()
+	defer f.mtx.Unlock()
+
+	return len(f.cached)
 }
 
 type MetaFetcher struct {
