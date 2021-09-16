@@ -10,6 +10,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+### Fixed
+
+- [#4663](https://github.com/thanos-io/thanos/pull/4663) Fetcher: Fix discovered data races
+
 ## v0.23.0 - In Progress
 
 ### Added
