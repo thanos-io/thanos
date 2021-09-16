@@ -797,10 +797,12 @@ func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.UL
 // Delay is not considered when computing DeletionMarkBlocks map.
 // Not go-routine safe.
 type IgnoreDeletionMarkFilter struct {
-	logger          log.Logger
-	delay           time.Duration
-	concurrency     int
-	bkt             objstore.InstrumentedBucketReader
+	logger      log.Logger
+	delay       time.Duration
+	concurrency int
+	bkt         objstore.InstrumentedBucketReader
+
+	mtx             sync.Mutex
 	deletionMarkMap map[ulid.ULID]*metadata.DeletionMark
 }
 
@@ -816,13 +818,23 @@ func NewIgnoreDeletionMarkFilter(logger log.Logger, bkt objstore.InstrumentedBuc
 
 // DeletionMarkBlocks returns block ids that were marked for deletion.
 func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.DeletionMark {
-	return f.deletionMarkMap
+	f.mtx.Lock()
+	defer f.mtx.Unlock()
+
+	deletionMarkMap := make(map[ulid.ULID]*metadata.DeletionMark)
+	for id, meta := range f.deletionMarkMap {
+		deletionMarkMap[id] = meta
+	}
+
+	return deletionMarkMap
 }
 
 // Filter filters out blocks that are marked for deletion after a given delay.
 // It also returns the blocks that can be deleted since they were uploaded delay duration before current time.
 func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec) error {
+	f.mtx.Lock()
 	f.deletionMarkMap = make(map[ulid.ULID]*metadata.DeletionMark)
+	f.mtx.Unlock()
 
 	// Make a copy of block IDs to check, in order to avoid concurrency issues
 	// between the scheduler and workers.
@@ -832,9 +844,8 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 	}
 
 	var (
-		eg  errgroup.Group
-		ch  = make(chan ulid.ULID, f.concurrency)
-		mtx sync.Mutex
+		eg errgroup.Group
+		ch = make(chan ulid.ULID, f.concurrency)
 	)
 
 	for i := 0; i < f.concurrency; i++ {
@@ -857,13 +868,13 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 
 				// Keep track of the blocks marked for deletion and filter them out if their
 				// deletion time is greater than the configured delay.
-				mtx.Lock()
+				f.mtx.Lock()
 				f.deletionMarkMap[id] = m
 				if time.Since(time.Unix(m.DeletionTime, 0)).Seconds() > f.delay.Seconds() {
 					synced.WithLabelValues(MarkedForDeletionMeta).Inc()
 					delete(metas, id)
 				}
-				mtx.Unlock()
+				f.mtx.Unlock()
 			}
 
 			return lastErr
