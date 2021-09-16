@@ -723,7 +723,11 @@ func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*met
 	}
 
 	for u, meta := range metas {
-		l := meta.Thanos.Labels
+		l := make(map[string]string)
+		for n, v := range meta.Thanos.Labels {
+			l[n] = v
+		}
+
 		for _, replicaLabel := range r.replicaLabels {
 			if _, exists := l[replicaLabel]; exists {
 				level.Debug(r.logger).Log("msg", "replica label removed", "label", replicaLabel)
@@ -735,7 +739,10 @@ func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*met
 			level.Warn(r.logger).Log("msg", "block has no labels left, creating one", r.replicaLabels[0], "deduped")
 			l[r.replicaLabels[0]] = "deduped"
 		}
-		metas[u].Thanos.Labels = l
+
+		nm := *meta
+		nm.Thanos.Labels = l
+		metas[u] = &nm
 	}
 	return nil
 }
