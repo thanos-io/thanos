@@ -290,7 +290,7 @@ web-serve: web-pre-process $(HUGO)
 lint: ## Runs various static analysis against our code.
 lint: go-lint react-app-lint shell-lint
 	@echo ">> detecting white noise"
-	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+	@find . -type f \( -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,'detected white noise, run make lint and commit changes')
 
 # PROTIP:
