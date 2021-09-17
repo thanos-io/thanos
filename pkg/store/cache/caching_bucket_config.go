@@ -66,8 +66,11 @@ type getRangeConfig struct {
 	operationConfig
 	subrangeSize   int64
 	maxSubRequests int
-	attributesTTL  time.Duration
 	subrangeTTL    time.Duration
+
+	// Dedicated config for attributes, so that caller can also configure
+	// a different cache for attributes.
+	attributes attributesConfig
 }
 
 type attributesConfig struct {
@@ -125,13 +128,17 @@ func (cfg *CachingBucketConfig) CacheExists(configName string, cache cache.Cache
 // Single "GetRange" requests can result in multiple smaller GetRange sub-requests issued on the underlying bucket.
 // MaxSubRequests specifies how many such subrequests may be issued. Values <= 0 mean there is no limit (requests
 // for adjacent missing subranges are still merged).
-func (cfg *CachingBucketConfig) CacheGetRange(configName string, cache cache.Cache, matcher func(string) bool, subrangeSize int64, attributesTTL, subrangeTTL time.Duration, maxSubRequests int) {
+func (cfg *CachingBucketConfig) CacheGetRange(configName string, cache cache.Cache, matcher func(string) bool, subrangeSize int64, attributesCache cache.Cache, attributesTTL, subrangeTTL time.Duration, maxSubRequests int) {
 	cfg.getRange[configName] = &getRangeConfig{
 		operationConfig: newOperationConfig(cache, matcher),
 		subrangeSize:    subrangeSize,
-		attributesTTL:   attributesTTL,
 		subrangeTTL:     subrangeTTL,
 		maxSubRequests:  maxSubRequests,
+
+		attributes: attributesConfig{
+			operationConfig: newOperationConfig(attributesCache, func(_ string) bool { return true }),
+			ttl:             attributesTTL,
+		},
 	}
 }
 

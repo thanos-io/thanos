@@ -224,7 +224,7 @@ func TestChunksCaching(t *testing.T) {
 			}
 
 			cfg := NewCachingBucketConfig()
-			cfg.CacheGetRange("chunks", cache, isTSDBChunkFile, subrangeSize, time.Hour, time.Hour, tc.maxGetRangeRequests)
+			cfg.CacheGetRange("chunks", cache, isTSDBChunkFile, subrangeSize, cache, time.Hour, time.Hour, tc.maxGetRangeRequests)
 
 			cachingBucket, err := NewCachingBucket(inmem, cfg, nil, nil)
 			testutil.Ok(t, err)
@@ -337,8 +337,9 @@ func TestMergeRanges(t *testing.T) {
 func TestInvalidOffsetAndLength(t *testing.T) {
 	b := &testBucket{objstore.NewInMemBucket()}
 
+	cache := newMockCache()
 	cfg := NewCachingBucketConfig()
-	cfg.CacheGetRange("chunks", newMockCache(), func(string) bool { return true }, 10000, time.Hour, time.Hour, 3)
+	cfg.CacheGetRange("chunks", cache, func(string) bool { return true }, 10000, cache, time.Hour, time.Hour, 3)
 
 	c, err := NewCachingBucket(b, cfg, nil, nil)
 	testutil.Ok(t, err)
