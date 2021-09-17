@@ -476,7 +476,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	testutil.Ok(t, s.StartAndWaitReady(receiver))
 	rwURL := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(8081)))
 
-	querier, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{receiver.GRPCNetworkEndpoint()}).Build()
+	querier, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", receiver.GRPCNetworkEndpoint()).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(querier))
 	r, err := e2ethanos.NewStatelessRuler(s.SharedDir(), "1", rulesSubDir, []alert.AlertmanagerConfig{
