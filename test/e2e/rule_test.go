@@ -26,7 +26,6 @@ import (
 	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/query"
-	"github.com/thanos-io/thanos/pkg/rules/remotewrite"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -500,12 +499,9 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 				Scheme: "http",
 			},
 		},
-	}, &remotewrite.Config{
-		Name: "ruler-rw-receivers",
-		RemoteStore: &config.RemoteWriteConfig{
-			URL:  &common_cfg.URL{URL: rwURL},
-			Name: "thanos-receiver",
-		},
+	}, &config.RemoteWriteConfig{
+		URL:  &common_cfg.URL{URL: rwURL},
+		Name: "thanos-receiver",
 	})
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(r))

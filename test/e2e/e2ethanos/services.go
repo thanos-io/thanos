@@ -17,6 +17,7 @@ import (
 	"github.com/grafana/dskit/backoff"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"gopkg.in/yaml.v2"
@@ -26,7 +27,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
-	"github.com/thanos-io/thanos/pkg/rules/remotewrite"
 )
 
 const infoLogLevel = "info"
@@ -465,11 +465,11 @@ func NewTSDBRuler(sharedDir string, name string, ruleSubDir string, amCfg []aler
 	return newRuler(sharedDir, name, ruleSubDir, amCfg, queryCfg, nil)
 }
 
-func NewStatelessRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []query.Config, remoteWriteCfg *remotewrite.Config) (*Service, error) {
+func NewStatelessRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []query.Config, remoteWriteCfg *config.RemoteWriteConfig) (*Service, error) {
 	return newRuler(sharedDir, name, ruleSubDir, amCfg, queryCfg, remoteWriteCfg)
 }
 
-func newRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []query.Config, remoteWriteCfg *remotewrite.Config) (*Service, error) {
+func newRuler(sharedDir string, name string, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []query.Config, remoteWriteCfg *config.RemoteWriteConfig) (*Service, error) {
 	dir := filepath.Join(sharedDir, "data", "rule", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "rule", name)
 	if err := os.MkdirAll(dir, 0750); err != nil {
