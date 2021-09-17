@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/promql"
@@ -120,7 +121,7 @@ func registerRule(app *extkingpin.App) {
 	cmd.Flag("eval-interval", "The default evaluation interval to use.").
 		Default("30s").DurationVar(&conf.evalInterval)
 
-	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write server where samples should be sent to. This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
+	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write server where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
 	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
 
@@ -336,20 +337,20 @@ func runRule(
 	}
 
 	if len(rwCfgYAML) > 0 {
-		var rwCfg remotewrite.Config
+		var rwCfg config.RemoteWriteConfig
 		rwCfg, err = remotewrite.LoadRemoteWriteConfig(rwCfgYAML)
 		if err != nil {
 			return err
 		}
 		walDir := filepath.Join(conf.dataDir, rwCfg.Name)
-		remoteStore, err := remotewrite.NewFanoutStorage(logger, reg, walDir, rwCfg)
+		remoteStore, err := remotewrite.NewFanoutStorage(logger, reg, walDir, &rwCfg)
 		if err != nil {
 			return errors.Wrap(err, "set up remote-write store for ruler")
 		}
 		appendable = remoteStore
 		queryable = remoteStore
 	} else {
-		db, err := tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
+		db, err = tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
 		if err != nil {
 			return errors.Wrap(err, "open TSDB")
 		}
@@ -554,7 +555,7 @@ func runRule(
 	)
 
 	// Start gRPC server.
-	{
+	if db != nil {
 		tsdbStore := store.NewTSDBStore(logger, db, component.Rule, conf.lset)
 
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA)
@@ -579,6 +580,7 @@ func runRule(
 			s.Shutdown(err)
 		})
 	}
+
 	// Start UI & metrics HTTP server.
 	{
 		router := route.New()

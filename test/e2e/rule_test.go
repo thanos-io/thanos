@@ -24,6 +24,10 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/promclient"
+<<<<<<< HEAD
+=======
+	"github.com/thanos-io/thanos/pkg/query"
+>>>>>>> 6b0612ca (Use Prometheus' remote write config instead of rolling another)
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -499,12 +503,9 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 				Scheme: "http",
 			},
 		},
-	}, &remotewrite.Config{
-		Name: "ruler-rw-receivers",
-		RemoteStore: &config.RemoteWriteConfig{
-			URL:  &common_cfg.URL{URL: rwURL},
-			Name: "thanos-receiver",
-		},
+	}, &config.RemoteWriteConfig{
+		URL:  &common_cfg.URL{URL: rwURL},
+		Name: "thanos-receiver",
 	})
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(r))

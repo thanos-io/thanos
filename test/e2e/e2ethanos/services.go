@@ -18,6 +18,7 @@ import (
 	"github.com/efficientgo/tools/core/pkg/backoff"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
@@ -27,7 +28,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
-	"github.com/thanos-io/thanos/pkg/rules/remotewrite"
 )
 
 const (
