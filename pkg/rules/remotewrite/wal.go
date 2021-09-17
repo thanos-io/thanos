@@ -45,27 +45,27 @@ type storageMetrics struct {
 func newStorageMetrics(r prometheus.Registerer) *storageMetrics {
 	m := storageMetrics{r: r}
 	m.numActiveSeries = promauto.With(r).NewGauge(prometheus.GaugeOpts{
-		Name: "agent_wal_storage_active_series",
+		Name: "thanos_wal_storage_active_series",
 		Help: "Current number of active series being tracked by the WAL storage",
 	})
 
 	m.numDeletedSeries = promauto.With(r).NewGauge(prometheus.GaugeOpts{
-		Name: "agent_wal_storage_deleted_series",
+		Name: "thanos_wal_storage_deleted_series",
 		Help: "Current number of series marked for deletion from memory",
 	})
 
 	m.totalCreatedSeries = promauto.With(r).NewCounter(prometheus.CounterOpts{
-		Name: "agent_wal_storage_created_series_total",
+		Name: "thanos_wal_storage_created_series_total",
 		Help: "Total number of created series appended to the WAL",
 	})
 
 	m.totalRemovedSeries = promauto.With(r).NewCounter(prometheus.CounterOpts{
-		Name: "agent_wal_storage_removed_series_total",
+		Name: "thanos_wal_storage_removed_series_total",
 		Help: "Total number of created series removed from the WAL",
 	})
 
 	m.totalAppendedSamples = promauto.With(r).NewCounter(prometheus.CounterOpts{
-		Name: "agent_wal_samples_appended_total",
+		Name: "thanos_wal_samples_appended_total",
 		Help: "Total number of samples appended to the WAL",
 	})
 
@@ -684,7 +684,7 @@ func (r *remoteWriteQueryable) LabelValues(name string, matchers ...*labels.Matc
 	return nil, nil, nil
 }
 
-func (r *remoteWriteQueryable) LabelNames() ([]string, storage.Warnings, error) {
+func (r *remoteWriteQueryable) LabelNames(matchers ...*labels.Matcher) ([]string, storage.Warnings, error) {
 	return nil, nil, nil
 }
 
