@@ -10,7 +10,9 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-## [v0.23.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.09.02
+## [v0.23.0-rc.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.09.20
+
+NOTE: We depend on Prometheus v2.30 code.
 
 ### Added
 
@@ -38,7 +40,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#4519](https://github.com/thanos-io/thanos/pull/4519) Query: Switch to miekgdns DNS resolver as the default one.
 - [#4586](https://github.com/thanos-io/thanos/pull/4586) Update Prometheus/Cortex dependencies and implement LabelNames() pushdown as a result; provides massive speed-up for the labels API in Thanos Query.
-- [#4421](https://github.com/thanos-io/thanos/pull/4421): *breaking :warning:*: `--store` (in the future, to be renamed to `--endpoints`) now supports passing any APIs from Thanos gRPC APIs: StoreAPI, MetadataAPI, RulesAPI, TargetsAPI and ExemplarsAPI (in oppose in the past you have to put it in hidden `--targets`, `--rules` etc flags). `--store` will now automatically detect what APIs server exposes.
+- [#4421](https://github.com/thanos-io/thanos/pull/4421) *breaking :warning:*: `--store` (in the future, to be renamed to `--endpoints`) now supports passing any APIs from Thanos gRPC APIs: StoreAPI, MetadataAPI, RulesAPI, TargetsAPI and ExemplarsAPI (in oppose in the past you have to put it in hidden `--targets`, `--rules` etc flags). `--store` will now automatically detect what APIs server exposes.
+- [#4669](https://github.com/thanos-io/thanos/pull/4669) Moved Prometheus dependency to v2.30.
 
 ## [v0.22.0](https://github.com/thanos-io/thanos/tree/release-0.22) - 2021.07.22
 
