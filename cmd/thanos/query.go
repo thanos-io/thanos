@@ -52,6 +52,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
+const (
+	promqlNegativeOffset = "promql-negative-offset"
+	promqlAtModifier     = "promql-at-modifier"
+)
+
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
@@ -146,6 +151,11 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
+	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+promqlNegativeOffset+" and "+promqlAtModifier+".").Default("").Strings()
+
+	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
+		Hidden().Default("true").Bool()
+
 	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
 	defaultRangeQueryStep := extkingpin.ModelDuration(cmd.Flag("query.default-step", "Set default step for range queries. Default step is only used when step is not set in UI. In such cases, Thanos UI will use default step to calculate resolution (resolution = max(rangeSeconds / 250, defaultStep)). This will not work from Grafana, but Grafana has __step variable which can be used.").
@@ -158,6 +168,16 @@ func registerQuery(app *extkingpin.App) {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
+		}
+
+		var enableNegativeOffset, enableAtModifier bool
+		for _, feature := range *featureList {
+			if feature == promqlNegativeOffset {
+				enableNegativeOffset = true
+			}
+			if feature == promqlAtModifier {
+				enableAtModifier = true
+			}
 		}
 
 		if dup := firstDuplicate(*stores); dup != "" {
@@ -254,6 +274,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableRulePartialResponse,
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
+			*enableExemplarPartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
@@ -262,6 +283,8 @@ func registerQuery(app *extkingpin.App) {
 			*defaultMetadataTimeRange,
 			*strictStores,
 			*webDisableCORS,
+			enableAtModifier,
+			enableNegativeOffset,
 			component.Query,
 		)
 	})
@@ -316,6 +339,7 @@ func runQuery(
 	enableRulePartialResponse bool,
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
+	enableExemplarPartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
@@ -324,6 +348,8 @@ func runQuery(
 	defaultMetadataTimeRange time.Duration,
 	strictStores []string,
 	disableCORS bool,
+	enableAtModifier bool,
+	enableNegativeOffset bool,
 	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
@@ -451,6 +477,14 @@ func runQuery(
 			cancelRun()
 		})
 
+		if enableAtModifier {
+			engineOpts.EnableAtModifier = true
+		}
+
+		if enableNegativeOffset {
+			engineOpts.EnableNegativeOffset = true
+		}
+
 		ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
 		g.Add(func() error {
 			for {
@@ -554,6 +588,7 @@ func runQuery(
 			enableRulePartialResponse,
 			enableTargetPartialResponse,
 			enableMetricMetadataPartialResponse,
+			enableExemplarPartialResponse,
 			queryReplicaLabels,
 			flagsMap,
 			defaultRangeQueryStep,
