@@ -111,7 +111,7 @@ func TestReaders(t *testing.T) {
 				if id == id1 {
 					testutil.Equals(t, 1, br.version)
 					testutil.Equals(t, 2, br.indexVersion)
-					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 69}, br.toc)
+					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 70}, br.toc)
 					testutil.Equals(t, int64(710), br.indexLastPostingEnd)
 					testutil.Equals(t, 8, br.symbols.Size())
 					testutil.Equals(t, 0, len(br.postingsV1))
