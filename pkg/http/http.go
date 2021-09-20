@@ -222,10 +222,10 @@ func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 		return nil, err
 	}
 
-  if cfg.ClientMetrics != nil {
-		tripper = extpromhttp.InstrumentedRoundTripper(rt, cfg.ClientMetrics)
+	if cfg.ClientMetrics != nil {
+		rt = extpromhttp.InstrumentedRoundTripper(rt, cfg.ClientMetrics)
 	}
-  
+
 	rt = &userAgentRoundTripper{name: ThanosUserAgent, rt: rt}
 	client := &http.Client{Transport: rt}
 

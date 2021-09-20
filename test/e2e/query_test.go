@@ -365,7 +365,7 @@ func TestQueryWithAuthorizedSidecar(t *testing.T) {
 	testutil.Ok(t, err)
 	_ = s.StartAndWaitReady(prom, sidecar)
 
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{sidecar.GRPCNetworkEndpoint()}).Build()
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{sidecar.GRPCNetworkEndpoint()}...).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
