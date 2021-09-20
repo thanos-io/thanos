@@ -119,8 +119,8 @@ func (stream *targetsStream) receive(ctx context.Context) error {
 			if err := stream.server.Send(targetspb.NewWarningTargetsResponse(err)); err != nil {
 				return errors.Wrapf(err, "sending targets error to server %v", stream.server)
 			}
-
-			continue
+			// Not an error if response strategy is warning.
+			return nil
 		}
 
 		if w := target.GetWarning(); w != "" {

@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+
 	"github.com/go-kit/kit/log"
 	"github.com/mwitkow/go-conntrack"
 	config_util "github.com/prometheus/common/config"
@@ -39,9 +41,11 @@ type ClientConfig struct {
 	ProxyURL string `yaml:"proxy_url"`
 	// TLSConfig to use to connect to the targets.
 	TLSConfig TLSConfig `yaml:"tls_config"`
-
 	// TransportConfig for Client transport properties
 	TransportConfig TransportConfig `yaml:"transport_config"`
+	// ClientMetrics contains metrics that will be used to instrument
+	// the client that will be created with this config.
+	ClientMetrics *extpromhttp.ClientMetrics `yaml:"-"`
 }
 
 // TLSConfig configures TLS connections.
@@ -218,6 +222,10 @@ func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 		return nil, err
 	}
 
+  if cfg.ClientMetrics != nil {
+		tripper = extpromhttp.InstrumentedRoundTripper(rt, cfg.ClientMetrics)
+	}
+  
 	rt = &userAgentRoundTripper{name: ThanosUserAgent, rt: rt}
 	client := &http.Client{Transport: rt}
 

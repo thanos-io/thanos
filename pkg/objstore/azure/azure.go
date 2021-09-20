@@ -57,6 +57,7 @@ type Config struct {
 	Endpoint           string         `yaml:"endpoint"`
 	MaxRetries         int            `yaml:"max_retries"`
 	MSIResource        string         `yaml:"msi_resource"`
+	UserAssignedID     string         `yaml:"user_assigned_id"`
 	PipelineConfig     PipelineConfig `yaml:"pipeline_config"`
 	ReaderConfig       ReaderConfig   `yaml:"reader_config"`
 	HTTPConfig         HTTPConfig     `yaml:"http_config"`
@@ -98,15 +99,24 @@ func (conf *Config) validate() error {
 
 	var errMsg []string
 	if conf.MSIResource == "" {
-		if conf.StorageAccountName == "" ||
-			conf.StorageAccountKey == "" {
-			errMsg = append(errMsg, "invalid Azure storage configuration")
-		}
-		if conf.StorageAccountName == "" && conf.StorageAccountKey != "" {
-			errMsg = append(errMsg, "no Azure storage_account specified while storage_account_key is present in config file; both should be present")
-		}
-		if conf.StorageAccountName != "" && conf.StorageAccountKey == "" {
-			errMsg = append(errMsg, "no Azure storage_account_key specified while storage_account is present in config file; both should be present")
+		if conf.UserAssignedID == "" {
+			if conf.StorageAccountName == "" ||
+				conf.StorageAccountKey == "" {
+				errMsg = append(errMsg, "invalid Azure storage configuration")
+			}
+			if conf.StorageAccountName == "" && conf.StorageAccountKey != "" {
+				errMsg = append(errMsg, "no Azure storage_account specified while storage_account_key is present in config file; both should be present")
+			}
+			if conf.StorageAccountName != "" && conf.StorageAccountKey == "" {
+				errMsg = append(errMsg, "no Azure storage_account_key specified while storage_account is present in config file; both should be present")
+			}
+		} else {
+			if conf.StorageAccountName == "" {
+				errMsg = append(errMsg, "UserAssignedID is configured but storage account name is missing")
+			}
+			if conf.StorageAccountKey != "" {
+				errMsg = append(errMsg, "UserAssignedID is configured but storage account key is used")
+			}
 		}
 	} else {
 		if conf.StorageAccountName == "" {
@@ -174,7 +184,7 @@ func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket
 	}
 
 	ctx := context.Background()
-	container, err := createContainer(ctx, conf)
+	container, err := createContainer(ctx, logger, conf)
 	if err != nil {
 		ret, ok := err.(blob.StorageError)
 		if !ok {
@@ -182,7 +192,7 @@ func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket
 		}
 		if ret.ServiceCode() == "ContainerAlreadyExists" {
 			level.Debug(logger).Log("msg", "Getting connection to existing Azure blob container", "container", conf.ContainerName)
-			container, err = getContainer(ctx, conf)
+			container, err = getContainer(ctx, logger, conf)
 			if err != nil {
 				return nil, errors.Wrapf(err, "cannot get existing Azure blob container: %s", container)
 			}

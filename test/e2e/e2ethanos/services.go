@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cortexproject/cortex/integration/e2e"
-	"github.com/cortexproject/cortex/pkg/util"
+	"github.com/grafana/dskit/backoff"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -31,7 +31,7 @@ import (
 const infoLogLevel = "info"
 
 // Same as default for now.
-var defaultBackoffConfig = util.BackoffConfig{
+var defaultBackoffConfig = backoff.Config{
 	MinBackoff: 300 * time.Millisecond,
 	MaxBackoff: 600 * time.Millisecond,
 	MaxRetries: 50,
@@ -43,7 +43,7 @@ const (
 
 // TODO(bwplotka): Run against multiple?
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.26.0"
+	return "quay.io/prometheus/prometheus:v2.29.2"
 }
 
 func DefaultAlertmanagerImage() string {
@@ -105,6 +105,10 @@ func NewPrometheus(sharedDir, name, config, promImage string, enableFeatures ...
 }
 
 func NewPrometheusWithSidecar(sharedDir, netName, name, config, promImage string, enableFeatures ...string) (*e2e.HTTPService, *Service, error) {
+	return NewPrometheusWithSidecarCustomImage(sharedDir, netName, name, config, promImage, DefaultImage(), enableFeatures...)
+}
+
+func NewPrometheusWithSidecarCustomImage(sharedDir, netName, name, config, promImage string, sidecarImage string, enableFeatures ...string) (*e2e.HTTPService, *Service, error) {
 	prom, dataDir, err := NewPrometheus(sharedDir, name, config, promImage, enableFeatures...)
 	if err != nil {
 		return nil, nil, err
@@ -113,7 +117,7 @@ func NewPrometheusWithSidecar(sharedDir, netName, name, config, promImage string
 
 	sidecar := NewService(
 		fmt.Sprintf("sidecar-%s", name),
-		DefaultImage(),
+		sidecarImage,
 		e2e.NewCommand("sidecar", e2e.BuildArgs(map[string]string{
 			"--debug.name":        fmt.Sprintf("sidecar-%v", name),
 			"--grpc-address":      ":9091",
@@ -138,6 +142,7 @@ type QuerierBuilder struct {
 	name           string
 	routePrefix    string
 	externalPrefix string
+	image          string
 
 	storeAddresses       []string
 	fileSDStoreAddresses []string
@@ -149,35 +154,41 @@ type QuerierBuilder struct {
 	tracingConfig string
 }
 
-func NewQuerierBuilder(sharedDir, name string, storeAddresses []string) *QuerierBuilder {
+func NewQuerierBuilder(sharedDir, name string, storeAddresses ...string) *QuerierBuilder {
 	return &QuerierBuilder{
 		sharedDir:      sharedDir,
 		name:           name,
 		storeAddresses: storeAddresses,
+		image:          DefaultImage(),
 	}
 }
 
-func (q *QuerierBuilder) WithFileSDStoreAddresses(fileSDStoreAddresses []string) *QuerierBuilder {
+func (q *QuerierBuilder) WithImage(image string) *QuerierBuilder {
+	q.image = image
+	return q
+}
+
+func (q *QuerierBuilder) WithFileSDStoreAddresses(fileSDStoreAddresses ...string) *QuerierBuilder {
 	q.fileSDStoreAddresses = fileSDStoreAddresses
 	return q
 }
 
-func (q *QuerierBuilder) WithRuleAddresses(ruleAddresses []string) *QuerierBuilder {
+func (q *QuerierBuilder) WithRuleAddresses(ruleAddresses ...string) *QuerierBuilder {
 	q.ruleAddresses = ruleAddresses
 	return q
 }
 
-func (q *QuerierBuilder) WithTargetAddresses(targetAddresses []string) *QuerierBuilder {
+func (q *QuerierBuilder) WithTargetAddresses(targetAddresses ...string) *QuerierBuilder {
 	q.targetAddresses = targetAddresses
 	return q
 }
 
-func (q *QuerierBuilder) WithExemplarAddresses(exemplarAddresses []string) *QuerierBuilder {
+func (q *QuerierBuilder) WithExemplarAddresses(exemplarAddresses ...string) *QuerierBuilder {
 	q.exemplarAddresses = exemplarAddresses
 	return q
 }
 
-func (q *QuerierBuilder) WithMetadataAddresses(metadataAddresses []string) *QuerierBuilder {
+func (q *QuerierBuilder) WithMetadataAddresses(metadataAddresses ...string) *QuerierBuilder {
 	q.metadataAddresses = metadataAddresses
 	return q
 }
@@ -269,7 +280,7 @@ func (q *QuerierBuilder) Build() (*Service, error) {
 
 	querier := NewService(
 		fmt.Sprintf("querier-%v", q.name),
-		DefaultImage(),
+		q.image,
 		e2e.NewCommand("query", args...),
 		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
 		8080,

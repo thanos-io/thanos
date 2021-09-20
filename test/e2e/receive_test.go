@@ -89,7 +89,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{i.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", i.GRPCNetworkEndpoint()).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -176,7 +176,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{i1.GRPCNetworkEndpoint(), i2.GRPCNetworkEndpoint(), i3.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", i1.GRPCNetworkEndpoint(), i2.GRPCNetworkEndpoint(), i3.GRPCNetworkEndpoint()).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -289,7 +289,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2))
 
 		//Setup Querier
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{i1.GRPCNetworkEndpoint(), i2.GRPCNetworkEndpoint(), i3.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", i1.GRPCNetworkEndpoint(), i2.GRPCNetworkEndpoint(), i3.GRPCNetworkEndpoint()).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -391,7 +391,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -467,7 +467,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -542,7 +542,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint(), r3.GRPCNetworkEndpoint()).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -614,7 +614,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", r1.GRPCNetworkEndpoint(), r2.GRPCNetworkEndpoint()).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 
@@ -689,7 +689,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, s.StartAndWaitReady(prom1))
 		testutil.Ok(t, s.StartAndWaitReady(prom2))
 
-		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r1.GRPCNetworkEndpoint()}).Build()
+		q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", r1.GRPCNetworkEndpoint()).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, s.StartAndWaitReady(q))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

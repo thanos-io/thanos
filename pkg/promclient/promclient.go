@@ -178,7 +178,9 @@ func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labe
 	if err := json.Unmarshal(body, &d); err != nil {
 		return nil, errors.Wrapf(err, "unmarshal response: %v", string(body))
 	}
-	var cfg config.Config
+	var cfg struct {
+		GlobalConfig config.GlobalConfig `yaml:"global"`
+	}
 	if err := yaml.Unmarshal([]byte(d.Data.YAML), &cfg); err != nil {
 		return nil, errors.Wrapf(err, "parse Prometheus config: %v", d.Data.YAML)
 	}
@@ -704,7 +706,7 @@ func (c *Client) SeriesInGRPC(ctx context.Context, base *url.URL, matchers []*la
 	return m.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_series HTTP[client]", &u, &m)
 }
 
-// LabelNames returns all known label names. It uses gRPC errors.
+// LabelNames returns all known label names constrained by the given matchers. It uses gRPC errors.
 // NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
 func (c *Client) LabelNamesInGRPC(ctx context.Context, base *url.URL, matchers []storepb.LabelMatcher, startTime, endTime int64) ([]string, error) {
 	u := *base
