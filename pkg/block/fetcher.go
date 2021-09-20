@@ -821,7 +821,7 @@ func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.
 	f.mtx.Lock()
 	defer f.mtx.Unlock()
 
-	deletionMarkMap := make(map[ulid.ULID]*metadata.DeletionMark)
+	deletionMarkMap := make(map[ulid.ULID]*metadata.DeletionMark, len(f.deletionMarkMap))
 	for id, meta := range f.deletionMarkMap {
 		deletionMarkMap[id] = meta
 	}
@@ -832,9 +832,7 @@ func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.
 // Filter filters out blocks that are marked for deletion after a given delay.
 // It also returns the blocks that can be deleted since they were uploaded delay duration before current time.
 func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec) error {
-	f.mtx.Lock()
-	f.deletionMarkMap = make(map[ulid.ULID]*metadata.DeletionMark)
-	f.mtx.Unlock()
+	deletionMarkMap := make(map[ulid.ULID]*metadata.DeletionMark)
 
 	// Make a copy of block IDs to check, in order to avoid concurrency issues
 	// between the scheduler and workers.
@@ -844,8 +842,9 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 	}
 
 	var (
-		eg errgroup.Group
-		ch = make(chan ulid.ULID, f.concurrency)
+		eg  errgroup.Group
+		ch  = make(chan ulid.ULID, f.concurrency)
+		mtx sync.Mutex
 	)
 
 	for i := 0; i < f.concurrency; i++ {
@@ -868,13 +867,13 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 
 				// Keep track of the blocks marked for deletion and filter them out if their
 				// deletion time is greater than the configured delay.
-				f.mtx.Lock()
-				f.deletionMarkMap[id] = m
+				mtx.Lock()
+				deletionMarkMap[id] = m
 				if time.Since(time.Unix(m.DeletionTime, 0)).Seconds() > f.delay.Seconds() {
 					synced.WithLabelValues(MarkedForDeletionMeta).Inc()
 					delete(metas, id)
 				}
-				f.mtx.Unlock()
+				mtx.Unlock()
 			}
 
 			return lastErr
@@ -900,6 +899,10 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 	if err := eg.Wait(); err != nil {
 		return errors.Wrap(err, "filter blocks marked for deletion")
 	}
+
+	f.mtx.Lock()
+	f.deletionMarkMap = deletionMarkMap
+	f.mtx.Unlock()
 
 	return nil
 }
