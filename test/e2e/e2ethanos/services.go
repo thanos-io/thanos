@@ -60,6 +60,15 @@ func DefaultImage() string {
 	return "thanos"
 }
 
+func defaultPromHttpConfig() string {
+	// username: test, secret: test(bcrypt hash)
+	return `
+basic_auth:
+	username: test
+	password: test
+`
+}
+
 func NewPrometheus(sharedDir, name, config, promImage string, enableFeatures ...string) (*e2e.HTTPService, string, error) {
 	dir := filepath.Join(sharedDir, "data", "prometheus", name)
 	container := filepath.Join(e2e.ContainerSharedDir, "data", "prometheus", name)
@@ -751,18 +760,14 @@ func NewPrometheusAndSidecarWithBasicAuth(sharedDir string, netName string, name
 	prom.SetBackoff(defaultBackoffConfig)
 
 	args = e2e.BuildArgs(map[string]string{
-		"--debug.name":        fmt.Sprintf("sidecar-%v", name),
-		"--grpc-address":      ":9091",
-		"--grpc-grace-period": "0s",
-		"--http-address":      ":8080",
-		"--prometheus.url":    "http://" + prom.NetworkEndpointFor(netName, 9090),
-		"--tsdb.path":         container,
-		"--log.level":         infoLogLevel,
-		"--prometheus.http-client": `
-basic_auth:
-  username: test
-  password: test
-`,
+		"--debug.name":             fmt.Sprintf("sidecar-%v", name),
+		"--grpc-address":           ":9091",
+		"--grpc-grace-period":      "0s",
+		"--http-address":           ":8080",
+		"--prometheus.url":         "http://" + prom.NetworkEndpointFor(netName, 9090),
+		"--tsdb.path":              container,
+		"--log.level":              infoLogLevel,
+		"--prometheus.http-client": defaultPromHttpConfig(),
 	})
 	sidecar := NewService(
 		fmt.Sprintf("sidecar-%s", name),

@@ -75,7 +75,11 @@ func (pc *prometheusConfig) registerFlag(cmd extkingpin.FlagClause) *prometheusC
 	cmd.Flag("prometheus.ready_timeout",
 		"Maximum time to wait for the Prometheus instance to start up").
 		Default("10m").DurationVar(&pc.readyTimeout)
-	pc.httpClient = extkingpin.RegisterHTTPConfigFlags(cmd)
+	pc.httpClient = extflag.RegisterPathOrContent(
+		cmd,
+		"prometheus.http-client",
+		"YAML file or string with http client configs. see Format details : ...",
+	)
 
 	return pc
 }
