@@ -16,18 +16,15 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	common_cfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
-<<<<<<< HEAD
-=======
-	"github.com/thanos-io/thanos/pkg/query"
->>>>>>> 6b0612ca (Use Prometheus' remote write config instead of rolling another)
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -233,7 +230,7 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(am1, am2))
 
-	r, err := e2ethanos.NewRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
+	r, err := e2ethanos.NewTSDBRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				FileSDConfigs: []httpconfig.FileSDConfig{
@@ -456,49 +453,49 @@ func TestRule(t *testing.T) {
 func TestRule_CanRemoteWriteData(t *testing.T) {
 	t.Parallel()
 
-	s, err := e2e.NewScenario("e2e_test_rule_remote_write")
+	e, err := e2e.NewDockerEnvironment("e2e_test_rule_remote_write")
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	t.Cleanup(cancel)
 
 	rulesSubDir := "rules"
-	rulesPath := filepath.Join(s.SharedDir(), rulesSubDir)
+	rulesPath := filepath.Join(e.SharedDir(), rulesSubDir)
 	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
 
 	for i, rule := range []string{testRuleRecordAbsentMetric, testAlertRuleWarnOnPartialResponse} {
 		createRuleFile(t, filepath.Join(rulesPath, fmt.Sprintf("rules-%d.yaml", i)), rule)
 	}
 
-	am, err := e2ethanos.NewAlertmanager(s.SharedDir(), "1")
+	am, err := e2ethanos.NewAlertmanager(e, "1")
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(am))
+	testutil.Ok(t, e2e.StartAndWaitReady(am))
 
-	receiver, err := e2ethanos.NewIngestingReceiver(s.SharedDir(), s.NetworkName())
+	receiver, err := e2ethanos.NewIngestingReceiver(e, "1")
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(receiver))
-	rwURL := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver.NetworkEndpoint(8081)))
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+	rwURL := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver.Endpoint("remote-write")))
 
-	querier, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", receiver.GRPCNetworkEndpoint()).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", receiver.Endpoint("grpc")).Build()
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(querier))
-	r, err := e2ethanos.NewStatelessRuler(s.SharedDir(), "1", rulesSubDir, []alert.AlertmanagerConfig{
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+	r, err := e2ethanos.NewStatelessRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
 		{
-			EndpointsConfig: http_util.EndpointsConfig{
+			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{
-					am.NetworkHTTPEndpoint(),
+					am.Endpoint("http"),
 				},
 				Scheme: "http",
 			},
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}, []query.Config{
+	}, []httpconfig.Config{
 		{
-			EndpointsConfig: http_util.EndpointsConfig{
+			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{
-					querier.NetworkHTTPEndpoint(),
+					q.Endpoint("http"),
 				},
 				Scheme: "http",
 			},
@@ -508,11 +505,11 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 		Name: "thanos-receiver",
 	})
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(r))
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
 	t.Run("can fetch remote-written samples from receiver", func(t *testing.T) {
 		testRecordedSamples := "test_absent_metric"
-		queryAndAssertSeries(t, ctx, querier.HTTPEndpoint(), testRecordedSamples, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), testRecordedSamples, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{

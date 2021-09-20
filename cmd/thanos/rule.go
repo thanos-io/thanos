@@ -555,31 +555,31 @@ func runRule(
 	)
 
 	// Start gRPC server.
+	tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA)
+	if err != nil {
+		return errors.Wrap(err, "setup gRPC server")
+	}
+
+	options := []grpcserver.Option{
+		grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
+		grpcserver.WithListen(conf.grpc.bindAddress),
+		grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
+		grpcserver.WithTLSConfig(tlsCfg),
+	}
 	if db != nil {
 		tsdbStore := store.NewTSDBStore(logger, db, component.Rule, conf.lset)
-
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA)
-		if err != nil {
-			return errors.Wrap(err, "setup gRPC server")
-		}
-
-		// TODO: Add rules API implementation when ready.
-		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)),
-			grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
-			grpcserver.WithListen(conf.grpc.bindAddress),
-			grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
-			grpcserver.WithTLSConfig(tlsCfg),
-		)
-
-		g.Add(func() error {
-			statusProber.Ready()
-			return s.ListenAndServe()
-		}, func(err error) {
-			statusProber.NotReady(err)
-			s.Shutdown(err)
-		})
+		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)))
 	}
+	// TODO: Add rules API implementation when ready.
+	s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe, options...)
+
+	g.Add(func() error {
+		statusProber.Ready()
+		return s.ListenAndServe()
+	}, func(err error) {
+		statusProber.NotReady(err)
+		s.Shutdown(err)
+	})
 
 	// Start UI & metrics HTTP server.
 	{
