@@ -1201,95 +1201,17 @@ func TestMetadataEndpoints(t *testing.T) {
 	}
 }
 
-// This test uses global Query timeout of 0s, per-request timeout of 10s.
-// This test verifies that lower value of {global Query timeout, per-request timeout} is used for executing queries.
-func TestQueryEndpointsForQueryTimeout(t *testing.T) {
-	lbls := []labels.Labels{
-		{
-			labels.Label{Name: "__name__", Value: "test_metric1"},
-			labels.Label{Name: "foo", Value: "bar"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric1"},
-			labels.Label{Name: "foo", Value: "boo"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric2"},
-			labels.Label{Name: "foo", Value: "boo"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "bar"},
-			labels.Label{Name: "replica", Value: "a"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica", Value: "a"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica", Value: "b"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica1", Value: "a"},
-		},
-	}
+// This test verifies queries timeout with lower value of {global Query timeout, per-request timeout}.
+func TestQueryTimeout(t *testing.T) {
 
-	db, err := e2eutil.NewTSDB()
-	defer func() { testutil.Ok(t, db.Close()) }()
-	testutil.Ok(t, err)
+	// This test uses global Query timeout of 10s, per-request timeout of 0s.
+	globalQueryTest := queryTimeoutTest(t, time.Second*10, time.Second*0)
 
-	app := db.Appender(context.Background())
-	for _, lbl := range lbls {
-		for i := int64(0); i < 10; i++ {
-			_, err := app.Append(0, lbl, i*60000, float64(i))
-			testutil.Ok(t, err)
-		}
-	}
-	testutil.Ok(t, app.Commit())
+	// This test uses global Query timeout of 0s, per-request timeout of 10s.
+	requestQueryTest := queryTimeoutTest(t, time.Second*0, time.Second*10)
 
-	now := time.Now()
-	globalQueryTimeout := 0 * time.Second
-	perRequestTimeout := "10s"
-
-	qe := promql.NewEngine(promql.EngineOpts{
-		Logger:     nil,
-		Reg:        nil,
-		MaxSamples: 10000,
-		Timeout:    globalQueryTimeout,
-	})
-	api := &QueryAPI{
-		baseAPI: &baseAPI.BaseAPI{
-			Now: func() time.Time { return now },
-		},
-		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, db, component.Query, nil), 2, globalQueryTimeout),
-		queryEngine: func(int64) *promql.Engine {
-			return qe
-		},
-		gate: gate.New(nil, 4),
-	}
-
-	var tests = []endpointTestCase{
-		{
-			endpoint: api.query,
-			query: url.Values{
-				"query":   []string{"2"},
-				"time":    []string{"123.4"},
-				"timeout": []string{perRequestTimeout},
-			},
-			errType: baseAPI.ErrorTimeout,
-		},
-	}
-
-	for i, test := range tests {
-		if ok := testEndpoint(t, test, fmt.Sprintf("#%d %s", i, test.query.Encode()), reflect.DeepEqual); !ok {
-			return
-		}
-	}
+	testEndpoint(t, globalQueryTest, globalQueryTest.query.Encode(), reflect.DeepEqual)
+	testEndpoint(t, requestQueryTest, requestQueryTest.query.Encode(), reflect.DeepEqual)
 }
 
 func TestParseTime(t *testing.T) {
@@ -1861,4 +1783,44 @@ func (s sample) T() int64 {
 
 func (s sample) V() float64 {
 	return s.v
+}
+
+func queryTimeoutTest(t *testing.T, globalTimeout, reqTimeout time.Duration) endpointTestCase {
+	db, err := e2eutil.NewTSDB()
+	defer func() { testutil.Ok(t, db.Close()) }()
+	testutil.Ok(t, err)
+
+	now := time.Now()
+	start := fmt.Sprintf("%d", now.Unix())
+	end := fmt.Sprintf("%d", now.Unix()+500)
+
+	qe := promql.NewEngine(promql.EngineOpts{
+		Logger:     nil,
+		Reg:        nil,
+		MaxSamples: 1000,
+		Timeout:    globalTimeout,
+	})
+	api := &QueryAPI{
+		baseAPI: &baseAPI.BaseAPI{
+			Now: func() time.Time { return now },
+		},
+		queryableCreate: query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, db, component.Query, nil), 2, globalTimeout),
+		queryEngine: func(int64) *promql.Engine {
+			return qe
+		},
+		gate:           gate.New(nil, 4),
+		queryRangeHist: prometheus.NewHistogram(prometheus.HistogramOpts{}),
+	}
+
+	return endpointTestCase{
+		endpoint: api.queryRange,
+		query: url.Values{
+			"query":   []string{"up"},
+			"start":   []string{start},
+			"end":     []string{end},
+			"step":    []string{"1s"},
+			"timeout": []string{reqTimeout.String()},
+		},
+		errType: baseAPI.ErrorType(baseAPI.ErrorTimeout),
+	}
 }
