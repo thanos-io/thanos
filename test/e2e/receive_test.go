@@ -54,10 +54,8 @@ func TestReceive(t *testing.T) {
 			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
 		*/
 
-		netName := "e2e_receive_single_ingestor"
-
 		t.Parallel()
-		e, err := e2e.NewDockerEnvironment(netName)
+		e, err := e2e.NewDockerEnvironment("e2e_receive_single_ingestor")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -338,28 +336,30 @@ func TestReceive(t *testing.T) {
 		*/
 		t.Parallel()
 
-		netName := "e2e_test_receive_hashring"
-
-		e, err := e2e.NewDockerEnvironment(netName)
+		e, err := e2e.NewDockerEnvironment("e2e_test_receive_hashring")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
+		r1 := e2ethanos.NewUninitiatedReceiver(e, "1")
+		r2 := e2ethanos.NewUninitiatedReceiver(e, "2")
+		r3 := e2ethanos.NewUninitiatedReceiver(e, "3")
+
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				netName + "-receive-1:9091",
-				netName + "-receive-2:9091",
-				netName + "-receive-3:9091",
+				r1.InternalEndpoint("grpc"),
+				r2.InternalEndpoint("grpc"),
+				r3.InternalEndpoint("grpc"),
 			},
 		}
 
 		// Create with hashring config.
-		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "1", 1, h)
+		r1Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(r1, e.SharedDir(), 1, h)
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "2", 1, h)
+		r2Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(r2, e.SharedDir(), 1, h)
 		testutil.Ok(t, err)
-		r3, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "3", 1, h)
+		r3Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(r3, e.SharedDir(), 1, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2, r3))
+		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r3Runnable))
 
 		prom1, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
@@ -384,21 +384,21 @@ func TestReceive(t *testing.T) {
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
-				"receive":    "2",
+				"receive":    "receive-2",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom2",
-				"receive":    "1",
+				"receive":    "receive-1",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom3",
-				"receive":    "2",
+				"receive":    "receive-2",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
@@ -408,29 +408,31 @@ func TestReceive(t *testing.T) {
 	t.Run("hashring with config watcher", func(t *testing.T) {
 		t.Parallel()
 
-		netName := "e2e_test_receive_hashring_config_watcher"
-
-		e, err := e2e.NewDockerEnvironment(netName)
+		e, err := e2e.NewDockerEnvironment("e2e_test_receive_hashring_config_watcher")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
+		r1 := e2ethanos.NewUninitiatedReceiver(e, "1")
+		r2 := e2ethanos.NewUninitiatedReceiver(e, "2")
+		r3 := e2ethanos.NewUninitiatedReceiver(e, "3")
+
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				netName + "-receive-1:9091",
-				netName + "-receive-2:9091",
-				netName + "-receive-3:9091",
+				r1.InternalEndpoint("grpc"),
+				r2.InternalEndpoint("grpc"),
+				r3.InternalEndpoint("grpc"),
 			},
 		}
 
 		// Create with hashring config.
 		// TODO(kakkoyun): Update config file and wait config watcher to reconcile hashring.
-		r1, err := e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(e, netName, "1", 1, h)
+		r1Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(r1, e.SharedDir(), 1, h)
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(e, netName, "2", 1, h)
+		r2Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(r2, e.SharedDir(), 1, h)
 		testutil.Ok(t, err)
-		r3, err := e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(e, netName, "3", 1, h)
+		r3Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverWithConfigWatcher(r3, e.SharedDir(), 1, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2, r3))
+		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r3Runnable))
 
 		prom1, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
@@ -455,21 +457,21 @@ func TestReceive(t *testing.T) {
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
-				"receive":    "2",
+				"receive":    "receive-2",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom2",
-				"receive":    "1",
+				"receive":    "receive-1",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom3",
-				"receive":    "2",
+				"receive":    "receive-2",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
@@ -479,9 +481,7 @@ func TestReceive(t *testing.T) {
 	t.Run("replication", func(t *testing.T) {
 		t.Parallel()
 
-		netName := "e2e_test_receive_replication"
-
-		e, err := e2e.NewDockerEnvironment(netName)
+		e, err := e2e.NewDockerEnvironment("e2e_test_receive_replication")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -490,22 +490,26 @@ func TestReceive(t *testing.T) {
 		// receivers and the test verifies that the time series are
 		// replicated to all of the nodes.
 
+		r1 := e2ethanos.NewUninitiatedReceiver(e, "1")
+		r2 := e2ethanos.NewUninitiatedReceiver(e, "2")
+		r3 := e2ethanos.NewUninitiatedReceiver(e, "3")
+
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				netName + "-receive-1:9091",
-				netName + "-receive-2:9091",
-				netName + "-receive-3:9091",
+				r1.InternalEndpoint("grpc"),
+				r2.InternalEndpoint("grpc"),
+				r3.InternalEndpoint("grpc"),
 			},
 		}
 
 		// Create with hashring config.
-		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "1", 3, h)
+		r1Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(r1, e.SharedDir(), 3, h)
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "2", 3, h)
+		r2Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(r2, e.SharedDir(), 3, h)
 		testutil.Ok(t, err)
-		r3, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "3", 3, h)
+		r3Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(r3, e.SharedDir(), 3, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2, r3))
+		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r3Runnable))
 
 		prom1, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
@@ -526,21 +530,21 @@ func TestReceive(t *testing.T) {
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
-				"receive":    "1",
+				"receive":    "receive-1",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
-				"receive":    "2",
+				"receive":    "receive-2",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
-				"receive":    "3",
+				"receive":    "receive-3",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
@@ -550,9 +554,7 @@ func TestReceive(t *testing.T) {
 	t.Run("replication_with_outage", func(t *testing.T) {
 		t.Parallel()
 
-		netName := "e2e_test_receive_replication_with_outage"
-
-		e, err := e2e.NewDockerEnvironment(netName)
+		e, err := e2e.NewDockerEnvironment("e2e_test_receive_replication_with_outage")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -560,20 +562,24 @@ func TestReceive(t *testing.T) {
 		// receivers is dead. In this case, replication should still
 		// succeed and the time series should be replicated to the other nodes.
 
+		r1 := e2ethanos.NewUninitiatedReceiver(e, "1")
+		r2 := e2ethanos.NewUninitiatedReceiver(e, "2")
+		r3 := e2ethanos.NewUninitiatedReceiver(e, "3")
+
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				netName + "-receive-1:9091",
-				netName + "-receive-2:9091",
-				netName + "-receive-3:9091",
+				r1.InternalEndpoint("grpc"),
+				r2.InternalEndpoint("grpc"),
+				r3.InternalEndpoint("grpc"),
 			},
 		}
 
 		// Create with hashring config.
-		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "1", 3, h)
+		r1Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(r1, e.SharedDir(), 3, h)
 		testutil.Ok(t, err)
-		r2, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "2", 3, h)
+		r2Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(r2, e.SharedDir(), 3, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2))
+		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable))
 
 		prom1, _, err := e2ethanos.NewPrometheus(e, "1", defaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
@@ -594,14 +600,14 @@ func TestReceive(t *testing.T) {
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
-				"receive":    "1",
+				"receive":    "receive-1",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
-				"receive":    "2",
+				"receive":    "receive-2",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
@@ -611,21 +617,22 @@ func TestReceive(t *testing.T) {
 	t.Run("multitenancy", func(t *testing.T) {
 		t.Parallel()
 
-		netName := "e2e_test_for_multitenancy"
-
-		e, err := e2e.NewDockerEnvironment(netName)
+		e, err := e2e.NewDockerEnvironment("e2e_test_for_multitenancy")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
+		r1 := e2ethanos.NewUninitiatedReceiver(e, "1")
+
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				netName + "-receive-1:9091",
+				r1.InternalEndpoint("grpc"),
 			},
 		}
 
-		r1, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "1", 1, h)
+		// Create with hashring config.
+		r1Runnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(r1, e.SharedDir(), 1, h)
 		testutil.Ok(t, err)
-		testutil.Ok(t, e2e.StartAndWaitReady(r1))
+		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable))
 
 		rp1, err := e2ethanos.NewReverseProxy(e, "1", "tenant-1", "http://"+r1.InternalEndpoint("remote-write"))
 		testutil.Ok(t, err)
@@ -652,14 +659,14 @@ func TestReceive(t *testing.T) {
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
-				"receive":    "1",
+				"receive":    "receive-1",
 				"replica":    "0",
 				"tenant_id":  "tenant-1",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom2",
-				"receive":    "1",
+				"receive":    "receive-1",
 				"replica":    "0",
 				"tenant_id":  "tenant-2",
 			},

@@ -103,11 +103,11 @@ func NewPrometheus(e e2e.Environment, name, config, promImage string, enableFeat
 	return prom, container, nil
 }
 
-func NewPrometheusWithSidecar(e e2e.Environment, netName, name, config, promImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
-	return NewPrometheusWithSidecarCustomImage(e, netName, name, config, promImage, DefaultImage(), enableFeatures...)
+func NewPrometheusWithSidecar(e e2e.Environment, name, config, promImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
+	return NewPrometheusWithSidecarCustomImage(e, name, config, promImage, DefaultImage(), enableFeatures...)
 }
 
-func NewPrometheusWithSidecarCustomImage(e e2e.Environment, netName, name, config, promImage string, sidecarImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
+func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, config, promImage string, sidecarImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
 	prom, dataDir, err := NewPrometheus(e, name, config, promImage, enableFeatures...)
 	if err != nil {
 		return nil, nil, err
@@ -207,7 +207,52 @@ func (q *QuerierBuilder) WithTracingConfig(tracingConfig string) *QuerierBuilder
 	return q
 }
 
+func (q *QuerierBuilder) BuildUninitiated() *e2e.FutureInstrumentedRunnable {
+	return newUninitiatedService(
+		q.environment,
+		fmt.Sprintf("querier-%v", q.name),
+		8080,
+		9091,
+	)
+}
+
+func (q *QuerierBuilder) Initiate(service *e2e.FutureInstrumentedRunnable, storeAddresses ...string) (*e2e.InstrumentedRunnable, error) {
+	q.storeAddresses = storeAddresses
+	args, err := q.collectArgs()
+	if err != nil {
+		return nil, err
+	}
+
+	querier := initiateService(
+		service,
+		q.image,
+		e2e.NewCommand("query", args...),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+	)
+
+	return querier, nil
+}
+
 func (q *QuerierBuilder) Build() (*e2e.InstrumentedRunnable, error) {
+	args, err := q.collectArgs()
+	if err != nil {
+		return nil, err
+	}
+
+	querier := NewService(
+		q.environment,
+		fmt.Sprintf("querier-%v", q.name),
+		q.image,
+		e2e.NewCommand("query", args...),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		8080,
+		9091,
+	)
+
+	return querier, nil
+}
+
+func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	const replicaLabel = "replica"
 
 	args := e2e.BuildArgs(map[string]string{
@@ -277,34 +322,31 @@ func (q *QuerierBuilder) Build() (*e2e.InstrumentedRunnable, error) {
 		args = append(args, "--tracing.config="+q.tracingConfig)
 	}
 
-	querier := NewService(
-		q.environment,
-		fmt.Sprintf("querier-%v", q.name),
-		q.image,
-		e2e.NewCommand("query", args...),
-		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-		8080,
-		9091,
-	)
-
-	return querier, nil
+	return args, nil
 }
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
 
-// NewRoutingAndIngestingReceiver creates a Thanos Receive instances that is configured both for ingesting samples and routing samples to other receivers.
-func NewRoutingAndIngestingReceiver(e e2e.Environment, networkName, name string, replicationFactor int, hashring ...receive.HashringConfig) (*e2e.InstrumentedRunnable, error) {
+// NewUninitiatedReceiver returns a future receiver that can be initiated. It is useful
+// for obtaining a receiver address for hashring before the receiver is started.
+func NewUninitiatedReceiver(e e2e.Environment, name string) *e2e.FutureInstrumentedRunnable {
+	return newUninitiatedService(e, fmt.Sprintf("receive-%v", name), 8080, 9091, Port{Name: "remote-write", PortNum: 8081})
+}
+
+// NewRoutingAndIngestingReceiverFromService creates a Thanos Receive instances from an unitiated service.
+// It is configured both for ingesting samples and routing samples to other receivers.
+func NewRoutingAndIngestingReceiverFromService(service *e2e.FutureInstrumentedRunnable, sharedDir string, replicationFactor int, hashring ...receive.HashringConfig) (*e2e.InstrumentedRunnable, error) {
 	var localEndpoint string
 	if len(hashring) == 0 {
 		localEndpoint = "0.0.0.0:9091"
 		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
 	} else {
-		localEndpoint = networkName + fmt.Sprintf("-receive-%v", name) + ":9091"
+		localEndpoint = service.InternalEndpoint("grpc")
 	}
 
-	dir := filepath.Join(e.SharedDir(), "data", "receive", name)
+	dir := filepath.Join(sharedDir, "data", "receive", service.Name())
 	dataDir := filepath.Join(dir, "data")
-	container := filepath.Join(ContainerSharedDir, "data", "receive", name)
+	container := filepath.Join(ContainerSharedDir, "data", "receive", service.Name())
 	if err := os.MkdirAll(dataDir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create receive dir")
 	}
@@ -313,17 +355,17 @@ func NewRoutingAndIngestingReceiver(e e2e.Environment, networkName, name string,
 		return nil, errors.Wrapf(err, "generate hashring file: %v", hashring)
 	}
 
-	receiver := NewService(e,
-		fmt.Sprintf("receive-%v", name),
+	receiver := initiateService(
+		service,
 		DefaultImage(),
 		// TODO(bwplotka): BuildArgs should be interface.
 		e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
-			"--debug.name":                 fmt.Sprintf("receive-%v", name),
+			"--debug.name":                 service.Name(),
 			"--grpc-address":               ":9091",
 			"--grpc-grace-period":          "0s",
 			"--http-address":               ":8080",
 			"--remote-write.address":       ":8081",
-			"--label":                      fmt.Sprintf(`receive="%s"`, name),
+			"--label":                      fmt.Sprintf(`receive="%s"`, service.Name()),
 			"--tsdb.path":                  filepath.Join(container, "data"),
 			"--log.level":                  infoLogLevel,
 			"--receive.replication-factor": strconv.Itoa(replicationFactor),
@@ -331,9 +373,54 @@ func NewRoutingAndIngestingReceiver(e e2e.Environment, networkName, name string,
 			"--receive.hashrings":          string(b),
 		})...),
 		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-		8080,
-		9091,
-		Port{name: "remote-write", portNum: 8081},
+	)
+
+	return receiver, nil
+}
+
+func NewRoutingAndIngestingReceiverWithConfigWatcher(service *e2e.FutureInstrumentedRunnable, sharedDir string, replicationFactor int, hashring ...receive.HashringConfig) (*e2e.InstrumentedRunnable, error) {
+	var localEndpoint string
+	if len(hashring) == 0 {
+		localEndpoint = "0.0.0.0:9091"
+		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
+	} else {
+		localEndpoint = service.InternalEndpoint("grpc")
+	}
+
+	dir := filepath.Join(sharedDir, "data", "receive", service.Name())
+	dataDir := filepath.Join(dir, "data")
+	container := filepath.Join(ContainerSharedDir, "data", "receive", service.Name())
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
+		return nil, errors.Wrap(err, "create receive dir")
+	}
+	b, err := json.Marshal(hashring)
+	if err != nil {
+		return nil, errors.Wrapf(err, "generate hashring file: %v", hashring)
+	}
+
+	if err := ioutil.WriteFile(filepath.Join(dir, "hashrings.json"), b, 0600); err != nil {
+		return nil, errors.Wrap(err, "creating receive config")
+	}
+
+	receiver := initiateService(
+		service,
+		DefaultImage(),
+		// TODO(bwplotka): BuildArgs should be interface.
+		e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
+			"--debug.name":                              service.Name(),
+			"--grpc-address":                            ":9091",
+			"--grpc-grace-period":                       "0s",
+			"--http-address":                            ":8080",
+			"--remote-write.address":                    ":8081",
+			"--label":                                   fmt.Sprintf(`receive="%s"`, service.Name()),
+			"--tsdb.path":                               filepath.Join(container, "data"),
+			"--log.level":                               infoLogLevel,
+			"--receive.replication-factor":              strconv.Itoa(replicationFactor),
+			"--receive.local-endpoint":                  localEndpoint,
+			"--receive.hashrings-file":                  filepath.Join(container, "hashrings.json"),
+			"--receive.hashrings-file-refresh-interval": "5s",
+		})...),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	)
 
 	return receiver, nil
@@ -377,7 +464,7 @@ func NewRoutingReceiver(e e2e.Environment, name string, replicationFactor int, h
 		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
-		Port{name: "remote-write", portNum: 8081},
+		Port{Name: "remote-write", PortNum: 8081},
 	)
 
 	return receiver, nil
@@ -408,58 +495,7 @@ func NewIngestingReceiver(e e2e.Environment, name string) (*e2e.InstrumentedRunn
 		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
-		Port{name: "remote-write", portNum: 8081},
-	)
-
-	return receiver, nil
-}
-
-func NewRoutingAndIngestingReceiverWithConfigWatcher(e e2e.Environment, networkName, name string, replicationFactor int, hashring ...receive.HashringConfig) (*e2e.InstrumentedRunnable, error) {
-	var localEndpoint string
-	if len(hashring) == 0 {
-		localEndpoint = "0.0.0.0:9091"
-		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
-	} else {
-		localEndpoint = networkName + fmt.Sprintf("-receive-%v", name) + ":9091"
-	}
-
-	dir := filepath.Join(e.SharedDir(), "data", "receive", name)
-	dataDir := filepath.Join(dir, "data")
-	container := filepath.Join(ContainerSharedDir, "data", "receive", name)
-	if err := os.MkdirAll(dataDir, 0750); err != nil {
-		return nil, errors.Wrap(err, "create receive dir")
-	}
-	b, err := json.Marshal(hashring)
-	if err != nil {
-		return nil, errors.Wrapf(err, "generate hashring file: %v", hashring)
-	}
-
-	if err := ioutil.WriteFile(filepath.Join(dir, "hashrings.json"), b, 0600); err != nil {
-		return nil, errors.Wrap(err, "creating receive config")
-	}
-
-	receiver := NewService(e,
-		fmt.Sprintf("receive-%v", name),
-		DefaultImage(),
-		// TODO(bwplotka): BuildArgs should be interface.
-		e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
-			"--debug.name":                              fmt.Sprintf("receive-%v", name),
-			"--grpc-address":                            ":9091",
-			"--grpc-grace-period":                       "0s",
-			"--http-address":                            ":8080",
-			"--remote-write.address":                    ":8081",
-			"--label":                                   fmt.Sprintf(`receive="%s"`, name),
-			"--tsdb.path":                               filepath.Join(container, "data"),
-			"--log.level":                               infoLogLevel,
-			"--receive.replication-factor":              strconv.Itoa(replicationFactor),
-			"--receive.local-endpoint":                  localEndpoint,
-			"--receive.hashrings-file":                  filepath.Join(container, "hashrings.json"),
-			"--receive.hashrings-file-refresh-interval": "5s",
-		})...),
-		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-		8080,
-		9091,
-		Port{name: "remote-write", portNum: 8081},
+		Port{Name: "remote-write", PortNum: 8081},
 	)
 
 	return receiver, nil
@@ -495,7 +531,7 @@ func NewRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Alertman
 			"--label":                         fmt.Sprintf(`replica="%s"`, name),
 			"--data-dir":                      container,
 			"--rule-file":                     filepath.Join(ContainerSharedDir, ruleSubDir, "*.yaml"),
-			"--eval-interval":                 "3s",
+			"--eval-interval":                 "1s",
 			"--alertmanagers.config":          string(amCfgBytes),
 			"--alertmanagers.sd-dns-interval": "1s",
 			"--log.level":                     infoLogLevel,

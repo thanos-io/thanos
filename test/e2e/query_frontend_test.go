@@ -26,15 +26,13 @@ import (
 func TestQueryFrontend(t *testing.T) {
 	t.Parallel()
 
-	netName := "e2e_test_query_frontend"
-
-	e, err := e2e.NewDockerEnvironment(netName)
+	e, err := e2e.NewDockerEnvironment("e2e_test_query_frontend")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	now := time.Now()
 
-	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, netName, "1", defaultPromConfig("test", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", defaultPromConfig("test", 0, "", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
@@ -392,15 +390,13 @@ func TestQueryFrontend(t *testing.T) {
 func TestQueryFrontendMemcachedCache(t *testing.T) {
 	t.Parallel()
 
-	netName := "e2e_test_query_frontend_memcached"
-
-	e, err := e2e.NewDockerEnvironment(netName)
+	e, err := e2e.NewDockerEnvironment("e2e_test_query_frontend_memcached")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	now := time.Now()
 
-	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, netName, "1", defaultPromConfig("test", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", defaultPromConfig("test", 0, "", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 

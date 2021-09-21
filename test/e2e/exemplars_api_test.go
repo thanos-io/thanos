@@ -25,9 +25,6 @@ const (
 
 func TestExemplarsAPI_Fanout(t *testing.T) {
 	t.Parallel()
-
-	netName := "e2e_test_exemplars_fanout"
-
 	var (
 		prom1, prom2       *e2e.InstrumentedRunnable
 		sidecar1, sidecar2 *e2e.InstrumentedRunnable
@@ -35,43 +32,45 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 		e                  *e2e.DockerEnvironment
 	)
 
-	e, err = e2e.NewDockerEnvironment(netName)
+	e, err = e2e.NewDockerEnvironment("e2e_test_exemplars_fanout")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	tracingCfg := fmt.Sprintf(`type: JAEGER
-config:
-  sampler_type: const
-  sampler_param: 1
-  service_name: %s`, netName+"-query")
+	qBuilder := e2ethanos.NewQuerierBuilder(e, "query")
+	qUnitiated := qBuilder.BuildUninitiated()
 
-	stores := []string{netName + "-" + "sidecar-prom1:9091", netName + "-" + "sidecar-prom2:9091"}
-	q, err := e2ethanos.NewQuerierBuilder(
-		e, "query", stores...).
-		WithExemplarAddresses(stores...).
-		WithTracingConfig(tracingCfg).
-		Build()
-	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(q))
-
-	// Recreate Prometheus and sidecar with Thanos query scrape target.
 	prom1, sidecar1, err = e2ethanos.NewPrometheusWithSidecar(
 		e,
-		netName,
 		"prom1",
-		defaultPromConfig("ha", 0, "", "", "localhost:9090", q.InternalEndpoint("http")),
+		defaultPromConfig("ha", 0, "", "", "localhost:9090", qUnitiated.InternalEndpoint("http")),
 		e2ethanos.DefaultPrometheusImage(),
 		e2ethanos.FeatureExemplarStorage,
 	)
 	testutil.Ok(t, err)
 	prom2, sidecar2, err = e2ethanos.NewPrometheusWithSidecar(
 		e,
-		netName,
 		"prom2",
-		defaultPromConfig("ha", 1, "", "", "localhost:9090", q.InternalEndpoint("http")),
+		defaultPromConfig("ha", 1, "", "", "localhost:9090", qUnitiated.InternalEndpoint("http")),
 		e2ethanos.DefaultPrometheusImage(),
 		e2ethanos.FeatureExemplarStorage,
 	)
+	testutil.Ok(t, err)
+
+	tracingCfg := fmt.Sprintf(`type: JAEGER
+config:
+  sampler_type: const
+  sampler_param: 1
+  service_name: %s`, qUnitiated.Name())
+
+	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")}
+
+	qBuilder = qBuilder.WithExemplarAddresses(stores...).
+		WithTracingConfig(tracingCfg)
+
+	q, err := qBuilder.Initiate(qUnitiated, stores...)
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 

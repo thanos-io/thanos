@@ -201,7 +201,7 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	t.Cleanup(cancel)
 
 	// Prepare work dirs.
@@ -356,7 +356,7 @@ func TestRule(t *testing.T) {
 		testutil.Ok(t, am1.WaitSumMetrics(e2e.Equals(currentValAm1), "alertmanager_alerts_received_total"))
 	})
 
-	t.Run("duplicate am ", func(t *testing.T) {
+	t.Run("duplicate am", func(t *testing.T) {
 		// am2 is already registered in static addresses.
 		writeTargets(t, filepath.Join(e.SharedDir(), amTargetsSubDir, "targets.yaml"), am2.InternalEndpoint("http"))
 
@@ -382,57 +382,59 @@ func TestRule(t *testing.T) {
 		checkReloadSuccessful(t, ctx, r.Endpoint("http"), 3)
 	})
 
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), "ALERTS", promclient.QueryOptions{
-		Deduplicate: false,
-	}, []model.Metric{
-		{
-			"__name__":   "ALERTS",
-			"severity":   "page",
-			"alertname":  "TestAlert_AbortOnPartialResponse",
-			"alertstate": "firing",
-			"replica":    "1",
-		},
-		{
-			"__name__":   "ALERTS",
-			"severity":   "page",
-			"alertname":  "TestAlert_HasBeenLoadedViaWebHandler",
-			"alertstate": "firing",
-			"replica":    "1",
-		},
-		{
-			"__name__":   "ALERTS",
-			"severity":   "page",
-			"alertname":  "TestAlert_WarnOnPartialResponse",
-			"alertstate": "firing",
-			"replica":    "1",
-		},
+	t.Run("query alerts", func(t *testing.T) {
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "ALERTS", promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"__name__":   "ALERTS",
+				"severity":   "page",
+				"alertname":  "TestAlert_AbortOnPartialResponse",
+				"alertstate": "firing",
+				"replica":    "1",
+			},
+			{
+				"__name__":   "ALERTS",
+				"severity":   "page",
+				"alertname":  "TestAlert_HasBeenLoadedViaWebHandler",
+				"alertstate": "firing",
+				"replica":    "1",
+			},
+			{
+				"__name__":   "ALERTS",
+				"severity":   "page",
+				"alertname":  "TestAlert_WarnOnPartialResponse",
+				"alertstate": "firing",
+				"replica":    "1",
+			},
+		})
+
+		expAlertLabels := []model.LabelSet{
+			{
+				"severity":  "page",
+				"alertname": "TestAlert_AbortOnPartialResponse",
+				"replica":   "1",
+			},
+			{
+				"severity":  "page",
+				"alertname": "TestAlert_HasBeenLoadedViaWebHandler",
+				"replica":   "1",
+			},
+			{
+				"severity":  "page",
+				"alertname": "TestAlert_WarnOnPartialResponse",
+				"replica":   "1",
+			},
+		}
+
+		alrts, err := promclient.NewDefaultClient().AlertmanagerAlerts(ctx, mustURLParse(t, "http://"+am2.Endpoint("http")))
+		testutil.Ok(t, err)
+
+		testutil.Equals(t, len(expAlertLabels), len(alrts))
+		for i, a := range alrts {
+			testutil.Assert(t, a.Labels.Equal(expAlertLabels[i]), "unexpected labels %s", a.Labels)
+		}
 	})
-
-	expAlertLabels := []model.LabelSet{
-		{
-			"severity":  "page",
-			"alertname": "TestAlert_AbortOnPartialResponse",
-			"replica":   "1",
-		},
-		{
-			"severity":  "page",
-			"alertname": "TestAlert_HasBeenLoadedViaWebHandler",
-			"replica":   "1",
-		},
-		{
-			"severity":  "page",
-			"alertname": "TestAlert_WarnOnPartialResponse",
-			"replica":   "1",
-		},
-	}
-
-	alrts, err := promclient.NewDefaultClient().AlertmanagerAlerts(ctx, mustURLParse(t, "http://"+am2.Endpoint("http")))
-	testutil.Ok(t, err)
-
-	testutil.Equals(t, len(expAlertLabels), len(alrts))
-	for i, a := range alrts {
-		testutil.Assert(t, a.Labels.Equal(expAlertLabels[i]), "unexpected labels %s", a.Labels)
-	}
 }
 
 // Test Ruler behavior on different storepb.PartialResponseStrategy when having partial response from single `failingStoreAPI`.

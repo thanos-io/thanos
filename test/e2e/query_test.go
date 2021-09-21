@@ -98,23 +98,22 @@ func sortResults(res model.Vector) {
 func TestQuery(t *testing.T) {
 	t.Parallel()
 
-	netName := "e2e_test_query"
-
-	e, err := e2e.NewDockerEnvironment(netName)
+	e, err := e2e.NewDockerEnvironment("e2e_test_query")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	receiver, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "1", 1)
+	receiver := e2ethanos.NewUninitiatedReceiver(e, "1")
+	receiverRunnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(receiver, e.SharedDir(), 1)
 	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+	testutil.Ok(t, e2e.StartAndWaitReady(receiverRunnable))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "e2e_test_query", "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "e2e_test_query", "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(e, "e2e_test_query", "ha1", defaultPromConfig("prom-ha", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage())
+	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(e, "ha1", defaultPromConfig("prom-ha", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom4, sidecar4, err := e2ethanos.NewPrometheusWithSidecar(e, "e2e_test_query", "ha2", defaultPromConfig("prom-ha", 1, "", filepath.Join(e2ethanos.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage())
+	prom4, sidecar4, err := e2ethanos.NewPrometheusWithSidecar(e, "ha2", defaultPromConfig("prom-ha", 1, "", filepath.Join(e2ethanos.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
@@ -140,7 +139,7 @@ func TestQuery(t *testing.T) {
 		{
 			"job":        "myself",
 			"prometheus": "prom-both-remote-write-and-sidecar",
-			"receive":    "1",
+			"receive":    "receive-1",
 			"replica":    "1234",
 			"tenant_id":  "default-tenant",
 		},
@@ -172,7 +171,7 @@ func TestQuery(t *testing.T) {
 		{
 			"job":        "myself",
 			"prometheus": "prom-both-remote-write-and-sidecar",
-			"receive":    "1",
+			"receive":    "receive-1",
 			"tenant_id":  "default-tenant",
 		},
 		{
@@ -253,19 +252,18 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 func TestQueryLabelNames(t *testing.T) {
 	t.Parallel()
 
-	netName := "e2e_test_query_label_names"
-
-	e, err := e2e.NewDockerEnvironment(netName)
+	e, err := e2e.NewDockerEnvironment("e2e_test_query_label_names")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	receiver, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "1", 1)
+	receiver := e2ethanos.NewUninitiatedReceiver(e, "1")
+	receiverRunnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(receiver, e.SharedDir(), 1)
 	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+	testutil.Ok(t, e2e.StartAndWaitReady(receiverRunnable))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, netName, "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, netName, "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
@@ -306,19 +304,18 @@ func TestQueryLabelNames(t *testing.T) {
 func TestQueryLabelValues(t *testing.T) {
 	t.Parallel()
 
-	netName := "e2e_test_query_label_values"
-
-	e, err := e2e.NewDockerEnvironment(netName)
+	e, err := e2e.NewDockerEnvironment("e2e_test_query_label_values")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	receiver, err := e2ethanos.NewRoutingAndIngestingReceiver(e, netName, "1", 1)
+	receiver := e2ethanos.NewUninitiatedReceiver(e, "1")
+	receiverRunnable, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(receiver, e.SharedDir(), 1)
 	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+	testutil.Ok(t, e2e.StartAndWaitReady(receiverRunnable))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, netName, "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, netName, "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
@@ -370,9 +367,7 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 	} {
 		i := i
 		t.Run(fmt.Sprintf("%+v", tcase), func(t *testing.T) {
-			netName := fmt.Sprintf("e2e_test_query_comp_query_%d", i)
-
-			e, err := e2e.NewDockerEnvironment(netName)
+			e, err := e2e.NewDockerEnvironment(fmt.Sprintf("e2e_test_query_comp_query_%d", i))
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -382,11 +377,13 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 			// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.
 			createRuleFile(t, filepath.Join(e.SharedDir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
 
+			qBuilder := e2ethanos.NewQuerierBuilder(e, "1")
+			qUninit := qBuilder.BuildUninitiated()
+
 			p1, s1, err := e2ethanos.NewPrometheusWithSidecarCustomImage(
 				e,
-				netName,
 				"p1",
-				defaultPromConfig("p1", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml"), "localhost:9090", netName+"-querier-1:8080"), // TODO(bwplotka): Use newer e2e lib to handle this in type safe manner.
+				defaultPromConfig("p1", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml"), "localhost:9090", qUninit.InternalEndpoint("http")),
 				e2ethanos.DefaultPrometheusImage(),
 				tcase.sidecarImage,
 				e2ethanos.FeatureExemplarStorage,
@@ -395,7 +392,7 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 			testutil.Ok(t, e2e.StartAndWaitReady(p1, s1))
 
 			// Newest querier with old --rules --meta etc flags.
-			q, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).
+			q, err := qBuilder.
 				WithMetadataAddresses(s1.InternalEndpoint("grpc")).
 				WithExemplarAddresses(s1.InternalEndpoint("grpc")).
 				WithTargetAddresses(s1.InternalEndpoint("grpc")).
@@ -404,9 +401,9 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 config:
   sampler_type: const
   sampler_param: 1
-  service_name: %s`, netName+"-query")). // Use fake tracing config to trigger exemplar.
+  service_name: %s`, qUninit.Name())). // Use fake tracing config to trigger exemplar.
 				WithImage(tcase.queryImage).
-				Build()
+				Initiate(qUninit, s1.InternalEndpoint("grpc"))
 			testutil.Ok(t, err)
 			testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -583,7 +580,7 @@ func instantQuery(t *testing.T, ctx context.Context, addr, q string, opts promcl
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	testutil.Ok(t, runutil.RetryWithLog(logger, 3*time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
 		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, mustURLParse(t, "http://"+addr), q, time.Now(), opts)
 		if err != nil {
 			return err

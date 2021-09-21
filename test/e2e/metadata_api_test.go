@@ -21,9 +21,7 @@ import (
 func TestMetadataAPI_Fanout(t *testing.T) {
 	t.Parallel()
 
-	netName := "e2e_test_metadata_fanout"
-
-	e, err := e2e.NewDockerEnvironment(netName)
+	e, err := e2e.NewDockerEnvironment("e2e_test_metadata_fanout")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -31,7 +29,6 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	// Each Prometheus scrapes its own metrics and Sidecar's metrics.
 	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
 		e,
-		netName,
 		"prom1",
 		defaultPromConfig("ha", 0, "", "", "localhost:9090", "sidecar-prom1:8080"),
 		e2ethanos.DefaultPrometheusImage(),
@@ -40,7 +37,6 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 
 	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
 		e,
-		netName,
 		"prom2",
 		defaultPromConfig("ha", 1, "", "", "localhost:9090", "sidecar-prom2:8080"),
 		e2ethanos.DefaultPrometheusImage(),

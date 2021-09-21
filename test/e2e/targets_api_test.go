@@ -29,16 +29,13 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 
 	t.Parallel()
 
-	netName := "e2e_test_targets_fanout"
-
-	e, err := e2e.NewDockerEnvironment(netName)
+	e, err := e2e.NewDockerEnvironment("e2e_test_targets_fanout")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	// 2x Prometheus.
 	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
 		e,
-		netName,
 		"prom1",
 		defaultPromConfig("ha", 0, "", "", "localhost:9090", "localhost:80"),
 		e2ethanos.DefaultPrometheusImage(),
@@ -46,7 +43,6 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, err)
 	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
 		e,
-		netName,
 		"prom2",
 		defaultPromConfig("ha", 1, "", "", "localhost:9090", "localhost:80"),
 		e2ethanos.DefaultPrometheusImage(),
