@@ -6,6 +6,7 @@ package objstore
 import (
 	"bytes"
 	"context"
+	"github.com/minio/minio-go/v7"
 	"io"
 	"os"
 	"path/filepath"
@@ -145,6 +146,12 @@ func TryToGetSize(r io.Reader) (int64, error) {
 		return int64(f.Len()), nil
 	case *strings.Reader:
 		return f.Size(), nil
+	case *minio.Object:
+		objectInfo, err := f.Stat()
+		if err != nil {
+			return 0, errors.Wrap(err, "minio.Object.Stat()")
+		}
+		return objectInfo.Size, nil
 	case ObjectSizer:
 		return f.ObjectSize()
 	}
@@ -500,9 +507,16 @@ type timingReadCloser struct {
 	duration          *prometheus.HistogramVec
 	failed            *prometheus.CounterVec
 	isFailureExpected IsOpFailureExpectedFunc
+
+	objSize    int64
+	objSizeErr error
 }
 
 func newTimingReadCloser(rc io.ReadCloser, op string, dur *prometheus.HistogramVec, failed *prometheus.CounterVec, isFailureExpected IsOpFailureExpectedFunc) *timingReadCloser {
+	// Since TryToGetSize can only reliably return size before doing any read calls,
+	// we call during "construction" and remember the results.
+	objSize, objSizeErr := TryToGetSize(rc)
+
 	// Initialize the metrics with 0.
 	dur.WithLabelValues(op)
 	failed.WithLabelValues(op)
@@ -513,6 +527,8 @@ func newTimingReadCloser(rc io.ReadCloser, op string, dur *prometheus.HistogramV
 		duration:          dur,
 		failed:            failed,
 		isFailureExpected: isFailureExpected,
+		objSize:           objSize,
+		objSizeErr:        objSizeErr,
 	}
 }
 
@@ -538,4 +554,8 @@ func (rc *timingReadCloser) Read(b []byte) (n int, err error) {
 		rc.alreadyGotErr = true
 	}
 	return n, err
+}
+
+func (rc *timingReadCloser) ObjectSize() (int64, error) {
+	return rc.objSize, rc.objSizeErr
 }
