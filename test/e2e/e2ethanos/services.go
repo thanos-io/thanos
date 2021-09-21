@@ -47,7 +47,7 @@ const (
 
 // TODO(bwplotka): Run against multiple?
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.26.0"
+	return "quay.io/prometheus/prometheus:v2.29.2"
 }
 
 func DefaultAlertmanagerImage() string {

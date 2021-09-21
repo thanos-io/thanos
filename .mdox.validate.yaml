@@ -17,3 +17,6 @@ validators:
   # 301 errors even when curl-ed.
   - regex: 'envoyproxy\.io'
     type: 'ignore'
+  # couldn't reach even when curl-ed.
+  - regex: 'cloud\.baidu\.com'
+    type: 'ignore'

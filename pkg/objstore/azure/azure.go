@@ -57,6 +57,7 @@ type Config struct {
 	Endpoint           string         `yaml:"endpoint"`
 	MaxRetries         int            `yaml:"max_retries"`
 	MSIResource        string         `yaml:"msi_resource"`
+	UserAssignedID     string         `yaml:"user_assigned_id"`
 	PipelineConfig     PipelineConfig `yaml:"pipeline_config"`
 	ReaderConfig       ReaderConfig   `yaml:"reader_config"`
 	HTTPConfig         HTTPConfig     `yaml:"http_config"`
@@ -98,15 +99,24 @@ func (conf *Config) validate() error {
 
 	var errMsg []string
 	if conf.MSIResource == "" {
-		if conf.StorageAccountName == "" ||
-			conf.StorageAccountKey == "" {
-			errMsg = append(errMsg, "invalid Azure storage configuration")
-		}
-		if conf.StorageAccountName == "" && conf.StorageAccountKey != "" {
-			errMsg = append(errMsg, "no Azure storage_account specified while storage_account_key is present in config file; both should be present")
-		}
-		if conf.StorageAccountName != "" && conf.StorageAccountKey == "" {
-			errMsg = append(errMsg, "no Azure storage_account_key specified while storage_account is present in config file; both should be present")
+		if conf.UserAssignedID == "" {
+			if conf.StorageAccountName == "" ||
+				conf.StorageAccountKey == "" {
+				errMsg = append(errMsg, "invalid Azure storage configuration")
+			}
+			if conf.StorageAccountName == "" && conf.StorageAccountKey != "" {
+				errMsg = append(errMsg, "no Azure storage_account specified while storage_account_key is present in config file; both should be present")
+			}
+			if conf.StorageAccountName != "" && conf.StorageAccountKey == "" {
+				errMsg = append(errMsg, "no Azure storage_account_key specified while storage_account is present in config file; both should be present")
+			}
+		} else {
+			if conf.StorageAccountName == "" {
+				errMsg = append(errMsg, "UserAssignedID is configured but storage account name is missing")
+			}
+			if conf.StorageAccountKey != "" {
+				errMsg = append(errMsg, "UserAssignedID is configured but storage account key is used")
+			}
 		}
 	} else {
 		if conf.StorageAccountName == "" {
