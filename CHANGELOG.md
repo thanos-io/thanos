@@ -10,9 +10,15 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+### Fixed
+
+- [#4663](https://github.com/thanos-io/thanos/pull/4663) Fetcher: Fix discovered data races
+
 ### Added
+
 - [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: add `exemplar.partial-response` flag to control partial response.
 - [#4679](https://github.com/thanos-io/thanos/pull/4679) Added `enable-feature` flag to enable negative offsets and @ modifier, similar to Prometheus.
+- [#4696](https://github.com/thanos-io/thanos/pull/4696) Query: add cache name to tracing spans.
 
 ## v0.23.0 - In Progress
 
