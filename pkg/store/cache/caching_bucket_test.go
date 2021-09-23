@@ -295,6 +295,10 @@ func (m *mockCache) Fetch(_ context.Context, keys []string) map[string][]byte {
 	return found
 }
 
+func (m *mockCache) Name() string {
+	return "mockCache"
+}
+
 func (m *mockCache) flush() {
 	m.cache = map[string]cacheItem{}
 }
