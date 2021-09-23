@@ -17,6 +17,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: add `exemplar.partial-response` flag to control partial response.
+- [#4696](https://github.com/thanos-io/thanos/pull/4696) Query: add cache name to tracing spans.
 
 ## v0.23.0 - In Progress
 
