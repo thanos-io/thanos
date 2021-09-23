@@ -199,18 +199,22 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLset)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	if !match {
+		return &storepb.LabelNamesResponse{Names: nil}, nil
+	}
+
 	q, err := s.db.ChunkQuerier(ctx, r.Start, r.End)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label names")
 
-	promMatchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	res, _, err := q.LabelNames(promMatchers...)
+	res, _, err := q.LabelNames(matchers...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -229,19 +233,33 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
 	*storepb.LabelValuesResponse, error,
 ) {
+	if r.Label == "" {
+		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
+	}
+
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLset)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	if !match {
+		return &storepb.LabelValuesResponse{Values: nil}, nil
+	}
+
+	if v := s.extLset.Get(r.Label); v != "" {
+		return &storepb.LabelValuesResponse{Values: []string{v}}, nil
+	}
+
 	q, err := s.db.ChunkQuerier(ctx, r.Start, r.End)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label values")
 
-	matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
 	res, _, err := q.LabelValues(r.Label, matchers...)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+
 	return &storepb.LabelValuesResponse{Values: res}, nil
 }

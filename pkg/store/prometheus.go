@@ -508,25 +508,24 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encodin
 
 // LabelNames returns all known label names of series that match the given matchers.
 func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
-	lnc := false
-	v := p.promVersion()
-	lbls := []string{}
+	extLset := p.externalLabelsFn()
 
-	version, err := semver.Parse(v)
-	if err == nil && version.GTE(baseVer) {
-		lnc = true
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if !match {
+		return &storepb.LabelNamesResponse{Names: nil}, nil
 	}
 
-	if lnc || len(r.Matchers) == 0 {
-		lbls, err = p.client.LabelNamesInGRPC(ctx, p.base, r.Matchers, r.Start, r.End)
+	var lbls []string
+	version, parseErr := semver.Parse(p.promVersion())
+	if len(matchers) == 0 || (parseErr == nil && version.GTE(baseVer)) {
+		lbls, err = p.client.LabelNamesInGRPC(ctx, p.base, matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
-		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
 		sers, err := p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
@@ -545,42 +544,49 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 		}
 	}
 
+	if len(lbls) > 0 {
+		for _, extLbl := range extLset {
+			lbls = append(lbls, extLbl.Name)
+		}
+		sort.Strings(lbls)
+	}
+
 	return &storepb.LabelNamesResponse{Names: lbls}, nil
 }
 
 // LabelValues returns all known label values for a given label name.
 func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
-	externalLset := p.externalLabelsFn()
+	if r.Label == "" {
+		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
+	}
+
+	extLset := p.externalLabelsFn()
 
 	// First check for matching external label which has priority.
-	if l := externalLset.Get(r.Label); l != "" {
+	if l := extLset.Get(r.Label); l != "" {
 		return &storepb.LabelValuesResponse{Values: []string{l}}, nil
+	}
+
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if !match {
+		return &storepb.LabelValuesResponse{Values: nil}, nil
 	}
 
 	var (
 		sers []map[string]string
-		err  error
+		vals []string
 	)
 
-	lvc := false // LabelValuesCall
-	vals := []string{}
-	v := p.promVersion()
-
-	version, err := semver.Parse(v)
-	if err == nil && version.GTE(baseVer) {
-		lvc = true
-	}
-
-	if len(r.Matchers) == 0 || lvc {
-		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, r.Matchers, r.Start, r.End)
+	version, parseErr := semver.Parse(p.promVersion())
+	if len(matchers) == 0 || (parseErr == nil && version.GTE(baseVer)) {
+		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		matchers, err := storepb.MatchersToPromMatchers(r.Matchers...)
-		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
 		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
@@ -597,6 +603,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 			vals = append(vals, key)
 		}
 	}
+
 	sort.Strings(vals)
 	return &storepb.LabelValuesResponse{Values: vals}, nil
 }
