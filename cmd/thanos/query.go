@@ -477,13 +477,8 @@ func runQuery(
 			cancelRun()
 		})
 
-		if enableAtModifier {
-			engineOpts.EnableAtModifier = true
-		}
-
-		if enableNegativeOffset {
-			engineOpts.EnableNegativeOffset = true
-		}
+		engineOpts.EnableAtModifier = enableAtModifier
+		engineOpts.EnableNegativeOffset = enableNegativeOffset
 
 		ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
 		g.Add(func() error {
