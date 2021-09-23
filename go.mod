@@ -19,6 +19,7 @@ require (
 	github.com/chromedp/chromedp v0.5.3
 	github.com/cortexproject/cortex v1.10.1-0.20210820081236-70dddb6b70b8
 	github.com/davecgh/go-spew v1.1.1
+	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/efficientgo/e2e v0.11.1-0.20210829161758-f4cc6dbdc6ea
 	github.com/efficientgo/tools/extkingpin v0.0.0-20210609125236-d73259166f20
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
@@ -40,6 +41,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/jpillora/backoff v1.0.0
 	github.com/klauspost/compress v1.13.1
+	github.com/ks3sdklib/aws-sdk-go v1.0.12
 	github.com/leanovate/gopter v0.2.4
 	github.com/lightstep/lightstep-tracer-go v0.18.1
 	github.com/lovoo/gcloud-opentracing v0.3.0
