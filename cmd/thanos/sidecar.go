@@ -138,10 +138,6 @@ func runSidecar(
 			Name: "thanos_sidecar_prometheus_up",
 			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
 		})
-		lastHeartbeat := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_sidecar_last_heartbeat_success_time_seconds",
-			Help: "Timestamp of the last successful heartbeat in seconds.",
-		})
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -191,7 +187,6 @@ func runSidecar(
 				)
 				promUp.Set(1)
 				statusProber.Ready()
-				lastHeartbeat.SetToCurrentTime()
 				return nil
 			})
 			if err != nil {
@@ -213,7 +208,6 @@ func runSidecar(
 					promUp.Set(0)
 				} else {
 					promUp.Set(1)
-					lastHeartbeat.SetToCurrentTime()
 				}
 
 				return nil

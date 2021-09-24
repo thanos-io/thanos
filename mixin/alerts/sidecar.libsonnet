@@ -2,6 +2,7 @@
   local thanos = self,
   sidecar+:: {
     selector: error 'must provide selector for Thanos Sidecar alerts',
+    thanosPrometheusCommonDimensions: error 'must provide commonDimensions between Thanos and Prometheus metrics for Sidecar alerts',
     dimensions: std.join(', ', std.objectFields(thanos.targetGroups) + ['job', 'instance']),
   },
   prometheusAlerts+:: {
@@ -10,20 +11,6 @@
       {
         name: 'thanos-sidecar',
         rules: [
-          {
-            alert: 'ThanosSidecarPrometheusDown',
-            annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}}%s cannot connect to Prometheus.' % location,
-              summary: 'Thanos Sidecar cannot connect to Prometheus',
-            },
-            expr: |||
-              thanos_sidecar_prometheus_up{%(selector)s} == 0
-            ||| % thanos.sidecar,
-            'for': '5m',
-            labels: {
-              severity: 'critical',
-            },
-          },
           {
             alert: 'ThanosSidecarBucketOperationsFailed',
             annotations: {
@@ -39,13 +26,15 @@
             },
           },
           {
-            alert: 'ThanosSidecarUnhealthy',
+            alert: 'ThanosSidecarNoConnectionToStartedPrometheus',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}}%s is unhealthy for more than {{$value}} seconds.' % location,
-              summary: 'Thanos Sidecar is unhealthy.',
+              description: 'Thanos Sidecar {{$labels.instance}}%s is unhealthy.' % location,
+              summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.',
             },
             expr: |||
-              time() - max by (%(dimensions)s) (thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) >= 240
+              thanos_sidecar_prometheus_up{%(selector)s} == 0
+              AND on (%(thanosPrometheusCommonDimensions)s)
+              prometheus_tsdb_data_replay_duration_seconds != 0
             ||| % thanos.sidecar,
             'for': '5m',
             labels: {

@@ -85,9 +85,8 @@
 
 |Name|Summary|Description|Severity|Runbook|
 |---|---|---|---|---|
-|ThanosSidecarPrometheusDown|Thanos Sidecar cannot connect to Prometheus|Thanos Sidecar {{$labels.instance}} cannot connect to Prometheus.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarprometheusdown](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarprometheusdown)|
 |ThanosSidecarBucketOperationsFailed|Thanos Sidecar bucket operations are failing|Thanos Sidecar {{$labels.instance}} bucket operations are failing|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarbucketoperationsfailed](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarbucketoperationsfailed)|
-|ThanosSidecarUnhealthy|Thanos Sidecar is unhealthy.|Thanos Sidecar {{$labels.instance}} is unhealthy for more than {{$value}} seconds.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy)|
+|ThanosSidecarNoConnectionToStartedPrometheus|Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.|Thanos Sidecar {{$labels.instance}} is unhealthy.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus)|
 
 ## thanos-store
 
