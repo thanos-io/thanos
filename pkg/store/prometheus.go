@@ -607,3 +607,21 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	sort.Strings(vals)
 	return &storepb.LabelValuesResponse{Values: vals}, nil
 }
+
+func (p *PrometheusStore) LabelSet() []labelpb.ZLabelSet {
+	lset := p.externalLabelsFn()
+
+	labels := make([]labelpb.ZLabel, 0, len(lset))
+	labels = append(labels, labelpb.ZLabelsFromPromLabels(lset)...)
+
+	// Until we deprecate the single labels in the reply, we just duplicate
+	// them here for migration/compatibility purposes.
+	labelset := []labelpb.ZLabelSet{}
+	if len(labels) > 0 {
+		labelset = append(labelset, labelpb.ZLabelSet{
+			Labels: labels,
+		})
+	}
+
+	return labelset
+}

@@ -58,23 +58,23 @@ func TestInfo(t *testing.T) {
 	// '--endpoint' flag works properly works together with other flags ('--target', '--metadata' etc.).
 	// Register 2 sidecars and 1 storeGW using '--endpoint'.
 	// Register `sidecar3` twice to verify it is deduplicated.
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{sidecar1.GRPCNetworkEndpoint()}).
-		WithTargetAddresses([]string{sidecar1.GRPCNetworkEndpoint()}).
-		WithMetadataAddresses([]string{sidecar1.GRPCNetworkEndpoint()}).
-		WithExemplarAddresses([]string{sidecar1.GRPCNetworkEndpoint()}).
-		WithRuleAddresses([]string{sidecar1.GRPCNetworkEndpoint()}).
-		WithEndpoints([]string{
+	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", sidecar1.GRPCNetworkEndpoint()).
+		WithTargetAddresses(sidecar1.GRPCNetworkEndpoint()).
+		WithMetadataAddresses(sidecar1.GRPCNetworkEndpoint()).
+		WithExemplarAddresses(sidecar1.GRPCNetworkEndpoint()).
+		WithRuleAddresses(sidecar1.GRPCNetworkEndpoint()).
+		WithEndpoints(
 			sidecar1.GRPCNetworkEndpoint(),
 			sidecar2.GRPCNetworkEndpoint(),
 			sidecar3.GRPCNetworkEndpoint(),
 			sidecar3.GRPCNetworkEndpoint(),
 			str.GRPCNetworkEndpoint(),
-		}).
+		).
 		Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.StartAndWaitReady(q))
 
-	expected := map[string][]query.StoreStatus{
+	expected := map[string][]query.EndpointStatus{
 		"sidecar": {
 			{
 				Name: "e2e_test_info-sidecar-alone1:9091",
@@ -126,7 +126,7 @@ func TestInfo(t *testing.T) {
 
 	url := "http://" + path.Join(q.HTTPEndpoint(), "/api/v1/stores")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
@@ -141,11 +141,14 @@ func TestInfo(t *testing.T) {
 		testutil.Ok(t, err)
 
 		var res struct {
-			Data map[string][]query.StoreStatus `json:"data"`
+			Data map[string][]query.EndpointStatus `json:"data"`
 		}
 
 		err = json.Unmarshal(body, &res)
 		testutil.Ok(t, err)
+
+		fmt.Println(res)
+		fmt.Println()
 
 		if err = assertStoreStatus(t, "sidecar", res.Data, expected); err != nil {
 			return err
@@ -160,7 +163,7 @@ func TestInfo(t *testing.T) {
 	testutil.Ok(t, err)
 }
 
-func assertStoreStatus(t *testing.T, component string, res map[string][]query.StoreStatus, expected map[string][]query.StoreStatus) error {
+func assertStoreStatus(t *testing.T, component string, res map[string][]query.EndpointStatus, expected map[string][]query.EndpointStatus) error {
 	t.Helper()
 
 	if len(res[component]) != len(expected[component]) {

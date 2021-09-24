@@ -199,6 +199,11 @@ func (q *QuerierBuilder) WithMetadataAddresses(metadataAddresses ...string) *Que
 	return q
 }
 
+func (q *QuerierBuilder) WithEndpoints(endpoints ...string) *QuerierBuilder {
+	q.endpoints = endpoints
+	return q
+}
+
 func (q *QuerierBuilder) WithRoutePrefix(routePrefix string) *QuerierBuilder {
 	q.routePrefix = routePrefix
 	return q

@@ -23,7 +23,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
-	v1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -39,6 +38,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/reloader"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -263,8 +263,8 @@ func runSidecar(
 				// Currently Exemplars API does not expose metadata such as min/max time,
 				// so we are using default minimum and maximum possible values as min/max time.
 				return &infopb.ExemplarsInfo{
-					MinTime: v1.MinTime.Unix(),
-					MaxTime: v1.MaxTime.Unix(),
+					MinTime: query.MinTime,
+					MaxTime: query.MaxTime,
 				}
 			},
 			func() *infopb.RulesInfo {

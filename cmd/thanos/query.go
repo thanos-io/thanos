@@ -333,7 +333,7 @@ func runQuery(
 	queryReplicaLabels []string,
 	selectorLset labels.Labels,
 	flagsMap map[string]string,
-	endpoints []string,
+	endpointAddrs []string,
 	storeAddrs []string,
 	ruleAddrs []string,
 	targetAddrs []string,
@@ -381,9 +381,9 @@ func runQuery(
 		}
 	}
 
-	dnsInfoProvider := dns.NewProvider(
+	dnsEndpointProvider := dns.NewProvider(
 		logger,
-		extprom.WrapRegistererWithPrefix("thanos_query_info_apis_", reg),
+		extprom.WrapRegistererWithPrefix("thanos_query_endpoints_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
 
@@ -421,7 +421,14 @@ func runQuery(
 					specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
 				}
 
-				for _, dnsProvider := range []*dns.Provider{dnsStoreProvider, dnsRuleProvider, dnsExemplarProvider, dnsMetadataProvider, dnsTargetProvider} {
+				for _, dnsProvider := range []*dns.Provider{
+					dnsStoreProvider,
+					dnsRuleProvider,
+					dnsExemplarProvider,
+					dnsMetadataProvider,
+					dnsTargetProvider,
+					dnsEndpointProvider,
+				} {
 					var tmpSpecs []query.EndpointSpec
 
 					for _, addr := range dnsProvider.Addresses() {
@@ -429,13 +436,6 @@ func runQuery(
 					}
 					tmpSpecs = removeDuplicateEndpointSpecs(logger, duplicatedStores, tmpSpecs)
 					specs = append(specs, tmpSpecs...)
-				}
-
-				return specs
-			},
-			func() (specs []query.InfoSpec) {
-				for _, addr := range dnsInfoProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
 				}
 
 				return specs
@@ -545,8 +545,8 @@ func runQuery(
 				if err := dnsExemplarProvider.Resolve(resolveCtx, exemplarAddrs); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for exemplarsAPI", "err", err)
 				}
-				if err := dnsInfoProvider.Resolve(resolveCtx, endpoints); err != nil {
-					level.Error(logger).Log("msg", "failed to resolve addresses  passed using endpoint flag", "err", err)
+				if err := dnsEndpointProvider.Resolve(resolveCtx, endpointAddrs); err != nil {
+					level.Error(logger).Log("msg", "failed to resolve addresses passed using endpoint flag", "err", err)
 
 				}
 				return nil
