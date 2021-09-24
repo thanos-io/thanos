@@ -4,11 +4,11 @@ import { PanelOptions, PanelType, PanelDefaultOptions } from '../pages/graph/Pan
 import { PanelMeta } from '../pages/graph/PanelList';
 import { queryURL } from '../thanos/config';
 
-export const generateID = () => {
+export const generateID = (): string => {
   return `_${Math.random().toString(36).substr(2, 9)}`;
 };
 
-export const byEmptyString = (p: string) => p.length > 0;
+export const byEmptyString = (p: string): boolean => p.length > 0;
 
 export const isPresent = <T>(obj: T): obj is NonNullable<T> => obj !== null && obj !== undefined;
 
@@ -27,7 +27,7 @@ export const escapeHTML = (str: string): string => {
   });
 };
 
-export const metricToSeriesName = (labels: { [key: string]: string }) => {
+export const metricToSeriesName = (labels: { [key: string]: string }): string => {
   if (labels === null) {
     return 'scalar';
   }
@@ -226,11 +226,13 @@ export const parseOption = (param: string): Partial<PanelOptions> => {
   return {};
 };
 
-export const formatParam = (key: string) => (paramName: string, value: number | string | boolean) => {
-  return `g${key}.${paramName}=${encodeURIComponent(value)}`;
-};
+export const formatParam =
+  (key: string) =>
+  (paramName: string, value: number | string | boolean): string => {
+    return `g${key}.${paramName}=${encodeURIComponent(value)}`;
+  };
 
-export const toQueryString = ({ key, options }: PanelMeta) => {
+export const toQueryString = ({ key, options }: PanelMeta): string => {
   const formatWithKey = formatParam(key);
   const {
     expr,
@@ -260,15 +262,15 @@ export const toQueryString = ({ key, options }: PanelMeta) => {
   return urlParams.filter(byEmptyString).join('&');
 };
 
-export const encodePanelOptionsToQueryString = (panels: PanelMeta[]) => {
+export const encodePanelOptionsToQueryString = (panels: PanelMeta[]): string => {
   return `?${panels.map(toQueryString).join('&')}`;
 };
 
-export const createExpressionLink = (expr: string) => {
+export const createExpressionLink = (expr: string): string => {
   return `../graph?g0.expr=${encodeURIComponent(expr)}&g0.tab=1&g0.stacked=0&g0.range_input=1h`;
 };
 
-export const createExternalExpressionLink = (expr: string) => {
+export const createExternalExpressionLink = (expr: string): string => {
   const expLink = createExpressionLink(expr);
   return `${queryURL}${expLink.replace(/^\.\./, '')}`;
 };
