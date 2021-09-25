@@ -1,16 +1,15 @@
 # Modify series in the object storage via bucket rewrite tool
 
-For operational purposes, there are some use cases to manipulate data in the object storage. For example, delete some high
-
-cardinality metrics or relabel metrics if needed. This is already possible via the bucket rewrite tool.
+For operational purposes, there are some use cases to manipulate data in the object storage. For example, delete some high cardinality metrics or relabel metrics if needed. This is already possible via the bucket rewrite tool.
 
 ## Delete series
 
-```
+```shell
 thanos tools bucket rewrite --rewrite.to-delete-config-file config.yaml --objstore.config-file objstore.yaml --id <block ID>
 ```
 
 This is the example command to delete some data in the specified TSDB block from your object store bucket. For example, if 
+
 `k8s_app_metric37` is the metric you want to delete, then the config file `config.yaml` would be:
 
 ```yaml
@@ -23,6 +22,7 @@ A changelog file is generated so that you can check the expected modification of
 
 ```shell
 thanos tools bucket rewrite  --rewrite.to-delete-config-file config.yaml --objstore.config-file ~/local-bucket-config.yaml --id 01FET1EK9BC3E0QD4886RQCM8K
+
 level=info ts=2021-09-25T05:47:14.87316Z caller=factory.go:49 msg="loading bucket configuration"
 level=info ts=2021-09-25T05:47:14.875365Z caller=tools_bucket.go:1078 msg="downloading block" source=01FET1EK9BC3E0QD4886RQCM8K
 level=info ts=2021-09-25T05:47:14.887816Z caller=tools_bucket.go:1115 msg="changelog will be available" file=/var/folders/ny/yy113mqs6szcpjy2qrnhq9rh0000gq/T/thanos-rewrite/01FGDQWKJ7H29B3V4HCQ691WN9/change.log
@@ -41,12 +41,11 @@ level=info ts=2021-09-25T05:47:14.964768Z caller=tools_bucket.go:1136 msg="dry r
 level=info ts=2021-09-25T05:47:14.965101Z caller=main.go:160 msg=exiting
 ```
 
-Below is an example output of the changelog. All the series that match the given deletion config will be deleted. The last column
+Below is an example output of the changelog. All the series that match the given deletion config will be deleted. The last column `[{1630713615001 1630715400001}]` represents the start and end time of the series.
 
-[{1630713615001 1630715400001}] represents the start and end time of the series.
-
-```
+```shell
 cat /var/folders/ny/yy113mqs6szcpjy2qrnhq9rh0000gq/T/thanos-rewrite/01FGDQWKJ7H29B3V4HCQ691WN9/change.log
+
 Deleted {__blockgen_target__="1", __name__="k8s_app_metric37", next_rollout_time="2021-09-03 23:30:00 +0000 UTC"} [{1630713615001 1630715400001}]
 Deleted {__blockgen_target__="1", __name__="k8s_app_metric37", next_rollout_time="2021-09-04 00:30:00 +0000 UTC"} [{1630715415000 1630719015000}]
 Deleted {__blockgen_target__="1", __name__="k8s_app_metric37", next_rollout_time="2021-09-04 01:30:00 +0000 UTC"} [{1630719015000 1630720815000}]
@@ -68,18 +67,17 @@ Deleted {__blockgen_target__="13", __name__="k8s_app_metric37", next_rollout_tim
 ...
 ```
 
-If the changelog output is expected, then we can use the same command in the first step, but with `--no-dry-run` flag to actually 
+If the changelog output is expected, then we can use the same command in the first step, but with `--no-dry-run` flag to actually delete the data we want.
 
-delete the data we want.
-
-```
+```shell
 thanos tools bucket rewrite --no-dry-run --rewrite.to-delete-config-file config.yaml --objstore.config-file objstore.yaml --id <block ID>
 ```
 
 The output is listed below.
 
-```
+```shell
 thanos tools bucket rewrite --no-dry-run --rewrite.to-delete-config-file config.yaml --objstore.config-file ~/local-bucket-config.yaml --id 01FET1EK9BC3E0QD4886RQCM8K
+
 level=info ts=2021-09-25T05:59:18.05232Z caller=factory.go:49 msg="loading bucket configuration"
 level=info ts=2021-09-25T05:59:18.059056Z caller=tools_bucket.go:1078 msg="downloading block" source=01FET1EK9BC3E0QD4886RQCM8K
 level=info ts=2021-09-25T05:59:18.074761Z caller=tools_bucket.go:1115 msg="changelog will be available" file=/var/folders/ny/yy113mqs6szcpjy2qrnhq9rh0000gq/T/thanos-rewrite/01FGDRJNST2EYDY2RKWFZJPGWJ/change.log
@@ -116,24 +114,20 @@ For example, the config file below specifies deletion for all series that match:
 1. metric name `k8s_app_metric1`
 2. metric name `k8s_app_metric37` and label `__blockgen_target__` that regexp matched `7.*`
 
-```
+```yaml
 - matchers: '{__name__="k8s_app_metric37", __blockgen_target__=~"7.*"}'
 - matchers: '{__name__="k8s_app_metric1"}'
 ```
 
 ## Relabel series
 
-```
+```shell
 thanos tools bucket rewrite --rewrite.to-relabel-config-file config.yaml --objstore.config-file objstore.yaml --id <block ID>
 ```
 
-Series relabeling is needed when you want to rename your metrics or drop some high cardinality labels. The command is similar
+Series relabeling is needed when you want to rename your metrics or drop some high cardinality labels. The command is similar to rewrite deletion, but with `--rewrite.to-relabel-config-file` flag. The configuration is the same as [Prometheus relabel_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config). For example, the relabel config file does:
 
-to rewrite deletion, but with `--rewrite.to-relabel-config-file` flag. The configuration is the same as [Prometheus relabel_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config).
-
-For example, the relabel config file does:
-
-1. delete all series that match {__name__="k8s_app_metric37"}
+1. delete all series that match `{__name__="k8s_app_metric37"}`
 
 2. rename `k8s_app_metric38` to `old_metric`
 
@@ -150,7 +144,7 @@ For example, the relabel config file does:
 
 Example output of the changelog:
 
-```
+```shell
 Deleted {__blockgen_target__="1", __name__="k8s_app_metric37", next_rollout_time="2021-09-03 23:30:00 +0000 UTC"} [{1630713615001 1630715400001}]
 Deleted {__blockgen_target__="1", __name__="k8s_app_metric37", next_rollout_time="2021-09-04 00:30:00 +0000 UTC"} [{1630715415000 1630719015000}]
 Deleted {__blockgen_target__="1", __name__="k8s_app_metric37", next_rollout_time="2021-09-04 01:30:00 +0000 UTC"} [{1630719015000 1630720815000}]
@@ -178,7 +172,7 @@ If the output is expected, then you can add `--no-dry-run` flag to rewrite block
 
 Thanos object storage supports `local filesystem`, which used local filesystem as bucket. If you want to delete/rewrite Prometheus TSDB, you can use the command below:
 
-```
+```shell
 thanos tools bucket rewrite --prom-blocks --rewrite.to-relabel-config-file config.yaml --objstore.config-file local-bucket.yaml --id <block ID>
 ```
 
