@@ -8,9 +8,7 @@ For operational purposes, there are some use cases to manipulate data in the obj
 thanos tools bucket rewrite --rewrite.to-delete-config-file config.yaml --objstore.config-file objstore.yaml --id <block ID>
 ```
 
-This is the example command to delete some data in the specified TSDB block from your object store bucket. For example, if 
-
-`k8s_app_metric37` is the metric you want to delete, then the config file `config.yaml` would be:
+This is the example command to delete some data in the specified TSDB block from your object store bucket. For example, if `k8s_app_metric37` is the metric you want to delete, then the config file `config.yaml` would be:
 
 ```yaml
 - matchers: '{__name__="k8s_app_metric37"}'
@@ -99,11 +97,9 @@ level=info ts=2021-09-25T05:59:18.667921Z caller=tools_bucket.go:1167 msg="rewri
 level=info ts=2021-09-25T05:59:18.668136Z caller=main.go:160 msg=exiting
 ```
 
-After rewriting, a new block `01FGDRJNST2EYDY2RKWFZJPGWJ` will be uploaded to your object store bucket. 
+After rewriting, a new block `01FGDRJNST2EYDY2RKWFZJPGWJ` will be uploaded to your object store bucket.
 
-However, the old block will not be deleted by default for the reason of safety. You can add `--delete-blocks` flag so that the source block
-
-will be marked as deletion after rewrite is done and will be deleted automatically if you have a compactor running against that bucket.
+However, the old block will not be deleted by default for the reason of safety. You can add `--delete-blocks` flag so that the source block will be marked as deletion after rewrite is done and will be deleted automatically if you have a compactor running against that bucket.
 
 ### Advanced deletion config
 
