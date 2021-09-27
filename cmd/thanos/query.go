@@ -503,7 +503,6 @@ func runQuery(
 			}
 		}, func(error) {
 			cancelUpdate()
-			close(fileSDUpdates)
 		})
 	}
 	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
