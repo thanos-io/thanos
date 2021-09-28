@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cortexproject/cortex/integration/e2e"
-	e2edb "github.com/cortexproject/cortex/integration/e2e/db"
+	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -36,20 +36,21 @@ import (
 func TestStoreGateway(t *testing.T) {
 	t.Parallel()
 
-	s, err := e2e.NewScenario("e2e_test_store_gateway")
+	e, err := e2e.NewDockerEnvironment("e2e_test_store_gateway")
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	m := e2edb.NewMinio(8080, "thanos")
-	testutil.Ok(t, s.StartAndWaitReady(m))
+	const bucket = "store_gateway_test"
+	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
-	s1, err := e2ethanos.NewStoreGW(s.SharedDir(), "1", client.BucketConfig{
+	s1, err := e2ethanos.NewStoreGW(e, "1", client.BucketConfig{
 		Type: client.S3,
 		Config: s3.Config{
-			Bucket:    "thanos",
+			Bucket:    bucket,
 			AccessKey: e2edb.MinioAccessKey,
 			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m.NetworkHTTPEndpoint(),
+			Endpoint:  m.InternalEndpoint("http"),
 			Insecure:  true,
 		},
 	}, relabel.Config{
@@ -58,16 +59,16 @@ func TestStoreGateway(t *testing.T) {
 		SourceLabels: model.LabelNames{"ext1"},
 	})
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(s1))
+	testutil.Ok(t, e2e.StartAndWaitReady(s1))
 	// Ensure bucket UI.
-	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.HTTPEndpoint(), "loaded"))
+	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.Endpoint("http"), "loaded"))
 
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", s1.GRPCNetworkEndpoint()).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(q))
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
-	dir := filepath.Join(s.SharedDir(), "tmp")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), dir), os.ModePerm))
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), dir), os.ModePerm))
 
 	series := []labels.Labels{labels.FromStrings("a", "1", "b", "2")}
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
@@ -75,7 +76,7 @@ func TestStoreGateway(t *testing.T) {
 	extLset3 := labels.FromStrings("ext1", "value2", "replica", "3")
 	extLset4 := labels.FromStrings("ext1", "value1", "replica", "3")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Cleanup(cancel)
 
 	now := time.Now()
@@ -89,10 +90,10 @@ func TestStoreGateway(t *testing.T) {
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l, s3.Config{
-		Bucket:    "thanos",
+		Bucket:    bucket,
 		AccessKey: e2edb.MinioAccessKey,
 		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  m.HTTPEndpoint(), // We need separate client config, when connecting to minio from outside.
+		Endpoint:  m.Endpoint("http"), // We need separate client config, when connecting to minio from outside.
 		Insecure:  true,
 	}, "test-feed")
 	testutil.Ok(t, err)
@@ -112,7 +113,7 @@ func TestStoreGateway(t *testing.T) {
 	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 	t.Run("query works", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -137,7 +138,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(6), "thanos_bucket_store_series_data_fetched"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(2), "thanos_bucket_store_series_blocks_queried"))
 
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: true,
 			},
@@ -167,7 +168,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 		// TODO(bwplotka): Entries are still in LRU cache.
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -196,7 +197,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -229,7 +230,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1+1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
-		queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},
