@@ -106,6 +106,7 @@ This project is intended to be used as a library. You can extend and customize d
   },
   sidecar+:: {
     selector: 'job=~".*thanos-sidecar.*"',
+    thanosPrometheusCommonDimensions: 'namespace, pod',
     title: '%(prefix)sSidecar' % $.dashboard.prefix,
   },
   // TODO(kakkoyun): Fix naming convention: bucketReplicate
