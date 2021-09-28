@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/teststorage"
+	"github.com/thanos-io/thanos/pkg/pushdown/querypb"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -640,6 +641,10 @@ func NewInProcessClient(t testing.TB, name string, client storepb.StoreClient, e
 		StoreClient: client,
 		extLset:     extLset,
 	}
+}
+
+func (i inProcessClient) QueryAPI() querypb.QueryClient {
+	return nil
 }
 
 func (i inProcessClient) LabelSets() []labels.Labels {

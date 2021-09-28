@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/pushdown/querypb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
@@ -50,6 +51,9 @@ type Client interface {
 	String() string
 	// Addr returns address of a Client.
 	Addr() string
+
+	// QueryAPI() optionally returns an associated QueryAPI node.
+	QueryAPI() querypb.QueryClient
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.

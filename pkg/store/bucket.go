@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
@@ -413,6 +414,51 @@ func NewBucketStore(
 
 	return s, nil
 }
+func (bs *BucketStore) Select(ctx context.Context, sortSeries bool, hints *storage.SelectHints, aggrs []storepb.Aggr, maxSourceResolution int64, matchers ...*labels.Matcher) ([]storepb.SeriesSet, error) {
+	ssMtx := &sync.Mutex{}
+	series := []storepb.SeriesSet{}
+
+	g := &errgroup.Group{}
+
+	bs.mtx.RLock()
+	defer bs.mtx.RUnlock()
+	for _, bs := range bs.blockSets {
+		blockMatchers, ok := bs.labelMatchers(matchers...)
+		if !ok {
+			continue
+		}
+
+		blocks := bs.getFor(hints.Start, hints.End, downsample.ResLevel0, []*labels.Matcher{})
+
+		for _, b := range blocks {
+			b := b
+
+			indexr := b.indexReader()
+			chunkr := b.chunkReader()
+			defer runutil.CloseWithLogOnErr(b.logger, chunkr, "series block")
+			defer runutil.CloseWithLogOnErr(b.logger, indexr, "series block")
+
+			g.Go(func() error {
+				seriesSet, _, err := blockSeries(ctx, b.extLset, indexr, chunkr, blockMatchers, nil, nil, false, hints.Start, hints.End, aggrs)
+				if err != nil {
+					return err
+				}
+
+				ssMtx.Lock()
+				series = append(series, seriesSet)
+				ssMtx.Unlock()
+				return nil
+			})
+		}
+	}
+
+	err := g.Wait()
+	if err != nil {
+		return nil, err
+	}
+
+	return series, nil
+}
 
 // Close the store.
 func (s *BucketStore) Close() (err error) {
@@ -765,9 +811,11 @@ func blockSeries(
 		return storepb.EmptySeriesSet(), indexr.stats, nil
 	}
 
-	// Reserve series seriesLimiter
-	if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
-		return nil, nil, errors.Wrap(err, "exceeded series limit")
+	if seriesLimiter != nil {
+		// Reserve series seriesLimiter
+		if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
+			return nil, nil, errors.Wrap(err, "exceeded series limit")
+		}
 	}
 
 	// Preload all series index data.
@@ -813,10 +861,13 @@ func blockSeries(
 				s.refs = append(s.refs, meta.Ref)
 			}
 
-			// Ensure sample limit through chunksLimiter if we return chunks.
-			if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
-				return nil, nil, errors.Wrap(err, "exceeded chunks limit")
+			if chunksLimiter != nil {
+				// Ensure sample limit through chunksLimiter if we return chunks.
+				if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
+					return nil, nil, errors.Wrap(err, "exceeded chunks limit")
+				}
 			}
+
 		}
 		if err := indexr.LookupLabelsSymbols(symbolizedLset, &lset); err != nil {
 			return nil, nil, errors.Wrap(err, "Lookup labels symbols")

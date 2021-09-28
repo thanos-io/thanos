@@ -1003,7 +1003,7 @@ func TestSortReplicaLabel(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
-			sortDedupLabels(test.input, test.dedupLabels)
+			SortDedupLabels(test.input, test.dedupLabels)
 			testutil.Equals(t, test.exp, test.input)
 		})
 	}

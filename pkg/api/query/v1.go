@@ -30,6 +30,7 @@ import (
 
 	cortexutil "github.com/cortexproject/cortex/pkg/util"
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -51,6 +52,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/metadata"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
+	"github.com/thanos-io/thanos/pkg/pushdown"
+	"github.com/thanos-io/thanos/pkg/pushdown/querypb"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
@@ -101,6 +104,8 @@ type QueryAPI struct {
 	defaultMetadataTimeRange               time.Duration
 
 	queryRangeHist prometheus.Histogram
+
+	pushdownAdapter *pushdown.TimeBasedPushdown
 }
 
 // NewQueryAPI returns an initialized QueryAPI type.
@@ -127,6 +132,7 @@ func NewQueryAPI(
 	disableCORS bool,
 	gate gate.Gate,
 	reg *prometheus.Registry,
+	pushdownAdapter *pushdown.TimeBasedPushdown,
 ) *QueryAPI {
 	return &QueryAPI{
 		baseAPI:         api.NewBaseAPI(logger, disableCORS, flagsMap),
@@ -157,6 +163,8 @@ func NewQueryAPI(
 			Help:    "A histogram of the query range window in seconds",
 			Buckets: prometheus.ExponentialBuckets(15*60, 2, 12),
 		}),
+
+		pushdownAdapter: pushdownAdapter,
 	}
 }
 
@@ -379,6 +387,16 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	}, res.Warnings, nil
 }
 
+// asisJSONMarshaler returns the given string
+// as-is when marshaling it into JSON.
+type asisJSONMarshaler struct {
+	data string
+}
+
+func (m *asisJSONMarshaler) MarshalJSON() ([]byte, error) {
+	return []byte(m.data), nil
+}
+
 func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.ApiError) {
 	start, err := parseTime(r.FormValue("start"))
 	if err != nil {
@@ -441,6 +459,36 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	maxSourceResolution, apiErr := qapi.parseDownsamplingParamMillis(r, step/5)
 	if apiErr != nil {
 		return nil, nil, apiErr
+	}
+
+	startNS := start.UnixNano()
+	endNS := end.UnixNano()
+	if qapi.pushdownAdapter != nil {
+		if node, match := qapi.pushdownAdapter.Match(startNS, endNS); match {
+			tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
+				err = qapi.gate.Start(ctx)
+			})
+			if err != nil {
+				return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+			}
+			defer qapi.gate.Done()
+
+			level.Debug(qapi.logger).Log("msg", "pushing down", "query", r.FormValue("query"))
+
+			resp, err := node.Query(ctx, &querypb.QueryRequest{
+				Query:               r.FormValue("query"),
+				StartNs:             startNS,
+				EndNs:               endNS,
+				Interval:            int64(step),
+				ReplicaLabels:       replicaLabels,
+				MaxSourceResolution: maxSourceResolution,
+			})
+			if err != nil {
+				return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
+			}
+
+			return &asisJSONMarshaler{resp.Response}, nil, nil
+		}
 	}
 
 	enablePartialResponse, apiErr := qapi.parsePartialResponseParam(r, qapi.enableQueryPartialResponse)

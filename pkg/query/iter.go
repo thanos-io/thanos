@@ -16,9 +16,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-// promSeriesSet implements the SeriesSet interface of the Prometheus storage
+// PromSeriesSet implements the SeriesSet interface of the Prometheus storage
 // package on top of our storepb SeriesSet.
-type promSeriesSet struct {
+type PromSeriesSet struct {
 	set  storepb.SeriesSet
 	done bool
 
@@ -32,7 +32,17 @@ type promSeriesSet struct {
 	warns storage.Warnings
 }
 
-func (s *promSeriesSet) Next() bool {
+func NewPromSeriesSet(mint, maxt int64, aggrs []storepb.Aggr, warns storage.Warnings, set storepb.SeriesSet) *PromSeriesSet {
+	return &PromSeriesSet{
+		mint:  mint,
+		maxt:  maxt,
+		aggrs: aggrs,
+		warns: warns,
+		set:   set,
+	}
+}
+
+func (s *PromSeriesSet) Next() bool {
 	if !s.initiated {
 		s.initiated = true
 		s.done = s.set.Next()
@@ -90,18 +100,18 @@ func removeExactDuplicates(chks []storepb.AggrChunk) []storepb.AggrChunk {
 	return ret
 }
 
-func (s *promSeriesSet) At() storage.Series {
+func (s *PromSeriesSet) At() storage.Series {
 	if !s.initiated || s.set.Err() != nil {
 		return nil
 	}
 	return newChunkSeries(s.currLset, s.currChunks, s.mint, s.maxt, s.aggrs)
 }
 
-func (s *promSeriesSet) Err() error {
+func (s *PromSeriesSet) Err() error {
 	return s.set.Err()
 }
 
-func (s *promSeriesSet) Warnings() storage.Warnings {
+func (s *PromSeriesSet) Warnings() storage.Warnings {
 	return s.warns
 }
 
@@ -112,7 +122,7 @@ type storeSeriesSet struct {
 	i      int
 }
 
-func newStoreSeriesSet(s []storepb.Series) *storeSeriesSet {
+func NewStoreSeriesSet(s []storepb.Series) *storeSeriesSet {
 	return &storeSeriesSet{series: s, i: -1}
 }
 

@@ -148,6 +148,7 @@ type QuerierBuilder struct {
 	metadataAddresses    []string
 	targetAddresses      []string
 	exemplarAddresses    []string
+	experimentalFeatures []string
 
 	tracingConfig string
 }
@@ -184,6 +185,11 @@ func (q *QuerierBuilder) WithTargetAddresses(targetAddresses ...string) *Querier
 
 func (q *QuerierBuilder) WithExemplarAddresses(exemplarAddresses ...string) *QuerierBuilder {
 	q.exemplarAddresses = exemplarAddresses
+	return q
+}
+
+func (q *QuerierBuilder) WithExperimentalFeatures(experimentalFeatures ...string) *QuerierBuilder {
+	q.experimentalFeatures = experimentalFeatures
 	return q
 }
 
@@ -255,7 +261,7 @@ func (q *QuerierBuilder) Build() (*e2e.InstrumentedRunnable, error) {
 func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	const replicaLabel = "replica"
 
-	args := e2e.BuildArgs(map[string]string{
+	argsList := map[string]string{
 		"--debug.name":            fmt.Sprintf("querier-%v", q.name),
 		"--grpc-address":          ":9091",
 		"--grpc-grace-period":     "0s",
@@ -265,7 +271,13 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 		"--log.level":             infoLogLevel,
 		"--query.max-concurrent":  "1",
 		"--store.sd-interval":     "5s",
-	})
+	}
+
+	if len(q.experimentalFeatures) > 0 {
+		argsList["--enable-feature"] = strings.Join(q.experimentalFeatures, ",")
+	}
+
+	args := e2e.BuildArgs(argsList)
 	for _, addr := range q.storeAddresses {
 		args = append(args, "--store="+addr)
 	}

@@ -1,0 +1,35 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+package thanos;
+import "gogoproto/gogo.proto";
+
+option go_package = "querypb";
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+service Query {
+    // Used for query pushdown. Executes a PromQL query and returns the results.
+    rpc Query(QueryRequest) returns (QueryResponse);
+}
+
+message QueryResponse {
+  string response = 1;
+}
+
+message QueryRequest {
+  string query = 1;
+  int64 start_ns = 2;
+  int64 end_ns = 3;
+  int64 interval = 4;
+  repeated string replica_labels = 5;
+  int64 max_source_resolution = 6;
+}

@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/pushdown/querypb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
@@ -40,6 +41,10 @@ type testClient struct {
 	labelSets []labels.Labels
 	minTime   int64
 	maxTime   int64
+}
+
+func (c testClient) QueryAPI() querypb.QueryClient {
+	return nil
 }
 
 func (c testClient) LabelSets() []labels.Labels {

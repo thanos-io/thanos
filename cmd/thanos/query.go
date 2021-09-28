@@ -41,6 +41,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/metadata"
 	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/pushdown"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -55,6 +56,7 @@ import (
 const (
 	promqlNegativeOffset = "promql-negative-offset"
 	promqlAtModifier     = "promql-at-modifier"
+	storePushdown        = "store-pushdown"
 )
 
 // registerQuery registers a query command.
@@ -151,7 +153,7 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
-	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+promqlNegativeOffset+" and "+promqlAtModifier+".").Default("").Strings()
+	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+promqlNegativeOffset+", "+storePushdown+", and "+promqlAtModifier+".").Default("").Strings()
 
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
 		Hidden().Default("true").Bool()
@@ -170,13 +172,16 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Wrap(err, "parse federation labels")
 		}
 
-		var enableNegativeOffset, enableAtModifier bool
+		var enableNegativeOffset, enableAtModifier, enableStorePushdown bool
 		for _, feature := range *featureList {
 			if feature == promqlNegativeOffset {
 				enableNegativeOffset = true
 			}
 			if feature == promqlAtModifier {
 				enableAtModifier = true
+			}
+			if feature == storePushdown {
+				enableStorePushdown = true
 			}
 		}
 
@@ -285,6 +290,7 @@ func registerQuery(app *extkingpin.App) {
 			*webDisableCORS,
 			enableAtModifier,
 			enableNegativeOffset,
+			enableStorePushdown,
 			component.Query,
 		)
 	})
@@ -350,6 +356,7 @@ func runQuery(
 	disableCORS bool,
 	enableAtModifier bool,
 	enableNegativeOffset bool,
+	enableStorePushdown bool,
 	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
@@ -567,6 +574,12 @@ func runQuery(
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewQueryUI(logger, endpoints, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
+		var pushdownAdapter *pushdown.TimeBasedPushdown
+
+		if enableStorePushdown {
+			pushdownAdapter = pushdown.NewTimeBasedPushdown(endpoints.GetStoreClients, extprom.WrapRegistererWithPrefix("thanos_query_pushdown_", reg))
+		}
+
 		api := v1.NewQueryAPI(
 			logger,
 			endpoints,
@@ -594,6 +607,7 @@ func runQuery(
 				maxConcurrentQueries,
 			),
 			reg,
+			pushdownAdapter,
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)

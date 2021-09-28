@@ -9,12 +9,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
@@ -63,9 +65,13 @@ func TestStoreGateway(t *testing.T) {
 	// Ensure bucket UI.
 	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.Endpoint("http"), "loaded"))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Build()
+	q1, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).WithExperimentalFeatures("store-pushdown").Build()
 	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(q))
+	testutil.Ok(t, e2e.StartAndWaitReady(q1))
+
+	q2, err := e2ethanos.NewQuerierBuilder(e, "2", s1.InternalEndpoint("grpc")).Build()
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(q2))
 
 	dir := filepath.Join(e.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), dir), os.ModePerm))
@@ -113,7 +119,7 @@ func TestStoreGateway(t *testing.T) {
 	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 	t.Run("query works", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q1.Endpoint("http"), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -138,7 +144,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(6), "thanos_bucket_store_series_data_fetched"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(2), "thanos_bucket_store_series_blocks_queried"))
 
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q1.Endpoint("http"), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: true,
 			},
@@ -168,7 +174,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 		// TODO(bwplotka): Entries are still in LRU cache.
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q1.Endpoint("http"), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -197,7 +203,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q1.Endpoint("http"), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -230,7 +236,7 @@ func TestStoreGateway(t *testing.T) {
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1+1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q1.Endpoint("http"), "{a=\"1\"}",
 			promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -244,6 +250,64 @@ func TestStoreGateway(t *testing.T) {
 			},
 		)
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(7+1), "thanos_bucket_store_series_blocks_queried"))
+	})
+
+	t.Run("query works for range query that is pushed down", func(t *testing.T) {
+		var pushdownMatrix, originalMatrix model.Matrix
+
+		rangeQuery(
+			t,
+			ctx,
+			q1.Endpoint("http"),
+			"{a=\"1\"}",
+			timestamp.FromTime(now),
+			timestamp.FromTime(now.Add(2*time.Hour)),
+			14,
+			promclient.QueryOptions{
+				Deduplicate: true,
+			},
+			func(res model.Matrix) error {
+				if len(res) == 0 {
+					return errors.Errorf("expected some results, got nothing")
+				}
+				pushdownMatrix = res
+				return nil
+			},
+		)
+
+		testutil.Ok(t, q1.WaitSumMetrics(e2e.Equals(1), "thanos_query_pushdown_matches_total"))
+
+		rangeQuery(
+			t,
+			ctx,
+			q2.Endpoint("http"),
+			"{a=\"1\"}",
+			timestamp.FromTime(now),
+			timestamp.FromTime(now.Add(2*time.Hour)),
+			14,
+			promclient.QueryOptions{
+				Deduplicate: true,
+			},
+			func(res model.Matrix) error {
+				if len(res) == 0 {
+					return errors.Errorf("expected some results, got nothing")
+				}
+				originalMatrix = res
+				return nil
+			},
+		)
+
+		testutil.Equals(t, len(originalMatrix), len(pushdownMatrix))
+		sort.Slice(originalMatrix, func(i, j int) bool {
+			return originalMatrix.Less(i, j)
+		})
+		sort.Slice(pushdownMatrix, func(i, j int) bool {
+			return pushdownMatrix.Less(i, j)
+		})
+
+		for i := range originalMatrix {
+			testutil.Equals(t, originalMatrix[i], pushdownMatrix[i])
+		}
 	})
 
 	// TODO(khyati) Let's add some case for compaction-meta.json once the PR will be merged: https://github.com/thanos-io/thanos/pull/2136.

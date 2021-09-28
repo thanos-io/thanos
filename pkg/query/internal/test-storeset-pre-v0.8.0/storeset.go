@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/pushdown/querypb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -163,6 +164,10 @@ func NewStoreSet(
 	}
 
 	return ss
+}
+
+func (s *storeRef) QueryAPI() querypb.QueryClient {
+	return nil
 }
 
 type storeRef struct {

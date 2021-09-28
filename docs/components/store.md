@@ -132,6 +132,11 @@ Flags:
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
+      --pushdown.max-samples=5000000  
+                                 Maximum samples that could be loaded into
+                                 memory when executing a query via the QueryAPI.
+      --pushdown.query-timeout=120s  
+                                 Timeout of a query sent via the QueryAPI.
       --request.logging-config=<content>  
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content of YAML file

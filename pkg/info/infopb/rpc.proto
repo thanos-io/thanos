@@ -46,6 +46,9 @@ message InfoResponse {
     
     /// ExemplarsInfo holds the metadata related to Exemplars API if exposed by the component otherwise it will be null.
     ExemplarsInfo exemplars            = 7;
+
+    /// QueryInfo holds the metadata related to Query API if exposed by the component otherwise it will be null.
+    QueryInfo query                    = 8;
 }
 
 /// StoreInfo holds the metadata related to Store API exposed by the component.
@@ -56,6 +59,10 @@ message StoreInfo {
 
 /// RulesInfo holds the metadata related to Rules API exposed by the component.
 message RulesInfo {
+}
+
+/// QueryInfo holds the metadata related to Query API exposed by the component.
+message QueryInfo {
 }
 
 /// MetricMetadataInfo holds the metadata related to Metadata API exposed by the component.

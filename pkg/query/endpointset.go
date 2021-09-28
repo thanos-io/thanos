@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/pushdown/querypb"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -146,6 +147,7 @@ func (es *grpcEndpointSpec) fillExpectedAPIs(componentType component.Component, 
 				MinTime: mintime,
 				MaxTime: maxTime,
 			},
+			Query: &infopb.QueryInfo{},
 		}
 	case component.Rule:
 		return infopb.InfoResponse{
@@ -659,6 +661,10 @@ func (er *endpointRef) Update(metadata *endpointMetadata) {
 		clients.exemplar = exemplarspb.NewExemplarsClient(er.cc)
 	}
 
+	if metadata.Query != nil {
+		clients.query = querypb.NewQueryClient(er.cc)
+	}
+
 	er.clients = clients
 	er.metadata = metadata
 }
@@ -698,6 +704,13 @@ func (er *endpointRef) HasTargetsAPI() bool {
 	return er.HasClients() && er.clients.target != nil
 }
 
+func (er *endpointRef) HasQueryAPI() bool {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	return er.HasClients() && er.clients.query != nil
+}
+
 func (er *endpointRef) HasMetricMetadataAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
@@ -732,6 +745,13 @@ func (er *endpointRef) LabelSets() []labels.Labels {
 		labelSet = append(labelSet, ls.Copy())
 	}
 	return labelSet
+}
+
+func (er *endpointRef) QueryAPI() querypb.QueryClient {
+	if er.HasQueryAPI() {
+		return er.clients.query
+	}
+	return nil
 }
 
 func (er *endpointRef) TimeRange() (mint, maxt int64) {
@@ -782,6 +802,10 @@ func (er *endpointRef) apisPresent() []string {
 		apisPresent = append(apisPresent, "MetricMetadataAPI")
 	}
 
+	if er.HasQueryAPI() {
+		apisPresent = append(apisPresent, "QueryAPI")
+	}
+
 	return apisPresent
 }
 
@@ -792,6 +816,7 @@ type endpointClients struct {
 	exemplar       exemplarspb.ExemplarsClient
 	target         targetspb.TargetsClient
 	info           infopb.InfoClient
+	query          querypb.QueryClient
 }
 
 type endpointMetadata struct {

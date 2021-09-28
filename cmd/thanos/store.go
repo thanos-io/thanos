@@ -35,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/pushdown"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -71,6 +72,9 @@ type storeConfig struct {
 	reqLogConfig                *extflag.PathOrContent
 	lazyIndexReaderEnabled      bool
 	lazyIndexReaderIdleTimeout  time.Duration
+
+	maxSamples   int
+	queryTimeout time.Duration
 }
 
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -161,6 +165,12 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").
 		Default("false").BoolVar(&sc.webConfig.disableCORS)
+
+	cmd.Flag("pushdown.query-timeout", "Timeout of a query sent via the QueryAPI.").
+		Default("120s").DurationVar(&sc.queryTimeout)
+
+	cmd.Flag("pushdown.max-samples", "Maximum samples that could be loaded into memory when executing a query via the QueryAPI.").
+		Default("5000000").IntVar(&sc.maxSamples)
 
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 }
@@ -382,7 +392,7 @@ func runStore(
 			cancel()
 		})
 	}
-	// Start query (proxy) gRPC StoreAPI.
+	// Start the gRPC server with APIs.
 	{
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA)
 		if err != nil {
@@ -391,6 +401,7 @@ func runStore(
 
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, conf.component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(bs)),
+			grpcserver.WithServer(pushdown.RegisterQueryServer(bs, conf.maxSamples, conf.queryTimeout, logger, extprom.WrapRegistererWithPrefix("thanos_bucket_queryapi_query_", reg))),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
 			grpcserver.WithGracePeriod(time.Duration(conf.grpcConfig.gracePeriod)),
 			grpcserver.WithTLSConfig(tlsCfg),

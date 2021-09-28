@@ -19,6 +19,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: add `exemplar.partial-response` flag to control partial response.
 - [#4679](https://github.com/thanos-io/thanos/pull/4679) Added `enable-feature` flag to enable negative offsets and @ modifier, similar to Prometheus.
 - [#4696](https://github.com/thanos-io/thanos/pull/4696) Query: add cache name to tracing spans.
+- [#4712](https://github.com/thanos-io/thanos/pull/4712) Query/Store: added experimental feature `store-pushdown` and corresponding flags to Thanos Store. You can enable it with `--enable-feature` on Thanos Query. Currently it makes Thanos Query push down a query to a leaf node if it is the only one matching the provided time range via the API. It should cover most cases where Sidecar/Ruler/Receive is responsible for a few days of data, and the rest of the data is covered by load-balanced Thanos Stores. Ad-hoc tests show a decrease of up to 50% in duration of queries which touch lots of time series because it is not necessary anymore to transfer all of them over the wire.
 
 ### Fixed
 

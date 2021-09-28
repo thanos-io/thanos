@@ -170,9 +170,9 @@ func (s *seriesServer) Context() context.Context {
 	return s.ctx
 }
 
-// aggrsFromFunc infers aggregates of the underlying data based on the wrapping
+// AggrsFromFunc infers aggregates of the underlying data based on the wrapping
 // function of a series selection.
-func aggrsFromFunc(f string) []storepb.Aggr {
+func AggrsFromFunc(f string) []storepb.Aggr {
 	if f == "min" || strings.HasPrefix(f, "min_") {
 		return []storepb.Aggr{storepb.Aggr_MIN}
 	}
@@ -261,7 +261,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		return nil, errors.Wrap(err, "convert matchers")
 	}
 
-	aggrs := aggrsFromFunc(hints.Func)
+	aggrs := AggrsFromFunc(hints.Func)
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
@@ -287,21 +287,21 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 
 	if !q.isDedupEnabled() {
 		// Return data without any deduplication.
-		return &promSeriesSet{
+		return &PromSeriesSet{
 			mint:  q.mint,
 			maxt:  q.maxt,
-			set:   newStoreSeriesSet(resp.seriesSet),
+			set:   NewStoreSeriesSet(resp.seriesSet),
 			aggrs: aggrs,
 			warns: warns,
 		}, nil
 	}
 
 	// TODO(fabxc): this could potentially pushed further down into the store API to make true streaming possible.
-	sortDedupLabels(resp.seriesSet, q.replicaLabels)
-	set := &promSeriesSet{
+	SortDedupLabels(resp.seriesSet, q.replicaLabels)
+	set := &PromSeriesSet{
 		mint:  q.mint,
 		maxt:  q.maxt,
-		set:   newStoreSeriesSet(resp.seriesSet),
+		set:   NewStoreSeriesSet(resp.seriesSet),
 		aggrs: aggrs,
 		warns: warns,
 	}
@@ -311,9 +311,9 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	return dedup.NewSeriesSet(set, q.replicaLabels, len(aggrs) == 1 && aggrs[0] == storepb.Aggr_COUNTER), nil
 }
 
-// sortDedupLabels re-sorts the set so that the same series with different replica
+// SortDedupLabels re-sorts the set so that the same series with different replica
 // labels are coming right after each other.
-func sortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
+func SortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
 	for _, s := range set {
 		// Move the replica labels to the very end.
 		sort.Slice(s.Labels, func(i, j int) bool {
