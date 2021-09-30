@@ -31,7 +31,8 @@ import (
 )
 
 const (
-	unhealthyEndpointMessage = "removing endpoint because it's unhealthy or does not exist"
+	unhealthyEndpointMessage  = "removing endpoint because it's unhealthy or does not exist"
+	noMetadataEndpointMessage = "cannot obtain metadata: neither info nor store client found"
 
 	// Default minimum and maximum time values used by Prometheus when they are not passed as query parameter.
 	MinTime = -9223309901257974
@@ -76,17 +77,27 @@ func (es *grpcEndpointSpec) Addr() string {
 // Metadata method for gRPC endpoint tries to call InfoAPI exposed by Thanos components until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
 func (es *grpcEndpointSpec) Metadata(ctx context.Context, client *endpointClients) (*endpointMetadata, error) {
-	resp, err := client.info.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
-	if err != nil {
-		// Call Info method of StoreAPI, this way querier will be able to discovery old components not exposing InfoAPI.
-		metadata, merr := es.getMetadataUsingStoreAPI(ctx, client.store)
-		if merr != nil {
-			return nil, errors.Wrapf(merr, "fallback fetching info from %s after err: %v", es.addr, err)
+	// TODO(@matej-g): Info client should not be used due to https://github.com/thanos-io/thanos/issues/4699
+	// Uncomment this after it is implemented in https://github.com/thanos-io/thanos/pull/4282.
+	// if client.info != nil {
+	// 	resp, err := client.info.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
+	// 	if err != nil {
+	// 		return nil, errors.Wrapf(err, "fetching info from %s", es.addr)
+	// 	}
+
+	// 	return &endpointMetadata{resp}, nil
+	// }
+
+	// Call Info method of StoreAPI, this way querier will be able to discovery old components not exposing InfoAPI.
+	if client.store != nil {
+		metadata, err := es.getMetadataUsingStoreAPI(ctx, client.store)
+		if err != nil {
+			return nil, errors.Wrapf(err, "fallback fetching info from %s", es.addr)
 		}
 		return metadata, nil
 	}
 
-	return &endpointMetadata{resp}, nil
+	return nil, errors.New(noMetadataEndpointMessage)
 }
 
 func (es *grpcEndpointSpec) getMetadataUsingStoreAPI(ctx context.Context, client storepb.StoreClient) (*endpointMetadata, error) {
@@ -494,7 +505,9 @@ func (e *EndpointSet) getActiveEndpoints(ctx context.Context, endpoints map[stri
 					logger:      e.logger,
 					StoreClient: storepb.NewStoreClient(conn),
 					clients: &endpointClients{
-						info:  infopb.NewInfoClient(conn),
+						// TODO(@matej-g): Info client should not be used due to https://github.com/thanos-io/thanos/issues/4699
+						// Uncomment this after it is implemented in https://github.com/thanos-io/thanos/pull/4282.
+						// info:  infopb.NewInfoClient(conn),
 						store: storepb.NewStoreClient(conn),
 					},
 				}
@@ -668,6 +681,10 @@ func (er *endpointRef) ComponentType() component.Component {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
+	if er.metadata == nil {
+		return component.UnknownStoreAPI
+	}
+
 	return component.FromString(er.metadata.ComponentType)
 }
 
@@ -786,13 +803,15 @@ func (er *endpointRef) apisPresent() []string {
 	return apisPresent
 }
 
+// TODO(@matej-g): Info client should not be used due to https://github.com/thanos-io/thanos/issues/4699
+// Uncomment the nolint directive after https://github.com/thanos-io/thanos/pull/4282.
 type endpointClients struct {
 	store          storepb.StoreClient
 	rule           rulespb.RulesClient
 	metricMetadata metadatapb.MetadataClient
 	exemplar       exemplarspb.ExemplarsClient
 	target         targetspb.TargetsClient
-	info           infopb.InfoClient
+	info           infopb.InfoClient //nolint:structcheck,unused
 }
 
 type endpointMetadata struct {

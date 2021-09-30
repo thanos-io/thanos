@@ -19,6 +19,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -58,7 +59,11 @@ var (
 	}
 	ruleInfo = &infopb.InfoResponse{
 		ComponentType: component.Rule.String(),
-		Rules:         &infopb.RulesInfo{},
+		Store: &infopb.StoreInfo{
+			MinTime: math.MinInt64,
+			MaxTime: math.MaxInt64,
+		},
+		Rules: &infopb.RulesInfo{},
 	}
 	storeGWInfo = &infopb.InfoResponse{
 		ComponentType: component.Store.String(),
@@ -93,6 +98,28 @@ func (c *mockedEndpoint) Info(ctx context.Context, r *infopb.InfoRequest) (*info
 	return &c.info, nil
 }
 
+type mockedStoreSrv struct {
+	infoDelay time.Duration
+	info      storepb.InfoResponse
+}
+
+func (s *mockedStoreSrv) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoResponse, error) {
+	if s.infoDelay > 0 {
+		time.Sleep(s.infoDelay)
+	}
+
+	return &s.info, nil
+}
+func (s *mockedStoreSrv) Series(*storepb.SeriesRequest, storepb.Store_SeriesServer) error {
+	return nil
+}
+func (s *mockedStoreSrv) LabelNames(context.Context, *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
+	return nil, nil
+}
+func (s *mockedStoreSrv) LabelValues(context.Context, *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
+	return nil, nil
+}
+
 type APIs struct {
 	store          bool
 	metricMetadata bool
@@ -113,6 +140,25 @@ type testEndpoints struct {
 	exposedAPIs map[string]*APIs
 }
 
+func componentTypeToStoreType(componentType string) storepb.StoreType {
+	switch componentType {
+	case component.Query.String():
+		return storepb.StoreType_QUERY
+	case component.Rule.String():
+		return storepb.StoreType_RULE
+	case component.Sidecar.String():
+		return storepb.StoreType_SIDECAR
+	case component.Store.String():
+		return storepb.StoreType_STORE
+	case component.Receive.String():
+		return storepb.StoreType_RECEIVE
+	case component.Debug.String():
+		return storepb.StoreType_DEBUG
+	default:
+		return storepb.StoreType_STORE
+	}
+}
+
 func startTestEndpoints(testEndpointMeta []testEndpointMeta) (*testEndpoints, error) {
 	e := &testEndpoints{
 		srvs:        map[string]*grpc.Server{},
@@ -130,6 +176,19 @@ func startTestEndpoints(testEndpointMeta []testEndpointMeta) (*testEndpoints, er
 		srv := grpc.NewServer()
 		addr := listener.Addr().String()
 
+		storeSrv := &mockedStoreSrv{
+			info: storepb.InfoResponse{
+				LabelSets: meta.extlsetFn(listener.Addr().String()),
+				StoreType: componentTypeToStoreType(meta.ComponentType),
+			},
+			infoDelay: meta.infoDelay,
+		}
+
+		if meta.Store != nil {
+			storeSrv.info.MinTime = meta.Store.MinTime
+			storeSrv.info.MaxTime = meta.Store.MaxTime
+		}
+
 		endpointSrv := &mockedEndpoint{
 			info: infopb.InfoResponse{
 				LabelSets:      meta.extlsetFn(listener.Addr().String()),
@@ -143,6 +202,7 @@ func startTestEndpoints(testEndpointMeta []testEndpointMeta) (*testEndpoints, er
 			infoDelay: meta.infoDelay,
 		}
 		infopb.RegisterInfoServer(srv, endpointSrv)
+		storepb.RegisterStoreServer(srv, storeSrv)
 		go func() {
 			_ = srv.Serve(listener)
 		}()
@@ -859,7 +919,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 						}
 						return endpointSpec
 					},
-					expectedStores:         4, // sidecar + querier + receiver + storeGW
+					expectedStores:         5, // sidecar + querier + receiver + storeGW + ruler
 					expectedRules:          3, // sidecar + querier + ruler
 					expectedTarget:         2, // sidecar + querier
 					expectedMetricMetadata: 2, // sidecar + querier
@@ -895,7 +955,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 							NewGRPCEndpointSpec(endpoints.orderAddrs[1], false),
 						}
 					},
-					expectedStores:         1, // sidecar
+					expectedStores:         2, // sidecar + ruler
 					expectedRules:          2, // sidecar + ruler
 					expectedTarget:         1, // sidecar
 					expectedMetricMetadata: 1, // sidecar
@@ -908,7 +968,8 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 							NewGRPCEndpointSpec(endpoints.orderAddrs[1], false),
 						}
 					},
-					expectedRules: 1, // ruler
+					expectedStores: 1, // ruler
+					expectedRules:  1, // ruler
 				},
 			},
 		},
@@ -1106,6 +1167,7 @@ func exposedAPIs(c string) *APIs {
 		}
 	case component.Rule.String():
 		return &APIs{
+			store: true,
 			rules: true,
 		}
 	case component.Store.String():
