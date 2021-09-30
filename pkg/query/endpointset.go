@@ -803,13 +803,15 @@ func (er *endpointRef) apisPresent() []string {
 	return apisPresent
 }
 
+// TODO(@matej-g): Info client should not be used due to https://github.com/thanos-io/thanos/issues/4699
+// Uncomment the nolint directive after https://github.com/thanos-io/thanos/pull/4282.
 type endpointClients struct {
 	store          storepb.StoreClient
 	rule           rulespb.RulesClient
 	metricMetadata metadatapb.MetadataClient
 	exemplar       exemplarspb.ExemplarsClient
 	target         targetspb.TargetsClient
-	info           infopb.InfoClient
+	info           infopb.InfoClient //nolint:structcheck,unused
 }
 
 type endpointMetadata struct {
