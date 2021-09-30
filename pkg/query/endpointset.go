@@ -77,14 +77,16 @@ func (es *grpcEndpointSpec) Addr() string {
 // Metadata method for gRPC endpoint tries to call InfoAPI exposed by Thanos components until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
 func (es *grpcEndpointSpec) Metadata(ctx context.Context, client *endpointClients) (*endpointMetadata, error) {
-	if client.info != nil {
-		resp, err := client.info.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
-		if err != nil {
-			return nil, errors.Wrapf(err, "fetching info from %s", es.addr)
-		}
+	// TODO(@matej-g): Info client should not be used due to https://github.com/thanos-io/thanos/issues/4699
+	// Uncomment this after it is implemented in https://github.com/thanos-io/thanos/pull/4282.
+	// if client.info != nil {
+	// 	resp, err := client.info.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
+	// 	if err != nil {
+	// 		return nil, errors.Wrapf(err, "fetching info from %s", es.addr)
+	// 	}
 
-		return &endpointMetadata{resp}, nil
-	}
+	// 	return &endpointMetadata{resp}, nil
+	// }
 
 	// Call Info method of StoreAPI, this way querier will be able to discovery old components not exposing InfoAPI.
 	if client.store != nil {
