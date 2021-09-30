@@ -238,7 +238,7 @@ func TestRule(t *testing.T) {
 			Timeout:    model.Duration(10 * time.Second),
 			APIVersion: alert.APIv1,
 		},
-	}, []query.Config{
+	}, []query.HTTPConfig{
 		{
 			EndpointsConfig: http_util.EndpointsConfig{
 				// We test Statically Addressed queries in other tests. Focus on FileSD here.

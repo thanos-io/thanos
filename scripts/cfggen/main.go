@@ -84,7 +84,7 @@ func init() {
 
 	queryCfg := query.DefaultConfig()
 	queryCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{{}}
-	configs[name(query.Config{})] = []query.Config{queryCfg}
+	configs[name(query.HTTPConfig{})] = []query.HTTPConfig{queryCfg}
 
 	for typ, config := range bucketConfigs {
 		configs[name(config)] = client.BucketConfig{Type: typ, Config: config}

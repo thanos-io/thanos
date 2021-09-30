@@ -64,7 +64,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	qBuilder := e2ethanos.NewQuerierBuilder(e, "query")
 	qUninit := qBuilder.BuildUninitiated()
 
-	queryCfg := []query.Config{
+	queryCfg := []query.HTTPConfig{
 		{
 			EndpointsConfig: http_util.EndpointsConfig{
 				StaticAddresses: []string{qUninit.InternalEndpoint("http")},

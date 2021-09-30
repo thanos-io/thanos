@@ -1,8 +1,8 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-// Package http is a wrapper around github.com/prometheus/common/config.
-package http
+// Package httpconfig is a wrapper around github.com/prometheus/common/config.
+package httpconfig
 
 import (
 	"context"
@@ -50,7 +50,7 @@ type TLSConfig struct {
 	CertFile string `yaml:"cert_file"`
 	// The client key file for the targets.
 	KeyFile string `yaml:"key_file"`
-	// Used to verify the hostname for the targets.
+	// Used to verify the hostname for the targets. See https://tools.ietf.org/html/rfc4366#section-3.1
 	ServerName string `yaml:"server_name"`
 	// Disable target certificate validation.
 	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
