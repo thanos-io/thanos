@@ -422,6 +422,17 @@ func runQuery(
 	)
 
 	var storeSets []*query.EndpointSet
+	var engineOpts = promql.EngineOpts{
+		Logger: logger,
+		Reg:    reg,
+		// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+		MaxSamples:    math.MaxInt32,
+		Timeout:       queryTimeout,
+		LookbackDelta: lookbackDelta,
+		NoStepSubqueryIntervalFn: func(int64) int64 {
+			return defaultEvaluationInterval.Milliseconds()
+		},
+	}
 	for _, config := range endpointConfig {
 		secure = (config.TLSConfig != store.TLSConfiguration{})
 		dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, config.Name, secure, skipVerify, config.TLSConfig)
@@ -503,6 +514,9 @@ func runQuery(
 					cancelRun()
 				})
 			}
+
+			engineOpts.EnableAtModifier = enableAtModifier
+			engineOpts.EnableNegativeOffset = enableNegativeOffset
 
 			ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
 			staticAddresses := config.Endpoints
@@ -626,17 +640,6 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 		)
-		engineOpts = promql.EngineOpts{
-			Logger: logger,
-			Reg:    reg,
-			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-			MaxSamples:    math.MaxInt32,
-			Timeout:       queryTimeout,
-			LookbackDelta: lookbackDelta,
-			NoStepSubqueryIntervalFn: func(int64) int64 {
-				return defaultEvaluationInterval.Milliseconds()
-			},
-		}
 		grpcProbe    = prober.NewGRPC()
 		httpProbe    = prober.NewHTTP()
 		statusProber = prober.Combine(
