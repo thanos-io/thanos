@@ -99,11 +99,15 @@ type QueryAPI struct {
 =======
 	replicaLabels []string
 <<<<<<< HEAD
+<<<<<<< HEAD
 	endpointSet   *query.EndpointSet
 =======
 	storeSets     []*query.StoreSet
 >>>>>>> addressed comments for querier
 >>>>>>> addressed comments for querier
+=======
+	endpointSet   []*query.EndpointSet
+>>>>>>> removing conflicts-1
 
 	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
@@ -116,6 +120,7 @@ type QueryAPI struct {
 func NewQueryAPI(
 	logger log.Logger,
 <<<<<<< HEAD
+<<<<<<< HEAD
 	endpointStatus func() []query.EndpointStatus,
 =======
 <<<<<<< HEAD
@@ -124,6 +129,9 @@ func NewQueryAPI(
 	storeSets []*query.StoreSet,
 >>>>>>> addressed comments for querier
 >>>>>>> addressed comments for querier
+=======
+	endpointSet []*query.EndpointSet,
+>>>>>>> removing conflicts-1
 	qe func(int64) *promql.Engine,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
@@ -164,6 +172,7 @@ func NewQueryAPI(
 		enableExemplarPartialResponse:          enableExemplarPartialResponse,
 		replicaLabels:                          replicaLabels,
 <<<<<<< HEAD
+<<<<<<< HEAD
 		endpointStatus:                         endpointStatus,
 =======
 <<<<<<< HEAD
@@ -172,6 +181,9 @@ func NewQueryAPI(
 		storeSets:                              storeSets,
 >>>>>>> addressed comments for querier
 >>>>>>> addressed comments for querier
+=======
+		endpointSet:                            endpointSet,
+>>>>>>> removing conflicts-1
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,

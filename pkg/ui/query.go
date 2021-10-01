@@ -22,11 +22,7 @@ import (
 
 type Query struct {
 	*BaseUI
-<<<<<<< HEAD
 	endpointSet []*query.EndpointSet
-=======
-	storeSets []*query.StoreSet
->>>>>>> addressed comments for querier
 
 	externalPrefix, prefixHeader string
 
@@ -36,11 +32,7 @@ type Query struct {
 	now     func() model.Time
 }
 
-<<<<<<< HEAD
 func NewQueryUI(logger log.Logger, endpointSet []*query.EndpointSet, externalPrefix, prefixHeader string) *Query {
-=======
-func NewQueryUI(logger log.Logger, storeSets []*query.StoreSet, externalPrefix, prefixHeader string) *Query {
->>>>>>> addressed comments for querier
 	tmplVariables := map[string]string{
 		"Component": component.Query.String(),
 	}
@@ -51,11 +43,7 @@ func NewQueryUI(logger log.Logger, storeSets []*query.StoreSet, externalPrefix, 
 
 	return &Query{
 		BaseUI:         NewBaseUI(logger, "query_menu.html", tmplFuncs, tmplVariables, externalPrefix, prefixHeader, component.Query),
-<<<<<<< HEAD
 		endpointSet:    endpointSet,
-=======
-		storeSets:      storeSets,
->>>>>>> addressed comments for querier
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,
 		cwd:            runtimeInfo().CWD,
@@ -123,17 +111,11 @@ func (q *Query) status(w http.ResponseWriter, r *http.Request) {
 
 func (q *Query) stores(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r)
-<<<<<<< HEAD
 	statuses := make(map[component.Component][]query.EndpointStatus)
-	for _, status := range q.endpointSet.GetEndpointStatus() {
-		statuses[status.ComponentType] = append(statuses[status.ComponentType], status)
-=======
-	statuses := make(map[component.StoreAPI][]query.StoreStatus)
-	for _, storesSet := range q.storeSets {
-		for _, status := range storesSet.GetStoreStatus() {
-			statuses[status.StoreType] = append(statuses[status.StoreType], status)
+	for _, endpointSet := range q.endpointSet {
+		for _, status := range endpointSet.GetEndpointStatus() {
+			statuses[status.ComponentType] = append(statuses[status.ComponentType], status)
 		}
->>>>>>> addressed comments for querier
 	}
 
 	sources := make([]component.Component, 0, len(statuses))

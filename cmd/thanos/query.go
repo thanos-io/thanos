@@ -582,7 +582,7 @@ func runQuery(
 		allClients = func() []store.Client {
 			var get []store.Client
 			for _, ss := range storeSets {
-				get = append(get, ss.Get()...)
+				get = append(get, ss.GetStoreClients()...)
 			}
 			return get
 		}
@@ -603,7 +603,7 @@ func runQuery(
 		metadataClients = func() []metadatapb.MetadataClient {
 			var getMetadataClient []metadatapb.MetadataClient
 			for _, ss := range storeSets {
-				getMetadataClient = append(getMetadataClient, ss.GetMetadataClients()...)
+				getMetadataClient = append(getMetadataClient, ss.GetMetricMetadataClients()...)
 			}
 			return getMetadataClient
 		}

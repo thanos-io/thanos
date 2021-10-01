@@ -208,13 +208,13 @@ type endpointSetNodeCollector struct {
 	connectionsDesc *prometheus.Desc
 }
 
-func newEndpointSetNodeCollector() *endpointSetNodeCollector {
+func newEndpointSetNodeCollector(configInstance string) *endpointSetNodeCollector {
 	return &endpointSetNodeCollector{
 		storeNodes: map[component.Component]map[string]int{},
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
-			[]string{"external_labels", "store_type"}, nil,
+			[]string{"external_labels", "store_type"}, map[string]string{"config_provider_name": configInstance},
 		),
 	}
 }
@@ -284,11 +284,15 @@ type EndpointSet struct {
 func NewEndpointSet(
 	logger log.Logger,
 	reg *prometheus.Registry,
+	configInstance string,
 	endpointSpecs func() []EndpointSpec,
 	dialOpts []grpc.DialOption,
 	unhealthyEndpointTimeout time.Duration,
 ) *EndpointSet {
-	endpointsMetric := newEndpointSetNodeCollector()
+	if configInstance == "" {
+		configInstance = "default"
+	}
+	endpointsMetric := newEndpointSetNodeCollector(configInstance)
 	if reg != nil {
 		reg.MustRegister(endpointsMetric)
 	}
