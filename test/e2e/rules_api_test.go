@@ -16,10 +16,9 @@ import (
 	"github.com/efficientgo/e2e"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 
-	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -64,9 +63,9 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	qBuilder := e2ethanos.NewQuerierBuilder(e, "query")
 	qUninit := qBuilder.BuildUninitiated()
 
-	queryCfg := []query.Config{
+	queryCfg := []httpconfig.Config{
 		{
-			EndpointsConfig: http_util.EndpointsConfig{
+			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{qUninit.InternalEndpoint("http")},
 				Scheme:          "http",
 			},

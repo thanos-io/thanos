@@ -18,12 +18,11 @@ import (
 	"github.com/efficientgo/e2e"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
-	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -222,8 +221,8 @@ func TestRule(t *testing.T) {
 
 	r, err := e2ethanos.NewRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
 		{
-			EndpointsConfig: http_util.EndpointsConfig{
-				FileSDConfigs: []http_util.FileSDConfig{
+			EndpointsConfig: httpconfig.EndpointsConfig{
+				FileSDConfigs: []httpconfig.FileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically am1.
 						Files:           []string{filepath.Join(e2ethanos.ContainerSharedDir, amTargetsSubDir, "*.yaml")},
@@ -238,11 +237,11 @@ func TestRule(t *testing.T) {
 			Timeout:    model.Duration(10 * time.Second),
 			APIVersion: alert.APIv1,
 		},
-	}, []query.Config{
+	}, []httpconfig.Config{
 		{
-			EndpointsConfig: http_util.EndpointsConfig{
+			EndpointsConfig: httpconfig.EndpointsConfig{
 				// We test Statically Addressed queries in other tests. Focus on FileSD here.
-				FileSDConfigs: []http_util.FileSDConfig{
+				FileSDConfigs: []httpconfig.FileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically q.
 						Files:           []string{filepath.Join(e2ethanos.ContainerSharedDir, queryTargetsSubDir, "*.yaml")},

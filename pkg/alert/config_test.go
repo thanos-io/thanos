@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -54,7 +54,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 		{
 			address: "http://localhost:9093",
 			expected: AlertmanagerConfig{
-				EndpointsConfig: http.EndpointsConfig{
+				EndpointsConfig: httpconfig.EndpointsConfig{
 					StaticAddresses: []string{"localhost:9093"},
 					Scheme:          "http",
 				},
@@ -64,7 +64,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 		{
 			address: "https://am.example.com",
 			expected: AlertmanagerConfig{
-				EndpointsConfig: http.EndpointsConfig{
+				EndpointsConfig: httpconfig.EndpointsConfig{
 					StaticAddresses: []string{"am.example.com"},
 					Scheme:          "https",
 				},
@@ -74,7 +74,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 		{
 			address: "dns+http://localhost:9093",
 			expected: AlertmanagerConfig{
-				EndpointsConfig: http.EndpointsConfig{
+				EndpointsConfig: httpconfig.EndpointsConfig{
 					StaticAddresses: []string{"dns+localhost:9093"},
 					Scheme:          "http",
 				},
@@ -84,7 +84,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 		{
 			address: "dnssrv+http://localhost",
 			expected: AlertmanagerConfig{
-				EndpointsConfig: http.EndpointsConfig{
+				EndpointsConfig: httpconfig.EndpointsConfig{
 					StaticAddresses: []string{"dnssrv+localhost"},
 					Scheme:          "http",
 				},
@@ -94,7 +94,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 		{
 			address: "ssh+http://localhost",
 			expected: AlertmanagerConfig{
-				EndpointsConfig: http.EndpointsConfig{
+				EndpointsConfig: httpconfig.EndpointsConfig{
 					StaticAddresses: []string{"localhost"},
 					Scheme:          "ssh+http",
 				},
@@ -104,7 +104,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 		{
 			address: "dns+https://localhost/path/prefix/",
 			expected: AlertmanagerConfig{
-				EndpointsConfig: http.EndpointsConfig{
+				EndpointsConfig: httpconfig.EndpointsConfig{
 					StaticAddresses: []string{"dns+localhost:9093"},
 					Scheme:          "https",
 					PathPrefix:      "/path/prefix/",
@@ -115,13 +115,13 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 		{
 			address: "http://user:pass@localhost:9093",
 			expected: AlertmanagerConfig{
-				HTTPClientConfig: http.ClientConfig{
-					BasicAuth: http.BasicAuth{
+				HTTPClientConfig: httpconfig.ClientConfig{
+					BasicAuth: httpconfig.BasicAuth{
 						Username: "user",
 						Password: "pass",
 					},
 				},
-				EndpointsConfig: http.EndpointsConfig{
+				EndpointsConfig: httpconfig.EndpointsConfig{
 					StaticAddresses: []string{"localhost:9093"},
 					Scheme:          "http",
 				},
