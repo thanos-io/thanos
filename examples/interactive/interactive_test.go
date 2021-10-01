@@ -13,7 +13,6 @@ import (
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	e2einteractive "github.com/efficientgo/e2e/interactive"
-	e2emonitoring "github.com/efficientgo/e2e/monitoring"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
@@ -102,9 +101,6 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	e, err := e2e.NewDockerEnvironment("interactive")
 	testutil.Ok(t, err)
 	t.Cleanup(e.Close)
-
-	m, err := e2emonitoring.Start(e)
-	testutil.Ok(t, err)
 
 	// Initialize object storage with two buckets (our long term storage).
 	//
@@ -320,7 +316,5 @@ global:
 
 	// Tracing endpoint.
 	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+j.Endpoint("http-front")))
-	// Monitoring Endpoint.
-	testutil.Ok(t, m.OpenUserInterfaceInBrowser())
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
