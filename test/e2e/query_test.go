@@ -224,7 +224,7 @@ func TestQuery(t *testing.T) {
 func TestQueryWithEndpointConfig(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query")
+	e, err := e2e.NewDockerEnvironment("e2e_test_query_config")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
