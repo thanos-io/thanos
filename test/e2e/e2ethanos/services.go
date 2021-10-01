@@ -101,11 +101,11 @@ func NewPrometheus(e e2e.Environment, name, config, promImage string, enableFeat
 	return prom, container, nil
 }
 
-func NewPrometheusWithSidecar(e e2e.Environment, name, config, promImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
-	return NewPrometheusWithSidecarCustomImage(e, name, config, promImage, DefaultImage(), enableFeatures...)
+func NewPrometheusWithSidecar(e e2e.Environment, name, config, promImage string, extraArgs []string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
+	return NewPrometheusWithSidecarCustomImage(e, name, config, promImage, extraArgs, DefaultImage(), enableFeatures...)
 }
 
-func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, config, promImage string, sidecarImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
+func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, config, promImage string, extraArgs []string, sidecarImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
 	prom, dataDir, err := NewPrometheus(e, name, config, promImage, enableFeatures...)
 	if err != nil {
 		return nil, nil, err
@@ -116,7 +116,7 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, config, promIm
 		"--grpc-address":      ":9091",
 		"--grpc-grace-period": "0s",
 		"--http-address":      ":8080",
-		"--prometheus.url":    "http://" + prom.NetworkEndpointFor(netName, 9090),
+		"--prometheus.url":    "http://" + prom.InternalEndpoint("http"),
 		"--tsdb.path":         dataDir,
 		"--log.level":         infoLogLevel,
 	})
@@ -128,7 +128,7 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, config, promIm
 		fmt.Sprintf("sidecar-%s", name),
 		DefaultImage(),
 		e2e.NewCommand("sidecar", args...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
 	)
@@ -255,13 +255,12 @@ func (q *QuerierBuilder) Build() (*e2e.InstrumentedRunnable, error) {
 	return querier, nil
 }
 
-func (q *QuerierBuilder) collectArgs() ([]string, error) {
 func (q *QuerierBuilder) WithEndpointConfig(endpointConfig []store.Config) *QuerierBuilder {
 	q.endpointConfig = endpointConfig
 	return q
 }
 
-func (q *QuerierBuilder) Build() (*Service, error) {
+func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	const replicaLabel = "replica"
 
 	args := e2e.BuildArgs(map[string]string{
@@ -295,28 +294,6 @@ func (q *QuerierBuilder) Build() (*Service, error) {
 		args = append(args, "--exemplar="+addr)
 	}
 
-	if len(q.fileSDStoreAddresses) > 0 {
-		queryFileSDDir := filepath.Join(q.sharedDir, "data", "querier", q.name)
-		container := filepath.Join(ContainerSharedDir, "data", "querier", q.name)
-		if err := os.MkdirAll(queryFileSDDir, 0750); err != nil {
-			return nil, errors.Wrap(err, "create query dir failed")
-		}
-
-		fileSD := []*targetgroup.Group{{}}
-		for _, a := range q.fileSDStoreAddresses {
-			fileSD[0].Targets = append(fileSD[0].Targets, model.LabelSet{model.AddressLabel: model.LabelValue(a)})
-		}
-
-		b, err := yaml.Marshal(fileSD)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.yaml", b, 0600); err != nil {
-			return nil, errors.Wrap(err, "creating query SD config failed")
-		}
-
-		args = append(args, "--store.sd-files="+filepath.Join(container, "filesd.yaml"))
 	if q.fileSDPath != "" {
 		args = append(args, "--store.sd-files="+q.fileSDPath)
 	}
@@ -341,18 +318,7 @@ func (q *QuerierBuilder) Build() (*Service, error) {
 		args = append(args, "--endpoint.config="+string(endpointCfgBytes))
 	}
 
-	querier := NewService(
-		fmt.Sprintf("querier-%v", q.name),
-		DefaultImage(),
-		e2e.NewCommand("query", args...),
-		e2e.NewHTTPReadinessProbe(8080, "/-/ready", 200, 200),
-		8080,
-		9091,
-	)
-	querier.SetUser(strconv.Itoa(os.Getuid()))
-	querier.SetBackoff(defaultBackoffConfig)
-
-	return querier, nil
+	return args, nil
 }
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }

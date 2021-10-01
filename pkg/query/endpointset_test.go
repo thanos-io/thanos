@@ -300,7 +300,7 @@ func TestEndpointSet_Update(t *testing.T) {
 
 	// Testing if duplicates can cause weird results.
 	discoveredEndpointAddr = append(discoveredEndpointAddr, discoveredEndpointAddr[0])
-	endpointSet := NewEndpointSet(nil, nil,
+	endpointSet := NewEndpointSet(nil, nil, "",
 		func() (specs []EndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, false))
@@ -683,7 +683,7 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 	endpoints.CloseOne(initialEndpointAddr[0])
 	endpoints.CloseOne(initialEndpointAddr[1])
 
-	endpointSet := NewEndpointSet(nil, nil,
+	endpointSet := NewEndpointSet(nil, nil, "",
 		func() (specs []EndpointSpec) {
 			for _, addr := range initialEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, false))
@@ -801,7 +801,7 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 
 	staticEndpointAddr := discoveredEndpointAddr[0]
 	slowStaticEndpointAddr := discoveredEndpointAddr[2]
-	endpointSet := NewEndpointSet(nil, nil, func() (specs []EndpointSpec) {
+	endpointSet := NewEndpointSet(nil, nil, "", func() (specs []EndpointSpec) {
 		return []EndpointSpec{
 			NewGRPCEndpointSpec(discoveredEndpointAddr[0], true),
 			NewGRPCEndpointSpec(discoveredEndpointAddr[1], false),
@@ -977,7 +977,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			currentState := 0
 
-			endpointSet := NewEndpointSet(nil, nil,
+			endpointSet := NewEndpointSet(nil, nil, "",
 				func() []EndpointSpec {
 					if tc.states[currentState].endpointSpec == nil {
 						return nil
