@@ -1133,8 +1133,8 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				}
 
 				if tbc.dryRun {
-					level.Info(logger).Log("msg", "dry run finished. Changes should be printed to stderr")
-					return nil
+					level.Info(logger).Log("msg", "dry run finished. Changes should be printed to stderr", "Block ID", id)
+					continue
 				}
 
 				level.Info(logger).Log("msg", "wrote new block after modifications; flushing", "source", id, "new", newID)
