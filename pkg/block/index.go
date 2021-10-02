@@ -254,9 +254,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		id := p.At()
 		stats.TotalSeries++
 
-		err := r.Series(id, &lset, &chks)
-		stats.OutOfOrderSeriesLabels = lset
-		if err != nil {
+		if err := r.Series(id, &lset, &chks); err != nil {
 			return stats, errors.Wrap(err, "read series")
 		}
 
@@ -334,6 +332,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		if ooo > 0 {
 			stats.OutOfOrderSeries++
 			stats.OutOfOrderChunks += ooo
+			stats.OutOfOrderSeriesLabels = lset
 		}
 
 		seriesChunks.Add(int64(len(chks)))
