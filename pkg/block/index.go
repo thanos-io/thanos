@@ -115,13 +115,20 @@ func (i HealthStats) Issue347OutsideChunksErr() error {
 
 func (i HealthStats) OutOfOrderChunksErr() error {
 	if i.OutOfOrderChunks > 0 {
+		formatedSeriesLabels := ""
+		for _, value := range i.OutOfOrderSeriesLabels {
+			for _, label := range value {
+				formatedSeriesLabels += label.Name + ":" + label.Value + ","
+			}
+			formatedSeriesLabels += "\n"
+		}
 		return errors.New(fmt.Sprintf(
 			"%d/%d series have an average of %.3f out-of-order chunks: "+
-				"The out of order series are: %v. %.3f of these are exact duplicates (in terms of data and time range)",
+				"The out of order series are: %s.%.3f of these are exact duplicates (in terms of data and time range)",
 			i.OutOfOrderSeries,
 			i.TotalSeries,
 			float64(i.OutOfOrderChunks)/float64(i.OutOfOrderSeries),
-			i.OutOfOrderSeriesLabels,
+			formatedSeriesLabels,
 			float64(i.DuplicatedChunks)/float64(i.OutOfOrderChunks),
 		))
 	}
