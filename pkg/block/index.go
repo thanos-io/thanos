@@ -43,8 +43,6 @@ type HealthStats struct {
 	TotalSeries int64
 	// OutOfOrderSeries represents number of series that have out of order chunks.
 	OutOfOrderSeries int
-	// OutOfOrderSeries represents the labels of series that are out of order
-	OutOfOrderSeriesLabels []labels.Labels
 
 	// OutOfOrderChunks represents number of chunks that are out of order (older time range is after younger one).
 	OutOfOrderChunks int
@@ -115,20 +113,12 @@ func (i HealthStats) Issue347OutsideChunksErr() error {
 
 func (i HealthStats) OutOfOrderChunksErr() error {
 	if i.OutOfOrderChunks > 0 {
-		formatedSeriesLabels := ""
-		for _, value := range i.OutOfOrderSeriesLabels {
-			for _, label := range value {
-				formatedSeriesLabels += label.Name + ":" + label.Value + ","
-			}
-			formatedSeriesLabels += "\n"
-		}
 		return errors.New(fmt.Sprintf(
 			"%d/%d series have an average of %.3f out-of-order chunks: "+
-				"The out of order series are: %s.%.3f of these are exact duplicates (in terms of data and time range)",
+				"%.3f of these are exact duplicates (in terms of data and time range)",
 			i.OutOfOrderSeries,
 			i.TotalSeries,
 			float64(i.OutOfOrderChunks)/float64(i.OutOfOrderSeries),
-			formatedSeriesLabels,
 			float64(i.DuplicatedChunks)/float64(i.OutOfOrderChunks),
 		))
 	}
@@ -264,7 +254,6 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		if err := r.Series(id, &lset, &chks); err != nil {
 			return stats, errors.Wrap(err, "read series")
 		}
-
 		if len(lset) == 0 {
 			return stats, errors.Errorf("empty label set detected for series %d", id)
 		}
@@ -339,7 +328,13 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		if ooo > 0 {
 			stats.OutOfOrderSeries++
 			stats.OutOfOrderChunks += ooo
-			stats.OutOfOrderSeriesLabels = append(stats.OutOfOrderSeriesLabels, lset)
+			OutOfOrderSeriesLabels := ""
+			for _, label := range lset[:len(lset)-1] {
+				OutOfOrderSeriesLabels += label.Name + ":" + label.Value + ","
+			}
+			OutOfOrderSeriesLabels += lset[len(lset)-1].Name + ":" + lset[len(lset)-1].Value
+			debugMessage := fmt.Sprintf("The out of order series labels are %s", OutOfOrderSeriesLabels)
+			level.Debug(logger).Log("msg", debugMessage)
 		}
 
 		seriesChunks.Add(int64(len(chks)))
