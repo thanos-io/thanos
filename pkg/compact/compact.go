@@ -773,7 +773,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 
 		if err := stats.CriticalErr(); err != nil {
-			return false, ulid.ULID{}, halt(errors.Wrapf(err, "block with not healthy index found %s; Compaction level %v; Labels: %v", bdir, meta.Compaction.Level, meta.Thanos.Labels))
+			return false, ulid.ULID{}, halt(errors.Wrapf(err, "block with not healthy index found %s; Compaction level %v; Labels: %v; Series labels: %v", bdir, meta.Compaction.Level, meta.Thanos.Labels, stats.OutOfOrderSeriesLabels))
 		}
 
 		if err := stats.OutOfOrderChunksErr(); err != nil {

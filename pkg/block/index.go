@@ -43,6 +43,8 @@ type HealthStats struct {
 	TotalSeries int64
 	// OutOfOrderSeries represents number of series that have out of order chunks.
 	OutOfOrderSeries int
+	// OutOfOrderSeries represents the labels of series that are out of order
+	OutOfOrderSeriesLabels labels.Labels
 
 	// OutOfOrderChunks represents number of chunks that are out of order (older time range is after younger one).
 	OutOfOrderChunks int
@@ -252,8 +254,10 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		stats.TotalSeries++
 
 		if err := r.Series(id, &lset, &chks); err != nil {
+			stats.OutOfOrderSeriesLabels = lset
 			return stats, errors.Wrap(err, "read series")
 		}
+
 		if len(lset) == 0 {
 			return stats, errors.Errorf("empty label set detected for series %d", id)
 		}
