@@ -22,10 +22,12 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -44,20 +46,44 @@ func TestStoreGateway(t *testing.T) {
 	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
-	s1, err := e2ethanos.NewStoreGW(e, "1", client.BucketConfig{
-		Type: client.S3,
-		Config: s3.Config{
-			Bucket:    bucket,
-			AccessKey: e2edb.MinioAccessKey,
-			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m.InternalEndpoint("http"),
-			Insecure:  true,
+	memcached := e2ethanos.NewMemcached(e, "1")
+	testutil.Ok(t, e2e.StartAndWaitReady(memcached))
+
+	memcachedConfig := storecache.CachingWithBackendConfig{
+		Type: storecache.MemcachedBucketCacheProvider,
+		BackendConfig: cacheutil.MemcachedClientConfig{
+			Addresses:                 []string{memcached.InternalEndpoint("memcached")},
+			MaxIdleConnections:        100,
+			MaxAsyncConcurrency:       20,
+			MaxGetMultiConcurrency:    100,
+			MaxGetMultiBatchSize:      0,
+			Timeout:                   time.Minute,
+			MaxAsyncBufferSize:        10000,
+			DNSProviderUpdateInterval: 10 * time.Second,
 		},
-	}, relabel.Config{
-		Action:       relabel.Drop,
-		Regex:        relabel.MustNewRegexp("value2"),
-		SourceLabels: model.LabelNames{"ext1"},
-	})
+		ChunkSubrangeSize: 16000,
+	}
+
+	s1, err := e2ethanos.NewStoreGW(
+		e,
+		"1",
+		client.BucketConfig{
+			Type: client.S3,
+			Config: s3.Config{
+				Bucket:    bucket,
+				AccessKey: e2edb.MinioAccessKey,
+				SecretKey: e2edb.MinioSecretKey,
+				Endpoint:  m.InternalEndpoint("http"),
+				Insecure:  true,
+			},
+		},
+		memcachedConfig,
+		relabel.Config{
+			Action:       relabel.Drop,
+			Regex:        relabel.MustNewRegexp("value2"),
+			SourceLabels: model.LabelNames{"ext1"},
+		},
+	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
 	// Ensure bucket UI.
