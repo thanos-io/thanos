@@ -328,6 +328,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		if ooo > 0 {
 			stats.OutOfOrderSeries++
 			stats.OutOfOrderChunks += ooo
+			level.Debug(logger).Log("msg", "found out of order series", "labels", lset)
 		}
 
 		seriesChunks.Add(int64(len(chks)))
