@@ -35,7 +35,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -452,7 +451,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 			Insecure:  true,
 		},
 	}
-	str, err := e2ethanos.NewStoreGW(e, "1", svcConfig, storecache.CachingWithBackendConfig{})
+	str, err := e2ethanos.NewStoreGW(e, "1", svcConfig, nil)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(str))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7)), "thanos_blocks_meta_synced"))

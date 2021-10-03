@@ -77,7 +77,7 @@ func TestStoreGateway(t *testing.T) {
 				Insecure:  true,
 			},
 		},
-		memcachedConfig,
+		&memcachedConfig,
 		relabel.Config{
 			Action:       relabel.Drop,
 			Regex:        relabel.MustNewRegexp("value2"),
