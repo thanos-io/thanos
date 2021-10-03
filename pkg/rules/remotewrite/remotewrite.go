@@ -32,6 +32,7 @@ func NewFanoutStorage(logger log.Logger, reg prometheus.Registerer, walDir strin
 	if err != nil {
 		return nil, err
 	}
+	// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
 	remoteStore := remote.NewStorage(logger, reg, walStore.StartTime, walStore.Directory(), 1*time.Minute, nil)
 	if err := remoteStore.ApplyConfig(&config.Config{
 		GlobalConfig:       config.DefaultGlobalConfig,

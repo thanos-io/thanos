@@ -60,6 +60,7 @@ require (
 	github.com/prometheus/common v0.30.0
 	github.com/prometheus/exporter-toolkit v0.6.1
 	github.com/prometheus/prometheus v1.8.2-0.20210914090109-37468d88dce8
+	github.com/stretchr/testify v1.7.0
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.31
 	github.com/uber/jaeger-client-go v2.29.1+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible

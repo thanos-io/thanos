@@ -475,16 +475,16 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	receiver, err := e2ethanos.NewIngestingReceiver(e, "1")
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
-	rwURL := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver.Endpoint("remote-write")))
+	rwURL := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", receiver.Endpoint("grpc")).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 	r, err := e2ethanos.NewStatelessRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{
-					am.Endpoint("http"),
+					am.InternalEndpoint("http"),
 				},
 				Scheme: "http",
 			},
@@ -495,7 +495,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{
-					q.Endpoint("http"),
+					q.InternalEndpoint("http"),
 				},
 				Scheme: "http",
 			},
@@ -515,7 +515,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 			{
 				"__name__":  "test_absent_metric",
 				"job":       "thanos-receive",
-				"receive":   "e2e_test_rule_remote_write",
+				"receive":   "1",
 				"tenant_id": "default-tenant",
 			},
 		})
