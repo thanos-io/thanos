@@ -328,13 +328,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		if ooo > 0 {
 			stats.OutOfOrderSeries++
 			stats.OutOfOrderChunks += ooo
-			OutOfOrderSeriesLabels := ""
-			for _, label := range lset[:len(lset)-1] {
-				OutOfOrderSeriesLabels += label.Name + ":" + label.Value + ","
-			}
-			OutOfOrderSeriesLabels += lset[len(lset)-1].Name + ":" + lset[len(lset)-1].Value
-			debugMessage := fmt.Sprintf("The out of order series labels are %s", OutOfOrderSeriesLabels)
-			level.Debug(logger).Log("msg", debugMessage)
+			level.Debug(logger).Log("msg", "The out of order series are: ", "labels", lset)
 		}
 
 		seriesChunks.Add(int64(len(chks)))
