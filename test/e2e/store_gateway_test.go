@@ -33,7 +33,7 @@ import (
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
-// TODO(bwplotka): Extend this test to have multiple stores and memcached.
+// TODO(bwplotka): Extend this test to have multiple stores.
 // TODO(bwplotka): Extend this test for downsampling.
 func TestStoreGateway(t *testing.T) {
 	t.Parallel()
