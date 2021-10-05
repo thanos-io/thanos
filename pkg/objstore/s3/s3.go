@@ -86,6 +86,7 @@ type Config struct {
 	// NOTE we need to make sure this number does not produce more parts than 10 000.
 	PartSize  uint64    `yaml:"part_size"`
 	SSEConfig SSEConfig `yaml:"sse_config"`
+	STSEndpoint string	`yaml:"sts_endpoint"`
 }
 
 // SSEConfig deals with the configuration of SSE for Minio. The following options are valid:
@@ -228,6 +229,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 				Client: &http.Client{
 					Transport: http.DefaultTransport,
 				},
+				Endpoint: config.STSEndpoint,
 			}),
 		}
 	}
