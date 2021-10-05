@@ -380,7 +380,7 @@ func TestStoreGatewayMemcachedCache(t *testing.T) {
 			},
 		)
 
-		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_store_bucket_cache_operation_hits_total"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_store_index_cache_hits_total"))
 	})
 
 	t.Run("query with cache hit", func(t *testing.T) {
@@ -398,7 +398,7 @@ func TestStoreGatewayMemcachedCache(t *testing.T) {
 			},
 		)
 
-		testutil.Ok(t, s1.WaitSumMetrics(e2e.Greater(0), "thanos_store_bucket_cache_operation_hits_total"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2e.Greater(0), "thanos_store_index_cache_hits_total"))
 	})
 
 }
