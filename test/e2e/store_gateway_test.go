@@ -22,16 +22,18 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
-// TODO(bwplotka): Extend this test to have multiple stores and memcached.
+// TODO(bwplotka): Extend this test to have multiple stores.
 // TODO(bwplotka): Extend this test for downsampling.
 func TestStoreGateway(t *testing.T) {
 	t.Parallel()
@@ -44,20 +46,44 @@ func TestStoreGateway(t *testing.T) {
 	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
-	s1, err := e2ethanos.NewStoreGW(e, "1", client.BucketConfig{
-		Type: client.S3,
-		Config: s3.Config{
-			Bucket:    bucket,
-			AccessKey: e2edb.MinioAccessKey,
-			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m.InternalEndpoint("http"),
-			Insecure:  true,
+	memcached := e2ethanos.NewMemcached(e, "1")
+	testutil.Ok(t, e2e.StartAndWaitReady(memcached))
+
+	memcachedConfig := storecache.CachingWithBackendConfig{
+		Type: storecache.MemcachedBucketCacheProvider,
+		BackendConfig: cacheutil.MemcachedClientConfig{
+			Addresses:                 []string{memcached.InternalEndpoint("memcached")},
+			MaxIdleConnections:        100,
+			MaxAsyncConcurrency:       20,
+			MaxGetMultiConcurrency:    100,
+			MaxGetMultiBatchSize:      0,
+			Timeout:                   time.Minute,
+			MaxAsyncBufferSize:        10000,
+			DNSProviderUpdateInterval: 10 * time.Second,
 		},
-	}, relabel.Config{
-		Action:       relabel.Drop,
-		Regex:        relabel.MustNewRegexp("value2"),
-		SourceLabels: model.LabelNames{"ext1"},
-	})
+		ChunkSubrangeSize: 16000,
+	}
+
+	s1, err := e2ethanos.NewStoreGW(
+		e,
+		"1",
+		client.BucketConfig{
+			Type: client.S3,
+			Config: s3.Config{
+				Bucket:    bucket,
+				AccessKey: e2edb.MinioAccessKey,
+				SecretKey: e2edb.MinioSecretKey,
+				Endpoint:  m.InternalEndpoint("http"),
+				Insecure:  true,
+			},
+		},
+		&memcachedConfig,
+		relabel.Config{
+			Action:       relabel.Drop,
+			Regex:        relabel.MustNewRegexp("value2"),
+			SourceLabels: model.LabelNames{"ext1"},
+		},
+	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
 	// Ensure bucket UI.
@@ -247,4 +273,132 @@ func TestStoreGateway(t *testing.T) {
 	})
 
 	// TODO(khyati) Let's add some case for compaction-meta.json once the PR will be merged: https://github.com/thanos-io/thanos/pull/2136.
+}
+
+func TestStoreGatewayMemcachedCache(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e_test_store_gateway_memcached_cache")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	const bucket = "store_gateway_memcached_cache_test"
+	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	memcached := e2ethanos.NewMemcached(e, "1")
+	testutil.Ok(t, e2e.StartAndWaitReady(memcached))
+
+	memcachedConfig := storecache.CachingWithBackendConfig{
+		Type: storecache.MemcachedBucketCacheProvider,
+		BackendConfig: cacheutil.MemcachedClientConfig{
+			Addresses:                 []string{memcached.InternalEndpoint("memcached")},
+			MaxIdleConnections:        100,
+			MaxAsyncConcurrency:       20,
+			MaxGetMultiConcurrency:    100,
+			MaxGetMultiBatchSize:      0,
+			Timeout:                   time.Minute,
+			MaxAsyncBufferSize:        10000,
+			DNSProviderUpdateInterval: 10 * time.Second,
+		},
+		ChunkSubrangeSize: 16000,
+	}
+
+	s1, err := e2ethanos.NewStoreGW(
+		e,
+		"1",
+		client.BucketConfig{
+			Type: client.S3,
+			Config: s3.Config{
+				Bucket:    bucket,
+				AccessKey: e2edb.MinioAccessKey,
+				SecretKey: e2edb.MinioSecretKey,
+				Endpoint:  m.InternalEndpoint("http"),
+				Insecure:  true,
+			},
+		},
+		&memcachedConfig,
+	)
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(s1))
+
+	// We need Prometheus to monitor the metrics exposed by Thanos Store.
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", defaultPromConfig("test", 0, "", "", s1.InternalEndpoint("http")), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc"), sidecar.InternalEndpoint("grpc")).Build()
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
+
+	series := []labels.Labels{labels.FromStrings("a", "1", "b", "2")}
+	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	now := time.Now()
+	id, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset, 0, metadata.NoneFunc)
+	testutil.Ok(t, err)
+
+	l := log.NewLogfmtLogger(os.Stdout)
+	bkt, err := s3.NewBucketWithConfig(l, s3.Config{
+		Bucket:    bucket,
+		AccessKey: e2edb.MinioAccessKey,
+		SecretKey: e2edb.MinioSecretKey,
+		Endpoint:  m.Endpoint("http"), // We need separate client config, when connecting to minio from outside.
+		Insecure:  true,
+	}, "test-feed")
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
+
+	// Wait for store to sync blocks.
+	// thanos_blocks_meta_synced: 1x loadedMeta 0x labelExcludedMeta 0x TooFreshMeta.
+	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
+
+	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1), "thanos_bucket_store_blocks_loaded"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_drops_total"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
+
+	t.Run("query with cache miss", func(t *testing.T) {
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+			promclient.QueryOptions{
+				Deduplicate: false,
+			},
+			[]model.Metric{
+				{
+					"a":       "1",
+					"b":       "2",
+					"ext1":    "value1",
+					"replica": "1",
+				},
+			},
+		)
+
+		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_store_bucket_cache_operation_hits_total"))
+	})
+
+	t.Run("query with cache hit", func(t *testing.T) {
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+			promclient.QueryOptions{
+				Deduplicate: false,
+			},
+			[]model.Metric{
+				{
+					"a":       "1",
+					"b":       "2",
+					"ext1":    "value1",
+					"replica": "1",
+				},
+			},
+		)
+
+		testutil.Ok(t, s1.WaitSumMetrics(e2e.Greater(0), "thanos_store_bucket_cache_operation_hits_total"))
+	})
+
 }
