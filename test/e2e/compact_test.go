@@ -451,7 +451,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 			Insecure:  true,
 		},
 	}
-	str, err := e2ethanos.NewStoreGW(e, "1", svcConfig)
+	str, err := e2ethanos.NewStoreGW(e, "1", svcConfig, nil)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(str))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7)), "thanos_blocks_meta_synced"))
