@@ -23,6 +23,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
 )
@@ -151,7 +152,7 @@ type QuerierBuilder struct {
 	targetAddresses   []string
 	exemplarAddresses []string
 
-	endpointConfig []store.Config
+	endpointConfig []query.Config
 
 	tracingConfig string
 }
@@ -255,7 +256,7 @@ func (q *QuerierBuilder) Build() (*e2e.InstrumentedRunnable, error) {
 	return querier, nil
 }
 
-func (q *QuerierBuilder) WithEndpointConfig(endpointConfig []store.Config) *QuerierBuilder {
+func (q *QuerierBuilder) WithEndpointConfig(endpointConfig []query.Config) *QuerierBuilder {
 	q.endpointConfig = endpointConfig
 	return q
 }

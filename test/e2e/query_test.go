@@ -35,8 +35,8 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -263,10 +263,10 @@ func TestQueryWithEndpointConfig(t *testing.T) {
 	fileSDPath, err := createSDFile(e.SharedDir(), "1", []string{sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")})
 	testutil.Ok(t, err)
 
-	endpointConfig := []store.Config{
+	endpointConfig := []query.Config{
 		{
 			Name: "withTLS",
-			TLSConfig: store.TLSConfiguration{
+			TLSConfig: query.TLSConfiguration{
 				CertFile:   filepath.Join(container, "e2e_test_query_config_client.crt"),
 				KeyFile:    filepath.Join(container, "testclient.key"),
 				CaCertFile: filepath.Join(container, "testca.crt"),

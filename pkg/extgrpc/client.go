@@ -15,13 +15,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // StoreClientGRPCOpts creates gRPC dial options for connecting to a store client.
-func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, clientInstance string, secure, skipVerify bool, tlsConfig store.TLSConfiguration) ([]grpc.DialOption, error) {
+func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, clientInstance string, secure, skipVerify bool, tlsConfig query.TLSConfiguration) ([]grpc.DialOption, error) {
 	if clientInstance == "" {
 		clientInstance = "default"
 	}

@@ -375,23 +375,23 @@ func runQuery(
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
 
-	var endpointConfig []store.Config
+	var endpointConfig []query.Config
 	var err error
 	if len(endpointConfigYAML) > 0 {
-		endpointConfig, err = store.LoadConfig(endpointConfigYAML, storeAddrs, strictStores, fileSDConfig)
+		endpointConfig, err = query.LoadConfig(endpointConfigYAML, storeAddrs, strictStores, fileSDConfig)
 		if err != nil {
 			return errors.Wrap(err, "loading endpoint config")
 		}
 	} else {
 		// TLSConfig for endpoints provided in --endpoint, --endpoint.sd-files and --endpoint-strict.
-		var TLSConfig store.TLSConfiguration
+		var TLSConfig query.TLSConfiguration
 		if secure {
 			TLSConfig.CertFile = cert
 			TLSConfig.KeyFile = key
 			TLSConfig.CaCertFile = caCert
 			TLSConfig.ServerName = serverName
 		}
-		endpointConfig, err = store.NewConfig(storeAddrs, strictStores, fileSDConfig, TLSConfig)
+		endpointConfig, err = query.NewConfig(storeAddrs, strictStores, fileSDConfig, TLSConfig)
 		if err != nil {
 			return errors.Wrap(err, "initializing endpoint config from individual flags")
 		}
@@ -434,7 +434,7 @@ func runQuery(
 		},
 	}
 	for _, config := range endpointConfig {
-		secure = (config.TLSConfig != store.TLSConfiguration{})
+		secure = (config.TLSConfig != query.TLSConfiguration{})
 		dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, config.Name, secure, skipVerify, config.TLSConfig)
 		if err != nil {
 			return errors.Wrap(err, "building gRPC client")
@@ -453,7 +453,7 @@ func runQuery(
 
 		var spec []query.EndpointSpec
 		// Add strict & static nodes.
-		if config.Mode == store.StrictEndpointMode {
+		if config.Mode == query.StrictEndpointMode {
 			for _, addr := range config.Endpoints {
 				if dns.IsDynamicNode(addr) {
 					return errors.Errorf("%s is a dynamically specified store i.e. it uses SD and that is not permitted under strict mode. Use --store for this", addr)

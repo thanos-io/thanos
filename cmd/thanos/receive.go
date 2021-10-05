@@ -35,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -120,7 +121,7 @@ func runReceive(
 		return err
 	}
 
-	TLSConfig := store.TLSConfiguration{
+	TLSConfig := query.TLSConfiguration{
 		CertFile:   conf.rwClientCert,
 		KeyFile:    conf.rwClientKey,
 		CaCertFile: conf.rwClientServerCA,
