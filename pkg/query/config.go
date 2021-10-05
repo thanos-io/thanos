@@ -40,57 +40,34 @@ const (
 	StrictEndpointMode  EndpointMode = "strict"
 )
 
-// NewConfig returns list of per-endpoint TLS config from individual flags.
-func NewConfig(endpointAddrs, strictEndpointAddrs []string, fileSDConfig *file.SDConfig, TLSConfig TLSConfiguration) ([]Config, error) {
-	var endpointConfig []Config
-
-	// Adding --endpoint, --endpoint.sd-files to []endpointConfig, if provided.
-	if len(endpointAddrs) > 0 || fileSDConfig != nil {
-		cfg := Config{}
-		cfg.TLSConfig = TLSConfig
-		cfg.Endpoints = endpointAddrs
-		if fileSDConfig != nil {
-			cfg.EndpointsSD = []file.SDConfig{*fileSDConfig}
-		}
-		endpointConfig = append(endpointConfig, cfg)
-	}
-
-	// Adding --endpoint-strict endpoints if provided.
-	if len(strictEndpointAddrs) > 0 {
-		cfg := Config{}
-		cfg.TLSConfig = TLSConfig
-		cfg.Endpoints = strictEndpointAddrs
-		cfg.Mode = StrictEndpointMode
-		endpointConfig = append(endpointConfig, cfg)
-	}
-	return endpointConfig, nil
-}
-
 // LoadConfig returns list of per-endpoint TLS config.
-func LoadConfig(confYAML []byte, endpointAddrs, strictEndpointAddrs []string, fileSDConfig *file.SDConfig) ([]Config, error) {
+func LoadConfig(confYAML []byte, endpointAddrs, strictEndpointAddrs []string, fileSDConfig *file.SDConfig, TLSConfig TLSConfiguration) ([]Config, error) {
 	var endpointConfig []Config
 
-	if err := yaml.UnmarshalStrict(confYAML, &endpointConfig); err != nil {
-		return nil, err
-	}
+	if len(confYAML) > 0 {
+		if err := yaml.UnmarshalStrict(confYAML, &endpointConfig); err != nil {
+			return nil, err
+		}
 
-	// Checking if wrong mode is provided.
-	for _, config := range endpointConfig {
-		if config.Mode != StrictEndpointMode && config.Mode != DefaultEndpointMode {
-			return nil, errors.Errorf("%s is wrong mode", config.Mode)
+		// Checking if wrong mode is provided.
+		for _, config := range endpointConfig {
+			if config.Mode != StrictEndpointMode && config.Mode != DefaultEndpointMode {
+				return nil, errors.Errorf("%s is wrong mode", config.Mode)
+			}
+		}
+
+		// No dynamic endpoints in strict mode.
+		for _, config := range endpointConfig {
+			if config.Mode == StrictEndpointMode && len(config.EndpointsSD) != 0 {
+				return nil, errors.Errorf("no sd-files allowed in strict mode")
+			}
 		}
 	}
 
-	// No dynamic endpoints in strict mode.
-	for _, config := range endpointConfig {
-		if config.Mode == StrictEndpointMode && len(config.EndpointsSD) != 0 {
-			return nil, errors.Errorf("no sd-files allowed in strict mode")
-		}
-	}
-
-	// Adding --endpoint, --endpoint.sd-files with NO-TLS, if provided.
+	// Adding --endpoint, --endpoint.sd-files, if provided.
 	if len(endpointAddrs) > 0 || fileSDConfig != nil {
 		cfg := Config{}
+		cfg.TLSConfig = TLSConfig
 		cfg.Endpoints = endpointAddrs
 		if fileSDConfig != nil {
 			cfg.EndpointsSD = []file.SDConfig{*fileSDConfig}
@@ -98,9 +75,10 @@ func LoadConfig(confYAML []byte, endpointAddrs, strictEndpointAddrs []string, fi
 		endpointConfig = append(endpointConfig, cfg)
 	}
 
-	// Adding --endpoint-strict endpoints with NO-TLS, if provided.
+	// Adding --endpoint-strict endpoints, if provided.
 	if len(strictEndpointAddrs) > 0 {
 		cfg := Config{}
+		cfg.TLSConfig = TLSConfig
 		cfg.Endpoints = strictEndpointAddrs
 		cfg.Mode = StrictEndpointMode
 		endpointConfig = append(endpointConfig, cfg)

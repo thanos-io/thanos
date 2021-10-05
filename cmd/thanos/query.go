@@ -375,26 +375,19 @@ func runQuery(
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
 
-	var endpointConfig []query.Config
-	var err error
-	if len(endpointConfigYAML) > 0 {
-		endpointConfig, err = query.LoadConfig(endpointConfigYAML, storeAddrs, strictStores, fileSDConfig)
-		if err != nil {
-			return errors.Wrap(err, "loading endpoint config")
+	// TLSConfig for endpoints provided in --endpoint, --endpoint.sd-files and --endpoint-strict.
+	var TLSConfig query.TLSConfiguration
+	if secure {
+		TLSConfig = query.TLSConfiguration{
+			CertFile:   cert,
+			KeyFile:    key,
+			CaCertFile: caCert,
+			ServerName: serverName,
 		}
-	} else {
-		// TLSConfig for endpoints provided in --endpoint, --endpoint.sd-files and --endpoint-strict.
-		var TLSConfig query.TLSConfiguration
-		if secure {
-			TLSConfig.CertFile = cert
-			TLSConfig.KeyFile = key
-			TLSConfig.CaCertFile = caCert
-			TLSConfig.ServerName = serverName
-		}
-		endpointConfig, err = query.NewConfig(storeAddrs, strictStores, fileSDConfig, TLSConfig)
-		if err != nil {
-			return errors.Wrap(err, "initializing endpoint config from individual flags")
-		}
+	}
+	endpointConfig, err := query.LoadConfig(endpointConfigYAML, storeAddrs, strictStores, fileSDConfig, TLSConfig)
+	if err != nil {
+		return errors.Wrap(err, "loading endpoint config")
 	}
 
 	dnsRuleProvider := dns.NewProvider(
