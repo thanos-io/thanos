@@ -88,6 +88,7 @@ config:
     kms_key_id: ""
     kms_encryption_context: {}
     encryption_key: ""
+  sts_endpoint: ""
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
@@ -225,6 +226,12 @@ We need access to CreateBucket and DeleteBucket and access to all buckets:
 With this policy you should be able to run set `THANOS_TEST_OBJSTORE_SKIP=GCS,AZURE,SWIFT,COS,ALIYUNOSS` and unset `S3_BUCKET` and run all tests using `make test`.
 
 Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html
+
+##### STS Endpoint
+
+If you want to use IAM credential retrieved from an instance profile, Thanos needs to authenticate through AWS STS. For this purposes you can specify your own STS Endpoint.
+
+By default Thanos will use endpoint: https://sts.amazonaws.com and AWS region coresponding endpoints.
 
 #### GCS
 
