@@ -693,7 +693,7 @@ func benchmarkMergeResponses(b *testing.B, size int) {
 
 func makeQueryRangeResponses(size int) ([]queryrange.Response, []queryrange.Response) {
 	labelResp := make([]queryrange.Response, 0, size)
-	seriesResp := make([]queryrange.Response, 0, size)
+	seriesResp := make([]queryrange.Response, 0, size*2)
 
 	// Generate with some duplicated values.
 	for i := 0; i < size; i++ {
@@ -702,14 +702,17 @@ func makeQueryRangeResponses(size int) ([]queryrange.Response, []queryrange.Resp
 			Data:   []string{fmt.Sprintf("data-%d", i), fmt.Sprintf("data-%d", i+1)},
 		})
 
-		seriesResp = append(seriesResp, &ThanosSeriesResponse{
-			Status: "success",
-			Data:   []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: fmt.Sprintf("foo-%d", i), Value: fmt.Sprintf("bar-%d", i)}}}},
-		},
+		seriesResp = append(
+			seriesResp,
+			&ThanosSeriesResponse{
+				Status: "success",
+				Data:   []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: fmt.Sprintf("foo-%d", i), Value: fmt.Sprintf("bar-%d", i)}}}},
+			},
 			&ThanosSeriesResponse{
 				Status: "success",
 				Data:   []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: fmt.Sprintf("foo-%d", i+1), Value: fmt.Sprintf("bar-%d", i+1)}}}},
-			})
+			},
+		)
 	}
 
 	return labelResp, seriesResp
