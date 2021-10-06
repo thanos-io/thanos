@@ -27,7 +27,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
-	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 )
 
 const (
@@ -588,7 +587,7 @@ receivers:
 	return s, nil
 }
 
-func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig *storecache.CachingWithBackendConfig, relabelConfig ...relabel.Config) (*e2e.InstrumentedRunnable, error) {
+func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig string, relabelConfig ...relabel.Config) (*e2e.InstrumentedRunnable, error) {
 	dir := filepath.Join(e.SharedDir(), "data", "store", name)
 	container := filepath.Join(ContainerSharedDir, "data", "store", name)
 	if err := os.MkdirAll(dir, 0750); err != nil {
@@ -603,13 +602,6 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 	relabelConfigBytes, err := yaml.Marshal(relabelConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err, "generate store relabel file: %v", relabelConfig)
-	}
-	cacheConfigBytes := []byte{}
-	if cacheConfig != nil {
-		cacheConfigBytes, err = yaml.Marshal(*cacheConfig)
-		if err != nil {
-			return nil, errors.Wrapf(err, "generate cache config file: %v", *cacheConfig)
-		}
 	}
 
 	args := e2e.BuildArgs(map[string]string{
@@ -628,8 +620,8 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		"--consistency-delay":                 "30m",
 	})
 
-	if len(cacheConfigBytes) != 0 {
-		args = append(args, "--store.caching-bucket.config", string(cacheConfigBytes))
+	if cacheConfig != "" {
+		args = append(args, "--store.caching-bucket.config", cacheConfig)
 	}
 
 	store := NewService(
