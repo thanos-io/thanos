@@ -132,13 +132,19 @@ config:
 
 ### Stackdriver
 
-Client for https://cloud.google.com/trace/ tracing.
+Client for https://cloud.google.com/trace/ tracing. 
+For details, please see [client config](https://github.com/lovoo/gcloud-opentracing/blob/master/recorder.go).
+The current library that we use in the [client](https://github.com/thanos-io/thanos/blob/0618ac3974fccdcbd4ac92625a4a0785bf746376/pkg/tracing/stackdriver/tracer.go#L16), [lovoo/gcloud-opentracing](https://github.com/lovoo/gcloud-opentracing), is outdated.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=stackdriver.Config"
 type: STACKDRIVER
 config:
+  # ServiceName specifies the service name to use on the tracer.
   service_name: ""
+  # The project ID is a unique identifier for a GCP project. 
   project_id: ""
+  # How often to send traces. One in every x requests.
+  # (1/sample_factor)
   sample_factor: 0
 ```
 
