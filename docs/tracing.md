@@ -72,28 +72,62 @@ Currently supported tracing backends:
 
 ### Jaeger
 
-Client for https://github.com/jaegertracing/jaeger tracing.
+Client for https://github.com/jaegertracing/jaeger tracing. For details, please see [client config](https://github.com/jaegertracing/jaeger-client-go/blob/master/config/config.go).
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=jaeger.Config"
 type: JAEGER
 config:
-  service_name: ""
+  # Disabled makes the config return opentracing.NoopTracer.
   disabled: false
-  rpc_metrics: false
-  tags: ""
-  sampler_type: ""
-  sampler_param: 0
-  sampler_manager_host_port: ""
-  sampler_max_operations: 0
-  sampler_refresh_interval: 0s
-  reporter_max_queue_size: 0
-  reporter_flush_interval: 0s
-  reporter_log_spans: false
+  # ServiceName specifies the service name to use on the tracer.
+  service_name: ""
+  # Endpoint instructs reporter to send spans to jaeger-collector at this URL.
+  # If not specified, it joins to AgentHost (localhost) with AgentPort (6831).
   endpoint: ""
-  user: ""
-  password: ""
+  # AgentHost instructs reporter to send spans to jaeger-agent at this host.
   agent_host: ""
+  # AgentPort instructs reporter to send spans to jaeger-agent at this port.
   agent_port: 0
+  # User instructs reporter to include a user for basic http authentication when sending spans to jaeger-collector.
+  user: ""
+  # Password instructs reporter to include a password for basic http authentication when sending spans to jaeger-collector.
+  password: ""
+  # RPCMetrics enables generations of RPC metrics (requires metrics factory to be provided).
+  rpc_metrics: false
+  # Tags specifies comma separated list of key=value.
+  tags: ""
+  # SamplerType specifies the type of the sampler: const, probabilistic, rateLimiting, or remote.
+  sampler_type: ""
+  # SamplerParam is a value passed to the sampler.
+	# Valid values for Param field are:
+	# - for "const" sampler, 0 or 1 for always false/true respectively
+	# - for "probabilistic" sampler, a probability between 0 and 1
+	# - for "rateLimiting" sampler, the number of spans per second
+	# - for "remote" sampler, param is the same as for "probabilistic"
+	#   and indicates the initial sampling rate before the actual one
+	#   is received from the mothership.
+  sampler_param: 0
+  # SamplingServerURL is the URL of sampling manager that can provide
+  # sampling strategy to this service.
+  sampler_manager_host_port: ""
+  # MaxOperations is the maximum number of operations that the PerOperationSampler
+  # will keep track of. If an operation is not tracked, a default probabilistic
+  # sampler will be used rather than the per operation specific sampler.
+  sampler_max_operations: 0
+  # SamplingRefreshInterval controls how often the remotely controlled sampler will poll
+  # sampling manager for the appropriate sampling strategy.
+  sampler_refresh_interval: 0s
+  # ReporterMaxQueueSize controls how many spans the reporter can keep in memory before it starts dropping
+  # new spans. The queue is continuously drained by a background go-routine, as fast as spans
+  # can be sent out of process.
+  reporter_max_queue_size: 0
+  # ReporterFlushInterval controls how often the buffer is force-flushed, even if it's not full.
+  # It is generally not useful, as it only matters for very low traffic services.
+  reporter_flush_interval: 0s
+  # ReporterLogSpans, when true, enables LoggingReporter that runs in parallel with the main reporter
+  # and logs all submitted spans. Main Configuration.Logger must be initialized in the code
+  # for this option to have any effect.
+  reporter_log_spans: false
 ```
 
 ### Stackdriver
@@ -110,32 +144,50 @@ config:
 
 ### Elastic APM
 
-Client for https://www.elastic.co/products/apm tracing.
+Client for https://www.elastic.co/products/apm tracing. For details, please see [client config](https://github.com/elastic/apm-agent-go/blob/master/tracer.go).
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=elasticapm.Config"
 type: ELASTIC_APM
 config:
+  # ServiceName holds the service name.
   service_name: ""
+  # ServiceVersion holds the service version.
   service_version: ""
+  # ServiceEnvironment holds the service environment.
   service_environment: ""
+  # SampleRate holds the sample rate in effect at the
+  # time of the sampling decision. This is used for
+  # propagating the value downstream, and for inclusion
+  # in events sent to APM Server.
   sample_rate: 0
 ```
 
 ### Lightstep
 
-Client for [Lightstep](https://lightstep.com).
+Client for [Lightstep](https://lightstep.com). For details, please see [client config](https://github.com/lightstep/lightstep-tracer-go/blob/master/options.go).
 
 In order to configure Thanos to interact with Lightstep you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-use-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=lightstep.Config"
 type: LIGHTSTEP
 config:
+  # AccessToken is the unique API key for your LightStep project.  It is
+  # available on your account page at https://app.lightstep.com/account
   access_token: ""
+  # Collector is the host, port, and plaintext option to use
+  # for the collector.
   collector:
+    # Scheme to use for the endpoint, defaults to appropriate one if no custom one is required
     scheme: ""
+    # Host on which the endpoint is running
     host: ""
+    # Port on which the endpoint is listening
     port: 0
+    # Whether or not to encrypt data send to the endpoint
     plaintext: false
+    # Path to a custom CA cert file, defaults to system defined certs if omitted
     custom_ca_cert_file: ""
+  # Tags are arbitrary key-value pairs that apply to all spans generated by
+  # this Tracer.
   tags: ""
 ```
