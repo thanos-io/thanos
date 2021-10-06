@@ -295,16 +295,25 @@ func (c *InMemoryIndexCache) StorePostings(_ context.Context, blockID ulid.ULID,
 
 // FetchMultiPostings fetches multiple postings - each identified by a label -
 // and returns a map containing cache hits, along with a list of missing keys.
-func (c *InMemoryIndexCache) FetchMultiPostings(_ context.Context, blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
-	hits = map[labels.Label][]byte{}
+func (c *InMemoryIndexCache) FetchMultiPostings(_ context.Context, toFetch map[ulid.ULID][]labels.Label) (hits map[ulid.ULID]map[labels.Label][]byte, misses map[ulid.ULID][]labels.Label) {
+	hits = map[ulid.ULID]map[labels.Label][]byte{}
 
-	for _, key := range keys {
-		if b, ok := c.get(cacheTypePostings, cacheKey{blockID, cacheKeyPostings(key)}); ok {
-			hits[key] = b
-			continue
+	for blID, keys := range toFetch {
+		for _, key := range keys {
+			if b, ok := c.get(cacheTypePostings, cacheKey{blID, cacheKeyPostings(key)}); ok {
+				if hits[blID] == nil {
+					hits[blID] = make(map[labels.Label][]byte)
+				}
+				hits[blID][key] = b
+				continue
+			}
+			if misses == nil {
+				misses = map[ulid.ULID][]labels.Label{}
+			}
+
+			misses[blID] = append(misses[blID], key)
 		}
 
-		misses = append(misses, key)
 	}
 
 	return hits, misses

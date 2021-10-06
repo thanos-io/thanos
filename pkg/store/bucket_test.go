@@ -970,6 +970,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 		block:        b,
 		stats:        &queryStats{},
 		loadedSeries: map[storage.SeriesRef][]byte{},
+		indexCache:   noopCache{},
 	}
 
 	// Success with no refetches.
@@ -1170,7 +1171,7 @@ func benchmarkExpandedPostings(
 				partitioner:       NewGapBasedPartitioner(PartitionerMaxGapSize),
 			}
 
-			indexr := newBucketIndexReader(b)
+			indexr := newBucketIndexReader(b, b.indexCache)
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
@@ -1440,7 +1441,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
 
 		b1 = &bucketBlock{
-			indexCache:  indexCache,
+			indexCache:  storecache.NewCorkedIndexCache(indexCache),
 			logger:      logger,
 			metrics:     newBucketStoreMetrics(nil),
 			bkt:         bkt,
@@ -1479,7 +1480,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(blockDir, id.String()), metadata.NoneFunc))
 
 		b2 = &bucketBlock{
-			indexCache:  indexCache,
+			indexCache:  storecache.NewCorkedIndexCache(indexCache),
 			logger:      logger,
 			metrics:     newBucketStoreMetrics(nil),
 			bkt:         bkt,
@@ -2245,7 +2246,7 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
-	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner)
+	blk, err := newBucketBlock(context.Background(), logger, newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, storecache.NewCorkedIndexCache(indexCache), chunkPool, indexHeaderReader, partitioner)
 	testutil.Ok(b, err)
 	return blk, blockMeta
 }
@@ -2287,7 +2288,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				// must be called only from the goroutine running the Benchmark function.
 				testutil.Ok(b, err)
 
-				indexReader := blk.indexReader()
+				indexReader := blk.indexReader(nil)
 				chunkReader := blk.chunkReader()
 
 				seriesSet, _, err := blockSeries(context.Background(), nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates)

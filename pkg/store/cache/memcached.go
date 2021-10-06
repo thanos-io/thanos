@@ -72,46 +72,69 @@ func (c *RemoteIndexCache) StorePostings(ctx context.Context, blockID ulid.ULID,
 // FetchMultiPostings fetches multiple postings - each identified by a label -
 // and returns a map containing cache hits, along with a list of missing keys.
 // In case of error, it logs and return an empty cache hits map.
-func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, lbls []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
+func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, toFetch map[ulid.ULID][]labels.Label) (hits map[ulid.ULID]map[labels.Label][]byte, misses map[ulid.ULID][]labels.Label) {
 	// Build the cache keys, while keeping a map between input label and the cache key
 	// so that we can easily reverse it back after the GetMulti().
-	keys := make([]string, 0, len(lbls))
-	keysMapping := map[labels.Label]string{}
+	var (
+		keys []string
+		n    int
+	)
 
-	for _, lbl := range lbls {
-		key := cacheKey{blockID, cacheKeyPostings(lbl)}.string()
+	keysMapping := map[cacheKey]string{}
 
-		keys = append(keys, key)
-		keysMapping[lbl] = key
+	for _, lbls := range toFetch {
+		for range lbls {
+			n++
+		}
+	}
+
+	keys = make([]string, 0, n)
+	allLbls := map[ulid.ULID][]labels.Label{}
+
+	for blID, lbls := range toFetch {
+		for _, lbl := range lbls {
+			key := cacheKey{blID, cacheKeyPostings(lbl)}.string()
+
+			keys = append(keys, key)
+			allLbls[blID] = append(allLbls[blID], lbl)
+			keysMapping[cacheKey{blID, lbl}] = key
+		}
 	}
 
 	// Fetch the keys from memcached in a single request.
 	c.requests.WithLabelValues(cacheTypePostings).Add(float64(len(keys)))
 	results := c.memcached.GetMulti(ctx, keys)
 	if len(results) == 0 {
-		return nil, lbls
+		return nil, allLbls
 	}
 
 	// Construct the resulting hits map and list of missing keys. We iterate on the input
 	// list of labels to be able to easily create the list of ones in a single iteration.
-	hits = map[labels.Label][]byte{}
+	hits = map[ulid.ULID]map[labels.Label][]byte{}
+	misses = map[ulid.ULID][]labels.Label{}
 
-	for _, lbl := range lbls {
-		key, ok := keysMapping[lbl]
-		if !ok {
-			level.Error(c.logger).Log("msg", "keys mapping inconsistency found in memcached index cache client", "type", "postings", "label", lbl.Name+":"+lbl.Value)
-			continue
+	for blID, lbls := range toFetch {
+		for _, lbl := range lbls {
+			key, ok := keysMapping[cacheKey{blID, lbl}]
+			if !ok {
+				level.Error(c.logger).Log("msg", "keys mapping inconsistency found in memcached index cache client", "type", "postings", "label", lbl.Name+":"+lbl.Value)
+				continue
+			}
+
+			// Check if the key has been found in memcached. If not, we add it to the list
+			// of missing keys.
+			value, ok := results[key]
+			if !ok {
+				misses[blID] = append(misses[blID], lbl)
+				continue
+			}
+
+			if hits[blID] == nil {
+				hits[blID] = make(map[labels.Label][]byte)
+			}
+			hits[blID][lbl] = value
 		}
 
-		// Check if the key has been found in memcached. If not, we add it to the list
-		// of missing keys.
-		value, ok := results[key]
-		if !ok {
-			misses = append(misses, lbl)
-			continue
-		}
-
-		hits[lbl] = value
 	}
 
 	c.hits.WithLabelValues(cacheTypePostings).Add(float64(len(hits)))

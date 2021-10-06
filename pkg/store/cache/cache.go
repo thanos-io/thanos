@@ -32,7 +32,7 @@ type IndexCache interface {
 
 	// FetchMultiPostings fetches multiple postings - each identified by a label -
 	// and returns a map containing cache hits, along with a list of missing keys.
-	FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label)
+	FetchMultiPostings(ctx context.Context, toFetch map[ulid.ULID][]labels.Label) (hits map[ulid.ULID]map[labels.Label][]byte, misses map[ulid.ULID][]labels.Label)
 
 	// StoreSeries stores a single series.
 	StoreSeries(ctx context.Context, blockID ulid.ULID, id storage.SeriesRef, v []byte)

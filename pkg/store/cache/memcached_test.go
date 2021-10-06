@@ -35,15 +35,15 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 		mockedErr      error
 		fetchBlockID   ulid.ULID
 		fetchLabels    []labels.Label
-		expectedHits   map[labels.Label][]byte
-		expectedMisses []labels.Label
+		expectedHits   map[ulid.ULID]map[labels.Label][]byte
+		expectedMisses map[ulid.ULID][]labels.Label
 	}{
 		"should return no hits on empty cache": {
 			setup:          []mockedPostings{},
 			fetchBlockID:   block1,
 			fetchLabels:    []labels.Label{label1, label2},
 			expectedHits:   nil,
-			expectedMisses: []labels.Label{label1, label2},
+			expectedMisses: map[ulid.ULID][]labels.Label{block1: {label1, label2}},
 		},
 		"should return no misses on 100% hit ratio": {
 			setup: []mockedPostings{
@@ -53,11 +53,10 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			},
 			fetchBlockID: block1,
 			fetchLabels:  []labels.Label{label1, label2},
-			expectedHits: map[labels.Label][]byte{
-				label1: value1,
-				label2: value2,
+			expectedHits: map[ulid.ULID]map[labels.Label][]byte{
+				block1: {label1: value1, label2: value2},
 			},
-			expectedMisses: nil,
+			expectedMisses: map[ulid.ULID][]labels.Label{},
 		},
 		"should return hits and misses on partial hits": {
 			setup: []mockedPostings{
@@ -66,8 +65,8 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			},
 			fetchBlockID:   block1,
 			fetchLabels:    []labels.Label{label1, label2},
-			expectedHits:   map[labels.Label][]byte{label1: value1},
-			expectedMisses: []labels.Label{label2},
+			expectedHits:   map[ulid.ULID]map[labels.Label][]byte{block1: {label1: value1}},
+			expectedMisses: map[ulid.ULID][]labels.Label{block1: {label2}},
 		},
 		"should return no hits on memcached error": {
 			setup: []mockedPostings{
@@ -79,7 +78,7 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			fetchBlockID:   block1,
 			fetchLabels:    []labels.Label{label1, label2},
 			expectedHits:   nil,
-			expectedMisses: []labels.Label{label1, label2},
+			expectedMisses: map[ulid.ULID][]labels.Label{block1: {label1, label2}},
 		},
 	}
 
@@ -96,7 +95,7 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			}
 
 			// Fetch postings from cached and assert on it.
-			hits, misses := c.FetchMultiPostings(ctx, testData.fetchBlockID, testData.fetchLabels)
+			hits, misses := c.FetchMultiPostings(ctx, map[ulid.ULID][]labels.Label{testData.fetchBlockID: testData.fetchLabels})
 			testutil.Equals(t, testData.expectedHits, hits)
 			testutil.Equals(t, testData.expectedMisses, misses)
 

@@ -74,8 +74,8 @@ func (c *swappableCache) StorePostings(ctx context.Context, blockID ulid.ULID, l
 	c.ptr.StorePostings(ctx, blockID, l, v)
 }
 
-func (c *swappableCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
-	return c.ptr.FetchMultiPostings(ctx, blockID, keys)
+func (c *swappableCache) FetchMultiPostings(ctx context.Context, toFetch map[ulid.ULID][]labels.Label) (map[ulid.ULID]map[labels.Label][]byte, map[ulid.ULID][]labels.Label) {
+	return c.ptr.FetchMultiPostings(ctx, toFetch)
 }
 
 func (c *swappableCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id storage.SeriesRef, v []byte) {
