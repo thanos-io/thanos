@@ -23,8 +23,8 @@ Release shepherd responsibilities:
 
 | Release | Time of first RC     | Shepherd (GitHub handle)    |
 |---------|----------------------|-----------------------------|
-| v0.25.0 | (planned) 2021.11.26 | No one ATM                  |
-| v0.24.0 | (planned) 2021.10.14 | No one ATM                  |
+| v0.25.0 | (planned) 2021.12.09 | No one ATM                  |
+| v0.24.0 | (planned) 2021.10.28 | `@squat`                    |
 | v0.23.0 | 2021.09.02           | `@bwplotka`                 |
 | v0.22.0 | 2021.07.06           | `@GiedriusS`                |
 | v0.21.0 | 2021.05.28           | `@metalmatze` and `@onprem` |
@@ -121,7 +121,7 @@ The whole release from release candidate `rc.0` to actual release should have ex
 
 10. Announce `#thanos` slack channel.
 
-11. Pull commits from release branch to main branch for non `rc` releases.
+11. Pull commits from release branch to main branch for non `rc` releases. Make sure to not modify `VERSION`, it should be still pointing to `version+1-dev` ([TODO to automate this](https://github.com/thanos-io/thanos/issues/4741))
 
 12. After releasing a major version, please cut a release for `kube-thanos` as well. https://github.com/thanos-io/kube-thanos/releases Make sure all the flag changes are reflected in the manifests. Otherwise, the process is the same, except we don't have `rc` for the `kube-thanos`. We do this to make sure we have compatible manifests for each major versions.
 
