@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"path"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
+	"github.com/efficientgo/e2e/matchers"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -22,12 +24,10 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -49,20 +49,13 @@ func TestStoreGateway(t *testing.T) {
 	memcached := e2ethanos.NewMemcached(e, "1")
 	testutil.Ok(t, e2e.StartAndWaitReady(memcached))
 
-	memcachedConfig := storecache.CachingWithBackendConfig{
-		Type: storecache.MemcachedBucketCacheProvider,
-		BackendConfig: cacheutil.MemcachedClientConfig{
-			Addresses:                 []string{memcached.InternalEndpoint("memcached")},
-			MaxIdleConnections:        100,
-			MaxAsyncConcurrency:       20,
-			MaxGetMultiConcurrency:    100,
-			MaxGetMultiBatchSize:      0,
-			Timeout:                   time.Minute,
-			MaxAsyncBufferSize:        10000,
-			DNSProviderUpdateInterval: 10 * time.Second,
-		},
-		ChunkSubrangeSize: 16000,
-	}
+	memcachedConfig := fmt.Sprintf(`type: MEMCACHED
+config:
+  addresses: [%s]
+blocks_iter_ttl: 0s
+metafile_exists_ttl: 0s
+metafile_doesnt_exist_ttl: 0s
+metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	s1, err := e2ethanos.NewStoreGW(
 		e,
@@ -77,7 +70,7 @@ func TestStoreGateway(t *testing.T) {
 				Insecure:  true,
 			},
 		},
-		&memcachedConfig,
+		memcachedConfig,
 		relabel.Config{
 			Action:       relabel.Drop,
 			Regex:        relabel.MustNewRegexp("value2"),
@@ -289,20 +282,10 @@ func TestStoreGatewayMemcachedCache(t *testing.T) {
 	memcached := e2ethanos.NewMemcached(e, "1")
 	testutil.Ok(t, e2e.StartAndWaitReady(memcached))
 
-	memcachedConfig := storecache.CachingWithBackendConfig{
-		Type: storecache.MemcachedBucketCacheProvider,
-		BackendConfig: cacheutil.MemcachedClientConfig{
-			Addresses:                 []string{memcached.InternalEndpoint("memcached")},
-			MaxIdleConnections:        100,
-			MaxAsyncConcurrency:       20,
-			MaxGetMultiConcurrency:    100,
-			MaxGetMultiBatchSize:      0,
-			Timeout:                   time.Minute,
-			MaxAsyncBufferSize:        10000,
-			DNSProviderUpdateInterval: 10 * time.Second,
-		},
-		ChunkSubrangeSize: 16000,
-	}
+	memcachedConfig := fmt.Sprintf(`type: MEMCACHED
+config:
+  addresses: [%s]
+blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	s1, err := e2ethanos.NewStoreGW(
 		e,
@@ -317,17 +300,12 @@ func TestStoreGatewayMemcachedCache(t *testing.T) {
 				Insecure:  true,
 			},
 		},
-		&memcachedConfig,
+		memcachedConfig,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
 
-	// We need Prometheus to monitor the metrics exposed by Thanos Store.
-	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", defaultPromConfig("test", 0, "", "", s1.InternalEndpoint("http")), e2ethanos.DefaultPrometheusImage())
-	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
-
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc"), sidecar.InternalEndpoint("grpc")).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -380,7 +358,7 @@ func TestStoreGatewayMemcachedCache(t *testing.T) {
 			},
 		)
 
-		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_store_bucket_cache_operation_hits_total"))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2e.Equals(0), []string{`thanos_store_bucket_cache_operation_hits_total`}, e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "config", "chunks"))))
 	})
 
 	t.Run("query with cache hit", func(t *testing.T) {
@@ -398,7 +376,8 @@ func TestStoreGatewayMemcachedCache(t *testing.T) {
 			},
 		)
 
-		testutil.Ok(t, s1.WaitSumMetrics(e2e.Greater(0), "thanos_store_bucket_cache_operation_hits_total"))
+		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_store_bucket_cache_operation_hits_total`}, e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "config", "chunks"))))
+		testutil.Ok(t, s1.WaitSumMetrics(e2e.Greater(0), "thanos_cache_memcached_hits_total"))
 	})
 
 }

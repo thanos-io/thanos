@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"testing"
@@ -520,4 +521,213 @@ func TestLabelsCodec_MergeResponse(t *testing.T) {
 			}
 		})
 	}
+}
+
+func BenchmarkLabelsCodecEncodeAndDecodeRequest(b *testing.B) {
+	codec := NewThanosLabelsCodec(false, time.Hour*2)
+	ctx := context.TODO()
+
+	b.Run("SeriesRequest", func(b *testing.B) {
+		req := &ThanosSeriesRequest{
+			Start: 123000,
+			End:   456000,
+			Path:  "/api/v1/series",
+			Dedup: true,
+		}
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for n := 0; n < b.N; n++ {
+			reqEnc, err := codec.EncodeRequest(ctx, req)
+			testutil.Ok(b, err)
+			_, err = codec.DecodeRequest(ctx, reqEnc)
+			testutil.Ok(b, err)
+		}
+	})
+
+	b.Run("LabelsRequest", func(b *testing.B) {
+		req := &ThanosLabelsRequest{
+			Path:            "/api/v1/labels",
+			Start:           123000,
+			End:             456000,
+			PartialResponse: true,
+			Matchers:        [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+			StoreMatchers:   [][]*labels.Matcher{},
+		}
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for n := 0; n < b.N; n++ {
+			reqEnc, err := codec.EncodeRequest(ctx, req)
+			testutil.Ok(b, err)
+			_, err = codec.DecodeRequest(ctx, reqEnc)
+			testutil.Ok(b, err)
+		}
+	})
+}
+
+func BenchmarkLabelsCodecDecodeResponse(b *testing.B) {
+	codec := NewThanosLabelsCodec(false, time.Hour*2)
+	ctx := context.TODO()
+
+	b.Run("SeriesResponse", func(b *testing.B) {
+		seriesData, err := json.Marshal(&ThanosSeriesResponse{
+			Status: "success",
+			Data:   []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}},
+		})
+		testutil.Ok(b, err)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for n := 0; n < b.N; n++ {
+			_, err := codec.DecodeResponse(
+				ctx,
+				makeResponse(seriesData, false),
+				&ThanosSeriesRequest{})
+			testutil.Ok(b, err)
+		}
+	})
+
+	b.Run("SeriesResponseWithHeaders", func(b *testing.B) {
+		seriesDataWithHeaders, err := json.Marshal(&ThanosSeriesResponse{
+			Status:  "success",
+			Data:    []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}}}},
+			Headers: []*ResponseHeader{{Name: cacheControlHeader, Values: []string{noStoreValue}}},
+		})
+		testutil.Ok(b, err)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for n := 0; n < b.N; n++ {
+			_, err := codec.DecodeResponse(
+				ctx,
+				makeResponse(seriesDataWithHeaders, true),
+				&ThanosSeriesRequest{})
+			testutil.Ok(b, err)
+		}
+	})
+
+	b.Run("LabelsResponse", func(b *testing.B) {
+		labelsData, err := json.Marshal(&ThanosLabelsResponse{
+			Status: "success",
+			Data:   []string{"__name__"},
+		})
+		testutil.Ok(b, err)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for n := 0; n < b.N; n++ {
+			_, err := codec.DecodeResponse(
+				ctx,
+				makeResponse(labelsData, false),
+				&ThanosLabelsRequest{})
+			testutil.Ok(b, err)
+		}
+	})
+
+	b.Run("LabelsResponseWithHeaders", func(b *testing.B) {
+		labelsDataWithHeaders, err := json.Marshal(&ThanosLabelsResponse{
+			Status:  "success",
+			Data:    []string{"__name__"},
+			Headers: []*ResponseHeader{{Name: cacheControlHeader, Values: []string{noStoreValue}}},
+		})
+		testutil.Ok(b, err)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for n := 0; n < b.N; n++ {
+			_, err := codec.DecodeResponse(
+				ctx,
+				makeResponse(labelsDataWithHeaders, true),
+				&ThanosLabelsRequest{})
+			testutil.Ok(b, err)
+		}
+	})
+}
+
+func BenchmarkLabelsCodecMergeResponses_1(b *testing.B) {
+	benchmarkMergeResponses(b, 1)
+}
+
+func BenchmarkLabelsCodecMergeResponses_10(b *testing.B) {
+	benchmarkMergeResponses(b, 10)
+}
+
+func BenchmarkLabelsCodecMergeResponses_100(b *testing.B) {
+	benchmarkMergeResponses(b, 100)
+}
+
+func BenchmarkLabelsCodecMergeResponses_1000(b *testing.B) {
+	benchmarkMergeResponses(b, 1000)
+}
+
+func benchmarkMergeResponses(b *testing.B, size int) {
+	codec := NewThanosLabelsCodec(false, time.Hour*2)
+	queryResLabel, queryResSeries := makeQueryRangeResponses(size)
+
+	b.Run("SeriesResponses", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			_, _ = codec.MergeResponse(queryResSeries...)
+		}
+	})
+
+	b.Run("LabelsResponses", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			_, _ = codec.MergeResponse(queryResLabel...)
+		}
+	})
+
+}
+
+func makeQueryRangeResponses(size int) ([]queryrange.Response, []queryrange.Response) {
+	labelResp := make([]queryrange.Response, 0, size)
+	seriesResp := make([]queryrange.Response, 0, size*2)
+
+	// Generate with some duplicated values.
+	for i := 0; i < size; i++ {
+		labelResp = append(labelResp, &ThanosLabelsResponse{
+			Status: "success",
+			Data:   []string{fmt.Sprintf("data-%d", i), fmt.Sprintf("data-%d", i+1)},
+		})
+
+		seriesResp = append(
+			seriesResp,
+			&ThanosSeriesResponse{
+				Status: "success",
+				Data:   []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: fmt.Sprintf("foo-%d", i), Value: fmt.Sprintf("bar-%d", i)}}}},
+			},
+			&ThanosSeriesResponse{
+				Status: "success",
+				Data:   []labelpb.ZLabelSet{{Labels: []labelpb.ZLabel{{Name: fmt.Sprintf("foo-%d", i+1), Value: fmt.Sprintf("bar-%d", i+1)}}}},
+			},
+		)
+	}
+
+	return labelResp, seriesResp
+}
+
+func makeResponse(data []byte, withHeader bool) *http.Response {
+	r := &http.Response{
+		StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer(data)),
+	}
+
+	if withHeader {
+		r.Header = map[string][]string{
+			cacheControlHeader: {noStoreValue},
+		}
+	}
+
+	return r
 }
