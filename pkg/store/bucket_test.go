@@ -556,6 +556,32 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 	}
 }
 
+func TestBucketStoreConfig_validate(t *testing.T) {
+	tests := map[string]struct {
+		config   *BucketStore
+		expected error
+	}{
+		"should pass on valid config": {
+			config: &BucketStore{
+				blockSyncConcurrency: 1,
+			},
+			expected: nil,
+		},
+		"should fail on blockSyncConcurrency < 1": {
+			config: &BucketStore{
+				blockSyncConcurrency: 0,
+			},
+			expected: errBlockSyncConcurrencyNotValid,
+		},
+	}
+
+	for testName, testData := range tests {
+		t.Run(testName, func(t *testing.T) {
+			testutil.Equals(t, testData.expected, testData.config.validate())
+		})
+	}
+}
+
 func TestBucketStore_Info(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 

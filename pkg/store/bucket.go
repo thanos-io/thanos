@@ -92,6 +92,12 @@ const (
 	// Labels for metrics.
 	labelEncode = "encode"
 	labelDecode = "decode"
+
+	minBlockSyncConcurrency = 1
+)
+
+var (
+	errBlockSyncConcurrencyNotValid = errors.New("the block sync concurrency must be equal or greater than 1.")
 )
 
 type bucketStoreMetrics struct {
@@ -298,6 +304,13 @@ type BucketStore struct {
 	enableSeriesResponseHints bool
 }
 
+func (b *BucketStore) validate() error {
+	if b.blockSyncConcurrency < minBlockSyncConcurrency {
+		return errBlockSyncConcurrencyNotValid
+	}
+	return nil
+}
+
 type noopCache struct{}
 
 func (noopCache) StorePostings(context.Context, ulid.ULID, labels.Label, []byte) {}
@@ -406,6 +419,10 @@ func NewBucketStore(
 	indexReaderPoolMetrics := indexheader.NewReaderPoolMetrics(extprom.WrapRegistererWithPrefix("thanos_bucket_store_", s.reg))
 	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, indexReaderPoolMetrics)
 	s.metrics = newBucketStoreMetrics(s.reg) // TODO(metalmatze): Might be possible via Option too
+
+	if err := s.validate(); err != nil {
+		return nil, errors.Wrap(err, "validate config")
+	}
 
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create dir")
