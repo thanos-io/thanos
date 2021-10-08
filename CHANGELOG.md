@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#4663](https://github.com/thanos-io/thanos/pull/4663) Fetcher: Fix discovered data races
+- [#4753](https://github.com/thanos-io/thanos/pull/4753) Store: valide block sync concurrency parameter
 
 ### Added
 
