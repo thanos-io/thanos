@@ -2495,7 +2495,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		readOffset = int(pIdxs[0].offset)
 
 		// Save a few allocations.
-		written  int64
+		written  int
 		diff     uint32
 		chunkLen int
 		n        int
@@ -2504,11 +2504,11 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	for i, pIdx := range pIdxs {
 		// Fast forward range reader to the next chunk start in case of sparse (for our purposes) byte range.
 		for readOffset < int(pIdx.offset) {
-			written, err = io.CopyN(ioutil.Discard, bufReader, int64(pIdx.offset)-int64(readOffset))
+			written, err = bufReader.Discard(int(pIdx.offset) - int(readOffset))
 			if err != nil {
 				return errors.Wrap(err, "fast forward range reader")
 			}
-			readOffset += int(written)
+			readOffset += written
 		}
 		// Presume chunk length to be reasonably large for common use cases.
 		// However, declaration for EstimatedMaxChunkSize warns us some chunks could be larger in some rare cases.
