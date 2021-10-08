@@ -569,7 +569,7 @@ func runQuery(
 
 		api := v1.NewQueryAPI(
 			logger,
-			endpoints,
+			endpoints.GetEndpointStatus,
 			engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta),
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
