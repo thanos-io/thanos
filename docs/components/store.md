@@ -34,6 +34,7 @@ Flags:
       --block-sync-concurrency=20  
                                  Number of goroutines to use when constructing
                                  index-cache.json blocks from object storage.
+                                 Must be equal or greater than 1.
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
                                  reserved strictly to reuse for chunks in
                                  memory.
