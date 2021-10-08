@@ -10,10 +10,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-### Fixed
-
-- [#4663](https://github.com/thanos-io/thanos/pull/4663) Fetcher: Fix discovered data races
-
 ### Added
 
 - [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: add `exemplar.partial-response` flag to control partial response.
@@ -23,6 +19,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#4508](https://github.com/thanos-io/thanos/pull/4508) Adjust and rename `ThanosSidecarUnhealthy` to `ThanosSidecarNoConnectionToStartedPrometheus`; Remove `ThanosSidecarPrometheusDown` alert; Remove unused `thanos_sidecar_last_heartbeat_success_time_seconds` metrics.
+- [#4663](https://github.com/thanos-io/thanos/pull/4663) Fetcher: Fix discovered data races.
+- [#4754](https://github.com/thanos-io/thanos/pull/4754) Query: Fix possible panic on stores endpoint.
 
 ## [v0.23.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.10.1
 
