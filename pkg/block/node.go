@@ -32,9 +32,9 @@ func getNonRootIDs(root *Node) []ulid.ULID {
 	return ulids
 }
 
-func childrenToULIDs(a *Node) []ulid.ULID {
-	var ulids = []ulid.ULID{a.ULID}
-	for _, childNode := range a.Children {
+func childrenToULIDs(item *Node) []ulid.ULID {
+	var ulids = []ulid.ULID{}
+	for _, childNode := range item.Children {
 		ulids = append(ulids, childrenToULIDs(childNode)...)
 	}
 	return ulids
