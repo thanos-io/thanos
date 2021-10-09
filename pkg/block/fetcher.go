@@ -660,9 +660,9 @@ func (f *DeduplicateFilter) DuplicateIDs() []ulid.ULID {
 
 func addNodeBySources(root, add *Node) bool {
 	var rootNode *Node
+	childSources := add.Compaction.Sources
 	for _, node := range root.Children {
 		parentSources := node.Compaction.Sources
-		childSources := add.Compaction.Sources
 
 		// Block exists with same sources, add as child.
 		if contains(parentSources, childSources) && contains(childSources, parentSources) {
