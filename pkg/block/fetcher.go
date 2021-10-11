@@ -660,9 +660,9 @@ func (f *DeduplicateFilter) DuplicateIDs() []ulid.ULID {
 
 func addNodeBySources(root, add *Node) bool {
 	var rootNode *Node
+	childSources := add.Compaction.Sources
 	for _, node := range root.Children {
 		parentSources := node.Compaction.Sources
-		childSources := add.Compaction.Sources
 
 		// Block exists with same sources, add as child.
 		if contains(parentSources, childSources) && contains(childSources, parentSources) {
@@ -744,6 +744,29 @@ func (r *ReplicaLabelRemover) Modify(_ context.Context, metas map[ulid.ULID]*met
 		nm.Thanos.Labels = l
 		metas[u] = &nm
 	}
+	return nil
+}
+
+type MaxCompactionLevelMetaFilter struct {
+	Logger             log.Logger
+	MaxCompactionLevel int
+}
+
+func NewMaxCompactionLevelMetaFilter(logger log.Logger, maxCompactionLevel int) *MaxCompactionLevelMetaFilter {
+	return &MaxCompactionLevelMetaFilter{
+		Logger:             logger,
+		MaxCompactionLevel: maxCompactionLevel,
+	}
+}
+
+// MaxCompactionLevelMetaFilter is a MetaFilter that filters out blocks with the max compaction level.
+func (f *MaxCompactionLevelMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec) error {
+	for id, meta := range metas {
+		if meta.BlockMeta.Compaction.Level < f.MaxCompactionLevel {
+			delete(metas, id)
+		}
+	}
+
 	return nil
 }
 

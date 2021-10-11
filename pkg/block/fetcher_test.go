@@ -1072,6 +1072,45 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 	})
 }
 
+// document this in working docs - decisions
+func TestMaxCompactionLevelMetaFilter_Filter(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	f := NewMaxCompactionLevelMetaFilter(log.NewNopLogger(), 2) // temporary // how should I set this?
+
+	input := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {
+			BlockMeta: tsdb.BlockMeta{
+				Compaction: tsdb.BlockMetaCompaction{
+					Level: 3,
+				},
+			},
+		},
+		ULID(2): {
+			BlockMeta: tsdb.BlockMeta{
+				Compaction: tsdb.BlockMetaCompaction{
+					Level: 1,
+				},
+			},
+		},
+	}
+
+	expected := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {
+			BlockMeta: tsdb.BlockMeta{
+				Compaction: tsdb.BlockMetaCompaction{
+					Level: 3,
+				},
+			},
+		},
+	}
+
+	m := newTestFetcherMetrics()
+	testutil.Ok(t, f.Filter(ctx, input, m.Synced))
+	testutil.Equals(t, expected, input)
+}
+
 func TestIgnoreDeletionMarkFilter_Filter(t *testing.T) {
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)

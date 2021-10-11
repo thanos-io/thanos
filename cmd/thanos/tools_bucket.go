@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -31,6 +32,7 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
@@ -42,6 +44,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/compactv2"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -246,6 +249,294 @@ func (tbc *bucketRetentionConfig) registerBucketRetentionFlag(cmd extkingpin.Fla
 	return tbc
 }
 
+func (tbc *compactConfig) registerBucketBacklogDedupFlag(cmd extkingpin.FlagClause) *compactConfig {
+	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
+		Hidden().Default("true").BoolVar(&tbc.haltOnError)
+	cmd.Flag("debug.accept-malformed-index",
+		"Compaction index verification will ignore out of order label names.").
+		Hidden().Default("false").BoolVar(&tbc.acceptMalformedIndex)
+	cmd.Flag("debug.max-compaction-level", fmt.Sprintf("Maximum compaction level, default is %d: %s", compactions.maxLevel(), compactions.String())).
+		Hidden().Default(strconv.Itoa(compactions.maxLevel())).IntVar(&tbc.maxCompactionLevel)
+
+	cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
+		Default("./data").StringVar(&tbc.dataDir)
+
+	cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %v will be removed.", compact.PartialUploadThresholdAge)).
+		Default("30m").DurationVar(&tbc.consistencyDelay)
+
+	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
+		Default("20").IntVar(&tbc.blockSyncConcurrency)
+	cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
+		Default("32").IntVar(&tbc.blockMetaFetchConcurrency)
+	cmd.Flag("block-viewer.global.sync-block-interval", "Repeat interval for syncing the blocks between local and remote view for /global Block Viewer UI.").
+		Default("1m").DurationVar(&tbc.blockViewerSyncBlockInterval)
+	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
+		Default("1").IntVar(&tbc.compactionConcurrency)
+	cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket. "+
+		"If delete-delay is non zero, blocks will be marked for deletion and compactor component will delete blocks marked for deletion from the bucket. "+
+		"If delete-delay is 0, blocks will be deleted straight away. "+
+		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
+		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
+		Default("48h").SetValue(&tbc.deleteDelay)
+	cmd.Flag("deduplication.func", "Experimental. Deduplication algorithm for merging overlapping blocks. "+
+		"Possible values are: \"\", \"penalty\". If no value is specified, the default compact deduplication merger is used, which performs 1:1 deduplication for samples. "+
+		"When set to penalty, penalty based deduplication algorithm will be used. At least one replica label has to be set via --deduplication.replica-label flag.").
+		Default("").EnumVar(&tbc.dedupFunc, compact.DedupAlgorithmPenalty, "")
+
+	cmd.Flag("deduplication.replica-label", "Label to treat as a replica indicator of blocks that can be deduplicated (repeated flag). This will merge multiple replica blocks into one. This process is irreversible."+
+		"Experimental. When one or more labels are set, compactor will ignore the given labels so that vertical compaction can merge the blocks."+
+		"Please note that by default this uses a NAIVE algorithm for merging which works well for deduplication of blocks with **precisely the same samples** like produced by Receiver replication."+
+		"If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func.").
+		StringsVar(&tbc.dedupReplicaLabels)
+
+	cmd.Flag("compact.block-max-index-size", "Maximum index size for the resulted block during any compaction. Note that"+
+		"total size is approximated in worst case. If the block that would be resulted from compaction is estimated to exceed this number, biggest source"+
+		"block is marked for no compaction (no-compact-mark.json is uploaded) which causes this block to be excluded from any compaction. "+
+		"Default is due to https://github.com/thanos-io/thanos/issues/1424, but it's overall recommended to keeps block size to some reasonable size.").
+		Hidden().Default("64GB").BytesVar(&tbc.maxBlockIndexSize)
+
+	cmd.Flag("compact.skip-block-with-out-of-order-chunks", "When set to true, mark blocks containing index with out-of-order chunks for no compact instead of halting the compaction").
+		Hidden().Default("false").BoolVar(&tbc.skipBlockWithOutOfOrderChunks)
+
+	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
+		Default("").EnumVar(&tbc.hashFunc, "SHA256", "")
+
+	tbc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
+	return tbc
+}
+
+func registerBucketBacklogDedup(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	// temporary long description - will elaborate more once it works
+	cmd := app.Command("backlog-dedup", "backlog deduplication for blocks at the max compaction level")
+	objStoreBackupConfig := extkingpin.RegisterCommonObjStoreFlags(cmd, "-objstore-config", false, "Common object store flags for backlog dedup")
+	_ = objStoreBackupConfig
+
+	tbc := compactConfig{}
+	tbc.registerBucketBacklogDedupFlag(cmd)
+
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		return runBacklogDedup(g, logger, reg, component.Compact, tbc, objStoreConfig)
+	})
+}
+
+func runBacklogDedup(
+	g *run.Group,
+	logger log.Logger,
+	reg *prometheus.Registry,
+	component component.Component,
+	conf compactConfig,
+	objStore *extflag.PathOrContent,
+) (rerr error) {
+	// focus on Prom metrics - P2
+	deleteDelay := time.Duration(conf.deleteDelay)
+	compactMetrics := newCompactMetrics(reg, deleteDelay)
+
+	httpProbe := prober.NewHTTP()
+	statusProber := prober.Combine(
+		httpProbe,
+		prober.NewInstrumentation(component, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
+	)
+
+	srv := httpserver.New(logger, reg, component, httpProbe,
+		httpserver.WithListen(conf.http.bindAddress),
+		httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
+		httpserver.WithTLSConfig(conf.http.tlsConfig),
+	)
+
+	g.Add(func() error {
+		statusProber.Healthy()
+
+		return srv.ListenAndServe()
+	}, func(err error) {
+		statusProber.NotReady(err)
+		defer statusProber.NotHealthy(err)
+
+		srv.Shutdown(err)
+	})
+
+	confContentYaml, err := objStore.Content()
+	if err != nil {
+		return err
+	}
+
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
+	if err != nil {
+		return err
+	}
+
+	relabelContentYaml, err := conf.selectorRelabelConf.Content()
+	if err != nil {
+		return errors.Wrap(err, "get content of relabel configuration")
+	}
+
+	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
+	if err != nil {
+		return err
+	}
+
+	// Ensure we close up everything properly.
+	defer func() {
+		if err != nil {
+			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+		}
+	}()
+
+	// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
+	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
+	// This is to make sure compactor will not accidentally perform compactions with gap instead.
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
+	duplicateBlocksFilter := block.NewDeduplicateFilter()
+	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt, conf.blockMetaFetchConcurrency)
+	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig)
+	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
+	maxCompactionLevelMetaFilter := block.NewMaxCompactionLevelMetaFilter(logger, conf.maxCompactionLevel)
+
+	baseMetaFetcher, err := block.NewBaseFetcher(logger, conf.blockMetaFetchConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
+	if err != nil {
+		return errors.Wrap(err, "create meta fetcher")
+	}
+
+	enableVerticalCompaction := true
+	level.Info(logger).Log(
+		"msg", "vertical compaction is enabled", "compact.enable-vertical-compaction", fmt.Sprintf("%v", enableVerticalCompaction),
+	)
+
+	if len(conf.dedupReplicaLabels) > 0 {
+		level.Info(logger).Log(
+			"msg", "deduplication.replica-label specified, enabling vertical compaction", "dedupReplicaLabels", strings.Join(conf.dedupReplicaLabels, ","),
+		)
+	}
+
+	var (
+		sy *compact.Syncer
+	)
+	{
+		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
+		cf := baseMetaFetcher.NewMetaFetcher(
+			extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
+				labelShardedMetaFilter,
+				consistencyDelayMetaFilter,
+				ignoreDeletionMarkFilter,
+				duplicateBlocksFilter,
+				noCompactMarkerFilter,
+				maxCompactionLevelMetaFilter,
+			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels)},
+		)
+		sy, err = compact.NewMetaSyncer(
+			logger,
+			reg,
+			bkt,
+			cf,
+			duplicateBlocksFilter,
+			ignoreDeletionMarkFilter,
+			compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
+			compactMetrics.garbageCollectedBlocks,
+			conf.blockSyncConcurrency)
+		if err != nil {
+			return errors.Wrap(err, "create syncer")
+		}
+	}
+
+	levels, err := compactions.levels(conf.maxCompactionLevel)
+	if err != nil {
+		return errors.Wrap(err, "get compaction levels")
+	}
+
+	if conf.maxCompactionLevel < compactions.maxLevel() {
+		level.Warn(logger).Log("msg", "Max compaction level is lower than should be", "current", conf.maxCompactionLevel, "default", compactions.maxLevel())
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	defer func() {
+		if rerr != nil {
+			cancel()
+		}
+	}()
+
+	var mergeFunc storage.VerticalChunkSeriesMergeFunc
+	switch conf.dedupFunc {
+	case compact.DedupAlgorithmPenalty:
+		mergeFunc = dedup.NewChunkSeriesMerger()
+
+		if len(conf.dedupReplicaLabels) == 0 {
+			return errors.New("penalty based deduplication needs at least one replica label specified")
+		}
+	case "":
+		mergeFunc = storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)
+
+	default:
+		return errors.Errorf("unsupported deduplication func, got %s", conf.dedupFunc)
+	}
+
+	// Instantiate the compactor with different time slices. Timestamps in TSDB
+	// are in milliseconds.
+	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), mergeFunc)
+	if err != nil {
+		return errors.Wrap(err, "create compactor")
+	}
+
+	var (
+		compactDir = path.Join(conf.dataDir, "compact")
+	)
+
+	if err := os.MkdirAll(compactDir, os.ModePerm); err != nil {
+		return errors.Wrap(err, "create working compact directory")
+	}
+
+	grouper := compact.NewDefaultGrouper(
+		logger,
+		bkt,
+		conf.acceptMalformedIndex,
+		enableVerticalCompaction,
+		reg,
+		compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
+		compactMetrics.garbageCollectedBlocks,
+		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
+		metadata.HashFunc(conf.hashFunc),
+	)
+	planner := compact.WithLargeTotalIndexSizeFilter(
+		compact.NewPlanner(logger, levels, noCompactMarkerFilter),
+		bkt,
+		int64(conf.maxBlockIndexSize),
+		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.IndexSizeExceedingNoCompactReason),
+	)
+
+	compactor, err := compact.NewBucketCompactor(
+		logger,
+		sy,
+		grouper,
+		planner,
+		comp,
+		compactDir,
+		bkt,
+		conf.compactionConcurrency,
+		conf.skipBlockWithOutOfOrderChunks,
+	)
+	if err != nil {
+		return errors.Wrap(err, "create bucket compactor")
+	}
+
+	compactMainFn := func() error {
+		if err := compactor.Compact(ctx); err != nil {
+			return errors.Wrap(err, "compaction")
+		}
+		return nil
+	}
+
+	g.Add(func() error {
+		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+		return compactMainFn()
+	}, func(error) {
+		cancel()
+	})
+
+	level.Info(logger).Log("msg", "starting compact node")
+	statusProber.Ready()
+
+	return nil
+}
+
 func registerBucket(app extkingpin.AppClause) {
 	cmd := app.Command("bucket", "Bucket utility commands")
 
@@ -260,6 +551,7 @@ func registerBucket(app extkingpin.AppClause) {
 	registerBucketMarkBlock(cmd, objStoreConfig)
 	registerBucketRewrite(cmd, objStoreConfig)
 	registerBucketRetention(cmd, objStoreConfig)
+	registerBucketBacklogDedup(cmd, objStoreConfig)
 }
 
 func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
