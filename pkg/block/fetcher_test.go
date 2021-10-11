@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
@@ -1072,25 +1073,41 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 	})
 }
 
-// document this in working docs - decisions
+var (
+	compactions = compactionSet{
+		1 * time.Hour,
+		2 * time.Hour,
+		8 * time.Hour,
+		2 * 24 * time.Hour,
+		14 * 24 * time.Hour,
+	}
+)
+
+// maxLevel returns max available compaction level.
+func (cs compactionSet) maxLevel() int {
+	return len(cs) - 1
+}
+
+type compactionSet []time.Duration
+
 func TestMaxCompactionLevelMetaFilter_Filter(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	f := NewMaxCompactionLevelMetaFilter(log.NewNopLogger(), 2) // temporary // how should I set this?
+	f := NewMaxCompactionLevelMetaFilter(log.NewNopLogger(), compactions.maxLevel())
 
 	input := map[ulid.ULID]*metadata.Meta{
 		ULID(1): {
 			BlockMeta: tsdb.BlockMeta{
 				Compaction: tsdb.BlockMetaCompaction{
-					Level: 3,
+					Level: compactions.maxLevel(),
 				},
 			},
 		},
 		ULID(2): {
 			BlockMeta: tsdb.BlockMeta{
 				Compaction: tsdb.BlockMetaCompaction{
-					Level: 1,
+					Level: compactions.maxLevel() - 2,
 				},
 			},
 		},
@@ -1100,7 +1117,7 @@ func TestMaxCompactionLevelMetaFilter_Filter(t *testing.T) {
 		ULID(1): {
 			BlockMeta: tsdb.BlockMeta{
 				Compaction: tsdb.BlockMetaCompaction{
-					Level: 3,
+					Level: compactions.maxLevel(),
 				},
 			},
 		},
