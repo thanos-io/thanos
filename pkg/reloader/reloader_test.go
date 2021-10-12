@@ -345,11 +345,10 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 
 			reloadsMtx.Lock()
 			rel := reloads
+			reloadsMtx.Unlock()
 			if init && rel <= reloadsSeen {
-				reloadsMtx.Unlock()
 				continue
 			}
-			reloadsMtx.Unlock()
 
 			// Catch up if reloader is step(s) ahead.
 			for skipped := rel - reloadsSeen - 1; skipped > 0; skipped-- {
