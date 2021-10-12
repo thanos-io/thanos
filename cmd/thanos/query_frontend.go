@@ -284,9 +284,10 @@ func runQueryFrontend(
 					logger,
 					ins.NewHandler(
 						name,
-						logMiddleware.HTTPMiddleware(
-							name,
-							gziphandler.GzipHandler(middleware.RequestID(f)),
+						gziphandler.GzipHandler(
+							middleware.RequestID(
+								logMiddleware.HTTPMiddleware(name, f),
+							),
 						),
 					),
 					// Cortex frontend middlewares require orgID.
