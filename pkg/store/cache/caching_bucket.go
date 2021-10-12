@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -130,8 +131,8 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 	}
 
 	cb.operationRequests.WithLabelValues(objstore.OpIter, cfgName).Inc()
-
-	key := cachingKeyIter(dir)
+	iterVerb := IterVerb{Name: dir}
+	key := iterVerb.Generate()
 	data := cfg.cache.Fetch(ctx, []string{key})
 	if data[key] != nil {
 		list, err := cfg.codec.Decode(data[key])
@@ -176,7 +177,8 @@ func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) 
 
 	cb.operationRequests.WithLabelValues(objstore.OpExists, cfgName).Inc()
 
-	key := cachingKeyExists(name)
+	existsVerb := ExistsVerb{Name: name}
+	key := existsVerb.Generate()
 	hits := cfg.cache.Fetch(ctx, []string{key})
 
 	if ex := hits[key]; ex != nil {
@@ -218,8 +220,10 @@ func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, e
 
 	cb.operationRequests.WithLabelValues(objstore.OpGet, cfgName).Inc()
 
-	contentKey := cachingKeyContent(name)
-	existsKey := cachingKeyExists(name)
+	contentVerb := ContentVerb{Name: name}
+	contentKey := contentVerb.Generate()
+	existsVerb := ExistsVerb{Name: name}
+	existsKey := existsVerb.Generate()
 
 	hits := cfg.cache.Fetch(ctx, []string{contentKey, existsKey})
 	if hits[contentKey] != nil {
@@ -286,7 +290,8 @@ func (cb *CachingBucket) Attributes(ctx context.Context, name string) (objstore.
 }
 
 func (cb *CachingBucket) cachedAttributes(ctx context.Context, name, cfgName string, cache cache.Cache, ttl time.Duration) (objstore.ObjectAttributes, error) {
-	key := cachingKeyAttributes(name)
+	attrVerb := AttributesVerb{Name: name}
+	key := attrVerb.Generate()
 
 	cb.operationRequests.WithLabelValues(objstore.OpAttributes, cfgName).Inc()
 
@@ -357,8 +362,8 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 			end = attrs.Size
 		}
 		totalRequestedBytes += (end - off)
-
-		k := cachingKeyObjectSubrange(name, off, end)
+		objectSubrange := SubrangeVerb{Name: name, Start: off, End: end}
+		k := objectSubrange.Generate()
 		keys = append(keys, k)
 		offsetKeys[off] = k
 	}
@@ -482,24 +487,80 @@ func mergeRanges(input []rng, limit int64) []rng {
 	return input[:last+1]
 }
 
-func cachingKeyAttributes(name string) string {
-	return fmt.Sprintf("attrs:%s", name)
+type CachingKey interface {
+	Generate() string
+	Parse(string) (interface{}, error)
 }
 
-func cachingKeyObjectSubrange(name string, start, end int64) string {
-	return fmt.Sprintf("subrange:%s:%d:%d", name, start, end)
+type ExistsVerb struct {
+	Name string
 }
 
-func cachingKeyIter(name string) string {
-	return fmt.Sprintf("iter:%s", name)
+func (v ExistsVerb) Generate() string {
+	return fmt.Sprintf("exists:%s", v.Name)
 }
 
-func cachingKeyExists(name string) string {
-	return fmt.Sprintf("exists:%s", name)
+func (v ExistsVerb) Parse(key string) (interface{}, error) {
+	return &ExistsVerb{Name: strings.Split(key, ":")[1]}, nil
 }
 
-func cachingKeyContent(name string) string {
-	return fmt.Sprintf("content:%s", name)
+type ContentVerb struct {
+	Name string
+}
+
+func (v ContentVerb) Generate() string {
+	return fmt.Sprintf("exists:%s", v.Name)
+}
+
+func (v ContentVerb) Parse(key string) (interface{}, error) {
+	return &ContentVerb{Name: strings.Split(key, ":")[1]}, nil
+}
+
+type IterVerb struct {
+	Name string
+}
+
+func (v IterVerb) Generate() string {
+	return fmt.Sprintf("exists:%s", v.Name)
+}
+
+func (v IterVerb) Parse(key string) (interface{}, error) {
+	return &IterVerb{Name: strings.Split(key, ":")[1]}, nil
+}
+
+type AttributesVerb struct {
+	Name string
+}
+
+func (v AttributesVerb) Generate() string {
+	return fmt.Sprintf("exists:%s", v.Name)
+}
+
+func (v AttributesVerb) Parse(key string) (interface{}, error) {
+	return &AttributesVerb{Name: strings.Split(key, ":")[1]}, nil
+}
+
+type SubrangeVerb struct {
+	Name       string
+	Start, End int64
+}
+
+func (v SubrangeVerb) Generate() string {
+	return fmt.Sprintf("subrange:%s:%d:%d", v.Name, v.Start, v.End)
+}
+
+func (v SubrangeVerb) Parse(key string) (interface{}, error) {
+	slice := strings.Split(key, ":")
+	name := slice[1]
+	start, err := strconv.ParseInt(slice[2], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	end, err := strconv.ParseInt(slice[3], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	return &SubrangeVerb{Name: name, Start: start, End: end}, nil
 }
 
 // Reader implementation that uses in-memory subranges.
