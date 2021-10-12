@@ -268,8 +268,6 @@ func (tbc *compactConfig) registerBucketBacklogDedupFlag(cmd extkingpin.FlagClau
 		Default("20").IntVar(&tbc.blockSyncConcurrency)
 	cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
 		Default("32").IntVar(&tbc.blockMetaFetchConcurrency)
-	cmd.Flag("block-viewer.global.sync-block-interval", "Repeat interval for syncing the blocks between local and remote view for /global Block Viewer UI.").
-		Default("1m").DurationVar(&tbc.blockViewerSyncBlockInterval)
 	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").IntVar(&tbc.compactionConcurrency)
 	cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket. "+
