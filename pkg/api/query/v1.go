@@ -93,8 +93,8 @@ type QueryAPI struct {
 	enableExemplarPartialResponse       bool
 	disableCORS                         bool
 
-	replicaLabels []string
-	endpointSet   *query.EndpointSet
+	replicaLabels  []string
+	endpointStatus func() []query.EndpointStatus
 
 	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
@@ -106,7 +106,7 @@ type QueryAPI struct {
 // NewQueryAPI returns an initialized QueryAPI type.
 func NewQueryAPI(
 	logger log.Logger,
-	endpointSet *query.EndpointSet,
+	endpointStatus func() []query.EndpointStatus,
 	qe func(int64) *promql.Engine,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
@@ -146,7 +146,7 @@ func NewQueryAPI(
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		enableExemplarPartialResponse:          enableExemplarPartialResponse,
 		replicaLabels:                          replicaLabels,
-		endpointSet:                            endpointSet,
+		endpointStatus:                         endpointStatus,
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
@@ -715,7 +715,11 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 
 func (qapi *QueryAPI) stores(_ *http.Request) (interface{}, []error, *api.ApiError) {
 	statuses := make(map[string][]query.EndpointStatus)
-	for _, status := range qapi.endpointSet.GetEndpointStatus() {
+	for _, status := range qapi.endpointStatus() {
+		// Don't consider an endpoint if we cannot retrieve component type.
+		if status.ComponentType == nil {
+			continue
+		}
 		statuses[status.ComponentType.String()] = append(statuses[status.ComponentType.String()], status)
 	}
 	return statuses, nil, nil
