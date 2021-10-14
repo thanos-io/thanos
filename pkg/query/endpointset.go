@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"google.golang.org/grpc"
 
@@ -34,14 +35,16 @@ const (
 	unhealthyEndpointMessage  = "removing endpoint because it's unhealthy or does not exist"
 	noMetadataEndpointMessage = "cannot obtain metadata: neither info nor store client found"
 
-	// Default minimum and maximum time values used by Prometheus when they are not passed as query parameter.
+	// MinTime is a default minimum time used by Prometheus when it's not passed as query parameter.
 	MinTime = -9223309901257974
+	// MaxTime is a default maximum time used by Prometheus when it's not passed as query parameter.
 	MaxTime = 9223309901257974
 )
 
 type EndpointSpec interface {
-	// Addr returns Thanos API Address for the endpoint spec. It is used as ID for endpoint.
+	// Addr returns host port address for the endpoint. It is used as ID for endpoint.
 	Addr() string
+
 	// Metadata returns current labels, component type and min, max ranges for store.
 	// It can change for every call for this method.
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
@@ -167,7 +170,13 @@ func (es *grpcEndpointSpec) fillExpectedAPIs(componentType component.Component, 
 			Rules: &infopb.RulesInfo{},
 		}
 	default:
-		return infopb.InfoResponse{}
+		// This might break non-native StoreAPI implementation, so assume Store API too.
+		return infopb.InfoResponse{
+			Store: &infopb.StoreInfo{
+				MinTime: mintime,
+				MaxTime: maxTime,
+			},
+		}
 	}
 }
 
@@ -208,13 +217,13 @@ type endpointSetNodeCollector struct {
 	connectionsDesc *prometheus.Desc
 }
 
-func newEndpointSetNodeCollector(configInstance string) *endpointSetNodeCollector {
+func newEndpointSetNodeCollector() *endpointSetNodeCollector {
 	return &endpointSetNodeCollector{
 		storeNodes: map[component.Component]map[string]int{},
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
-			[]string{"external_labels", "store_type"}, map[string]string{"config_provider_name": configInstance},
+			[]string{"external_labels", "store_type"}, nil,
 		),
 	}
 }
@@ -256,15 +265,63 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-// EndpointSet maintains a set of active Thanos endpoints. It is backed up by Endpoint Specifications that are dynamically fetched on
-// every Update() call.
+// EndpointGroup groups common endpoints (having the same gRPC dial Opts and coming from the same DNS discovery) together.
+// It is backed up by set of *exthttp.Discoverer structs can give us addresses.
+type EndpointGroup struct {
+	d *exthttp.Discoverer
+
+	dialOpts []grpc.DialOption
+}
+
+func NewEndpointGroup(d *exthttp.Discoverer, dialOpts []grpc.DialOption) *EndpointGroup {
+	return &EndpointGroup{
+		d:        d,
+		dialOpts: dialOpts,
+	}
+}
+
+func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.EndpointSpec) []query.EndpointSpec {
+	set := make(map[string]query.EndpointSpec)
+	for _, spec := range specs {
+		addr := spec.Addr()
+		if _, ok := set[addr]; ok {
+			level.Warn(logger).Log("msg", "Duplicate store address is provided", "addr", addr)
+			duplicatedStores.Inc()
+		}
+		set[addr] = spec
+	}
+	deduplicated := make([]query.EndpointSpec, 0, len(set))
+	for _, value := range set {
+		deduplicated = append(deduplicated, value)
+	}
+	return deduplicated
+}
+
+// Spec returns current set of endpoint specs.
+// Note that endpoint specifications return  can change dynamically. If some component is missing from the list, we assume it is no longer
+// accessible and we close gRPC client for it, unless it is strict.
+func (g *EndpointGroup) Spec() []EndpointSpec {
+	g.d.Endpoints() // TODO: ...
+
+	/*
+		Something like..
+		for _, dnsProvider := range []*dns.Provider{dnsStoreProvider, dnsRuleProvider, dnsExemplarProvider, dnsMetadataProvider, dnsTargetProvider} {
+					var tmpSpecs []query.EndpointSpec
+
+					for _, addr := range dnsProvider.Addresses() {
+						tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpec(addr, false))
+					}
+					tmpSpecs = removeDuplicateEndpointSpecs(logger, duplicatedStores, tmpSpecs)
+					specs = append(specs, tmpSpecs...)
+				}
+	*/
+}
+
+// EndpointSet maintains a set of active Thanos endpoints groups.
 type EndpointSet struct {
 	logger log.Logger
 
-	// Endpoint specifications can change dynamically. If some component is missing from the list, we assume it is no longer
-	// accessible and we close gRPC client for it, unless it is strict.
-	endpointSpec        func() []EndpointSpec
-	dialOpts            []grpc.DialOption
+	groups              []*EndpointGroup
 	gRPCInfoCallTimeout time.Duration
 
 	updateMtx            sync.Mutex
@@ -284,15 +341,11 @@ type EndpointSet struct {
 func NewEndpointSet(
 	logger log.Logger,
 	reg *prometheus.Registry,
-	configInstance string,
-	endpointSpecs func() []EndpointSpec,
-	dialOpts []grpc.DialOption,
+	groups []*EndpointGroup,
 	unhealthyEndpointTimeout time.Duration,
 ) *EndpointSet {
-	if configInstance == "" {
-		configInstance = "default"
-	}
-	endpointsMetric := newEndpointSetNodeCollector(configInstance)
+	// TODO(bwplotka): Consider adding provider per config name, for instrumentation purposes, but only if strongly requested.
+	endpointsMetric := newEndpointSetNodeCollector()
 	if reg != nil {
 		reg.MustRegister(endpointsMetric)
 	}
@@ -301,19 +354,14 @@ func NewEndpointSet(
 		logger = log.NewNopLogger()
 	}
 
-	if endpointSpecs == nil {
-		endpointSpecs = func() []EndpointSpec { return nil }
-	}
-
 	es := &EndpointSet{
 		logger:                   log.With(logger, "component", "endpointset"),
-		dialOpts:                 dialOpts,
 		endpointsMetric:          endpointsMetric,
 		gRPCInfoCallTimeout:      5 * time.Second,
 		endpoints:                make(map[string]*endpointRef),
 		endpointStatuses:         make(map[string]*EndpointStatus),
 		unhealthyEndpointTimeout: unhealthyEndpointTimeout,
-		endpointSpec:             endpointSpecs,
+		groups:                   groups,
 	}
 	return es
 }

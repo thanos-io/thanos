@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/relabel"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -25,10 +25,10 @@ type AlertingConfig struct {
 
 // AlertmanagerConfig represents a client to a cluster of Alertmanager endpoints.
 type AlertmanagerConfig struct {
-	HTTPClientConfig httpconfig.ClientConfig    `yaml:"http_config"`
-	EndpointsConfig  httpconfig.EndpointsConfig `yaml:",inline"`
-	Timeout          model.Duration             `yaml:"timeout"`
-	APIVersion       APIVersion                 `yaml:"api_version"`
+	HTTPClientConfig exthttp.ClientConfig    `yaml:"http_config"`
+	EndpointsConfig  exthttp.EndpointsConfig `yaml:",inline"`
+	Timeout          model.Duration          `yaml:"timeout"`
+	APIVersion       APIVersion              `yaml:"api_version"`
 }
 
 // APIVersion represents the API version of the Alertmanager endpoint.
@@ -61,10 +61,10 @@ func (v *APIVersion) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 func DefaultAlertmanagerConfig() AlertmanagerConfig {
 	return AlertmanagerConfig{
-		EndpointsConfig: httpconfig.EndpointsConfig{
-			Scheme:          "http",
-			StaticAddresses: []string{},
-			FileSDConfigs:   []httpconfig.FileSDConfig{},
+		EndpointsConfig: exthttp.EndpointsConfig{
+			Scheme:        "http",
+			Addresses:     []string{},
+			FileSDConfigs: []exthttp.FileSDConfig{},
 		},
 		Timeout:    model.Duration(time.Second * 10),
 		APIVersion: APIv1,
@@ -111,7 +111,7 @@ func BuildAlertmanagerConfig(address string, timeout time.Duration) (Alertmanage
 			break
 		}
 	}
-	var basicAuth httpconfig.BasicAuth
+	var basicAuth exthttp.BasicAuth
 	if parsed.User != nil && parsed.User.String() != "" {
 		basicAuth.Username = parsed.User.Username()
 		pw, _ := parsed.User.Password()
@@ -119,13 +119,13 @@ func BuildAlertmanagerConfig(address string, timeout time.Duration) (Alertmanage
 	}
 
 	return AlertmanagerConfig{
-		HTTPClientConfig: httpconfig.ClientConfig{
+		HTTPClientConfig: exthttp.ClientConfig{
 			BasicAuth: basicAuth,
 		},
-		EndpointsConfig: httpconfig.EndpointsConfig{
-			PathPrefix:      parsed.Path,
-			Scheme:          scheme,
-			StaticAddresses: []string{host},
+		EndpointsConfig: exthttp.EndpointsConfig{
+			PathPrefix: parsed.Path,
+			Scheme:     scheme,
+			Addresses:  []string{host},
 		},
 		Timeout:    model.Duration(timeout),
 		APIVersion: APIv1,

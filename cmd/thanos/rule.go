@@ -33,8 +33,8 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -265,29 +265,29 @@ func runRule(
 ) error {
 	metrics := newRuleMetrics(reg)
 
-	var queryCfg []httpconfig.Config
+	var queryCfg []exthttp.Config
 	var err error
 	if len(conf.queryConfigYAML) > 0 {
-		queryCfg, err = httpconfig.LoadConfigs(conf.queryConfigYAML)
+		queryCfg, err = exthttp.LoadConfigs(conf.queryConfigYAML)
 		if err != nil {
 			return err
 		}
 	} else {
-		queryCfg, err = httpconfig.BuildConfig(conf.query.addrs)
+		queryCfg, err = exthttp.BuildConfig(conf.query.addrs)
 		if err != nil {
 			return errors.Wrap(err, "query configuration")
 		}
 
 		// Build the query configuration from the legacy query flags.
-		var fileSDConfigs []httpconfig.FileSDConfig
+		var fileSDConfigs []exthttp.FileSDConfig
 		if len(conf.query.sdFiles) > 0 {
-			fileSDConfigs = append(fileSDConfigs, httpconfig.FileSDConfig{
+			fileSDConfigs = append(fileSDConfigs, exthttp.FileSDConfig{
 				Files:           conf.query.sdFiles,
 				RefreshInterval: model.Duration(conf.query.sdInterval),
 			})
 			queryCfg = append(queryCfg,
-				httpconfig.Config{
-					EndpointsConfig: httpconfig.EndpointsConfig{
+				exthttp.Config{
+					EndpointsConfig: exthttp.EndpointsConfig{
 						Scheme:        "http",
 						FileSDConfigs: fileSDConfigs,
 					},
@@ -301,22 +301,21 @@ func runRule(
 		extprom.WrapRegistererWithPrefix("thanos_rule_query_apis_", reg),
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
-	var queryClients []*httpconfig.Client
+	var queryClients []*exthttp.Client
 	queryClientMetrics := extpromhttp.NewClientMetrics(extprom.WrapRegistererWith(prometheus.Labels{"client": "query"}, reg))
 	for _, cfg := range queryCfg {
-		cfg.HTTPClientConfig.ClientMetrics = queryClientMetrics
-		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "query")
+		c, err := exthttp.NewHTTPClient(cfg.HTTPClientConfig, "query", queryClientMetrics)
 		if err != nil {
 			return err
 		}
 		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
-		queryClient, err := httpconfig.NewClient(logger, cfg.EndpointsConfig, c, queryProvider.Clone())
+		queryClient, err := exthttp.NewClient(logger, cfg.EndpointsConfig, c, queryProvider.Clone())
 		if err != nil {
 			return err
 		}
 		queryClients = append(queryClients, queryClient)
 		// Discover and resolve query addresses.
-		addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
+		addDiscoveryGroups(g, queryClient.Discoverer, conf.query.dnsSDInterval)
 	}
 
 	db, err := tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
@@ -379,19 +378,18 @@ func runRule(
 		extprom.WrapRegistererWith(prometheus.Labels{"client": "alertmanager"}, reg),
 	)
 	for _, cfg := range alertingCfg.Alertmanagers {
-		cfg.HTTPClientConfig.ClientMetrics = amClientMetrics
-		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
+		c, err := exthttp.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager", amClientMetrics)
 		if err != nil {
 			return err
 		}
 		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
 		// Each Alertmanager client has a different list of targets thus each needs its own DNS provider.
-		amClient, err := httpconfig.NewClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
+		amClient, err := exthttp.NewClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
 		if err != nil {
 			return err
 		}
 		// Discover and resolve Alertmanager addresses.
-		addDiscoveryGroups(g, amClient, conf.alertmgr.alertmgrsDNSSDInterval)
+		addDiscoveryGroups(g, amClient.Discoverer, conf.alertmgr.alertmgrsDNSSDInterval)
 
 		alertmgrs = append(alertmgrs, alert.NewAlertmanager(logger, amClient, time.Duration(cfg.Timeout), cfg.APIVersion))
 	}
@@ -705,7 +703,7 @@ func removeDuplicateQueryEndpoints(logger log.Logger, duplicatedQueriers prometh
 
 func queryFuncCreator(
 	logger log.Logger,
-	queriers []*httpconfig.Client,
+	queriers []*exthttp.Client,
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
 	httpMethod string,
@@ -761,10 +759,10 @@ func queryFuncCreator(
 	}
 }
 
-func addDiscoveryGroups(g *run.Group, c *httpconfig.Client, interval time.Duration) {
+func addDiscoveryGroups(g *run.Group, d *exthttp.Discoverer, interval time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 	g.Add(func() error {
-		c.Discover(ctx)
+		d.Discover(ctx)
 		return nil
 	}, func(error) {
 		cancel()
@@ -772,7 +770,7 @@ func addDiscoveryGroups(g *run.Group, c *httpconfig.Client, interval time.Durati
 
 	g.Add(func() error {
 		return runutil.Repeat(interval, ctx.Done(), func() error {
-			return c.Resolve(ctx)
+			return d.Resolve(ctx)
 		})
 	}, func(error) {
 		cancel()

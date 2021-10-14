@@ -93,21 +93,8 @@ type QueryAPI struct {
 	enableExemplarPartialResponse       bool
 	disableCORS                         bool
 
-<<<<<<< HEAD
 	replicaLabels  []string
 	endpointStatus func() []query.EndpointStatus
-=======
-	replicaLabels []string
-<<<<<<< HEAD
-<<<<<<< HEAD
-	endpointSet   *query.EndpointSet
-=======
-	storeSets     []*query.StoreSet
->>>>>>> addressed comments for querier
->>>>>>> addressed comments for querier
-=======
-	endpointSet   []*query.EndpointSet
->>>>>>> removing conflicts-1
 
 	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
@@ -119,19 +106,7 @@ type QueryAPI struct {
 // NewQueryAPI returns an initialized QueryAPI type.
 func NewQueryAPI(
 	logger log.Logger,
-<<<<<<< HEAD
-<<<<<<< HEAD
 	endpointStatus func() []query.EndpointStatus,
-=======
-<<<<<<< HEAD
-	endpointSet *query.EndpointSet,
-=======
-	storeSets []*query.StoreSet,
->>>>>>> addressed comments for querier
->>>>>>> addressed comments for querier
-=======
-	endpointSet []*query.EndpointSet,
->>>>>>> removing conflicts-1
 	qe func(int64) *promql.Engine,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
@@ -171,19 +146,7 @@ func NewQueryAPI(
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		enableExemplarPartialResponse:          enableExemplarPartialResponse,
 		replicaLabels:                          replicaLabels,
-<<<<<<< HEAD
-<<<<<<< HEAD
 		endpointStatus:                         endpointStatus,
-=======
-<<<<<<< HEAD
-		endpointSet:                            endpointSet,
-=======
-		storeSets:                              storeSets,
->>>>>>> addressed comments for querier
->>>>>>> addressed comments for querier
-=======
-		endpointSet:                            endpointSet,
->>>>>>> removing conflicts-1
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,

@@ -22,7 +22,7 @@ import (
 
 type Query struct {
 	*BaseUI
-	endpointSet []*query.EndpointSet
+	endpointStatus func() []query.EndpointStatus
 
 	externalPrefix, prefixHeader string
 
@@ -32,7 +32,7 @@ type Query struct {
 	now     func() model.Time
 }
 
-func NewQueryUI(logger log.Logger, endpointSet []*query.EndpointSet, externalPrefix, prefixHeader string) *Query {
+func NewQueryUI(logger log.Logger, endpointStatus func() []query.EndpointStatus, externalPrefix, prefixHeader string) *Query {
 	tmplVariables := map[string]string{
 		"Component": component.Query.String(),
 	}
@@ -43,7 +43,7 @@ func NewQueryUI(logger log.Logger, endpointSet []*query.EndpointSet, externalPre
 
 	return &Query{
 		BaseUI:         NewBaseUI(logger, "query_menu.html", tmplFuncs, tmplVariables, externalPrefix, prefixHeader, component.Query),
-		endpointSet:    endpointSet,
+		endpointStatus: endpointStatus,
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,
 		cwd:            runtimeInfo().CWD,
@@ -112,10 +112,8 @@ func (q *Query) status(w http.ResponseWriter, r *http.Request) {
 func (q *Query) stores(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r)
 	statuses := make(map[component.Component][]query.EndpointStatus)
-	for _, endpointSet := range q.endpointSet {
-		for _, status := range endpointSet.GetEndpointStatus() {
-			statuses[status.ComponentType] = append(statuses[status.ComponentType], status)
-		}
+	for _, status := range q.endpointStatus() {
+		statuses[status.ComponentType] = append(statuses[status.ComponentType], status)
 	}
 
 	sources := make([]component.Component, 0, len(statuses))

@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package httpconfig
+package exthttp
 
 import (
 	"fmt"
@@ -22,9 +22,9 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		EndpointsConfig: EndpointsConfig{
-			Scheme:          "http",
-			StaticAddresses: []string{},
-			FileSDConfigs:   []FileSDConfig{},
+			Scheme:        "http",
+			Addresses:     []string{},
+			FileSDConfigs: []FileSDConfig{},
 		},
 	}
 }
@@ -65,9 +65,9 @@ func BuildConfig(addrs []string) ([]Config, error) {
 		}
 		configs = append(configs, Config{
 			EndpointsConfig: EndpointsConfig{
-				Scheme:          u.Scheme,
-				StaticAddresses: []string{u.Host},
-				PathPrefix:      u.Path,
+				Scheme:     u.Scheme,
+				Addresses:  []string{u.Host},
+				PathPrefix: u.Path,
 			},
 		})
 	}

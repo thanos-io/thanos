@@ -263,7 +263,7 @@ func TestQueryWithEndpointConfig(t *testing.T) {
 	fileSDPath, err := createSDFile(e.SharedDir(), "1", []string{sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")})
 	testutil.Ok(t, err)
 
-	endpointConfig := []query.Config{
+	endpointConfig := []query.EndpointConfig{
 		{
 			Name: "withTLS",
 			TLSConfig: query.TLSConfiguration{

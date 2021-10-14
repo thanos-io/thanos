@@ -1,8 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-// Package httpconfig is a wrapper around github.com/prometheus/common/config.
-package httpconfig
+package exthttp
 
 import (
 	"context"
@@ -37,9 +36,6 @@ type ClientConfig struct {
 	ProxyURL string `yaml:"proxy_url"`
 	// TLSConfig to use to connect to the targets.
 	TLSConfig TLSConfig `yaml:"tls_config"`
-	// ClientMetrics contains metrics that will be used to instrument
-	// the client that will be created with this config.
-	ClientMetrics *extpromhttp.ClientMetrics `yaml:"-"`
 }
 
 // TLSConfig configures TLS connections.
@@ -69,7 +65,7 @@ func (b BasicAuth) IsZero() bool {
 }
 
 // NewHTTPClient returns a new HTTP client.
-func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
+func NewHTTPClient(cfg ClientConfig, name string, metrics *extpromhttp.ClientMetrics) (*http.Client, error) {
 	httpClientConfig := config_util.HTTPClientConfig{
 		BearerToken:     config_util.Secret(cfg.BearerToken),
 		BearerTokenFile: cfg.BearerTokenFile,
@@ -107,8 +103,8 @@ func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 
 	tripper := client.Transport
 
-	if cfg.ClientMetrics != nil {
-		tripper = extpromhttp.InstrumentedRoundTripper(tripper, cfg.ClientMetrics)
+	if metrics != nil {
+		tripper = extpromhttp.InstrumentedRoundTripper(tripper, metrics)
 	}
 
 	client.Transport = &userAgentRoundTripper{name: ThanosUserAgent, rt: tripper}
@@ -145,7 +141,7 @@ func (u userAgentRoundTripper) RoundTrip(r *http.Request) (*http.Response, error
 // file service discovery.
 type EndpointsConfig struct {
 	// List of addresses with DNS prefixes.
-	StaticAddresses []string `yaml:"static_configs"`
+	Addresses []string `yaml:"static_configs"`
 	// List of file  configurations (our FileSD supports different DNS lookups).
 	FileSDConfigs []FileSDConfig `yaml:"file_sd_configs"`
 
@@ -162,7 +158,7 @@ type FileSDConfig struct {
 	RefreshInterval model.Duration `yaml:"refresh_interval"`
 }
 
-func (c FileSDConfig) convert() (file.SDConfig, error) {
+func (c FileSDConfig) Convert() (file.SDConfig, error) {
 	var fileSDConfig file.SDConfig
 	b, err := yaml.Marshal(c)
 	if err != nil {
@@ -177,69 +173,62 @@ type AddressProvider interface {
 	Addresses() []string
 }
 
-// Client represents a client that can send requests to a cluster of HTTP-based endpoints.
-type Client struct {
-	logger log.Logger
-
-	httpClient *http.Client
-	scheme     string
-	prefix     string
-
+// Discoverer allows managing and discovering group of targets composed form static and dynamic (file SD) HTTP addresses. It works also for
+// gRPC addresses (which are HTTP on underlying protocol).
+type Discoverer struct {
 	staticAddresses []string
 	fileSDCache     *cache.Cache
 	fileDiscoverers []*file.Discovery
 
+	scheme string
+	prefix string
+
 	provider AddressProvider
 }
 
-// NewClient returns a new Client.
-func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider) (*Client, error) {
+// NewDiscoverer returns a new Discoverer.
+func NewDiscoverer(logger log.Logger, cfg EndpointsConfig, provider AddressProvider) (*Discoverer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
 	var discoverers []*file.Discovery
 	for _, sdCfg := range cfg.FileSDConfigs {
-		fileSDCfg, err := sdCfg.convert()
+		fileSDCfg, err := sdCfg.Convert()
 		if err != nil {
 			return nil, err
 		}
 		discoverers = append(discoverers, file.NewDiscovery(&fileSDCfg, logger))
 	}
-	return &Client{
-		logger:          logger,
-		httpClient:      client,
+	return &Discoverer{
 		scheme:          cfg.Scheme,
 		prefix:          cfg.PathPrefix,
-		staticAddresses: cfg.StaticAddresses,
+		staticAddresses: cfg.Addresses,
 		fileSDCache:     cache.New(),
 		fileDiscoverers: discoverers,
 		provider:        provider,
 	}, nil
 }
 
-// Do executes an HTTP request with the underlying HTTP client.
-func (c *Client) Do(req *http.Request) (*http.Response, error) {
-	return c.httpClient.Do(req)
-}
-
 // Endpoints returns the list of known endpoints.
-func (c *Client) Endpoints() []*url.URL {
+func (c *Discoverer) Endpoints() []*url.URL {
 	var urls []*url.URL
 	for _, addr := range c.provider.Addresses() {
-		urls = append(urls,
-			&url.URL{
-				Scheme: c.scheme,
-				Host:   addr,
-				Path:   path.Join("/", c.prefix),
-			},
-		)
+		u := &url.URL{
+			Scheme: c.scheme,
+			Host:   addr,
+		}
+
+		if c.prefix != "" {
+			u.Path = path.Join("/", c.prefix)
+		}
+		urls = append(urls, u)
 	}
 	return urls
 }
 
-// Discover runs the service to discover endpoints until the given context is done.
-func (c *Client) Discover(ctx context.Context) {
+// Discover runs the service to discover endpoints from file SD until the given context is done.
+func (c *Discoverer) Discover(ctx context.Context) {
 	var wg sync.WaitGroup
 	ch := make(chan []*targetgroup.Group)
 
@@ -269,6 +258,30 @@ func (c *Client) Discover(ctx context.Context) {
 }
 
 // Resolve refreshes and resolves the list of targets.
-func (c *Client) Resolve(ctx context.Context) error {
+func (c *Discoverer) Resolve(ctx context.Context) error {
 	return c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...))
+}
+
+// Client represents a client that can send requests to a cluster of HTTP-based endpoints.
+type Client struct {
+	*Discoverer
+
+	httpClient *http.Client
+}
+
+// NewClient returns a new Client.
+func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider) (*Client, error) {
+	d, err := NewDiscoverer(logger, cfg, provider)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		httpClient: client,
+		Discoverer: d,
+	}, nil
+}
+
+// Do executes an HTTP request with the underlying HTTP client.
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	return c.httpClient.Do(req)
 }

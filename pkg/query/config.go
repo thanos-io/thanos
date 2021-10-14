@@ -4,33 +4,23 @@
 package query
 
 import (
+	"github.com/thanos-io/thanos/pkg/extgrpc"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"gopkg.in/yaml.v2"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/discovery/file"
 )
 
-// Config represents the configuration of a set of Store API endpoints.
+// EndpointConfig represents the configuration of a set of gRPC Store API endpoints.
 // If `tls_config` is omitted then TLS will not be used.
 // Configs must have a name and they must be unique.
-type Config struct {
-	Name        string           `yaml:"name"`
-	TLSConfig   TLSConfiguration `yaml:"tls_config"`
-	Endpoints   []string         `yaml:"endpoints"`
-	EndpointsSD []file.SDConfig  `yaml:"endpoints_sd_files"`
-	Mode        EndpointMode     `yaml:"mode"`
-}
+type EndpointConfig struct {
+	extgrpc.Config `yaml:",inline"`
 
-// TlsConfiguration represents the TLS configuration for a set of Store API endpoints.
-type TLSConfiguration struct {
-	// TLS Certificates file to use to identify this client to the server.
-	CertFile string `yaml:"cert_file"`
-	// TLS Key file for the client's certificate.
-	KeyFile string `yaml:"key_file"`
-	// TLS CA Certificates file to use to verify gRPC servers.
-	CaCertFile string `yaml:"ca_file"`
-	// Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1
-	ServerName string `yaml:"server_name"`
+	Mode EndpointMode `yaml:"mode"`
+
+	// TODO(bwplotka): Allow filtering by API (e.g someone wants to have endpoint that serves Store and Exemplar API but want to connect to Store only.
 }
 
 type EndpointMode string
@@ -41,8 +31,8 @@ const (
 )
 
 // LoadConfig returns list of per-endpoint TLS config.
-func LoadConfig(confYAML []byte, endpointAddrs, strictEndpointAddrs []string, fileSDConfig *file.SDConfig, TLSConfig TLSConfiguration) ([]Config, error) {
-	var endpointConfig []Config
+func LoadConfig(confYAML []byte, endpointAddrs, strictEndpointAddrs []string, globalFileSDConfig *file.SDConfig, globalTLSConfig exthttp.TLSConfig) ([]EndpointConfig, error) {
+	var endpointConfig []EndpointConfig
 
 	if len(confYAML) > 0 {
 		if err := yaml.UnmarshalStrict(confYAML, &endpointConfig); err != nil {
@@ -58,42 +48,49 @@ func LoadConfig(confYAML []byte, endpointAddrs, strictEndpointAddrs []string, fi
 
 		// No dynamic endpoints in strict mode.
 		for _, config := range endpointConfig {
-			if config.Mode == StrictEndpointMode && len(config.EndpointsSD) != 0 {
+			if config.Mode == StrictEndpointMode && len(config.EndpointsConfig.FileSDConfigs) != 0 {
 				return nil, errors.Errorf("no sd-files allowed in strict mode")
 			}
 		}
 	}
 
-	// Adding --endpoint, --endpoint.sd-files, if provided.
-	if len(endpointAddrs) > 0 || fileSDConfig != nil {
-		cfg := Config{}
-		cfg.TLSConfig = TLSConfig
-		cfg.Endpoints = endpointAddrs
-		if fileSDConfig != nil {
-			cfg.EndpointsSD = []file.SDConfig{*fileSDConfig}
+	// Adding --store, rule, metadata, target, exemplar and --store.sd-files, if provided.
+	// Global TLS config applies until deprecated.
+	if len(endpointAddrs) > 0 || globalFileSDConfig != nil {
+		cfg := EndpointConfig{}
+		cfg.GRPCClientConfig.TLSConfig = globalTLSConfig
+		cfg.EndpointsConfig.Addresses = endpointAddrs
+		if globalFileSDConfig != nil {
+			cfg.EndpointsConfig.FileSDConfigs = []exthttp.FileSDConfig{
+				{
+					Files:           globalFileSDConfig.Files,
+					RefreshInterval: globalFileSDConfig.RefreshInterval,
+				},
+			}
 		}
 		endpointConfig = append(endpointConfig, cfg)
 	}
 
-	// Adding --endpoint-strict endpoints, if provided.
+	// Adding --store-strict endpoints, if provided.
+	// Global TLS config applies until deprecated.
 	if len(strictEndpointAddrs) > 0 {
-		cfg := Config{}
-		cfg.TLSConfig = TLSConfig
-		cfg.Endpoints = strictEndpointAddrs
+		cfg := EndpointConfig{}
+		cfg.GRPCClientConfig.TLSConfig = globalTLSConfig
+		cfg.EndpointsConfig.Addresses = strictEndpointAddrs
 		cfg.Mode = StrictEndpointMode
 		endpointConfig = append(endpointConfig, cfg)
 	}
 
-	// Checking if some endpoints are inputted more than once.
+	// Checking for duplicates.
+	// NOTE: This does not check dynamic endpoints of course.
 	allEndpoints := make(map[string]struct{})
 	for _, config := range endpointConfig {
-		for _, addr := range config.Endpoints {
+		for _, addr := range config.EndpointsConfig.Addresses {
 			if _, exists := allEndpoints[addr]; exists {
 				return nil, errors.Errorf("%s endpoint provided more than once", addr)
 			}
 			allEndpoints[addr] = struct{}{}
 		}
 	}
-
 	return endpointConfig, nil
 }

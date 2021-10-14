@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -35,7 +36,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
-	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -121,10 +121,10 @@ func runReceive(
 		return err
 	}
 
-	TLSConfig := query.TLSConfiguration{
+	TLSConfig := exthttp.TLSConfig{
 		CertFile:   conf.rwClientCert,
 		KeyFile:    conf.rwClientKey,
-		CaCertFile: conf.rwClientServerCA,
+		CAFile:     conf.rwClientServerCA,
 		ServerName: conf.rwClientServerName,
 	}
 

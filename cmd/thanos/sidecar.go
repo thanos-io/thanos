@@ -29,7 +29,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/logging"
 	meta "github.com/thanos-io/thanos/pkg/metadata"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
@@ -228,7 +227,7 @@ func runSidecar(
 		t := exthttp.NewTransport()
 		t.MaxIdleConnsPerHost = conf.connection.maxIdleConnsPerHost
 		t.MaxIdleConns = conf.connection.maxIdleConns
-		c := promclient.NewClient(&http.Client{Transport: tracing.HTTPTripperware(logger, t)}, logger, httpconfig.ThanosUserAgent)
+		c := promclient.NewClient(&http.Client{Transport: tracing.HTTPTripperware(logger, t)}, logger, exthttp.ThanosUserAgent)
 
 		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {

@@ -152,7 +152,7 @@ type QuerierBuilder struct {
 	targetAddresses   []string
 	exemplarAddresses []string
 
-	endpointConfig []query.Config
+	endpointConfig []query.EndpointConfig
 
 	tracingConfig string
 }
@@ -256,7 +256,7 @@ func (q *QuerierBuilder) Build() (*e2e.InstrumentedRunnable, error) {
 	return querier, nil
 }
 
-func (q *QuerierBuilder) WithEndpointConfig(endpointConfig []query.Config) *QuerierBuilder {
+func (q *QuerierBuilder) WithEndpointConfig(endpointConfig []query.EndpointConfig) *QuerierBuilder {
 	q.endpointConfig = endpointConfig
 	return q
 }
