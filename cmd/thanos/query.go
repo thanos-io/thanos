@@ -463,6 +463,7 @@ func runQuery(
 			endpoints.Close()
 		})
 	}
+
 	// Run File Service Discovery and update the store set when the files are modified.
 	if fileSD != nil {
 		var fileSDUpdates chan []*targetgroup.Group
@@ -476,9 +477,6 @@ func runQuery(
 		}, func(error) {
 			cancelRun()
 		})
-
-		engineOpts.EnableAtModifier = enableAtModifier
-		engineOpts.EnableNegativeOffset = enableNegativeOffset
 
 		ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -717,6 +715,8 @@ func engineFactory(
 			ActiveQueryTracker:       eo.ActiveQueryTracker,
 			LookbackDelta:            lookbackDelta,
 			NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
+			EnableAtModifier:         eo.EnableAtModifier,
+			EnableNegativeOffset:     eo.EnableNegativeOffset,
 		})
 	}
 	return func(maxSourceResolutionMillis int64) *promql.Engine {
