@@ -6,6 +6,7 @@ package exemplars
 import (
 	"context"
 	"sort"
+	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
@@ -32,6 +33,7 @@ type GRPCClient struct {
 
 type exemplarsServer struct {
 	// This field just exist to pseudo-implement the unused methods of the interface.
+	sync.RWMutex
 	exemplarspb.Exemplars_ExemplarsServer
 	ctx context.Context
 
@@ -40,6 +42,8 @@ type exemplarsServer struct {
 }
 
 func (srv *exemplarsServer) Send(res *exemplarspb.ExemplarsResponse) error {
+	srv.Lock()
+	defer srv.Unlock()
 	if res.GetWarning() != "" {
 		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
 		return nil

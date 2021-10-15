@@ -6,6 +6,8 @@ package exemplars
 import (
 	"testing"
 
+	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -13,6 +15,29 @@ import (
 
 func TestMain(m *testing.M) {
 	testutil.TolerantVerifyLeakMain(m)
+}
+
+func TestExemplarsServerSendDataRace(t *testing.T) {
+	es := &exemplarsServer{}
+
+	res := []*exemplarspb.ExemplarsResponse{
+		exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
+			SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+			Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
+		}),
+		exemplarspb.NewWarningExemplarsResponse(errors.New("warning from client1")), exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
+			SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+			Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
+		}),
+		exemplarspb.NewWarningExemplarsResponse(errors.New("warning from client2")), exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
+			SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+			Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
+		}),
+	}
+
+	for i := range res {
+		go es.Send(res[i])
+	}
 }
 
 func TestDedupExemplarsResponse(t *testing.T) {
