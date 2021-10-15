@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/oklog/ulid"
 	"os"
 	"path"
 	"strconv"
@@ -457,6 +458,52 @@ func runCompact(
 
 		return cleanPartialMarked()
 	}
+
+	numberOfIterations := 0
+	numberOfBlocksToMerge := 0
+	g.Add(func() error {
+		// Fetch metadatas
+		_ = sy.SyncMetas(context.Background())
+		// Original metadatas we have before we start simulation
+		originalMetas := sy.Metas()
+
+		var plan []*metadata.Meta
+		var hasPlan bool
+		hasPlan = true
+		for  {
+			groups, _ := grouper.Groups(originalMetas)
+			for _, g := range groups {
+				plan, _ = planner.Plan(context.Background(), g.IDs())
+				if len(plan) == 0 {
+					continue
+				}
+				numberOfIterations++
+				var metas []*tsdb.BlockMeta
+				for _, p := range plan {
+					//p := p
+					metas = append(metas, &p.BlockMeta)
+				}
+				numberOfBlocksToMerge += len(plan)
+
+				// Simulation of compaction
+				// 1. Create a new block metadata from source blocks
+				// 2. Remove source blocks metas from this group
+				// 3. Add new block meta to this group
+				newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
+				g.AppendMeta(metadata.Meta{BlockMeta: *newMeta})
+			}
+
+			if noPlan {
+				break
+			}
+			// remove planned blocks from originalMetas
+			// Add the metadata of the new compacted block
+		}
+
+		return nil
+	}, func(err error) {
+		return nil
+	})
 
 	g.Add(func() error {
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
