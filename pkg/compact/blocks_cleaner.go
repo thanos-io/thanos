@@ -47,6 +47,7 @@ func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) error {
 		if time.Since(time.Unix(deletionMark.DeletionTime, 0)).Seconds() > s.deleteDelay.Seconds() {
 			if err := block.Delete(ctx, s.logger, s.bkt, deletionMark.ID); err != nil {
 				s.blockCleanupFailures.Inc()
+				level.Error(s.logger).Log("msg", "cleaning of blocks marked for deletion fail", "err", err)
 				return errors.Wrap(err, "delete block")
 			}
 			s.blocksCleaned.Inc()
