@@ -2508,7 +2508,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 	r.stats.chunksFetchedSizeSum += int(part.End - part.Start)
 
 	var (
-		buf        = make([]byte, EstimatedMaxChunkSize)
+		buf        []byte
 		readOffset = int(pIdxs[0].offset)
 
 		// Save a few allocations.
@@ -2517,6 +2517,14 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		chunkLen int
 		n        int
 	)
+
+	bufPooled, err := r.block.chunkPool.Get(EstimatedMaxChunkSize)
+	if err == nil {
+		buf = *bufPooled
+	} else {
+		buf = make([]byte, EstimatedMaxChunkSize)
+	}
+	defer r.block.chunkPool.Put(&buf)
 
 	for i, pIdx := range pIdxs {
 		// Fast forward range reader to the next chunk start in case of sparse (for our purposes) byte range.
