@@ -18,6 +18,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
+	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -457,6 +458,35 @@ func runCompact(
 
 		return cleanPartialMarked()
 	}
+
+	g.Add(func() error {
+		_ = sy.SyncMetas(context.Background())
+		originalMetas := sy.Metas()
+
+		// figure out hasPlan and noPlan
+		for {
+			groups, _ := grouper.Groups(originalMetas)
+			for _, g := range groups {
+				// parameter should be of type tsdb.BlockMeata.meta
+				plan, _ := planner.Plan(context.Background(), g.Metadata())
+				if len(plan) == 0 {
+					continue
+				}
+				var metas []*tsdb.BlockMeta
+				for _, p := range plan {
+					metas = append(metas, &p.BlockMeta)
+				}
+				newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
+				g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta})
+			}
+
+			// remove 'plan' blocks from 'original metadata'
+		}
+
+		return nil
+	}, func(err error) {
+		cancel()
+	})
 
 	g.Add(func() error {
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")

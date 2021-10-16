@@ -402,6 +402,10 @@ func (cg *Group) Key() string {
 	return cg.key
 }
 
+func (cg *Group) Metadata() []*metadata.Meta {
+	return cg.metasByMinTime
+}
+
 // AppendMeta the block with the given meta to the group.
 func (cg *Group) AppendMeta(meta *metadata.Meta) error {
 	cg.mtx.Lock()
