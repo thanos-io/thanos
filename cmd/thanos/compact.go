@@ -460,15 +460,23 @@ func runCompact(
 	}
 
 	g.Add(func() error {
-		_ = sy.SyncMetas(context.Background())
+		if err := sy.SyncMetas(context.Background()); err != nil {
+			return errors.Wrapf(err, "could not sync metas")
+		}
 		originalMetas := sy.Metas()
 
 		// figure out hasPlan and noPlan
 		for {
-			groups, _ := grouper.Groups(originalMetas)
+			groups, err := grouper.Groups(originalMetas)
+			if err != nil {
+				return errors.Wrapf(err, "could not group original metadata")
+			}
 			for _, g := range groups {
-				// parameter should be of type tsdb.BlockMeata.meta
-				plan, _ := planner.Plan(context.Background(), g.Metadata())
+				// parameter should be of type tsdb.BlockMeta.meta
+				plan, err := planner.Plan(context.Background(), g.Metadata())
+				if err != nil {
+					return errors.Wrapf(err, "could not plan")
+				}
 				if len(plan) == 0 {
 					continue
 				}
@@ -478,9 +486,11 @@ func runCompact(
 				}
 				newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
 				g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta})
+
+				// remove 'plan' blocks from 'original metadata'
+
 			}
 
-			// remove 'plan' blocks from 'original metadata'
 		}
 
 		return nil
