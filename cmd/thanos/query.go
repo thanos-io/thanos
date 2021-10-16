@@ -447,6 +447,8 @@ func runQuery(
 			NoStepSubqueryIntervalFn: func(int64) int64 {
 				return defaultEvaluationInterval.Milliseconds()
 			},
+			EnableNegativeOffset: enableNegativeOffset,
+			EnableAtModifier:     enableAtModifier,
 		}
 	)
 
