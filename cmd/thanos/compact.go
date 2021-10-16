@@ -458,8 +458,7 @@ func runCompact(
 
 		return cleanPartialMarked()
 	}
-
-	g.Add(func() error {
+    g.Add(func() error {
 		if err := sy.SyncMetas(context.Background()); err != nil {
 			return errors.Wrapf(err, "could not sync metas")
 		}
@@ -480,17 +479,22 @@ func runCompact(
 				if len(plan) == 0 {
 					continue
 				}
+
+				var toRemove []ulid.ULID
 				var metas []*tsdb.BlockMeta
 				for _, p := range plan {
 					metas = append(metas, &p.BlockMeta)
+					toRemove = append(toRemove, p.BlockMeta.ULID)
 				}
+
+				// remove 'plan' blocks from 'original metadata' - so that the remaining blocks can now be planned ?
+				for _, meta := range toRemove {
+					delete(originalMetas, meta.BlockMeta.ULID)
+				}
+
 				newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
 				g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta})
-
-				// remove 'plan' blocks from 'original metadata'
-
 			}
-
 		}
 
 		return nil
