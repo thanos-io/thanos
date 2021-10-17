@@ -182,10 +182,12 @@ func TestQueryEndpoints(t *testing.T) {
 	now := time.Now()
 	timeout := 100 * time.Second
 	qe := promql.NewEngine(promql.EngineOpts{
-		Logger:     nil,
-		Reg:        nil,
-		MaxSamples: 10000,
-		Timeout:    timeout,
+		Logger:               nil,
+		Reg:                  nil,
+		MaxSamples:           10000,
+		Timeout:              timeout,
+		EnableNegativeOffset: true,
+		EnableAtModifier:     true,
 	})
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
@@ -247,6 +249,191 @@ func TestQueryEndpoints(t *testing.T) {
 				},
 			},
 		},
+		{
+			endpoint: api.query,
+			query: url.Values{
+				"query": []string{"test_metric_replica1 offset -1s"},
+				"time":  []string{"1970-01-01T01:01:03+01:00"},
+			},
+			response: &queryData{
+				ResultType: parser.ValueTypeVector,
+				Result: promql.Vector{
+					{
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+							{
+								Name:  "replica",
+								Value: "a",
+							},
+						},
+						Point: promql.Point{
+							T: 63000,
+							V: 1,
+						},
+					},
+					{
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+							{
+								Name:  "replica",
+								Value: "a",
+							},
+						},
+						Point: promql.Point{
+							T: 63000,
+							V: 1,
+						},
+					},
+					{
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+							{
+								Name:  "replica",
+								Value: "b",
+							},
+						},
+						Point: promql.Point{
+							T: 63000,
+							V: 1,
+						},
+					},
+					{
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+							{
+								Name:  "replica1",
+								Value: "a",
+							},
+						},
+						Point: promql.Point{
+							T: 63000,
+							V: 1,
+						},
+					},
+				},
+			},
+		},
+		{
+			endpoint: api.query,
+			query: url.Values{
+				"query": []string{"test_metric_replica1 @ 100"},
+				"time":  []string{"1970-01-01T01:01:03+01:00"},
+			},
+			response: &queryData{
+				ResultType: parser.ValueTypeVector,
+				Result: promql.Vector{
+					{
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+							{
+								Name:  "replica",
+								Value: "a",
+							},
+						},
+						Point: promql.Point{
+							T: 63000,
+							V: 1,
+						},
+					},
+					{
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+							{
+								Name:  "replica",
+								Value: "a",
+							},
+						},
+						Point: promql.Point{
+							T: 63000,
+							V: 1,
+						},
+					},
+					{
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+							{
+								Name:  "replica",
+								Value: "b",
+							},
+						},
+						Point: promql.Point{
+							T: 63000,
+							V: 1,
+						},
+					},
+					{
+						Metric: labels.Labels{
+							{
+								Name:  "__name__",
+								Value: "test_metric_replica1",
+							},
+							{
+								Name:  "foo",
+								Value: "boo",
+							},
+							{
+								Name:  "replica1",
+								Value: "a",
+							},
+						},
+						Point: promql.Point{
+							T: 63000,
+							V: 1,
+						},
+					},
+				},
+			},
+		},
+
 		// Query endpoint without deduplication.
 		{
 			endpoint: api.query,
