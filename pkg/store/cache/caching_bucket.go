@@ -131,8 +131,8 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 	}
 
 	cb.operationRequests.WithLabelValues(objstore.OpIter, cfgName).Inc()
-	iterVerb := IterVerb{Name: dir}
-	key := iterVerb.Generate()
+	iterVerb := CachingKey{Verb: IterVerb, Name: dir}
+	key := GenerateCachingKey(iterVerb)
 	data := cfg.cache.Fetch(ctx, []string{key})
 	if data[key] != nil {
 		list, err := cfg.codec.Decode(data[key])
@@ -177,8 +177,8 @@ func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) 
 
 	cb.operationRequests.WithLabelValues(objstore.OpExists, cfgName).Inc()
 
-	existsVerb := ExistsVerb{Name: name}
-	key := existsVerb.Generate()
+	existsVerb := CachingKey{Verb: ExistsVerb, Name: name}
+	key := GenerateCachingKey(existsVerb)
 	hits := cfg.cache.Fetch(ctx, []string{key})
 
 	if ex := hits[key]; ex != nil {
@@ -220,10 +220,10 @@ func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, e
 
 	cb.operationRequests.WithLabelValues(objstore.OpGet, cfgName).Inc()
 
-	contentVerb := ContentVerb{Name: name}
-	contentKey := contentVerb.Generate()
-	existsVerb := ExistsVerb{Name: name}
-	existsKey := existsVerb.Generate()
+	contentVerb := CachingKey{Verb: ContentVerb, Name: name}
+	contentKey := GenerateCachingKey(contentVerb)
+	existsVerb := CachingKey{Verb: ExistsVerb, Name: name}
+	existsKey := GenerateCachingKey(existsVerb)
 
 	hits := cfg.cache.Fetch(ctx, []string{contentKey, existsKey})
 	if hits[contentKey] != nil {
@@ -290,8 +290,8 @@ func (cb *CachingBucket) Attributes(ctx context.Context, name string) (objstore.
 }
 
 func (cb *CachingBucket) cachedAttributes(ctx context.Context, name, cfgName string, cache cache.Cache, ttl time.Duration) (objstore.ObjectAttributes, error) {
-	attrVerb := AttributesVerb{Name: name}
-	key := attrVerb.Generate()
+	attrVerb := CachingKey{Verb: AttributesVerb, Name: name}
+	key := GenerateCachingKey(attrVerb)
 
 	cb.operationRequests.WithLabelValues(objstore.OpAttributes, cfgName).Inc()
 
@@ -362,8 +362,8 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 			end = attrs.Size
 		}
 		totalRequestedBytes += (end - off)
-		objectSubrange := SubrangeVerb{Name: name, Start: off, End: end}
-		k := objectSubrange.Generate()
+		objectSubrange := CachingKey{Verb: SubrangeVerb, Name: name, Start: off, End: end}
+		k := GenerateCachingKey(objectSubrange)
 		keys = append(keys, k)
 		offsetKeys[off] = k
 	}
@@ -487,80 +487,57 @@ func mergeRanges(input []rng, limit int64) []rng {
 	return input[:last+1]
 }
 
-type CachingKey interface {
-	Generate() string
-	Parse(string) (interface{}, error)
+type VerbType string
+
+const (
+	ExistsVerb              = "exists"
+	ContentVerb             = "content"
+	IterVerb                = "iter"
+	AttributesVerb          = "attrs"
+	SubrangeVerb   VerbType = "subrange"
+)
+
+type CachingKey struct {
+	Verb  VerbType
+	Name  string
+	Start int64
+	End   int64
 }
 
-type ExistsVerb struct {
-	Name string
+func GenerateCachingKey(ck CachingKey) string {
+	if ck.Start == 0 && ck.End == 0 {
+		return fmt.Sprintf("%s:%s", ck.Verb, ck.Name)
+	}
+	if ck.End != 0 && ck.Start != ck.End {
+		return fmt.Sprintf("%s:%s:%d:%d", ck.Verb, ck.Name, ck.Start, ck.End)
+	}
+	return ""
 }
 
-func (v ExistsVerb) Generate() string {
-	return fmt.Sprintf("exists:%s", v.Name)
-}
-
-func (v ExistsVerb) Parse(key string) (interface{}, error) {
-	return &ExistsVerb{Name: strings.Split(key, ":")[1]}, nil
-}
-
-type ContentVerb struct {
-	Name string
-}
-
-func (v ContentVerb) Generate() string {
-	return fmt.Sprintf("exists:%s", v.Name)
-}
-
-func (v ContentVerb) Parse(key string) (interface{}, error) {
-	return &ContentVerb{Name: strings.Split(key, ":")[1]}, nil
-}
-
-type IterVerb struct {
-	Name string
-}
-
-func (v IterVerb) Generate() string {
-	return fmt.Sprintf("exists:%s", v.Name)
-}
-
-func (v IterVerb) Parse(key string) (interface{}, error) {
-	return &IterVerb{Name: strings.Split(key, ":")[1]}, nil
-}
-
-type AttributesVerb struct {
-	Name string
-}
-
-func (v AttributesVerb) Generate() string {
-	return fmt.Sprintf("exists:%s", v.Name)
-}
-
-func (v AttributesVerb) Parse(key string) (interface{}, error) {
-	return &AttributesVerb{Name: strings.Split(key, ":")[1]}, nil
-}
-
-type SubrangeVerb struct {
-	Name       string
-	Start, End int64
-}
-
-func (v SubrangeVerb) Generate() string {
-	return fmt.Sprintf("subrange:%s:%d:%d", v.Name, v.Start, v.End)
-}
-
-func (v SubrangeVerb) Parse(key string) (interface{}, error) {
+func ParseCachingKey(key string) (CachingKey, error) {
+	ck := CachingKey{}
 	slice := strings.Split(key, ":")
-	name := slice[1]
-	start, err := strconv.ParseInt(slice[2], 10, 64)
-	if err != nil {
-		return nil, err
+	if len(slice) < 2 {
+		return ck, errors.New("CachingKey has invalid format.")
 	}
-	end, err := strconv.ParseInt(slice[3], 10, 64)
-	if err != nil {
-		return nil, err
+
+	if len(slice) > 2 {
+		start, err := strconv.ParseInt(slice[2], 10, 64)
+		if err != nil {
+			return CachingKey{}, err
+		}
+
+		end, err := strconv.ParseInt(slice[3], 10, 64)
+		if err != nil {
+			return CachingKey{}, err
+		}
+		ck.Start = start
+		ck.End = end
 	}
-	return &SubrangeVerb{Name: name, Start: start, End: end}, nil
+	ck.Verb = VerbType(slice[0])
+	ck.Name = slice[1]
+
+	return ck, nil
 }
 
 // Reader implementation that uses in-memory subranges.

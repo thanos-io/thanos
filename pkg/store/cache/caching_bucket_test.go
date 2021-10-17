@@ -125,12 +125,12 @@ func TestChunksCaching(t *testing.T) {
 			expectedCachedBytes:  7 * subrangeSize,
 			init: func() {
 				// Delete first 3 subranges.
-				objectSubrange := SubrangeVerb{Name: name, Start: 0 * subrangeSize, End: 1 * subrangeSize}
-				delete(cache.cache, objectSubrange.Generate())
-				objectSubrange = SubrangeVerb{Name: name, Start: 1 * subrangeSize, End: 2 * subrangeSize}
-				delete(cache.cache, objectSubrange.Generate())
-				objectSubrange = SubrangeVerb{Name: name, Start: 2 * subrangeSize, End: 3 * subrangeSize}
-				delete(cache.cache, objectSubrange.Generate())
+				objectSubrange := CachingKey{Verb: SubrangeVerb, Name: name, Start: 0 * subrangeSize, End: 1 * subrangeSize}
+				delete(cache.cache, GenerateCachingKey(objectSubrange))
+				objectSubrange = CachingKey{Verb: SubrangeVerb, Name: name, Start: 1 * subrangeSize, End: 2 * subrangeSize}
+				delete(cache.cache, GenerateCachingKey(objectSubrange))
+				objectSubrange = CachingKey{Verb: SubrangeVerb, Name: name, Start: 2 * subrangeSize, End: 3 * subrangeSize}
+				delete(cache.cache, GenerateCachingKey(objectSubrange))
 			},
 		},
 
@@ -143,12 +143,12 @@ func TestChunksCaching(t *testing.T) {
 			expectedCachedBytes:  7 * subrangeSize,
 			init: func() {
 				// Delete last 3 subranges.
-				objectSubrange := SubrangeVerb{Name: name, Start: 7 * subrangeSize, End: 8 * subrangeSize}
-				delete(cache.cache, objectSubrange.Generate())
-				objectSubrange = SubrangeVerb{Name: name, Start: 8 * subrangeSize, End: 9 * subrangeSize}
-				delete(cache.cache, objectSubrange.Generate())
-				objectSubrange = SubrangeVerb{Name: name, Start: 9 * subrangeSize, End: 10 * subrangeSize}
-				delete(cache.cache, objectSubrange.Generate())
+				objectSubrange := CachingKey{Verb: SubrangeVerb, Name: name, Start: 7 * subrangeSize, End: 8 * subrangeSize}
+				delete(cache.cache, GenerateCachingKey(objectSubrange))
+				objectSubrange = CachingKey{Verb: SubrangeVerb, Name: name, Start: 8 * subrangeSize, End: 9 * subrangeSize}
+				delete(cache.cache, GenerateCachingKey(objectSubrange))
+				objectSubrange = CachingKey{Verb: SubrangeVerb, Name: name, Start: 9 * subrangeSize, End: 10 * subrangeSize}
+				delete(cache.cache, GenerateCachingKey(objectSubrange))
 			},
 		},
 
@@ -161,12 +161,12 @@ func TestChunksCaching(t *testing.T) {
 			expectedCachedBytes:  7 * subrangeSize,
 			init: func() {
 				// Delete 3 subranges in the middle.
-				objectSubrange := SubrangeVerb{Name: name, Start: 3 * subrangeSize, End: 4 * subrangeSize}
-				delete(cache.cache, objectSubrange.Generate())
-				objectSubrange = SubrangeVerb{Name: name, Start: 4 * subrangeSize, End: 5 * subrangeSize}
-				delete(cache.cache, objectSubrange.Generate())
-				objectSubrange = SubrangeVerb{Name: name, Start: 5 * subrangeSize, End: 6 * subrangeSize}
-				delete(cache.cache, objectSubrange.Generate())
+				objectSubrange := CachingKey{Verb: SubrangeVerb, Name: name, Start: 3 * subrangeSize, End: 4 * subrangeSize}
+				delete(cache.cache, GenerateCachingKey(objectSubrange))
+				objectSubrange = CachingKey{Verb: SubrangeVerb, Name: name, Start: 4 * subrangeSize, End: 5 * subrangeSize}
+				delete(cache.cache, GenerateCachingKey(objectSubrange))
+				objectSubrange = CachingKey{Verb: SubrangeVerb, Name: name, Start: 5 * subrangeSize, End: 6 * subrangeSize}
+				delete(cache.cache, GenerateCachingKey(objectSubrange))
 			},
 		},
 
@@ -183,8 +183,8 @@ func TestChunksCaching(t *testing.T) {
 					if i > 0 && i%3 == 0 {
 						continue
 					}
-					objectSubrange := SubrangeVerb{Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
-					delete(cache.cache, objectSubrange.Generate())
+					objectSubrange := CachingKey{Verb: SubrangeVerb, Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
+					delete(cache.cache, GenerateCachingKey(objectSubrange))
 				}
 			},
 		},
@@ -204,8 +204,8 @@ func TestChunksCaching(t *testing.T) {
 					if i == 3 || i == 5 || i == 7 {
 						continue
 					}
-					objectSubrange := SubrangeVerb{Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
-					delete(cache.cache, objectSubrange.Generate())
+					objectSubrange := CachingKey{Verb: SubrangeVerb, Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
+					delete(cache.cache, GenerateCachingKey(objectSubrange))
 				}
 			},
 		},
@@ -224,8 +224,8 @@ func TestChunksCaching(t *testing.T) {
 					if i == 5 || i == 6 || i == 7 {
 						continue
 					}
-					objectSubrange := SubrangeVerb{Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
-					delete(cache.cache, objectSubrange.Generate())
+					objectSubrange := CachingKey{Verb: SubrangeVerb, Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
+					delete(cache.cache, GenerateCachingKey(objectSubrange))
 				}
 			},
 		},
