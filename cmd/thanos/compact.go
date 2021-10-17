@@ -18,7 +18,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -83,6 +82,9 @@ func (cs compactionSet) levels(maxLevel int) ([]int64, error) {
 func (cs compactionSet) maxLevel() int {
 	return len(cs) - 1
 }
+
+// add recvr func to planning struct to modify metadata
+// move to pkg/compact later
 
 func registerCompact(app *extkingpin.App) {
 	cmd := app.Command(component.Compact.String(), "Continuously compacts blocks in an object store bucket.")
@@ -458,44 +460,14 @@ func runCompact(
 
 		return cleanPartialMarked()
 	}
-    g.Add(func() error {
-		if err := sy.SyncMetas(context.Background()); err != nil {
-			return errors.Wrapf(err, "could not sync metas")
+	g.Add(func() error {
+		ps := compact.NewDefaultPlanSim(grouper, planner, sy)
+		numberOfIterations, numberOfBlocksMerged, err := ps.PlanProgressCalc(context.Background())
+		if err != nil {
+			return errors.Wrapf(err, "could not simulate planning")
 		}
-		originalMetas := sy.Metas()
-
-		// figure out hasPlan and noPlan
-		for {
-			groups, err := grouper.Groups(originalMetas)
-			if err != nil {
-				return errors.Wrapf(err, "could not group original metadata")
-			}
-			for _, g := range groups {
-				// parameter should be of type tsdb.BlockMeta.meta
-				plan, err := planner.Plan(context.Background(), g.Metadata())
-				if err != nil {
-					return errors.Wrapf(err, "could not plan")
-				}
-				if len(plan) == 0 {
-					continue
-				}
-
-				var toRemove []ulid.ULID
-				var metas []*tsdb.BlockMeta
-				for _, p := range plan {
-					metas = append(metas, &p.BlockMeta)
-					toRemove = append(toRemove, p.BlockMeta.ULID)
-				}
-
-				// remove 'plan' blocks from 'original metadata' - so that the remaining blocks can now be planned ?
-				for _, meta := range toRemove {
-					delete(originalMetas, meta.BlockMeta.ULID)
-				}
-
-				newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
-				g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta})
-			}
-		}
+		level.Debug(logger).Log("msg", "number of iterations performed","count", numberOfIterations)
+		level.Debug(logger).Log("msg", "number of blocks merged", "count",numberOfBlocksMerged)
 
 		return nil
 	}, func(err error) {
