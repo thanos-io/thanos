@@ -131,8 +131,8 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 	}
 
 	cb.operationRequests.WithLabelValues(objstore.OpIter, cfgName).Inc()
-	iterVerb := CachingKey{Verb: IterVerb, Name: dir}
-	key := GenerateCachingKey(iterVerb)
+	iterVerb := BucketCacheKey{Verb: IterVerb, Name: dir}
+	key := iterVerb.String()
 	data := cfg.cache.Fetch(ctx, []string{key})
 	if data[key] != nil {
 		list, err := cfg.codec.Decode(data[key])
@@ -177,8 +177,8 @@ func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) 
 
 	cb.operationRequests.WithLabelValues(objstore.OpExists, cfgName).Inc()
 
-	existsVerb := CachingKey{Verb: ExistsVerb, Name: name}
-	key := GenerateCachingKey(existsVerb)
+	existsVerb := BucketCacheKey{Verb: ExistsVerb, Name: name}
+	key := existsVerb.String()
 	hits := cfg.cache.Fetch(ctx, []string{key})
 
 	if ex := hits[key]; ex != nil {
@@ -220,10 +220,10 @@ func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, e
 
 	cb.operationRequests.WithLabelValues(objstore.OpGet, cfgName).Inc()
 
-	contentVerb := CachingKey{Verb: ContentVerb, Name: name}
-	contentKey := GenerateCachingKey(contentVerb)
-	existsVerb := CachingKey{Verb: ExistsVerb, Name: name}
-	existsKey := GenerateCachingKey(existsVerb)
+	contentVerb := BucketCacheKey{Verb: ContentVerb, Name: name}
+	contentKey := contentVerb.String()
+	existsVerb := BucketCacheKey{Verb: ExistsVerb, Name: name}
+	existsKey := existsVerb.String()
 
 	hits := cfg.cache.Fetch(ctx, []string{contentKey, existsKey})
 	if hits[contentKey] != nil {
@@ -290,8 +290,8 @@ func (cb *CachingBucket) Attributes(ctx context.Context, name string) (objstore.
 }
 
 func (cb *CachingBucket) cachedAttributes(ctx context.Context, name, cfgName string, cache cache.Cache, ttl time.Duration) (objstore.ObjectAttributes, error) {
-	attrVerb := CachingKey{Verb: AttributesVerb, Name: name}
-	key := GenerateCachingKey(attrVerb)
+	attrVerb := BucketCacheKey{Verb: AttributesVerb, Name: name}
+	key := attrVerb.String()
 
 	cb.operationRequests.WithLabelValues(objstore.OpAttributes, cfgName).Inc()
 
@@ -362,8 +362,8 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 			end = attrs.Size
 		}
 		totalRequestedBytes += (end - off)
-		objectSubrange := CachingKey{Verb: SubrangeVerb, Name: name, Start: off, End: end}
-		k := GenerateCachingKey(objectSubrange)
+		objectSubrange := BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: off, End: end}
+		k := objectSubrange.String()
 		keys = append(keys, k)
 		offsetKeys[off] = k
 	}
@@ -497,39 +497,37 @@ const (
 	SubrangeVerb   VerbType = "subrange"
 )
 
-type CachingKey struct {
+type BucketCacheKey struct {
 	Verb  VerbType
 	Name  string
 	Start int64
 	End   int64
 }
 
-func GenerateCachingKey(ck CachingKey) string {
+func (ck BucketCacheKey) String() string {
 	if ck.Start == 0 && ck.End == 0 {
 		return fmt.Sprintf("%s:%s", ck.Verb, ck.Name)
 	}
-	if ck.End != 0 && ck.Start != ck.End {
-		return fmt.Sprintf("%s:%s:%d:%d", ck.Verb, ck.Name, ck.Start, ck.End)
-	}
-	return ""
+
+	return fmt.Sprintf("%s:%s:%d:%d", ck.Verb, ck.Name, ck.Start, ck.End)
 }
 
-func ParseCachingKey(key string) (CachingKey, error) {
-	ck := CachingKey{}
+func ParseBucketCacheKey(key string) (BucketCacheKey, error) {
+	ck := BucketCacheKey{}
 	slice := strings.Split(key, ":")
 	if len(slice) < 2 {
-		return ck, errors.New("CachingKey has invalid format.")
+		return ck, errors.New("BucketCacheKey has invalid format.")
 	}
 
 	if len(slice) > 2 {
 		start, err := strconv.ParseInt(slice[2], 10, 64)
 		if err != nil {
-			return CachingKey{}, err
+			return BucketCacheKey{}, err
 		}
 
 		end, err := strconv.ParseInt(slice[3], 10, 64)
 		if err != nil {
-			return CachingKey{}, err
+			return BucketCacheKey{}, err
 		}
 		ck.Start = start
 		ck.End = end
