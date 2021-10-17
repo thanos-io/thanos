@@ -148,6 +148,7 @@ type QuerierBuilder struct {
 	metadataAddresses    []string
 	targetAddresses      []string
 	exemplarAddresses    []string
+	enableFeatures       []string
 
 	tracingConfig string
 }
@@ -160,6 +161,11 @@ func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string)
 		storeAddresses: storeAddresses,
 		image:          DefaultImage(),
 	}
+}
+
+func (q *QuerierBuilder) WithEnabledFeature(enableFeatures []string) *QuerierBuilder {
+	q.enableFeatures = enableFeatures
+	return q
 }
 
 func (q *QuerierBuilder) WithImage(image string) *QuerierBuilder {
@@ -284,6 +290,10 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 
 	for _, addr := range q.exemplarAddresses {
 		args = append(args, "--exemplar="+addr)
+	}
+
+	for _, feature := range q.enableFeatures {
+		args = append(args, "--enable-features="+feature)
 	}
 
 	if len(q.fileSDStoreAddresses) > 0 {
