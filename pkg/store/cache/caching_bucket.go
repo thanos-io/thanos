@@ -490,10 +490,10 @@ func mergeRanges(input []rng, limit int64) []rng {
 type VerbType string
 
 const (
-	ExistsVerb              = "exists"
-	ContentVerb             = "content"
-	IterVerb                = "iter"
-	AttributesVerb          = "attrs"
+	ExistsVerb     VerbType = "exists"
+	ContentVerb    VerbType = "content"
+	IterVerb       VerbType = "iter"
+	AttributesVerb VerbType = "attrs"
 	SubrangeVerb   VerbType = "subrange"
 )
 
