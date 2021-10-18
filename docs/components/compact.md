@@ -284,6 +284,10 @@ Flags:
                                 Repeat interval for syncing the blocks between
                                 local and remote view for /global Block Viewer
                                 UI.
+      --block-viewer.global.sync-block-timeout=5m  
+                                Maximum time for syncing the blocks between
+                                local and remote view for /global Block Viewer
+                                UI.
       --bucket-web-label=BUCKET-WEB-LABEL  
                                 Prometheus label to use as timeline title in the
                                 bucket web UI
