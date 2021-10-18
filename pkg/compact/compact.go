@@ -515,8 +515,8 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 	iterations := 0
 	blocksToMerge := 0
 
-	// figure out hasPlan and noPlan
-	for {
+	hasPlan := true
+	for hasPlan {
 		for _, g := range groups {
 			if len(g.IDs()) == 1 {
 				continue
@@ -544,6 +544,13 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 
 			// remove 'plan' blocks from 'original metadata' - so that the remaining blocks can now be planned ?
 			// not required to modify originalMeta now
+
+			if len(g.metasByMinTime) == 0 {
+				hasPlan = false
+				break
+				// no plan in case the group is empty after removing the 'planned' metadata
+				// group size will remain one even after newMeta is added, hence, no plan needed for this case
+			}
 
 			newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
 			g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta})
