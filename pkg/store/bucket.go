@@ -34,6 +34,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
+	promtombstones "github.com/prometheus/prometheus/tsdb/tombstones"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -54,6 +55,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
+	"github.com/thanos-io/thanos/pkg/tombstone"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -303,6 +305,9 @@ type BucketStore struct {
 	filterConfig             *FilterConfig
 	advLabelSets             []labelpb.ZLabelSet
 	enableCompatibilityLabel bool
+
+	tombstonesMtx sync.RWMutex
+	tombstones    []*tombstone.Tombstone
 
 	// Every how many posting offset entry we pool in heap memory. Default in Prometheus is 32.
 	postingOffsetsInMemSampling int
@@ -783,6 +788,7 @@ func blockSeries(
 	skipChunks bool, // If true, chunks are not loaded.
 	minTime, maxTime int64, // Series must have data in this time range to be returned.
 	loadAggregates []storepb.Aggr, // List of aggregates to load when loading chunks.
+	tombstones []*tombstone.Tombstone,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(ctx, matchers)
 	if err != nil {
@@ -813,6 +819,7 @@ func blockSeries(
 		lset           labels.Labels
 		chks           []chunks.Meta
 	)
+PostingsLoop:
 	for _, id := range ps {
 		ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, skipChunks, minTime, maxTime)
 		if err != nil {
@@ -824,11 +831,35 @@ func blockSeries(
 		}
 
 		s := seriesEntry{}
+		if err := indexr.LookupLabelsSymbols(symbolizedLset, &lset); err != nil {
+			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
+		}
+		var tombstoneIntervals promtombstones.Intervals
+		for _, ts := range tombstones {
+			for _, matcher := range ts.Matchers {
+				if val := lset.Get(matcher.Name); val != "" {
+					if matcher.Matches(val) {
+						if skipChunks {
+							continue PostingsLoop
+						}
+						tombstoneIntervals.Add(promtombstones.Interval{Mint: ts.MinTime, Maxt: ts.MaxTime})
+					}
+				}
+			}
+		}
+
 		if !skipChunks {
 			// Schedule loading chunks.
 			s.refs = make([]chunks.ChunkRef, 0, len(chks))
 			s.chks = make([]storepb.AggrChunk, 0, len(chks))
+		ChunkMetasLoop:
 			for j, meta := range chks {
+				for _, it := range tombstoneIntervals {
+					if meta.OverlapsClosedInterval(it.Mint, it.Maxt) {
+						continue ChunkMetasLoop
+					}
+				}
+
 				// seriesEntry s is appended to res, but not at every outer loop iteration,
 				// therefore len(res) is the index we need here, not outer loop iteration number.
 				if err := chunkr.addLoad(meta.Ref, len(res), j); err != nil {
@@ -845,9 +876,6 @@ func blockSeries(
 			if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
 				return nil, nil, errors.Wrap(err, "exceeded chunks limit")
 			}
-		}
-		if err := indexr.LookupLabelsSymbols(symbolizedLset, &lset); err != nil {
-			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
 		}
 
 		s.lset = labelpb.ExtendSortedLabels(lset, extLset)
@@ -1017,6 +1045,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	}
 
 	s.mtx.RLock()
+	s.tombstonesMtx.RLock()
+	tombstones := s.tombstones
+	s.tombstonesMtx.RUnlock()
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
@@ -1069,6 +1100,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					req.SkipChunks,
 					req.MinTime, req.MaxTime,
 					req.Aggregates,
+					tombstones,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
@@ -1271,7 +1303,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 				result = strutil.MergeSlices(res, extRes)
 			} else {
-				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil)
+				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
@@ -1402,7 +1434,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				}
 				result = res
 			} else {
-				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil)
+				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
@@ -1453,6 +1485,13 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		Values: strutil.MergeSlices(sets...),
 		Hints:  anyHints,
 	}, nil
+}
+
+func (s *BucketStore) SyncTombstones(ctx context.Context) (err error) {
+	s.tombstonesMtx.Lock()
+	s.tombstones, err = tombstone.ReadTombstones(ctx, s.bkt, s.logger)
+	s.tombstonesMtx.Unlock()
+	return
 }
 
 // bucketBlockSet holds all blocks of an equal label set. It internally splits

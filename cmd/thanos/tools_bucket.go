@@ -33,6 +33,7 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
@@ -60,6 +61,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/tombstone"
 	"github.com/thanos-io/thanos/pkg/ui"
 	"github.com/thanos-io/thanos/pkg/verifier"
 )
@@ -151,6 +153,13 @@ type bucketMarkBlockConfig struct {
 	details  string
 	marker   string
 	blockIDs []string
+}
+
+type bucketDeleteConfig struct {
+	timeout  time.Duration
+	matchers string
+	author   string
+	reason   string
 }
 
 func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *bucketVerifyConfig {
@@ -264,6 +273,15 @@ func (tbc *bucketRetentionConfig) registerBucketRetentionFlag(cmd extkingpin.Fla
 	return tbc
 }
 
+func (tbc *bucketDeleteConfig) registerBucketDeleteFlag(cmd extkingpin.FlagClause) *bucketDeleteConfig {
+	cmd.Flag("timeout", "Timeout to upload tombstone file to the remote storage").Default("5m").DurationVar(&tbc.timeout)
+	cmd.Flag("matchers", "The string representing label matchers").Default("").StringVar(&tbc.matchers)
+	cmd.Flag("author", "Author of the deletion request").Default("not specified").StringVar(&tbc.author)
+	cmd.Flag("reason", "Reason to perform the deletion request").Default("not specified").StringVar(&tbc.reason)
+
+	return tbc
+}
+
 func registerBucket(app extkingpin.AppClause) {
 	cmd := app.Command("bucket", "Bucket utility commands")
 
@@ -278,6 +296,7 @@ func registerBucket(app extkingpin.AppClause) {
 	registerBucketMarkBlock(cmd, objStoreConfig)
 	registerBucketRewrite(cmd, objStoreConfig)
 	registerBucketRetention(cmd, objStoreConfig)
+	registerBucketDelete(cmd, objStoreConfig)
 }
 
 func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
@@ -1365,5 +1384,45 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 			return errors.Wrap(err, "retention failed")
 		}
 		return nil
+	})
+}
+
+func registerBucketDelete(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command("delete", "Delete series command for the object storage. NOTE: Currently it only performs Store API masking in the object storage at chunk level with respect to the tombstones created by the user (Doesn't actually delete the data in objstore).")
+
+	tbc := &bucketDeleteConfig{}
+	tbc.registerBucketDeleteFlag(cmd)
+
+	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to delete. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d (Calculates the actual timestamp at the tombstone creation time) or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("0000-01-01T00:00:00Z"))
+
+	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to delete. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d (Calculates the actual timestamp at the tombstone creation time) or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("9999-12-31T23:59:59Z"))
+
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		confContentYaml, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, "delete")
+		if err != nil {
+			return err
+		}
+		defer runutil.CloseWithLogOnErr(logger, bkt, "tools delete")
+
+		// Dummy actor to immediately kill the group after the run function returns.
+		g.Add(func() error { return nil }, func(error) {})
+
+		m, err := parser.ParseMetricSelector(tbc.matchers)
+		if err != nil {
+			return err
+		}
+
+		ts := tombstone.NewTombstone(m, minTime.PrometheusTimestamp(), maxTime.PrometheusTimestamp(), tbc.author, tbc.reason)
+
+		ctx, cancel := context.WithTimeout(context.Background(), tbc.timeout)
+		defer cancel()
+		return tombstone.UploadTombstone(ctx, ts, bkt, logger)
 	})
 }

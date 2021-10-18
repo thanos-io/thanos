@@ -356,8 +356,8 @@ func runStore(
 
 	// bucketStoreReady signals when bucket store is ready.
 	bucketStoreReady := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
 	{
-		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
@@ -401,6 +401,15 @@ func runStore(
 		}),
 	)
 
+	{
+		g.Add(func() error {
+			return runutil.Repeat(time.Minute*3, ctx.Done(), func() error {
+				return bs.SyncTombstones(ctx)
+			})
+		}, func(error) {
+			cancel()
+		})
+	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA)

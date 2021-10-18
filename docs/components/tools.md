@@ -78,6 +78,12 @@ Subcommands:
     Retention applies retention policies on the given bucket. Please make sure
     no compactor is running on the same bucket at the same time.
 
+  tools bucket delete [<flags>]
+    Delete series command for the object storage. NOTE: Currently it only
+    performs Store API masking in the object storage at chunk level with respect
+    to the tombstones created by the user (Doesn't actually delete the data in
+    objstore).
+
   tools rules-check --rules=RULES
     Check if the rule files are valid or not.
 
@@ -186,6 +192,12 @@ Subcommands:
   tools bucket retention [<flags>]
     Retention applies retention policies on the given bucket. Please make sure
     no compactor is running on the same bucket at the same time.
+
+  tools bucket delete [<flags>]
+    Delete series command for the object storage. NOTE: Currently it only
+    performs Store API masking in the object storage at chunk level with respect
+    to the tombstones created by the user (Doesn't actually delete the data in
+    objstore).
 
 
 ```
