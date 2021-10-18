@@ -242,6 +242,8 @@ type DefaultGrouper struct {
 	blocksMarkedForDeletion  prometheus.Counter
 	blocksMarkedForNoCompact prometheus.Counter
 	hashFunc                 metadata.HashFunc
+	numberOfIterations       prometheus.Gauge
+	numberOfBlocksToMerge    prometheus.Gauge
 }
 
 // NewDefaultGrouper makes a new DefaultGrouper.
@@ -255,6 +257,8 @@ func NewDefaultGrouper(
 	garbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
+	numberOfIterations prometheus.Gauge,
+	numberOfBlocksToMerge prometheus.Gauge,
 ) *DefaultGrouper {
 	return &DefaultGrouper{
 		bkt:                      bkt,
@@ -285,6 +289,14 @@ func NewDefaultGrouper(
 		garbageCollectedBlocks:   garbageCollectedBlocks,
 		blocksMarkedForDeletion:  blocksMarkedForDeletion,
 		hashFunc:                 hashFunc,
+		numberOfIterations: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_number_of_compaction_iterations",
+			Help: "The number of compactions to do",
+		}),
+		numberOfBlocksToMerge: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_number_of_blocks_to_merge",
+			Help: "The number of blocks to be merged",
+		}),
 	}
 }
 
@@ -314,6 +326,8 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.blocksMarkedForDeletion,
 				g.blocksMarkedForNoCompact,
 				g.hashFunc,
+				g.numberOfIterations,
+				g.numberOfBlocksToMerge,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
@@ -352,6 +366,9 @@ type Group struct {
 	blocksMarkedForDeletion     prometheus.Counter
 	blocksMarkedForNoCompact    prometheus.Counter
 	hashFunc                    metadata.HashFunc
+
+	numberOfIterations    prometheus.Gauge
+	numberOfBlocksToMerge prometheus.Gauge
 }
 
 // NewGroup returns a new compaction group.
@@ -372,6 +389,8 @@ func NewGroup(
 	blocksMarkedForDeletion prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
+	numberOfIterations prometheus.Gauge,
+	numberOfBlocksToMerge prometheus.Gauge,
 ) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -393,6 +412,8 @@ func NewGroup(
 		blocksMarkedForDeletion:     blocksMarkedForDeletion,
 		blocksMarkedForNoCompact:    blocksMarkedForNoCompact,
 		hashFunc:                    hashFunc,
+		numberOfIterations:          numberOfIterations,
+		numberOfBlocksToMerge:       numberOfBlocksToMerge,
 	}
 	return g, nil
 }
@@ -400,10 +421,6 @@ func NewGroup(
 // Key returns an identifier for the group.
 func (cg *Group) Key() string {
 	return cg.key
-}
-
-func (cg *Group) Metadata() []*metadata.Meta {
-	return cg.metasByMinTime
 }
 
 func (cg *Group) deleteFromGroup(target map[ulid.ULID]bool) {
@@ -487,46 +504,16 @@ func (cg *Group) Resolution() int64 {
 
 // should return the results/metrics of the planning simulation
 type PlanSim interface {
-	ProgressCalculate(ctx context.Context) error
+	ProgressCalculate(ctx context.Context, groups []*Group) error
 }
 
 type DefaultPlanSim struct {
-	grouper               Grouper
-	planner               Planner
-	sy                    *Syncer
-	numberOfIterations    prometheus.Gauge
-	numberOfBlocksToMerge prometheus.Gauge
+	planner Planner
 }
 
-func NewDefaultPlanSim(grouper Grouper, planner Planner, sy *Syncer, reg prometheus.Registerer) *DefaultPlanSim {
-	return &DefaultPlanSim{
-		grouper: grouper,
-		planner: planner,
-		sy:      sy,
-		numberOfIterations: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_number_of_compaction_iterations",
-			Help: "The number of compactions to do",
-		}),
-		numberOfBlocksToMerge: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_number_of_blocks_to_merge",
-			Help: "The number of blocks to be merged",
-		}),
-	}
-}
-
-func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context) error {
+func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
 	iterations := 0
 	blocksToMerge := 0
-
-	if err := ps.sy.SyncMetas(ctx); err != nil {
-		return errors.Wrapf(err, "could not sync metas")
-	}
-	originalMetas := ps.sy.Metas()
-
-	groups, err := ps.grouper.Groups(originalMetas)
-	if err != nil {
-		return errors.Wrapf(err, "could not group original metadata")
-	}
 
 	// figure out hasPlan and noPlan
 	for {
@@ -536,7 +523,7 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context) error {
 			}
 
 			// parameter should be of type tsdb.BlockMeta.meta
-			plan, err := ps.planner.Plan(ctx, g.Metadata())
+			plan, err := ps.planner.Plan(ctx, g.metasByMinTime)
 			if err != nil {
 				return errors.Wrapf(err, "could not plan")
 			}
@@ -565,8 +552,6 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context) error {
 
 	// updated only once here - after the entire planning simulation is completed
 	// updating the exposed metrics inside the loop will change based on iterations needed for each plan loop
-	ps.numberOfIterations.Set(float64(iterations))
-	ps.numberOfBlocksToMerge.Set(float64(blocksToMerge))
 
 	return nil
 }

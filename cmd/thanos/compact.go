@@ -83,9 +83,6 @@ func (cs compactionSet) maxLevel() int {
 	return len(cs) - 1
 }
 
-// add recvr func to planning struct to modify metadata
-// move to pkg/compact later
-
 func registerCompact(app *extkingpin.App) {
 	cmd := app.Command(component.Compact.String(), "Continuously compacts blocks in an object store bucket.")
 	conf := &compactConfig{}
@@ -345,6 +342,7 @@ func runCompact(
 		return errors.Wrap(err, "create working downsample directory")
 	}
 
+	var numberOfIterations, numberOfBlocks prometheus.Gauge
 	grouper := compact.NewDefaultGrouper(
 		logger,
 		bkt,
@@ -355,6 +353,8 @@ func runCompact(
 		compactMetrics.garbageCollectedBlocks,
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
 		metadata.HashFunc(conf.hashFunc),
+		numberOfIterations,
+		numberOfBlocks,
 	)
 	planner := compact.WithLargeTotalIndexSizeFilter(
 		compact.NewPlanner(logger, levels, noCompactMarkerFilter),
@@ -461,9 +461,18 @@ func runCompact(
 		return cleanPartialMarked()
 	}
 	g.Add(func() error {
-		ps := compact.NewDefaultPlanSim(grouper, planner, sy, reg)
-		err := ps.ProgressCalculate(context.Background())
+		if err := sy.SyncMetas(context.Background()); err != nil {
+			return errors.Wrapf(err, "could not sync metas")
+		}
+		originalMetas := sy.Metas()
+
+		groups, err := grouper.Groups(originalMetas)
 		if err != nil {
+			return errors.Wrapf(err, "could not group original metadata")
+		}
+
+		var ps compact.DefaultPlanSim
+		if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
 			return errors.Wrapf(err, "could not simulate planning")
 		}
 
