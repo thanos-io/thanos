@@ -461,13 +461,11 @@ func runCompact(
 		return cleanPartialMarked()
 	}
 	g.Add(func() error {
-		ps := compact.NewDefaultPlanSim(grouper, planner, sy)
-		numberOfIterations, numberOfBlocksMerged, err := ps.PlanProgressCalc(context.Background())
+		ps := compact.NewDefaultPlanSim(grouper, planner, sy, reg)
+		err := ps.PlanProgressCalc(context.Background())
 		if err != nil {
 			return errors.Wrapf(err, "could not simulate planning")
 		}
-		level.Debug(logger).Log("msg", "number of iterations performed","count", numberOfIterations)
-		level.Debug(logger).Log("msg", "number of blocks merged", "count",numberOfBlocksMerged)
 
 		return nil
 	}, func(err error) {

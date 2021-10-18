@@ -476,49 +476,64 @@ func (cg *Group) Resolution() int64 {
 
 // should return the results/metrics of the planning simulation
 type PlanSim interface {
-	PlanProgressCalc(ctx context.Context) (int, int, error)
+	PlanProgressCalc(ctx context.Context) error
 }
 
 type DefaultPlanSim struct {
-	grouper Grouper
-	planner Planner
-	sy      *Syncer
+	grouper               Grouper
+	planner               Planner
+	sy                    *Syncer
+	numberOfIterations    prometheus.Gauge
+	numberOfBlocksToMerge prometheus.Gauge
 }
 
-func NewDefaultPlanSim(grouper Grouper, planner Planner, sy *Syncer) *DefaultPlanSim {
+func NewDefaultPlanSim(grouper Grouper, planner Planner, sy *Syncer, reg prometheus.Registerer) *DefaultPlanSim {
 	return &DefaultPlanSim{
 		grouper: grouper,
 		planner: planner,
 		sy:      sy,
+		numberOfIterations: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_number_of_compaction_iterations",
+			Help: "The number of compactions to do",
+		}),
+		numberOfBlocksToMerge: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_number_of_blocks_to_merge",
+			Help: "The number of blocks to be merged",
+		}),
 	}
 }
 
-func (ps *DefaultPlanSim) PlanProgressCalc(ctx context.Context) (int, int, error) {
-	numberOfIterations := 0
-	numberOfBlocksToMerge := 0
+func (ps *DefaultPlanSim) PlanProgressCalc(ctx context.Context) error {
+	iterations := 0
+	blocksToMerge := 0
 
 	if err := ps.sy.SyncMetas(ctx); err != nil {
-		return numberOfIterations, numberOfBlocksToMerge, errors.Wrapf(err, "could not sync metas")
+		return errors.Wrapf(err, "could not sync metas")
 	}
 	originalMetas := ps.sy.Metas()
 
 	groups, err := ps.grouper.Groups(originalMetas)
 	if err != nil {
-		return numberOfIterations, numberOfBlocksToMerge, errors.Wrapf(err, "could not group original metadata")
+		return errors.Wrapf(err, "could not group original metadata")
 	}
 
 	// figure out hasPlan and noPlan
 	for {
 		for _, g := range groups {
+			if len(g.IDs()) == 1 {
+				continue
+			}
+
 			// parameter should be of type tsdb.BlockMeta.meta
 			plan, err := ps.planner.Plan(ctx, g.Metadata())
 			if err != nil {
-				return numberOfIterations, numberOfBlocksToMerge, errors.Wrapf(err, "could not plan")
+				return errors.Wrapf(err, "could not plan")
 			}
 			if len(plan) == 0 {
 				continue
 			}
-			numberOfIterations++
+			iterations++
+			ps.numberOfIterations.Set(float64(iterations))
 
 			var toRemove []ulid.ULID
 			var metas []*tsdb.BlockMeta
@@ -526,7 +541,8 @@ func (ps *DefaultPlanSim) PlanProgressCalc(ctx context.Context) (int, int, error
 				metas = append(metas, &p.BlockMeta)
 				toRemove = append(toRemove, p.BlockMeta.ULID)
 			}
-			numberOfBlocksToMerge += len(plan)
+			blocksToMerge += len(plan)
+			ps.numberOfBlocksToMerge.Set(float64(blocksToMerge))
 
 			// remove 'plan' blocks from 'original metadata' - so that the remaining blocks can now be planned ?
 			// not required to modify originalMeta now
@@ -536,7 +552,7 @@ func (ps *DefaultPlanSim) PlanProgressCalc(ctx context.Context) (int, int, error
 		}
 	}
 
-	return numberOfIterations, numberOfBlocksToMerge, nil
+	return nil
 }
 
 // Planner returns blocks to compact.
