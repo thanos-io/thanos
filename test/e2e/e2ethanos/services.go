@@ -163,7 +163,7 @@ func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string)
 	}
 }
 
-func (q *QuerierBuilder) WithEnabledFeature(enableFeatures []string) *QuerierBuilder {
+func (q *QuerierBuilder) WithEnabledFeatures(enableFeatures []string) *QuerierBuilder {
 	q.enableFeatures = enableFeatures
 	return q
 }
