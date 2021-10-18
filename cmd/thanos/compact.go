@@ -462,7 +462,7 @@ func runCompact(
 	}
 	g.Add(func() error {
 		ps := compact.NewDefaultPlanSim(grouper, planner, sy, reg)
-		err := ps.PlanProgressCalc(context.Background())
+		err := ps.ProgressCalculate(context.Background())
 		if err != nil {
 			return errors.Wrapf(err, "could not simulate planning")
 		}

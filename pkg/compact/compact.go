@@ -406,6 +406,9 @@ func (cg *Group) Metadata() []*metadata.Meta {
 	return cg.metasByMinTime
 }
 
+func (cg *Group) deleteFromGroup(target ulid.ULID) {
+}
+
 // AppendMeta the block with the given meta to the group.
 func (cg *Group) AppendMeta(meta *metadata.Meta) error {
 	cg.mtx.Lock()
@@ -476,7 +479,7 @@ func (cg *Group) Resolution() int64 {
 
 // should return the results/metrics of the planning simulation
 type PlanSim interface {
-	PlanProgressCalc(ctx context.Context) error
+	ProgressCalculate(ctx context.Context) error
 }
 
 type DefaultPlanSim struct {
@@ -503,7 +506,7 @@ func NewDefaultPlanSim(grouper Grouper, planner Planner, sy *Syncer, reg prometh
 	}
 }
 
-func (ps *DefaultPlanSim) PlanProgressCalc(ctx context.Context) error {
+func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context) error {
 	iterations := 0
 	blocksToMerge := 0
 
@@ -533,7 +536,6 @@ func (ps *DefaultPlanSim) PlanProgressCalc(ctx context.Context) error {
 				continue
 			}
 			iterations++
-			ps.numberOfIterations.Set(float64(iterations))
 
 			var toRemove []ulid.ULID
 			var metas []*tsdb.BlockMeta
@@ -542,7 +544,6 @@ func (ps *DefaultPlanSim) PlanProgressCalc(ctx context.Context) error {
 				toRemove = append(toRemove, p.BlockMeta.ULID)
 			}
 			blocksToMerge += len(plan)
-			ps.numberOfBlocksToMerge.Set(float64(blocksToMerge))
 
 			// remove 'plan' blocks from 'original metadata' - so that the remaining blocks can now be planned ?
 			// not required to modify originalMeta now
@@ -551,6 +552,11 @@ func (ps *DefaultPlanSim) PlanProgressCalc(ctx context.Context) error {
 			g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta})
 		}
 	}
+
+	// updated only once here - after the entire planning simulation is completed
+	// updating the exposed metrics inside the loop will change based on iterations needed for each plan loop
+	ps.numberOfIterations.Set(float64(iterations))
+	ps.numberOfBlocksToMerge.Set(float64(blocksToMerge))
 
 	return nil
 }
