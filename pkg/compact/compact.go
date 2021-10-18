@@ -546,7 +546,7 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context) error {
 			iterations++
 
 			var toRemove map[ulid.ULID]bool
-			var metas []*tsdb.BlockMeta
+			metas := make([]*tsdb.BlockMeta, 0, len(plan))
 			for _, p := range plan {
 				metas = append(metas, &p.BlockMeta)
 				toRemove[p.BlockMeta.ULID] = true
