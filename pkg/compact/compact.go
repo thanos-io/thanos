@@ -406,7 +406,15 @@ func (cg *Group) Metadata() []*metadata.Meta {
 	return cg.metasByMinTime
 }
 
-func (cg *Group) deleteFromGroup(target ulid.ULID) {
+func (cg *Group) deleteFromGroup(target map[ulid.ULID]bool) {
+	var newGroupMeta []*metadata.Meta
+	for _, meta := range cg.metasByMinTime {
+		if target[meta.BlockMeta.ULID] {
+			newGroupMeta = append(newGroupMeta, meta)
+		}
+	}
+
+	cg.metasByMinTime = newGroupMeta
 }
 
 // AppendMeta the block with the given meta to the group.
@@ -537,12 +545,14 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context) error {
 			}
 			iterations++
 
-			var toRemove []ulid.ULID
+			var toRemove map[ulid.ULID]bool
 			var metas []*tsdb.BlockMeta
 			for _, p := range plan {
 				metas = append(metas, &p.BlockMeta)
-				toRemove = append(toRemove, p.BlockMeta.ULID)
+				toRemove[p.BlockMeta.ULID] = true
 			}
+			g.deleteFromGroup(toRemove)
+
 			blocksToMerge += len(plan)
 
 			// remove 'plan' blocks from 'original metadata' - so that the remaining blocks can now be planned ?
