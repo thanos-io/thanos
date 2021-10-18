@@ -342,7 +342,6 @@ func runCompact(
 		return errors.Wrap(err, "create working downsample directory")
 	}
 
-	var numberOfIterations, numberOfBlocks prometheus.Gauge
 	grouper := compact.NewDefaultGrouper(
 		logger,
 		bkt,
@@ -353,8 +352,6 @@ func runCompact(
 		compactMetrics.garbageCollectedBlocks,
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
 		metadata.HashFunc(conf.hashFunc),
-		numberOfIterations,
-		numberOfBlocks,
 	)
 	planner := compact.WithLargeTotalIndexSizeFilter(
 		compact.NewPlanner(logger, levels, noCompactMarkerFilter),
@@ -471,8 +468,8 @@ func runCompact(
 			return errors.Wrapf(err, "could not group original metadata")
 		}
 
-		var ps compact.DefaultPlanSim
-		if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
+        ps := compact.NewDefaultPlanSim(reg)
+        if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
 			return errors.Wrapf(err, "could not simulate planning")
 		}
 

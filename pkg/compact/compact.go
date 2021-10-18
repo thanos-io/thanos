@@ -242,8 +242,6 @@ type DefaultGrouper struct {
 	blocksMarkedForDeletion  prometheus.Counter
 	blocksMarkedForNoCompact prometheus.Counter
 	hashFunc                 metadata.HashFunc
-	numberOfIterations       prometheus.Gauge
-	numberOfBlocksToMerge    prometheus.Gauge
 }
 
 // NewDefaultGrouper makes a new DefaultGrouper.
@@ -257,8 +255,6 @@ func NewDefaultGrouper(
 	garbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
-	numberOfIterations prometheus.Gauge,
-	numberOfBlocksToMerge prometheus.Gauge,
 ) *DefaultGrouper {
 	return &DefaultGrouper{
 		bkt:                      bkt,
@@ -289,14 +285,6 @@ func NewDefaultGrouper(
 		garbageCollectedBlocks:   garbageCollectedBlocks,
 		blocksMarkedForDeletion:  blocksMarkedForDeletion,
 		hashFunc:                 hashFunc,
-		numberOfIterations: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_number_of_compaction_iterations",
-			Help: "The number of compactions to do",
-		}),
-		numberOfBlocksToMerge: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_number_of_blocks_to_merge",
-			Help: "The number of blocks to be merged",
-		}),
 	}
 }
 
@@ -326,8 +314,6 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.blocksMarkedForDeletion,
 				g.blocksMarkedForNoCompact,
 				g.hashFunc,
-				g.numberOfIterations,
-				g.numberOfBlocksToMerge,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
@@ -366,9 +352,6 @@ type Group struct {
 	blocksMarkedForDeletion     prometheus.Counter
 	blocksMarkedForNoCompact    prometheus.Counter
 	hashFunc                    metadata.HashFunc
-
-	numberOfIterations    prometheus.Gauge
-	numberOfBlocksToMerge prometheus.Gauge
 }
 
 // NewGroup returns a new compaction group.
@@ -389,8 +372,6 @@ func NewGroup(
 	blocksMarkedForDeletion prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
-	numberOfIterations prometheus.Gauge,
-	numberOfBlocksToMerge prometheus.Gauge,
 ) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -412,8 +393,6 @@ func NewGroup(
 		blocksMarkedForDeletion:     blocksMarkedForDeletion,
 		blocksMarkedForNoCompact:    blocksMarkedForNoCompact,
 		hashFunc:                    hashFunc,
-		numberOfIterations:          numberOfIterations,
-		numberOfBlocksToMerge:       numberOfBlocksToMerge,
 	}
 	return g, nil
 }
@@ -502,6 +481,13 @@ func (cg *Group) Resolution() int64 {
 	return cg.resolution
 }
 
+// metrics related to planning and compaction progress
+type ProgressMetrics struct {
+	NumberOfIterations    *prometheus.GaugeVec
+	numberOfBlocksToMerge *prometheus.GaugeVec
+	// figure out where to add groupKey labels to this
+}
+
 // should return the results/metrics of the planning simulation
 type PlanSim interface {
 	ProgressCalculate(ctx context.Context, groups []*Group) error
@@ -509,6 +495,22 @@ type PlanSim interface {
 
 type DefaultPlanSim struct {
 	planner Planner
+	ProgressMetrics
+}
+
+func NewDefaultPlanSim(reg prometheus.Registerer) *DefaultPlanSim {
+	return &DefaultPlanSim{
+		ProgressMetrics: ProgressMetrics{
+			NumberOfIterations: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_number_of_iterations",
+				Help: "number of iterations to be done",
+			}, []string{"group"}),
+			numberOfBlocksToMerge: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_number_of_blocks_planned",
+				Help: "number of blocks planned to be merged",
+			}, []string{"group"}),
+		},
+	}
 }
 
 func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
