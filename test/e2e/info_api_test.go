@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cortexproject/cortex/integration/e2e"
 	e2edb "github.com/cortexproject/cortex/integration/e2e/db"
+	"github.com/efficientgo/e2e"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
@@ -27,52 +27,58 @@ import (
 func TestInfo(t *testing.T) {
 	t.Parallel()
 
-	s, err := e2e.NewScenario("e2e_test_info")
+	e, err := e2e.NewDockerEnvironment("e2e_test_info")
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_info", "alone1", defaultPromConfig("prom-alone1", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone1", defaultPromConfig("prom-alone1", 0, "", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_info", "alone2", defaultPromConfig("prom-alone2", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "alone2", defaultPromConfig("prom-alone2", 0, "", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(s.SharedDir(), "e2e_test_info", "alone3", defaultPromConfig("prom-alone3", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(e, "alone3", defaultPromConfig("prom-alone3", 0, "", ""), e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
 
-	m := e2edb.NewMinio(8080, "thanos")
-	testutil.Ok(t, s.StartAndWaitReady(m))
-	str, err := e2ethanos.NewStoreGW(s.SharedDir(), "1", client.BucketConfig{
-		Type: client.S3,
-		Config: s3.Config{
-			Bucket:    "thanos",
-			AccessKey: e2edb.MinioAccessKey,
-			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m.NetworkHTTPEndpoint(),
-			Insecure:  true,
+	const bucket = "info-api-test"
+	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+	str, err := e2ethanos.NewStoreGW(
+		e,
+		"1",
+		client.BucketConfig{
+			Type: client.S3,
+			Config: s3.Config{
+				Bucket:    bucket,
+				AccessKey: e2edb.MinioAccessKey,
+				SecretKey: e2edb.MinioSecretKey,
+				Endpoint:  m.InternalEndpoint("http"),
+				Insecure:  true,
+			},
 		},
-	})
+		"",
+	)
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(str))
+	testutil.Ok(t, e2e.StartAndWaitReady(str))
 
 	// Register `sidecar1` in all flags (i.e. '--store', '--rule', '--target', '--metadata', '--exemplar', '--endpoint') to verify
 	// '--endpoint' flag works properly works together with other flags ('--target', '--metadata' etc.).
 	// Register 2 sidecars and 1 storeGW using '--endpoint'.
 	// Register `sidecar3` twice to verify it is deduplicated.
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", sidecar1.GRPCNetworkEndpoint()).
-		WithTargetAddresses(sidecar1.GRPCNetworkEndpoint()).
-		WithMetadataAddresses(sidecar1.GRPCNetworkEndpoint()).
-		WithExemplarAddresses(sidecar1.GRPCNetworkEndpoint()).
-		WithRuleAddresses(sidecar1.GRPCNetworkEndpoint()).
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).
+		WithTargetAddresses(sidecar1.InternalEndpoint("grpc")).
+		WithMetadataAddresses(sidecar1.InternalEndpoint("grpc")).
+		WithExemplarAddresses(sidecar1.InternalEndpoint("grpc")).
+		WithRuleAddresses(sidecar1.InternalEndpoint("grpc")).
 		WithEndpoints(
-			sidecar1.GRPCNetworkEndpoint(),
-			sidecar2.GRPCNetworkEndpoint(),
-			sidecar3.GRPCNetworkEndpoint(),
-			sidecar3.GRPCNetworkEndpoint(),
-			str.GRPCNetworkEndpoint(),
+			sidecar1.InternalEndpoint("grpc"),
+			sidecar2.InternalEndpoint("grpc"),
+			sidecar3.InternalEndpoint("grpc"),
+			sidecar3.InternalEndpoint("grpc"),
+			str.InternalEndpoint("grpc"),
 		).
 		Build()
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(q))
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	expected := map[string][]query.EndpointStatus{
 		"sidecar": {
@@ -124,7 +130,7 @@ func TestInfo(t *testing.T) {
 		},
 	}
 
-	url := "http://" + path.Join(q.HTTPEndpoint(), "/api/v1/stores")
+	url := "http://" + path.Join(q.Endpoint("http"), "/api/v1/stores")
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
@@ -146,9 +152,6 @@ func TestInfo(t *testing.T) {
 
 		err = json.Unmarshal(body, &res)
 		testutil.Ok(t, err)
-
-		fmt.Println(res)
-		fmt.Println()
 
 		if err = assertStoreStatus(t, "sidecar", res.Data, expected); err != nil {
 			return err
