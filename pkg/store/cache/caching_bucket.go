@@ -32,7 +32,12 @@ const (
 	originBucket = "bucket"
 )
 
-var errObjNotFound = errors.Errorf("object not found")
+var (
+	errObjNotFound                 = errors.Errorf("object not found")
+	ErrInvalidBucketCacheKeyFormat = errors.New("key has invalid format")
+	ErrInvalidBucketCacheKeyVerb   = errors.New("key has invalid verb")
+	ErrParseKeyInt                 = errors.New("failed to parse integer in key")
+)
 
 // CachingBucket implementation that provides some caching features, based on passed configuration.
 type CachingBucket struct {
@@ -487,6 +492,7 @@ func mergeRanges(input []rng, limit int64) []rng {
 	return input[:last+1]
 }
 
+// VerbType is the type of operation whose result has been stored in the caching bucket's cache.
 type VerbType string
 
 const (
@@ -504,6 +510,7 @@ type BucketCacheKey struct {
 	End   int64
 }
 
+// String returns the string representation of BucketCacheKey.
 func (ck BucketCacheKey) String() string {
 	if ck.Start == 0 && ck.End == 0 {
 		return fmt.Sprintf("%s:%s", ck.Verb, ck.Name)
@@ -512,29 +519,58 @@ func (ck BucketCacheKey) String() string {
 	return fmt.Sprintf("%s:%s:%d:%d", ck.Verb, ck.Name, ck.Start, ck.End)
 }
 
+// IsValidVerb checks if the VerbType matches the predefined verbs.
+func IsValidVerb(v VerbType) bool {
+	switch v {
+	case
+		ExistsVerb,
+		ContentVerb,
+		IterVerb,
+		AttributesVerb,
+		SubrangeVerb:
+		return true
+	}
+	return false
+}
+
+// ParseBucketCacheKey parses a string and returns BucketCacheKey.
 func ParseBucketCacheKey(key string) (BucketCacheKey, error) {
 	ck := BucketCacheKey{}
 	slice := strings.Split(key, ":")
 	if len(slice) < 2 {
-		return ck, errors.New("BucketCacheKey has invalid format.")
+		return ck, ErrInvalidBucketCacheKeyFormat
 	}
 
-	if len(slice) > 2 {
+	verb := VerbType(slice[0])
+	if !IsValidVerb(verb) {
+		return BucketCacheKey{}, ErrInvalidBucketCacheKeyVerb
+	}
+
+	if verb == SubrangeVerb {
+		if len(slice) != 4 {
+			return BucketCacheKey{}, ErrInvalidBucketCacheKeyFormat
+		}
+
 		start, err := strconv.ParseInt(slice[2], 10, 64)
 		if err != nil {
-			return BucketCacheKey{}, err
+			return BucketCacheKey{}, ErrParseKeyInt
 		}
 
 		end, err := strconv.ParseInt(slice[3], 10, 64)
 		if err != nil {
-			return BucketCacheKey{}, err
+			return BucketCacheKey{}, ErrParseKeyInt
 		}
+
 		ck.Start = start
 		ck.End = end
+	} else {
+		if len(slice) != 2 {
+			return BucketCacheKey{}, ErrInvalidBucketCacheKeyFormat
+		}
 	}
-	ck.Verb = VerbType(slice[0])
-	ck.Name = slice[1]
 
+	ck.Verb = verb
+	ck.Name = slice[1]
 	return ck, nil
 }
 
