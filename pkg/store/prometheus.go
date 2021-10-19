@@ -49,7 +49,7 @@ type PrometheusStore struct {
 	component        component.StoreAPI
 	externalLabelsFn func() labels.Labels
 	promVersion      func() string
-	Timestamps       func() (mint int64, maxt int64)
+	timestamps       func() (mint int64, maxt int64)
 
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 
@@ -72,7 +72,7 @@ func NewPrometheusStore(
 	baseURL *url.URL,
 	component component.StoreAPI,
 	externalLabelsFn func() labels.Labels,
-	Timestamps func() (mint int64, maxt int64),
+	timestamps func() (mint int64, maxt int64),
 	promVersion func() string,
 ) (*PrometheusStore, error) {
 	if logger == nil {
@@ -85,7 +85,7 @@ func NewPrometheusStore(
 		component:                     component,
 		externalLabelsFn:              externalLabelsFn,
 		promVersion:                   promVersion,
-		Timestamps:                    Timestamps,
+		timestamps:                    timestamps,
 		remoteReadAcceptableResponses: []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS, prompb.ReadRequest_SAMPLES},
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
@@ -107,7 +107,7 @@ func NewPrometheusStore(
 // This is fine for now, but might be needed in future.
 func (p *PrometheusStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	lset := p.externalLabelsFn()
-	mint, maxt := p.Timestamps()
+	mint, maxt := p.timestamps()
 
 	res := &storepb.InfoResponse{
 		Labels:    make([]labelpb.ZLabel, 0, len(lset)),
@@ -153,7 +153,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	}
 
 	// Don't ask for more than available time. This includes potential `minTime` flag limit.
-	availableMinTime, _ := p.Timestamps()
+	availableMinTime, _ := p.timestamps()
 	if r.MinTime < availableMinTime {
 		r.MinTime = availableMinTime
 	}
@@ -624,4 +624,8 @@ func (p *PrometheusStore) LabelSet() []labelpb.ZLabelSet {
 	}
 
 	return labelset
+}
+
+func (p *PrometheusStore) Timestamps() (mint int64, maxt int64) {
+	return p.timestamps()
 }
