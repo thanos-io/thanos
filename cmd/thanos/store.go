@@ -388,20 +388,16 @@ func runStore(
 
 	infoSrv := info.NewInfoServer(
 		component.Store.String(),
-		func() []labelpb.ZLabelSet {
+		info.WithLabelSet(func() []labelpb.ZLabelSet {
 			return bs.LabelSet()
-		},
-		func() *infopb.StoreInfo {
+		}),
+		info.WithStoreInfo(func() *infopb.StoreInfo {
 			mint, maxt := bs.TimeRange()
 			return &infopb.StoreInfo{
 				MinTime: mint,
 				MaxTime: maxt,
 			}
-		},
-		nil,
-		nil,
-		nil,
-		nil,
+		}),
 	)
 
 	// Start query (proxy) gRPC StoreAPI.

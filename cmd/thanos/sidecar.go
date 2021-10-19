@@ -249,33 +249,33 @@ func runSidecar(
 
 		infoSrv := info.NewInfoServer(
 			component.Sidecar.String(),
-			func() []labelpb.ZLabelSet {
+			info.WithLabelSet(func() []labelpb.ZLabelSet {
 				return promStore.LabelSet()
-			},
-			func() *infopb.StoreInfo {
+			}),
+			info.WithStoreInfo(func() *infopb.StoreInfo {
 				mint, maxt := promStore.Timestamps()
 				return &infopb.StoreInfo{
 					MinTime: mint,
 					MaxTime: maxt,
 				}
-			},
-			func() *infopb.ExemplarsInfo {
+			}),
+			info.WithExemplarsInfo(func() *infopb.ExemplarsInfo {
 				// Currently Exemplars API does not expose metadata such as min/max time,
 				// so we are using default minimum and maximum possible values as min/max time.
 				return &infopb.ExemplarsInfo{
 					MinTime: query.MinTime,
 					MaxTime: query.MaxTime,
 				}
-			},
-			func() *infopb.RulesInfo {
+			}),
+			info.WithRulesInfo(func() *infopb.RulesInfo {
 				return &infopb.RulesInfo{}
-			},
-			func() *infopb.TargetsInfo {
+			}),
+			info.WithTargetInfo(func() *infopb.TargetsInfo {
 				return &infopb.TargetsInfo{}
-			},
-			func() *infopb.MetricMetadataInfo {
+			}),
+			info.WithMetricMetadataInfo(func() *infopb.MetricMetadataInfo {
 				return &infopb.MetricMetadataInfo{}
-			},
+			}),
 		)
 
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
