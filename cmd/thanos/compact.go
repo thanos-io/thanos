@@ -55,6 +55,10 @@ var (
 	}
 )
 
+const (
+	progressMetrics = "compact-progress-metrics"
+)
+
 type compactionSet []time.Duration
 
 func (cs compactionSet) String() string {
@@ -457,26 +461,35 @@ func runCompact(
 
 		return cleanPartialMarked()
 	}
-	g.Add(func() error {
-		if err := sy.SyncMetas(context.Background()); err != nil {
-			return errors.Wrapf(err, "could not sync metas")
-		}
-		originalMetas := sy.Metas()
 
-		groups, err := grouper.Groups(originalMetas)
-		if err != nil {
-			return errors.Wrapf(err, "could not group original metadata")
-		}
+	if conf.progressMetrics {
+		g.Add(func() error {
+			if err := sy.SyncMetas(context.Background()); err != nil {
+				return errors.Wrapf(err, "could not sync metas")
+			}
+			originalMetas := sy.Metas()
 
-        ps := compact.NewDefaultPlanSim(reg)
-        if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
-			return errors.Wrapf(err, "could not simulate planning")
-		}
+			groups, err := grouper.Groups(originalMetas)
+			if err != nil {
+				return errors.Wrapf(err, "could not group original metadata")
+			}
 
-		return nil
-	}, func(err error) {
-		cancel()
-	})
+			ps := compact.NewDefaultPlanSim(reg)
+			if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
+				return errors.Wrapf(err, "could not simulate planning")
+			}
+
+			for _, meta := range originalMetas {
+				groupKey := compact.DefaultGroupKey(meta.Thanos)
+				ps.ProgressMetrics.NumberOfIterations.WithLabelValues(groupKey)
+				ps.ProgressMetrics.NumberOfBlocksToMerge.WithLabelValues(groupKey)
+			}
+
+			return nil
+		}, func(err error) {
+			cancel()
+		})
+	}
 
 	g.Add(func() error {
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
@@ -610,9 +623,17 @@ type compactConfig struct {
 	enableVerticalCompaction                       bool
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
+	progressMetrics                                bool
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
+	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+progressMetrics+".").Default("").Strings()
+	for _, f := range *featureList {
+		if f == "compact-progress-metrics" {
+			cc.progressMetrics = true
+		}
+	}
+
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)
 	cmd.Flag("debug.accept-malformed-index",
