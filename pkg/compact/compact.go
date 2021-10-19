@@ -484,7 +484,7 @@ func (cg *Group) Resolution() int64 {
 // metrics related to planning and compaction progress
 type ProgressMetrics struct {
 	NumberOfIterations    *prometheus.GaugeVec
-	numberOfBlocksToMerge *prometheus.GaugeVec
+	NumberOfBlocksToMerge *prometheus.GaugeVec
 	// figure out where to add groupKey labels to this
 }
 
@@ -505,7 +505,7 @@ func NewDefaultPlanSim(reg prometheus.Registerer) *DefaultPlanSim {
 				Name: "thanos_number_of_iterations",
 				Help: "number of iterations to be done",
 			}, []string{"group"}),
-			numberOfBlocksToMerge: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+			NumberOfBlocksToMerge: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_number_of_blocks_planned",
 				Help: "number of blocks planned to be merged",
 			}, []string{"group"}),
@@ -516,6 +516,7 @@ func NewDefaultPlanSim(reg prometheus.Registerer) *DefaultPlanSim {
 func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
 	iterations := 0
 	blocksToMerge := 0
+	var groupCompactions, groupBlocks map[string]int
 
 	hasPlan := true
 	for hasPlan {
@@ -533,6 +534,7 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 				continue
 			}
 			iterations++
+			groupCompactions[g.key] = iterations
 
 			var toRemove map[ulid.ULID]bool
 			metas := make([]*tsdb.BlockMeta, 0, len(plan))
@@ -543,6 +545,7 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 			g.deleteFromGroup(toRemove)
 
 			blocksToMerge += len(plan)
+			groupBlocks[g.key] = blocksToMerge
 
 			// remove 'plan' blocks from 'original metadata' - so that the remaining blocks can now be planned ?
 			// not required to modify originalMeta now
@@ -560,7 +563,11 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 	}
 
 	// updated only once here - after the entire planning simulation is completed
-	// updating the exposed metrics inside the loop will change based on iterations needed for each plan loop
+	// updating the exposed metrics inside the above loop will change based on iterations needed for each plan loop
+	for _, g := range groups {
+		ps.ProgressMetrics.NumberOfIterations.WithLabelValues(g.key).Add(float64(groupCompactions[g.key]))
+		ps.ProgressMetrics.NumberOfBlocksToMerge.WithLabelValues(g.key).Add(float64(groupBlocks[g.key]))
+	}
 
 	return nil
 }
