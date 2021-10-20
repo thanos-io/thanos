@@ -1030,6 +1030,10 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		var groupErrs errutil.MultiError
 	groupLoop:
 		for _, g := range groups {
+			// Ignore groups with only one block because there is nothing to compact.
+			if len(g.IDs()) == 1 {
+				continue
+			}
 			select {
 			case groupErr := <-errChan:
 				groupErrs.Add(groupErr)
