@@ -4,8 +4,7 @@
 package pool
 
 import (
-	"bytes"
-	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -71,52 +70,57 @@ func TestRacePutGet(t *testing.T) {
 
 	s := sync.WaitGroup{}
 
-	// Start two goroutines: they always Get and Put two byte slices
-	// to which they write 'foo' / 'barbazbaz' and check if the data is still
-	// there after writing it, before putting it back.
-	errs := make(chan error, 2)
-	stop := make(chan bool, 2)
+	const goroutines = 100
 
-	f := func(txt string) {
+	// Start multiple goroutines: they always Get and Put two byte slices
+	// to which they write their contents and check if the data is still
+	// there after writing it, before putting it back.
+	errs := make(chan error, goroutines)
+	stop := make(chan struct{})
+
+	f := func(txt string, grow bool) {
 		defer s.Done()
 		for {
 			select {
 			case <-stop:
 				return
 			default:
-				c, err := chunkPool.Get(3)
+				c, err := chunkPool.Get(len(txt))
 				if err != nil {
 					errs <- errors.Wrapf(err, "goroutine %s", txt)
 					return
 				}
 
-				buf := bytes.NewBuffer(*c)
-
-				_, err = fmt.Fprintf(buf, "%s", txt)
-				if err != nil {
-					errs <- errors.Wrapf(err, "goroutine %s", txt)
-					return
-				}
-
-				if buf.String() != txt {
+				*c = append(*c, txt...)
+				if string(*c) != txt {
 					errs <- errors.New("expected to get the data just written")
 					return
 				}
+				if grow {
+					*c = append(*c, txt...)
+					*c = append(*c, txt...)
+					if string(*c) != txt+txt+txt {
+						errs <- errors.New("expected to get the data just written")
+						return
+					}
+				}
 
-				b := buf.Bytes()
-				chunkPool.Put(&b)
+				chunkPool.Put(c)
 			}
 		}
 	}
 
-	s.Add(2)
-	go f("foo")
-	go f("barbazbaz")
+	for i := 0; i < goroutines; i++ {
+		s.Add(1)
+		// make sure we start multiple goroutines with same len buf requirements, to hit same pools
+		s := strings.Repeat(string(byte(i)), i%10)
+		// some of the goroutines will append more elements to the provided slice
+		grow := i%2 == 0
+		go f(s, grow)
+	}
 
-	time.Sleep(5 * time.Second)
-	stop <- true
-	stop <- true
-
+	time.Sleep(1 * time.Second)
+	close(stop)
 	s.Wait()
 	select {
 	case err := <-errs:
