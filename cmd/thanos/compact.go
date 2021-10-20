@@ -475,14 +475,14 @@ func runCompact(
 			}
 
 			ps := compact.NewDefaultPlanSim(reg, planner)
-			if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
-				return errors.Wrapf(err, "could not simulate planning")
-			}
-
 			for _, meta := range originalMetas {
 				groupKey := compact.DefaultGroupKey(meta.Thanos)
 				ps.ProgressMetrics.NumberOfIterations.WithLabelValues(groupKey)
 				ps.ProgressMetrics.NumberOfBlocksToMerge.WithLabelValues(groupKey)
+			}
+
+			if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
+				return errors.Wrapf(err, "could not simulate planning")
 			}
 
 			return nil

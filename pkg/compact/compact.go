@@ -514,8 +514,6 @@ func NewDefaultPlanSim(reg prometheus.Registerer, planner Planner) *DefaultPlanS
 }
 
 func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
-	iterations := 0
-	blocksToMerge := 0
 	groupCompactions := make(map[string]int, len(groups))
 	groupBlocks := make(map[string]int, len(groups))
 
@@ -534,8 +532,7 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 			if len(plan) == 0 {
 				continue
 			}
-			iterations++
-			groupCompactions[g.key] = iterations
+			groupCompactions[g.key]++
 
 			// value type in map is struct{} - enpty struct consumes 0 bytes so prefered over bool
 			toRemove := make(map[ulid.ULID]struct{}, len(plan))
@@ -546,8 +543,7 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 			}
 			g.deleteFromGroup(toRemove)
 
-			blocksToMerge += len(plan)
-			groupBlocks[g.key] = blocksToMerge
+			groupBlocks[g.key] += len(plan)
 
 			// remove 'plan' blocks from 'original metadata' - so that the remaining blocks can now be planned ?
 			// not required to modify originalMeta now
@@ -569,9 +565,7 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 	// updating the metrics' maps directly - some keys may not be present in the groups map; also saves the cost of a lookup if done directly
 	for key, iters := range groupCompactions {
 		ps.ProgressMetrics.NumberOfIterations.WithLabelValues(key).Add(float64(iters))
-	}
-	for key, blocks := range groupBlocks {
-		ps.ProgressMetrics.NumberOfBlocksToMerge.WithLabelValues(key).Add(float64(blocks))
+		ps.ProgressMetrics.NumberOfBlocksToMerge.WithLabelValues(key).Add(float64(groupBlocks[key]))
 	}
 
 	return nil
