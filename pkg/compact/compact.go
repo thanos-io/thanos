@@ -556,7 +556,7 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 			}
 
 			newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
-			g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta})
+			g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta, Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: g.Resolution()}, Labels: g.Labels().Map()}})
 		}
 	}
 
