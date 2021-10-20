@@ -498,8 +498,9 @@ type DefaultPlanSim struct {
 	ProgressMetrics
 }
 
-func NewDefaultPlanSim(reg prometheus.Registerer) *DefaultPlanSim {
+func NewDefaultPlanSim(reg prometheus.Registerer, logger log.Logger) *DefaultPlanSim {
 	return &DefaultPlanSim{
+		planner: NewTSDBBasedPlanner(logger, []int64{}),
 		ProgressMetrics: ProgressMetrics{
 			NumberOfIterations: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_number_of_iterations",
@@ -536,7 +537,7 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 			iterations++
 			groupCompactions[g.key] = iterations
 
-			var toRemove map[ulid.ULID]bool
+			toRemove := make(map[ulid.ULID]bool, len(plan))
 			metas := make([]*tsdb.BlockMeta, 0, len(plan))
 			for _, p := range plan {
 				metas = append(metas, &p.BlockMeta)
