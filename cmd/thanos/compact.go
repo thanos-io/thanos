@@ -474,7 +474,7 @@ func runCompact(
 				return errors.Wrapf(err, "could not group original metadata")
 			}
 
-			ps := compact.NewDefaultPlanSim(reg, logger)
+			ps := compact.NewDefaultPlanSim(reg, planner)
 			if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
 				return errors.Wrapf(err, "could not simulate planning")
 			}

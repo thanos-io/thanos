@@ -402,10 +402,10 @@ func (cg *Group) Key() string {
 	return cg.key
 }
 
-func (cg *Group) deleteFromGroup(target map[ulid.ULID]bool) {
+func (cg *Group) deleteFromGroup(target map[ulid.ULID]struct{}) {
 	var newGroupMeta []*metadata.Meta
 	for _, meta := range cg.metasByMinTime {
-		if target[meta.BlockMeta.ULID] {
+		if _, found := target[meta.BlockMeta.ULID]; found {
 			newGroupMeta = append(newGroupMeta, meta)
 		}
 	}
@@ -485,7 +485,6 @@ func (cg *Group) Resolution() int64 {
 type ProgressMetrics struct {
 	NumberOfIterations    *prometheus.GaugeVec
 	NumberOfBlocksToMerge *prometheus.GaugeVec
-	// figure out where to add groupKey labels to this
 }
 
 // should return the results/metrics of the planning simulation
@@ -495,13 +494,13 @@ type PlanSim interface {
 
 type DefaultPlanSim struct {
 	planner Planner
-	ProgressMetrics
+	*ProgressMetrics
 }
 
-func NewDefaultPlanSim(reg prometheus.Registerer, logger log.Logger) *DefaultPlanSim {
+func NewDefaultPlanSim(reg prometheus.Registerer, planner Planner) *DefaultPlanSim {
 	return &DefaultPlanSim{
-		planner: NewTSDBBasedPlanner(logger, []int64{}),
-		ProgressMetrics: ProgressMetrics{
+		planner: planner,
+		ProgressMetrics: &ProgressMetrics{
 			NumberOfIterations: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_number_of_iterations",
 				Help: "number of iterations to be done",
@@ -517,7 +516,8 @@ func NewDefaultPlanSim(reg prometheus.Registerer, logger log.Logger) *DefaultPla
 func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
 	iterations := 0
 	blocksToMerge := 0
-	var groupCompactions, groupBlocks map[string]int
+	groupCompactions := make(map[string]int, len(groups))
+	groupBlocks := make(map[string]int, len(groups))
 
 	hasPlan := true
 	for hasPlan {
@@ -537,11 +537,12 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 			iterations++
 			groupCompactions[g.key] = iterations
 
-			toRemove := make(map[ulid.ULID]bool, len(plan))
+			// value type in map is struct{} - enpty struct consumes 0 bytes so prefered over bool
+			toRemove := make(map[ulid.ULID]struct{}, len(plan))
 			metas := make([]*tsdb.BlockMeta, 0, len(plan))
 			for _, p := range plan {
 				metas = append(metas, &p.BlockMeta)
-				toRemove[p.BlockMeta.ULID] = true
+				toRemove[p.BlockMeta.ULID] = struct{}{}
 			}
 			g.deleteFromGroup(toRemove)
 
@@ -565,9 +566,12 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 
 	// updated only once here - after the entire planning simulation is completed
 	// updating the exposed metrics inside the above loop will change based on iterations needed for each plan loop
-	for _, g := range groups {
-		ps.ProgressMetrics.NumberOfIterations.WithLabelValues(g.key).Add(float64(groupCompactions[g.key]))
-		ps.ProgressMetrics.NumberOfBlocksToMerge.WithLabelValues(g.key).Add(float64(groupBlocks[g.key]))
+	// updating the metrics' maps directly - some keys may not be present in the groups map; also saves the cost of a lookup if done directly
+	for key, iters := range groupCompactions {
+		ps.ProgressMetrics.NumberOfIterations.WithLabelValues(key).Add(float64(iters))
+	}
+	for key, blocks := range groupBlocks {
+		ps.ProgressMetrics.NumberOfBlocksToMerge.WithLabelValues(key).Add(float64(blocks))
 	}
 
 	return nil
