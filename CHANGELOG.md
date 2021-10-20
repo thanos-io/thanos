@@ -24,6 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4663](https://github.com/thanos-io/thanos/pull/4663) Fetcher: Fix discovered data races.
 - [#4754](https://github.com/thanos-io/thanos/pull/4754) Query: Fix possible panic on stores endpoint.
 - [#4753](https://github.com/thanos-io/thanos/pull/4753) Store: validate block sync concurrency parameter
+- [#4792](https://github.com/thanos-io/thanos/pull/4792) Store: Fix data race in BucketedBytes pool.
 
 ## [v0.23.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.10.1
 
