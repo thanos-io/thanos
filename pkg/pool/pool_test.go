@@ -113,9 +113,9 @@ func TestRacePutGet(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		s.Add(1)
 		// make sure we start multiple goroutines with same len buf requirements, to hit same pools
-		s := strings.Repeat(string(byte(i)), i % 10)
+		s := strings.Repeat(string(byte(i)), i%10)
 		// some of the goroutines will append more elements to the provided slice
-		grow := i % 2 == 0
+		grow := i%2 == 0
 		go f(s, grow)
 	}
 
