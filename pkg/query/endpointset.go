@@ -688,46 +688,39 @@ func (er *endpointRef) ComponentType() component.Component {
 	return component.FromString(er.metadata.ComponentType)
 }
 
-func (er *endpointRef) HasClients() bool {
-	er.mtx.RLock()
-	defer er.mtx.RUnlock()
-
-	return er.clients != nil
-}
-
 func (er *endpointRef) HasStoreAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.HasClients() && er.clients.store != nil
+	return er.clients != nil && er.clients.store != nil
 }
 
 func (er *endpointRef) HasRulesAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.HasClients() && er.clients.rule != nil
+	return er.clients != nil && er.clients.rule != nil
 }
 
 func (er *endpointRef) HasTargetsAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.HasClients() && er.clients.target != nil
+	return er.clients != nil && er.clients.target != nil
 }
 
 func (er *endpointRef) HasMetricMetadataAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.HasClients() && er.clients.metricMetadata != nil
+	return er.clients != nil && er.clients.metricMetadata != nil
 }
 
 func (er *endpointRef) HasExemplarsAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.HasClients() && er.clients.exemplar != nil
+	return er.clients != nil && er.clients.exemplar != nil
 }
 
 func (er *endpointRef) LabelSets() []labels.Labels {

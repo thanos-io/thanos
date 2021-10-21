@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
 	"github.com/pkg/errors"
@@ -1184,4 +1185,48 @@ func assertRegisteredAPIs(t *testing.T, expectedAPIs *APIs, er *endpointRef) {
 	testutil.Equals(t, expectedAPIs.target, er.HasTargetsAPI())
 	testutil.Equals(t, expectedAPIs.metricMetadata, er.HasMetricMetadataAPI())
 	testutil.Equals(t, expectedAPIs.exemplars, er.HasExemplarsAPI())
+}
+
+// Regression test for: https://github.com/thanos-io/thanos/issues/4766.
+func TestDeadlockLocking(t *testing.T) {
+	t.Parallel()
+
+	mockEndpointRef := &endpointRef{
+		addr: "mockedStore",
+		metadata: &endpointMetadata{
+			&infopb.InfoResponse{},
+		},
+		clients: &endpointClients{},
+	}
+
+	g := &errgroup.Group{}
+	deadline := time.Now().Add(3 * time.Second)
+
+	g.Go(func() error {
+		for {
+			if time.Now().After(deadline) {
+				break
+			}
+			mockEndpointRef.Update(&endpointMetadata{
+				InfoResponse: &infopb.InfoResponse{},
+			})
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		for {
+			if time.Now().After(deadline) {
+				break
+			}
+			mockEndpointRef.HasStoreAPI()
+			mockEndpointRef.HasExemplarsAPI()
+			mockEndpointRef.HasMetricMetadataAPI()
+			mockEndpointRef.HasRulesAPI()
+			mockEndpointRef.HasTargetsAPI()
+		}
+		return nil
+	})
+
+	testutil.Ok(t, g.Wait())
 }
