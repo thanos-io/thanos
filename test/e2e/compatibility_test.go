@@ -71,7 +71,7 @@ scrape_configs:
 
 	t.Run("receive", func(t *testing.T) {
 		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "receive.yaml"),
-			[]byte(promLablsPromQLConfig(prom, queryReceive, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
+			[]byte(promLabelsPromQLConfig(prom, queryReceive, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
 
 		stdout, stderr, err := compliance.Exec(e2e.NewCommand("-config-file", filepath.Join(compliance.InternalDir(), "receive.yaml")))
 		testutil.Ok(t, err)
@@ -79,7 +79,7 @@ scrape_configs:
 	})
 	t.Run("sidecar", func(t *testing.T) {
 		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "sidecar.yaml"),
-			[]byte(promLablsPromQLConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
+			[]byte(promLabelsPromQLConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
 
 		stdout, stderr, err := compliance.Exec(e2e.NewCommand("-config-file", filepath.Join(compliance.InternalDir(), "sidecar.yaml")))
 		testutil.Ok(t, err)
@@ -87,7 +87,7 @@ scrape_configs:
 	})
 }
 
-func promLablsPromQLConfig(reference *e2edb.Prometheus, target e2e.Runnable, dropLabels []string) string {
+func promLabelsPromQLConfig(reference *e2edb.Prometheus, target e2e.Runnable, dropLabels []string) string {
 	return `reference_target_config:
   query_url: '` + reference.InternalEndpoint("http") + `'
 
