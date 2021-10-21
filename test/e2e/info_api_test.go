@@ -42,7 +42,7 @@ func TestInfo(t *testing.T) {
 	const bucket = "info-api-test"
 	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
-	str, err := e2ethanos.NewStoreGW(
+	store, err := e2ethanos.NewStoreGW(
 		e,
 		"1",
 		client.BucketConfig{
@@ -58,7 +58,7 @@ func TestInfo(t *testing.T) {
 		"",
 	)
 	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(str))
+	testutil.Ok(t, e2e.StartAndWaitReady(store))
 
 	// Register `sidecar1` in all flags (i.e. '--store', '--rule', '--target', '--metadata', '--exemplar', '--endpoint') to verify
 	// '--endpoint' flag works properly works together with other flags ('--target', '--metadata' etc.).
@@ -74,7 +74,7 @@ func TestInfo(t *testing.T) {
 			sidecar2.InternalEndpoint("grpc"),
 			sidecar3.InternalEndpoint("grpc"),
 			sidecar3.InternalEndpoint("grpc"),
-			str.InternalEndpoint("grpc"),
+			store.InternalEndpoint("grpc"),
 		).
 		Build()
 	testutil.Ok(t, err)
@@ -138,20 +138,28 @@ func TestInfo(t *testing.T) {
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		testutil.Ok(t, err)
+		if err != nil {
+			return err
+		}
 
 		resp, err := http.DefaultClient.Do(req)
-		testutil.Ok(t, err)
+		if err != nil {
+			return err
+		}
 
 		body, err := ioutil.ReadAll(resp.Body)
-		testutil.Ok(t, err)
+		if err != nil {
+			return err
+		}
 
 		var res struct {
 			Data map[string][]query.EndpointStatus `json:"data"`
 		}
 
 		err = json.Unmarshal(body, &res)
-		testutil.Ok(t, err)
+		if err != nil {
+			return err
+		}
 
 		if err = assertStoreStatus(t, "sidecar", res.Data, expected); err != nil {
 			return err
