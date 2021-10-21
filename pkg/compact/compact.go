@@ -497,9 +497,9 @@ type DefaultPlanSim struct {
 	*ProgressMetrics
 }
 
-func NewDefaultPlanSim(reg prometheus.Registerer, planner Planner) *DefaultPlanSim {
+func NewDefaultPlanSim(reg prometheus.Registerer, logger log.Logger) *DefaultPlanSim {
 	return &DefaultPlanSim{
-		planner: planner,
+		planner: NewTSDBBasedPlanner(logger, []int64{}),
 		ProgressMetrics: &ProgressMetrics{
 			NumberOfIterations: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_number_of_iterations",
@@ -517,13 +517,12 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 	groupCompactions := make(map[string]int, len(groups))
 	groupBlocks := make(map[string]int, len(groups))
 
-	hasPlan := true
-	for hasPlan {
+	for len(groups) > 0 {
+		tmpGroups := make([]*Group, 0, len(groups))
 		for _, g := range groups {
 			if len(g.IDs()) == 1 {
 				continue
 			}
-
 			// parameter should be of type tsdb.BlockMeta.meta
 			plan, err := ps.planner.Plan(ctx, g.metasByMinTime)
 			if err != nil {
@@ -549,15 +548,19 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 			// not required to modify originalMeta now
 
 			if len(g.metasByMinTime) == 0 {
-				hasPlan = false
-				break
+				continue
 				// no plan in case the group is empty after removing the 'planned' metadata
 				// group size will remain one even after newMeta is added, hence, no plan needed for this case
 			}
 
 			newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
-			g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta, Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: g.Resolution()}, Labels: g.Labels().Map()}})
+			if err := g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta, Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: g.Resolution()}, Labels: g.Labels().Map()}}); err != nil {
+				return errors.Wrapf(err, "append meta")
+			}
+			tmpGroups = append(tmpGroups, g)
 		}
+
+		groups = tmpGroups
 	}
 
 	// updated only once here - after the entire planning simulation is completed

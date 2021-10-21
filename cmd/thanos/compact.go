@@ -474,7 +474,7 @@ func runCompact(
 				return errors.Wrapf(err, "could not group original metadata")
 			}
 
-			ps := compact.NewDefaultPlanSim(reg, planner)
+			ps := compact.NewDefaultPlanSim(reg, logger)
 			for _, meta := range originalMetas {
 				groupKey := compact.DefaultGroupKey(meta.Thanos)
 				ps.ProgressMetrics.NumberOfIterations.WithLabelValues(groupKey)
