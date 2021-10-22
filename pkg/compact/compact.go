@@ -574,6 +574,52 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 	return nil
 }
 
+type DownsampleMetrics struct {
+	blocksDownsampled *prometheus.GaugeVec
+	// - number of blocks to be finally downsampled, grouped by resolution - ??
+}
+
+type DownsampleSim interface {
+	DownsampleCalculate()
+}
+
+type DefaultDownsampleSim struct {
+	*DownsampleMetrics
+}
+
+func NewDefaultDownsampleSim(reg prometheus.Registerer) *DefaultDownsampleSim {
+	return &DefaultDownsampleSim{}
+}
+
+func (ds *DefaultDownsampleSim) DownsampleCalculate(ctx context.Context, logger log.Logger, bkt objstore.Bucket, metas map[ulid.ULID]*metadata.Meta) error {
+
+	sources5m := map[ulid.ULID]struct{}{}
+	sources1h := map[ulid.ULID]struct{}{}
+
+	for _, m := range metas {
+		switch m.Thanos.Downsample.Resolution {
+		case downsample.ResLevel0:
+			continue
+		case downsample.ResLevel1:
+			for _, id := range m.Compaction.Sources {
+				sources5m[id] = struct{}{}
+			}
+		case downsample.ResLevel2:
+			for _, id := range m.Compaction.Sources {
+				sources1h[id] = struct{}{}
+			}
+		default:
+			return errors.Errorf("unexpected downsampling resolution %d", m.Thanos.Downsample.Resolution)
+		}
+	}
+
+	level.Info(logger).Log("msg", "number of blocks to be downsampled", "5m", len(sources5m))
+
+	level.Info(logger).Log("msg", "number of blocks to be downsampled", "1h", len(sources1h))
+
+	return nil
+}
+
 // Planner returns blocks to compact.
 type Planner interface {
 	// Plan returns a list of blocks that should be compacted into single one.

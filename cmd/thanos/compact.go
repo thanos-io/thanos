@@ -492,6 +492,29 @@ func runCompact(
 	}
 
 	g.Add(func() error {
+		if err := sy.SyncMetas(context.Background()); err != nil {
+			return errors.Wrapf(err, "could not sync metas")
+		}
+		originalMetas := sy.Metas()
+
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
+		if err != nil {
+			return err
+		}
+
+		ds := compact.NewDefaultDownsampleSim(reg)
+		if err := ds.DownsampleCalculate(context.Background(), logger, bkt, originalMetas); err != nil {
+			return errors.Wrapf(err, "could not simulate downsampling")
+		}
+
+		// find source blocks for 5m and 1h - like the above func
+
+		return nil
+	}, func(err error) {
+		cancel()
+	})
+
+	g.Add(func() error {
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 		if !conf.wait {
