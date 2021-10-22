@@ -9,6 +9,7 @@ require (
 	github.com/Azure/go-autorest/autorest/azure/auth v0.5.8
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/alecthomas/units v0.0.0-20210208195552-ff826a37aa15
+	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1295
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
 	github.com/baidubce/bce-sdk-go v0.9.81
 	github.com/blang/semver/v4 v4.0.0

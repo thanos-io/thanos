@@ -5,6 +5,7 @@ package oss
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,11 +13,15 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/prometheus/common/version"
+
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	alioss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -26,24 +31,82 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/clientutil"
 )
 
-// Part size for multi part upload.
+// PartSize for multi part upload.
 const PartSize = 1024 * 1024 * 128
+
+const securityCredURL = "http://100.100.100.200/latest/meta-data/ram/security-credentials/"
 
 // Config stores the configuration for oss bucket.
 type Config struct {
 	Endpoint        string `yaml:"endpoint"`
 	Bucket          string `yaml:"bucket"`
+	RoleName        string `yaml:"role_name"`
 	AccessKeyID     string `yaml:"access_key_id"`
 	AccessKeySecret string `yaml:"access_key_secret"`
 }
 
 // Bucket implements the store.Bucket interface.
 type Bucket struct {
-	name   string
-	logger log.Logger
-	client *alioss.Client
-	config Config
-	bucket *alioss.Bucket
+	name      string
+	logger    log.Logger
+	config    Config
+	getClient func(ctx context.Context) (*alioss.Client, *alioss.Bucket, error)
+}
+
+// getCredentialByEcsRoleName aims to access metadata server to get sts credential.
+func getCredentialByEcsRoleName(ctx context.Context, ecsRoleName string) (accessKey, secretKey, token string, err error) {
+	var (
+		requestUrl = securityCredURL + ecsRoleName
+		data       = struct {
+			AccessKeyId     string    `json:"AccessKeyId"`
+			AccessKeySecret string    `json:"AccessKeySecret"`
+			Expiration      time.Time `json:"Expiration"`
+			SecurityToken   string    `json:"SecurityToken"`
+			LastUpdated     time.Time `json:"LastUpdated"`
+			Code            string    `json:"Code"`
+		}{}
+	)
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, requestUrl, nil)
+	if err != nil {
+		err = fmt.Errorf("build sts requests err: %s", err.Error())
+		return
+	}
+	httpResponse, err := http.DefaultClient.Do(httpRequest)
+	if err != nil {
+		err = fmt.Errorf("get Ecs sts token err : %s", err.Error())
+		return
+	}
+	response := responses.NewCommonResponse()
+	err = responses.Unmarshal(response, httpResponse, "")
+	if err != nil {
+		err = errors.Wrap(err, "failed to unmarshal ecs sts token response")
+		return
+	}
+
+	if response.GetHttpStatus() != http.StatusOK {
+		err = fmt.Errorf(
+			"failed to get ecs sts token, httpStatus: %d, message = %s",
+			response.GetHttpStatus(), response.GetHttpContentString(),
+		)
+		return
+	}
+
+	err = json.Unmarshal(response.GetHttpContentBytes(), &data)
+	if err != nil {
+		err = fmt.Errorf("refresh Ecs sts token err, json.Unmarshal fail: %s", err.Error())
+		return
+	}
+	if data.Code != "Success" {
+		err = fmt.Errorf("refresh Ecs sts token err, Code is not Success")
+		return
+	}
+
+	if data.AccessKeyId == "" || data.AccessKeySecret == "" || data.SecurityToken == "" {
+		err = fmt.Errorf("there is no any available accesskey, secret and security token for ecs role %s", ecsRoleName)
+		return
+	}
+
+	return data.AccessKeyId, data.AccessKeySecret, data.SecurityToken, nil
 }
 
 func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
@@ -68,11 +131,16 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 }
 
 // Upload the contents of the reader as an object into the bucket.
-func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
+func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
 	size, err := objstore.TryToGetSize(r)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get size apriori to upload %s", name)
+	}
+
+	_, bucket, err := b.getClient(ctx)
+	if err != nil {
+		return errors.Wrap(err, "get aliyun oss bucket failed")
 	}
 
 	chunksnum, lastslice := int(math.Floor(float64(size)/PartSize)), size%PartSize
@@ -80,20 +148,20 @@ func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
 	ncloser := ioutil.NopCloser(r)
 	switch chunksnum {
 	case 0:
-		if err := b.bucket.PutObject(name, ncloser); err != nil {
+		if err := bucket.PutObject(name, ncloser); err != nil {
 			return errors.Wrap(err, "failed to upload oss object")
 		}
 	default:
 		{
-			init, err := b.bucket.InitiateMultipartUpload(name)
+			init, err := bucket.InitiateMultipartUpload(name)
 			if err != nil {
 				return errors.Wrap(err, "failed to initiate multi-part upload")
 			}
 			chunk := 0
 			uploadEveryPart := func(everypartsize int64, cnk int) (alioss.UploadPart, error) {
-				prt, err := b.bucket.UploadPart(init, ncloser, everypartsize, cnk)
+				prt, err := bucket.UploadPart(init, ncloser, everypartsize, cnk)
 				if err != nil {
-					if err := b.bucket.AbortMultipartUpload(init); err != nil {
+					if err := bucket.AbortMultipartUpload(init); err != nil {
 						return prt, errors.Wrap(err, "failed to abort multi-part upload")
 					}
 
@@ -116,7 +184,7 @@ func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
 				}
 				parts = append(parts, part)
 			}
-			if _, err := b.bucket.CompleteMultipartUpload(init, parts); err != nil {
+			if _, err := bucket.CompleteMultipartUpload(init, parts); err != nil {
 				return errors.Wrap(err, "failed to set multi-part upload completive")
 			}
 		}
@@ -126,7 +194,11 @@ func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
-	if err := b.bucket.DeleteObject(name); err != nil {
+	_, bucket, err := b.getClient(ctx)
+	if err != nil {
+		return errors.Wrap(err, "get aliyun oss bucket failed")
+	}
+	if err := bucket.DeleteObject(name); err != nil {
 		return errors.Wrap(err, "delete oss object")
 	}
 	return nil
@@ -134,7 +206,11 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 
 // Attributes returns information about the specified object.
 func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAttributes, error) {
-	m, err := b.bucket.GetObjectMeta(name)
+	_, bucket, err := b.getClient(ctx)
+	if err != nil {
+		return objstore.ObjectAttributes{}, errors.Wrap(err, "get aliyun oss bucket failed")
+	}
+	m, err := bucket.GetObjectMeta(name)
 	if err != nil {
 		return objstore.ObjectAttributes{}, err
 	}
@@ -158,34 +234,67 @@ func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAt
 }
 
 // NewBucket returns a new Bucket using the provided oss config values.
-func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, component string) (bkt *Bucket, err error) {
 	var config Config
+
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return nil, errors.Wrap(err, "parse aliyun oss config file failed")
 	}
 
-	if config.Endpoint == "" || config.Bucket == "" || config.AccessKeyID == "" || config.AccessKeySecret == "" {
-		return nil, errors.New("aliyun oss endpoint or bucket or access_key_id or access_key_secret " +
-			"is not present in config file")
+	if config.Endpoint == "" || config.Bucket == "" {
+		return nil, errors.New("aliyun oss endpoint or bucket is not present in config file")
 	}
 
-	client, err := alioss.New(config.Endpoint, config.AccessKeyID, config.AccessKeySecret)
-	if err != nil {
-		return nil, errors.Wrap(err, "create aliyun oss client failed")
-	}
-	bk, err := client.Bucket(config.Bucket)
-	if err != nil {
-		return nil, errors.Wrapf(err, "use aliyun oss bucket %s failed", config.Bucket)
+	if config.AccessKeyID == "" && config.RoleName == "" {
+		return nil, errors.New("aliyun oss access_key_id or role_name is not present in config file")
 	}
 
-	bkt := &Bucket{
-		logger: logger,
-		client: client,
-		name:   config.Bucket,
-		config: config,
-		bucket: bk,
+	if config.AccessKeyID != "" && config.AccessKeySecret == "" {
+		return nil, errors.New("aliyun oss access_key_id is present in " +
+			"config file buf access_key_secret is not found")
 	}
-	return bkt, nil
+	// The role name is used to obtain the credentials through the metadata server .
+	// Since the validity period of the credentials obtained from the metadata server is short ,
+	// it is obtained once before each use
+	getClient := func(ctx context.Context) (*alioss.Client, *alioss.Bucket, error) {
+		var (
+			accessKeyID     = config.AccessKeyID
+			accessKeySecret = config.AccessKeySecret
+			securityToken   string
+			userAgent       = fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version())
+			options         = []alioss.ClientOption{alioss.UserAgent(userAgent)}
+		)
+
+		if config.RoleName != "" {
+			// Overwrite authentication credentials
+			accessKeyID, accessKeySecret, securityToken, err = getCredentialByEcsRoleName(ctx, config.RoleName)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "unable to get credentials by ecs role name")
+			}
+		}
+
+		if securityToken != "" {
+			options = append(options, alioss.SecurityToken(securityToken))
+		}
+
+		client, err := alioss.New(config.Endpoint, accessKeyID, accessKeySecret, options...)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "create aliyun oss client failed")
+		}
+
+		bt, err := client.Bucket(config.Bucket)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "use aliyun oss bucket %s failed", config.Bucket)
+		}
+		return client, bt, err
+	}
+
+	return &Bucket{
+		logger:    logger,
+		name:      config.Bucket,
+		config:    config,
+		getClient: getClient,
+	}, nil
 }
 
 // Iter calls f for each entry in the given directory (not recursive). The argument to f is the full
@@ -199,13 +308,17 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 	if objstore.ApplyIterOptions(options...).Recursive {
 		delimiter = nil
 	}
+	_, bucket, err := b.getClient(ctx)
+	if err != nil {
+		return errors.Wrap(err, "get aliyun oss bucket failed")
+	}
 
 	marker := alioss.Marker("")
 	for {
 		if err := ctx.Err(); err != nil {
 			return errors.Wrap(err, "context closed while iterating bucket")
 		}
-		objects, err := b.bucket.ListObjects(alioss.Prefix(dir), delimiter, marker)
+		objects, err := bucket.ListObjects(alioss.Prefix(dir), delimiter, marker)
 		if err != nil {
 			return errors.Wrap(err, "listing aliyun oss bucket failed")
 		}
@@ -276,7 +389,12 @@ func NewTestBucketFromConfig(t testing.TB, c Config, reuseBucket bool) (objstore
 
 	return b, func() {
 		objstore.EmptyBucket(t, context.Background(), b)
-		if err := b.client.DeleteBucket(c.Bucket); err != nil {
+		cli, _, err := b.getClient(context.Background())
+		if err != nil {
+			t.Logf("get aliyun oss bucket %s failed: %s", c.Bucket, err)
+			return
+		}
+		if err := cli.DeleteBucket(c.Bucket); err != nil {
 			t.Logf("deleting bucket %s failed: %s", c.Bucket, err)
 		}
 	}, nil
@@ -284,10 +402,14 @@ func NewTestBucketFromConfig(t testing.TB, c Config, reuseBucket bool) (objstore
 
 func (b *Bucket) Close() error { return nil }
 
-func (b *Bucket) setRange(start, end int64, name string) (alioss.Option, error) {
+func (b *Bucket) setRange(ctx context.Context, start, end int64, name string) (alioss.Option, error) {
+	_, bucket, err := b.getClient(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "get aliyun oss bucket failed")
+	}
 	var opt alioss.Option
 	if 0 <= start && start <= end {
-		header, err := b.bucket.GetObjectMeta(name)
+		header, err := bucket.GetObjectMeta(name)
 		if err != nil {
 			return nil, err
 		}
@@ -308,21 +430,25 @@ func (b *Bucket) setRange(start, end int64, name string) (alioss.Option, error) 
 	return opt, nil
 }
 
-func (b *Bucket) getRange(_ context.Context, name string, off, length int64) (io.ReadCloser, error) {
+func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	_, bucket, err := b.getClient(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "get aliyun oss bucket failed")
+	}
 	if name == "" {
 		return nil, errors.New("given object name should not empty")
 	}
 
 	var opts []alioss.Option
 	if length != -1 {
-		opt, err := b.setRange(off, off+length-1, name)
+		opt, err := b.setRange(ctx, off, off+length-1, name)
 		if err != nil {
 			return nil, err
 		}
 		opts = append(opts, opt)
 	}
 
-	resp, err := b.bucket.GetObject(name, opts...)
+	resp, err := bucket.GetObject(name, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +467,11 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 
 // Exists checks if the given object exists in the bucket.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	exists, err := b.bucket.IsObjectExist(name)
+	_, bucket, err := b.getClient(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "get aliyun oss bucket failed")
+	}
+	exists, err := bucket.IsObjectExist(name)
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
