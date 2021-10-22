@@ -591,7 +591,7 @@ func NewDefaultDownsampleSim(reg prometheus.Registerer) *DefaultDownsampleSim {
 	return &DefaultDownsampleSim{}
 }
 
-func (ds *DefaultDownsampleSim) DownsampleCalculate(ctx context.Context, logger log.Logger, bkt objstore.Bucket, metas map[ulid.ULID]*metadata.Meta) error {
+func (ds *DefaultDownsampleSim) DownsampleCalculate(ctx context.Context, logger log.Logger, bkt objstore.Bucket, metas map[ulid.ULID]*metadata.Meta, dir string) error {
 
 	sources5m := map[ulid.ULID]struct{}{}
 	sources1h := map[ulid.ULID]struct{}{}
@@ -613,9 +613,39 @@ func (ds *DefaultDownsampleSim) DownsampleCalculate(ctx context.Context, logger 
 		}
 	}
 
+	// check for missing blocks here before using len
 	level.Info(logger).Log("msg", "number of blocks to be downsampled", "5m", len(sources5m))
 
 	level.Info(logger).Log("msg", "number of blocks to be downsampled", "1h", len(sources1h))
+
+	metasULIDS := make([]ulid.ULID, 0, len(metas))
+	for k := range metas {
+		metasULIDS = append(metasULIDS, k)
+	}
+	sort.Slice(metasULIDS, func(i, j int) bool {
+		return metasULIDS[i].Compare(metasULIDS[j]) < 0
+	})
+
+	// each of these metas is added to the channel and hence, each of these ULIDs should be processed similar to processDownsampling()
+	for _, mk := range metasULIDS {
+		m := metas[mk]
+
+		// if block not valid, continue the loop
+		// else, update the gauge vec. here
+		bdir := filepath.Join(dir, m.ULID.String())
+
+		err := block.Download(ctx, logger, bkt, m.ULID, bdir)
+		if err != nil {
+			return errors.Wrapf(err, "download block %s", m.ULID)
+		}
+
+		if err := block.VerifyIndex(logger, filepath.Join(bdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
+			//return errors.Wrap(err, "input block index not valid")
+			continue // instead of return so it processes next block
+		} else {
+			// increment gauge vector
+		}
+	}
 
 	return nil
 }

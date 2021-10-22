@@ -497,17 +497,13 @@ func runCompact(
 		}
 		originalMetas := sy.Metas()
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
-		if err != nil {
-			return err
-		}
+		testDownsamplingDir := path.Join(conf.dataDir, "testDownsample")
 
 		ds := compact.NewDefaultDownsampleSim(reg)
-		if err := ds.DownsampleCalculate(context.Background(), logger, bkt, originalMetas); err != nil {
+		if err := ds.DownsampleCalculate(context.Background(), logger, bkt, originalMetas, testDownsamplingDir); err != nil {
 			return errors.Wrapf(err, "could not simulate downsampling")
 		}
-
-		// find source blocks for 5m and 1h - like the above func
+		// delete test downsampling dir after this
 
 		return nil
 	}, func(err error) {
