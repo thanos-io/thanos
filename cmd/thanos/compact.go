@@ -448,7 +448,7 @@ func runCompact(
 
 		// TODO(bwplotka): Find a way to avoid syncing if no op was done.
 		if err := sy.SyncMetas(ctx); err != nil {
-			return errors.Wrap(err, "sync before first pass of downsampling")
+			return errors.Wrap(err, "sync before retention")
 		}
 
 		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")); err != nil {
