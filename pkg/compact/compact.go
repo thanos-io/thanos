@@ -403,6 +403,8 @@ func (cg *Group) Key() string {
 }
 
 func (cg *Group) deleteFromGroup(target map[ulid.ULID]struct{}) {
+	cg.mtx.Lock()
+	defer cg.mtx.Unlock()
 	var newGroupMeta []*metadata.Meta
 	for _, meta := range cg.metasByMinTime {
 		if _, found := target[meta.BlockMeta.ULID]; found {
@@ -483,8 +485,8 @@ func (cg *Group) Resolution() int64 {
 
 // metrics related to planning and compaction progress
 type ProgressMetrics struct {
-	NumberOfIterations    *prometheus.GaugeVec
-	NumberOfBlocksToMerge *prometheus.GaugeVec
+	NumberOfCompactionRuns   *prometheus.GaugeVec
+	NumberOfCompactionBlocks *prometheus.GaugeVec
 }
 
 // should return the results/metrics of the planning simulation
@@ -501,11 +503,11 @@ func NewDefaultPlanSim(reg prometheus.Registerer, logger log.Logger) *DefaultPla
 	return &DefaultPlanSim{
 		planner: NewTSDBBasedPlanner(logger, []int64{}),
 		ProgressMetrics: &ProgressMetrics{
-			NumberOfIterations: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+			NumberOfCompactionRuns: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_number_of_iterations",
 				Help: "number of iterations to be done",
 			}, []string{"group"}),
-			NumberOfBlocksToMerge: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+			NumberOfCompactionBlocks: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_number_of_blocks_planned",
 				Help: "number of blocks planned to be merged",
 			}, []string{"group"}),
@@ -567,8 +569,8 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group
 	// updating the exposed metrics inside the above loop will change based on iterations needed for each plan loop
 	// updating the metrics' maps directly - some keys may not be present in the groups map; also saves the cost of a lookup if done directly
 	for key, iters := range groupCompactions {
-		ps.ProgressMetrics.NumberOfIterations.WithLabelValues(key).Add(float64(iters))
-		ps.ProgressMetrics.NumberOfBlocksToMerge.WithLabelValues(key).Add(float64(groupBlocks[key]))
+		ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(key).Add(float64(iters))
+		ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(key).Add(float64(groupBlocks[key]))
 	}
 
 	return nil
@@ -591,7 +593,7 @@ func NewDefaultDownsampleSim(reg prometheus.Registerer) *DefaultDownsampleSim {
 	return &DefaultDownsampleSim{}
 }
 
-func (ds *DefaultDownsampleSim) DownsampleCalculate(ctx context.Context, logger log.Logger, bkt objstore.Bucket, metas map[ulid.ULID]*metadata.Meta, dir string) error {
+func (ds *DefaultDownsampleSim) DownsampleCalculate(ctx context.Context, metas map[ulid.ULID]*metadata.Meta) error {
 
 	sources5m := map[ulid.ULID]struct{}{}
 	sources1h := map[ulid.ULID]struct{}{}
@@ -614,9 +616,6 @@ func (ds *DefaultDownsampleSim) DownsampleCalculate(ctx context.Context, logger 
 	}
 
 	// check for missing blocks here before using len
-	level.Info(logger).Log("msg", "number of blocks to be downsampled", "5m", len(sources5m))
-
-	level.Info(logger).Log("msg", "number of blocks to be downsampled", "1h", len(sources1h))
 
 	metasULIDS := make([]ulid.ULID, 0, len(metas))
 	for k := range metas {
@@ -632,18 +631,43 @@ func (ds *DefaultDownsampleSim) DownsampleCalculate(ctx context.Context, logger 
 
 		// if block not valid, continue the loop
 		// else, update the gauge vec. here
-		bdir := filepath.Join(dir, m.ULID.String())
+		switch m.Thanos.Downsample.Resolution {
+		case downsample.ResLevel2:
+			continue
 
-		err := block.Download(ctx, logger, bkt, m.ULID, bdir)
-		if err != nil {
-			return errors.Wrapf(err, "download block %s", m.ULID)
-		}
+		case downsample.ResLevel0:
+			missing := false
+			for _, id := range m.Compaction.Sources {
+				if _, ok := sources5m[id]; !ok {
+					missing = true
+					break
+				}
+			}
+			if !missing {
+				continue
+			}
 
-		if err := block.VerifyIndex(logger, filepath.Join(bdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
-			//return errors.Wrap(err, "input block index not valid")
-			continue // instead of return so it processes next block
-		} else {
-			// increment gauge vector
+			if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
+				continue
+			}
+			//update metrics here
+
+		case downsample.ResLevel1:
+			missing := false
+			for _, id := range m.Compaction.Sources {
+				if _, ok := sources1h[id]; !ok {
+					missing = true
+					break
+				}
+			}
+			if !missing {
+				continue
+			}
+
+			if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
+				continue
+			}
+			// update metrics here
 		}
 	}
 

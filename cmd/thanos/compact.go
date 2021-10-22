@@ -477,8 +477,8 @@ func runCompact(
 			ps := compact.NewDefaultPlanSim(reg, logger)
 			for _, meta := range originalMetas {
 				groupKey := compact.DefaultGroupKey(meta.Thanos)
-				ps.ProgressMetrics.NumberOfIterations.WithLabelValues(groupKey)
-				ps.ProgressMetrics.NumberOfBlocksToMerge.WithLabelValues(groupKey)
+				ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(groupKey)
+				ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(groupKey)
 			}
 
 			if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
@@ -497,10 +497,8 @@ func runCompact(
 		}
 		originalMetas := sy.Metas()
 
-		testDownsamplingDir := path.Join(conf.dataDir, "testDownsample")
-
 		ds := compact.NewDefaultDownsampleSim(reg)
-		if err := ds.DownsampleCalculate(context.Background(), logger, bkt, originalMetas, testDownsamplingDir); err != nil {
+		if err := ds.DownsampleCalculate(context.Background(), originalMetas); err != nil {
 			return errors.Wrapf(err, "could not simulate downsampling")
 		}
 		// delete test downsampling dir after this
