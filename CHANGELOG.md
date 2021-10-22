@@ -15,6 +15,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: add `exemplar.partial-response` flag to control partial response.
 - [#4679](https://github.com/thanos-io/thanos/pull/4679) Added `enable-feature` flag to enable negative offsets and @ modifier, similar to Prometheus.
 - [#4696](https://github.com/thanos-io/thanos/pull/4696) Query: add cache name to tracing spans.
+- [#4736](https://github.com/thanos-io/thanos/pull/4736) S3: Add capability to use custom AWS STS Endpoint.
 - [#4764](https://github.com/thanos-io/thanos/pull/4764) Compactor: add `block-viewer.global.sync-block-timeout` flag to set the timeout of synchronization block metas.
 
 ### Fixed
@@ -23,6 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4663](https://github.com/thanos-io/thanos/pull/4663) Fetcher: Fix discovered data races.
 - [#4754](https://github.com/thanos-io/thanos/pull/4754) Query: Fix possible panic on stores endpoint.
 - [#4753](https://github.com/thanos-io/thanos/pull/4753) Store: validate block sync concurrency parameter
+- [#4792](https://github.com/thanos-io/thanos/pull/4792) Store: Fix data race in BucketedBytes pool.
 
 ## [v0.23.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.10.1
 
