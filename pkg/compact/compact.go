@@ -491,7 +491,7 @@ type ProgressMetrics struct {
 
 // should return the results/metrics of the planning simulation
 type PlanSim interface {
-	ProgressCalculate(ctx context.Context, groups []*Group) error
+	ProgressCalculate(ctx context.Context, grouper *DefaultGrouper, metas map[ulid.ULID]*metadata.Meta) error
 }
 
 type DefaultPlanSim struct {
@@ -515,7 +515,12 @@ func NewDefaultPlanSim(reg prometheus.Registerer, logger log.Logger) *DefaultPla
 	}
 }
 
-func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
+func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, grouper *DefaultGrouper, metas map[ulid.ULID]*metadata.Meta) error {
+	groups, err := grouper.Groups(metas)
+	if err != nil {
+		return errors.Wrapf(err, "could not group original metadata")
+	}
+
 	groupCompactions := make(map[string]int, len(groups))
 	groupBlocks := make(map[string]int, len(groups))
 
@@ -581,10 +586,6 @@ type DownsampleMetrics struct {
 	// - number of blocks to be finally downsampled, grouped by resolution - ??
 }
 
-type DownsampleSim interface {
-	DownsampleCalculate()
-}
-
 type DefaultDownsampleSim struct {
 	*DownsampleMetrics
 }
@@ -593,12 +594,16 @@ func NewDefaultDownsampleSim(reg prometheus.Registerer) *DefaultDownsampleSim {
 	return &DefaultDownsampleSim{}
 }
 
-func (ds *DefaultDownsampleSim) DownsampleCalculate(ctx context.Context, metas map[ulid.ULID]*metadata.Meta) error {
+func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, grouper *DefaultGrouper, metas map[ulid.ULID]*metadata.Meta) error {
 
 	sources5m := map[ulid.ULID]struct{}{}
 	sources1h := map[ulid.ULID]struct{}{}
+	metasULIDS := make([]ulid.ULID, 0, len(metas)) // change size of map allocation
 
-	for _, m := range metas {
+	for k, m := range metas {
+		if m.Thanos.Downsample.Resolution != downsample.ResLevel2 {
+			metasULIDS = append(metasULIDS, k)
+		}
 		switch m.Thanos.Downsample.Resolution {
 		case downsample.ResLevel0:
 			continue
@@ -615,12 +620,6 @@ func (ds *DefaultDownsampleSim) DownsampleCalculate(ctx context.Context, metas m
 		}
 	}
 
-	// check for missing blocks here before using len
-
-	metasULIDS := make([]ulid.ULID, 0, len(metas))
-	for k := range metas {
-		metasULIDS = append(metasULIDS, k)
-	}
 	sort.Slice(metasULIDS, func(i, j int) bool {
 		return metasULIDS[i].Compare(metasULIDS[j]) < 0
 	})
@@ -629,12 +628,8 @@ func (ds *DefaultDownsampleSim) DownsampleCalculate(ctx context.Context, metas m
 	for _, mk := range metasULIDS {
 		m := metas[mk]
 
-		// if block not valid, continue the loop
-		// else, update the gauge vec. here
 		switch m.Thanos.Downsample.Resolution {
-		case downsample.ResLevel2:
-			continue
-
+		// removed case with ResLevel2 since those aren't included in metasULIDs
 		case downsample.ResLevel0:
 			missing := false
 			for _, id := range m.Compaction.Sources {

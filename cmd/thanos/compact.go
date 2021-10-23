@@ -469,11 +469,6 @@ func runCompact(
 			}
 			originalMetas := sy.Metas()
 
-			groups, err := grouper.Groups(originalMetas)
-			if err != nil {
-				return errors.Wrapf(err, "could not group original metadata")
-			}
-
 			ps := compact.NewDefaultPlanSim(reg, logger)
 			for _, meta := range originalMetas {
 				groupKey := compact.DefaultGroupKey(meta.Thanos)
@@ -481,7 +476,7 @@ func runCompact(
 				ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(groupKey)
 			}
 
-			if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
+			if err = ps.ProgressCalculate(context.Background(), grouper, originalMetas); err != nil {
 				return errors.Wrapf(err, "could not simulate planning")
 			}
 
@@ -498,10 +493,9 @@ func runCompact(
 		originalMetas := sy.Metas()
 
 		ds := compact.NewDefaultDownsampleSim(reg)
-		if err := ds.DownsampleCalculate(context.Background(), originalMetas); err != nil {
+		if err := ds.ProgressCalculate(context.Background(), grouper, originalMetas); err != nil {
 			return errors.Wrapf(err, "could not simulate downsampling")
 		}
-		// delete test downsampling dir after this
 
 		return nil
 	}, func(err error) {
