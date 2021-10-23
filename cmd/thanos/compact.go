@@ -493,6 +493,8 @@ func runCompact(
 		originalMetas := sy.Metas()
 
 		ds := compact.NewDefaultDownsampleSim(reg)
+		ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues("resLevel0")
+		ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues("resLevel1")
 		if err := ds.ProgressCalculate(context.Background(), grouper, originalMetas); err != nil {
 			return errors.Wrapf(err, "could not simulate downsampling")
 		}

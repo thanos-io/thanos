@@ -582,7 +582,7 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, grouper *Defaul
 }
 
 type DownsampleMetrics struct {
-	blocksDownsampled *prometheus.GaugeVec
+	BlocksDownsampled *prometheus.GaugeVec
 	// - number of blocks to be finally downsampled, grouped by resolution - ??
 }
 
@@ -591,7 +591,14 @@ type DefaultDownsampleSim struct {
 }
 
 func NewDefaultDownsampleSim(reg prometheus.Registerer) *DefaultDownsampleSim {
-	return &DefaultDownsampleSim{}
+	return &DefaultDownsampleSim{
+		DownsampleMetrics: &DownsampleMetrics{
+			BlocksDownsampled: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_blocks_downsampled",
+				Help: "number of blocks to be downsampled",
+			}, []string{"resolution"}),
+		},
+	}
 }
 
 func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, grouper *DefaultGrouper, metas map[ulid.ULID]*metadata.Meta) error {
@@ -624,6 +631,10 @@ func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, grouper *
 		return metasULIDS[i].Compare(metasULIDS[j]) < 0
 	})
 
+	// count number of blocks downsampled for each res level
+	resLevel0 := 0
+	resLevel1 := 0
+
 	// each of these metas is added to the channel and hence, each of these ULIDs should be processed similar to processDownsampling()
 	for _, mk := range metasULIDS {
 		m := metas[mk]
@@ -645,7 +656,7 @@ func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, grouper *
 			if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
 				continue
 			}
-			//update metrics here
+			resLevel0++
 
 		case downsample.ResLevel1:
 			missing := false
@@ -662,9 +673,12 @@ func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, grouper *
 			if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
 				continue
 			}
-			// update metrics here
+			resLevel1++
 		}
 	}
+
+	ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues("resLevel0").Add(float64(resLevel0))
+	ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues("resLevel1").Add(float64(resLevel1))
 
 	return nil
 }
