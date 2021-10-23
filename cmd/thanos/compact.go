@@ -56,7 +56,7 @@ var (
 )
 
 const (
-	progressMetrics = "compact-progress-metrics"
+	compactionProgressMetrics = "compact-progress-metrics"
 )
 
 type compactionSet []time.Duration
@@ -357,8 +357,9 @@ func runCompact(
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
 		metadata.HashFunc(conf.hashFunc),
 	)
+	tempTSDBPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
 	planner := compact.WithLargeTotalIndexSizeFilter(
-		compact.NewPlanner(logger, levels, noCompactMarkerFilter),
+		tempTSDBPlanner,
 		bkt,
 		int64(conf.maxBlockIndexSize),
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.IndexSizeExceedingNoCompactReason),
@@ -462,22 +463,33 @@ func runCompact(
 		return cleanPartialMarked()
 	}
 
-	if conf.progressMetrics {
+	if conf.compactionProgressMetrics {
 		g.Add(func() error {
 			if err := sy.SyncMetas(context.Background()); err != nil {
 				return errors.Wrapf(err, "could not sync metas")
 			}
 			originalMetas := sy.Metas()
 
-			ps := compact.NewDefaultPlanSim(reg, logger)
+			groups, err := grouper.Groups(originalMetas)
+			if err != nil {
+				return errors.Wrapf(err, "could not group original metadata")
+			}
+
+			ps := compact.NewDefaultPlanSim(reg, tempTSDBPlanner)
+			ds := compact.NewDefaultDownsampleSim(reg)
 			for _, meta := range originalMetas {
 				groupKey := compact.DefaultGroupKey(meta.Thanos)
 				ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(groupKey)
 				ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(groupKey)
+				ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(groupKey)
 			}
 
-			if err = ps.ProgressCalculate(context.Background(), grouper, originalMetas); err != nil {
+			if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
 				return errors.Wrapf(err, "could not simulate planning")
+			}
+
+			if err := ds.ProgressCalculate(context.Background(), groups); err != nil {
+				return errors.Wrapf(err, "could not simulate downsampling")
 			}
 
 			return nil
@@ -485,24 +497,6 @@ func runCompact(
 			cancel()
 		})
 	}
-
-	g.Add(func() error {
-		if err := sy.SyncMetas(context.Background()); err != nil {
-			return errors.Wrapf(err, "could not sync metas")
-		}
-		originalMetas := sy.Metas()
-
-		ds := compact.NewDefaultDownsampleSim(reg)
-		ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues("resLevel0")
-		ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues("resLevel1")
-		if err := ds.ProgressCalculate(context.Background(), grouper, originalMetas); err != nil {
-			return errors.Wrapf(err, "could not simulate downsampling")
-		}
-
-		return nil
-	}, func(err error) {
-		cancel()
-	})
 
 	g.Add(func() error {
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
@@ -636,14 +630,14 @@ type compactConfig struct {
 	enableVerticalCompaction                       bool
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
-	progressMetrics                                bool
+	compactionProgressMetrics                      bool
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
-	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+progressMetrics+".").Default("").Strings()
+	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+compactionProgressMetrics+".").Default("").Strings()
 	for _, f := range *featureList {
-		if f == "compact-progress-metrics" {
-			cc.progressMetrics = true
+		if f == compactionProgressMetrics {
+			cc.compactionProgressMetrics = true
 		}
 	}
 

@@ -491,7 +491,7 @@ type ProgressMetrics struct {
 
 // should return the results/metrics of the planning simulation
 type PlanSim interface {
-	ProgressCalculate(ctx context.Context, grouper *DefaultGrouper, metas map[ulid.ULID]*metadata.Meta) error
+	ProgressCalculate(ctx context.Context, groups []*Group) error
 }
 
 type DefaultPlanSim struct {
@@ -499,9 +499,9 @@ type DefaultPlanSim struct {
 	*ProgressMetrics
 }
 
-func NewDefaultPlanSim(reg prometheus.Registerer, logger log.Logger) *DefaultPlanSim {
+func NewDefaultPlanSim(reg prometheus.Registerer, planner *tsdbBasedPlanner) *DefaultPlanSim {
 	return &DefaultPlanSim{
-		planner: NewTSDBBasedPlanner(logger, []int64{}),
+		planner: planner,
 		ProgressMetrics: &ProgressMetrics{
 			NumberOfCompactionRuns: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_number_of_iterations",
@@ -515,12 +515,7 @@ func NewDefaultPlanSim(reg prometheus.Registerer, logger log.Logger) *DefaultPla
 	}
 }
 
-func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, grouper *DefaultGrouper, metas map[ulid.ULID]*metadata.Meta) error {
-	groups, err := grouper.Groups(metas)
-	if err != nil {
-		return errors.Wrapf(err, "could not group original metadata")
-	}
-
+func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
 	groupCompactions := make(map[string]int, len(groups))
 	groupBlocks := make(map[string]int, len(groups))
 
@@ -583,7 +578,7 @@ func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, grouper *Defaul
 
 type DownsampleMetrics struct {
 	BlocksDownsampled *prometheus.GaugeVec
-	// - number of blocks to be finally downsampled, grouped by resolution - ??
+	// - number of blocks to be finally downsampled, grouped by groupKey
 }
 
 type DefaultDownsampleSim struct {
@@ -596,12 +591,20 @@ func NewDefaultDownsampleSim(reg prometheus.Registerer) *DefaultDownsampleSim {
 			BlocksDownsampled: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_blocks_downsampled",
 				Help: "number of blocks to be downsampled",
-			}, []string{"resolution"}),
+			}, []string{"group"}),
 		},
 	}
 }
 
-func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, grouper *DefaultGrouper, metas map[ulid.ULID]*metadata.Meta) error {
+func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
+
+	var metas map[ulid.ULID]*metadata.Meta // pre allocate with size
+	// mapping ULIDs to meta - reference: https://github.com/thanos-io/thanos/blob/18049504408c5ae09deb76961b92baf7f96b0e93/pkg/compact/compact.go#L425-L436
+	for _, group := range groups {
+		for _, meta := range group.metasByMinTime {
+			metas[meta.ULID] = meta
+		}
+	}
 
 	sources5m := map[ulid.ULID]struct{}{}
 	sources1h := map[ulid.ULID]struct{}{}
@@ -631,10 +634,6 @@ func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, grouper *
 		return metasULIDS[i].Compare(metasULIDS[j]) < 0
 	})
 
-	// count number of blocks downsampled for each res level
-	resLevel0 := 0
-	resLevel1 := 0
-
 	// each of these metas is added to the channel and hence, each of these ULIDs should be processed similar to processDownsampling()
 	for _, mk := range metasULIDS {
 		m := metas[mk]
@@ -656,7 +655,6 @@ func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, grouper *
 			if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
 				continue
 			}
-			resLevel0++
 
 		case downsample.ResLevel1:
 			missing := false
@@ -673,12 +671,8 @@ func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, grouper *
 			if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
 				continue
 			}
-			resLevel1++
 		}
 	}
-
-	ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues("resLevel0").Add(float64(resLevel0))
-	ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues("resLevel1").Add(float64(resLevel1))
 
 	return nil
 }
