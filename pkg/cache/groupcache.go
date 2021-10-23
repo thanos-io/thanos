@@ -261,3 +261,7 @@ func (c *Groupcache) Fetch(ctx context.Context, keys []string) map[string][]byte
 
 	return data
 }
+
+func (c *Groupcache) Name() string {
+	return c.group.Name()
+}
