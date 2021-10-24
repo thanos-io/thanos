@@ -476,20 +476,25 @@ func runCompact(
 			}
 
 			ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
-			ds := compact.NewDownsampleSim(reg)
 			for _, meta := range originalMetas {
 				groupKey := compact.DefaultGroupKey(meta.Thanos)
 				ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(groupKey)
 				ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(groupKey)
-				ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(groupKey)
 			}
 
 			if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
 				return errors.Wrapf(err, "could not simulate planning")
 			}
 
-			if err := ds.ProgressCalculate(context.Background(), groups); err != nil {
-				return errors.Wrapf(err, "could not simulate downsampling")
+			if !conf.disableDownsampling {
+				ds := compact.NewDownsampleSim(reg)
+				for _, meta := range originalMetas {
+					groupKey := compact.DefaultGroupKey(meta.Thanos)
+					ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(groupKey)
+				}
+				if err := ds.ProgressCalculate(context.Background(), groups); err != nil {
+					return errors.Wrapf(err, "could not simulate downsampling")
+				}
 			}
 
 			return nil
