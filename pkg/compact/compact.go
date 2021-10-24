@@ -577,8 +577,7 @@ func (ps *CompactionSimulator) ProgressCalculate(ctx context.Context, groups []*
 }
 
 type DownsampleMetrics struct {
-	BlocksDownsampled *prometheus.GaugeVec
-	// - number of blocks to be finally downsampled, grouped by groupKey
+	BlocksDownsampled *prometheus.GaugeVec // number of blocks to be finally downsampled, grouped by groupKey
 }
 
 type DownsampleSim struct {
@@ -597,33 +596,27 @@ func NewDownsampleSim(reg prometheus.Registerer) *DownsampleSim {
 }
 
 func (ds *DownsampleSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
-
-	var metas map[ulid.ULID]*metadata.Meta // pre allocate with size
-	// mapping ULIDs to meta - reference: https://github.com/thanos-io/thanos/blob/18049504408c5ae09deb76961b92baf7f96b0e93/pkg/compact/compact.go#L425-L436
-	for _, group := range groups {
-		for _, meta := range group.metasByMinTime {
-			metas[meta.ULID] = meta
-		}
-	}
-
 	sources5m := map[ulid.ULID]struct{}{}
 	sources1h := map[ulid.ULID]struct{}{}
 	groupBlocks := make(map[string]int, len(groups))
 
-	for _, m := range metas {
-		switch m.Thanos.Downsample.Resolution {
-		case downsample.ResLevel0:
-			continue
-		case downsample.ResLevel1:
-			for _, id := range m.Compaction.Sources {
-				sources5m[id] = struct{}{}
+	for _, group := range groups {
+		for _, m := range group.metasByMinTime {
+			switch m.Thanos.Downsample.Resolution {
+			case downsample.ResLevel0:
+				continue
+			case downsample.ResLevel1:
+				for _, id := range m.Compaction.Sources {
+					sources5m[id] = struct{}{}
+				}
+			case downsample.ResLevel2:
+				for _, id := range m.Compaction.Sources {
+					sources1h[id] = struct{}{}
+				}
+			default:
+				return errors.Errorf("unexpected downsampling resolution %d", m.Thanos.Downsample.Resolution)
 			}
-		case downsample.ResLevel2:
-			for _, id := range m.Compaction.Sources {
-				sources1h[id] = struct{}{}
-			}
-		default:
-			return errors.Errorf("unexpected downsampling resolution %d", m.Thanos.Downsample.Resolution)
+
 		}
 	}
 
