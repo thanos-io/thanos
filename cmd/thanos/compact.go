@@ -357,9 +357,9 @@ func runCompact(
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
 		metadata.HashFunc(conf.hashFunc),
 	)
-	tempTSDBPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
+	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
 	planner := compact.WithLargeTotalIndexSizeFilter(
-		tempTSDBPlanner,
+		tsdbPlanner,
 		bkt,
 		int64(conf.maxBlockIndexSize),
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.IndexSizeExceedingNoCompactReason),
@@ -475,8 +475,8 @@ func runCompact(
 				return errors.Wrapf(err, "could not group original metadata")
 			}
 
-			ps := compact.NewDefaultPlanSim(reg, tempTSDBPlanner)
-			ds := compact.NewDefaultDownsampleSim(reg)
+			ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
+			ds := compact.NewDownsampleSim(reg)
 			for _, meta := range originalMetas {
 				groupKey := compact.DefaultGroupKey(meta.Thanos)
 				ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(groupKey)

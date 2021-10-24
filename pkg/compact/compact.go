@@ -490,17 +490,17 @@ type ProgressMetrics struct {
 }
 
 // should return the results/metrics of the planning simulation
-type PlanSim interface {
+type ProgressCalculator interface {
 	ProgressCalculate(ctx context.Context, groups []*Group) error
 }
 
-type DefaultPlanSim struct {
+type CompactionSimulator struct {
 	planner Planner
 	*ProgressMetrics
 }
 
-func NewDefaultPlanSim(reg prometheus.Registerer, planner *tsdbBasedPlanner) *DefaultPlanSim {
-	return &DefaultPlanSim{
+func NewCompactionSimulator(reg prometheus.Registerer, planner *tsdbBasedPlanner) *CompactionSimulator {
+	return &CompactionSimulator{
 		planner: planner,
 		ProgressMetrics: &ProgressMetrics{
 			NumberOfCompactionRuns: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
@@ -515,7 +515,7 @@ func NewDefaultPlanSim(reg prometheus.Registerer, planner *tsdbBasedPlanner) *De
 	}
 }
 
-func (ps *DefaultPlanSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
+func (ps *CompactionSimulator) ProgressCalculate(ctx context.Context, groups []*Group) error {
 	groupCompactions := make(map[string]int, len(groups))
 	groupBlocks := make(map[string]int, len(groups))
 
@@ -581,12 +581,12 @@ type DownsampleMetrics struct {
 	// - number of blocks to be finally downsampled, grouped by groupKey
 }
 
-type DefaultDownsampleSim struct {
+type DownsampleSim struct {
 	*DownsampleMetrics
 }
 
-func NewDefaultDownsampleSim(reg prometheus.Registerer) *DefaultDownsampleSim {
-	return &DefaultDownsampleSim{
+func NewDownsampleSim(reg prometheus.Registerer) *DownsampleSim {
+	return &DownsampleSim{
 		DownsampleMetrics: &DownsampleMetrics{
 			BlocksDownsampled: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_blocks_downsampled",
@@ -596,7 +596,7 @@ func NewDefaultDownsampleSim(reg prometheus.Registerer) *DefaultDownsampleSim {
 	}
 }
 
-func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
+func (ds *DownsampleSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
 
 	var metas map[ulid.ULID]*metadata.Meta // pre allocate with size
 	// mapping ULIDs to meta - reference: https://github.com/thanos-io/thanos/blob/18049504408c5ae09deb76961b92baf7f96b0e93/pkg/compact/compact.go#L425-L436
@@ -608,12 +608,9 @@ func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, groups []
 
 	sources5m := map[ulid.ULID]struct{}{}
 	sources1h := map[ulid.ULID]struct{}{}
-	metasULIDS := make([]ulid.ULID, 0, len(metas)) // change size of map allocation
+	groupBlocks := make(map[string]int, len(groups))
 
-	for k, m := range metas {
-		if m.Thanos.Downsample.Resolution != downsample.ResLevel2 {
-			metasULIDS = append(metasULIDS, k)
-		}
+	for _, m := range metas {
 		switch m.Thanos.Downsample.Resolution {
 		case downsample.ResLevel0:
 			continue
@@ -630,48 +627,49 @@ func (ds *DefaultDownsampleSim) ProgressCalculate(ctx context.Context, groups []
 		}
 	}
 
-	sort.Slice(metasULIDS, func(i, j int) bool {
-		return metasULIDS[i].Compare(metasULIDS[j]) < 0
-	})
-
 	// each of these metas is added to the channel and hence, each of these ULIDs should be processed similar to processDownsampling()
-	for _, mk := range metasULIDS {
-		m := metas[mk]
-
-		switch m.Thanos.Downsample.Resolution {
-		// removed case with ResLevel2 since those aren't included in metasULIDs
-		case downsample.ResLevel0:
-			missing := false
-			for _, id := range m.Compaction.Sources {
-				if _, ok := sources5m[id]; !ok {
-					missing = true
-					break
+	for _, group := range groups {
+		for _, m := range group.metasByMinTime {
+			switch m.Thanos.Downsample.Resolution {
+			// removed case with ResLevel2 since those aren't included in metasULIDs
+			case downsample.ResLevel0:
+				missing := false
+				for _, id := range m.Compaction.Sources {
+					if _, ok := sources5m[id]; !ok {
+						missing = true
+						break
+					}
 				}
-			}
-			if !missing {
-				continue
-			}
-
-			if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
-				continue
-			}
-
-		case downsample.ResLevel1:
-			missing := false
-			for _, id := range m.Compaction.Sources {
-				if _, ok := sources1h[id]; !ok {
-					missing = true
-					break
+				if !missing {
+					continue
 				}
-			}
-			if !missing {
-				continue
-			}
 
-			if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
-				continue
+				if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
+					continue
+				}
+				groupBlocks[group.key]++
+			case downsample.ResLevel1:
+				missing := false
+				for _, id := range m.Compaction.Sources {
+					if _, ok := sources1h[id]; !ok {
+						missing = true
+						break
+					}
+				}
+				if !missing {
+					continue
+				}
+
+				if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
+					continue
+				}
+				groupBlocks[group.key]++
 			}
 		}
+	}
+
+	for key, blocks := range groupBlocks {
+		ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(key).Add(float64(blocks))
 	}
 
 	return nil
