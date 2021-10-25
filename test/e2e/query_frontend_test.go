@@ -59,7 +59,7 @@ func TestQueryFrontend(t *testing.T) {
 
 	// Ensure we can get the result from Querier first so that it
 	// doesn't need to retry when we send queries to the frontend later.
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, time.Now(), promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{
@@ -77,7 +77,7 @@ func TestQueryFrontend(t *testing.T) {
 	queryTimes := vals[0]
 
 	t.Run("query frontend works for instant query", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, queryFrontend.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, queryFrontend.Endpoint("http"), queryUpWithoutInstance, time.Now(), promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
@@ -436,7 +436,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 
 	// Ensure we can get the result from Querier first so that it
 	// doesn't need to retry when we send queries to the frontend later.
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, time.Now(), promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{

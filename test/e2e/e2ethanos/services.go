@@ -293,7 +293,7 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 
 	for _, feature := range q.enableFeatures {
-		args = append(args, "--enable-features="+feature)
+		args = append(args, "--enable-feature="+feature)
 	}
 
 	if len(q.fileSDStoreAddresses) > 0 {
