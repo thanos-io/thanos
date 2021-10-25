@@ -219,9 +219,9 @@ func GetInstr(
 
 		return tracing.HTTPMiddleware(tracer, name, logger,
 			ins.NewHandler(name,
-				logMiddleware.HTTPMiddleware(name,
-					gziphandler.GzipHandler(
-						middleware.RequestID(hf),
+				gziphandler.GzipHandler(
+					middleware.RequestID(
+						logMiddleware.HTTPMiddleware(name, hf),
 					),
 				),
 			),
