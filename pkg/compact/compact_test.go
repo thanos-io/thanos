@@ -17,6 +17,8 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -173,4 +175,122 @@ func BenchmarkGatherNoCompactionMarkFilter_Filter(b *testing.B) {
 		}
 	}
 
+}
+
+func TestPlanSimulate(t *testing.T) {
+	logger := log.NewNopLogger()
+	planner := NewTSDBBasedPlanner(logger, []int64{
+		int64(1 * time.Hour / time.Millisecond),
+		int64(2 * time.Hour / time.Millisecond),
+		int64(8 * time.Hour / time.Millisecond),
+		int64(2 * 24 * time.Hour / time.Millisecond),
+	})
+	reg := prometheus.NewRegistry()
+	ps := NewCompactionSimulator(reg, planner)
+
+	metas := []*metadata.Meta{
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(0, nil),
+				MinTime: 0,
+				MaxTime: int64(2 * time.Hour / time.Millisecond),
+			},
+			Thanos: metadata.Thanos{
+				Version: 1,
+				Labels:  map[string]string{"a": "1"},
+			},
+		},
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(1, nil),
+				MinTime: int64(2 * time.Hour / time.Millisecond),
+				MaxTime: int64(4 * time.Hour / time.Millisecond),
+			},
+			Thanos: metadata.Thanos{
+				Version: 1,
+				Labels:  map[string]string{"a": "1"},
+			},
+		},
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(2, nil),
+				MinTime: int64(4 * time.Hour / time.Millisecond),
+				MaxTime: int64(6 * time.Hour / time.Millisecond),
+			},
+			Thanos: metadata.Thanos{
+				Version: 1,
+				Labels:  map[string]string{"a": "1"},
+			},
+		},
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(3, nil),
+				MinTime: int64(6 * time.Hour / time.Millisecond),
+				MaxTime: int64(8 * time.Hour / time.Millisecond),
+			},
+			Thanos: metadata.Thanos{
+				Version: 1,
+				Labels:  map[string]string{"a": "1"},
+			},
+		},
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(4, nil),
+				MinTime: int64(8 * time.Hour / time.Millisecond),
+				MaxTime: int64(10 * time.Hour / time.Millisecond),
+			},
+			Thanos: metadata.Thanos{
+				Version: 1,
+				Labels:  map[string]string{"a": "1"},
+			},
+		},
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(5, nil),
+				MinTime: int64(10 * time.Hour / time.Millisecond),
+				MaxTime: int64(12 * time.Hour / time.Millisecond),
+			},
+			Thanos: metadata.Thanos{
+				Version: 1,
+				Labels:  map[string]string{"a": "1"},
+			},
+		},
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(6, nil),
+				MinTime: int64(12 * time.Hour / time.Millisecond),
+				MaxTime: int64(20 * time.Hour / time.Millisecond),
+			},
+			Thanos: metadata.Thanos{
+				Version: 1,
+				Labels:  map[string]string{"a": "1"},
+			},
+		},
+		{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustNew(7, nil),
+				MinTime: int64(20 * time.Hour / time.Millisecond),
+				MaxTime: int64(28 * time.Hour / time.Millisecond),
+			},
+			Thanos: metadata.Thanos{
+				Version: 1,
+				Labels:  map[string]string{"a": "1"},
+			},
+		},
+	}
+
+	extLabels := labels.FromMap(map[string]string{"a": "1"})
+	groups := []*Group{
+		{
+			labels:         extLabels,
+			resolution:     0,
+			metasByMinTime: metas,
+		},
+	}
+
+	err := ps.ProgressCalculate(context.Background(), groups)
+	testutil.Ok(t, err)
+	metrics := ps.ProgressMetrics
+	testutil.Equals(t, 2.0, promtestutil.ToFloat64(metrics.NumberOfCompactionRuns))
+	testutil.Equals(t, 6.0, promtestutil.ToFloat64(metrics.NumberOfCompactionBlocks))
 }

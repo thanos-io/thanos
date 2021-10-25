@@ -407,7 +407,7 @@ func (cg *Group) deleteFromGroup(target map[ulid.ULID]struct{}) {
 	defer cg.mtx.Unlock()
 	var newGroupMeta []*metadata.Meta
 	for _, meta := range cg.metasByMinTime {
-		if _, found := target[meta.BlockMeta.ULID]; found {
+		if _, found := target[meta.BlockMeta.ULID]; !found {
 			newGroupMeta = append(newGroupMeta, meta)
 		}
 	}
