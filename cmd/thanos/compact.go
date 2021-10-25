@@ -465,35 +465,44 @@ func runCompact(
 
 	if conf.compactionProgressMetrics {
 		g.Add(func() error {
+			// need to create simulator structs only once
+			var ds *compact.DownsampleSim
+			if !conf.disableDownsampling {
+				ds = compact.NewDownsampleSim(reg)
+			}
+			ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
 			if err := sy.SyncMetas(context.Background()); err != nil {
 				return errors.Wrapf(err, "could not sync metas")
 			}
-			originalMetas := sy.Metas()
 
-			groups, err := grouper.Groups(originalMetas)
-			if err != nil {
-				return errors.Wrapf(err, "could not group original metadata")
-			}
+			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+				originalMetas := sy.Metas()
+				groups, err := grouper.Groups(originalMetas)
+				if err != nil {
+					return errors.Wrapf(err, "could not group original metadata")
+				}
 
-			ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
-			for _, group := range groups {
-				ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(group.Key())
-				ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(group.Key())
-			}
-
-			if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
-				return errors.Wrapf(err, "could not simulate planning")
-			}
-
-			if !conf.disableDownsampling {
-				ds := compact.NewDownsampleSim(reg)
+				// re-initializing metrics here since new groups are formed each time
 				for _, group := range groups {
-					ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(group.Key())
+					ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(group.Key())
+					ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(group.Key())
 				}
-				if err := ds.ProgressCalculate(context.Background(), groups); err != nil {
-					return errors.Wrapf(err, "could not simulate downsampling")
+
+				if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
+					return errors.Wrapf(err, "could not simulate planning")
 				}
-			}
+
+				if !conf.disableDownsampling {
+					for _, group := range groups {
+						ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(group.Key())
+					}
+					if err := ds.ProgressCalculate(context.Background(), groups); err != nil {
+						return errors.Wrapf(err, "could not simulate downsampling")
+					}
+				}
+
+				return nil
+			})
 
 			return nil
 		}, func(err error) {
