@@ -466,9 +466,9 @@ func runCompact(
 	if conf.compactionProgressMetrics {
 		g.Add(func() error {
 			// need to create simulator structs only once
-			var ds *compact.DownsampleSim
+			var ds *compact.DownsampleSimulator
 			if !conf.disableDownsampling {
-				ds = compact.NewDownsampleSim(reg)
+				ds = compact.NewDownsampleSimulator(reg)
 			}
 			ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
 			if err := sy.SyncMetas(context.Background()); err != nil {

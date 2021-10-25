@@ -580,12 +580,12 @@ type DownsampleMetrics struct {
 	BlocksDownsampled *prometheus.GaugeVec // number of blocks to be finally downsampled, grouped by groupKey
 }
 
-type DownsampleSim struct {
+type DownsampleSimulator struct {
 	*DownsampleMetrics
 }
 
-func NewDownsampleSim(reg prometheus.Registerer) *DownsampleSim {
-	return &DownsampleSim{
+func NewDownsampleSimulator(reg prometheus.Registerer) *DownsampleSimulator {
+	return &DownsampleSimulator{
 		DownsampleMetrics: &DownsampleMetrics{
 			BlocksDownsampled: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_blocks_downsampled",
@@ -595,7 +595,7 @@ func NewDownsampleSim(reg prometheus.Registerer) *DownsampleSim {
 	}
 }
 
-func (ds *DownsampleSim) ProgressCalculate(ctx context.Context, groups []*Group) error {
+func (ds *DownsampleSimulator) ProgressCalculate(ctx context.Context, groups []*Group) error {
 	sources5m := map[ulid.ULID]struct{}{}
 	sources1h := map[ulid.ULID]struct{}{}
 	groupBlocks := make(map[string]int, len(groups))
