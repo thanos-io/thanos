@@ -93,6 +93,12 @@ func registerCompact(app *extkingpin.App) {
 	conf.registerFlag(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		for _, f := range conf.enableFeature {
+			if f == compactionProgressMetrics {
+				conf.compactionProgressMetrics = true
+			}
+		}
+
 		return runCompact(g, logger, tracer, reg, component.Compact, *conf, getFlagsMap(cmd.Flags()))
 	})
 }
@@ -641,15 +647,11 @@ type compactConfig struct {
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
 	compactionProgressMetrics                      bool
+	enableFeature                                  []string
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
-	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+compactionProgressMetrics+".").Default("").Strings()
-	for _, f := range *featureList {
-		if f == compactionProgressMetrics {
-			cc.compactionProgressMetrics = true
-		}
-	}
+	cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+compactionProgressMetrics+".").Default("").StringsVar(&cc.enableFeature)
 
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)
