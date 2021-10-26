@@ -348,6 +348,9 @@ Flags:
                                 non-downsampled data is not efficient and useful
                                 e.g it is not possible to render all samples for
                                 a human eye anyway
+      --enable-feature= ...     Comma separated experimental feature names to
+                                enable.The current list of features is
+                                compact-progress-metrics.
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files. If no
                                 function has been specified, it does not happen.
