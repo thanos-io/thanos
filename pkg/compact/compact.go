@@ -483,13 +483,11 @@ func (cg *Group) Resolution() int64 {
 	return cg.resolution
 }
 
-// metrics related to planning and compaction progress
 type ProgressMetrics struct {
 	NumberOfCompactionRuns   *prometheus.GaugeVec
 	NumberOfCompactionBlocks *prometheus.GaugeVec
 }
 
-// should return the results/metrics of the planning simulation
 type ProgressCalculator interface {
 	ProgressCalculate(ctx context.Context, groups []*Group) error
 }
@@ -525,7 +523,6 @@ func (ps *CompactionSimulator) ProgressCalculate(ctx context.Context, groups []*
 			if len(g.IDs()) == 1 {
 				continue
 			}
-			// parameter should be of type tsdb.BlockMeta.meta
 			plan, err := ps.planner.Plan(ctx, g.metasByMinTime)
 			if err != nil {
 				return errors.Wrapf(err, "could not plan")
@@ -535,7 +532,6 @@ func (ps *CompactionSimulator) ProgressCalculate(ctx context.Context, groups []*
 			}
 			groupCompactions[g.key]++
 
-			// value type in map is struct{} - enpty struct consumes 0 bytes so prefered over bool
 			toRemove := make(map[ulid.ULID]struct{}, len(plan))
 			metas := make([]*tsdb.BlockMeta, 0, len(plan))
 			for _, p := range plan {
@@ -546,13 +542,8 @@ func (ps *CompactionSimulator) ProgressCalculate(ctx context.Context, groups []*
 
 			groupBlocks[g.key] += len(plan)
 
-			// remove 'plan' blocks from 'original metadata' - so that the remaining blocks can now be planned ?
-			// not required to modify originalMeta now
-
 			if len(g.metasByMinTime) == 0 {
 				continue
-				// no plan in case the group is empty after removing the 'planned' metadata
-				// group size will remain one even after newMeta is added, hence, no plan needed for this case
 			}
 
 			newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
@@ -565,9 +556,6 @@ func (ps *CompactionSimulator) ProgressCalculate(ctx context.Context, groups []*
 		groups = tmpGroups
 	}
 
-	// updated only once here - after the entire planning simulation is completed
-	// updating the exposed metrics inside the above loop will change based on iterations needed for each plan loop
-	// updating the metrics' maps directly - some keys may not be present in the groups map; also saves the cost of a lookup if done directly
 	for key, iters := range groupCompactions {
 		ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(key).Add(float64(iters))
 		ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(key).Add(float64(groupBlocks[key]))
@@ -577,7 +565,7 @@ func (ps *CompactionSimulator) ProgressCalculate(ctx context.Context, groups []*
 }
 
 type DownsampleMetrics struct {
-	BlocksDownsampled *prometheus.GaugeVec // number of blocks to be finally downsampled, grouped by groupKey
+	BlocksDownsampled *prometheus.GaugeVec
 }
 
 type DownsampleSimulator struct {
@@ -620,11 +608,9 @@ func (ds *DownsampleSimulator) ProgressCalculate(ctx context.Context, groups []*
 		}
 	}
 
-	// each of these metas is added to the channel and hence, each of these ULIDs should be processed similar to processDownsampling()
 	for _, group := range groups {
 		for _, m := range group.metasByMinTime {
 			switch m.Thanos.Downsample.Resolution {
-			// removed case with ResLevel2 since those aren't included in metasULIDs
 			case downsample.ResLevel0:
 				missing := false
 				for _, id := range m.Compaction.Sources {

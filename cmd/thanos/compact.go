@@ -465,7 +465,6 @@ func runCompact(
 
 	if conf.compactionProgressMetrics {
 		g.Add(func() error {
-			// need to create simulator structs only once
 			var ds *compact.DownsampleSimulator
 			if !conf.disableDownsampling {
 				ds = compact.NewDownsampleSimulator(reg)
@@ -482,7 +481,6 @@ func runCompact(
 					return errors.Wrapf(err, "could not group original metadata")
 				}
 
-				// re-initializing metrics here since new groups are formed each time
 				for _, group := range groups {
 					ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(group.Key())
 					ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(group.Key())
