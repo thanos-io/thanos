@@ -507,8 +507,6 @@ func runCompact(
 
 				return nil
 			})
-
-			return nil
 		}, func(err error) {
 			cancel()
 		})
