@@ -133,7 +133,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	t.Run("query works", func(t *testing.T) {
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"} @ end()",
-			time.Now(), promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
@@ -158,7 +158,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(2), "thanos_bucket_store_series_blocks_queried"))
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			time.Now(), promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: true,
 			},
 			[]model.Metric{
@@ -188,7 +188,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 		// TODO(bwplotka): Entries are still in LRU cache.
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			time.Now(), promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
@@ -217,7 +217,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			time.Now(), promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
@@ -250,7 +250,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			time.Now(), promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
@@ -267,7 +267,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	t.Run("negative offset should work", func(t *testing.T) {
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"} offset -4h",
-			time.Now().Add(-4*time.Hour), promclient.QueryOptions{
+			func() time.Time { return time.Now().Add(-4 * time.Hour) }, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
@@ -362,7 +362,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	t.Run("query with cache miss", func(t *testing.T) {
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			time.Now(), promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
@@ -380,7 +380,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	t.Run("query with cache hit", func(t *testing.T) {
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			time.Now(), promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
