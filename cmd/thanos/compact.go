@@ -476,11 +476,11 @@ func runCompact(
 				ds = compact.NewDownsampleSimulator(reg)
 			}
 			ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
-			if err := sy.SyncMetas(context.Background()); err != nil {
-				return errors.Wrapf(err, "could not sync metas")
-			}
-
 			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+				if err := sy.SyncMetas(context.Background()); err != nil {
+					return errors.Wrapf(err, "could not sync metas")
+				}
+
 				originalMetas := sy.Metas()
 				groups, err := grouper.Groups(originalMetas)
 				if err != nil {
