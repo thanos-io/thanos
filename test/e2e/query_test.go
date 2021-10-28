@@ -127,7 +127,7 @@ func TestQuery(t *testing.T) {
 
 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, time.Now, promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{
@@ -160,7 +160,7 @@ func TestQuery(t *testing.T) {
 	})
 
 	// With deduplication.
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, []model.Metric{
 		{
@@ -412,7 +412,7 @@ config:
 			// We should have single TCP connection, since all APIs are against the same server.
 			testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-			queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, promclient.QueryOptions{
+			queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			}, []model.Metric{
 				{
@@ -571,7 +571,7 @@ func mustURLParse(t *testing.T, addr string) *url.URL {
 	return u
 }
 
-func instantQuery(t *testing.T, ctx context.Context, addr, q string, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
+func instantQuery(t *testing.T, ctx context.Context, addr, q string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
 	t.Helper()
 
 	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q)
@@ -580,7 +580,7 @@ func instantQuery(t *testing.T, ctx context.Context, addr, q string, opts promcl
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, mustURLParse(t, "http://"+addr), q, time.Now(), opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, mustURLParse(t, "http://"+addr), q, ts(), opts)
 		if err != nil {
 			return err
 		}
@@ -599,10 +599,10 @@ func instantQuery(t *testing.T, ctx context.Context, addr, q string, opts promcl
 	return result
 }
 
-func queryAndAssertSeries(t *testing.T, ctx context.Context, addr, q string, opts promclient.QueryOptions, expected []model.Metric) {
+func queryAndAssertSeries(t *testing.T, ctx context.Context, addr, q string, ts func() time.Time, opts promclient.QueryOptions, expected []model.Metric) {
 	t.Helper()
 
-	result := instantQuery(t, ctx, addr, q, opts, len(expected))
+	result := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
 	for i, exp := range expected {
 		testutil.Equals(t, exp, result[i].Metric)
 	}
@@ -612,7 +612,7 @@ func queryAndAssert(t *testing.T, ctx context.Context, addr, q string, opts prom
 	t.Helper()
 
 	sortResults(expected)
-	result := instantQuery(t, ctx, addr, q, opts, len(expected))
+	result := instantQuery(t, ctx, addr, q, time.Now, opts, len(expected))
 	for _, r := range result {
 		r.Timestamp = 0 // Does not matter for us.
 	}
