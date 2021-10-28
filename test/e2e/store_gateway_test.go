@@ -82,7 +82,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	// Ensure bucket UI.
 	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.Endpoint("http"), "loaded"))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).WithEnabledFeatures([]string{"promql-negative-offset", "promql-at-modifier"}).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -132,8 +132,8 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 	t.Run("query works", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"} @ end()",
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
@@ -158,7 +158,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(2), "thanos_bucket_store_series_blocks_queried"))
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: true,
 			},
 			[]model.Metric{
@@ -188,7 +188,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 		// TODO(bwplotka): Entries are still in LRU cache.
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
@@ -217,7 +217,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
@@ -250,7 +250,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
@@ -263,6 +263,23 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			},
 		)
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(7+1), "thanos_bucket_store_series_blocks_queried"))
+	})
+
+	t.Run("negative offset should work", func(t *testing.T) {
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"} offset -4h",
+			func() time.Time { return time.Now().Add(-4 * time.Hour) }, promclient.QueryOptions{
+				Deduplicate: false,
+			},
+			[]model.Metric{
+				{
+					"a":       "1",
+					"b":       "2",
+					"ext1":    "value1",
+					"replica": "3",
+				},
+			},
+		)
+		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(7+2), "thanos_bucket_store_series_blocks_queried"))
 	})
 
 	// TODO(khyati) Let's add some case for compaction-meta.json once the PR will be merged: https://github.com/thanos-io/thanos/pull/2136.
@@ -345,7 +362,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	t.Run("query with cache miss", func(t *testing.T) {
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{
@@ -363,7 +380,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	t.Run("query with cache hit", func(t *testing.T) {
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
-			promclient.QueryOptions{
+			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
 			[]model.Metric{

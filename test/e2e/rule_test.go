@@ -382,7 +382,7 @@ func TestRule(t *testing.T) {
 	})
 
 	t.Run("query alerts", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "ALERTS", promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "ALERTS", time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
