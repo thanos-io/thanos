@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -293,4 +294,116 @@ func TestPlanSimulate(t *testing.T) {
 	metrics := ps.ProgressMetrics
 	testutil.Equals(t, 2.0, promtestutil.ToFloat64(metrics.NumberOfCompactionRuns))
 	testutil.Equals(t, 6.0, promtestutil.ToFloat64(metrics.NumberOfCompactionBlocks))
+}
+
+func TestDownsampleSimulate(t *testing.T) {
+
+	for _, tcase := range []struct {
+		input    []*metadata.Meta
+		expected float64
+	}{
+		{
+			input: []*metadata.Meta{
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(0, nil),
+						MinTime: 0,
+						MaxTime: downsample.DownsampleRange1,
+						Compaction: tsdb.BlockMetaCompaction{
+							Sources: []ulid.ULID{ulid.MustNew(1, nil), ulid.MustNew(2, nil)},
+						},
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1"},
+						Downsample: metadata.ThanosDownsample{
+							Resolution: downsample.ResLevel1,
+						},
+					},
+				},
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(3, nil),
+						MinTime: 1,
+						MaxTime: downsample.DownsampleRange0,
+						Compaction: tsdb.BlockMetaCompaction{
+							Sources: []ulid.ULID{ulid.MustNew(4, nil), ulid.MustNew(5, nil)},
+						},
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1"},
+						Downsample: metadata.ThanosDownsample{
+							Resolution: downsample.ResLevel0,
+						},
+					},
+				},
+			},
+			expected: 1.0,
+		},
+		{
+			input: []*metadata.Meta{
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(6, nil),
+						MinTime: 1,
+						MaxTime: downsample.DownsampleRange0,
+						Compaction: tsdb.BlockMetaCompaction{
+							Sources: []ulid.ULID{ulid.MustNew(7, nil), ulid.MustNew(8, nil)},
+						},
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1"},
+						Downsample: metadata.ThanosDownsample{
+							Resolution: downsample.ResLevel2,
+						},
+					},
+				},
+			},
+			expected: 0.0,
+		}, {
+			input: []*metadata.Meta{
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(9, nil),
+						MinTime: 0,
+						MaxTime: downsample.DownsampleRange0,
+						Compaction: tsdb.BlockMetaCompaction{
+							Sources: []ulid.ULID{ulid.MustNew(10, nil), ulid.MustNew(11, nil)},
+						},
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1"},
+						Downsample: metadata.ThanosDownsample{
+							Resolution: downsample.ResLevel0,
+						},
+					},
+				},
+			},
+			expected: 1.0,
+		},
+	} {
+		reg := prometheus.NewRegistry()
+		ds := NewDownsampleSimulator(reg)
+
+		extLabels := labels.FromMap(map[string]string{"a": "1"})
+		groups := []*Group{
+			{
+				key:            "a",
+				labels:         extLabels,
+				resolution:     downsample.ResLevel1,
+				metasByMinTime: tcase.input,
+			},
+		}
+		if ok := t.Run("", func(t *testing.T) {
+			err := ds.ProgressCalculate(context.Background(), groups)
+			testutil.Ok(t, err)
+			metrics := ds.DownsampleMetrics
+			testutil.Equals(t, tcase.expected, promtestutil.ToFloat64(metrics.BlocksDownsampled.WithLabelValues("a")))
+		}); !ok {
+			return
+		}
+	}
 }
