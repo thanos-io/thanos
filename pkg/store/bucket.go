@@ -104,6 +104,7 @@ type bucketStoreMetrics struct {
 	blocksLoaded          prometheus.Gauge
 	blockLoads            prometheus.Counter
 	blockLoadFailures     prometheus.Counter
+	lastLoadedBlock       prometheus.Gauge
 	blockDrops            prometheus.Counter
 	blockDropFailures     prometheus.Counter
 	seriesDataTouched     *prometheus.SummaryVec
@@ -150,6 +151,10 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.blocksLoaded = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_bucket_store_blocks_loaded",
 		Help: "Number of currently loaded blocks.",
+	})
+	m.lastLoadedBlock = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_bucket_store_blocks_last_loaded_timestamp_seconds",
+		Help: "Timestamp when last block got loaded.",
 	})
 
 	m.seriesDataTouched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
@@ -628,7 +633,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	s.blocks[b.meta.ULID] = b
 
 	s.metrics.blocksLoaded.Inc()
-
+	s.metrics.lastLoadedBlock.SetToCurrentTime()
 	return nil
 }
 
