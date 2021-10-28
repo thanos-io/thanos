@@ -23,7 +23,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const data = "data"
+const (
+	data           = "data"
+	defaultProfile = "continuous-30d-tiny"
+)
 
 var (
 	maxTimeFresh = `2021-07-27T00:00:00Z`
@@ -42,7 +45,17 @@ func exec(cmd string, args ...string) error {
 	return nil
 }
 
+// createData generates some blocks for us to play with and makes them
+// available to store and Prometheus instances.
+//
+// You can choose different profiles by setting the BLOCK_PROFILE environment variable.
+// Available profiles can be found at https://github.com/thanos-io/thanosbench/blob/master/pkg/blockgen/profiles.go#L28
 func createData() (perr error) {
+	profile := os.Getenv("BLOCK_PROFILE")
+	if profile == "" {
+		profile = defaultProfile
+	}
+
 	fmt.Println("Re-creating data (can take minutes)...")
 	defer func() {
 		if perr != nil {
@@ -53,16 +66,16 @@ func createData() (perr error) {
 	if err := exec(
 		"sh", "-c",
 		fmt.Sprintf("mkdir -p %s && "+
-			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p continuous-1w-small --labels 'cluster=\"eu-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
-			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", store1Data, maxTimeOld, store1Data),
+			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p %s --labels 'cluster=\"eu-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", store1Data, profile, maxTimeOld, store1Data),
 	); err != nil {
 		return err
 	}
 	if err := exec(
 		"sh", "-c",
 		fmt.Sprintf("mkdir -p %s && "+
-			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p continuous-1w-small --labels 'cluster=\"us-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
-			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", store2Data, maxTimeOld, store2Data),
+			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p %s --labels 'cluster=\"us-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", store2Data, profile, maxTimeOld, store2Data),
 	); err != nil {
 		return err
 	}
@@ -70,16 +83,16 @@ func createData() (perr error) {
 	if err := exec(
 		"sh", "-c",
 		fmt.Sprintf("mkdir -p %s && "+
-			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p continuous-1w-small --max-time=%s | "+
-			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", prom1Data, maxTimeFresh, prom1Data),
+			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p %s --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", prom1Data, profile, maxTimeFresh, prom1Data),
 	); err != nil {
 		return err
 	}
 	if err := exec(
 		"sh", "-c",
 		fmt.Sprintf("mkdir -p %s && "+
-			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p continuous-1w-small --max-time=%s | "+
-			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", prom2Data, maxTimeFresh, prom2Data),
+			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p %s --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", prom2Data, profile, maxTimeFresh, prom2Data),
 	); err != nil {
 		return err
 	}
@@ -89,14 +102,15 @@ func createData() (perr error) {
 // TestReadOnlyThanosSetup runs read only Thanos setup that has data from `maxTimeFresh - 2w` to `maxTimeOld`, with extra monitoring and tracing for full playground experience.
 // Run with test args `-test.timeout 9999m`.
 func TestReadOnlyThanosSetup(t *testing.T) {
-	t.Skip("This is interactive test - it will run until you will kill it or curl 'finish' endpoint. Comment and run as normal test to use it!")
+	// t.Skip("This is interactive test - it will run until you will kill it or curl 'finish' endpoint. Comment and run as normal test to use it!")
 
-	// Create 20k series for 2w of TSDB blocks. Cache them to 'data' dir so we don't need to re-create on every run (it takes ~5m).
+	// Create series of TSDB blocks. Cache them to 'data' dir so we don't need to re-create on every run.
 	_, err := os.Stat(data)
 	if os.IsNotExist(err) {
 		testutil.Ok(t, createData())
 	} else {
 		testutil.Ok(t, err)
+		fmt.Println("Skipping blocks generation, found data directory.")
 	}
 
 	e, err := e2e.NewDockerEnvironment("interactive")
@@ -310,7 +324,6 @@ global:
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(query1))
 
-	// Let's start the party with 1.5 billions of samples (~20k series for 15s scrape for 2w).
 	// Wait until we have 5 gRPC connections.
 	testutil.Ok(t, query1.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
