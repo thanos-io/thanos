@@ -486,7 +486,14 @@ func runCompact(
 				if err != nil {
 					return errors.Wrapf(err, "could not group original metadata")
 				}
-				downGroups := groups //groups used for downsampling
+				downGroups := make([]*compact.Group, len(groups))
+				for ind, group := range groups {
+					if group == nil {
+						continue
+					}
+					v := *group
+					downGroups[ind] = &v
+				}
 
 				for _, group := range groups {
 					ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(group.Key())
