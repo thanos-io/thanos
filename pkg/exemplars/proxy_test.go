@@ -292,8 +292,7 @@ func TestProxy(t *testing.T) {
 	}
 }
 
-// TestProxyDataRace find the concurrent data race bug.
-// go test -race -run TestProxyDataRace -v
+// TestProxyDataRace find the concurrent data race bug ( go test -race -run TestProxyDataRace -v ).
 func TestProxyDataRace(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 	p := NewProxy(logger, func() []*exemplarspb.ExemplarStore {

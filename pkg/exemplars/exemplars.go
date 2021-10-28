@@ -6,6 +6,7 @@ package exemplars
 import (
 	"context"
 	"sort"
+	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
@@ -37,10 +38,13 @@ type exemplarsServer struct {
 
 	warnings []error
 	data     []*exemplarspb.ExemplarData
+	mu       sync.Mutex
 }
 
 func (srv *exemplarsServer) Send(res *exemplarspb.ExemplarsResponse) error {
 	if res.GetWarning() != "" {
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
 		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
 		return nil
 	}
@@ -49,6 +53,8 @@ func (srv *exemplarsServer) Send(res *exemplarspb.ExemplarsResponse) error {
 		return errors.New("empty exemplars data")
 	}
 
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
 	srv.data = append(srv.data, res.GetData())
 	return nil
 }
