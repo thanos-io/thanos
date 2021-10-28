@@ -299,10 +299,13 @@ func TestPlanSimulate(t *testing.T) {
 func TestDownsampleSimulate(t *testing.T) {
 
 	for _, tcase := range []struct {
+		testName string
 		input    []*metadata.Meta
 		expected float64
 	}{
 		{
+			// this test case has 1 block to be downsampled out of 2 since for the second block, the difference between MinTime and MaxTime is less than the acceptable threshold, DownsampleRange0
+			testName: "min_max_time_diff_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -342,6 +345,8 @@ func TestDownsampleSimulate(t *testing.T) {
 			expected: 1.0,
 		},
 		{
+			// this test case returns 0 blocks to be downsampled since the resolution is resLevel2, which is skipped when grouping blocks for downsampling.
+			testName: "res_level_2_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -363,6 +368,8 @@ func TestDownsampleSimulate(t *testing.T) {
 			},
 			expected: 0.0,
 		}, {
+			// this test case returns 1 block to be downsampled since for this block, which has a resolution of resLevel0, the difference between minTime and maxTime is greater than the acceptable threshold, DownsampleRange0.
+			testName: "res_level_0_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -397,7 +404,7 @@ func TestDownsampleSimulate(t *testing.T) {
 				metasByMinTime: tcase.input,
 			},
 		}
-		if ok := t.Run("", func(t *testing.T) {
+		if ok := t.Run(tcase.testName, func(t *testing.T) {
 			err := ds.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
 			metrics := ds.DownsampleMetrics
