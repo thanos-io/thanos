@@ -477,7 +477,7 @@ func runCompact(
 			}
 			ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
 			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
-				if err := sy.SyncMetas(context.Background()); err != nil {
+				if err := sy.SyncMetas(ctx); err != nil {
 					return errors.Wrapf(err, "could not sync metas")
 				}
 
@@ -486,21 +486,22 @@ func runCompact(
 				if err != nil {
 					return errors.Wrapf(err, "could not group original metadata")
 				}
+				downGroups := groups //groups used for downsampling
 
 				for _, group := range groups {
 					ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(group.Key())
 					ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(group.Key())
 				}
 
-				if err = ps.ProgressCalculate(context.Background(), groups); err != nil {
+				if err = ps.ProgressCalculate(ctx, groups); err != nil {
 					return errors.Wrapf(err, "could not simulate planning")
 				}
 
 				if !conf.disableDownsampling {
-					for _, group := range groups {
+					for _, group := range downGroups {
 						ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(group.Key())
 					}
-					if err := ds.ProgressCalculate(context.Background(), groups); err != nil {
+					if err := ds.ProgressCalculate(ctx, downGroups); err != nil {
 						return errors.Wrapf(err, "could not simulate downsampling")
 					}
 				}
