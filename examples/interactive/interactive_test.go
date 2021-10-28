@@ -225,7 +225,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	sidecar2 := e2edb.NewThanosSidecar(e, "sidecar2", prom2, e2edb.WithImage("thanos:latest"))
 
 	testutil.Ok(t, exec("cp", "-r", prom1Data+"/.", promHA0.Dir()))
-	testutil.Ok(t, exec("sh", "-c", "find "+prom1Data+"/ -maxdepth 1 -type d | tail -5 | xargs cp -r -t "+promHA1.Dir())) // Copy only 5 blocks from 9 to mimic replica 1 with partial data set.
+	testutil.Ok(t, exec("sh", "-c", "find "+prom1Data+"/ -maxdepth 1 -type d | tail -5 | xargs -I {} cp -r {} "+promHA1.Dir())) // Copy only 5 blocks from 9 to mimic replica 1 with partial data set.
 	testutil.Ok(t, exec("cp", "-r", prom2Data+"/.", prom2.Dir()))
 
 	testutil.Ok(t, promHA0.SetConfig(`
