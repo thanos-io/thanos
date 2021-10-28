@@ -359,7 +359,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                   getOptionLabel={(option: Store) => option.name}
                   getOptionValue={(option: Store) => option.name}
                   closeMenuOnSelect={false}
-                  styles={{ container: (provided, state) => ({ ...provided, marginBottom: 20, zIndex: 3, width: '100%' }) }}
+                  styles={{
+                    container: (provided, state) => ({
+                      ...provided,
+                      marginBottom: 20,
+                      zIndex: 3,
+                      width: '100%',
+                      color: '#000',
+                    }),
+                  }}
                   onChange={this.handleStoreMatchChange}
                 />
               </div>
