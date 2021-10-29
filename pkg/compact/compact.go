@@ -483,15 +483,18 @@ func (cg *Group) Resolution() int64 {
 	return cg.resolution
 }
 
+// ProgressMetrics contains Prometheus metrics related to planning and compaction progress.
 type ProgressMetrics struct {
 	NumberOfCompactionRuns   *prometheus.GaugeVec
 	NumberOfCompactionBlocks *prometheus.GaugeVec
 }
 
+// ProgressCalculator updates the results/metrics from the compaction planning and downsampling simulations.
 type ProgressCalculator interface {
 	ProgressCalculate(ctx context.Context, groups []*Group) error
 }
 
+// CompactionSimulator contains a planner and ProgressMetrics, which are updated during the compaction simulation process
 type CompactionSimulator struct {
 	planner Planner
 	*ProgressMetrics
@@ -564,10 +567,12 @@ func (ps *CompactionSimulator) ProgressCalculate(ctx context.Context, groups []*
 	return nil
 }
 
+// DownsampleMetrics contains Prometheus metrics related to downsampling progress.
 type DownsampleMetrics struct {
 	BlocksDownsampled *prometheus.GaugeVec
 }
 
+// DownsampleSimulator contains DownsampleMetrics, which are updated during the downsampling simulation process.
 type DownsampleSimulator struct {
 	*DownsampleMetrics
 }

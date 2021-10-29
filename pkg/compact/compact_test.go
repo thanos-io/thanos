@@ -292,6 +292,8 @@ func TestPlanSimulate(t *testing.T) {
 	err := ps.ProgressCalculate(context.Background(), groups)
 	testutil.Ok(t, err)
 	metrics := ps.ProgressMetrics
+	// In this test case, the first four blocks are planned for compaction in the first run. These are then removed from the group and then the next two blocks from the original group are planned for compaction in the second run.
+	// Hence, a total of 6 blocks are planned for compaction over 2 runs.
 	testutil.Equals(t, 2.0, promtestutil.ToFloat64(metrics.NumberOfCompactionRuns))
 	testutil.Equals(t, 6.0, promtestutil.ToFloat64(metrics.NumberOfCompactionBlocks))
 }
