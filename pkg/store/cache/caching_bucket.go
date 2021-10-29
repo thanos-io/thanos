@@ -431,6 +431,19 @@ func (cb *CachingBucket) fetchMissingSubranges(ctx context.Context, name string,
 			}
 			defer runutil.CloseWithLogOnErr(cb.logger, r, "fetching range [%d, %d]", m.start, m.end)
 
+			var bufSize int64
+			if lastSubrangeOffset >= m.end {
+				bufSize = m.end - m.start
+			} else {
+				bufSize = ((m.end - m.start) - cfg.subrangeSize) + int64(lastSubrangeLength)
+			}
+
+			buf := make([]byte, bufSize)
+			_, err = io.ReadFull(r, buf)
+			if err != nil {
+				return errors.Wrapf(err, "fetching range [%d, %d]", m.start, m.end)
+			}
+
 			for off := m.start; off < m.end && gctx.Err() == nil; off += cfg.subrangeSize {
 				key := cacheKeys[off]
 				if key == "" {
@@ -442,13 +455,9 @@ func (cb *CachingBucket) fetchMissingSubranges(ctx context.Context, name string,
 				if off == lastSubrangeOffset {
 					// The very last subrange in the object may have different length,
 					// if object length isn't divisible by subrange size.
-					subrangeData = make([]byte, lastSubrangeLength)
+					subrangeData = buf[off-m.start : off-m.start+int64(lastSubrangeLength)]
 				} else {
-					subrangeData = make([]byte, cfg.subrangeSize)
-				}
-				_, err := io.ReadFull(r, subrangeData)
-				if err != nil {
-					return errors.Wrapf(err, "fetching range [%d, %d]", m.start, m.end)
+					subrangeData = buf[off-m.start : off-m.start+cfg.subrangeSize]
 				}
 
 				storeToCache := false
