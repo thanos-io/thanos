@@ -27,11 +27,12 @@ Since we cannot access the `Thanos Sidecar` directly - we cannot query metrics d
 This means that the Global View would be at least 2 hours out of date, and does not satisfy requirement #2.
 </details>
 
+
 ## Thanos Receive
 
 Enter [Thanos Receive](https://thanos.io/tip/components/receive.md/).
 
-`Thanos Receive` is a component that implements the [Prometheus Remote Write API](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This means that it will accept metrics data that is sent to it by other Prometheus instances.
+`Thanos Receive` is a component that implements the [Prometheus Remote Write API](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This means that it will accept metrics data that is sent to it by other Prometheus instances (or any other process that implements Remote Write API).
 
 Prometheus can be configured to `Remote Write`. This means that Prometheus will send all of its metrics data to a remote endpoint as they are being ingested - useful for our requirements!
 
@@ -57,6 +58,8 @@ docker run -d --rm \
     --label "receive_cluster=\"wayne-enterprises\"" \
     --remote-write.address 127.0.0.1:10908
 ```{{execute}}
+
+This starts Thanos Receive that listens on `http://127.0.0.1:10908/api/v1/receive' endpoint for Remote Write and on `127.0.0.1:10907` for Thanos StoreAPI.
 
 Let's talk about some important parameters:
 * `--label` - `Thanos Receive` requires at least one label to be set. These are called 'external labels' and are used to uniquely identify this instance of `Thanos Receive`.
@@ -91,10 +94,11 @@ Now we are done right? Try querying for some data...
 ![alt text](./assets/receive-empty-query-result.png)
 
 <details>
- <summary>Uh-oh! Why are we seeing 'Empty Query Result' responses?</summary>
+ <summary>Uh-oh! Do you know why are we seeing 'Empty Query Result' responses?</summary>
 
 We have correctly configured `Thanos Receive` & `Thanos Query`, but we have not yet configured Prometheus to write to remote write its data to the right place.
 
 </details>
+
 
 Hit continue and we will fix this setup!

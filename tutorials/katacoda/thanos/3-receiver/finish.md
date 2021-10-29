@@ -1,10 +1,11 @@
 # Summary
 
 Congratulations! 🎉🎉🎉
-You completed this Thanos Receive tutorial. Let's summarize what we learned:
+You completed this `Thanos Receive` tutorial. Let's summarize what we learned:
 
-* Thanos Receive is a component that implements the `Prometheus Remote Write` protocol.
-* Prometheus can be configured to remote write its metric data in real-time to another server that implements the Remote Write protocol.
+* `Thanos Receive` is a component that implements the `Prometheus Remote Write` protocol.
+* Prometheus can be configured to remote-write its metric data in real-time to another server that implements the `Remote Write` protocol.
+* Thanos Receive allows us to ingest the data from sources which have limited accessibility, or that has no querying / storing capabilities and they have to forward data somewhere else (e.g Prometheus in Agent mode explained in next tutorial).
 
 See next courses for other tutorials about different deployment models and more advanced features of Thanos!
 
