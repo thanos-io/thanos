@@ -55,10 +55,6 @@ var (
 	}
 )
 
-const (
-	compactionProgressMetrics = "compact-progress-metrics"
-)
-
 type compactionSet []time.Duration
 
 func (cs compactionSet) String() string {
@@ -93,12 +89,6 @@ func registerCompact(app *extkingpin.App) {
 	conf.registerFlag(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		for _, f := range conf.enableFeature {
-			if f == compactionProgressMetrics {
-				conf.compactionProgressMetrics = true
-			}
-		}
-
 		return runCompact(g, logger, tracer, reg, component.Compact, *conf, getFlagsMap(cmd.Flags()))
 	})
 }
@@ -471,12 +461,9 @@ func runCompact(
 
 	if conf.compactionProgressMetrics {
 		g.Add(func() error {
-			var ds *compact.DownsampleSimulator
-			if !conf.disableDownsampling {
-				ds = compact.NewDownsampleSimulator(reg)
-			}
-			ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
 			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+				ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
+
 				if err := sy.SyncMetas(ctx); err != nil {
 					return errors.Wrapf(err, "could not sync metas")
 				}
@@ -486,13 +473,22 @@ func runCompact(
 				if err != nil {
 					return errors.Wrapf(err, "could not group original metadata")
 				}
-				downGroups := make([]*compact.Group, len(groups))
-				for ind, group := range groups {
-					if group == nil {
-						continue
+
+				if !conf.disableDownsampling {
+					ds := compact.NewDownsampleSimulator(reg)
+
+					downGroups := make([]*compact.Group, len(groups))
+					for ind, group := range groups {
+						v := *group
+						downGroups[ind] = &v
 					}
-					v := *group
-					downGroups[ind] = &v
+
+					for _, group := range downGroups {
+						ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(group.Key())
+					}
+					if err := ds.ProgressCalculate(ctx, downGroups); err != nil {
+						return errors.Wrapf(err, "could not simulate downsampling")
+					}
 				}
 
 				for _, group := range groups {
@@ -502,15 +498,6 @@ func runCompact(
 
 				if err = ps.ProgressCalculate(ctx, groups); err != nil {
 					return errors.Wrapf(err, "could not simulate planning")
-				}
-
-				if !conf.disableDownsampling {
-					for _, group := range downGroups {
-						ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(group.Key())
-					}
-					if err := ds.ProgressCalculate(ctx, downGroups); err != nil {
-						return errors.Wrapf(err, "could not simulate downsampling")
-					}
 				}
 
 				return nil
@@ -653,11 +640,10 @@ type compactConfig struct {
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
 	compactionProgressMetrics                      bool
-	enableFeature                                  []string
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
-	cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+compactionProgressMetrics+".").Default("").StringsVar(&cc.enableFeature)
+	cmd.Flag("progress-metrics", "Enables the progress metrics, indicating the progress of the compaction and downsampling processes").Default("false").BoolVar(&cc.compactionProgressMetrics)
 
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)

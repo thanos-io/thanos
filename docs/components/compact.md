@@ -348,9 +348,6 @@ Flags:
                                 non-downsampled data is not efficient and useful
                                 e.g it is not possible to render all samples for
                                 a human eye anyway
-      --enable-feature= ...     Comma separated experimental feature names to
-                                enable.The current list of features is
-                                compact-progress-metrics.
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files. If no
                                 function has been specified, it does not happen.
@@ -379,6 +376,9 @@ Flags:
                                 Path to YAML file that contains object store
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
+      --progress-metrics        Enables the progress metrics, indicating the
+                                progress of the compaction and downsampling
+                                processes
       --retention.resolution-1h=0d  
                                 How long to retain samples of resolution 2 (1
                                 hour) in bucket. Setting this to 0d will retain
