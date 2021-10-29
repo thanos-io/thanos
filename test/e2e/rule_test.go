@@ -509,7 +509,9 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 
 	t.Run("can fetch remote-written samples from receiver", func(t *testing.T) {
 		testRecordedSamples := "test_absent_metric"
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), testRecordedSamples, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), testRecordedSamples, func() time.Time {
+			return time.Now()
+		}, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
