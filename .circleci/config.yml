@@ -11,7 +11,7 @@ executors:
   golang-test:
     docker:
       - image: cimg/go:1.16-node
-      - image: beaukode/docker-swift-onlyone-authv2-keystone
+      - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1
 
 jobs:
   test:
