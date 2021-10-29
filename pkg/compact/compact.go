@@ -502,11 +502,11 @@ func NewCompactionSimulator(reg prometheus.Registerer, planner *tsdbBasedPlanner
 		planner: planner,
 		ProgressMetrics: &ProgressMetrics{
 			NumberOfCompactionRuns: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-				Name: "thanos_number_of_iterations",
+				Name: "thanos_compact_todo_compactions",
 				Help: "number of iterations to be done",
 			}, []string{"group"}),
 			NumberOfCompactionBlocks: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-				Name: "thanos_number_of_blocks_planned",
+				Name: "thanos_compact_todo_compaction_blocks",
 				Help: "number of blocks planned to be merged",
 			}, []string{"group"}),
 		},
@@ -576,7 +576,7 @@ func NewDownsampleSimulator(reg prometheus.Registerer) *DownsampleSimulator {
 	return &DownsampleSimulator{
 		DownsampleMetrics: &DownsampleMetrics{
 			BlocksDownsampled: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-				Name: "thanos_blocks_downsampled",
+				Name: "thanos_compact_todo_downsample_blocks",
 				Help: "number of blocks to be downsampled",
 			}, []string{"group"}),
 		},
