@@ -179,8 +179,7 @@ func BenchmarkGatherNoCompactionMarkFilter_Filter(b *testing.B) {
 }
 
 func TestPlanSimulate(t *testing.T) {
-	logger := log.NewNopLogger()
-	planner := NewTSDBBasedPlanner(logger, []int64{
+	planner := NewTSDBBasedPlanner(log.NewNopLogger(), []int64{
 		int64(1 * time.Hour / time.Millisecond),
 		int64(2 * time.Hour / time.Millisecond),
 		int64(8 * time.Hour / time.Millisecond),
