@@ -483,27 +483,27 @@ func (cg *Group) Resolution() int64 {
 	return cg.resolution
 }
 
-// ProgressMetrics contains Prometheus metrics related to planning and compaction progress.
-type ProgressMetrics struct {
+// CompactProgressMetrics contains Prometheus metrics related to planning and compaction progress.
+type CompactProgressMetrics struct {
 	NumberOfCompactionRuns   *prometheus.GaugeVec
 	NumberOfCompactionBlocks *prometheus.GaugeVec
 }
 
-// ProgressCalculator updates the results/metrics from the compaction planning and downsampling simulations.
+// ProgressCalculator calculates the progress of the compaction process for a given slice of Groups.
 type ProgressCalculator interface {
 	ProgressCalculate(ctx context.Context, groups []*Group) error
 }
 
-// CompactionSimulator contains a planner and ProgressMetrics, which are updated during the compaction simulation process
-type CompactionSimulator struct {
+// CompactionProgressCalculator contains a planner and ProgressMetrics, which are updated during the compaction simulation process
+type CompactionProgressCalculator struct {
 	planner Planner
-	*ProgressMetrics
+	*CompactProgressMetrics
 }
 
-func NewCompactionSimulator(reg prometheus.Registerer, planner *tsdbBasedPlanner) *CompactionSimulator {
-	return &CompactionSimulator{
+func NewCompactionProgressCalculator(reg prometheus.Registerer, planner *tsdbBasedPlanner) *CompactionProgressCalculator {
+	return &CompactionProgressCalculator{
 		planner: planner,
-		ProgressMetrics: &ProgressMetrics{
+		CompactProgressMetrics: &CompactProgressMetrics{
 			NumberOfCompactionRuns: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_compact_todo_compactions",
 				Help: "number of iterations to be done",
@@ -516,7 +516,7 @@ func NewCompactionSimulator(reg prometheus.Registerer, planner *tsdbBasedPlanner
 	}
 }
 
-func (ps *CompactionSimulator) ProgressCalculate(ctx context.Context, groups []*Group) error {
+func (ps *CompactionProgressCalculator) ProgressCalculate(ctx context.Context, groups []*Group) error {
 	groupCompactions := make(map[string]int, len(groups))
 	groupBlocks := make(map[string]int, len(groups))
 
@@ -560,27 +560,27 @@ func (ps *CompactionSimulator) ProgressCalculate(ctx context.Context, groups []*
 	}
 
 	for key, iters := range groupCompactions {
-		ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(key).Add(float64(iters))
-		ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(key).Add(float64(groupBlocks[key]))
+		ps.CompactProgressMetrics.NumberOfCompactionRuns.WithLabelValues(key).Add(float64(iters))
+		ps.CompactProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(key).Add(float64(groupBlocks[key]))
 	}
 
 	return nil
 }
 
-// DownsampleMetrics contains Prometheus metrics related to downsampling progress.
-type DownsampleMetrics struct {
-	BlocksDownsampled *prometheus.GaugeVec
+// DownsampleProgressMetrics contains Prometheus metrics related to downsampling progress.
+type DownsampleProgressMetrics struct {
+	NumberOfBlocksDownsampled *prometheus.GaugeVec
 }
 
-// DownsampleSimulator contains DownsampleMetrics, which are updated during the downsampling simulation process.
-type DownsampleSimulator struct {
-	*DownsampleMetrics
+// DownsampleProgressCalculator contains DownsampleMetrics, which are updated during the downsampling simulation process.
+type DownsampleProgressCalculator struct {
+	*DownsampleProgressMetrics
 }
 
-func NewDownsampleSimulator(reg prometheus.Registerer) *DownsampleSimulator {
-	return &DownsampleSimulator{
-		DownsampleMetrics: &DownsampleMetrics{
-			BlocksDownsampled: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+func NewDownsampleProgressCalculator(reg prometheus.Registerer) *DownsampleProgressCalculator {
+	return &DownsampleProgressCalculator{
+		DownsampleProgressMetrics: &DownsampleProgressMetrics{
+			NumberOfBlocksDownsampled: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_compact_todo_downsample_blocks",
 				Help: "number of blocks to be downsampled",
 			}, []string{"group"}),
@@ -588,7 +588,7 @@ func NewDownsampleSimulator(reg prometheus.Registerer) *DownsampleSimulator {
 	}
 }
 
-func (ds *DownsampleSimulator) ProgressCalculate(ctx context.Context, groups []*Group) error {
+func (ds *DownsampleProgressCalculator) ProgressCalculate(ctx context.Context, groups []*Group) error {
 	sources5m := map[ulid.ULID]struct{}{}
 	sources1h := map[ulid.ULID]struct{}{}
 	groupBlocks := make(map[string]int, len(groups))
@@ -653,7 +653,7 @@ func (ds *DownsampleSimulator) ProgressCalculate(ctx context.Context, groups []*
 	}
 
 	for key, blocks := range groupBlocks {
-		ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(key).Add(float64(blocks))
+		ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.WithLabelValues(key).Add(float64(blocks))
 	}
 
 	return nil

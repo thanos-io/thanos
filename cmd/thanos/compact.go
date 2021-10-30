@@ -462,10 +462,10 @@ func runCompact(
 
 	if conf.compactionProgressMetrics {
 		g.Add(func() error {
-			ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
-			var ds *compact.DownsampleSimulator
+			ps := compact.NewCompactionProgressCalculator(reg, tsdbPlanner)
+			var ds *compact.DownsampleProgressCalculator
 			if !conf.disableDownsampling {
-				ds = compact.NewDownsampleSimulator(reg)
+				ds = compact.NewDownsampleProgressCalculator(reg)
 			}
 
 			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
@@ -481,8 +481,8 @@ func runCompact(
 				}
 
 				u := receive.UnRegisterer{Registerer: reg}
-				u.MustRegister(ps.ProgressMetrics.NumberOfCompactionRuns)
-				u.MustRegister(ps.ProgressMetrics.NumberOfCompactionBlocks)
+				u.MustRegister(ps.CompactProgressMetrics.NumberOfCompactionRuns)
+				u.MustRegister(ps.CompactProgressMetrics.NumberOfCompactionBlocks)
 
 				if !conf.disableDownsampling {
 					downGroups := make([]*compact.Group, len(groups))
@@ -491,10 +491,10 @@ func runCompact(
 						downGroups[ind] = &v
 					}
 
-					u.MustRegister(ds.DownsampleMetrics.BlocksDownsampled)
+					u.MustRegister(ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled)
 
 					for _, group := range downGroups {
-						ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(group.Key())
+						ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.WithLabelValues(group.Key())
 					}
 					if err := ds.ProgressCalculate(ctx, downGroups); err != nil {
 						return errors.Wrapf(err, "could not simulate downsampling")
@@ -502,8 +502,8 @@ func runCompact(
 				}
 
 				for _, group := range groups {
-					ps.ProgressMetrics.NumberOfCompactionRuns.WithLabelValues(group.Key())
-					ps.ProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(group.Key())
+					ps.CompactProgressMetrics.NumberOfCompactionRuns.WithLabelValues(group.Key())
+					ps.CompactProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(group.Key())
 				}
 
 				if err = ps.ProgressCalculate(ctx, groups); err != nil {

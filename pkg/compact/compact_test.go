@@ -186,7 +186,7 @@ func TestPlanSimulate(t *testing.T) {
 		int64(2 * 24 * time.Hour / time.Millisecond),
 	})
 	reg := prometheus.NewRegistry()
-	ps := NewCompactionSimulator(reg, planner)
+	ps := NewCompactionProgressCalculator(reg, planner)
 
 	metas := []*metadata.Meta{
 		{
@@ -290,7 +290,7 @@ func TestPlanSimulate(t *testing.T) {
 
 	err := ps.ProgressCalculate(context.Background(), groups)
 	testutil.Ok(t, err)
-	metrics := ps.ProgressMetrics
+	metrics := ps.CompactProgressMetrics
 	// In this test case, the first four blocks are planned for compaction in the first run. These are then removed from the group and then the next two blocks from the original group are planned for compaction in the second run.
 	// Hence, a total of 6 blocks are planned for compaction over 2 runs.
 	testutil.Equals(t, 2.0, promtestutil.ToFloat64(metrics.NumberOfCompactionRuns))
@@ -394,7 +394,7 @@ func TestDownsampleSimulate(t *testing.T) {
 		},
 	} {
 		reg := prometheus.NewRegistry()
-		ds := NewDownsampleSimulator(reg)
+		ds := NewDownsampleProgressCalculator(reg)
 
 		extLabels := labels.FromMap(map[string]string{"a": "1"})
 		groups := []*Group{
@@ -408,8 +408,8 @@ func TestDownsampleSimulate(t *testing.T) {
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
 			err := ds.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
-			metrics := ds.DownsampleMetrics
-			testutil.Equals(t, tcase.expected, promtestutil.ToFloat64(metrics.BlocksDownsampled.WithLabelValues("a")))
+			metrics := ds.DownsampleProgressMetrics
+			testutil.Equals(t, tcase.expected, promtestutil.ToFloat64(metrics.NumberOfBlocksDownsampled.WithLabelValues("a")))
 		}); !ok {
 			return
 		}
