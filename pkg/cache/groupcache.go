@@ -7,9 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
-	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -22,6 +20,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/cache/cachekey"
 	"gopkg.in/yaml.v2"
 )
 
@@ -62,53 +61,6 @@ var (
 		DNSInterval:   1 * time.Minute,
 	}
 )
-
-type ExistsVerb struct {
-	Name string
-}
-
-type ContentVerb struct {
-	Name string
-}
-
-type IterVerb struct {
-	Name string
-}
-
-type SubrangeVerb struct {
-	Name       string
-	Start, End int64
-}
-
-type AttributesVerb struct {
-	Name string
-}
-
-func ParseGroupcacheKey(key string) interface{} {
-	if strings.HasPrefix(key, "attrs:") {
-		return &AttributesVerb{Name: key[6:]}
-	}
-	if strings.HasPrefix(key, "iter:") {
-		return &IterVerb{Name: key[5:]}
-	}
-	if strings.HasPrefix(key, "exists:") {
-		return &ExistsVerb{Name: key[7:]}
-	}
-	if strings.HasPrefix(key, "content:") {
-		return &ContentVerb{Name: key[8:]}
-	}
-	if strings.HasPrefix(key, "subrange:") {
-		r := regexp.MustCompile(`subrange:(?P<Name>.+):(?P<Start>\d+):(?P<End>\d+)`)
-		matches := r.FindStringSubmatch(key)
-
-		start, _ := strconv.ParseInt(matches[2], 10, 64)
-		end, _ := strconv.ParseInt(matches[3], 10, 64)
-
-		return &SubrangeVerb{Name: matches[1], Start: start, End: end}
-	}
-
-	panic("unsupported verb")
-}
 
 // parseGroupcacheConfig unmarshals a buffer into a GroupcacheConfig with default values.
 func parseGroupcacheConfig(conf []byte) (GroupcacheConfig, error) {
@@ -164,11 +116,14 @@ func NewGroupcacheWithConfig(name string, logger log.Logger, reg prometheus.Regi
 
 	group := groupcache.NewGroup(conf.GroupcacheGroup, int64(conf.MaxSize), groupcache.GetterFunc(
 		func(ctx context.Context, id string, dest groupcache.Sink) error {
-			parsedData := ParseGroupcacheKey(id)
+			parsedData, err := cachekey.ParseBucketCacheKey(id)
+			if err != nil {
+				return err
+			}
 
-			switch v := parsedData.(type) {
-			case *AttributesVerb:
-				attrs, err := bucket.Attributes(ctx, v.Name)
+			switch parsedData.Verb {
+			case cachekey.AttributesVerb:
+				attrs, err := bucket.Attributes(ctx, parsedData.Name)
 				if err != nil {
 					return err
 				}
@@ -181,12 +136,12 @@ func NewGroupcacheWithConfig(name string, logger log.Logger, reg prometheus.Regi
 				if err != nil {
 					return err
 				}
-			case *IterVerb:
+			case cachekey.IterVerb:
 				// Not supported.
 
 				return nil
-			case *ContentVerb:
-				rc, err := bucket.Get(ctx, v.Name)
+			case cachekey.ContentVerb:
+				rc, err := bucket.Get(ctx, parsedData.Name)
 				if err != nil {
 					return err
 				}
@@ -201,8 +156,8 @@ func NewGroupcacheWithConfig(name string, logger log.Logger, reg prometheus.Regi
 				if err != nil {
 					return err
 				}
-			case *ExistsVerb:
-				exists, err := bucket.Exists(ctx, v.Name)
+			case cachekey.ExistsVerb:
+				exists, err := bucket.Exists(ctx, parsedData.Name)
 				if err != nil {
 					return err
 				}
@@ -211,8 +166,8 @@ func NewGroupcacheWithConfig(name string, logger log.Logger, reg prometheus.Regi
 				if err != nil {
 					return err
 				}
-			case *SubrangeVerb:
-				rc, err := bucket.GetRange(ctx, v.Name, v.Start, v.End-v.Start)
+			case cachekey.SubrangeVerb:
+				rc, err := bucket.GetRange(ctx, parsedData.Name, parsedData.Start, parsedData.End-parsedData.Start)
 				if err != nil {
 					return err
 				}
