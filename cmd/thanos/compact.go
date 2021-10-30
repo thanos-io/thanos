@@ -40,6 +40,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
@@ -461,8 +462,13 @@ func runCompact(
 
 	if conf.compactionProgressMetrics {
 		g.Add(func() error {
+			ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
+			var ds *compact.DownsampleSimulator
+			if !conf.disableDownsampling {
+				ds = compact.NewDownsampleSimulator(reg)
+			}
+
 			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
-				ps := compact.NewCompactionSimulator(reg, tsdbPlanner)
 
 				if err := sy.SyncMetas(ctx); err != nil {
 					return errors.Wrapf(err, "could not sync metas")
@@ -474,14 +480,18 @@ func runCompact(
 					return errors.Wrapf(err, "could not group original metadata")
 				}
 
-				if !conf.disableDownsampling {
-					ds := compact.NewDownsampleSimulator(reg)
+				u := receive.UnRegisterer{Registerer: reg}
+				u.MustRegister(ps.ProgressMetrics.NumberOfCompactionRuns)
+				u.MustRegister(ps.ProgressMetrics.NumberOfCompactionBlocks)
 
+				if !conf.disableDownsampling {
 					downGroups := make([]*compact.Group, len(groups))
 					for ind, group := range groups {
 						v := *group
 						downGroups[ind] = &v
 					}
+
+					u.MustRegister(ds.DownsampleMetrics.BlocksDownsampled)
 
 					for _, group := range downGroups {
 						ds.DownsampleMetrics.BlocksDownsampled.WithLabelValues(group.Key())
