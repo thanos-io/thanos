@@ -5,6 +5,7 @@ package metadata
 
 import (
 	"context"
+	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
@@ -67,10 +68,13 @@ type metadataServer struct {
 
 	warnings    []error
 	metadataMap map[string][]metadatapb.Meta
+	mu          sync.Mutex
 }
 
 func (srv *metadataServer) Send(res *metadatapb.MetricMetadataResponse) error {
 	if res.GetWarning() != "" {
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
 		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
 		return nil
 	}
@@ -84,6 +88,8 @@ func (srv *metadataServer) Send(res *metadatapb.MetricMetadataResponse) error {
 		return nil
 	}
 
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
 	for k, v := range res.GetMetadata().Metadata {
 		if metadata, ok := srv.metadataMap[k]; !ok {
 			// If limit is set and it is positive, we limit the size of the map.
