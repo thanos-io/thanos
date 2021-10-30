@@ -462,10 +462,11 @@ func runCompact(
 
 	if conf.compactionProgressMetrics {
 		g.Add(func() error {
-			ps := compact.NewCompactionProgressCalculator(reg, tsdbPlanner)
+			unRegisterer := &receive.UnRegisterer{Registerer: reg}
+			ps := compact.NewCompactionProgressCalculator(unRegisterer, tsdbPlanner)
 			var ds *compact.DownsampleProgressCalculator
 			if !conf.disableDownsampling {
-				ds = compact.NewDownsampleProgressCalculator(reg)
+				ds = compact.NewDownsampleProgressCalculator(unRegisterer)
 			}
 
 			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
@@ -480,18 +481,12 @@ func runCompact(
 					return errors.Wrapf(err, "could not group original metadata")
 				}
 
-				u := receive.UnRegisterer{Registerer: reg}
-				u.MustRegister(ps.CompactProgressMetrics.NumberOfCompactionRuns)
-				u.MustRegister(ps.CompactProgressMetrics.NumberOfCompactionBlocks)
-
 				if !conf.disableDownsampling {
 					downGroups := make([]*compact.Group, len(groups))
 					for ind, group := range groups {
 						v := *group
 						downGroups[ind] = &v
 					}
-
-					u.MustRegister(ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled)
 
 					for _, group := range downGroups {
 						ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.WithLabelValues(group.Key())
