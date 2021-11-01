@@ -388,6 +388,19 @@ groups:
     for: 10m
     labels:
       severity: warning
+  - alert: ThanosStoreObjstoreOperationBlocksMissing
+    annotations:
+      description: Thanos Store {{$labels.job}}%s Bucket could not upload a single
+        block during the last {{$value}} seconds
+      runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosstoreobjstoreoperationblocksmissing
+      summary: During the last 6 hours, Thanos Store could not upload a single block.
+    expr: |
+      (
+        absent(thanos_bucket_store_blocks_last_loaded_timestamp_seconds != 1) and (time() - thanos_bucket_store_blocks_last_loaded_timestamp_seconds > 6 * 60 * 60)
+      )
+    for: 6h
+    labels:
+      severity: warning
 - name: thanos-rule
   rules:
   - alert: ThanosRuleQueueIsDroppingAlerts

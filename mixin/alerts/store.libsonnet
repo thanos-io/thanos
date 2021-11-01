@@ -89,6 +89,22 @@
               severity: 'warning',
             },
           },
+          {
+            alert: 'ThanosStoreObjstoreOperationBlocksMissing',
+            annotations: {
+              description: 'Thanos Store {{$labels.job}}%s Bucket could not upload a single block during the last {{$value}} seconds',
+              summary: 'During the last 6 hours, Thanos Store could not upload a single block.',
+            },
+            expr: |||
+              (
+                absent(thanos_bucket_store_blocks_last_loaded_timestamp_seconds != 1) and (time() - thanos_bucket_store_blocks_last_loaded_timestamp_seconds > 6 * 60 * 60)
+              )
+            ||| % thanos.store,
+            'for': '6h',
+            labels: {
+              severity: 'warning',
+            },
+          },
         ],
       },
     ],
