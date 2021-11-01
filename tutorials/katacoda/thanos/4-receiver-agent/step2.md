@@ -9,7 +9,7 @@ With `Wayne Enterprise` platform ready to ingest Remote Write data, we need to t
 
 How are we going to do this?
 
-Previously our recommended option was to deploy Prometheus on our edge place that scrapes required applications, and remote writes all metrics to Thanos Receive. This will work great and satisfy 1st and 2nd requirements, but there are a couple of things that Prometheus offers that we don't need in this particular scenario:
+Previously, the recommended approach was to deploy Prometheus to our edge environment which scrapes required applications, then remote writes all metrics to Thanos Receive. This will work and satisfy 1st and 2nd requirements, however Prometheus does some things that we don't need in this specific scenario:
 
 * We don't want to alert locally or use recording rules from our edge places.
 * We don't want to query data locally, and we want to store it for an as short duration as possible.

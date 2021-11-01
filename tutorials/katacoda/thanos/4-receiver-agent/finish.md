@@ -5,6 +5,7 @@ You completed this Prometheus Agent tutorial. Let's summarize what we learned:
 
 * Thanos Receive is a component that implements the `Prometheus Remote Write` protocol.
 * Prometheus Agent can be deployed to remote write its metric data in real-time to another server that implements the Remote Write protocol.
+* Prometheus Agent uses a _fraction_ of the resources as normal Prometheus, by not enabling features like: local metrics storage and local query APIs.
 
 See next courses for other tutorials about different deployment models and more advanced features of Thanos!
 

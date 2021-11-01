@@ -12,7 +12,7 @@ The agent mode is optimized for efficient metric scraping and forwarding (i.e. i
 
 In this tutorial, you will learn:
 
-* How to slim down Prometheus based client-side metric collection to a minimum, using the new Prometheus "Agent mode" with `Thanos Receiver`, explained in the previous tutorial.
+* How to reduce Prometheus based client-side metric collection to a minimum, using the new Prometheus "Agent mode" with `Thanos Receiver`, explained in the previous tutorial.
 
 > NOTE: This course uses docker containers with pre-built Thanos, Prometheus, and Minio Docker images available publicly.
 

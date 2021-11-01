@@ -1,16 +1,16 @@
 ## Problem Statement
 
-Let's get back to our example from [Tutorial 3](https://www.katacoda.com/thanos/courses/thanos/3-receiver). Imagine you run a company called `Wayne Enterprises`. In tutorial 3, we established monitoring of two special clusters: `Batcave` & `Batcomputer`.  Special, because they do not expose public endpoints to the Prometheus instances running there for security reasons, so we used the Remote Write protocol to stream all metrics to Thanos Receive in our centralized space.
+Let's get back to our example from [Tutorial 3](https://www.katacoda.com/thanos/courses/thanos/3-receiver). Imagine you run a company called `Wayne Enterprises`. In tutorial 3, we established monitoring of two special clusters: `Batcave` & `Batcomputer`.  These are special because they do not expose public endpoints to the Prometheus instances running there for security reasons, so we used the Remote Write protocol to stream all metrics to Thanos Receive in our centralized space.
 
 Let's imagine we want to expand our `Wayne Enterprises` by adding metrics collection to applications running on smaller devices inside more mobile Batman tools: `Batmobile` and `Batcopter`.
 
 Each of these vehicles has a smaller computer that runs applications from which we want to scrape Prometheus-like metrics using OpenMetrics format.
 
-As the person responsible for implementing monitoring these places, you have three requirements to meet:
+As the person responsible for implementing monitoring in these environments, you have three requirements to meet:
 
 1. Implement a global view of this data. `Wayne Enterprises` needs to know what is happening in all company parts - including secret ones!
 2. `Batmobile` and `Batcopter` can be out of network for some duration of time. You don't want to lose precious data.
-3. Batmobile and Batcopter do not have large compute power, so you want an efficient solution that avoids extra computations and storage.
+3. `Batmobile` and `Batcopter` environments are very **resource constrained**, so you want an efficient solution that avoids extra computations and storage.
 
 Firstly, let us set up Thanos as we explained in the previous tutorial.
 
@@ -49,7 +49,7 @@ query \
 --store "127.0.0.1:10907"
 ```{{execute}}
 
-Verify that `Thanos Query` is working and configured correctly by looking at the 'stores' tab [here](https://[[HOST_SUBDOMAIN]]-39090-[[KATACODA_HOST]].environments.katacoda.com/stores).
+Verify that `Thanos Query` is working and configured correctly by looking at the 'stores' tab [here](https://[[HOST_SUBDOMAIN]]-39090-[[KATACODA_HOST]].environments.katacoda.com/stores) (try refreshing the Thanos UI if it does not show up straight away).
 
 We should see Receive store on this page and, as expected, no metric data since we did not connect any Remote Write sender yet.
 
