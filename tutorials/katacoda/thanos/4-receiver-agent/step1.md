@@ -2,7 +2,7 @@
 
 ## Problem Statement
 
-Let's get back to our example from [Tutorial 3](https://www.katacoda.com/thanos/courses/thanos/3-receiver). Imagine you run a company called `Wayne Enterprises`. In tutorial 3 we established monitoring to two special clusters: `Batcave` & `Batcomputer`.  Special, because they do not expose public endpoints to the Prometheus instances running there for security reasons, so we used the Remote Write protocol to stream all metrics to Thanos Receive in our centralized space.
+Let's get back to our example from [Tutorial 3](https://www.katacoda.com/thanos/courses/thanos/3-receiver). Imagine you run a company called `Wayne Enterprises`. In tutorial 3, we established monitoring of two special clusters: `Batcave` & `Batcomputer`.  Special, because they do not expose public endpoints to the Prometheus instances running there for security reasons, so we used the Remote Write protocol to stream all metrics to Thanos Receive in our centralized space.
 
 Let's imagine we want to expand our `Wayne Enterprises` by adding metrics collection to applications running on smaller devices inside more mobile Batman tools: `Batmobile` and `Batcopter`.
 

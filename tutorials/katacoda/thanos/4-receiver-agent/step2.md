@@ -17,7 +17,7 @@ Previously our recommended option was to deploy Prometheus on our edge place tha
 Prometheus was designed as a stateful time-series database, and it adds certain mechanics which are not desired for full forward mode. For example:
 
 * Prometheus builds additional memory structures for easy querying from memory.
-* Prometheus does not remove data when it is safely sent via remote write. It waits for at least two hours, and only after the TSDB block is persistent in the disk, it may or may not remove it depending on retention configuration.
+* Prometheus does not remove data when it is safely sent via remote write. It waits for at least two hours and only after the TSDB block is persisted to the disk, it may or may not be removed, depending on retention configuration.
 
 This is where Agent mode comes in handy! It is a native Prometheus mode built into the Prometheus binary. If you add the `--agent` flag when running Prometheus, it will run a dedicated, specially streamlined database, optimized for forwarding purposes, yet able to persist scraped data in the event of a crash, restart or network disconnection.
 
