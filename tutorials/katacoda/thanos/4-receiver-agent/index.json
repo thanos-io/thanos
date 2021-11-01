@@ -1,6 +1,6 @@
 {
-  "title": "Intermediate: (Bonus) Using Prometheus Agent for pure forward-only metric streaming with Thanos Receive",
-  "description": "Learn how to use native Prometheus in agent mode to efficiently stream metrics out of cluster to Thanos Receive.",
+  "title": "Bonus: Using Prometheus Agent for streaming metrics to Thanos Receive",
+  "description": "Learn how to use Prometheus in agent mode to efficiently stream metrics out of cluster.",
   "difficulty": "Moderate",
   "details": {
     "steps": [

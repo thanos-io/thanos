@@ -1,5 +1,3 @@
-# Problem Statement
-
 ## Problem Statement
 
 Let's get back to our example from [Tutorial 3](https://www.katacoda.com/thanos/courses/thanos/3-receiver). Imagine you run a company called `Wayne Enterprises`. In tutorial 3, we established monitoring of two special clusters: `Batcave` & `Batcomputer`.  Special, because they do not expose public endpoints to the Prometheus instances running there for security reasons, so we used the Remote Write protocol to stream all metrics to Thanos Receive in our centralized space.
@@ -37,7 +35,7 @@ docker run -d --rm \
     --remote-write.address 127.0.0.1:10908
 ```{{execute}}
 
-This starts Thanos Receive that listens on `http://127.0.0.1:10908/api/v1/receive' endpoint for Remote Write and on `127.0.0.1:10907` for Thanos StoreAPI.
+This starts Thanos Receive that listens on `http://127.0.0.1:10908/api/v1/receive` endpoint for Remote Write and on `127.0.0.1:10907` for Thanos StoreAPI.
 
 Next, let us run a `Thanos Query` instance connected to Thanos Receive:
 
