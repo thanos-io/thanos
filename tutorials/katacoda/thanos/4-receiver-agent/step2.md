@@ -51,8 +51,8 @@ docker run -d --net=host --rm \
 -v /root/prom-batmobile-data:/prometheus \
 -u root \
 --name prom-agent-batmobile \
-quay.io/bwplotka/prometheus:agent1 \
---agent \
+quay.io/prometheus/prometheus:main \
+--enable-feature=agent \
 --config.file=/etc/prometheus/prometheus.yaml \
 --storage.tsdb.path=/prometheus \
 --web.listen-address=:9090
@@ -62,7 +62,7 @@ This runs Prometheus Agent, which will scrape itself and forward all to Thanos R
 
 Verify that `prom-agent-batmobile` is running by navigating to the [Batmobile Prometheus Agent UI](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/targets).
 
-You should see one target: Prometheus Agent on batmobile itself.
+You should see one target: Prometheus Agent on `batmobile` itself.
 
 ## Deploy `Prometheus Agent` on `batcopter`
 
@@ -90,8 +90,8 @@ docker run -d --net=host --rm \
 -v /root/prom-batcopter-data:/prometheus \
 -u root \
 --name prom-agent-batcopter \
-quay.io/bwplotka/prometheus:agent1 \
---agent \
+quay.io/prometheus/prometheus:main \
+--enable-feature=agent \
 --config.file=/etc/prometheus/prometheus.yaml \
 --storage.tsdb.path=/prometheus \
 --web.listen-address=:9091
@@ -99,6 +99,6 @@ quay.io/bwplotka/prometheus:agent1 \
 
 Verify that `prom-agent-batcopter` is running by navigating to the [Batcopter Prometheus Agent UI](https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com/targets).
 
-You should see one target: Prometheus Agent on batcopter itself.
+You should see one target: Prometheus Agent on `batcopter` itself.
 
 Now, let's navigate to the last step to verify our `Wayne Enterprises` setup!
