@@ -179,33 +179,31 @@ func BenchmarkGatherNoCompactionMarkFilter_Filter(b *testing.B) {
 
 }
 
-type planResult struct {
-	compactionBlocks, compactionRuns float64
-}
-
 func TestCompactProgressCalculate(t *testing.T) {
+	type planResult struct {
+		compactionBlocks, compactionRuns float64
+	}
+
 	reg := prometheus.NewRegistry()
 	unRegisterer := &receive.UnRegisterer{Registerer: reg}
-	planner := NewTSDBBasedPlanner(log.NewNopLogger(), []int64{})
+	planner := NewTSDBBasedPlanner(log.NewNopLogger(), []int64{
+		int64(1 * time.Hour / time.Millisecond),
+		int64(2 * time.Hour / time.Millisecond),
+		int64(8 * time.Hour / time.Millisecond),
+		int64(2 * 24 * time.Hour / time.Millisecond),
+	})
 
 	extLabels := labels.FromMap(map[string]string{"a": "1"})
 
 	for _, tcase := range []struct {
-		testName          string
-		testPlannerRanges []int64
-		input             []*metadata.Meta
-		expected          planResult
+		testName string
+		input    []*metadata.Meta
+		expected planResult
 	}{
 		// In this test case, the first four blocks are planned for compaction in the first run. These are then removed from the group and then the next two blocks from the original group are planned for compaction in the second run.
 		// Hence, a total of 6 blocks are planned for compaction over 2 runs.
 		{
 			testName: "two_runs",
-			testPlannerRanges: []int64{
-				int64(1 * time.Hour / time.Millisecond),
-				int64(2 * time.Hour / time.Millisecond),
-				int64(8 * time.Hour / time.Millisecond),
-				int64(2 * 24 * time.Hour / time.Millisecond),
-			},
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -304,11 +302,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 		{
 			// In this test case, the first four blocks are compacted into an 8h block in the first run.
 			testName: "single_run",
-			testPlannerRanges: []int64{
-				int64(1 * time.Hour / time.Millisecond),
-				int64(2 * time.Hour / time.Millisecond),
-				int64(8 * time.Hour / time.Millisecond),
-			},
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -380,7 +373,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 					metasByMinTime: tcase.input,
 				},
 			}
-			planner.ranges = tcase.testPlannerRanges
 			ps := NewCompactionProgressCalculator(unRegisterer, planner)
 			err := ps.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
