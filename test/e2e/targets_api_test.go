@@ -25,8 +25,6 @@ import (
 )
 
 func TestTargetsAPI_Fanout(t *testing.T) {
-	t.Skip("TODO: Flaky test. See: https://github.com/thanos-io/thanos/issues/4069")
-
 	t.Parallel()
 
 	e, err := e2e.NewDockerEnvironment("e2e_test_targets_fanout")
