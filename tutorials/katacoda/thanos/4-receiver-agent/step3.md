@@ -18,7 +18,7 @@ Let's make sure that we can query data from each of our Prometheus instances fro
 
 Navigate to the [Thanos Query UI](https://[[HOST_SUBDOMAIN]]-39090-[[KATACODA_HOST]].environments.katacoda.com), and query for a metric like `up` or `go_goroutines` - inspect the output and you should see `batmobile` and `batcopter` in the `cluster` label.
 
-`go_routines` should look something like on image below:
+`go_goroutines` should look something like on image below:
 
 ![expected](./assets/expected.png)
 
