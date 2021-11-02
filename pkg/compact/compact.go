@@ -494,7 +494,7 @@ type ProgressCalculator interface {
 	ProgressCalculate(ctx context.Context, groups []*Group) error
 }
 
-// CompactionProgressCalculator contains a planner and ProgressMetrics, which are updated during the compaction simulation process
+// CompactionProgressCalculator contains a planner and ProgressMetrics, which are updated during the compaction simulation process.
 type CompactionProgressCalculator struct {
 	planner Planner
 	*CompactProgressMetrics

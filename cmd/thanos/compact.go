@@ -475,23 +475,10 @@ func runCompact(
 					return errors.Wrapf(err, "could not sync metas")
 				}
 
-				originalMetas := sy.Metas()
-				groups, err := grouper.Groups(originalMetas)
+				metas := sy.Metas()
+				groups, err := grouper.Groups(metas)
 				if err != nil {
 					return errors.Wrapf(err, "could not group original metadata")
-				}
-
-				if !conf.disableDownsampling {
-					downGroups, err := grouper.Groups(originalMetas)
-					if err != nil {
-						return errors.Wrapf(err, "could not group original metadata into downsample groups")
-					}
-					for _, group := range downGroups {
-						ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.WithLabelValues(group.Key())
-					}
-					if err := ds.ProgressCalculate(ctx, downGroups); err != nil {
-						return errors.Wrapf(err, "could not simulate downsampling")
-					}
 				}
 
 				for _, group := range groups {
@@ -500,7 +487,20 @@ func runCompact(
 				}
 
 				if err = ps.ProgressCalculate(ctx, groups); err != nil {
-					return errors.Wrapf(err, "could not simulate planning")
+					return errors.Wrapf(err, "could not calculate compaction progress")
+				}
+
+				if !conf.disableDownsampling {
+					groups, err = grouper.Groups(metas)
+					if err != nil {
+						return errors.Wrapf(err, "could not group original metadata into downsample groups")
+					}
+					for _, group := range groups {
+						ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.WithLabelValues(group.Key())
+					}
+					if err := ds.ProgressCalculate(ctx, groups); err != nil {
+						return errors.Wrapf(err, "could not calculate downsampling progress")
+					}
 				}
 
 				return nil
