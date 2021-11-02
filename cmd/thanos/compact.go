@@ -482,12 +482,10 @@ func runCompact(
 				}
 
 				if !conf.disableDownsampling {
-					downGroups := make([]*compact.Group, len(groups))
-					for ind, group := range groups {
-						v := *group
-						downGroups[ind] = &v
+					downGroups, err := grouper.Groups(originalMetas)
+					if err != nil {
+						return errors.Wrapf(err, "could not group original metadata into downsample groups")
 					}
-
 					for _, group := range downGroups {
 						ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.WithLabelValues(group.Key())
 					}
