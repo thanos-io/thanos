@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -32,13 +33,15 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"gopkg.in/yaml.v2"
 
-	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/thanos-io/thanos/pkg/alert"
 	v1 "github.com/thanos-io/thanos/pkg/api/rule"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -51,7 +54,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	thanosrules "github.com/thanos-io/thanos/pkg/rules"
-	"github.com/thanos-io/thanos/pkg/rules/remotewrite"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -149,6 +151,10 @@ func registerRule(app *extkingpin.App) {
 			WALCompression:    *walCompression,
 		}
 
+		agentOpts := &agent.Options{
+			WALCompression: *walCompression,
+		}
+
 		// Parse and check query configuration.
 		lookupQueries := map[string]struct{}{}
 		for _, q := range conf.query.addrs {
@@ -206,6 +212,7 @@ func registerRule(app *extkingpin.App) {
 			grpcLogOpts,
 			tagOpts,
 			tsdbOpts,
+			agentOpts,
 		)
 	})
 }
@@ -269,6 +276,7 @@ func runRule(
 	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 	tsdbOpts *tsdb.Options,
+	agentOpts *agent.Options,
 ) error {
 	metrics := newRuleMetrics(reg)
 
@@ -338,17 +346,28 @@ func runRule(
 
 	if len(rwCfgYAML) > 0 {
 		var rwCfg config.RemoteWriteConfig
-		rwCfg, err = remotewrite.LoadRemoteWriteConfig(rwCfgYAML)
-		if err != nil {
+		if err := yaml.Unmarshal(rwCfgYAML, &rwCfg); err != nil {
 			return err
 		}
 		walDir := filepath.Join(conf.dataDir, rwCfg.Name)
-		remoteStore, err := remotewrite.NewFanoutStorage(logger, reg, walDir, &rwCfg)
-		if err != nil {
-			return errors.Wrap(err, "set up remote-write store for ruler")
+		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
+		remoteStore := remote.NewStorage(logger, reg, func() (int64, error) {
+			return 0, nil
+		}, walDir, 1*time.Minute, nil)
+		if err := remoteStore.ApplyConfig(&config.Config{
+			GlobalConfig:       config.DefaultGlobalConfig,
+			RemoteWriteConfigs: []*config.RemoteWriteConfig{&rwCfg},
+		}); err != nil {
+			return errors.Wrap(err, "applying config to remote storage")
 		}
-		appendable = remoteStore
-		queryable = remoteStore
+
+		db, err := agent.Open(logger, reg, remoteStore, walDir, agentOpts)
+		if err != nil {
+			return errors.Wrap(err, "start remote write agent db")
+		}
+		fanoutStore := storage.NewFanout(logger, db, remoteStore)
+		appendable = fanoutStore
+		queryable = fanoutStore
 	} else {
 		db, err = tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
 		if err != nil {

@@ -5,10 +5,10 @@ require (
 	cloud.google.com/go/trace v0.1.0
 	github.com/Azure/azure-pipeline-go v0.2.3
 	github.com/Azure/azure-storage-blob-go v0.13.0
-	github.com/Azure/go-autorest/autorest/adal v0.9.15
+	github.com/Azure/go-autorest/autorest/adal v0.9.16
 	github.com/Azure/go-autorest/autorest/azure/auth v0.5.8
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/alecthomas/units v0.0.0-20210208195552-ff826a37aa15
+	github.com/alecthomas/units v0.0.0-20210927113745-59d0afb8317a
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
 	github.com/baidubce/bce-sdk-go v0.9.81
 	github.com/blang/semver/v4 v4.0.0
@@ -28,7 +28,7 @@ require (
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/go-kit/kit v0.11.0
-	github.com/go-openapi/strfmt v0.20.2
+	github.com/go-openapi/strfmt v0.20.3
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
@@ -57,10 +57,9 @@ require (
 	github.com/prometheus/alertmanager v0.23.1-0.20210914172521-e35efbddb66a
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
-	github.com/prometheus/common v0.30.0
-	github.com/prometheus/exporter-toolkit v0.6.1
-	github.com/prometheus/prometheus v1.8.2-0.20210914090109-37468d88dce8
-	github.com/stretchr/testify v1.7.0
+	github.com/prometheus/common v0.32.1
+	github.com/prometheus/exporter-toolkit v0.7.0
+	github.com/prometheus/prometheus v1.8.2-0.20211101135822-b862218389fc
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.31
 	github.com/uber/jaeger-client-go v2.29.1+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
@@ -69,13 +68,13 @@ require (
 	go.elastic.co/apm/module/apmot v1.11.0
 	go.uber.org/atomic v1.9.0
 	go.uber.org/automaxprocs v1.4.0
-	go.uber.org/goleak v1.1.10
+	go.uber.org/goleak v1.1.12
 	golang.org/x/crypto v0.0.0-20210616213533-5ff15b29337e
-	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f
+	golang.org/x/oauth2 v0.0.0-20211005180243-6b3c2da341f1
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/text v0.3.6
-	google.golang.org/api v0.56.0
-	google.golang.org/genproto v0.0.0-20210903162649-d08c68adba83
+	google.golang.org/api v0.59.0
+	google.golang.org/genproto v0.0.0-20211020151524-b7c3a969101a
 	google.golang.org/grpc v1.40.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/fsnotify.v1 v1.4.7
@@ -94,7 +93,7 @@ replace (
 	// TODO: Remove this: https://github.com/thanos-io/thanos/issues/3967.
 	github.com/minio/minio-go/v7 => github.com/bwplotka/minio-go/v7 v7.0.11-0.20210324165441-f9927e5255a6
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
-	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20210914090109-37468d88dce8
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20211101135822-b862218389fc
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 
