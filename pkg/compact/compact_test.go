@@ -183,7 +183,7 @@ type planResult struct {
 	compactionBlocks, compactionRuns float64
 }
 
-func TestPlanSimulate(t *testing.T) {
+func TestCompactProgressCalculate(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	unRegisterer := &receive.UnRegisterer{Registerer: reg}
 	planner := NewTSDBBasedPlanner(log.NewNopLogger(), []int64{})
@@ -394,7 +394,7 @@ func TestPlanSimulate(t *testing.T) {
 
 }
 
-func TestDownsampleSimulate(t *testing.T) {
+func TestDownsampleProgressCalculate(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	unRegisterer := &receive.UnRegisterer{Registerer: reg}
 

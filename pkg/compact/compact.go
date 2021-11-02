@@ -500,6 +500,7 @@ type CompactionProgressCalculator struct {
 	*CompactProgressMetrics
 }
 
+// NewCompactProgressCalculator creates a new CompactionProgressCalculator
 func NewCompactionProgressCalculator(reg prometheus.Registerer, planner *tsdbBasedPlanner) *CompactionProgressCalculator {
 	return &CompactionProgressCalculator{
 		planner: planner,
@@ -516,6 +517,7 @@ func NewCompactionProgressCalculator(reg prometheus.Registerer, planner *tsdbBas
 	}
 }
 
+// ProgressCalculate calculates the number of blocks and compaction runs in the planning process of the given groups
 func (ps *CompactionProgressCalculator) ProgressCalculate(ctx context.Context, groups []*Group) error {
 	groupCompactions := make(map[string]int, len(groups))
 	groupBlocks := make(map[string]int, len(groups))
@@ -577,6 +579,7 @@ type DownsampleProgressCalculator struct {
 	*DownsampleProgressMetrics
 }
 
+// NewDownsampleProgressCalculator creates a new DownsampleProgressCalculator
 func NewDownsampleProgressCalculator(reg prometheus.Registerer) *DownsampleProgressCalculator {
 	return &DownsampleProgressCalculator{
 		DownsampleProgressMetrics: &DownsampleProgressMetrics{
@@ -588,6 +591,7 @@ func NewDownsampleProgressCalculator(reg prometheus.Registerer) *DownsampleProgr
 	}
 }
 
+// ProgressCalculate calculates the number of blocks to be downsampled for the given groups
 func (ds *DownsampleProgressCalculator) ProgressCalculate(ctx context.Context, groups []*Group) error {
 	sources5m := map[ulid.ULID]struct{}{}
 	sources1h := map[ulid.ULID]struct{}{}
