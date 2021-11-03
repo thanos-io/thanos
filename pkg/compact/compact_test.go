@@ -203,7 +203,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 		// In this test case, the first four blocks are planned for compaction in the first run. These are then removed from the group and then the next two blocks from the original group are planned for compaction in the second run.
 		// Hence, a total of 6 blocks are planned for compaction over 2 runs.
 		{
-			testName: "two_runs",
+			testName: "two_runs_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -302,7 +302,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 		{
 			// This test case has non-consecutive blocks.
 			// The first four blocks are planned for compaction, like the previous case. But unlike the previous case, the next two blocks are not planned for compaction since these 6 blocks are not consecutive.
-			testName: "non_consecutive_blocks",
+			testName: "non_consecutive_blocks_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -378,7 +378,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 		},
 		{
 			// In this test case, the first four blocks are compacted into an 8h block in the first run.
-			testName: "single_run",
+			testName: "single_run_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -444,7 +444,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 		{
 			// In this test case, the metadata is part of two groups.
 			// The first four blocks are compacted in the first run.
-			testName: "two_groups",
+			testName: "two_groups_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -563,7 +563,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 	}{
 		{
 			// This test case has 1 block to be downsampled out of 2 since for the second block, the difference between MinTime and MaxTime is less than the acceptable threshold, DownsampleRange0
-			testName: "min_max_time_diff_test",
+			testName: "minTime_maxTime_diff_threshold_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -603,7 +603,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			expected: 1.0,
 		},
 		{
-			// this test case returns 0 blocks to be downsampled since the resolution is resLevel2, which is skipped when grouping blocks for downsampling.
+			// This test case returns 0 blocks to be downsampled since the resolution is resLevel2, which is skipped when grouping blocks for downsampling.
 			testName: "res_level_2_test",
 			input: []*metadata.Meta{
 				{
@@ -675,7 +675,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 		{
 			// This test case has metadata belonging to two input groups.
 			// It returns two blocks to be downsampled since for both the blocks, the difference between MinTime and MaxTime is above the accepted threshold for their resolution level.
-			testName: "two_groups",
+			testName: "two_groups_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{

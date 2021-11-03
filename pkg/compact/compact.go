@@ -483,7 +483,7 @@ func (cg *Group) Resolution() int64 {
 	return cg.resolution
 }
 
-// CompactProgressMetrics contains Prometheus metrics related to planning and compaction progress.
+// CompactProgressMetrics contains Prometheus metrics related to compaction progress.
 type CompactProgressMetrics struct {
 	NumberOfCompactionRuns   *prometheus.GaugeVec
 	NumberOfCompactionBlocks *prometheus.GaugeVec
@@ -511,7 +511,7 @@ func NewCompactionProgressCalculator(reg prometheus.Registerer, planner *tsdbBas
 			}, []string{"group"}),
 			NumberOfCompactionBlocks: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_compact_todo_compaction_blocks",
-				Help: "number of blocks planned to be merged",
+				Help: "number of blocks planned to be compacted",
 			}, []string{"group"}),
 		},
 	}

@@ -646,7 +646,7 @@ type compactConfig struct {
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
-	cmd.Flag("progress-metrics", "Enables the progress metrics, indicating the progress of the compaction and downsampling processes").Default("false").BoolVar(&cc.compactionProgressMetrics)
+	cmd.Flag("progress-metrics", "Enables the progress metrics, indicating the progress of compaction and downsampling").Default("false").BoolVar(&cc.compactionProgressMetrics)
 
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)
