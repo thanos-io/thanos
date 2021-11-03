@@ -529,8 +529,8 @@ github.com/eclipse/paho.mqtt.golang v1.2.0/go.mod h1:H9keYFcgq3Qr5OUJm/JZI/i6U7j
 github.com/edsrzf/mmap-go v0.0.0-20170320065105-0bce6a688712/go.mod h1:YO35OhQPt3KJa3ryjFM5Bs14WD66h8eGKpfaBNrHW5M=
 github.com/edsrzf/mmap-go v1.0.0 h1:CEBF7HpRnUCSJgGUb5h1Gm7e3VkmVDrR8lvWVLtrOFw=
 github.com/edsrzf/mmap-go v1.0.0/go.mod h1:YO35OhQPt3KJa3ryjFM5Bs14WD66h8eGKpfaBNrHW5M=
-github.com/efficientgo/e2e v0.11.1-0.20210829161758-f4cc6dbdc6ea h1:PFKVWZOnEfthNTcdpiz0wGzmikPOINnbRYEo4MneloE=
-github.com/efficientgo/e2e v0.11.1-0.20210829161758-f4cc6dbdc6ea/go.mod h1:vDnF4AAEZmO0mvyFIATeDJPFaSRM7ywaOnKd61zaSoE=
+github.com/efficientgo/e2e v0.11.2-0.20211027134903-67d538984a47 h1:k0qDUhOU0KJqKztQYJL1qMBR9nCOntuIRWYwA56Z634=
+github.com/efficientgo/e2e v0.11.2-0.20211027134903-67d538984a47/go.mod h1:vDnF4AAEZmO0mvyFIATeDJPFaSRM7ywaOnKd61zaSoE=
 github.com/efficientgo/tools/core v0.0.0-20210731122119-5d4a0645ce9a h1:Az9zRvQubUIHE+tHAm0gG7Dwge08V8Q/9uNSIFjFm+A=
 github.com/efficientgo/tools/core v0.0.0-20210731122119-5d4a0645ce9a/go.mod h1:OmVcnJopJL8d3X3sSXTiypGoUSgFq1aDGmlrdi9dn/M=
 github.com/efficientgo/tools/extkingpin v0.0.0-20210609125236-d73259166f20 h1:kM/ALyvAnTrwSB+nlKqoKaDnZbInp1YImZvW+gtHwc8=
