@@ -51,7 +51,7 @@ func parse(s string) ActionType {
 	switch s {
 	case "DELETION":
 		return Deletion
-	case "NO COMPACTION":
+	case "NO_COMPACTION":
 		return NoCompaction
 	default:
 		return Unknown

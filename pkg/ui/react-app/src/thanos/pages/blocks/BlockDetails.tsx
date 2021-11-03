@@ -16,7 +16,7 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
 
   const submitMarkBlock = async (action: string, ulid: string, detail: string | null) => {
     try {
-      let body = detail
+      const body = detail
         ? new URLSearchParams({
             id: ulid,
             action,
@@ -35,8 +35,7 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
       if (!response.ok) {
         throw new Error(response.statusText);
       }
-      setModalAction('');
-    } catch (error) {
+    } finally {
       setModalAction('');
     }
   };
@@ -114,14 +113,14 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
           <div style={{ marginTop: '12px' }}>
             <Button
               onClick={() => {
-                setModalAction('NO COMPACTION');
+                setModalAction('NO_COMPACTION');
                 setDetailValue('');
               }}
             >
               Mark No Compaction
             </Button>
           </div>
-          <Modal isOpen={modalAction ? true : false}>
+          <Modal isOpen={!!modalAction}>
             <ModalBody>
               <ModalHeader toggle={() => setModalAction('')}>
                 Mark {modalAction === 'DELETION' ? 'Deletion' : 'No Compaction'} Detail (Optional)
