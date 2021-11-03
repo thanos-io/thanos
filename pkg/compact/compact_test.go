@@ -300,6 +300,83 @@ func TestCompactProgressCalculate(t *testing.T) {
 			},
 		},
 		{
+			// This test case has non-consecutive blocks.
+			// The first four blocks are planned for compaction, like the previous case. But unlike the previous case, the next two blocks are not planned for compaction since these 6 blocks are not consecutive.
+			testName: "non_consecutive_blocks",
+			input: []*metadata.Meta{
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(0, nil),
+						MinTime: 0,
+						MaxTime: int64(2 * time.Hour / time.Millisecond),
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1"},
+					},
+				},
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(1, nil),
+						MinTime: int64(2 * time.Hour / time.Millisecond),
+						MaxTime: int64(4 * time.Hour / time.Millisecond),
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1"},
+					},
+				},
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(2, nil),
+						MinTime: int64(4 * time.Hour / time.Millisecond),
+						MaxTime: int64(6 * time.Hour / time.Millisecond),
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1"},
+					},
+				},
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(3, nil),
+						MinTime: int64(6 * time.Hour / time.Millisecond),
+						MaxTime: int64(8 * time.Hour / time.Millisecond),
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1"},
+					},
+				},
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(4, nil),
+						MinTime: int64(10 * time.Hour / time.Millisecond),
+						MaxTime: int64(12 * time.Hour / time.Millisecond),
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1"},
+					},
+				},
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(4, nil),
+						MinTime: int64(12 * time.Hour / time.Millisecond),
+						MaxTime: int64(14 * time.Hour / time.Millisecond),
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1"},
+					},
+				},
+			},
+			expected: planResult{
+				compactionRuns:   1.0,
+				compactionBlocks: 4.0,
+			},
+		},
+		{
 			// In this test case, the first four blocks are compacted into an 8h block in the first run.
 			testName: "single_run",
 			input: []*metadata.Meta{
