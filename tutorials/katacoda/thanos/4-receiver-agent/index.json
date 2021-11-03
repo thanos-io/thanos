@@ -1,6 +1,6 @@
 {
-  "title": "Intermediate: Streaming metrics from remote source with Thanos Receive",
-  "description": "Learn how to ingest and then query metrics data from egress-only sources with Thanos Receive.",
+  "title": "Bonus: Using Prometheus Agent for streaming metrics to Thanos Receive",
+  "description": "Learn how to use Prometheus in agent mode to efficiently stream metrics out of cluster.",
   "difficulty": "Moderate",
   "details": {
     "steps": [
@@ -10,19 +10,14 @@
         "verify": "step1-verify.sh"
       },
       {
-        "title": "Setup Thanos Receive",
+        "title": "Setup Prometheus Agents",
         "text": "step2.md",
         "verify": "step2-verify.sh"
       },
       {
-        "title": "Configure Prometheus Remote Write",
+        "title": "Verify Setup",
         "text": "step3.md",
         "verify": "step3-verify.sh"
-      },
-      {
-        "title": "Verify Setup",
-        "text": "step4.md",
-        "verify": "step4-verify.sh"
       }
     ],
     "intro": {
@@ -36,8 +31,8 @@
     }
   },
   "files": [
-    "prometheus-batcave.yaml",
-    "prometheus-batcomputer.yaml"
+    "prom-agent-batmobile.yaml",
+    "prom-agent-batcopter.yaml"
   ],
   "environment": {
     "uilayout": "editor-terminal",
@@ -45,8 +40,8 @@
     "uieditorpath": "/root/editor",
     "showdashboard": true,
     "dashboards": [
-      {"name": "Prometheus Batcave", "port": 9090},
-      {"name": "Prometheus Batcomputer", "port": 9001},
+      {"name": "Prometheus Agent Batmobile", "port": 9090},
+      {"name": "Prometheus Agent Batcopter", "port": 9091},
       {"name": "Thanos Query", "port": 39090}
   ]
   },
