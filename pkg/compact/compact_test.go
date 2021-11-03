@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -184,9 +185,10 @@ func TestCompactProgressCalculate(t *testing.T) {
 		compactionBlocks, compactionRuns float64
 	}
 
+	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
 	unRegisterer := &receive.UnRegisterer{Registerer: reg}
-	planner := NewTSDBBasedPlanner(log.NewNopLogger(), []int64{
+	planner := NewTSDBBasedPlanner(logger, []int64{
 		int64(1 * time.Hour / time.Millisecond),
 		int64(2 * time.Hour / time.Millisecond),
 		int64(8 * time.Hour / time.Millisecond),
@@ -533,17 +535,106 @@ func TestCompactProgressCalculate(t *testing.T) {
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
 			groups := []*Group{
 				{
+					key:            "b",
 					labels:         extLabels,
 					resolution:     0,
 					metasByMinTime: tcase.input,
 				},
 			}
+
+			if tcase.testName == "two_groups_test" {
+				groups = append(groups, &Group{
+					key: "a",
+					metasByMinTime: []*metadata.Meta{
+						{
+							BlockMeta: tsdb.BlockMeta{
+								ULID:    ulid.MustNew(0, nil),
+								MinTime: int64(0 * time.Hour / time.Millisecond),
+								MaxTime: int64(2 * time.Hour / time.Millisecond),
+							},
+							Thanos: metadata.Thanos{
+								Version: 1,
+								Labels:  map[string]string{"b": "2"},
+							},
+						},
+						{
+							BlockMeta: tsdb.BlockMeta{
+								ULID:    ulid.MustNew(1, nil),
+								MinTime: int64(2 * time.Hour / time.Millisecond),
+								MaxTime: int64(4 * time.Hour / time.Millisecond),
+							},
+							Thanos: metadata.Thanos{
+								Version: 1,
+								Labels:  map[string]string{"b": "2"},
+							},
+						},
+						{
+							BlockMeta: tsdb.BlockMeta{
+								ULID:    ulid.MustNew(2, nil),
+								MinTime: int64(4 * time.Hour / time.Millisecond),
+								MaxTime: int64(6 * time.Hour / time.Millisecond),
+							},
+							Thanos: metadata.Thanos{
+								Version: 1,
+								Labels:  map[string]string{"b": "2"},
+							},
+						},
+						{
+							BlockMeta: tsdb.BlockMeta{
+								ULID:    ulid.MustNew(3, nil),
+								MinTime: int64(6 * time.Hour / time.Millisecond),
+								MaxTime: int64(8 * time.Hour / time.Millisecond),
+							},
+							Thanos: metadata.Thanos{
+								Version: 1,
+								Labels:  map[string]string{"b": "2"},
+							},
+						},
+						{
+							BlockMeta: tsdb.BlockMeta{
+								ULID:    ulid.MustNew(4, nil),
+								MinTime: int64(8 * time.Hour / time.Millisecond),
+								MaxTime: int64(10 * time.Hour / time.Millisecond),
+							},
+							Thanos: metadata.Thanos{
+								Version: 1,
+								Labels:  map[string]string{"b": "2"},
+							},
+						},
+					},
+					resolution: 0,
+				})
+			}
+
 			ps := NewCompactionProgressCalculator(unRegisterer, planner)
 			err := ps.ProgressCalculate(context.Background(), groups)
-			testutil.Ok(t, err)
 			metrics := ps.CompactProgressMetrics
-			testutil.Equals(t, tcase.expected.compactionBlocks, promtestutil.ToFloat64(metrics.NumberOfCompactionBlocks))
-			testutil.Equals(t, tcase.expected.compactionRuns, promtestutil.ToFloat64(metrics.NumberOfCompactionRuns))
+			testutil.Ok(t, err)
+			a, err := metrics.NumberOfCompactionBlocks.GetMetricWithLabelValues("b")
+			if err != nil {
+				level.Warn(logger).Log("msg", "could not get number of blocks")
+			}
+			testutil.Equals(t, tcase.expected.compactionBlocks, promtestutil.ToFloat64(a))
+
+			b, err := metrics.NumberOfCompactionRuns.GetMetricWithLabelValues("b")
+			if err != nil {
+				level.Warn(logger).Log("msg", "could not get number of runs")
+			}
+			testutil.Equals(t, tcase.expected.compactionRuns, promtestutil.ToFloat64(b))
+
+			if tcase.testName == "two_groups_test" {
+				a, err = metrics.NumberOfCompactionBlocks.GetMetricWithLabelValues("a")
+				if err != nil {
+					level.Warn(logger).Log("msg", "could not get number of blocks for two groups test")
+				}
+				testutil.Equals(t, 4.0, promtestutil.ToFloat64(a))
+				b, err := metrics.NumberOfCompactionRuns.GetMetricWithLabelValues("a")
+				if err != nil {
+					level.Warn(logger).Log("msg", "could not get number of runs")
+				}
+				testutil.Equals(t, 1.0, promtestutil.ToFloat64(b))
+
+			}
 		}); !ok {
 			return
 		}
@@ -555,6 +646,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	unRegisterer := &receive.UnRegisterer{Registerer: reg}
 	extLabels := labels.FromMap(map[string]string{"a": "1", "b": "2"})
+	logger := log.NewNopLogger()
 
 	for _, tcase := range []struct {
 		testName string
@@ -724,12 +816,66 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			},
 		}
 
+		if tcase.testName == "two_groups_test" {
+			groups = append(groups, &Group{
+				resolution: 0,
+				key:        "b",
+				metasByMinTime: []*metadata.Meta{
+					{
+						BlockMeta: tsdb.BlockMeta{
+							ULID:    ulid.MustNew(0, nil),
+							MinTime: 0,
+							MaxTime: downsample.DownsampleRange1,
+							Compaction: tsdb.BlockMetaCompaction{
+								Sources: []ulid.ULID{ulid.MustNew(1, nil), ulid.MustNew(2, nil)},
+							},
+						},
+						Thanos: metadata.Thanos{
+							Version: 1,
+							Labels:  map[string]string{"a": "1"},
+							Downsample: metadata.ThanosDownsample{
+								Resolution: downsample.ResLevel1,
+							},
+						},
+					},
+					{
+						BlockMeta: tsdb.BlockMeta{
+							ULID:    ulid.MustNew(3, nil),
+							MinTime: 1,
+							MaxTime: downsample.DownsampleRange0,
+							Compaction: tsdb.BlockMetaCompaction{
+								Sources: []ulid.ULID{ulid.MustNew(4, nil), ulid.MustNew(5, nil)},
+							},
+						},
+						Thanos: metadata.Thanos{
+							Version: 1,
+							Labels:  map[string]string{"a": "1"},
+							Downsample: metadata.ThanosDownsample{
+								Resolution: downsample.ResLevel0,
+							},
+						},
+					},
+				},
+			})
+		}
+
 		ds := NewDownsampleProgressCalculator(unRegisterer)
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
 			err := ds.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
 			metrics := ds.DownsampleProgressMetrics
-			testutil.Equals(t, tcase.expected, promtestutil.ToFloat64(metrics.NumberOfBlocksDownsampled.WithLabelValues("a")))
+			if tcase.testName == "two_groups_test" {
+				a, err := metrics.NumberOfBlocksDownsampled.GetMetricWithLabelValues("b")
+				if err != nil {
+					level.Warn(logger).Log("msg", "could not get number of blocks")
+				}
+				testutil.Equals(t, 1.0, promtestutil.ToFloat64(a))
+			}
+			a, err := metrics.NumberOfBlocksDownsampled.GetMetricWithLabelValues("a")
+			if err != nil {
+				level.Warn(logger).Log("msg", "could not get number of blocks")
+			}
+			testutil.Equals(t, tcase.expected, promtestutil.ToFloat64(a))
 		}); !ok {
 			return
 		}
