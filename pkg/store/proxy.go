@@ -418,6 +418,8 @@ func startStreamSeriesSet(
 				}
 			}
 		}()
+		// The `defer` only executed when function return, we do `defer cancel` in for loop,
+		// so make the loop body as a function, release timers created by context as early.
 		handleRecvResponse := func() (next bool) {
 			frameTimeoutCtx, cancel := frameCtx(s.responseTimeout)
 			defer cancel()
