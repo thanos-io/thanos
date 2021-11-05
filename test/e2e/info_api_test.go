@@ -148,9 +148,7 @@ func TestInfo(t *testing.T) {
 		}
 
 		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
+		defer runutil.CloseWithErrCapture(&err, resp.Body, "response body close")
 
 		var res struct {
 			Data map[string][]query.EndpointStatus `json:"data"`

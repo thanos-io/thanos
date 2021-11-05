@@ -614,8 +614,6 @@ func (p *PrometheusStore) LabelSet() []labelpb.ZLabelSet {
 	labels := make([]labelpb.ZLabel, 0, len(lset))
 	labels = append(labels, labelpb.ZLabelsFromPromLabels(lset)...)
 
-	// Until we deprecate the single labels in the reply, we just duplicate
-	// them here for migration/compatibility purposes.
 	labelset := []labelpb.ZLabelSet{}
 	if len(labels) > 0 {
 		labelset = append(labelset, labelpb.ZLabelSet{
