@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -180,6 +179,24 @@ func BenchmarkGatherNoCompactionMarkFilter_Filter(b *testing.B) {
 
 }
 
+func createBlockMeta(id uint64, minTime, maxTime int64, labels map[string]string, resolution int64) *metadata.Meta {
+	m := &metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			ULID:    ulid.MustNew(id, nil),
+			MinTime: minTime,
+			MaxTime: maxTime,
+		},
+		Thanos: metadata.Thanos{
+			Labels: labels,
+			Downsample: metadata.ThanosDownsample{
+				Resolution: resolution,
+			},
+		},
+	}
+
+	return m
+}
+
 func TestCompactProgressCalculate(t *testing.T) {
 	type planResult struct {
 		compactionBlocks, compactionRuns float64
@@ -219,97 +236,14 @@ func TestCompactProgressCalculate(t *testing.T) {
 		{
 			testName: "first_test",
 			input: []*metadata.Meta{
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(0, nil),
-						MinTime: 0,
-						MaxTime: int64(2 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(1, nil),
-						MinTime: int64(2 * time.Hour / time.Millisecond),
-						MaxTime: int64(4 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(2, nil),
-						MinTime: int64(4 * time.Hour / time.Millisecond),
-						MaxTime: int64(6 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(3, nil),
-						MinTime: int64(6 * time.Hour / time.Millisecond),
-						MaxTime: int64(8 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(4, nil),
-						MinTime: int64(8 * time.Hour / time.Millisecond),
-						MaxTime: int64(10 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(5, nil),
-						MinTime: int64(10 * time.Hour / time.Millisecond),
-						MaxTime: int64(12 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version:    1,
-						Labels:     map[string]string{"a": "1", "b": "2"},
-						Downsample: metadata.ThanosDownsample{Resolution: 1},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(6, nil),
-						MinTime: int64(12 * time.Hour / time.Millisecond),
-						MaxTime: int64(20 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version:    1,
-						Labels:     map[string]string{"a": "1", "b": "2"},
-						Downsample: metadata.ThanosDownsample{Resolution: 1},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(7, nil),
-						MinTime: int64(20 * time.Hour / time.Millisecond),
-						MaxTime: int64(28 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version:    1,
-						Labels:     map[string]string{"a": "1", "b": "2"},
-						Downsample: metadata.ThanosDownsample{Resolution: 1},
-					},
-				},
+				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0),
+				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0),
+				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
+				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(8)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
+				createBlockMeta(4, int64(time.Duration(8)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
+				createBlockMeta(5, int64(time.Duration(10)*time.Hour/time.Millisecond), int64(time.Duration(12)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
+				createBlockMeta(6, int64(time.Duration(12)*time.Hour/time.Millisecond), int64(time.Duration(20)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
+				createBlockMeta(7, int64(time.Duration(20)*time.Hour/time.Millisecond), int64(time.Duration(28)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
 			},
 			expected: map[string]planResult{
 				keys[0]: {
@@ -329,75 +263,12 @@ func TestCompactProgressCalculate(t *testing.T) {
 		{
 			testName: "second_test",
 			input: []*metadata.Meta{
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(0, nil),
-						MinTime: 0,
-						MaxTime: int64(2 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(1, nil),
-						MinTime: int64(2 * time.Hour / time.Millisecond),
-						MaxTime: int64(4 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(2, nil),
-						MinTime: int64(4 * time.Hour / time.Millisecond),
-						MaxTime: int64(6 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(3, nil),
-						MinTime: int64(6 * time.Hour / time.Millisecond),
-						MaxTime: int64(10 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version:    1,
-						Labels:     map[string]string{"a": "1", "b": "2"},
-						Downsample: metadata.ThanosDownsample{Resolution: 1},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(4, nil),
-						MinTime: int64(10 * time.Hour / time.Millisecond),
-						MaxTime: int64(14 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version:    1,
-						Labels:     map[string]string{"a": "1", "b": "2"},
-						Downsample: metadata.ThanosDownsample{Resolution: 1},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(5, nil),
-						MinTime: int64(14 * time.Hour / time.Millisecond),
-						MaxTime: int64(16 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version:    1,
-						Labels:     map[string]string{"a": "1", "b": "2"},
-						Downsample: metadata.ThanosDownsample{Resolution: 1},
-					},
-				},
+				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0),
+				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
+				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
+				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
+				createBlockMeta(4, int64(time.Duration(10)*time.Hour/time.Millisecond), int64(time.Duration(14)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
+				createBlockMeta(5, int64(time.Duration(14)*time.Hour/time.Millisecond), int64(time.Duration(16)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
 			},
 			expected: map[string]planResult{
 				keys[0]: {
@@ -417,63 +288,11 @@ func TestCompactProgressCalculate(t *testing.T) {
 		{
 			testName: "third_test",
 			input: []*metadata.Meta{
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(0, nil),
-						MinTime: 0,
-						MaxTime: int64(2 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(1, nil),
-						MinTime: int64(2 * time.Hour / time.Millisecond),
-						MaxTime: int64(4 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(2, nil),
-						MinTime: int64(4 * time.Hour / time.Millisecond),
-						MaxTime: int64(6 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(3, nil),
-						MinTime: int64(6 * time.Hour / time.Millisecond),
-						MaxTime: int64(8 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version:    1,
-						Labels:     map[string]string{"a": "1", "b": "2"},
-						Downsample: metadata.ThanosDownsample{Resolution: 1},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(4, nil),
-						MinTime: int64(8 * time.Hour / time.Millisecond),
-						MaxTime: int64(10 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version:    1,
-						Labels:     map[string]string{"a": "1", "b": "2"},
-						Downsample: metadata.ThanosDownsample{Resolution: 1},
-					},
-				},
+				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0),
+				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
+				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
+				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(8)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
+				createBlockMeta(4, int64(time.Duration(8)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
 			},
 			expected: map[string]planResult{
 				keys[0]: {
@@ -499,23 +318,17 @@ func TestCompactProgressCalculate(t *testing.T) {
 			}
 			// form groups from the input metadata - do not hardcode groups. hence, grouper.Groups should stay
 			groups, err := grouper.Groups(blocks)
-			if err != nil {
-				level.Warn(logger).Log("msg, unable to form groups")
-			}
+			testutil.Ok(t, err)
 			ps := NewCompactionProgressCalculator(unRegisterer, planner)
 			err = ps.ProgressCalculate(context.Background(), groups)
+			testutil.Ok(t, err)
 			metrics := ps.CompactProgressMetrics
 			testutil.Ok(t, err)
-			for _, key := range keys {
+			for key := range tcase.expected {
 				a, err := metrics.NumberOfCompactionBlocks.GetMetricWithLabelValues(key)
-				if err != nil {
-					level.Warn(logger).Log("msg", "could not get number of blocks")
-				}
+				testutil.Ok(t, err)
 				b, err := metrics.NumberOfCompactionRuns.GetMetricWithLabelValues(key)
-				if err != nil {
-					level.Warn(logger).Log("msg", "could not get number of runs")
-				}
-
+				testutil.Ok(t, err)
 				testutil.Equals(t, tcase.expected[key].compactionBlocks, promtestutil.ToFloat64(a))
 				testutil.Equals(t, tcase.expected[key].compactionRuns, promtestutil.ToFloat64(b))
 			}
@@ -778,19 +591,16 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 				blocks[meta.ULID] = meta
 			}
 			groups, err := grouper.Groups(blocks)
-			if err != nil {
-				level.Warn(logger).Log("msg", "unable to form groups")
-			}
+			testutil.Ok(t, err)
 
 			ds := NewDownsampleProgressCalculator(unRegisterer)
 			err = ds.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
 			metrics := ds.DownsampleProgressMetrics
-			for _, key := range keys {
+			for key := range tcase.expected {
 				a, err := metrics.NumberOfBlocksDownsampled.GetMetricWithLabelValues(key)
-				if err != nil {
-					level.Warn(logger).Log("msg", "could not get number of blocks")
-				}
+
+				testutil.Ok(t, err)
 				testutil.Equals(t, tcase.expected[key], promtestutil.ToFloat64(a))
 			}
 		}); !ok {
