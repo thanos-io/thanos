@@ -184,6 +184,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 	type planResult struct {
 		compactionBlocks, compactionRuns float64
 	}
+	type groupedResult map[string]planResult
 
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
@@ -191,21 +192,32 @@ func TestCompactProgressCalculate(t *testing.T) {
 	planner := NewTSDBBasedPlanner(logger, []int64{
 		int64(1 * time.Hour / time.Millisecond),
 		int64(2 * time.Hour / time.Millisecond),
+		int64(4 * time.Hour / time.Millisecond),
 		int64(8 * time.Hour / time.Millisecond),
-		int64(2 * 24 * time.Hour / time.Millisecond),
 	})
 
-	extLabels := labels.FromMap(map[string]string{"a": "1", "b": "2"})
+	// pre calculating group keys
+	keys := make([]string, 3)
+	m := make([]metadata.Meta, 3)
+	m[0].Thanos.Labels = map[string]string{"a": "1"}
+	m[1].Thanos.Labels = map[string]string{"b": "2"}
+	m[2].Thanos.Labels = map[string]string{"a": "1", "b": "2"}
+	m[2].Thanos.Downsample.Resolution = 1
+	for ind, meta := range m {
+		keys[ind] = DefaultGroupKey(meta.Thanos)
+	}
+
+	var bkt objstore.Bucket
+	temp := prometheus.NewCounter(prometheus.CounterOpts{})
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "")
 
 	for _, tcase := range []struct {
 		testName string
 		input    []*metadata.Meta
-		expected planResult
+		expected groupedResult
 	}{
-		// In this test case, the first four blocks are planned for compaction in the first run. These are then removed from the group and then the next two blocks from the original group are planned for compaction in the second run.
-		// Hence, a total of 6 blocks are planned for compaction over 2 runs.
 		{
-			testName: "two_runs_test",
+			testName: "first_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -237,7 +249,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 					},
 					Thanos: metadata.Thanos{
 						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Labels:  map[string]string{"b": "2"},
 					},
 				},
 				{
@@ -248,7 +260,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 					},
 					Thanos: metadata.Thanos{
 						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Labels:  map[string]string{"b": "2"},
 					},
 				},
 				{
@@ -259,7 +271,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 					},
 					Thanos: metadata.Thanos{
 						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Labels:  map[string]string{"b": "2"},
 					},
 				},
 				{
@@ -269,8 +281,9 @@ func TestCompactProgressCalculate(t *testing.T) {
 						MaxTime: int64(12 * time.Hour / time.Millisecond),
 					},
 					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Version:    1,
+						Labels:     map[string]string{"a": "1", "b": "2"},
+						Downsample: metadata.ThanosDownsample{Resolution: 1},
 					},
 				},
 				{
@@ -280,8 +293,9 @@ func TestCompactProgressCalculate(t *testing.T) {
 						MaxTime: int64(20 * time.Hour / time.Millisecond),
 					},
 					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Version:    1,
+						Labels:     map[string]string{"a": "1", "b": "2"},
+						Downsample: metadata.ThanosDownsample{Resolution: 1},
 					},
 				},
 				{
@@ -291,20 +305,29 @@ func TestCompactProgressCalculate(t *testing.T) {
 						MaxTime: int64(28 * time.Hour / time.Millisecond),
 					},
 					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Version:    1,
+						Labels:     map[string]string{"a": "1", "b": "2"},
+						Downsample: metadata.ThanosDownsample{Resolution: 1},
 					},
 				},
 			},
-			expected: planResult{
-				compactionRuns:   2.0,
-				compactionBlocks: 6.0,
+			expected: map[string]planResult{
+				keys[0]: planResult{
+					compactionRuns:   0.0,
+					compactionBlocks: 0.0,
+				},
+				keys[1]: planResult{
+					compactionRuns:   1.0,
+					compactionBlocks: 2.0,
+				},
+				keys[2]: planResult{
+					compactionRuns:   0.0,
+					compactionBlocks: 0.0,
+				},
 			},
 		},
 		{
-			// This test case has non-consecutive blocks.
-			// The first four blocks are planned for compaction, like the previous case. But unlike the previous case, the next two blocks are not planned for compaction since these 6 blocks are not consecutive.
-			testName: "non_consecutive_blocks_test",
+			testName: "second_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -325,7 +348,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 					},
 					Thanos: metadata.Thanos{
 						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Labels:  map[string]string{"b": "2"},
 					},
 				},
 				{
@@ -336,51 +359,63 @@ func TestCompactProgressCalculate(t *testing.T) {
 					},
 					Thanos: metadata.Thanos{
 						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Labels:  map[string]string{"b": "2"},
 					},
 				},
 				{
 					BlockMeta: tsdb.BlockMeta{
 						ULID:    ulid.MustNew(3, nil),
 						MinTime: int64(6 * time.Hour / time.Millisecond),
-						MaxTime: int64(8 * time.Hour / time.Millisecond),
+						MaxTime: int64(10 * time.Hour / time.Millisecond),
 					},
 					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Version:    1,
+						Labels:     map[string]string{"a": "1", "b": "2"},
+						Downsample: metadata.ThanosDownsample{Resolution: 1},
 					},
 				},
 				{
 					BlockMeta: tsdb.BlockMeta{
 						ULID:    ulid.MustNew(4, nil),
 						MinTime: int64(10 * time.Hour / time.Millisecond),
-						MaxTime: int64(12 * time.Hour / time.Millisecond),
+						MaxTime: int64(14 * time.Hour / time.Millisecond),
 					},
 					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Version:    1,
+						Labels:     map[string]string{"a": "1", "b": "2"},
+						Downsample: metadata.ThanosDownsample{Resolution: 1},
 					},
 				},
 				{
 					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(4, nil),
-						MinTime: int64(12 * time.Hour / time.Millisecond),
-						MaxTime: int64(14 * time.Hour / time.Millisecond),
+						ULID:    ulid.MustNew(5, nil),
+						MinTime: int64(14 * time.Hour / time.Millisecond),
+						MaxTime: int64(16 * time.Hour / time.Millisecond),
 					},
 					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Version:    1,
+						Labels:     map[string]string{"a": "1", "b": "2"},
+						Downsample: metadata.ThanosDownsample{Resolution: 1},
 					},
 				},
 			},
-			expected: planResult{
-				compactionRuns:   1.0,
-				compactionBlocks: 4.0,
+			expected: map[string]planResult{
+				keys[0]: planResult{
+					compactionRuns:   0.0,
+					compactionBlocks: 0.0,
+				},
+				keys[1]: planResult{
+					compactionRuns:   0.0,
+					compactionBlocks: 0.0,
+				},
+				keys[2]: planResult{
+					compactionRuns:   0.0,
+					compactionBlocks: 0.0,
+				},
 			},
 		},
 		{
-			// In this test case, the first four blocks are compacted into an 8h block in the first run.
-			testName: "single_run_test",
+			testName: "third_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -401,7 +436,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 					},
 					Thanos: metadata.Thanos{
 						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Labels:  map[string]string{"b": "2"},
 					},
 				},
 				{
@@ -412,7 +447,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 					},
 					Thanos: metadata.Thanos{
 						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Labels:  map[string]string{"b": "2"},
 					},
 				},
 				{
@@ -422,8 +457,9 @@ func TestCompactProgressCalculate(t *testing.T) {
 						MaxTime: int64(8 * time.Hour / time.Millisecond),
 					},
 					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Version:    1,
+						Labels:     map[string]string{"a": "1", "b": "2"},
+						Downsample: metadata.ThanosDownsample{Resolution: 1},
 					},
 				},
 				{
@@ -433,207 +469,54 @@ func TestCompactProgressCalculate(t *testing.T) {
 						MaxTime: int64(10 * time.Hour / time.Millisecond),
 					},
 					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
+						Version:    1,
+						Labels:     map[string]string{"a": "1", "b": "2"},
+						Downsample: metadata.ThanosDownsample{Resolution: 1},
 					},
 				},
 			},
-			expected: planResult{
-				compactionRuns:   1.0,
-				compactionBlocks: 4.0,
-			},
-		},
-		{
-			// In this test case, the metadata is part of two groups.
-			// The first four blocks are compacted in the first run.
-			testName: "two_groups_test",
-			input: []*metadata.Meta{
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(0, nil),
-						MinTime: 0,
-						MaxTime: int64(2 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-					},
+			expected: map[string]planResult{
+				keys[0]: planResult{
+					compactionRuns:   0.0,
+					compactionBlocks: 0.0,
 				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(1, nil),
-						MinTime: int64(2 * time.Hour / time.Millisecond),
-						MaxTime: int64(4 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-					},
+				keys[1]: planResult{
+					compactionRuns:   0.0,
+					compactionBlocks: 0.0,
 				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(2, nil),
-						MinTime: int64(4 * time.Hour / time.Millisecond),
-						MaxTime: int64(6 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
+				keys[2]: planResult{
+					compactionRuns:   0.0,
+					compactionBlocks: 0.0,
 				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(3, nil),
-						MinTime: int64(6 * time.Hour / time.Millisecond),
-						MaxTime: int64(8 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(4, nil),
-						MinTime: int64(8 * time.Hour / time.Millisecond),
-						MaxTime: int64(16 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(6, nil),
-						MinTime: int64(16 * time.Hour / time.Millisecond),
-						MaxTime: int64(18 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(7, nil),
-						MinTime: int64(18 * time.Hour / time.Millisecond),
-						MaxTime: int64(26 * time.Hour / time.Millisecond),
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-					},
-				},
-			},
-			expected: planResult{
-				compactionRuns:   1.0,
-				compactionBlocks: 4.0,
 			},
 		},
+		{},
 	} {
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
-			groups := []*Group{
-				{
-					key:            "b",
-					labels:         extLabels,
-					resolution:     0,
-					metasByMinTime: tcase.input,
-				},
-			}
+			groups := make([]*Group, 3)
 
-			if tcase.testName == "two_groups_test" {
-				groups = append(groups, &Group{
-					key: "a",
-					metasByMinTime: []*metadata.Meta{
-						{
-							BlockMeta: tsdb.BlockMeta{
-								ULID:    ulid.MustNew(0, nil),
-								MinTime: int64(0 * time.Hour / time.Millisecond),
-								MaxTime: int64(2 * time.Hour / time.Millisecond),
-							},
-							Thanos: metadata.Thanos{
-								Version: 1,
-								Labels:  map[string]string{"b": "2"},
-							},
-						},
-						{
-							BlockMeta: tsdb.BlockMeta{
-								ULID:    ulid.MustNew(1, nil),
-								MinTime: int64(2 * time.Hour / time.Millisecond),
-								MaxTime: int64(4 * time.Hour / time.Millisecond),
-							},
-							Thanos: metadata.Thanos{
-								Version: 1,
-								Labels:  map[string]string{"b": "2"},
-							},
-						},
-						{
-							BlockMeta: tsdb.BlockMeta{
-								ULID:    ulid.MustNew(2, nil),
-								MinTime: int64(4 * time.Hour / time.Millisecond),
-								MaxTime: int64(6 * time.Hour / time.Millisecond),
-							},
-							Thanos: metadata.Thanos{
-								Version: 1,
-								Labels:  map[string]string{"b": "2"},
-							},
-						},
-						{
-							BlockMeta: tsdb.BlockMeta{
-								ULID:    ulid.MustNew(3, nil),
-								MinTime: int64(6 * time.Hour / time.Millisecond),
-								MaxTime: int64(8 * time.Hour / time.Millisecond),
-							},
-							Thanos: metadata.Thanos{
-								Version: 1,
-								Labels:  map[string]string{"b": "2"},
-							},
-						},
-						{
-							BlockMeta: tsdb.BlockMeta{
-								ULID:    ulid.MustNew(4, nil),
-								MinTime: int64(8 * time.Hour / time.Millisecond),
-								MaxTime: int64(10 * time.Hour / time.Millisecond),
-							},
-							Thanos: metadata.Thanos{
-								Version: 1,
-								Labels:  map[string]string{"b": "2"},
-							},
-						},
-					},
-					resolution: 0,
-				})
+			blocks := make(map[ulid.ULID]*metadata.Meta, len(tcase.input))
+			for _, meta := range tcase.input {
+				blocks[meta.ULID] = meta
 			}
-
+			// form groups from the input metadata - do not hardcode groups. hence, grouper.Groups should stay
+			groups, _ = grouper.Groups(blocks)
 			ps := NewCompactionProgressCalculator(unRegisterer, planner)
 			err := ps.ProgressCalculate(context.Background(), groups)
 			metrics := ps.CompactProgressMetrics
 			testutil.Ok(t, err)
-			a, err := metrics.NumberOfCompactionBlocks.GetMetricWithLabelValues("b")
-			if err != nil {
-				level.Warn(logger).Log("msg", "could not get number of blocks")
-			}
-			testutil.Equals(t, tcase.expected.compactionBlocks, promtestutil.ToFloat64(a))
-
-			b, err := metrics.NumberOfCompactionRuns.GetMetricWithLabelValues("b")
-			if err != nil {
-				level.Warn(logger).Log("msg", "could not get number of runs")
-			}
-			testutil.Equals(t, tcase.expected.compactionRuns, promtestutil.ToFloat64(b))
-
-			if tcase.testName == "two_groups_test" {
-				a, err = metrics.NumberOfCompactionBlocks.GetMetricWithLabelValues("a")
+			for _, key := range keys {
+				a, err := metrics.NumberOfCompactionBlocks.GetMetricWithLabelValues(key)
 				if err != nil {
-					level.Warn(logger).Log("msg", "could not get number of blocks for two groups test")
+					level.Warn(logger).Log("msg", "could not get number of blocks")
 				}
-				testutil.Equals(t, 4.0, promtestutil.ToFloat64(a))
-				b, err := metrics.NumberOfCompactionRuns.GetMetricWithLabelValues("a")
+				b, err := metrics.NumberOfCompactionRuns.GetMetricWithLabelValues(key)
 				if err != nil {
 					level.Warn(logger).Log("msg", "could not get number of runs")
 				}
-				testutil.Equals(t, 1.0, promtestutil.ToFloat64(b))
 
+				testutil.Equals(t, tcase.expected[key].compactionBlocks, promtestutil.ToFloat64(a))
+				testutil.Equals(t, tcase.expected[key].compactionRuns, promtestutil.ToFloat64(b))
 			}
 		}); !ok {
 			return
