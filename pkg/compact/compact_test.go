@@ -18,6 +18,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
 
@@ -207,7 +208,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 	}
 
 	var bkt objstore.Bucket
-	temp := prometheus.NewCounter(prometheus.CounterOpts{})
+	temp := promauto.NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
 	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "")
 
 	for _, tcase := range []struct {
@@ -311,15 +312,15 @@ func TestCompactProgressCalculate(t *testing.T) {
 				},
 			},
 			expected: map[string]planResult{
-				keys[0]: planResult{
+				keys[0]: {
 					compactionRuns:   0.0,
 					compactionBlocks: 0.0,
 				},
-				keys[1]: planResult{
+				keys[1]: {
 					compactionRuns:   1.0,
 					compactionBlocks: 2.0,
 				},
-				keys[2]: planResult{
+				keys[2]: {
 					compactionRuns:   0.0,
 					compactionBlocks: 0.0,
 				},
@@ -399,15 +400,15 @@ func TestCompactProgressCalculate(t *testing.T) {
 				},
 			},
 			expected: map[string]planResult{
-				keys[0]: planResult{
+				keys[0]: {
 					compactionRuns:   0.0,
 					compactionBlocks: 0.0,
 				},
-				keys[1]: planResult{
+				keys[1]: {
 					compactionRuns:   0.0,
 					compactionBlocks: 0.0,
 				},
-				keys[2]: planResult{
+				keys[2]: {
 					compactionRuns:   0.0,
 					compactionBlocks: 0.0,
 				},
@@ -475,15 +476,15 @@ func TestCompactProgressCalculate(t *testing.T) {
 				},
 			},
 			expected: map[string]planResult{
-				keys[0]: planResult{
+				keys[0]: {
 					compactionRuns:   0.0,
 					compactionBlocks: 0.0,
 				},
-				keys[1]: planResult{
+				keys[1]: {
 					compactionRuns:   0.0,
 					compactionBlocks: 0.0,
 				},
-				keys[2]: planResult{
+				keys[2]: {
 					compactionRuns:   0.0,
 					compactionBlocks: 0.0,
 				},
@@ -492,16 +493,17 @@ func TestCompactProgressCalculate(t *testing.T) {
 		{},
 	} {
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
-			groups := make([]*Group, 3)
-
 			blocks := make(map[ulid.ULID]*metadata.Meta, len(tcase.input))
 			for _, meta := range tcase.input {
 				blocks[meta.ULID] = meta
 			}
 			// form groups from the input metadata - do not hardcode groups. hence, grouper.Groups should stay
-			groups, _ = grouper.Groups(blocks)
+			groups, err := grouper.Groups(blocks)
+			if err != nil {
+				level.Warn(logger).Log("msg, unable to form groups")
+			}
 			ps := NewCompactionProgressCalculator(unRegisterer, planner)
-			err := ps.ProgressCalculate(context.Background(), groups)
+			err = ps.ProgressCalculate(context.Background(), groups)
 			metrics := ps.CompactProgressMetrics
 			testutil.Ok(t, err)
 			for _, key := range keys {
@@ -543,7 +545,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 	}
 
 	var bkt objstore.Bucket
-	temp := prometheus.NewCounter(prometheus.CounterOpts{})
+	temp := promauto.NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for downsample progress tests"})
 	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "")
 
 	for _, tcase := range []struct {
@@ -771,16 +773,17 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 		},
 	} {
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
-			groups := make([]*Group, 3)
-
 			blocks := make(map[ulid.ULID]*metadata.Meta, len(tcase.input))
 			for _, meta := range tcase.input {
 				blocks[meta.ULID] = meta
 			}
-			groups, _ = grouper.Groups(blocks)
+			groups, err := grouper.Groups(blocks)
+			if err != nil {
+				level.Warn(logger).Log("msg", "unable to form groups")
+			}
 
 			ds := NewDownsampleProgressCalculator(unRegisterer)
-			err := ds.ProgressCalculate(context.Background(), groups)
+			err = ds.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
 			metrics := ds.DownsampleProgressMetrics
 			for _, key := range keys {
