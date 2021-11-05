@@ -179,12 +179,20 @@ func BenchmarkGatherNoCompactionMarkFilter_Filter(b *testing.B) {
 
 }
 
-func createBlockMeta(id uint64, minTime, maxTime int64, labels map[string]string, resolution int64) *metadata.Meta {
+func createBlockMeta(id uint64, minTime, maxTime int64, labels map[string]string, resolution int64, sources []uint64) *metadata.Meta {
+	sourceBlocks := make([]ulid.ULID, len(sources))
+	for ind, source := range sources {
+		sourceBlocks[ind] = ulid.MustNew(source, nil)
+	}
+
 	m := &metadata.Meta{
 		BlockMeta: tsdb.BlockMeta{
 			ULID:    ulid.MustNew(id, nil),
 			MinTime: minTime,
 			MaxTime: maxTime,
+			Compaction: tsdb.BlockMetaCompaction{
+				Sources: sourceBlocks,
+			},
 		},
 		Thanos: metadata.Thanos{
 			Labels: labels,
@@ -236,14 +244,14 @@ func TestCompactProgressCalculate(t *testing.T) {
 		{
 			testName: "first_test",
 			input: []*metadata.Meta{
-				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0),
-				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0),
-				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
-				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(8)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
-				createBlockMeta(4, int64(time.Duration(8)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
-				createBlockMeta(5, int64(time.Duration(10)*time.Hour/time.Millisecond), int64(time.Duration(12)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
-				createBlockMeta(6, int64(time.Duration(12)*time.Hour/time.Millisecond), int64(time.Duration(20)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
-				createBlockMeta(7, int64(time.Duration(20)*time.Hour/time.Millisecond), int64(time.Duration(28)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
+				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
+				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(8)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
+				createBlockMeta(4, int64(time.Duration(8)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
+				createBlockMeta(5, int64(time.Duration(10)*time.Hour/time.Millisecond), int64(time.Duration(12)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
+				createBlockMeta(6, int64(time.Duration(12)*time.Hour/time.Millisecond), int64(time.Duration(20)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
+				createBlockMeta(7, int64(time.Duration(20)*time.Hour/time.Millisecond), int64(time.Duration(28)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
 			},
 			expected: map[string]planResult{
 				keys[0]: {
@@ -263,12 +271,12 @@ func TestCompactProgressCalculate(t *testing.T) {
 		{
 			testName: "second_test",
 			input: []*metadata.Meta{
-				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0),
-				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
-				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
-				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
-				createBlockMeta(4, int64(time.Duration(10)*time.Hour/time.Millisecond), int64(time.Duration(14)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
-				createBlockMeta(5, int64(time.Duration(14)*time.Hour/time.Millisecond), int64(time.Duration(16)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
+				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
+				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
+				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
+				createBlockMeta(4, int64(time.Duration(10)*time.Hour/time.Millisecond), int64(time.Duration(14)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
+				createBlockMeta(5, int64(time.Duration(14)*time.Hour/time.Millisecond), int64(time.Duration(16)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
 			},
 			expected: map[string]planResult{
 				keys[0]: {
@@ -288,11 +296,11 @@ func TestCompactProgressCalculate(t *testing.T) {
 		{
 			testName: "third_test",
 			input: []*metadata.Meta{
-				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0),
-				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
-				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0),
-				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(8)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
-				createBlockMeta(4, int64(time.Duration(8)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1),
+				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
+				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
+				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(8)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
+				createBlockMeta(4, int64(time.Duration(8)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
 			},
 			expected: map[string]planResult{
 				keys[0]: {
@@ -309,7 +317,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 				},
 			},
 		},
-		{},
 	} {
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
 			blocks := make(map[ulid.ULID]*metadata.Meta, len(tcase.input))
