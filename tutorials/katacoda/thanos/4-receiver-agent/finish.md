@@ -1,6 +1,11 @@
 # Summary
 
 Congratulations! 🎉🎉🎉
+
+`Batmobile` is now well-monitored! Batman says thank you!
+
+![batman](./assets/batmobile.jpg)
+
 You completed this Prometheus Agent tutorial. Let's summarize what we learned:
 
 * Thanos Receive is a component that implements the `Prometheus Remote Write` protocol.
