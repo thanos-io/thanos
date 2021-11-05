@@ -19,7 +19,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -522,48 +521,46 @@ func TestCompactProgressCalculate(t *testing.T) {
 			return
 		}
 	}
-
 }
 
 func TestDownsampleProgressCalculate(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	unRegisterer := &receive.UnRegisterer{Registerer: reg}
-	extLabels := labels.FromMap(map[string]string{"a": "1", "b": "2"})
 	logger := log.NewNopLogger()
+	type groupedResult map[string]float64
+
+	// pre calculating group keys
+	keys := make([]string, 3)
+	m := make([]metadata.Meta, 3)
+	m[0].Thanos.Labels = map[string]string{"a": "1"}
+	m[0].Thanos.Downsample.Resolution = downsample.ResLevel0
+	m[1].Thanos.Labels = map[string]string{"b": "2"}
+	m[1].Thanos.Downsample.Resolution = downsample.ResLevel1
+	m[2].Thanos.Labels = map[string]string{"a": "1", "b": "2"}
+	m[2].Thanos.Downsample.Resolution = downsample.ResLevel2
+	for ind, meta := range m {
+		keys[ind] = DefaultGroupKey(meta.Thanos)
+	}
+
+	var bkt objstore.Bucket
+	temp := prometheus.NewCounter(prometheus.CounterOpts{})
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "")
 
 	for _, tcase := range []struct {
 		testName string
 		input    []*metadata.Meta
-		expected float64
+		expected groupedResult
 	}{
 		{
-			// This test case has 1 block to be downsampled out of 2 since for the second block, the difference between MinTime and MaxTime is less than the acceptable threshold, DownsampleRange0
-			testName: "minTime_maxTime_diff_threshold_test",
+			testName: "first_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
 						ULID:    ulid.MustNew(0, nil),
 						MinTime: 0,
-						MaxTime: downsample.DownsampleRange1,
-						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(1, nil), ulid.MustNew(2, nil)},
-						},
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-						Downsample: metadata.ThanosDownsample{
-							Resolution: downsample.ResLevel1,
-						},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(3, nil),
-						MinTime: 1,
 						MaxTime: downsample.DownsampleRange0,
 						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(4, nil), ulid.MustNew(5, nil)},
+							Sources: []ulid.ULID{ulid.MustNew(1, nil), ulid.MustNew(2, nil)},
 						},
 					},
 					Thanos: metadata.Thanos{
@@ -574,12 +571,49 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 						},
 					},
 				},
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(3, nil),
+						MinTime: 1,
+						MaxTime: downsample.DownsampleRange1,
+						Compaction: tsdb.BlockMetaCompaction{
+							Sources: []ulid.ULID{ulid.MustNew(4, nil), ulid.MustNew(5, nil)},
+						},
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"b": "2"},
+						Downsample: metadata.ThanosDownsample{
+							Resolution: downsample.ResLevel1,
+						},
+					},
+				},
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(4, nil),
+						MinTime: 1,
+						MaxTime: downsample.DownsampleRange1,
+						Compaction: tsdb.BlockMetaCompaction{
+							Sources: []ulid.ULID{ulid.MustNew(4, nil), ulid.MustNew(5, nil)},
+						},
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1", "b": "2"},
+						Downsample: metadata.ThanosDownsample{
+							Resolution: downsample.ResLevel2,
+						},
+					},
+				},
 			},
-			expected: 1.0,
+			expected: map[string]float64{
+				keys[0]: 1.0,
+				keys[1]: 0.0,
+				keys[2]: 0.0,
+			},
 		},
 		{
-			// This test case returns 0 blocks to be downsampled since the resolution is resLevel2, which is skipped when grouping blocks for downsampling.
-			testName: "res_level_2_test",
+			testName: "second_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -594,15 +628,52 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 						Version: 1,
 						Labels:  map[string]string{"a": "1"},
 						Downsample: metadata.ThanosDownsample{
+							Resolution: downsample.ResLevel0,
+						},
+					},
+				},
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(7, nil),
+						MinTime: 1,
+						MaxTime: downsample.DownsampleRange1,
+						Compaction: tsdb.BlockMetaCompaction{
+							Sources: []ulid.ULID{ulid.MustNew(7, nil), ulid.MustNew(8, nil)},
+						},
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"b": "2"},
+						Downsample: metadata.ThanosDownsample{
+							Resolution: downsample.ResLevel1,
+						},
+					},
+				},
+				{
+					BlockMeta: tsdb.BlockMeta{
+						ULID:    ulid.MustNew(8, nil),
+						MinTime: 1,
+						MaxTime: downsample.DownsampleRange1,
+						Compaction: tsdb.BlockMetaCompaction{
+							Sources: []ulid.ULID{ulid.MustNew(7, nil), ulid.MustNew(8, nil)},
+						},
+					},
+					Thanos: metadata.Thanos{
+						Version: 1,
+						Labels:  map[string]string{"a": "1", "b": "2"},
+						Downsample: metadata.ThanosDownsample{
 							Resolution: downsample.ResLevel2,
 						},
 					},
 				},
 			},
-			expected: 0.0,
+			expected: map[string]float64{
+				keys[0]: 0.0,
+				keys[1]: 0.0,
+				keys[2]: 0.0,
+			},
 		}, {
-			// This test case returns 1 block to be downsampled since for this block, which has a resolution of resLevel0, the difference between minTime and maxTime is greater than the acceptable threshold, DownsampleRange0.
-			testName: "res_level_0_test",
+			testName: "third_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -622,10 +693,13 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 					},
 				},
 			},
-			expected: 1.0,
+			expected: map[string]float64{
+				keys[0]: 1.0,
+				keys[1]: 0.0,
+				keys[2]: 0.0,
+			},
 		}, {
-			// This test case returns 1 block to be downsampled since for this block, which has a resolution of resLevel1, the difference between minTime and maxTime is greater than the acceptable threshold, DownsampleRange1.
-			testName: "res_level_1_test",
+			testName: "fourth_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -645,12 +719,14 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 					},
 				},
 			},
-			expected: 1.0,
+			expected: map[string]float64{
+				keys[0]: 0.0,
+				keys[1]: 0.0,
+				keys[2]: 0.0,
+			},
 		},
 		{
-			// This test case has metadata belonging to two input groups.
-			// It returns two blocks to be downsampled since for both the blocks, the difference between MinTime and MaxTime is above the accepted threshold for their resolution level.
-			testName: "two_groups_test",
+			testName: "fifth_test",
 			input: []*metadata.Meta{
 				{
 					BlockMeta: tsdb.BlockMeta{
@@ -687,78 +763,33 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 					},
 				},
 			},
-			expected: 2.0,
+			expected: map[string]float64{
+				keys[0]: 0.0,
+				keys[1]: 0.0,
+				keys[2]: 0.0,
+			},
 		},
 	} {
-		groups := []*Group{
-			{
-				key:            "a",
-				labels:         extLabels,
-				resolution:     downsample.ResLevel1,
-				metasByMinTime: tcase.input,
-			},
-		}
-
-		if tcase.testName == "two_groups_test" {
-			groups = append(groups, &Group{
-				resolution: 0,
-				key:        "b",
-				metasByMinTime: []*metadata.Meta{
-					{
-						BlockMeta: tsdb.BlockMeta{
-							ULID:    ulid.MustNew(0, nil),
-							MinTime: 0,
-							MaxTime: downsample.DownsampleRange1,
-							Compaction: tsdb.BlockMetaCompaction{
-								Sources: []ulid.ULID{ulid.MustNew(1, nil), ulid.MustNew(2, nil)},
-							},
-						},
-						Thanos: metadata.Thanos{
-							Version: 1,
-							Labels:  map[string]string{"a": "1"},
-							Downsample: metadata.ThanosDownsample{
-								Resolution: downsample.ResLevel1,
-							},
-						},
-					},
-					{
-						BlockMeta: tsdb.BlockMeta{
-							ULID:    ulid.MustNew(3, nil),
-							MinTime: 1,
-							MaxTime: downsample.DownsampleRange0,
-							Compaction: tsdb.BlockMetaCompaction{
-								Sources: []ulid.ULID{ulid.MustNew(4, nil), ulid.MustNew(5, nil)},
-							},
-						},
-						Thanos: metadata.Thanos{
-							Version: 1,
-							Labels:  map[string]string{"a": "1"},
-							Downsample: metadata.ThanosDownsample{
-								Resolution: downsample.ResLevel0,
-							},
-						},
-					},
-				},
-			})
-		}
-
-		ds := NewDownsampleProgressCalculator(unRegisterer)
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
+			groups := make([]*Group, 3)
+
+			blocks := make(map[ulid.ULID]*metadata.Meta, len(tcase.input))
+			for _, meta := range tcase.input {
+				blocks[meta.ULID] = meta
+			}
+			groups, _ = grouper.Groups(blocks)
+
+			ds := NewDownsampleProgressCalculator(unRegisterer)
 			err := ds.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
 			metrics := ds.DownsampleProgressMetrics
-			if tcase.testName == "two_groups_test" {
-				a, err := metrics.NumberOfBlocksDownsampled.GetMetricWithLabelValues("b")
+			for _, key := range keys {
+				a, err := metrics.NumberOfBlocksDownsampled.GetMetricWithLabelValues(key)
 				if err != nil {
 					level.Warn(logger).Log("msg", "could not get number of blocks")
 				}
-				testutil.Equals(t, 1.0, promtestutil.ToFloat64(a))
+				testutil.Equals(t, tcase.expected[key], promtestutil.ToFloat64(a))
 			}
-			a, err := metrics.NumberOfBlocksDownsampled.GetMetricWithLabelValues("a")
-			if err != nil {
-				level.Warn(logger).Log("msg", "could not get number of blocks")
-			}
-			testutil.Equals(t, tcase.expected, promtestutil.ToFloat64(a))
 		}); !ok {
 			return
 		}
