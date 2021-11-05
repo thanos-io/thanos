@@ -376,57 +376,9 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 		{
 			testName: "first_test",
 			input: []*metadata.Meta{
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(0, nil),
-						MinTime: 0,
-						MaxTime: downsample.DownsampleRange0,
-						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(1, nil), ulid.MustNew(2, nil)},
-						},
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-						Downsample: metadata.ThanosDownsample{
-							Resolution: downsample.ResLevel0,
-						},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(3, nil),
-						MinTime: 1,
-						MaxTime: downsample.DownsampleRange1,
-						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(4, nil), ulid.MustNew(5, nil)},
-						},
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-						Downsample: metadata.ThanosDownsample{
-							Resolution: downsample.ResLevel1,
-						},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(4, nil),
-						MinTime: 1,
-						MaxTime: downsample.DownsampleRange1,
-						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(4, nil), ulid.MustNew(5, nil)},
-						},
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1", "b": "2"},
-						Downsample: metadata.ThanosDownsample{
-							Resolution: downsample.ResLevel2,
-						},
-					},
-				},
+				createBlockMeta(0, 0, downsample.DownsampleRange0, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{1, 2}),
+				createBlockMeta(3, 1, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel0, []uint64{4, 5}),
+				createBlockMeta(6, 1, downsample.DownsampleRange1, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{7, 8}),
 			},
 			expected: map[string]float64{
 				keys[0]: 1.0,
@@ -437,57 +389,9 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 		{
 			testName: "second_test",
 			input: []*metadata.Meta{
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(6, nil),
-						MinTime: 1,
-						MaxTime: downsample.DownsampleRange0,
-						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(7, nil), ulid.MustNew(8, nil)},
-						},
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-						Downsample: metadata.ThanosDownsample{
-							Resolution: downsample.ResLevel0,
-						},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(7, nil),
-						MinTime: 1,
-						MaxTime: downsample.DownsampleRange1,
-						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(7, nil), ulid.MustNew(8, nil)},
-						},
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-						Downsample: metadata.ThanosDownsample{
-							Resolution: downsample.ResLevel1,
-						},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(8, nil),
-						MinTime: 1,
-						MaxTime: downsample.DownsampleRange1,
-						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(7, nil), ulid.MustNew(8, nil)},
-						},
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1", "b": "2"},
-						Downsample: metadata.ThanosDownsample{
-							Resolution: downsample.ResLevel2,
-						},
-					},
-				},
+				createBlockMeta(6, 1, downsample.DownsampleRange0, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{7, 8}),
+				createBlockMeta(7, 1, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{7, 8}),
+				createBlockMeta(8, 1, downsample.DownsampleRange1, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{7, 8}),
 			},
 			expected: map[string]float64{
 				keys[0]: 0.0,
@@ -497,98 +401,29 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 		}, {
 			testName: "third_test",
 			input: []*metadata.Meta{
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(9, nil),
-						MinTime: 0,
-						MaxTime: downsample.DownsampleRange0,
-						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(10, nil), ulid.MustNew(11, nil)},
-						},
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-						Downsample: metadata.ThanosDownsample{
-							Resolution: downsample.ResLevel0,
-						},
-					},
-				},
+				createBlockMeta(9, 0, downsample.DownsampleRange0, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{10, 11}),
 			},
 			expected: map[string]float64{
 				keys[0]: 1.0,
-				keys[1]: 0.0,
-				keys[2]: 0.0,
 			},
 		}, {
 			testName: "fourth_test",
 			input: []*metadata.Meta{
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(10, nil),
-						MinTime: 0,
-						MaxTime: downsample.DownsampleRange1,
-						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(11, nil), ulid.MustNew(12, nil)},
-						},
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-						Downsample: metadata.ThanosDownsample{
-							Resolution: downsample.ResLevel1,
-						},
-					},
-				},
+				createBlockMeta(10, 0, downsample.DownsampleRange1, map[string]string{"a": "1"}, downsample.ResLevel1, []uint64{11, 12}),
 			},
 			expected: map[string]float64{
 				keys[0]: 0.0,
-				keys[1]: 0.0,
-				keys[2]: 0.0,
 			},
 		},
 		{
 			testName: "fifth_test",
 			input: []*metadata.Meta{
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(0, nil),
-						MinTime: 0,
-						MaxTime: downsample.DownsampleRange1,
-						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(1, nil), ulid.MustNew(2, nil)},
-						},
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"a": "1"},
-						Downsample: metadata.ThanosDownsample{
-							Resolution: downsample.ResLevel1,
-						},
-					},
-				},
-				{
-					BlockMeta: tsdb.BlockMeta{
-						ULID:    ulid.MustNew(3, nil),
-						MinTime: 0,
-						MaxTime: downsample.DownsampleRange0,
-						Compaction: tsdb.BlockMetaCompaction{
-							Sources: []ulid.ULID{ulid.MustNew(4, nil), ulid.MustNew(5, nil)},
-						},
-					},
-					Thanos: metadata.Thanos{
-						Version: 1,
-						Labels:  map[string]string{"b": "2"},
-						Downsample: metadata.ThanosDownsample{
-							Resolution: downsample.ResLevel0,
-						},
-					},
-				},
+				createBlockMeta(10, 0, downsample.DownsampleRange1, map[string]string{"a": "1"}, downsample.ResLevel1, []uint64{1, 2}),
+				createBlockMeta(3, 0, downsample.DownsampleRange0, map[string]string{"b": "2"}, downsample.ResLevel0, []uint64{4, 5}),
 			},
 			expected: map[string]float64{
 				keys[0]: 0.0,
 				keys[1]: 0.0,
-				keys[2]: 0.0,
 			},
 		},
 	} {
