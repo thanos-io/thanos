@@ -17,6 +17,7 @@ describe('Blocks SourceView', () => {
     gridMinTime: 1596096000000,
     gridMaxTime: 1595108031471,
     blockSearch: '',
+    compactionLevel: 0,
   };
 
   const sourceView = mount(<SourceView {...defaultProps} />);

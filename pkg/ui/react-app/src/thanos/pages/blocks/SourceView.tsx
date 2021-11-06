@@ -2,7 +2,7 @@ import React, { FC } from 'react';
 import { Block, BlocksPool } from './block';
 import { BlockSpan } from './BlockSpan';
 import styles from './blocks.module.css';
-import { getBlockByUlid } from './helpers';
+import { getBlockByUlid, getBlocksByCompactionLevel } from './helpers';
 
 export const BlocksRow: FC<{
   blocks: Block[];
@@ -10,12 +10,14 @@ export const BlocksRow: FC<{
   gridMaxTime: number;
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
   blockSearch: string;
-}> = ({ blocks, gridMinTime, gridMaxTime, selectBlock, blockSearch }) => {
-  const blockSearchValue = getBlockByUlid(blocks, blockSearch);
+  compactionLevel: number;
+}> = ({ blocks, gridMinTime, gridMaxTime, selectBlock, blockSearch, compactionLevel }) => {
+  let filteredBlocks = getBlockByUlid(blocks, blockSearch);
+  filteredBlocks = getBlocksByCompactionLevel(filteredBlocks, compactionLevel);
 
   return (
     <div className={styles.row}>
-      {blockSearchValue.map<JSX.Element>((b) => (
+      {filteredBlocks.map<JSX.Element>((b) => (
         <BlockSpan selectBlock={selectBlock} block={b} gridMaxTime={gridMaxTime} gridMinTime={gridMinTime} key={b.ulid} />
       ))}
     </div>
@@ -29,9 +31,18 @@ export interface SourceViewProps {
   gridMaxTime: number;
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
   blockSearch: string;
+  compactionLevel: number;
 }
 
-export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, gridMinTime, selectBlock, blockSearch }) => {
+export const SourceView: FC<SourceViewProps> = ({
+  data,
+  title,
+  gridMaxTime,
+  gridMinTime,
+  selectBlock,
+  blockSearch,
+  compactionLevel,
+}) => {
   return (
     <>
       <div className={styles.source}>
@@ -49,6 +60,7 @@ export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, grid
                   gridMaxTime={gridMaxTime}
                   gridMinTime={gridMinTime}
                   blockSearch={blockSearch}
+                  compactionLevel={compactionLevel}
                 />
               ))}
             </React.Fragment>
