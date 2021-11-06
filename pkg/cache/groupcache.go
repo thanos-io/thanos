@@ -208,7 +208,7 @@ func (c *Groupcache) Fetch(ctx context.Context, keys []string) map[string][]byte
 
 		if err := c.group.Get(ctx, k, groupcache.AllocatingByteSliceSink(&keyData)); err != nil {
 			level.Error(c.logger).Log("msg", "failed fetching data from groupcache", "err", err, "key", k)
-			return nil
+			continue
 		}
 
 		data[k] = keyData
