@@ -402,6 +402,19 @@ func (cg *Group) Key() string {
 	return cg.key
 }
 
+func (cg *Group) deleteFromGroup(target map[ulid.ULID]struct{}) {
+	cg.mtx.Lock()
+	defer cg.mtx.Unlock()
+	var newGroupMeta []*metadata.Meta
+	for _, meta := range cg.metasByMinTime {
+		if _, found := target[meta.BlockMeta.ULID]; !found {
+			newGroupMeta = append(newGroupMeta, meta)
+		}
+	}
+
+	cg.metasByMinTime = newGroupMeta
+}
+
 // AppendMeta the block with the given meta to the group.
 func (cg *Group) AppendMeta(meta *metadata.Meta) error {
 	cg.mtx.Lock()
@@ -468,6 +481,190 @@ func (cg *Group) Labels() labels.Labels {
 // Resolution returns the common downsampling resolution of blocks in the group.
 func (cg *Group) Resolution() int64 {
 	return cg.resolution
+}
+
+// CompactProgressMetrics contains Prometheus metrics related to compaction progress.
+type CompactProgressMetrics struct {
+	NumberOfCompactionRuns   *prometheus.GaugeVec
+	NumberOfCompactionBlocks *prometheus.GaugeVec
+}
+
+// ProgressCalculator calculates the progress of the compaction process for a given slice of Groups.
+type ProgressCalculator interface {
+	ProgressCalculate(ctx context.Context, groups []*Group) error
+}
+
+// CompactionProgressCalculator contains a planner and ProgressMetrics, which are updated during the compaction simulation process.
+type CompactionProgressCalculator struct {
+	planner Planner
+	*CompactProgressMetrics
+}
+
+// NewCompactProgressCalculator creates a new CompactionProgressCalculator.
+func NewCompactionProgressCalculator(reg prometheus.Registerer, planner *tsdbBasedPlanner) *CompactionProgressCalculator {
+	return &CompactionProgressCalculator{
+		planner: planner,
+		CompactProgressMetrics: &CompactProgressMetrics{
+			NumberOfCompactionRuns: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_compactions",
+				Help: "number of compactions to be done",
+			}, []string{"group"}),
+			NumberOfCompactionBlocks: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_compaction_blocks",
+				Help: "number of blocks planned to be compacted",
+			}, []string{"group"}),
+		},
+	}
+}
+
+// ProgressCalculate calculates the number of blocks and compaction runs in the planning process of the given groups.
+func (ps *CompactionProgressCalculator) ProgressCalculate(ctx context.Context, groups []*Group) error {
+	groupCompactions := make(map[string]int, len(groups))
+	groupBlocks := make(map[string]int, len(groups))
+
+	for len(groups) > 0 {
+		tmpGroups := make([]*Group, 0, len(groups))
+		for _, g := range groups {
+			if len(g.IDs()) == 1 {
+				continue
+			}
+			plan, err := ps.planner.Plan(ctx, g.metasByMinTime)
+			if err != nil {
+				return errors.Wrapf(err, "could not plan")
+			}
+			if len(plan) == 0 {
+				continue
+			}
+			groupCompactions[g.key]++
+
+			toRemove := make(map[ulid.ULID]struct{}, len(plan))
+			metas := make([]*tsdb.BlockMeta, 0, len(plan))
+			for _, p := range plan {
+				metas = append(metas, &p.BlockMeta)
+				toRemove[p.BlockMeta.ULID] = struct{}{}
+			}
+			g.deleteFromGroup(toRemove)
+
+			groupBlocks[g.key] += len(plan)
+
+			if len(g.metasByMinTime) == 0 {
+				continue
+			}
+
+			newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
+			if err := g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta, Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: g.Resolution()}, Labels: g.Labels().Map()}}); err != nil {
+				return errors.Wrapf(err, "append meta")
+			}
+			tmpGroups = append(tmpGroups, g)
+		}
+
+		groups = tmpGroups
+	}
+
+	ps.CompactProgressMetrics.NumberOfCompactionRuns.Reset()
+	ps.CompactProgressMetrics.NumberOfCompactionBlocks.Reset()
+
+	for key, iters := range groupCompactions {
+		ps.CompactProgressMetrics.NumberOfCompactionRuns.WithLabelValues(key).Add(float64(iters))
+		ps.CompactProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(key).Add(float64(groupBlocks[key]))
+	}
+
+	return nil
+}
+
+// DownsampleProgressMetrics contains Prometheus metrics related to downsampling progress.
+type DownsampleProgressMetrics struct {
+	NumberOfBlocksDownsampled *prometheus.GaugeVec
+}
+
+// DownsampleProgressCalculator contains DownsampleMetrics, which are updated during the downsampling simulation process.
+type DownsampleProgressCalculator struct {
+	*DownsampleProgressMetrics
+}
+
+// NewDownsampleProgressCalculator creates a new DownsampleProgressCalculator.
+func NewDownsampleProgressCalculator(reg prometheus.Registerer) *DownsampleProgressCalculator {
+	return &DownsampleProgressCalculator{
+		DownsampleProgressMetrics: &DownsampleProgressMetrics{
+			NumberOfBlocksDownsampled: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_downsample_blocks",
+				Help: "number of blocks to be downsampled",
+			}, []string{"group"}),
+		},
+	}
+}
+
+// ProgressCalculate calculates the number of blocks to be downsampled for the given groups.
+func (ds *DownsampleProgressCalculator) ProgressCalculate(ctx context.Context, groups []*Group) error {
+	sources5m := map[ulid.ULID]struct{}{}
+	sources1h := map[ulid.ULID]struct{}{}
+	groupBlocks := make(map[string]int, len(groups))
+
+	for _, group := range groups {
+		for _, m := range group.metasByMinTime {
+			switch m.Thanos.Downsample.Resolution {
+			case downsample.ResLevel0:
+				continue
+			case downsample.ResLevel1:
+				for _, id := range m.Compaction.Sources {
+					sources5m[id] = struct{}{}
+				}
+			case downsample.ResLevel2:
+				for _, id := range m.Compaction.Sources {
+					sources1h[id] = struct{}{}
+				}
+			default:
+				return errors.Errorf("unexpected downsampling resolution %d", m.Thanos.Downsample.Resolution)
+			}
+
+		}
+	}
+
+	for _, group := range groups {
+		for _, m := range group.metasByMinTime {
+			switch m.Thanos.Downsample.Resolution {
+			case downsample.ResLevel0:
+				missing := false
+				for _, id := range m.Compaction.Sources {
+					if _, ok := sources5m[id]; !ok {
+						missing = true
+						break
+					}
+				}
+				if !missing {
+					continue
+				}
+
+				if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
+					continue
+				}
+				groupBlocks[group.key]++
+			case downsample.ResLevel1:
+				missing := false
+				for _, id := range m.Compaction.Sources {
+					if _, ok := sources1h[id]; !ok {
+						missing = true
+						break
+					}
+				}
+				if !missing {
+					continue
+				}
+
+				if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
+					continue
+				}
+				groupBlocks[group.key]++
+			}
+		}
+	}
+
+	ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.Reset()
+	for key, blocks := range groupBlocks {
+		ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.WithLabelValues(key).Add(float64(blocks))
+	}
+
+	return nil
 }
 
 // Planner returns blocks to compact.

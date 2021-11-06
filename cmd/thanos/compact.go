@@ -353,8 +353,9 @@ func runCompact(
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
 		metadata.HashFunc(conf.hashFunc),
 	)
+	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
 	planner := compact.WithLargeTotalIndexSizeFilter(
-		compact.NewPlanner(logger, levels, noCompactMarkerFilter),
+		tsdbPlanner,
 		bkt,
 		int64(conf.maxBlockIndexSize),
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.IndexSizeExceedingNoCompactReason),
@@ -456,6 +457,47 @@ func runCompact(
 		}
 
 		return cleanPartialMarked()
+	}
+
+	if conf.compactionProgressMetrics {
+		g.Add(func() error {
+			ps := compact.NewCompactionProgressCalculator(reg, tsdbPlanner)
+			var ds *compact.DownsampleProgressCalculator
+			if !conf.disableDownsampling {
+				ds = compact.NewDownsampleProgressCalculator(reg)
+			}
+
+			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+
+				if err := sy.SyncMetas(ctx); err != nil {
+					return errors.Wrapf(err, "could not sync metas")
+				}
+
+				metas := sy.Metas()
+				groups, err := grouper.Groups(metas)
+				if err != nil {
+					return errors.Wrapf(err, "could not group metadata")
+				}
+
+				if err = ps.ProgressCalculate(ctx, groups); err != nil {
+					return errors.Wrapf(err, "could not calculate compaction progress")
+				}
+
+				if !conf.disableDownsampling {
+					groups, err = grouper.Groups(metas)
+					if err != nil {
+						return errors.Wrapf(err, "could not group metadata into downsample groups")
+					}
+					if err := ds.ProgressCalculate(ctx, groups); err != nil {
+						return errors.Wrapf(err, "could not calculate downsampling progress")
+					}
+				}
+
+				return nil
+			})
+		}, func(err error) {
+			cancel()
+		})
 	}
 
 	g.Add(func() error {
@@ -590,9 +632,12 @@ type compactConfig struct {
 	enableVerticalCompaction                       bool
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
+	compactionProgressMetrics                      bool
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
+	cmd.Flag("progress-metrics", "Enables the progress metrics, indicating the progress of compaction and downsampling").Default("true").BoolVar(&cc.compactionProgressMetrics)
+
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)
 	cmd.Flag("debug.accept-malformed-index",
