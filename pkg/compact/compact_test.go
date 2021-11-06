@@ -221,7 +221,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 		int64(8 * time.Hour / time.Millisecond),
 	})
 
-	// pre calculating group keys
 	keys := make([]string, 3)
 	m := make([]metadata.Meta, 3)
 	m[0].Thanos.Labels = map[string]string{"a": "1"}
@@ -233,7 +232,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 	}
 
 	var bkt objstore.Bucket
-	temp := promauto.NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
+	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
 	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "")
 
 	for _, tcase := range []struct {
@@ -242,7 +241,8 @@ func TestCompactProgressCalculate(t *testing.T) {
 		expected groupedResult
 	}{
 		{
-			testName: "first_test",
+			// This test has a single compaction run with two blocks from the second group compacted.
+			testName: "single_run_test",
 			input: []*metadata.Meta{
 				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
 				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
@@ -269,51 +269,42 @@ func TestCompactProgressCalculate(t *testing.T) {
 			},
 		},
 		{
-			testName: "second_test",
+			// This test has three compaction runs, with blocks from the first group getting compacted.
+			testName: "three_runs_test",
 			input: []*metadata.Meta{
 				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(3, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(4, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(5, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(8)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(6, int64(time.Duration(8)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
 				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
 				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
-				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
-				createBlockMeta(4, int64(time.Duration(10)*time.Hour/time.Millisecond), int64(time.Duration(14)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
-				createBlockMeta(5, int64(time.Duration(14)*time.Hour/time.Millisecond), int64(time.Duration(16)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
 			},
 			expected: map[string]planResult{
 				keys[0]: {
-					compactionRuns:   0.0,
-					compactionBlocks: 0.0,
+					compactionRuns:   3.0,
+					compactionBlocks: 6.0,
 				},
 				keys[1]: {
-					compactionRuns:   0.0,
-					compactionBlocks: 0.0,
-				},
-				keys[2]: {
 					compactionRuns:   0.0,
 					compactionBlocks: 0.0,
 				},
 			},
 		},
 		{
-			testName: "third_test",
+			// This test case has 4 2-hour blocks, which are non consecutive.
+			// Hence, only the first two blocks are compacted.
+			testName: "non_consecutive_blocks_test",
 			input: []*metadata.Meta{
-				createBlockMeta(0, 0, int64(time.Duration(2)*time.Hour/time.Millisecond), map[string]string{"a": "1"}, 0, []uint64{}),
-				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
-				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"b": "2"}, 0, []uint64{}),
+				createBlockMeta(1, int64(time.Duration(2)*time.Hour/time.Millisecond), int64(time.Duration(4)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
+				createBlockMeta(2, int64(time.Duration(4)*time.Hour/time.Millisecond), int64(time.Duration(6)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
 				createBlockMeta(3, int64(time.Duration(6)*time.Hour/time.Millisecond), int64(time.Duration(8)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
-				createBlockMeta(4, int64(time.Duration(8)*time.Hour/time.Millisecond), int64(time.Duration(10)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
+				createBlockMeta(4, int64(time.Duration(10)*time.Hour/time.Millisecond), int64(time.Duration(12)*time.Hour/time.Millisecond), map[string]string{"a": "1", "b": "2"}, 1, []uint64{}),
 			},
 			expected: map[string]planResult{
-				keys[0]: {
-					compactionRuns:   0.0,
-					compactionBlocks: 0.0,
-				},
-				keys[1]: {
-					compactionRuns:   0.0,
-					compactionBlocks: 0.0,
-				},
 				keys[2]: {
-					compactionRuns:   0.0,
-					compactionBlocks: 0.0,
+					compactionRuns:   1.0,
+					compactionBlocks: 2.0,
 				},
 			},
 		},
@@ -323,7 +314,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 			for _, meta := range tcase.input {
 				blocks[meta.ULID] = meta
 			}
-			// form groups from the input metadata - do not hardcode groups. hence, grouper.Groups should stay
 			groups, err := grouper.Groups(blocks)
 			testutil.Ok(t, err)
 			ps := NewCompactionProgressCalculator(unRegisterer, planner)
@@ -351,7 +341,6 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 	logger := log.NewNopLogger()
 	type groupedResult map[string]float64
 
-	// pre calculating group keys
 	keys := make([]string, 3)
 	m := make([]metadata.Meta, 3)
 	m[0].Thanos.Labels = map[string]string{"a": "1"}
@@ -365,7 +354,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 	}
 
 	var bkt objstore.Bucket
-	temp := promauto.NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for downsample progress tests"})
+	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for downsample progress tests"})
 	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "")
 
 	for _, tcase := range []struct {
@@ -374,32 +363,22 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 		expected groupedResult
 	}{
 		{
-			testName: "first_test",
-			input: []*metadata.Meta{
-				createBlockMeta(0, 0, downsample.DownsampleRange0, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{1, 2}),
-				createBlockMeta(3, 1, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel0, []uint64{4, 5}),
-				createBlockMeta(6, 1, downsample.DownsampleRange1, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{7, 8}),
-			},
-			expected: map[string]float64{
-				keys[0]: 1.0,
-				keys[1]: 0.0,
-				keys[2]: 0.0,
-			},
-		},
-		{
-			testName: "second_test",
+			// This test case has blocks from multiple groups and resolution levels. Only the second block should be downsampled since the others either have time differences not in the range for their resolution, or a resolution which should not be downsampled.
+			testName: "multi_group_test",
 			input: []*metadata.Meta{
 				createBlockMeta(6, 1, downsample.DownsampleRange0, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{7, 8}),
-				createBlockMeta(7, 1, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{7, 8}),
-				createBlockMeta(8, 1, downsample.DownsampleRange1, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{7, 8}),
+				createBlockMeta(7, 0, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{8, 9}),
+				createBlockMeta(8, 0, downsample.DownsampleRange1, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{9, 10}),
 			},
 			expected: map[string]float64{
 				keys[0]: 0.0,
-				keys[1]: 0.0,
+				keys[1]: 1.0,
 				keys[2]: 0.0,
 			},
 		}, {
-			testName: "third_test",
+			// This is a test case for resLevel0, with the correct time difference threshold.
+			// This block should be downsampled.
+			testName: "res_level0_test",
 			input: []*metadata.Meta{
 				createBlockMeta(9, 0, downsample.DownsampleRange0, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{10, 11}),
 			},
@@ -407,22 +386,45 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 				keys[0]: 1.0,
 			},
 		}, {
-			testName: "fourth_test",
+			// This is a test case for resLevel1, with the correct time difference threshold.
+			// This block should be downsampled.
+			testName: "res_level1_test",
 			input: []*metadata.Meta{
-				createBlockMeta(10, 0, downsample.DownsampleRange1, map[string]string{"a": "1"}, downsample.ResLevel1, []uint64{11, 12}),
+				createBlockMeta(9, 0, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{10, 11}),
+			},
+			expected: map[string]float64{
+				keys[1]: 1.0,
+			},
+		},
+		{
+			// This is a test case for resLevel2.
+			// Blocks with this resolution should not be downsampled.
+			testName: "res_level2_test",
+			input: []*metadata.Meta{
+				createBlockMeta(10, 0, downsample.DownsampleRange1, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{11, 12}),
+			},
+			expected: map[string]float64{
+				keys[2]: 0.0,
+			},
+		}, {
+			// This is a test case for resLevel0, with incorrect time difference, below the threshold.
+			// This block should be downsampled.
+			testName: "res_level0_test_incorrect",
+			input: []*metadata.Meta{
+				createBlockMeta(9, 1, downsample.DownsampleRange0, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{10, 11}),
 			},
 			expected: map[string]float64{
 				keys[0]: 0.0,
 			},
 		},
 		{
-			testName: "fifth_test",
+			// This is a test case for resLevel1, with incorrect time difference, below the threshold.
+			// This block should be downsampled.
+			testName: "res_level1_test",
 			input: []*metadata.Meta{
-				createBlockMeta(10, 0, downsample.DownsampleRange1, map[string]string{"a": "1"}, downsample.ResLevel1, []uint64{1, 2}),
-				createBlockMeta(3, 0, downsample.DownsampleRange0, map[string]string{"b": "2"}, downsample.ResLevel0, []uint64{4, 5}),
+				createBlockMeta(9, 1, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{10, 11}),
 			},
 			expected: map[string]float64{
-				keys[0]: 0.0,
 				keys[1]: 0.0,
 			},
 		},
