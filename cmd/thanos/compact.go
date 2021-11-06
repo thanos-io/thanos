@@ -40,7 +40,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
-	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
@@ -462,11 +461,10 @@ func runCompact(
 
 	if conf.compactionProgressMetrics {
 		g.Add(func() error {
-			unRegisterer := &receive.UnRegisterer{Registerer: reg}
-			ps := compact.NewCompactionProgressCalculator(unRegisterer, tsdbPlanner)
+			ps := compact.NewCompactionProgressCalculator(reg, tsdbPlanner)
 			var ds *compact.DownsampleProgressCalculator
 			if !conf.disableDownsampling {
-				ds = compact.NewDownsampleProgressCalculator(unRegisterer)
+				ds = compact.NewDownsampleProgressCalculator(reg)
 			}
 
 			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
@@ -478,12 +476,7 @@ func runCompact(
 				metas := sy.Metas()
 				groups, err := grouper.Groups(metas)
 				if err != nil {
-					return errors.Wrapf(err, "could not group original metadata")
-				}
-
-				for _, group := range groups {
-					ps.CompactProgressMetrics.NumberOfCompactionRuns.WithLabelValues(group.Key())
-					ps.CompactProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(group.Key())
+					return errors.Wrapf(err, "could not group metadata")
 				}
 
 				if err = ps.ProgressCalculate(ctx, groups); err != nil {
@@ -493,10 +486,7 @@ func runCompact(
 				if !conf.disableDownsampling {
 					groups, err = grouper.Groups(metas)
 					if err != nil {
-						return errors.Wrapf(err, "could not group original metadata into downsample groups")
-					}
-					for _, group := range groups {
-						ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.WithLabelValues(group.Key())
+						return errors.Wrapf(err, "could not group metadata into downsample groups")
 					}
 					if err := ds.ProgressCalculate(ctx, groups); err != nil {
 						return errors.Wrapf(err, "could not calculate downsampling progress")
@@ -646,7 +636,7 @@ type compactConfig struct {
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
-	cmd.Flag("progress-metrics", "Enables the progress metrics, indicating the progress of compaction and downsampling").Default("false").BoolVar(&cc.compactionProgressMetrics)
+	cmd.Flag("progress-metrics", "Enables the progress metrics, indicating the progress of compaction and downsampling").Default("true").BoolVar(&cc.compactionProgressMetrics)
 
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)

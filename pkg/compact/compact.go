@@ -507,7 +507,7 @@ func NewCompactionProgressCalculator(reg prometheus.Registerer, planner *tsdbBas
 		CompactProgressMetrics: &CompactProgressMetrics{
 			NumberOfCompactionRuns: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_compact_todo_compactions",
-				Help: "number of iterations to be done",
+				Help: "number of compactions to be done",
 			}, []string{"group"}),
 			NumberOfCompactionBlocks: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_compact_todo_compaction_blocks",
@@ -560,6 +560,9 @@ func (ps *CompactionProgressCalculator) ProgressCalculate(ctx context.Context, g
 
 		groups = tmpGroups
 	}
+
+	ps.CompactProgressMetrics.NumberOfCompactionRuns.Reset()
+	ps.CompactProgressMetrics.NumberOfCompactionBlocks.Reset()
 
 	for key, iters := range groupCompactions {
 		ps.CompactProgressMetrics.NumberOfCompactionRuns.WithLabelValues(key).Add(float64(iters))
@@ -656,6 +659,7 @@ func (ds *DownsampleProgressCalculator) ProgressCalculate(ctx context.Context, g
 		}
 	}
 
+	ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.Reset()
 	for key, blocks := range groupBlocks {
 		ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.WithLabelValues(key).Add(float64(blocks))
 	}
