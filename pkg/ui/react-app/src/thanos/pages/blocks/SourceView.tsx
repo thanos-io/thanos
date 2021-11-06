@@ -12,12 +12,12 @@ export const BlocksRow: FC<{
   blockSearch: string;
   compactionLevel: number;
 }> = ({ blocks, gridMinTime, gridMaxTime, selectBlock, blockSearch, compactionLevel }) => {
-  let blockSearchValue = getBlockByUlid(blocks, blockSearch);
-  blockSearchValue = getBlocksByCompactionLevel(blockSearchValue, compactionLevel);
+  let filteredBlocks = getBlockByUlid(blocks, blockSearch);
+  filteredBlocks = getBlocksByCompactionLevel(filteredBlocks, compactionLevel);
 
   return (
     <div className={styles.row}>
-      {blockSearchValue.map<JSX.Element>((b) => (
+      {filteredBlocks.map<JSX.Element>((b) => (
         <BlockSpan selectBlock={selectBlock} block={b} gridMaxTime={gridMaxTime} gridMinTime={gridMinTime} key={b.ulid} />
       ))}
     </div>
