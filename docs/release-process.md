@@ -125,6 +125,15 @@ The whole release from release candidate `rc.0` to actual release should have ex
 
 12. After releasing a major version, please cut a release for `kube-thanos` as well. https://github.com/thanos-io/kube-thanos/releases Make sure all the flag changes are reflected in the manifests. Otherwise, the process is the same, except we don't have `rc` for the `kube-thanos`. We do this to make sure we have compatible manifests for each major versions.
 
+13. Merge `release-<major>.<minor>` branch back to main. This is important for Go modules tooling to make release tags reachable from main branch.
+
+    - Create `merge-release-<major>.<minor>-to-main` branch **from `release-<major>.<minor>` branch** locally
+    - Merge upstream `main` branch into your `merge-release-<major>.<minor>-to-main` and resolve conflicts
+    - Send PR for merging your `merge-release-<major>.<minor>-to-main` branch into `main`
+    - Once approved, merge the PR by using "Merge" commit.
+      - This can either be done by temporarily enabling "Allow merge commits" option in "Settings > Options".
+      - Alternatively, this can be done locally by merging `merge-release-<major>.<minor>-to-main` branch into `main`, and pushing resulting `main` to upstream repository. This doesn't break `main` branch protection, since PR has been approved already, and it also doesn't require removing the protection.
+
 ## Pre-releases (release candidates)
 
 The following changes to the above procedures apply:
