@@ -363,16 +363,17 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 		expected groupedResult
 	}{
 		{
-			// This test case has blocks from multiple groups and resolution levels. Only the second block should be downsampled since the others either have time differences not in the range for their resolution, or a resolution which should not be downsampled.
+			// This test case has blocks from multiple groups and resolution levels. Only the blocks in the second group should be downsampled since the others either have time differences not in the range for their resolution, or a resolution which should not be downsampled.
 			testName: "multi_group_test",
 			input: []*metadata.Meta{
 				createBlockMeta(6, 1, downsample.DownsampleRange0, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{7, 8}),
 				createBlockMeta(7, 0, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{8, 9}),
+				createBlockMeta(9, 0, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{8, 11}),
 				createBlockMeta(8, 0, downsample.DownsampleRange1, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{9, 10}),
 			},
 			expected: map[string]float64{
 				keys[0]: 0.0,
-				keys[1]: 1.0,
+				keys[1]: 2.0,
 				keys[2]: 0.0,
 			},
 		}, {
