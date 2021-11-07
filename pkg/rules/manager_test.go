@@ -293,6 +293,7 @@ func TestConfigRuleAdapterUnmarshalMarshalYAML(t *testing.T) {
   - alert: some
     expr: up
   partial_response_strategy: ABORT
+  limit: 10
 - name: something2
   rules:
   - alert: some
@@ -302,7 +303,8 @@ func TestConfigRuleAdapterUnmarshalMarshalYAML(t *testing.T) {
 	b, err := yaml.Marshal(c)
 	testutil.Ok(t, err)
 	testutil.Equals(t, `groups:
-    - name: something1
+    - limit: 10
+      name: something1
       rules:
         - alert: some
           expr: up
@@ -396,4 +398,57 @@ groups:
 	err = thanosRuleMgr.Update(1*time.Second, []string{})
 	testutil.Ok(t, err)
 	testutil.Equals(t, 0, len(thanosRuleMgr.RuleGroups()))
+}
+
+func TestManagerRunRulesWithRuleGroupLimit(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test_rule_rule_groups")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	filename := filepath.Join(dir, "with_limit.yaml")
+	testutil.Ok(t, ioutil.WriteFile(filename, []byte(`
+groups:
+- name: "something1"
+  limit: 1
+  rules:
+  - alert: "some"
+    expr: "up>0"
+    for: 0s
+`), os.ModePerm))
+
+	thanosRuleMgr := NewManager(
+		context.Background(),
+		nil,
+		dir,
+		rules.ManagerOptions{
+			Logger:    log.NewLogfmtLogger(os.Stderr),
+			Queryable: nopQueryable{},
+		},
+		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
+			return func(ctx context.Context, q string, ts time.Time) (promql.Vector, error) {
+				return []promql.Sample{
+					{
+						Point:  promql.Point{T: 0, V: 1},
+						Metric: labels.FromStrings("foo", "bar"),
+					},
+					{
+						Point:  promql.Point{T: 0, V: 1},
+						Metric: labels.FromStrings("foo1", "bar1"),
+					},
+				}, nil
+			}
+		},
+		nil,
+		"http://localhost",
+	)
+	thanosRuleMgr.Run()
+	defer func() {
+		thanosRuleMgr.Stop()
+	}()
+	testutil.Ok(t, thanosRuleMgr.Update(time.Millisecond, []string{filename}))
+	testutil.Equals(t, 1, len(thanosRuleMgr.protoRuleGroups()))
+	testutil.Equals(t, 1, len(thanosRuleMgr.protoRuleGroups()[0].Rules))
+	testutil.Equals(t, string(rules.HealthUnknown), thanosRuleMgr.protoRuleGroups()[0].Rules[0].GetAlert().Health)
+	time.Sleep(time.Millisecond * 2)
+	testutil.Equals(t, string(rules.HealthBad), thanosRuleMgr.protoRuleGroups()[0].Rules[0].GetAlert().Health)
+	testutil.Equals(t, "exceeded limit of 1 with 2 alerts", thanosRuleMgr.protoRuleGroups()[0].Rules[0].GetAlert().LastError)
 }
