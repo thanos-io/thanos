@@ -95,7 +95,7 @@ func runSidecar(
 		return errors.Wrap(err, "Improper http client config")
 	}
 
-	reloader.HTTPClient = *httpClient
+	reloader.SetHttpClient(*httpClient)
 
 	var m = &promMetadata{
 		promURL: conf.prometheus.url,
