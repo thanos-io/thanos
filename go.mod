@@ -29,7 +29,6 @@ require (
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/go-kit/kit v0.11.0
-	github.com/go-kit/log v0.1.0
 	github.com/go-openapi/strfmt v0.20.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0

@@ -14,19 +14,21 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
+	"github.com/thanos-io/thanos/pkg/tracing/google_cloud"
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/pkg/tracing/lightstep"
-	"github.com/thanos-io/thanos/pkg/tracing/stackdriver"
+	"github.com/thanos-io/thanos/pkg/tracing/migration"
 	"gopkg.in/yaml.v2"
 )
 
 type TracingProvider string
 
 const (
-	STACKDRIVER TracingProvider = "STACKDRIVER"
-	JAEGER      TracingProvider = "JAEGER"
-	ELASTIC_APM TracingProvider = "ELASTIC_APM"
-	LIGHTSTEP   TracingProvider = "LIGHTSTEP"
+	STACKDRIVER  TracingProvider = "STACKDRIVER"
+	GOOGLE_CLOUD TracingProvider = "GOOGLE_CLOUD"
+	JAEGER       TracingProvider = "JAEGER"
+	ELASTIC_APM  TracingProvider = "ELASTIC_APM"
+	LIGHTSTEP    TracingProvider = "LIGHTSTEP"
 )
 
 type TracingConfig struct {
@@ -52,8 +54,13 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 	}
 
 	switch strings.ToUpper(string(tracingConf.Type)) {
-	case string(STACKDRIVER):
-		return stackdriver.NewTracer(ctx, logger, config)
+	case string(STACKDRIVER), string(GOOGLE_CLOUD):
+		tracerProvider, err := google_cloud.NewTracerProvider(ctx, logger, config)
+		if err != nil {
+			return nil, nil, err
+		}
+		tracer, closerFunc := migration.Bridge(tracerProvider, logger)
+		return tracer, closerFunc, nil
 	case string(JAEGER):
 		return jaeger.NewTracer(ctx, logger, metrics, config)
 	case string(ELASTIC_APM):
