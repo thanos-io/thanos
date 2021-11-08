@@ -66,10 +66,9 @@ func DefaultImage() string {
 
 func defaultPromHttpConfig() string {
 	// username: test, secret: test(bcrypt hash)
-	return `
-basic_auth:
-	username: test
-	password: test
+	return `basic_auth:
+  username: test
+  password: test
 `
 }
 
@@ -90,6 +89,8 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 		}
 	}
 
+	probe := e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200)
+
 	args := e2e.BuildArgs(map[string]string{
 		"--config.file":                     filepath.Join(container, "prometheus.yml"),
 		"--storage.tsdb.path":               container,
@@ -103,6 +104,8 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 	}
 	if len(webConfig) > 0 {
 		args = append(args, fmt.Sprintf("--web.config.file=%s", filepath.Join(container, "web-config.yml")))
+		// If auth is enabled then prober would get 401 error.
+		probe = e2e.NewHTTPReadinessProbe("http", "/-/ready", 401, 401)
 	}
 	prom := e2e.NewInstrumentedRunnable(
 		e,
@@ -112,7 +115,7 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 		e2e.StartOptions{
 			Image:            promImage,
 			Command:          e2e.NewCommandWithoutEntrypoint("prometheus", args...),
-			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+			Readiness:        probe,
 			User:             strconv.Itoa(os.Getuid()),
 			WaitReadyBackoff: &defaultBackoffConfig,
 		},
