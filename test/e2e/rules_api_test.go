@@ -73,9 +73,9 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	}
 
 	// Recreate rulers with the corresponding query config.
-	r1, err := e2ethanos.NewRuler(e, "rule1", thanosRulesSubDir, nil, queryCfg)
+	r1, err := e2ethanos.NewTSDBRuler(e, "rule1", thanosRulesSubDir, nil, queryCfg)
 	testutil.Ok(t, err)
-	r2, err := e2ethanos.NewRuler(e, "rule2", thanosRulesSubDir, nil, queryCfg)
+	r2, err := e2ethanos.NewTSDBRuler(e, "rule2", thanosRulesSubDir, nil, queryCfg)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(r1, r2))
 
