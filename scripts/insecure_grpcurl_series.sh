@@ -38,7 +38,7 @@ if [ -z "${REQUESTED_MAX_TIME}" ]; then
   exit 1
 fi
 
-go install github.com/fullstorydev/grpcurl/cmd/grpcurl
+go install github.com/fullstorydev/grpcurl/cmd/grpcurl@v1.8.2
 
 SERIES_REQUEST='{
   "min_time": '${REQUESTED_MIN_TIME}',

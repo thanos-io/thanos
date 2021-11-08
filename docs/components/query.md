@@ -252,6 +252,9 @@ Query node exposing PromQL enabled Query API with data retrieved from multiple
 store nodes.
 
 Flags:
+      --enable-feature= ...      Comma separated experimental feature names to
+                                 enable.The current list of features is
+                                 promql-negative-offset and promql-at-modifier.
       --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable

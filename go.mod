@@ -17,9 +17,10 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.2
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
 	github.com/chromedp/chromedp v0.5.3
-	github.com/cortexproject/cortex v1.10.1-0.20210820081236-70dddb6b70b8
+	github.com/cortexproject/cortex v1.10.1-0.20211006150606-fb15b432e267
 	github.com/davecgh/go-spew v1.1.1
-	github.com/efficientgo/e2e v0.11.1-0.20210829161758-f4cc6dbdc6ea
+	github.com/efficientgo/e2e v0.11.2-0.20211027134903-67d538984a47
+	github.com/efficientgo/tools/core v0.0.0-20210129205121-421d0828c9a6
 	github.com/efficientgo/tools/extkingpin v0.0.0-20210609125236-d73259166f20
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.1.0
@@ -33,7 +34,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/golang/snappy v0.0.4
 	github.com/googleapis/gax-go v2.0.2+incompatible
-	github.com/grafana/dskit v0.0.0-20210819132858-471020752967
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2 v2.0.0-20201002093600-73cf2ae9d891
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0-rc.2.0.20201207153454-9f6bf00c00a7
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
@@ -54,7 +54,7 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.0
-	github.com/prometheus/alertmanager v0.23.0
+	github.com/prometheus/alertmanager v0.23.1-0.20210914172521-e35efbddb66a
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.30.0
@@ -63,7 +63,7 @@ require (
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.31
 	github.com/uber/jaeger-client-go v2.29.1+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
-	github.com/weaveworks/common v0.0.0-20210722103813-e649eff5ab4a
+	github.com/weaveworks/common v0.0.0-20210901124008-1fa3f9fa874c
 	go.elastic.co/apm v1.11.0
 	go.elastic.co/apm/module/apmot v1.11.0
 	go.uber.org/atomic v1.9.0

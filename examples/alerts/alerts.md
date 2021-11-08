@@ -296,16 +296,6 @@ rules:
 ```yaml mdox-exec="cat examples/tmp/thanos-sidecar.yaml"
 name: thanos-sidecar
 rules:
-- alert: ThanosSidecarPrometheusDown
-  annotations:
-    description: Thanos Sidecar {{$labels.instance}} cannot connect to Prometheus.
-    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarprometheusdown
-    summary: Thanos Sidecar cannot connect to Prometheus
-  expr: |
-    thanos_sidecar_prometheus_up{job=~".*thanos-sidecar.*"} == 0
-  for: 5m
-  labels:
-    severity: critical
 - alert: ThanosSidecarBucketOperationsFailed
   annotations:
     description: Thanos Sidecar {{$labels.instance}} bucket operations are failing
@@ -316,14 +306,16 @@ rules:
   for: 5m
   labels:
     severity: critical
-- alert: ThanosSidecarUnhealthy
+- alert: ThanosSidecarNoConnectionToStartedPrometheus
   annotations:
-    description: Thanos Sidecar {{$labels.instance}} is unhealthy for more than {{$value}}
-      seconds.
-    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy
-    summary: Thanos Sidecar is unhealthy.
+    description: Thanos Sidecar {{$labels.instance}} is unhealthy.
+    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus
+    summary: Thanos Sidecar cannot access Prometheus, even though Prometheus seems
+      healthy and has reloaded WAL.
   expr: |
-    time() - max by (job, instance) (thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}) >= 240
+    thanos_sidecar_prometheus_up{job=~".*thanos-sidecar.*"} == 0
+    AND on (namespace, pod)
+    prometheus_tsdb_data_replay_duration_seconds != 0
   for: 5m
   labels:
     severity: critical

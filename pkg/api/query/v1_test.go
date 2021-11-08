@@ -1201,6 +1201,93 @@ func TestMetadataEndpoints(t *testing.T) {
 	}
 }
 
+func TestStoresEndpoint(t *testing.T) {
+	apiWithNotEndpoints := &QueryAPI{
+		endpointStatus: func() []query.EndpointStatus {
+			return []query.EndpointStatus{}
+		},
+	}
+	apiWithValidEndpoints := &QueryAPI{
+		endpointStatus: func() []query.EndpointStatus {
+			return []query.EndpointStatus{
+				{
+					Name:          "endpoint-1",
+					ComponentType: component.Store,
+				},
+				{
+					Name:          "endpoint-2",
+					ComponentType: component.Store,
+				},
+				{
+					Name:          "endpoint-3",
+					ComponentType: component.Sidecar,
+				},
+			}
+		},
+	}
+	apiWithInvalidEndpoint := &QueryAPI{
+		endpointStatus: func() []query.EndpointStatus {
+			return []query.EndpointStatus{
+				{
+					Name:          "endpoint-1",
+					ComponentType: component.Store,
+				},
+				{
+					Name: "endpoint-2",
+				},
+			}
+		},
+	}
+
+	testCases := []endpointTestCase{
+		{
+			endpoint: apiWithNotEndpoints.stores,
+			method:   http.MethodGet,
+			response: map[string][]query.EndpointStatus{},
+		},
+		{
+			endpoint: apiWithValidEndpoints.stores,
+			method:   http.MethodGet,
+			response: map[string][]query.EndpointStatus{
+				"store": {
+					{
+						Name:          "endpoint-1",
+						ComponentType: component.Store,
+					},
+					{
+						Name:          "endpoint-2",
+						ComponentType: component.Store,
+					},
+				},
+				"sidecar": {
+					{
+						Name:          "endpoint-3",
+						ComponentType: component.Sidecar,
+					},
+				},
+			},
+		},
+		{
+			endpoint: apiWithInvalidEndpoint.stores,
+			method:   http.MethodGet,
+			response: map[string][]query.EndpointStatus{
+				"store": {
+					{
+						Name:          "endpoint-1",
+						ComponentType: component.Store,
+					},
+				},
+			},
+		},
+	}
+
+	for i, test := range testCases {
+		if ok := testEndpoint(t, test, strings.TrimSpace(fmt.Sprintf("#%d %s", i, test.query.Encode())), reflect.DeepEqual); !ok {
+			return
+		}
+	}
+}
+
 func TestParseTime(t *testing.T) {
 	ts, err := time.Parse(time.RFC3339Nano, "2015-06-03T13:21:58.555Z")
 	if err != nil {

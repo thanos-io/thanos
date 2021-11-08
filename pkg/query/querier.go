@@ -276,6 +276,8 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		Aggregates:              aggrs,
 		PartialResponseDisabled: !q.partialResponse,
 		SkipChunks:              q.skipChunks,
+		Step:                    hints.Step,
+		Range:                   hints.Range,
 	}, resp); err != nil {
 		return nil, errors.Wrap(err, "proxy Series()")
 	}

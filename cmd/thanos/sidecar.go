@@ -27,7 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
-	thanoshttp "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/logging"
 	meta "github.com/thanos-io/thanos/pkg/metadata"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
@@ -85,12 +85,12 @@ func runSidecar(
 	if err != nil {
 		return errors.Wrap(err, "getting http client config")
 	}
-	httpClientConfig, err := thanoshttp.NewClientConfigFromYAML(httpConfContentYaml)
+	httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
 	if err != nil {
 		return errors.Wrap(err, "parsing http config YAML")
 	}
 
-	httpClient, err := thanoshttp.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
+	httpClient, err := httpconfig.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
 	if err != nil {
 		return errors.Wrap(err, "Improper http client config")
 	}
@@ -151,10 +151,6 @@ func runSidecar(
 			Name: "thanos_sidecar_prometheus_up",
 			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
 		})
-		lastHeartbeat := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_sidecar_last_heartbeat_success_time_seconds",
-			Help: "Timestamp of the last successful heartbeat in seconds.",
-		})
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -204,7 +200,6 @@ func runSidecar(
 				)
 				promUp.Set(1)
 				statusProber.Ready()
-				lastHeartbeat.SetToCurrentTime()
 				return nil
 			})
 			if err != nil {
@@ -226,7 +221,6 @@ func runSidecar(
 					promUp.Set(0)
 				} else {
 					promUp.Set(1)
-					lastHeartbeat.SetToCurrentTime()
 				}
 
 				return nil
@@ -244,7 +238,7 @@ func runSidecar(
 		})
 	}
 	{
-		c := promclient.NewWithTracingClient(logger, httpClient, thanoshttp.ThanosUserAgent)
+		c := promclient.NewWithTracingClient(logger, httpClient, httpconfig.ThanosUserAgent)
 
 		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {

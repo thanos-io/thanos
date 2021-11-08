@@ -194,3 +194,9 @@
 .blockInput {
   margin-bottom: 12px;
 }
+
+.blockFilter {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}

@@ -11,36 +11,61 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Added
-- [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: add `exemplar.partial-response` flag to control partial response.
 
-## v0.23.0 - In Progress
+- [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: add `exemplar.partial-response` flag to control partial response.
+- [#4679](https://github.com/thanos-io/thanos/pull/4679) Added `enable-feature` flag to enable negative offsets and @ modifier, similar to Prometheus.
+- [#4696](https://github.com/thanos-io/thanos/pull/4696) Query: add cache name to tracing spans.
+- [#4710](https://github.com/thanos-io/thanos/pull/4710) Store: add metric to capture timestamp of the last loaded block.
+- [#4736](https://github.com/thanos-io/thanos/pull/4736) S3: Add capability to use custom AWS STS Endpoint.
+- [#4764](https://github.com/thanos-io/thanos/pull/4764) Compactor: add `block-viewer.global.sync-block-timeout` flag to set the timeout of synchronization block metas.
+- [#4801](https://github.com/thanos-io/thanos/pull/4801) Compactor: added Prometheus metrics for tracking the progress of compaction and downsampling.
+- [#4444](https://github.com/thanos-io/thanos/pull/4444) UI: add mark deletion and no compaction to the Block UI.
+- [#4576](https://github.com/thanos-io/thanos/pull/4576) UI: add filter compaction level to the Block UI.
+
+### Fixed
+
+- [#4508](https://github.com/thanos-io/thanos/pull/4508) Adjust and rename `ThanosSidecarUnhealthy` to `ThanosSidecarNoConnectionToStartedPrometheus`; Remove `ThanosSidecarPrometheusDown` alert; Remove unused `thanos_sidecar_last_heartbeat_success_time_seconds` metrics.
+- [#4663](https://github.com/thanos-io/thanos/pull/4663) Fetcher: Fix discovered data races.
+- [#4754](https://github.com/thanos-io/thanos/pull/4754) Query: Fix possible panic on stores endpoint.
+- [#4753](https://github.com/thanos-io/thanos/pull/4753) Store: validate block sync concurrency parameter
+- [#4779](https://github.com/thanos-io/thanos/pull/4779) Examples: Fix the interactive test for MacOS users.
+- [#4792](https://github.com/thanos-io/thanos/pull/4792) Store: Fix data race in BucketedBytes pool.
+- [#4769](https://github.com/thanos-io/thanos/pull/4769) Query-frontend+api: add "X-Request-ID" field and other fields to start call log.
+
+## [v0.23.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.10.1
+
+- [#4714](https://github.com/thanos-io/thanos/pull/4714) EndpointSet: Do not use unimplemented yet new InfoAPI to obtain metadata (avoids unnecessary HTTP roundtrip, instrumentation/alerts spam and logs).
+
+## [v0.23.0](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.09.23
 
 ### Added
 
-- [#4453](https://github.com/thanos-io/thanos/pull/4453) Tools: Add flag `--selector.relabel-config-file` / `--selector.relabel-config` / `--max-time` / `--min-time` to filter served blocks.
-- [#4482](https://github.com/thanos-io/thanos/pull/4482) COS: Add http_config for cos object store client.
-- [#4487](https://github.com/thanos-io/thanos/pull/4487) Query: Add memcached auto discovery support.
-- [#4444](https://github.com/thanos-io/thanos/pull/4444) UI: Add search block UI.
-- [#4509](https://github.com/thanos-io/thanos/pull/4509) Logging: Adds duration_ms in int64 to the logs.
-- [#4462](https://github.com/thanos-io/thanos/pull/4462) UI: Add find overlap block UI.
-- [#4469](https://github.com/thanos-io/thanos/pull/4469) Compact: Add flag `compact.skip-block-with-out-of-order-chunks` to skip blocks with out-of-order chunks during compaction instead of halting
-- [#4506](https://github.com/thanos-io/thanos/pull/4506) `Baidu BOS` object storage, see [documents](docs/storage.md#baidu-bos) for further information.
-- [#4552](https://github.com/thanos-io/thanos/pull/4552) Compact: Adds `thanos_compact_downsample_duration_seconds` histogram.
-- [#4594](https://github.com/thanos-io/thanos/pull/4594) reloader: Expose metrics in config reloader to give info on the last operation.
-- [#4623](https://github.com/thanos-io/thanos/pull/4623) query-frontend: made HTTP downstream tripper (client) configurable via parameters `--query-range.downstream-tripper-config` and `--query-range.downstream-tripper-config-file`. If your downstream URL is localhost or 127.0.0.1 then it is strongly recommended to bump `max_idle_conns_per_host` to at least 100 so that `query-frontend` could properly use HTTP keep-alive connections and thus reduce the latency of `query-frontend` by about 20%.
-- [#4636](https://github.com/thanos-io/thanos/pull/4636) Azure: Support authentication using user-assigned managed identity
+- [#4453](https://github.com/thanos-io/thanos/pull/4453) Tools `thanos bucket web`: Add flag `--selector.relabel-config-file` / `--selector.relabel-config` / `--max-time` / `--min-time` to filter served blocks.
+- [#4482](https://github.com/thanos-io/thanos/pull/4482) Store: Add `http_config` option for COS object store client.
+- [#4487](https://github.com/thanos-io/thanos/pull/4487) Query/Store: Add memcached auto discovery support for all caching clients.
+- [#4444](https://github.com/thanos-io/thanos/pull/4444) UI: Add search to the Block UI.
+- [#4509](https://github.com/thanos-io/thanos/pull/4509) Logging: Add `duration_ms` in int64 to the logs for easier log filtering.
+- [#4462](https://github.com/thanos-io/thanos/pull/4462) UI: Highlighting blocks overlap in the Block UI.
+- [#4469](https://github.com/thanos-io/thanos/pull/4469) Compact: Add flag `compact.skip-block-with-out-of-order-chunks` to skip blocks with out-of-order chunks during compaction instead of halting.
+- [#4506](https://github.com/thanos-io/thanos/pull/4506) Store: Add `Baidu BOS` object storage, see [documents](docs/storage.md#baidu-bos) for further information.
+- [#4552](https://github.com/thanos-io/thanos/pull/4552) Compact: Add `thanos_compact_downsample_duration_seconds` histogram metric.
+- [#4594](https://github.com/thanos-io/thanos/pull/4594) Reloader: Expose metrics in config reloader to give info on the last operation.
+- [#4619](https://github.com/thanos-io/thanos/pull/4619) Tracing: Added consistent tags to Series call from Querier about number important series statistics: `processed.series`, `processed.samples`, `processed.samples` and `processed.bytes`. This will give admin idea of how much data each component processes per query.
+- [#4623](https://github.com/thanos-io/thanos/pull/4623) Query-frontend: Make HTTP downstream tripper (client) configurable via parameters `--query-range.downstream-tripper-config` and `--query-range.downstream-tripper-config-file`. If your downstream URL is localhost or 127.0.0.1 then it is strongly recommended to bump `max_idle_conns_per_host` to at least 100 so that `query-frontend` could properly use HTTP keep-alive connections and thus reduce the latency of `query-frontend` by about 20%.
 
 ### Fixed
 
 - [#4468](https://github.com/thanos-io/thanos/pull/4468) Rule: Fix temporary rule filename composition issue.
-- [#4476](https://github.com/thanos-io/thanos/pull/4476) UI: fix incorrect html escape sequence used for '>' symbol.
-- [#4532](https://github.com/thanos-io/thanos/pull/4532) Mixin: Fixed "all jobs" selector in thanos mixin dashboards.
-- [#4607](https://github.com/thanos-io/thanos/pull/4607) Azure: Fix Azure MSI Rate Limit
+- [#4476](https://github.com/thanos-io/thanos/pull/4476) UI: Fix incorrect html escape sequence used for '>' symbol.
+- [#4532](https://github.com/thanos-io/thanos/pull/4532) Mixin: Fix "all jobs" selector in thanos mixin dashboards.
+- [#4607](https://github.com/thanos-io/thanos/pull/4607) Azure: Fix Azure MSI Rate Limit.
 
 ### Changed
 
-- [#4519](https://github.com/thanos-io/thanos/pull/4519) Query: switch to miekgdns DNS resolver as the default one.
+- [#4519](https://github.com/thanos-io/thanos/pull/4519) Query: Switch to miekgdns DNS resolver as the default one.
 - [#4586](https://github.com/thanos-io/thanos/pull/4586) Update Prometheus/Cortex dependencies and implement LabelNames() pushdown as a result; provides massive speed-up for the labels API in Thanos Query.
+- [#4421](https://github.com/thanos-io/thanos/pull/4421) *breaking :warning:*: `--store` (in the future, to be renamed to `--endpoints`) now supports passing any APIs from Thanos gRPC APIs: StoreAPI, MetadataAPI, RulesAPI, TargetsAPI and ExemplarsAPI (in oppose in the past you have to put it in hidden `--targets`, `--rules` etc flags). `--store` will now automatically detect what APIs server exposes.
+- [#4669](https://github.com/thanos-io/thanos/pull/4669) Moved Prometheus dependency to v2.30.
 
 ## [v0.22.0](https://github.com/thanos-io/thanos/tree/release-0.22) - 2021.07.22
 

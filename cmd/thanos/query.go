@@ -52,6 +52,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
+const (
+	promqlNegativeOffset = "promql-negative-offset"
+	promqlAtModifier     = "promql-at-modifier"
+)
+
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
@@ -146,6 +151,8 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
+	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+promqlNegativeOffset+" and "+promqlAtModifier+".").Default("").Strings()
+
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
@@ -161,6 +168,16 @@ func registerQuery(app *extkingpin.App) {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
+		}
+
+		var enableNegativeOffset, enableAtModifier bool
+		for _, feature := range *featureList {
+			if feature == promqlNegativeOffset {
+				enableNegativeOffset = true
+			}
+			if feature == promqlAtModifier {
+				enableAtModifier = true
+			}
 		}
 
 		if dup := firstDuplicate(*stores); dup != "" {
@@ -266,6 +283,8 @@ func registerQuery(app *extkingpin.App) {
 			*defaultMetadataTimeRange,
 			*strictStores,
 			*webDisableCORS,
+			enableAtModifier,
+			enableNegativeOffset,
 			component.Query,
 		)
 	})
@@ -329,6 +348,8 @@ func runQuery(
 	defaultMetadataTimeRange time.Duration,
 	strictStores []string,
 	disableCORS bool,
+	enableAtModifier bool,
+	enableNegativeOffset bool,
 	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
@@ -426,6 +447,8 @@ func runQuery(
 			NoStepSubqueryIntervalFn: func(int64) int64 {
 				return defaultEvaluationInterval.Milliseconds()
 			},
+			EnableNegativeOffset: enableNegativeOffset,
+			EnableAtModifier:     enableAtModifier,
 		}
 	)
 
@@ -442,6 +465,7 @@ func runQuery(
 			endpoints.Close()
 		})
 	}
+
 	// Run File Service Discovery and update the store set when the files are modified.
 	if fileSD != nil {
 		var fileSDUpdates chan []*targetgroup.Group
@@ -479,7 +503,6 @@ func runQuery(
 			}
 		}, func(error) {
 			cancelUpdate()
-			close(fileSDUpdates)
 		})
 	}
 	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
@@ -546,7 +569,7 @@ func runQuery(
 
 		api := v1.NewQueryAPI(
 			logger,
-			endpoints,
+			endpoints.GetEndpointStatus,
 			engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta),
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
@@ -694,6 +717,8 @@ func engineFactory(
 			ActiveQueryTracker:       eo.ActiveQueryTracker,
 			LookbackDelta:            lookbackDelta,
 			NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
+			EnableAtModifier:         eo.EnableAtModifier,
+			EnableNegativeOffset:     eo.EnableNegativeOffset,
 		})
 	}
 	return func(maxSourceResolutionMillis int64) *promql.Engine {

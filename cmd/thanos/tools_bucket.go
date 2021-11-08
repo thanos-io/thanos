@@ -551,7 +551,17 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 
 		flagsMap := getFlagsMap(cmd.Flags())
 
-		api := v1.NewBlocksAPI(logger, tbc.webDisableCORS, tbc.label, flagsMap)
+		confContentYaml, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
+		if err != nil {
+			return errors.Wrap(err, "bucket client")
+		}
+
+		api := v1.NewBlocksAPI(logger, tbc.webDisableCORS, tbc.label, flagsMap, bkt)
 
 		// Configure Request Logging for HTTP calls.
 		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
@@ -573,16 +583,6 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 
 		if tbc.interval < (tbc.timeout * 2) {
 			level.Warn(logger).Log("msg", "Refresh interval should be at least 2 times the timeout")
-		}
-
-		confContentYaml, err := objStoreConfig.Content()
-		if err != nil {
-			return err
-		}
-
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
-		if err != nil {
-			return errors.Wrap(err, "bucket client")
 		}
 
 		relabelContentYaml, err := selectorRelabelConf.Content()
@@ -1133,8 +1133,8 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				}
 
 				if tbc.dryRun {
-					level.Info(logger).Log("msg", "dry run finished. Changes should be printed to stderr")
-					return nil
+					level.Info(logger).Log("msg", "dry run finished. Changes should be printed to stderr", "Block ID", id)
+					continue
 				}
 
 				level.Info(logger).Log("msg", "wrote new block after modifications; flushing", "source", id, "new", newID)

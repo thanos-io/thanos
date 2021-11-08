@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cortexproject/cortex/integration/e2e"
-	e2edb "github.com/cortexproject/cortex/integration/e2e/db"
+	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -25,6 +25,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -32,51 +33,15 @@ import (
 func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	t.Parallel()
 
-	s, err := e2e.NewScenario("e2e_test_tools_bucket_web_route_prefix")
+	e, err := e2e.NewDockerEnvironment("e2e_test_tools_bucket_web_route_prefix")
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	externalPrefix := "testThanos"
-	m := e2edb.NewMinio(8080, "thanos")
-	testutil.Ok(t, s.StartAndWaitReady(m))
 
-	svcConfig := client.BucketConfig{
-		Type: client.S3,
-		Config: s3.Config{
-			Bucket:    "thanos",
-			AccessKey: e2edb.MinioAccessKey,
-			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m.NetworkHTTPEndpoint(),
-			Insecure:  true,
-		},
-	}
-
-	b, err := e2ethanos.NewToolsBucketWeb(
-		"1",
-		svcConfig,
-		"",
-		externalPrefix,
-		"",
-		"",
-		"",
-	)
-	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(b))
-
-	checkNetworkRequests(t, "http://"+b.HTTPEndpoint()+"/"+externalPrefix+"/blocks")
-}
-
-func TestToolsBucketWebExternalPrefix(t *testing.T) {
-	t.Parallel()
-
-	s, err := e2e.NewScenario("e2e_test_tools_bucket_web_external_prefix")
-	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
-
-	externalPrefix := "testThanos"
-	const bucket = "toolsBucketWeb_test"
-	m := e2edb.NewMinio(8080, bucket)
-	testutil.Ok(t, s.StartAndWaitReady(m))
+	const bucket = "compact_test"
+	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
 		Type: client.S3,
@@ -84,12 +49,13 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 			Bucket:    bucket,
 			AccessKey: e2edb.MinioAccessKey,
 			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m.NetworkHTTPEndpoint(),
+			Endpoint:  m.Endpoint("http"),
 			Insecure:  true,
 		},
 	}
 
 	b, err := e2ethanos.NewToolsBucketWeb(
+		e,
 		"1",
 		svcConfig,
 		"",
@@ -99,9 +65,48 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 		"",
 	)
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(b))
+	testutil.Ok(t, e2e.StartAndWaitReady(b))
 
-	toolsBucketWebURL := mustURLParse(t, "http://"+b.HTTPEndpoint()+"/"+externalPrefix)
+	checkNetworkRequests(t, "http://"+b.Endpoint("http")+"/"+externalPrefix+"/blocks")
+}
+
+func TestToolsBucketWebExternalPrefix(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e_test_tools_bucket_web_external_prefix")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	externalPrefix := "testThanos"
+	const bucket = "toolsBucketWeb_test"
+	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	svcConfig := client.BucketConfig{
+		Type: client.S3,
+		Config: s3.Config{
+			Bucket:    bucket,
+			AccessKey: e2edb.MinioAccessKey,
+			SecretKey: e2edb.MinioSecretKey,
+			Endpoint:  m.Endpoint("http"),
+			Insecure:  true,
+		},
+	}
+
+	b, err := e2ethanos.NewToolsBucketWeb(
+		e,
+		"1",
+		svcConfig,
+		"",
+		externalPrefix,
+		"",
+		"",
+		"",
+	)
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(b))
+
+	toolsBucketWebURL := mustURLParse(t, "http://"+b.Endpoint("http")+"/"+externalPrefix)
 
 	toolsBucketWebProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(toolsBucketWebURL, externalPrefix))
 	t.Cleanup(toolsBucketWebProxy.Close)
@@ -112,15 +117,15 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	t.Parallel()
 
-	s, err := e2e.NewScenario("e2e_test_tools_bucket_web_and_route_prefix")
+	e, err := e2e.NewDockerEnvironment("e2e_test_tools_bucket_web_and_route_prefix")
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	externalPrefix := "testThanos"
 	routePrefix := "test"
 	const bucket = "toolsBucketWeb_test"
-	m := e2edb.NewMinio(8080, bucket)
-	testutil.Ok(t, s.StartAndWaitReady(m))
+	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
 		Type: client.S3,
@@ -128,12 +133,13 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 			Bucket:    bucket,
 			AccessKey: e2edb.MinioAccessKey,
 			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m.NetworkHTTPEndpoint(),
+			Endpoint:  m.Endpoint("http"),
 			Insecure:  true,
 		},
 	}
 
 	b, err := e2ethanos.NewToolsBucketWeb(
+		e,
 		"1",
 		svcConfig,
 		routePrefix,
@@ -143,9 +149,9 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 		"",
 	)
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(b))
+	testutil.Ok(t, e2e.StartAndWaitReady(b))
 
-	toolsBucketWebURL := mustURLParse(t, "http://"+b.HTTPEndpoint()+"/"+routePrefix)
+	toolsBucketWebURL := mustURLParse(t, "http://"+b.Endpoint("http")+"/"+routePrefix)
 
 	toolsBucketWebProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(toolsBucketWebURL, externalPrefix))
 	t.Cleanup(toolsBucketWebProxy.Close)
@@ -156,25 +162,25 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 	t.Parallel()
 	// Create network.
-	s, err := e2e.NewScenario("e2e_test_tools_bucket_web_time_and_relabel_filter")
+	e, err := e2e.NewDockerEnvironment("e2e_test_tools_bucket_web_time_and_relabel_filter")
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 	// Create Minio.
 	const bucket = "toolsBucketWeb_test"
-	m := e2edb.NewMinio(8080, bucket)
-	testutil.Ok(t, s.StartAndWaitReady(m))
+	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
 	// Create bucket.
 	logger := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(logger, s3.Config{
 		Bucket:    bucket,
 		AccessKey: e2edb.MinioAccessKey,
 		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  m.HTTPEndpoint(),
+		Endpoint:  m.Endpoint("http"),
 		Insecure:  true,
 	}, "tools")
 	testutil.Ok(t, err)
 	// Create share dir for upload.
-	dir := filepath.Join(s.SharedDir(), "tmp")
+	dir := filepath.Join(e.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 	// Upload blocks.
 	now, err := time.Parse(time.RFC3339, "2021-07-24T08:00:00Z")
@@ -200,9 +206,14 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 		},
 	}
 	for _, b := range blocks {
-		id, err := b.Create(context.Background(), dir, 0, b.hashFunc)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		t.Cleanup(cancel)
+
+		id, err := b.Create(ctx, dir, 0, b.hashFunc)
 		testutil.Ok(t, err)
-		testutil.Ok(t, objstore.UploadDir(context.Background(), logger, bkt, path.Join(dir, id.String()), id.String()))
+		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+			return objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String())
+		}))
 	}
 	// Start thanos tool bucket web.
 	svcConfig := client.BucketConfig{
@@ -211,11 +222,12 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 			Bucket:    bucket,
 			AccessKey: e2edb.MinioAccessKey,
 			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m.NetworkHTTPEndpoint(),
+			Endpoint:  m.InternalEndpoint("http"),
 			Insecure:  true,
 		},
 	}
 	b, err := e2ethanos.NewToolsBucketWeb(
+		e,
 		"1",
 		svcConfig,
 		"",
@@ -228,9 +240,9 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
   source_labels: ["tenant_id"]`,
 	)
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(b))
+	testutil.Ok(t, e2e.StartAndWaitReady(b))
 	// Request blocks api.
-	resp, err := http.DefaultClient.Get("http://" + b.HTTPEndpoint() + "/api/v1/blocks")
+	resp, err := http.DefaultClient.Get("http://" + b.Endpoint("http") + "/api/v1/blocks")
 	testutil.Ok(t, err)
 	testutil.Equals(t, http.StatusOK, resp.StatusCode)
 	defer resp.Body.Close()

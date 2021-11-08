@@ -51,6 +51,9 @@ func (tdv *TimeOrDurationValue) String() string {
 	case tdv.Time != nil:
 		return tdv.Time.String()
 	case tdv.Dur != nil:
+		if v := *tdv.Dur; v < 0 {
+			return "-" + (-v).String()
+		}
 		return tdv.Dur.String()
 	}
 

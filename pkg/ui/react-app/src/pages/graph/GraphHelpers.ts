@@ -53,7 +53,7 @@ export const formatValue = (y: number | null): string => {
   throw Error("couldn't format a value, this is a bug");
 };
 
-export const getHoverColor = (color: string, opacity: number, stacked: boolean) => {
+export const getHoverColor = (color: string, opacity: number, stacked: boolean): string => {
   const { r, g, b } = $.color.parse(color);
   if (!stacked) {
     return `rgba(${r}, ${g}, ${b}, ${opacity})`;
@@ -137,7 +137,10 @@ export const getOptions = (stacked: boolean, useLocalTime: boolean): jquery.flot
 };
 
 // This was adapted from Flot's color generation code.
-export const getColors = (data: { resultType: string; result: Array<{ metric: Metric; values: [number, string][] }> }) => {
+export const getColors = (data: {
+  resultType: string;
+  result: Array<{ metric: Metric; values: [number, string][] }>;
+}): Color[] => {
   const colorPool = ['#edc240', '#afd8f8', '#cb4b4b', '#4da74d', '#9440ed'];
   const colorPoolSize = colorPool.length;
   let variation = 0;
@@ -189,7 +192,7 @@ export const normalizeData = ({ queryParams, data }: GraphProps): GraphSeries[] 
   });
 };
 
-export const parseValue = (value: string) => {
+export const parseValue = (value: string): null | number => {
   const val = parseFloat(value);
   // "+Inf", "-Inf", "+Inf" will be parsed into NaN by parseFloat(). They
   // can't be graphed, so show them as gaps (null).

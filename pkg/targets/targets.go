@@ -6,6 +6,7 @@ package targets
 import (
 	"context"
 	"sort"
+	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
@@ -185,10 +186,13 @@ type targetsServer struct {
 
 	warnings []error
 	targets  *targetspb.TargetDiscovery
+	mu       sync.Mutex
 }
 
 func (srv *targetsServer) Send(res *targetspb.TargetsResponse) error {
 	if res.GetWarning() != "" {
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
 		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
 		return nil
 	}
@@ -196,6 +200,8 @@ func (srv *targetsServer) Send(res *targetspb.TargetsResponse) error {
 	if res.GetTargets() == nil {
 		return errors.New("no targets")
 	}
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
 	srv.targets.ActiveTargets = append(srv.targets.ActiveTargets, res.GetTargets().ActiveTargets...)
 	srv.targets.DroppedTargets = append(srv.targets.DroppedTargets, res.GetTargets().DroppedTargets...)
 

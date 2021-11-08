@@ -34,6 +34,7 @@ import (
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -43,12 +44,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
-	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/query"
 	thanosrules "github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -266,29 +265,29 @@ func runRule(
 ) error {
 	metrics := newRuleMetrics(reg)
 
-	var queryCfg []query.Config
+	var queryCfg []httpconfig.Config
 	var err error
 	if len(conf.queryConfigYAML) > 0 {
-		queryCfg, err = query.LoadConfigs(conf.queryConfigYAML)
+		queryCfg, err = httpconfig.LoadConfigs(conf.queryConfigYAML)
 		if err != nil {
 			return err
 		}
 	} else {
-		queryCfg, err = query.BuildQueryConfig(conf.query.addrs)
+		queryCfg, err = httpconfig.BuildConfig(conf.query.addrs)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "query configuration")
 		}
 
 		// Build the query configuration from the legacy query flags.
-		var fileSDConfigs []http_util.FileSDConfig
+		var fileSDConfigs []httpconfig.FileSDConfig
 		if len(conf.query.sdFiles) > 0 {
-			fileSDConfigs = append(fileSDConfigs, http_util.FileSDConfig{
+			fileSDConfigs = append(fileSDConfigs, httpconfig.FileSDConfig{
 				Files:           conf.query.sdFiles,
 				RefreshInterval: model.Duration(conf.query.sdInterval),
 			})
 			queryCfg = append(queryCfg,
-				query.Config{
-					EndpointsConfig: http_util.EndpointsConfig{
+				httpconfig.Config{
+					EndpointsConfig: httpconfig.EndpointsConfig{
 						Scheme:        "http",
 						FileSDConfigs: fileSDConfigs,
 					},
@@ -302,16 +301,16 @@ func runRule(
 		extprom.WrapRegistererWithPrefix("thanos_rule_query_apis_", reg),
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
-	var queryClients []*http_util.Client
+	var queryClients []*httpconfig.Client
 	queryClientMetrics := extpromhttp.NewClientMetrics(extprom.WrapRegistererWith(prometheus.Labels{"client": "query"}, reg))
 	for _, cfg := range queryCfg {
 		cfg.HTTPClientConfig.ClientMetrics = queryClientMetrics
-		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "query")
+		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "query")
 		if err != nil {
 			return err
 		}
 		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
-		queryClient, err := http_util.NewClient(logger, cfg.EndpointsConfig, c, queryProvider.Clone())
+		queryClient, err := httpconfig.NewClient(logger, cfg.EndpointsConfig, c, queryProvider.Clone())
 		if err != nil {
 			return err
 		}
@@ -381,13 +380,13 @@ func runRule(
 	)
 	for _, cfg := range alertingCfg.Alertmanagers {
 		cfg.HTTPClientConfig.ClientMetrics = amClientMetrics
-		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
+		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
 		if err != nil {
 			return err
 		}
 		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
 		// Each Alertmanager client has a different list of targets thus each needs its own DNS provider.
-		amClient, err := http_util.NewClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
+		amClient, err := httpconfig.NewClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
 		if err != nil {
 			return err
 		}
@@ -706,7 +705,7 @@ func removeDuplicateQueryEndpoints(logger log.Logger, duplicatedQueriers prometh
 
 func queryFuncCreator(
 	logger log.Logger,
-	queriers []*http_util.Client,
+	queriers []*httpconfig.Client,
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
 	httpMethod string,
@@ -762,7 +761,7 @@ func queryFuncCreator(
 	}
 }
 
-func addDiscoveryGroups(g *run.Group, c *http_util.Client, interval time.Duration) {
+func addDiscoveryGroups(g *run.Group, c *httpconfig.Client, interval time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 	g.Add(func() error {
 		c.Discover(ctx)

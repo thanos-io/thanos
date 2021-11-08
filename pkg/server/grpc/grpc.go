@@ -72,7 +72,11 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	}
 
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{
+		// NOTE: It is recommended for gRPC messages to not go over 1MB, yet it is typical for remote write requests and store API responses to go over 4MB.
+		// Remove limits and allow users to use histogram message sizes to detect those situations.
+		// TODO(bwplotka): https://github.com/grpc-ecosystem/go-grpc-middleware/issues/462
 		grpc.MaxSendMsgSize(math.MaxInt32),
+		grpc.MaxRecvMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.UnaryServerInterceptor(),

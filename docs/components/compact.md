@@ -284,6 +284,10 @@ Flags:
                                 Repeat interval for syncing the blocks between
                                 local and remote view for /global Block Viewer
                                 UI.
+      --block-viewer.global.sync-block-timeout=5m  
+                                Maximum time for syncing the blocks between
+                                local and remote view for /global Block Viewer
+                                UI.
       --bucket-web-label=BUCKET-WEB-LABEL  
                                 Prometheus label to use as timeline title in the
                                 bucket web UI
@@ -372,6 +376,8 @@ Flags:
                                 Path to YAML file that contains object store
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
+      --progress-metrics        Enables the progress metrics, indicating the
+                                progress of compaction and downsampling
       --retention.resolution-1h=0d  
                                 How long to retain samples of resolution 2 (1
                                 hour) in bucket. Setting this to 0d will retain

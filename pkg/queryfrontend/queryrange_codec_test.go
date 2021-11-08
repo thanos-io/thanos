@@ -282,3 +282,26 @@ func TestQueryRangeCodec_EncodeRequest(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkQueryRangeCodecEncodeAndDecodeRequest(b *testing.B) {
+	codec := NewThanosQueryRangeCodec(true)
+	ctx := context.TODO()
+
+	req := &ThanosQueryRangeRequest{
+		Start:               123000,
+		End:                 456000,
+		Step:                1000,
+		MaxSourceResolution: int64(compact.ResolutionLevel1h),
+		Dedup:               true,
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		reqEnc, err := codec.EncodeRequest(ctx, req)
+		testutil.Ok(b, err)
+		_, err = codec.DecodeRequest(ctx, reqEnc)
+		testutil.Ok(b, err)
+	}
+}
