@@ -18,6 +18,7 @@ import (
 	"github.com/efficientgo/tools/core/pkg/backoff"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
@@ -536,9 +537,18 @@ func NewIngestingReceiver(e e2e.Environment, name string) (*e2e.InstrumentedRunn
 	return receiver, nil
 }
 
-func NewRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config) (*e2e.InstrumentedRunnable, error) {
+func NewTSDBRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config) (*e2e.InstrumentedRunnable, error) {
+	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, nil)
+}
+
+func NewStatelessRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg *config.RemoteWriteConfig) (*e2e.InstrumentedRunnable, error) {
+	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, remoteWriteCfg)
+}
+
+func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg *config.RemoteWriteConfig) (*e2e.InstrumentedRunnable, error) {
 	dir := filepath.Join(e.SharedDir(), "data", "rule", name)
 	container := filepath.Join(ContainerSharedDir, "data", "rule", name)
+
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create rule dir")
 	}
@@ -555,25 +565,34 @@ func NewRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Alertman
 		return nil, errors.Wrapf(err, "generate query file: %v", queryCfg)
 	}
 
+	ruleArgs := map[string]string{
+		"--debug.name":                    fmt.Sprintf("rule-%v", name),
+		"--grpc-address":                  ":9091",
+		"--grpc-grace-period":             "0s",
+		"--http-address":                  ":8080",
+		"--label":                         fmt.Sprintf(`replica="%s"`, name),
+		"--data-dir":                      container,
+		"--rule-file":                     filepath.Join(ContainerSharedDir, ruleSubDir, "*.yaml"),
+		"--eval-interval":                 "1s",
+		"--alertmanagers.config":          string(amCfgBytes),
+		"--alertmanagers.sd-dns-interval": "1s",
+		"--log.level":                     infoLogLevel,
+		"--query.config":                  string(queryCfgBytes),
+		"--query.sd-dns-interval":         "1s",
+		"--resend-delay":                  "5s",
+	}
+	if remoteWriteCfg != nil {
+		rwCfgBytes, err := yaml.Marshal(remoteWriteCfg)
+		if err != nil {
+			return nil, errors.Wrapf(err, "generate remote write config: %v", remoteWriteCfg)
+		}
+		ruleArgs["--remote-write.config"] = string(rwCfgBytes)
+	}
+
 	ruler := NewService(e,
 		fmt.Sprintf("rule-%v", name),
 		DefaultImage(),
-		e2e.NewCommand("rule", e2e.BuildArgs(map[string]string{
-			"--debug.name":                    fmt.Sprintf("rule-%v", name),
-			"--grpc-address":                  ":9091",
-			"--grpc-grace-period":             "0s",
-			"--http-address":                  ":8080",
-			"--label":                         fmt.Sprintf(`replica="%s"`, name),
-			"--data-dir":                      container,
-			"--rule-file":                     filepath.Join(ContainerSharedDir, ruleSubDir, "*.yaml"),
-			"--eval-interval":                 "1s",
-			"--alertmanagers.config":          string(amCfgBytes),
-			"--alertmanagers.sd-dns-interval": "1s",
-			"--log.level":                     infoLogLevel,
-			"--query.config":                  string(queryCfgBytes),
-			"--query.sd-dns-interval":         "1s",
-			"--resend-delay":                  "5s",
-		})...),
+		e2e.NewCommand("rule", e2e.BuildArgs(ruleArgs)...),
 		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,
