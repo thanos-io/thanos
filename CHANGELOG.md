@@ -12,6 +12,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#4228](https://github.com/thanos-io/thanos/pull/4228) Tools `thanos bucket inspect`: Add flag `--output` to provide output method (table,csv,tsv).
 - [#4394](https://github.com/thanos-io/thanos/pull/4394) Add error logs to receiver when write request rejected with invalid replica
 - [#4403](https://github.com/thanos-io/thanos/pull/4403) UI: Add sorting and filtering to flags page
 - [#4299](https://github.com/thanos-io/thanos/pull/4299) Tracing: Add tracing to exemplar APIs.
