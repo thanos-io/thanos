@@ -101,6 +101,9 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 	if len(enableFeatures) > 0 {
 		args = append(args, fmt.Sprintf("--enable-feature=%s", strings.Join(enableFeatures, ",")))
 	}
+	if len(webConfig) > 0 {
+		args = append(args, fmt.Sprintf("--web.config.file=%s", filepath.Join(container, "web-config.yml")))
+	}
 	prom := e2e.NewInstrumentedRunnable(
 		e,
 		fmt.Sprintf("prometheus-%s", name),
