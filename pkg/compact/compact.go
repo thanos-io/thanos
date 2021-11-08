@@ -667,6 +667,55 @@ func (ds *DownsampleProgressCalculator) ProgressCalculate(ctx context.Context, g
 	return nil
 }
 
+// RetentionProgressMetrics contains Prometheus metrics related to retention progress.
+type RetentionProgressMetrics struct {
+	NumberOfBlocksDeleted *prometheus.GaugeVec
+}
+
+// RetentionProgressCalculator contains RetentionProgressMetrics, which are updated during the retention simulation process.
+type RetentionProgressCalculator struct {
+	*RetentionProgressMetrics
+	retentionByResolution map[ResolutionLevel]time.Duration
+}
+
+// NewRetentionProgressCalculator creates a new RetentionProgressCalculator.
+func NewRetentionProgressCalculator(reg prometheus.Registerer, retentionByResolution map[ResolutionLevel]time.Duration) *RetentionProgressCalculator {
+	return &RetentionProgressCalculator{
+		retentionByResolution: retentionByResolution,
+		RetentionProgressMetrics: &RetentionProgressMetrics{
+			NumberOfBlocksDeleted: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_deleted_blocks",
+				Help: "number of blocks that have crossed their retention period",
+			}, []string{"group"}),
+		},
+	}
+}
+
+// ProgressCalculate calculates the number of blocks to be retained for the given groups.
+func (rs *RetentionProgressCalculator) ProgressCalculate(ctx context.Context, groups []*Group) error {
+	groupBlocks := make(map[string]int, len(groups))
+
+	for _, group := range groups {
+		for _, m := range group.metasByMinTime {
+			retentionDuration := rs.retentionByResolution[ResolutionLevel(m.Thanos.Downsample.Resolution)]
+			if retentionDuration.Seconds() == 0 {
+				continue
+			}
+			maxTime := time.Unix(m.MaxTime/1000, 0)
+			if time.Now().After(maxTime.Add(retentionDuration)) {
+				groupBlocks[group.key]++
+			}
+		}
+	}
+
+	rs.RetentionProgressMetrics.NumberOfBlocksDeleted.Reset()
+	for key, blocks := range groupBlocks {
+		rs.RetentionProgressMetrics.NumberOfBlocksDeleted.WithLabelValues(key).Add(float64(blocks))
+	}
+
+	return nil
+}
+
 // Planner returns blocks to compact.
 type Planner interface {
 	// Plan returns a list of blocks that should be compacted into single one.
