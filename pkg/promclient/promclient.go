@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -32,7 +33,6 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
-	thanoshttp "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -85,7 +85,7 @@ func NewClient(c HTTPClient, logger log.Logger, userAgent string) *Client {
 
 // NewDefaultClient returns Client with tracing tripperware.
 func NewDefaultClient() *Client {
-	client, _ := thanoshttp.NewHTTPClient(thanoshttp.ClientConfig{}, "")
+	client, _ := httpconfig.NewHTTPClient(httpconfig.ClientConfig{}, "")
 	return NewWithTracingClient(
 		log.NewNopLogger(),
 		client,

@@ -426,7 +426,7 @@ func (r *Reloader) triggerReload(ctx context.Context) error {
 	return nil
 }
 
-// Sets Http client for reloader
+// SetHttpClient sets Http client for reloader.
 func (r *Reloader) SetHttpClient(client http.Client) {
 	r.httpClient = client
 }
