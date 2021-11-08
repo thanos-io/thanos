@@ -28,7 +28,7 @@
     selector: 'job=~".*thanos-query.*"',
     title: '%(prefix)sQuery' % $.dashboard.prefix,
   },
-  queryFrontend+:: {
+  query_frontend+:: {
     selector: 'job=~".*thanos-query-frontend.*"',
     title: '%(prefix)sQueryFrontend' % $.dashboard.prefix,
   },
