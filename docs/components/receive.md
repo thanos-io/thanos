@@ -12,6 +12,14 @@ For more information please check out [initial design proposal](../proposals-don
 
 > NOTE: As the block producer it's important to set correct "external labels" that will identify data block across Thanos clusters. See [external labels](../storage.md#external-labels) docs for details.
 
+As of version [v0.22.0](https://github.com/thanos-io/thanos/blob/main/CHANGELOG.md#added), the Thanos receiver implements the [receiver split proposal](https://github.com/thanos-io/thanos/blob/main/docs/proposals/202012_receive_split.md), which allows data ingestion as well as request routing to be independently enabled/disabled.
+Thanks to these changes only routing-receivers need to watch for configuration changes, and ingesting-receivers do not need to. So when the configuration is updated, the routing-receivers will almost instantaneously re-configure without a lengthy WAL flush (& downtime) like we have in the current setup (routing & ingesting receivers). 
+This would also enable users to prepare a topology of receivers, containing trees of receiver with depth **N**.
+
+![Example Receive architecture diagram](https://docs.google.com/drawings/d/e/2PACX-1vQaLa9EdF_frGmE6zbK48Zj9a8lIKxdx8NpOCU0eFizGCALRY8uUzZfFJLH8VNvtjyi-YBmVHq6PR8A/pub?w=1442&h=563)
+
+The current behaviour for receiver, however has not been modified, and works as expected. So users who are using receiver for both routing and ingestion, should not notice any changes as such. The change is backwards compatible.
+
 ## Example
 
 ```bash
@@ -61,6 +69,13 @@ The example content of `hashring.json`:
 ```
 
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed for tenancy and replication.
+
+### Enabling Routing and Ingestion for the Thanos Receiver
+
+We have not added another flag for controlling this behaviour. Instead, we have relied on the existing flags and the below convention to enable and disable the ingestion and routing functionalities:
+* **Ingestion** - For ingestion only no flags need to be specified.
+* **Routing** - For routing functionality only, provide one of the hashring configuration flags: either `--receive.hashrings` or `--receive.hashrings-file`.
+* **Ingestion and Routing** - Make sure that `--receive.local-endpoint` and either `--receive.hashrings` or `--receive.hashrings-file` are provided.
 
 ## Flags
 
