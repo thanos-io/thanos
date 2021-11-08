@@ -100,11 +100,9 @@ config:
 
 Client for https://cloud.google.com/trace/ tracing.
 
-You will also need to ensure that the authentication with the API is
-working, follow [this guide](https://cloud.google.com/trace/docs/setup/go-ot#configure_your_platform) to set it up.
+You will also need to ensure that the authentication with the API is working, follow [this guide](https://cloud.google.com/trace/docs/setup/go-ot#configure_your_platform) to set it up.
 
-_Note:_ The `type` in the configuration below can have either value `GOOGLE_CLOUD`
-or `STACKDRIVER` - this is to ensure backwards compatibility.
+*Note:* The `type` in the configuration below can have either value `GOOGLE_CLOUD` or `STACKDRIVER` - this is to ensure backwards compatibility.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=google_cloud.Config"
 type: GOOGLE_CLOUD
