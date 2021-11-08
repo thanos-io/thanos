@@ -1,14 +1,8 @@
----
-type: docs
-title: Mentorship
-menu: contributing
----
-
 # Thanos / Prometheus Open Source Mentorship
 
 Both Thanos and Prometheus projects participate in various, periodic mentoring programs.
 
-[Follow us on Twitter](https://thanos.io/tip/contributing/community.md/#twitter) to be up-to-date with application process and announcements.
+[Follow us on Twitter](https://twitter.com/ThanosMetrics) to be up-to-date with application process and announcements.
 
 Programs we participated / are participating:
 
@@ -22,14 +16,14 @@ You have been selected for mentorship with Prometheus or Thanos? Congratulations
 
 ### Onboarding Check List
 
-- [X] Please see and acknowledge our [Code of Conduct](https://thanos.io/tip/contributing/code_of_conduct.md/). A similar one is for the Prometheus project. TL;DR: Be nice and friendly!
+- [X] Please see and acknowledge our [Code of Conduct](../../CODE_OF_CONDUCT.md). A similar one is for the Prometheus project. TL;DR: Be nice and friendly!
 - [X] Create an account on the [CNCF Slack](https://slack.cncf.io/). Please add any profile photo to make it unique. (: This is Thanos's main chat provider. You can reach any of the mentors there.
 - [X] If you are a Prometheus mentee OR if your task will involve collaborating with the Prometheus project, it's also recommended to set up an IRC account e.g by [joining Element](https://prometheus.io/community/). This the main channel Prometheus Team is using currently.
 - [X] Send your mentors your slack account handle, so we can join you to private channels. We have one with just you and your main mentors, and second with all mentees, ex-mentees and mentors.
-- [X] Join main [Thanos channels](https://thanos.io/tip/contributing/community.md/#slack) and write a few sentences to about yourself, say hello! 💜
+- [X] Join main [Thanos channels](community.md#slack) and write a few sentences to about yourself, say hello! 💜
 - [X] You are welcome to join Twitter, start following others and gather your own followers! Who knows maybe you will get addicted? (: Feel free to post any related content around Thanos while mentioning `@ThanosMetrics`.
 - [X] Ask maintainers to set up some weekly 2:1 meeting (highly recommended).
-- [X] Read our [contributing guides](https://thanos.io/tip/contributing/contributing.md/)
+- [X] Read our [contributing guides](../../CONTRIBUTING.md)
 - [X] Read carefully your main GitHub issue and start thinking about it, but don't stress out! It's better to start slowly with a smaller task to get things going. 🚀
 
 ### Suggestions

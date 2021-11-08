@@ -195,7 +195,7 @@ func GetRuntimeInfoFunc(logger log.Logger) RuntimeInfoFn {
 
 type InstrFunc func(name string, f ApiFunc) http.HandlerFunc
 
-// Instr returns a http HandlerFunc with the instrumentation middleware.
+// GetInstr returns a http HandlerFunc with the instrumentation middleware.
 func GetInstr(
 	tracer opentracing.Tracer,
 	logger log.Logger,
@@ -219,9 +219,9 @@ func GetInstr(
 
 		return tracing.HTTPMiddleware(tracer, name, logger,
 			ins.NewHandler(name,
-				logMiddleware.HTTPMiddleware(name,
-					gziphandler.GzipHandler(
-						middleware.RequestID(hf),
+				gziphandler.GzipHandler(
+					middleware.RequestID(
+						logMiddleware.HTTPMiddleware(name, hf),
 					),
 				),
 			),

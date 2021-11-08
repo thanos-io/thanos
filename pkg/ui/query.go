@@ -22,7 +22,7 @@ import (
 
 type Query struct {
 	*BaseUI
-	storeSet *query.StoreSet
+	endpointSet *query.EndpointSet
 
 	externalPrefix, prefixHeader string
 
@@ -32,7 +32,7 @@ type Query struct {
 	now     func() model.Time
 }
 
-func NewQueryUI(logger log.Logger, storeSet *query.StoreSet, externalPrefix, prefixHeader string) *Query {
+func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefix, prefixHeader string) *Query {
 	tmplVariables := map[string]string{
 		"Component": component.Query.String(),
 	}
@@ -43,7 +43,7 @@ func NewQueryUI(logger log.Logger, storeSet *query.StoreSet, externalPrefix, pre
 
 	return &Query{
 		BaseUI:         NewBaseUI(logger, "query_menu.html", tmplFuncs, tmplVariables, externalPrefix, prefixHeader, component.Query),
-		storeSet:       storeSet,
+		endpointSet:    endpointSet,
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,
 		cwd:            runtimeInfo().CWD,
@@ -111,12 +111,12 @@ func (q *Query) status(w http.ResponseWriter, r *http.Request) {
 
 func (q *Query) stores(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(q.logger, q.externalPrefix, q.prefixHeader, r)
-	statuses := make(map[component.StoreAPI][]query.StoreStatus)
-	for _, status := range q.storeSet.GetStoreStatus() {
-		statuses[status.StoreType] = append(statuses[status.StoreType], status)
+	statuses := make(map[component.Component][]query.EndpointStatus)
+	for _, status := range q.endpointSet.GetEndpointStatus() {
+		statuses[status.ComponentType] = append(statuses[status.ComponentType], status)
 	}
 
-	sources := make([]component.StoreAPI, 0, len(statuses))
+	sources := make([]component.Component, 0, len(statuses))
 	for k := range statuses {
 		sources = append(sources, k)
 	}
@@ -131,8 +131,8 @@ func (q *Query) stores(w http.ResponseWriter, r *http.Request) {
 	})
 
 	q.executeTemplate(w, "stores.html", prefix, struct {
-		Stores  map[component.StoreAPI][]query.StoreStatus
-		Sources []component.StoreAPI
+		Stores  map[component.Component][]query.EndpointStatus
+		Sources []component.Component
 	}{
 		Stores:  statuses,
 		Sources: sources,

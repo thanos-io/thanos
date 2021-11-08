@@ -6,6 +6,7 @@ package block
 import (
 	"context"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -83,5 +84,18 @@ func TestRewrite(t *testing.T) {
 		testutil.Ok(t, ir2.Series(p.At(), &lset, &chks))
 		testutil.Equals(t, 1, len(chks))
 	}
+}
 
+func TestGatherIndexHealthStatsReturnsOutOfOrderChunksErr(t *testing.T) {
+	blockDir, err := ioutil.TempDir("", "test-ooo-index")
+	testutil.Ok(t, err)
+
+	err = testutil.PutOutOfOrderIndex(blockDir, 0, math.MaxInt64)
+	testutil.Ok(t, err)
+
+	stats, err := GatherIndexHealthStats(log.NewLogfmtLogger(os.Stderr), blockDir+"/"+IndexFilename, 0, math.MaxInt64)
+
+	testutil.Ok(t, err)
+	testutil.Equals(t, 1, stats.OutOfOrderChunks)
+	testutil.NotOk(t, stats.OutOfOrderChunksErr())
 }

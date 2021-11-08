@@ -1,9 +1,3 @@
----
-type: docs
-title: Tracing
-menu: thanos
----
-
 # Tracing
 
 Thanos supports different tracing backends that implements `opentracing.Tracer` interface.
@@ -16,7 +10,7 @@ You can either pass YAML file defined below in `--tracing.config-file` or pass t
 
 Don't be afraid of multiline flags!
 
-In Kubernetes it is as easy as (on Thanos sidecar example):
+In Kubernetes it is as easy as (using Thanos sidecar example):
 
 ```yaml
       - args:
@@ -44,9 +38,37 @@ In Kubernetes it is as easy as (on Thanos sidecar example):
 
 At that point, anyone can use your provider by spec.
 
+See [this issue](https://github.com/thanos-io/thanos/issues/1972) to check our progress on moving to OpenTelemetry Go client library.
+
+## Usage
+
+Once tracing is enabled and sampling per backend is configured, Thanos will generate traces for all gRPC and HTTP APIs thanks to generic "middlewares". Some more interesting to observe APIs like `query` or `query_range` have more low-level spans with focused metadata showing latency for important functionalities. For example, Jaeger view of HTTP query_range API call might look as follows:
+
+![view](img/tracing2.png)
+
+As you can see it contains both HTTP request and spans around gRPC request, since [Querier](components/query.md) calls gRPC services to get fetch series data.
+
+Each Thanos component generates spans related to its work and sends them to central place e.g Jaeger or OpenTelemetry collector. Such place is then responsible to tie all spans to a single trace, showing a request execution path.
+
+### Obtaining Trace ID
+
+Single trace is tied to a single, unique request to the system and is composed of many spans from different components. Trace is identifiable using `Trace ID`, which is a unique hash e.g `131da78f02aa3525`. This information can be also referred as `request id` and `operation id` in other systems. In order to use trace data you want to find trace IDs that explains the requests you are interested in e.g request with interesting error, or longer latency, or just debug call you just made.
+
+When using tracing with Thanos, you can obtain trace ID in multiple ways:
+
+* Search by labels/attributes/tags/time/component/latency e.g. using Jaeger indexing.
+* [Exemplars](https://www.bwplotka.dev/2021/correlations-exemplars/)
+* If request was sampled, response will have `X-Thanos-Trace-Id` response header with trace ID of this request as value.
+
+![view](img/tracing.png)
+
+### Forcing Sampling
+
+Every request against any Thanos component's API with header `X-Thanos-Force-Tracing` will be sampled if tracing backend was configured.
+
 ## Configuration
 
-Current tracing supported backends:
+Currently supported tracing backends:
 
 ### Jaeger
 

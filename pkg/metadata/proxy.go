@@ -135,7 +135,8 @@ func (stream *metricMetadataStream) receive(ctx context.Context) error {
 				return errors.Wrapf(err, "sending metadata error to server %v", stream.server)
 			}
 
-			continue
+			// Not an error if response strategy is warning.
+			return nil
 		}
 
 		if w := resp.GetWarning(); w != "" {

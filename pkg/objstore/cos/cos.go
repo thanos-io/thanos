@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -14,12 +15,15 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/mozillazg/go-cos"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
+	"github.com/tencentyun/cos-go-sdk-v5"
+	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/clientutil"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"gopkg.in/yaml.v2"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -32,13 +36,27 @@ type Bucket struct {
 	name   string
 }
 
+// DefaultConfig is the default config for an cos client. default tune the `MaxIdleConnsPerHost`.
+var DefaultConfig = Config{
+	HTTPConfig: HTTPConfig{
+		IdleConnTimeout:       model.Duration(90 * time.Second),
+		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
+		TLSHandshakeTimeout:   model.Duration(10 * time.Second),
+		ExpectContinueTimeout: model.Duration(1 * time.Second),
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		MaxConnsPerHost:       0,
+	},
+}
+
 // Config encapsulates the necessary config values to instantiate an cos client.
 type Config struct {
-	Bucket    string `yaml:"bucket"`
-	Region    string `yaml:"region"`
-	AppId     string `yaml:"app_id"`
-	SecretKey string `yaml:"secret_key"`
-	SecretId  string `yaml:"secret_id"`
+	Bucket     string     `yaml:"bucket"`
+	Region     string     `yaml:"region"`
+	AppId      string     `yaml:"app_id"`
+	SecretKey  string     `yaml:"secret_key"`
+	SecretId   string     `yaml:"secret_id"`
+	HTTPConfig HTTPConfig `yaml:"http_config"`
 }
 
 // Validate checks to see if mandatory cos config options are set.
@@ -53,31 +71,61 @@ func (conf *Config) validate() error {
 	return nil
 }
 
+// parseConfig unmarshal a buffer into a Config with default HTTPConfig values.
+func parseConfig(conf []byte) (Config, error) {
+	config := DefaultConfig
+	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return Config{}, err
+	}
+
+	return config, nil
+}
+
+// HTTPConfig stores the http.Transport configuration for the cos client.
+type HTTPConfig struct {
+	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
+	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
+	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
+	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
+	MaxIdleConns          int            `yaml:"max_idle_conns"`
+	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
+	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
+}
+
+// DefaultTransport build http.Transport from config.
+func DefaultTransport(c HTTPConfig) *http.Transport {
+	transport := exthttp.NewTransport()
+	transport.IdleConnTimeout = time.Duration(c.IdleConnTimeout)
+	transport.ResponseHeaderTimeout = time.Duration(c.ResponseHeaderTimeout)
+	transport.TLSHandshakeTimeout = time.Duration(c.TLSHandshakeTimeout)
+	transport.ExpectContinueTimeout = time.Duration(c.ExpectContinueTimeout)
+	transport.MaxIdleConns = c.MaxIdleConns
+	transport.MaxIdleConnsPerHost = c.MaxIdleConnsPerHost
+	transport.MaxConnsPerHost = c.MaxConnsPerHost
+	return transport
+}
+
 // NewBucket returns a new Bucket using the provided cos configuration.
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
-	var config Config
-	if err := yaml.Unmarshal(conf, &config); err != nil {
+	config, err := parseConfig(conf)
+	if err != nil {
 		return nil, errors.Wrap(err, "parsing cos configuration")
 	}
 	if err := config.validate(); err != nil {
 		return nil, errors.Wrap(err, "validate cos configuration")
 	}
 
-	bucketUrl := cos.NewBucketURL(config.Bucket, config.AppId, config.Region, true)
-
-	b, err := cos.NewBaseURL(bucketUrl.String())
-	if err != nil {
-		return nil, errors.Wrap(err, "initialize cos base url")
-	}
-
+	bucketURL := cos.NewBucketURL(fmt.Sprintf("%s-%s", config.Bucket, config.AppId), config.Region, true)
+	b := &cos.BaseURL{BucketURL: bucketURL}
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
 			SecretID:  config.SecretId,
 			SecretKey: config.SecretKey,
+			Transport: DefaultTransport(config.HTTPConfig),
 		},
 	})
 
@@ -158,13 +206,17 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 }
 
 func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	if len(name) == 0 {
+	if name == "" {
 		return nil, errors.New("given object name should not empty")
 	}
 
 	opts := &cos.ObjectGetOptions{}
 	if length != -1 {
 		if err := setRange(opts, off, off+length-1); err != nil {
+			return nil, err
+		}
+	} else if off > 0 {
+		if err := setRange(opts, off, 0); err != nil {
 			return nil, err
 		}
 	}
@@ -346,7 +398,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 		t.Log("WARNING. Reusing", c.Bucket, "COS bucket for COS tests. Manual cleanup afterwards is required")
 		return b, func() {}, nil
 	}
-	c.Bucket = objstore.CreateTemporaryTestBucketName(t)
+	c.Bucket = createTemporaryTestBucketName(t)
 
 	bc, err := yaml.Marshal(c)
 	if err != nil {
@@ -379,4 +431,17 @@ func validateForTest(conf Config) error {
 		return errors.New("insufficient cos configuration information")
 	}
 	return nil
+}
+
+// createTemporaryTestBucketName create a temp cos bucket for test.
+// Bucket Naming Conventions: https://intl.cloud.tencent.com/document/product/436/13312#overview
+func createTemporaryTestBucketName(t testing.TB) string {
+	src := rand.New(rand.NewSource(time.Now().UnixNano()))
+	name := fmt.Sprintf("test_%x_%s", src.Int31(), strings.ToLower(t.Name()))
+	name = strings.NewReplacer("_", "-", "/", "-").Replace(name)
+	const maxLength = 50
+	if len(name) >= maxLength {
+		name = name[:maxLength]
+	}
+	return strings.TrimSuffix(name, "-")
 }

@@ -14,6 +14,7 @@ type options struct {
 	registerServerFuncs []registerServerFunc
 
 	gracePeriod time.Duration
+	maxConnAge  time.Duration
 	listen      string
 	network     string
 
@@ -78,5 +79,12 @@ func WithNetwork(s string) Option {
 func WithTLSConfig(cfg *tls.Config) Option {
 	return optionFunc(func(o *options) {
 		o.tlsConfig = cfg
+	})
+}
+
+// WithMaxConnAge sets the maximum connection age for gRPC server.
+func WithMaxConnAge(t time.Duration) Option {
+	return optionFunc(func(o *options) {
+		o.maxConnAge = t
 	})
 }

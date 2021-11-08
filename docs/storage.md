@@ -1,9 +1,3 @@
----
-type: docs
-title: Object Storage & Data Format
-menu: thanos
----
-
 # Object Storage & Data Format
 
 Thanos uses object storage as primary storage for metrics and metadata related to them. In this document you can learn how to configure your object storage and what is the data layout and format for primary Thanos components that are "block" aware, like: `sidecar` `compact`, `receive` and `store gateway`.
@@ -49,7 +43,7 @@ Current object storage client implementations:
 | [AWS/S3](#s3) (and all S3-compatible storages e.g disk-based [Minio](https://min.io/)) | Stable             | Production Usage      | yes               | @bwplotka               |
 | [Azure Storage Account](#azure)                                                        | Stable             | Production Usage      | no                | @vglafirov              |
 | [OpenStack Swift](#openstack-swift)                                                    | Beta (working PoC) | Production Usage      | yes               | @FUSAKLA                |
-| [Tencent COS](#tencent-cos)                                                            | Beta               | Production Usage      | no                | @jojohappy              |
+| [Tencent COS](#tencent-cos)                                                            | Beta               | Production Usage      | no                | @jojohappy,@hanjm       |
 | [AliYun OSS](#aliyun-oss)                                                              | Beta               | Production Usage      | no                | @shaulboozhiao,@wujinhu |
 | [Local Filesystem](#filesystem)                                                        | Stable             | Testing and Demo only | yes               | @bwplotka               |
 
@@ -94,6 +88,7 @@ config:
     kms_key_id: ""
     kms_encryption_context: {}
     encryption_key: ""
+  sts_endpoint: ""
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
@@ -232,6 +227,12 @@ With this policy you should be able to run set `THANOS_TEST_OBJSTORE_SKIP=GCS,AZ
 
 Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html
 
+##### STS Endpoint
+
+If you want to use IAM credential retrieved from an instance profile, Thanos needs to authenticate through AWS STS. For this purposes you can specify your own STS Endpoint.
+
+By default Thanos will use endpoint: https://sts.amazonaws.com and AWS region coresponding endpoints.
+
 #### GCS
 
 To configure Google Cloud Storage bucket as an object store you need to set `bucket` with GCS bucket name and configure Google Application credentials.
@@ -319,7 +320,32 @@ config:
   container: ""
   endpoint: ""
   max_retries: 0
+  msi_resource: ""
+  user_assigned_id: ""
+  pipeline_config:
+    max_tries: 0
+    try_timeout: 0s
+    retry_delay: 0s
+    max_retry_delay: 0s
+  reader_config:
+    max_retry_requests: 0
+  http_config:
+    idle_conn_timeout: 0s
+    response_header_timeout: 0s
+    insecure_skip_verify: false
+    tls_handshake_timeout: 0s
+    expect_continue_timeout: 0s
+    max_idle_conns: 0
+    max_idle_conns_per_host: 0
+    max_conns_per_host: 0
+    disable_compression: false
 ```
+
+If `msi_resource` is used, authentication is done via system-assigned managed identity. The value for Azure should be `https://<storage-account-name>.blob.core.windows.net`.
+
+If `user_assigned_id` is used, authentication is done via user-assigned managed identity. When using `user_assigned_id` the `msi_resource` defaults to `https://<storage_account>.<endpoint>`
+
+The generic `max_retries` will be used as value for the `pipeline_config`'s `max_tries` and `reader_config`'s `max_retry_requests`. For more control, `max_retries` could be ignored (0) and one could set specific retry values.
 
 #### OpenStack Swift
 
@@ -369,6 +395,14 @@ config:
   app_id: ""
   secret_key: ""
   secret_id: ""
+  http_config:
+    idle_conn_timeout: 1m30s
+    response_header_timeout: 2m
+    tls_handshake_timeout: 10s
+    expect_continue_timeout: 1s
+    max_idle_conns: 100
+    max_idle_conns_per_host: 100
+    max_conns_per_host: 0
 ```
 
 Set the flags `--objstore.config-file` to reference to the configuration file.
@@ -389,6 +423,19 @@ config:
 ```
 
 Use --objstore.config-file to reference to this configuration file.
+
+#### Baidu BOS
+
+In order to use Baidu BOS object storage, you should apply for a Baidu Account and create an object storage bucket first. Refer to [Baidu Cloud Documents](https://cloud.baidu.com/doc/BOS/index.html) for more details. To use Baidu BOS object storage, please specify the following yaml configuration file in `--objstore.config*` flag.
+
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=bos.Config"
+type: BOS
+config:
+  bucket: ""
+  endpoint: ""
+  access_key: ""
+  secret_key: ""
+```
 
 #### Filesystem
 
@@ -418,7 +465,7 @@ At that point, anyone can use your provider by spec.
 
 ## Data in Object Storage
 
-Thanos supports writing and reading data in native Prometheus `TSDB blocks` in [TSDB format](https://github.com/prometheus/prometheus/tree/master/tsdb/docs/format). This is the format used by [Prometheus](https://prometheus.io) TSDB database for persisting data on the local disk. With the efficient index and [chunk](design.md/#chunk) binary formats, it also fits well to be used directly from object storage using range GET API.
+Thanos supports writing and reading data in native Prometheus `TSDB blocks` in [TSDB format](https://github.com/prometheus/prometheus/tree/master/tsdb/docs/format). This is the format used by [Prometheus](https://prometheus.io) TSDB database for persisting data on the local disk. With the efficient index and [chunk](design.md#chunk) binary formats, it also fits well to be used directly from object storage using range GET API.
 
 Following sections explain this format in details with the additional files and entries that Thanos system supports.
 
@@ -616,7 +663,7 @@ From high level it allows to find:
 * Label names
 * Label values for label name
 * All series labels
-* Given (or all) series' chunk reference. This can be used to find [chunk](design.md/#chunk) with samples in the [chunk files](#chunks-file-format)
+* Given (or all) series' chunk reference. This can be used to find [chunk](design.md#chunk) with samples in the [chunk files](#chunks-file-format)
 
 The following describes the format of the `index` file found in each block directory. It is terminated by a table of contents which serves as an entry point into the index.
 
@@ -678,7 +725,7 @@ The section contains a sequence of the string entries, each prefixed with the st
 
 ##### Series
 
-The section contains a sequence of series that hold the label set of the series as well as its [chunks](design.md/#chunk) within the block. The series are sorted lexicographically by their label sets. Each series section is aligned to 16 bytes. The ID for a series is the `offset/16`. This serves as the series' ID in all subsequent references. Thereby, a sorted list of series IDs implies a lexicographically sorted list of series label sets.
+The section contains a sequence of series that hold the label set of the series as well as its [chunks](design.md#chunk) within the block. The series are sorted lexicographically by their label sets. Each series section is aligned to 16 bytes. The ID for a series is the `offset/16`. This serves as the series' ID in all subsequent references. Thereby, a sorted list of series IDs implies a lexicographically sorted list of series label sets.
 
 ```
 ┌───────────────────────────────────────┐
@@ -692,9 +739,9 @@ The section contains a sequence of series that hold the label set of the series 
 └───────────────────────────────────────┘
 ```
 
-Every series entry first holds its number of labels, followed by tuples of symbol table references that contain the label name and value. The label pairs are lexicographically sorted. After the labels, the number of indexed [chunks](design.md/#chunk) is encoded, followed by a sequence of metadata entries containing the chunks minimum (`mint`) and maximum (`maxt`) timestamp and a reference to its position in the chunk file. The `mint` is the time of the first sample and `maxt` is the time of the last sample in the chunk. Holding the time range data in the index allows dropping chunks irrelevant to queried time ranges without accessing them directly.
+Every series entry first holds its number of labels, followed by tuples of symbol table references that contain the label name and value. The label pairs are lexicographically sorted. After the labels, the number of indexed [chunks](design.md#chunk) is encoded, followed by a sequence of metadata entries containing the chunks minimum (`mint`) and maximum (`maxt`) timestamp and a reference to its position in the chunk file. The `mint` is the time of the first sample and `maxt` is the time of the last sample in the chunk. Holding the time range data in the index allows dropping chunks irrelevant to queried time ranges without accessing them directly.
 
-`mint` of the first [chunk](design.md/#chunk) is stored, it's `maxt` is stored as a delta and the `mint` and `maxt` are encoded as deltas to the previous time for subsequent chunks. Similarly, the reference of the first chunk is stored and the next ref is stored as a delta to the previous one.
+`mint` of the first [chunk](design.md#chunk) is stored, it's `maxt` is stored as a delta and the `mint` and `maxt` are encoded as deltas to the previous time for subsequent chunks. Similarly, the reference of the first chunk is stored and the next ref is stored as a delta to the previous one.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -860,7 +907,7 @@ The table of contents serves as an entry point to the entire index and points to
 
 The following describes the format of a chunks file, which is created in the `chunks/` directory of a block. The maximum size per segment file is 512MiB.
 
-[Chunks](design.md/#chunk) in the files are referenced from the index by uint64 composed of in-file offset (lower 4 bytes) and segment sequence number (upper 4 bytes).
+[Chunks](design.md#chunk) in the files are referenced from the index by uint64 composed of in-file offset (lower 4 bytes) and segment sequence number (upper 4 bytes).
 
 ```
 ┌──────────────────────────────┐

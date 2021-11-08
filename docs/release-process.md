@@ -1,9 +1,3 @@
----
-type: docs
-title: Release Process
-menu: thanos
----
-
 # Release Process
 
 This page describes the release cadence and process for Thanos project.
@@ -18,7 +12,7 @@ We aim for regular and strict one release per *6 weeks*. 6 weeks is counter from
 
 No feature should block release.
 
-Additionally we (obviously) aim for `main` branch being stable.
+Additionally, we (obviously) aim for `main` branch being stable.
 
 We are assigning a release shepherd for each minor release.
 
@@ -29,9 +23,10 @@ Release shepherd responsibilities:
 
 | Release | Time of first RC     | Shepherd (GitHub handle)    |
 |---------|----------------------|-----------------------------|
-| v0.24.0 | (planned) 2021.09.28 | No one ATM                  |
-| v0.23.0 | (planned) 2021.08.17 | `@bwplotka`                 |
-| v0.22.0 | (planned) 2021.07.06 | `@GiedriusS`                |
+| v0.25.0 | (planned) 2021.12.09 | No one ATM                  |
+| v0.24.0 | (planned) 2021.10.28 | `@squat`                    |
+| v0.23.0 | 2021.09.02           | `@bwplotka`                 |
+| v0.22.0 | 2021.07.06           | `@GiedriusS`                |
 | v0.21.0 | 2021.05.28           | `@metalmatze` and `@onprem` |
 | v0.20.0 | 2021.04.23           | `@kakkoyun`                 |
 | v0.19.0 | 2021.03.02           | `@bwplotka`                 |
@@ -126,9 +121,18 @@ The whole release from release candidate `rc.0` to actual release should have ex
 
 10. Announce `#thanos` slack channel.
 
-11. Pull commits from release branch to main branch for non `rc` releases.
+11. Pull commits from release branch to main branch for non `rc` releases. Make sure to not modify `VERSION`, it should be still pointing to `version+1-dev` ([TODO to automate this](https://github.com/thanos-io/thanos/issues/4741))
 
 12. After releasing a major version, please cut a release for `kube-thanos` as well. https://github.com/thanos-io/kube-thanos/releases Make sure all the flag changes are reflected in the manifests. Otherwise, the process is the same, except we don't have `rc` for the `kube-thanos`. We do this to make sure we have compatible manifests for each major versions.
+
+13. Merge `release-<major>.<minor>` branch back to main. This is important for Go modules tooling to make release tags reachable from main branch.
+
+    - Create `merge-release-<major>.<minor>-to-main` branch **from `release-<major>.<minor>` branch** locally
+    - Merge upstream `main` branch into your `merge-release-<major>.<minor>-to-main` and resolve conflicts
+    - Send PR for merging your `merge-release-<major>.<minor>-to-main` branch into `main`
+    - Once approved, merge the PR by using "Merge" commit.
+      - This can either be done by temporarily enabling "Allow merge commits" option in "Settings > Options".
+      - Alternatively, this can be done locally by merging `merge-release-<major>.<minor>-to-main` branch into `main`, and pushing resulting `main` to upstream repository. This doesn't break `main` branch protection, since PR has been approved already, and it also doesn't require removing the protection.
 
 ## Pre-releases (release candidates)
 

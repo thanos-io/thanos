@@ -174,7 +174,7 @@ func ParseHTTPOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 	}
 
 	// Check if the user enables request logging through flags and YAML.
-	if len(configYAML) != 0 && len(flagDecision) != 0 {
+	if len(configYAML) != 0 && flagDecision != "" {
 		return logOpts, fmt.Errorf("both log.request.decision and request.logging have been enabled, please use only one of the flags")
 	}
 	// If old flag is enabled.
@@ -200,12 +200,12 @@ func ParsegRPCOptions(flagDecision string, reqLogConfig *extflag.PathOrContent) 
 	}
 
 	// Check if the user enables request logging through flags and YAML.
-	if len(configYAML) != 0 && len(flagDecision) != 0 {
+	if len(configYAML) != 0 && flagDecision != "" {
 		return []tags.Option{}, logOpts, fmt.Errorf("both log.request.decision and request.logging-config have been enabled, please use only one of the flags")
 	}
 
 	// If the old flag is empty, use the new YAML config.
-	if len(flagDecision) == 0 {
+	if flagDecision == "" {
 		tagOpts, logOpts, err := NewGRPCOption(configYAML)
 		if err != nil {
 			return []tags.Option{}, logOpts, err

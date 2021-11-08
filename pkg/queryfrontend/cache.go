@@ -36,7 +36,7 @@ func (t thanosCacheKeyGenerator) GenerateCacheKey(_ string, r queryrange.Request
 		}
 		return fmt.Sprintf("%s:%d:%d:%d", tr.Query, tr.Step, currentInterval, i)
 	case *ThanosLabelsRequest:
-		return fmt.Sprintf("%s:%d", tr.Label, currentInterval)
+		return fmt.Sprintf("%s:%s:%d", tr.Label, tr.Matchers, currentInterval)
 	case *ThanosSeriesRequest:
 		return fmt.Sprintf("%s:%d", tr.Matchers, currentInterval)
 	}

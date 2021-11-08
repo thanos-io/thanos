@@ -15,12 +15,14 @@ import (
 
 	"github.com/oklog/ulid"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
+	"gopkg.in/yaml.v3"
 )
 
 func TestIsWALFileAccessible_e2e(t *testing.T) {
@@ -38,12 +40,14 @@ func TestIsWALFileAccessible_e2e(t *testing.T) {
 
 func TestExternalLabels_e2e(t *testing.T) {
 	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
-		p.SetConfig(`
-global:
-  external_labels:
-    region: eu-west
-    az: 1
-`)
+		// Keep consistent with the config processing in function (*Client).ExternalLabels.
+		cfg := config.Config{GlobalConfig: config.GlobalConfig{ExternalLabels: []labels.Label{
+			{Name: "region", Value: "eu-west"},
+			{Name: "az", Value: "1"},
+		}}}
+		cfgData, err := yaml.Marshal(cfg)
+		testutil.Ok(t, err)
+		p.SetConfig(string(cfgData))
 
 		testutil.Ok(t, p.Start())
 

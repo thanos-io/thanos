@@ -1,9 +1,3 @@
----
-type: docs
-title: Tools
-menu: components
----
-
 # Tools
 
 The `thanos tools` subcommand of Thanos is a set of additional CLI, short-living tools that are meant to be ran for development or debugging purposes.
@@ -79,6 +73,10 @@ Subcommands:
     source block for deletion to avoid overlaps. WARNING: This procedure is
     *IRREVERSIBLE* after certain time (delete delay), so do backup your blocks
     first.
+
+  tools bucket retention [<flags>]
+    Retention applies retention policies on the given bucket. Please make sure
+    no compactor is running on the same bucket at the same time.
 
   tools rules-check --rules=RULES
     Check if the rule files are valid or not.
@@ -184,6 +182,10 @@ Subcommands:
     *IRREVERSIBLE* after certain time (delete delay), so do backup your blocks
     first.
 
+  tools bucket retention [<flags>]
+    Retention applies retention policies on the given bucket. Please make sure
+    no compactor is running on the same bucket at the same time.
+
 
 ```
 
@@ -220,6 +222,21 @@ Flags:
       --log.format=logfmt       Log format to use. Possible options: logfmt or
                                 json.
       --log.level=info          Log filtering level.
+      --max-time=9999-12-31T23:59:59Z  
+                                End of time range limit to serve. Thanos tool
+                                bucket web will serve only blocks, which
+                                happened earlier than this value. Option can be
+                                a constant time in RFC3339 format or time
+                                duration relative to current time, such as -1d
+                                or 2h45m. Valid duration units are ms, s, m, h,
+                                d, w, y.
+      --min-time=0000-01-01T00:00:00Z  
+                                Start of time range limit to serve. Thanos tool
+                                bucket web will serve only blocks, which
+                                happened later than this value. Option can be a
+                                constant time in RFC3339 format or time duration
+                                relative to current time, such as -1d or 2h45m.
+                                Valid duration units are ms, s, m, h, d, w, y.
       --objstore.config=<content>  
                                 Alternative to 'objstore.config-file' flag
                                 (mutually exclusive). Content of YAML file that
@@ -232,6 +249,20 @@ Flags:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --refresh=30m             Refresh interval to download metadata from
                                 remote storage
+      --selector.relabel-config=<content>  
+                                Alternative to 'selector.relabel-config-file'
+                                flag (mutually exclusive). Content of YAML file
+                                that contains relabeling configuration that
+                                allows selecting blocks. It follows native
+                                Prometheus relabel-config syntax. See format
+                                details:
+                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+      --selector.relabel-config-file=<file-path>  
+                                Path to YAML file that contains relabeling
+                                configuration that allows selecting blocks. It
+                                follows native Prometheus relabel-config syntax.
+                                See format details:
+                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --timeout=5m              Timeout to download metadata from remote storage
       --tracing.config=<content>  
                                 Alternative to 'tracing.config-file' flag
@@ -576,6 +607,9 @@ Continuously downsamples blocks in an object store bucket.
 Flags:
       --data-dir="./data"     Data directory in which to cache blocks and
                               process downsamplings.
+      --downsample.concurrency=1  
+                              Number of goroutines to use when downsampling
+                              blocks.
       --hash-func=            Specify which hash function to use when
                               calculating the hashes of produced files. If no
                               function has been specified, it does not happen.

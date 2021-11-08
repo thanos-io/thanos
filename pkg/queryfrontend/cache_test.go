@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	"github.com/prometheus/prometheus/pkg/labels"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -75,6 +76,61 @@ func TestGenerateCacheKey(t *testing.T) {
 				MaxSourceResolution: hour,
 			},
 			expected: "up:10000:0:0",
+		},
+		{
+			name: "label names, no matcher",
+			req: &ThanosLabelsRequest{
+				Start: 0,
+			},
+			expected: ":[]:0",
+		},
+		{
+			name: "label names, single matcher",
+			req: &ThanosLabelsRequest{
+				Start:    0,
+				Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+			},
+			expected: `:[[foo="bar"]]:0`,
+		},
+		{
+			name: "label names, multiple matchers",
+			req: &ThanosLabelsRequest{
+				Start: 0,
+				Matchers: [][]*labels.Matcher{
+					{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
+					{labels.MustNewMatcher(labels.MatchEqual, "baz", "qux")},
+				},
+			},
+			expected: `:[[foo="bar"] [baz="qux"]]:0`,
+		},
+		{
+			name: "label values, no matcher",
+			req: &ThanosLabelsRequest{
+				Start: 0,
+				Label: "up",
+			},
+			expected: "up:[]:0",
+		},
+		{
+			name: "label values, single matcher",
+			req: &ThanosLabelsRequest{
+				Start:    0,
+				Label:    "up",
+				Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+			},
+			expected: `up:[[foo="bar"]]:0`,
+		},
+		{
+			name: "label values, multiple matchers",
+			req: &ThanosLabelsRequest{
+				Start: 0,
+				Label: "up",
+				Matchers: [][]*labels.Matcher{
+					{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
+					{labels.MustNewMatcher(labels.MatchEqual, "baz", "qux")},
+				},
+			},
+			expected: `up:[[foo="bar"] [baz="qux"]]:0`,
 		},
 	} {
 		key := splitter.GenerateCacheKey("", tc.req)

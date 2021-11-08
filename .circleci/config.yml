@@ -11,7 +11,7 @@ executors:
   golang-test:
     docker:
       - image: cimg/go:1.16-node
-      - image: beaukode/docker-swift-onlyone-authv2-keystone
+      - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1
 
 jobs:
   test:
@@ -35,7 +35,7 @@ jobs:
       - run:
           name: "Run unit tests."
           environment:
-            THANOS_TEST_OBJSTORE_SKIP: AZURE,COS,ALIYUNOSS
+            THANOS_TEST_OBJSTORE_SKIP: AZURE,COS,ALIYUNOSS,BOS
             # Variables for Swift testing.
             OS_AUTH_URL: http://127.0.0.1:5000/v2.0
             OS_PASSWORD: s3cr3t

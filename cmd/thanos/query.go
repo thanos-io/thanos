@@ -52,13 +52,18 @@ import (
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
+const (
+	promqlNegativeOffset = "promql-negative-offset"
+	promqlAtModifier     = "promql-at-modifier"
+)
+
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
 	cmd := app.Command(comp.String(), "Query node exposing PromQL enabled Query API with data retrieved from multiple store nodes.")
 
 	httpBindAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
-	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := extkingpin.RegisterGRPCFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA, grpcMaxConnAge := extkingpin.RegisterGRPCFlags(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
 	skipVerify := cmd.Flag("grpc-client-tls-skip-verify", "Disable TLS certificate verification i.e self signed, signed by fake CA").Default("false").Bool()
@@ -127,7 +132,7 @@ func registerQuery(app *extkingpin.App) {
 		Default("30s"))
 
 	dnsSDResolver := cmd.Flag("store.sd-dns-resolver", fmt.Sprintf("Resolver to use. Possible options: [%s, %s]", dns.GolangResolverType, dns.MiekgdnsResolverType)).
-		Default(string(dns.GolangResolverType)).Hidden().String()
+		Default(string(dns.MiekgdnsResolverType)).Hidden().String()
 
 	unhealthyStoreTimeout := extkingpin.ModelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
 
@@ -146,6 +151,11 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
+	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+promqlNegativeOffset+" and "+promqlAtModifier+".").Default("").Strings()
+
+	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
+		Hidden().Default("true").Bool()
+
 	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
 	defaultRangeQueryStep := extkingpin.ModelDuration(cmd.Flag("query.default-step", "Set default step for range queries. Default step is only used when step is not set in UI. In such cases, Thanos UI will use default step to calculate resolution (resolution = max(rangeSeconds / 250, defaultStep)). This will not work from Grafana, but Grafana has __step variable which can be used.").
@@ -158,6 +168,16 @@ func registerQuery(app *extkingpin.App) {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
+		}
+
+		var enableNegativeOffset, enableAtModifier bool
+		for _, feature := range *featureList {
+			if feature == promqlNegativeOffset {
+				enableNegativeOffset = true
+			}
+			if feature == promqlAtModifier {
+				enableAtModifier = true
+			}
 		}
 
 		if dup := firstDuplicate(*stores); dup != "" {
@@ -220,6 +240,7 @@ func registerQuery(app *extkingpin.App) {
 			*grpcCert,
 			*grpcKey,
 			*grpcClientCA,
+			*grpcMaxConnAge,
 			*secure,
 			*skipVerify,
 			*cert,
@@ -253,6 +274,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableRulePartialResponse,
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
+			*enableExemplarPartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
@@ -261,6 +283,8 @@ func registerQuery(app *extkingpin.App) {
 			*defaultMetadataTimeRange,
 			*strictStores,
 			*webDisableCORS,
+			enableAtModifier,
+			enableNegativeOffset,
 			component.Query,
 		)
 	})
@@ -281,6 +305,7 @@ func runQuery(
 	grpcCert string,
 	grpcKey string,
 	grpcClientCA string,
+	grpcMaxConnAge time.Duration,
 	secure bool,
 	skipVerify bool,
 	cert string,
@@ -314,6 +339,7 @@ func runQuery(
 	enableRulePartialResponse bool,
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
+	enableExemplarPartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
@@ -322,6 +348,8 @@ func runQuery(
 	defaultMetadataTimeRange time.Duration,
 	strictStores []string,
 	disableCORS bool,
+	enableAtModifier bool,
+	enableNegativeOffset bool,
 	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
@@ -373,48 +401,23 @@ func runQuery(
 	)
 
 	var (
-		stores = query.NewStoreSet(
+		endpoints = query.NewEndpointSet(
 			logger,
 			reg,
-			func() (specs []query.StoreSpec) {
-
+			func() (specs []query.EndpointSpec) {
 				// Add strict & static nodes.
 				for _, addr := range strictStores {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, true))
-				}
-				// Add DNS resolved addresses from static flags and file SD.
-				for _, addr := range dnsStoreProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
-				}
-				return removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
-			},
-			func() (specs []query.RuleSpec) {
-				for _, addr := range dnsRuleProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+					specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
 				}
 
-				// NOTE(s-urbaniak): No need to remove duplicates, as rule apis are a subset of store apis.
-				// hence, any duplicates will be tracked in the store api set.
+				for _, dnsProvider := range []*dns.Provider{dnsStoreProvider, dnsRuleProvider, dnsExemplarProvider, dnsMetadataProvider, dnsTargetProvider} {
+					var tmpSpecs []query.EndpointSpec
 
-				return specs
-			},
-			func() (specs []query.TargetSpec) {
-				for _, addr := range dnsTargetProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
-				}
-
-				return specs
-			},
-			func() (specs []query.MetadataSpec) {
-				for _, addr := range dnsMetadataProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
-				}
-
-				return specs
-			},
-			func() (specs []query.ExemplarSpec) {
-				for _, addr := range dnsExemplarProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr, false))
+					for _, addr := range dnsProvider.Addresses() {
+						tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpec(addr, false))
+					}
+					tmpSpecs = removeDuplicateEndpointSpecs(logger, duplicatedStores, tmpSpecs)
+					specs = append(specs, tmpSpecs...)
 				}
 
 				return specs
@@ -422,11 +425,11 @@ func runQuery(
 			dialOpts,
 			unhealthyStoreTimeout,
 		)
-		proxy            = store.NewProxyStore(logger, reg, stores.Get, component.Query, selectorLset, storeResponseTimeout)
-		rulesProxy       = rules.NewProxy(logger, stores.GetRulesClients)
-		targetsProxy     = targets.NewProxy(logger, stores.GetTargetsClients)
-		metadataProxy    = metadata.NewProxy(logger, stores.GetMetadataClients)
-		exemplarsProxy   = exemplars.NewProxy(logger, stores.GetExemplarsStores, selectorLset)
+		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout)
+		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
+		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
+		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)
+		exemplarsProxy   = exemplars.NewProxy(logger, endpoints.GetExemplarsStores, selectorLset)
 		queryableCreator = query.NewQueryableCreator(
 			logger,
 			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
@@ -444,6 +447,8 @@ func runQuery(
 			NoStepSubqueryIntervalFn: func(int64) int64 {
 				return defaultEvaluationInterval.Milliseconds()
 			},
+			EnableNegativeOffset: enableNegativeOffset,
+			EnableAtModifier:     enableAtModifier,
 		}
 	)
 
@@ -452,14 +457,15 @@ func runQuery(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
-				stores.Update(ctx)
+				endpoints.Update(ctx)
 				return nil
 			})
 		}, func(error) {
 			cancel()
-			stores.Close()
+			endpoints.Close()
 		})
 	}
+
 	// Run File Service Discovery and update the store set when the files are modified.
 	if fileSD != nil {
 		var fileSDUpdates chan []*targetgroup.Group
@@ -484,7 +490,7 @@ func runQuery(
 						continue
 					}
 					fileSDCache.Update(update)
-					stores.Update(ctxUpdate)
+					endpoints.Update(ctxUpdate)
 
 					if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
 						level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
@@ -497,7 +503,6 @@ func runQuery(
 			}
 		}, func(error) {
 			cancelUpdate()
-			close(fileSDUpdates)
 		})
 	}
 	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
@@ -560,11 +565,11 @@ func runQuery(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-		ui.NewQueryUI(logger, stores, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
+		ui.NewQueryUI(logger, endpoints, webExternalPrefix, webPrefixHeaderName).Register(router, ins)
 
 		api := v1.NewQueryAPI(
 			logger,
-			stores,
+			endpoints.GetEndpointStatus,
 			engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta),
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
@@ -577,6 +582,7 @@ func runQuery(
 			enableRulePartialResponse,
 			enableTargetPartialResponse,
 			enableMetricMetadataPartialResponse,
+			enableExemplarPartialResponse,
 			queryReplicaLabels,
 			flagsMap,
 			defaultRangeQueryStep,
@@ -626,6 +632,7 @@ func runQuery(
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
+			grpcserver.WithMaxConnAge(grpcMaxConnAge),
 		)
 
 		g.Add(func() error {
@@ -641,8 +648,8 @@ func runQuery(
 	return nil
 }
 
-func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.StoreSpec) []query.StoreSpec {
-	set := make(map[string]query.StoreSpec)
+func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.EndpointSpec) []query.EndpointSpec {
+	set := make(map[string]query.EndpointSpec)
 	for _, spec := range specs {
 		addr := spec.Addr()
 		if _, ok := set[addr]; ok {
@@ -651,7 +658,7 @@ func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Co
 		}
 		set[addr] = spec
 	}
-	deduplicated := make([]query.StoreSpec, 0, len(set))
+	deduplicated := make([]query.EndpointSpec, 0, len(set))
 	for _, value := range set {
 		deduplicated = append(deduplicated, value)
 	}
@@ -710,6 +717,8 @@ func engineFactory(
 			ActiveQueryTracker:       eo.ActiveQueryTracker,
 			LookbackDelta:            lookbackDelta,
 			NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
+			EnableAtModifier:         eo.EnableAtModifier,
+			EnableNegativeOffset:     eo.EnableNegativeOffset,
 		})
 	}
 	return func(maxSourceResolutionMillis int64) *promql.Engine {

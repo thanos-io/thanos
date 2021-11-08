@@ -37,6 +37,10 @@ body.bootstrap-dark {
   background-color: $body-bg; // 2
 }
 
+body.bootstrap-dark button{
+  color: $body-color;
+}
+
 .bootstrap-dark {
   @import 'node_modules/bootstrap/scss/root';
   @import 'node_modules/bootstrap/scss/type';

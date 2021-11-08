@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 
@@ -71,7 +72,11 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	}
 
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{
+		// NOTE: It is recommended for gRPC messages to not go over 1MB, yet it is typical for remote write requests and store API responses to go over 4MB.
+		// Remove limits and allow users to use histogram message sizes to detect those situations.
+		// TODO(bwplotka): https://github.com/grpc-ecosystem/go-grpc-middleware/issues/462
 		grpc.MaxSendMsgSize(math.MaxInt32),
+		grpc.MaxRecvMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.UnaryServerInterceptor(),
@@ -90,6 +95,9 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 
 	if options.tlsConfig != nil {
 		options.grpcOpts = append(options.grpcOpts, grpc.Creds(credentials.NewTLS(options.tlsConfig)))
+	}
+	if options.maxConnAge > 0 {
+		options.grpcOpts = append(options.grpcOpts, grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: options.maxConnAge}))
 	}
 	s := grpc.NewServer(options.grpcOpts...)
 

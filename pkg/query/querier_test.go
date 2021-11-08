@@ -743,7 +743,7 @@ type mockedQueryable struct {
 
 // Querier creates a querier with the provided min and max time.
 // The promQL engine sets mint and it is calculated based on the default lookback delta.
-func (q *mockedQueryable) Querier(_ context.Context, mint int64, maxt int64) (storage.Querier, error) {
+func (q *mockedQueryable) Querier(_ context.Context, mint, maxt int64) (storage.Querier, error) {
 	if q.Creator == nil {
 		return q.querier, nil
 	}

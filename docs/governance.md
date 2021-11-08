@@ -1,18 +1,12 @@
----
-type: docs
-title: Governance
-menu: thanos
----
-
 # Governance
 
 This document describes the rules and governance of the project. It is a slightly modified version of the [Prometheus Governance](https://prometheus.io/governance/#governance-changes).
 
 It is meant to be followed by all the developers of the Thanos project and the Thanos community. Common terminology used in this governance document are listed below:
 
-* **Maintainers Team**: A core Thanos team that have owner access to http://github.com/thanos-io organization and all projects within it. Current list is available [here](https://thanos.io/tip/thanos/maintainers.md/).
+* **Maintainers Team**: A core Thanos team that have owner access to http://github.com/thanos-io organization and all projects within it. Current list is available [here](../MAINTAINERS.md).
 
-* **Triage Team**: Contributors who does not belong to Maintainer's team, but has `Triage` GitHub role on [Thanos](https://github.com/thanos-io/thanos) repository allowing to change GitHub issues and PRs statuses and labels. They are listed [here](https://thanos.io/tip/thanos/maintainers.md/#triage).
+* **Triage Team**: Contributors who does not belong to Maintainer's team, but has `Triage` GitHub role on [Thanos](https://github.com/thanos-io/thanos) repository allowing to change GitHub issues and PRs statuses and labels. They are listed [here](../MAINTAINERS.md#triage).
 
 * **The Thanos project**: The sum of all activities performed under the [thanos-io organization on GitHub](https://github.com/thanos-io), concerning one or more repositories or the community.
 
@@ -36,7 +30,7 @@ If they choose to accept, the following steps are taken:
 
 * Maintainer is added to the [GitHub organization](https://github.com/thanos-io) as *Owner*.
 * Maintainer is added to the [thanos-io](https://groups.google.com/forum/#!forum/thanos-io).
-* Maintainer is added to the list of team members [here](https://thanos.io/tip/thanos/maintainers.md/)
+* Maintainer is added to the list of team members [here](../MAINTAINERS.md)
 * New maintainer is announced on the [Thanos Twitter](https://twitter.com/ThanosMetrics) by an existing team member.
 
 Team members may retire at any time by emailing [thanos-io@googlegroups.com](https://groups.google.com/forum/#!forum/thanos-io).
@@ -57,7 +51,7 @@ If they choose to accept, the following steps are taken:
 
 * Triage member is added to the [Thanos project](http://github.com/thanos-io/thanos) with `Triage` access.
 * Triage member is added to the [thanos-io](https://groups.google.com/forum/#!forum/thanos-io).
-* Triage member is added to the list of Triage members [here](https://thanos.io/tip/thanos/maintainers.md/).
+* Triage member is added to the list of Triage members [here](../MAINTAINERS.md#triage).
 * New team Triage member are announced on the [Thanos Twitter](https://twitter.com/ThanosMetrics) by an existing team member.
 
 Triage member may retire at any time by emailing [thanos-io@googlegroups.com](https://groups.google.com/forum/#!forum/thanos-io). It can be proposed to step up as Maintainer in any time as well.

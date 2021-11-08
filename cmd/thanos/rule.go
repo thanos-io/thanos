@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -26,16 +27,21 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
+	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"gopkg.in/yaml.v2"
 
-	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/thanos-io/thanos/pkg/alert"
 	v1 "github.com/thanos-io/thanos/pkg/api/rule"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -43,12 +49,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
-	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/query"
 	thanosrules "github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -75,12 +79,13 @@ type ruleConfig struct {
 	alertQueryURL          *url.URL
 	alertRelabelConfigYAML []byte
 
+	rwConfig *extflag.PathOrContent
+
 	resendDelay    time.Duration
 	evalInterval   time.Duration
 	ruleFiles      []string
 	objStoreConfig *extflag.PathOrContent
 	dataDir        string
-	reloadSignal   <-chan struct{}
 	lset           labels.Labels
 }
 
@@ -118,6 +123,8 @@ func registerRule(app *extkingpin.App) {
 	cmd.Flag("eval-interval", "The default evaluation interval to use.").
 		Default("30s").DurationVar(&conf.evalInterval)
 
+	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write server where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
+
 	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
 
 	conf.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
@@ -142,6 +149,10 @@ func registerRule(app *extkingpin.App) {
 			RetentionDuration: int64(time.Duration(*tsdbRetention) / time.Millisecond),
 			NoLockfile:        *noLockFile,
 			WALCompression:    *walCompression,
+		}
+
+		agentOpts := &agent.Options{
+			WALCompression: *walCompression,
 		}
 
 		// Parse and check query configuration.
@@ -195,11 +206,13 @@ func registerRule(app *extkingpin.App) {
 			tracer,
 			comp,
 			*conf,
+			reload,
 			getFlagsMap(cmd.Flags()),
 			httpLogOpts,
 			grpcLogOpts,
 			tagOpts,
 			tsdbOpts,
+			agentOpts,
 		)
 	})
 }
@@ -257,37 +270,39 @@ func runRule(
 	tracer opentracing.Tracer,
 	comp component.Component,
 	conf ruleConfig,
+	reloadSignal <-chan struct{},
 	flagsMap map[string]string,
 	httpLogOpts []logging.Option,
 	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 	tsdbOpts *tsdb.Options,
+	agentOpts *agent.Options,
 ) error {
 	metrics := newRuleMetrics(reg)
 
-	var queryCfg []query.Config
+	var queryCfg []httpconfig.Config
 	var err error
 	if len(conf.queryConfigYAML) > 0 {
-		queryCfg, err = query.LoadConfigs(conf.queryConfigYAML)
+		queryCfg, err = httpconfig.LoadConfigs(conf.queryConfigYAML)
 		if err != nil {
 			return err
 		}
 	} else {
-		queryCfg, err = query.BuildQueryConfig(conf.query.addrs)
+		queryCfg, err = httpconfig.BuildConfig(conf.query.addrs)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "query configuration")
 		}
 
 		// Build the query configuration from the legacy query flags.
-		var fileSDConfigs []http_util.FileSDConfig
+		var fileSDConfigs []httpconfig.FileSDConfig
 		if len(conf.query.sdFiles) > 0 {
-			fileSDConfigs = append(fileSDConfigs, http_util.FileSDConfig{
+			fileSDConfigs = append(fileSDConfigs, httpconfig.FileSDConfig{
 				Files:           conf.query.sdFiles,
 				RefreshInterval: model.Duration(conf.query.sdInterval),
 			})
 			queryCfg = append(queryCfg,
-				query.Config{
-					EndpointsConfig: http_util.EndpointsConfig{
+				httpconfig.Config{
+					EndpointsConfig: httpconfig.EndpointsConfig{
 						Scheme:        "http",
 						FileSDConfigs: fileSDConfigs,
 					},
@@ -301,14 +316,16 @@ func runRule(
 		extprom.WrapRegistererWithPrefix("thanos_rule_query_apis_", reg),
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
-	var queryClients []*http_util.Client
+	var queryClients []*httpconfig.Client
+	queryClientMetrics := extpromhttp.NewClientMetrics(extprom.WrapRegistererWith(prometheus.Labels{"client": "query"}, reg))
 	for _, cfg := range queryCfg {
-		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "query")
+		cfg.HTTPClientConfig.ClientMetrics = queryClientMetrics
+		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "query")
 		if err != nil {
 			return err
 		}
 		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
-		queryClient, err := http_util.NewClient(logger, cfg.EndpointsConfig, c, queryProvider.Clone())
+		queryClient, err := httpconfig.NewClient(logger, cfg.EndpointsConfig, c, queryProvider.Clone())
 		if err != nil {
 			return err
 		}
@@ -316,25 +333,64 @@ func runRule(
 		// Discover and resolve query addresses.
 		addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
 	}
+	var (
+		appendable storage.Appendable
+		queryable  storage.Queryable
+		tsdbDB     *tsdb.DB
+		agentDB    *agent.DB
+	)
 
-	db, err := tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
+	rwCfgYAML, err := conf.rwConfig.Content()
 	if err != nil {
-		return errors.Wrap(err, "open TSDB")
+		return err
 	}
 
-	level.Debug(logger).Log("msg", "removing storage lock file if any")
-	if err := removeLockfileIfAny(logger, conf.dataDir); err != nil {
-		return errors.Wrap(err, "remove storage lock files")
-	}
+	if len(rwCfgYAML) > 0 {
+		var rwCfg config.RemoteWriteConfig
+		if err := yaml.Unmarshal(rwCfgYAML, &rwCfg); err != nil {
+			return err
+		}
+		walDir := filepath.Join(conf.dataDir, rwCfg.Name)
+		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
+		remoteStore := remote.NewStorage(logger, reg, func() (int64, error) {
+			return 0, nil
+		}, walDir, 1*time.Minute, nil)
+		if err := remoteStore.ApplyConfig(&config.Config{
+			GlobalConfig:       config.DefaultGlobalConfig,
+			RemoteWriteConfigs: []*config.RemoteWriteConfig{&rwCfg},
+		}); err != nil {
+			return errors.Wrap(err, "applying config to remote storage")
+		}
 
-	{
-		done := make(chan struct{})
-		g.Add(func() error {
-			<-done
-			return db.Close()
-		}, func(error) {
-			close(done)
-		})
+		agentDB, err = agent.Open(logger, reg, remoteStore, walDir, agentOpts)
+		if err != nil {
+			return errors.Wrap(err, "start remote write agent db")
+		}
+		fanoutStore := storage.NewFanout(logger, agentDB, remoteStore)
+		appendable = fanoutStore
+		queryable = fanoutStore
+	} else {
+		tsdbDB, err = tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
+		if err != nil {
+			return errors.Wrap(err, "open TSDB")
+		}
+
+		level.Debug(logger).Log("msg", "removing storage lock file if any")
+		if err := removeLockfileIfAny(logger, conf.dataDir); err != nil {
+			return errors.Wrap(err, "remove storage lock files")
+		}
+
+		{
+			done := make(chan struct{})
+			g.Add(func() error {
+				<-done
+				return tsdbDB.Close()
+			}, func(error) {
+				close(done)
+			})
+		}
+		appendable = tsdbDB
+		queryable = tsdbDB
 	}
 
 	// Build the Alertmanager clients.
@@ -373,14 +429,18 @@ func runRule(
 		dns.ResolverType(conf.query.dnsSDResolver),
 	)
 	var alertmgrs []*alert.Alertmanager
+	amClientMetrics := extpromhttp.NewClientMetrics(
+		extprom.WrapRegistererWith(prometheus.Labels{"client": "alertmanager"}, reg),
+	)
 	for _, cfg := range alertingCfg.Alertmanagers {
-		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
+		cfg.HTTPClientConfig.ClientMetrics = amClientMetrics
+		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
 		if err != nil {
 			return err
 		}
 		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
 		// Each Alertmanager client has a different list of targets thus each needs its own DNS provider.
-		amClient, err := http_util.NewClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
+		amClient, err := httpconfig.NewClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
 		if err != nil {
 			return err
 		}
@@ -428,13 +488,17 @@ func runRule(
 			rules.ManagerOptions{
 				NotifyFunc:  notifyFunc,
 				Logger:      logger,
-				Appendable:  db,
+				Appendable:  appendable,
 				ExternalURL: nil,
-				Queryable:   db,
+				Queryable:   queryable,
 				ResendDelay: conf.resendDelay,
 			},
 			queryFuncCreator(logger, queryClients, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod),
 			conf.lset,
+			// In our case the querying URL is the external URL because in Prometheus
+			// --web.external-url points to it i.e. it points at something where the user
+			// could execute the alert or recording rule's expression and get results.
+			conf.alertQueryURL.String(),
 		)
 
 		// Schedule rule manager that evaluates rules.
@@ -483,7 +547,7 @@ func runRule(
 			}
 			for {
 				select {
-				case <-conf.reloadSignal:
+				case <-reloadSignal:
 					if err := reloadRules(logger, conf.ruleFiles, ruleMgr, conf.evalInterval, metrics); err != nil {
 						level.Error(logger).Log("msg", "reload rules by sighup failed", "err", err)
 					}
@@ -511,31 +575,31 @@ func runRule(
 	)
 
 	// Start gRPC server.
-	{
-		tsdbStore := store.NewTSDBStore(logger, db, component.Rule, conf.lset)
-
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA)
-		if err != nil {
-			return errors.Wrap(err, "setup gRPC server")
-		}
-
-		// TODO: Add rules API implementation when ready.
-		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)),
-			grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
-			grpcserver.WithListen(conf.grpc.bindAddress),
-			grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
-			grpcserver.WithTLSConfig(tlsCfg),
-		)
-
-		g.Add(func() error {
-			statusProber.Ready()
-			return s.ListenAndServe()
-		}, func(err error) {
-			statusProber.NotReady(err)
-			s.Shutdown(err)
-		})
+	tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA)
+	if err != nil {
+		return errors.Wrap(err, "setup gRPC server")
 	}
+
+	options := []grpcserver.Option{
+		grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
+		grpcserver.WithListen(conf.grpc.bindAddress),
+		grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
+		grpcserver.WithTLSConfig(tlsCfg),
+	}
+	if tsdbDB != nil {
+		tsdbStore := store.NewTSDBStore(logger, tsdbDB, component.Rule, conf.lset)
+		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)))
+	}
+	s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe, options...)
+
+	g.Add(func() error {
+		statusProber.Ready()
+		return s.ListenAndServe()
+	}, func(err error) {
+		statusProber.NotReady(err)
+		s.Shutdown(err)
+	})
+
 	// Start UI & metrics HTTP server.
 	{
 		router := route.New()
@@ -695,7 +759,7 @@ func removeDuplicateQueryEndpoints(logger log.Logger, duplicatedQueriers prometh
 
 func queryFuncCreator(
 	logger log.Logger,
-	queriers []*http_util.Client,
+	queriers []*httpconfig.Client,
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
 	httpMethod string,
@@ -751,7 +815,7 @@ func queryFuncCreator(
 	}
 }
 
-func addDiscoveryGroups(g *run.Group, c *http_util.Client, interval time.Duration) {
+func addDiscoveryGroups(g *run.Group, c *httpconfig.Client, interval time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 	g.Add(func() error {
 		c.Discover(ctx)

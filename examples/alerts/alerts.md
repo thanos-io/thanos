@@ -4,8 +4,7 @@ Here are some example alerts configured for Kubernetes environment.
 
 ## Compaction
 
-[embedmd]:# (../tmp/thanos-compact.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-compact.yaml"
 name: thanos-compact
 rules:
 - alert: ThanosCompactMultipleRunning
@@ -74,8 +73,7 @@ rules:
 
 For Thanos Ruler we run some alerts in local Prometheus, to make sure that Thanos Ruler is working:
 
-[embedmd]:# (../tmp/thanos-rule.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-rule.yaml"
 name: thanos-rule
 rules:
 - alert: ThanosRuleQueueIsDroppingAlerts
@@ -226,8 +224,7 @@ rules:
 
 ## Store Gateway
 
-[embedmd]:# (../tmp/thanos-store.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-store.yaml"
 name: thanos-store
 rules:
 - alert: ThanosStoreGrpcErrorRate
@@ -296,20 +293,9 @@ rules:
 
 ## Sidecar
 
-[embedmd]:# (../tmp/thanos-sidecar.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-sidecar.yaml"
 name: thanos-sidecar
 rules:
-- alert: ThanosSidecarPrometheusDown
-  annotations:
-    description: Thanos Sidecar {{$labels.instance}} cannot connect to Prometheus.
-    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarprometheusdown
-    summary: Thanos Sidecar cannot connect to Prometheus
-  expr: |
-    thanos_sidecar_prometheus_up{job=~".*thanos-sidecar.*"} == 0
-  for: 5m
-  labels:
-    severity: critical
 - alert: ThanosSidecarBucketOperationsFailed
   annotations:
     description: Thanos Sidecar {{$labels.instance}} bucket operations are failing
@@ -320,14 +306,16 @@ rules:
   for: 5m
   labels:
     severity: critical
-- alert: ThanosSidecarUnhealthy
+- alert: ThanosSidecarNoConnectionToStartedPrometheus
   annotations:
-    description: Thanos Sidecar {{$labels.instance}} is unhealthy for more than {{$value}}
-      seconds.
-    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy
-    summary: Thanos Sidecar is unhealthy.
+    description: Thanos Sidecar {{$labels.instance}} is unhealthy.
+    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus
+    summary: Thanos Sidecar cannot access Prometheus, even though Prometheus seems
+      healthy and has reloaded WAL.
   expr: |
-    time() - max by (job, instance) (thanos_sidecar_last_heartbeat_success_time_seconds{job=~".*thanos-sidecar.*"}) >= 240
+    thanos_sidecar_prometheus_up{job=~".*thanos-sidecar.*"} == 0
+    AND on (namespace, pod)
+    prometheus_tsdb_data_replay_duration_seconds != 0
   for: 5m
   labels:
     severity: critical
@@ -335,8 +323,7 @@ rules:
 
 ## Query
 
-[embedmd]:# (../tmp/thanos-query.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-query.yaml"
 name: thanos-query
 rules:
 - alert: ThanosQueryHttpRequestQueryErrorRateHigh
@@ -449,8 +436,7 @@ rules:
 
 ## Receive
 
-[embedmd]:# (../tmp/thanos-receive.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-receive.yaml"
 name: thanos-receive
 rules:
 - alert: ThanosReceiveHttpRequestErrorRateHigh
@@ -584,8 +570,7 @@ rules:
 
 ## Replicate
 
-[embedmd]:# (../tmp/thanos-bucket-replicate.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-bucket-replicate.yaml"
 name: thanos-bucket-replicate
 rules:
 - alert: ThanosBucketReplicateErrorRate
@@ -624,8 +609,7 @@ rules:
 
 ### Absent Rules
 
-[embedmd]:# (../tmp/thanos-component-absent.yaml yaml)
-```yaml
+```yaml mdox-exec="cat examples/tmp/thanos-component-absent.yaml"
 name: thanos-component-absent
 rules:
 - alert: ThanosBucketReplicateIsDown

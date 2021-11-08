@@ -1,9 +1,3 @@
----
-type: docs
-title: Query
-menu: components
----
-
 # Querier/Query
 
 The `thanos query` command (also known as "Querier") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
@@ -35,7 +29,7 @@ Since for Querier "a backend" is anything that implements gRPC StoreAPI we can a
 * Metrics received from Prometheus remote write streams (see [Receiver](receive.md))
 * Another Querier (you can stack Queriers on top of each other)
 * Non-Prometheus systems!
-  * e.g [OpenTSDB](../integrations.md#opentsdb)
+  * e.g [OpenTSDB](../integrations.md#opentsdb-as-storeapi)
 
 Thanks to that, you can run queries (manually, from Grafana or via Alerting rule) that aggregate metrics from mix of those sources.
 
@@ -57,7 +51,7 @@ Thanos Querier instead pulls the data from both replicas, and deduplicate those 
 
 Overall QueryAPI exposed by Thanos is guaranteed to be compatible with [Prometheus 2.x. API](https://prometheus.io/docs/prometheus/latest/querying/api/). The above diagram shows what Querier does for each Prometheus query request.
 
-See [here](https://thanos.io/tip/thanos/service-discovery.md/) on how to connect Querier with desired StoreAPIs.
+See [here](../service-discovery.md) on how to connect Querier with desired StoreAPIs.
 
 ### Deduplication
 
@@ -258,6 +252,9 @@ Query node exposing PromQL enabled Query API with data retrieved from multiple
 store nodes.
 
 Flags:
+      --enable-feature= ...      Comma separated experimental feature names to
+                                 enable.The current list of features is
+                                 promql-negative-offset and promql-at-modifier.
       --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -277,6 +274,10 @@ Flags:
                                  signed, signed by fake CA
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
+      --grpc-server-max-connection-age=60m  
+                                 The grpc server max connection age. This
+                                 controls how often to re-read the tls
+                                 certificates and redo the TLS handshake
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-client-ca=""  

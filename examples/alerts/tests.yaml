@@ -7,127 +7,74 @@ evaluation_interval: 1m
 tests:
 - interval: 1m
   input_series:
-  - series: 'thanos_sidecar_last_heartbeat_success_time_seconds{namespace="production", job="thanos-sidecar", instance="thanos-sidecar-0"}'
-    values: '5 10 43 17 11 0 0 0'
-  - series: 'thanos_sidecar_last_heartbeat_success_time_seconds{namespace="production", job="thanos-sidecar", instance="thanos-sidecar-1"}'
-    values: '4 9 42 15 10 0 0 0'
-  promql_expr_test:
-    - expr: time()
-      eval_time: 1m
-      exp_samples:
-        - labels: '{}'
-          value: 60
-    - expr: time()
-      eval_time: 2m
-      exp_samples:
-        - labels: '{}'
-          value: 120
-    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance)
-      eval_time: 2m
-      exp_samples:
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
-          value: 43
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
-          value: 42
-    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance)
-      eval_time: 10m
-      exp_samples:
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
-          value: 0
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
-          value: 0
-    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance)
-      eval_time: 11m
-      exp_samples:
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
-          value: 0
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
-          value: 0
-    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance)
-      eval_time: 10m
-      exp_samples:
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
-          value: 600
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
-          value: 600
-    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance)
-      eval_time: 11m
-      exp_samples:
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
-          value: 660
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
-          value: 660
-    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (job, instance) >= 600
-      eval_time: 12m
-      exp_samples:
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-0"}'
-          value: 720
-        - labels: '{job="thanos-sidecar", instance="thanos-sidecar-1"}'
-          value: 720
+  - series: 'thanos_sidecar_prometheus_up{namespace="production", job="thanos-sidecar", instance="thanos-sidecar-0", pod="prometheus-0"}'
+    values: '1x5 0x15'
+  - series: 'thanos_sidecar_prometheus_up{namespace="production", job="thanos-sidecar", instance="thanos-sidecar-1", pod="prometheus-1"}'
+    values: '1x4 0x15'
+  - series: 'prometheus_tsdb_data_replay_duration_seconds{namespace="production", job="prometheus-k8s", instance="prometheus-k8s-0", pod="prometheus-0"}'
+    values: '4x5 0x5 5x15'
+  - series: 'prometheus_tsdb_data_replay_duration_seconds{namespace="production", job="prometheus-k8s", instance="prometheus-k8s-1", pod="prometheus-1"}'
+    values: '10x14 0x6'
   alert_rule_test:
   - eval_time: 1m
-    alertname: ThanosSidecarUnhealthy
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
   - eval_time: 2m
-    alertname: ThanosSidecarUnhealthy
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
   - eval_time: 3m
-    alertname: ThanosSidecarUnhealthy
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
   - eval_time: 10m
-    alertname: ThanosSidecarUnhealthy
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
     exp_alerts:
     - exp_labels:
         severity: critical
         job: thanos-sidecar
-        instance: thanos-sidecar-0
-      exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for more than 600 seconds.'
-        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
-        summary: 'Thanos Sidecar is unhealthy.'
-    - exp_labels:
-        severity: critical
-        job: thanos-sidecar
         instance: thanos-sidecar-1
+        namespace: production
+        pod: prometheus-1
       exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for more than 600 seconds.'
-        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
-        summary: 'Thanos Sidecar is unhealthy.'
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus'
+        summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.'
   - eval_time: 11m
-    alertname: ThanosSidecarUnhealthy
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
     exp_alerts:
     - exp_labels:
         severity: critical
         job: thanos-sidecar
-        instance: thanos-sidecar-0
-      exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for more than 660 seconds.'
-        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
-        summary: 'Thanos Sidecar is unhealthy.'
-    - exp_labels:
-        severity: critical
-        job: thanos-sidecar
         instance: thanos-sidecar-1
+        namespace: production
+        pod: prometheus-1
       exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for more than 660 seconds.'
-        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
-        summary: 'Thanos Sidecar is unhealthy.'
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus'
+        summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.'
   - eval_time: 12m
-    alertname: ThanosSidecarUnhealthy
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-1
+        namespace: production
+        pod: prometheus-1
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus'
+        summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.'
+  - eval_time: 20m
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
     exp_alerts:
     - exp_labels:
         severity: critical
         job: thanos-sidecar
         instance: thanos-sidecar-0
+        namespace: production
+        pod: prometheus-0
       exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy for more than 720 seconds.'
-        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
-        summary: 'Thanos Sidecar is unhealthy.'
-    - exp_labels:
-        severity: critical
-        job: thanos-sidecar
-        instance: thanos-sidecar-1
-      exp_annotations:
-        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy for more than 720 seconds.'
-        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy'
-        summary: 'Thanos Sidecar is unhealthy.'
+        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus'
+        summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.'
+
 - interval: 1m
   input_series:
   - series: 'prometheus_rule_evaluations_total{namespace="production", job="thanos-ruler", instance="thanos-ruler-0"}'

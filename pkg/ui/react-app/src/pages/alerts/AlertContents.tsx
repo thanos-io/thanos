@@ -85,7 +85,7 @@ const AlertsContent: FC<AlertsProps> = ({ groups = [], statsCount }) => {
         return hasFilterOn ? (
           <Fragment key={i}>
             <GroupInfo rules={group.rules}>
-              {group.file} &gt {group.name}
+              {group.file} &gt; {group.name}
             </GroupInfo>
             {group.rules.map((rule, j) => {
               return (

@@ -32,7 +32,7 @@ func TestWriter(t *testing.T) {
 		reqs             []*prompb.WriteRequest
 		expectedErr      error
 		expectedIngested []prompb.TimeSeries
-		maxExemplars     int
+		maxExemplars     int64
 	}{
 		"should succeed on valid series with exemplars": {
 			reqs: []*prompb.WriteRequest{{
@@ -128,11 +128,12 @@ func TestWriter(t *testing.T) {
 			logger := log.NewNopLogger()
 
 			m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-				RetentionDuration: (6 * time.Hour).Milliseconds(),
-				NoLockfile:        true,
-				MaxExemplars:      testData.maxExemplars,
+				MinBlockDuration:      (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
+				RetentionDuration:     (6 * time.Hour).Milliseconds(),
+				NoLockfile:            true,
+				MaxExemplars:          testData.maxExemplars,
+				EnableExemplarStorage: true,
 			},
 				labels.FromStrings("replica", "01"),
 				"tenant_id",
@@ -166,6 +167,7 @@ func TestWriter(t *testing.T) {
 				if testData.expectedErr == nil || idx < len(testData.reqs)-1 {
 					testutil.Ok(t, err)
 				} else {
+					testutil.NotOk(t, err)
 					testutil.Equals(t, testData.expectedErr.Error(), err.Error())
 				}
 			}

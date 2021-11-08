@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/go-kit/kit/log"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -50,7 +51,7 @@ func Test_getContainerURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			got, err := getContainerURL(ctx, tt.args.conf)
+			got, err := getContainerURL(ctx, log.NewNopLogger(), tt.args.conf)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getContainerURL() error = %v, wantErr %v", err, tt.wantErr)
 				return

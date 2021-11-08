@@ -1,6 +1,6 @@
 {
-  "title": "Intermediate: Ingesting metrics data from unreachable sources with Thanos Receive",
-  "description": "Learn how to ingest and query metrics data from unreachable sources with Thanos Receive.",
+  "title": "Intermediate: Streaming metrics from remote source with Thanos Receive",
+  "description": "Learn how to ingest and then query metrics data from egress-only sources with Thanos Receive.",
   "difficulty": "Moderate",
   "details": {
     "steps": [

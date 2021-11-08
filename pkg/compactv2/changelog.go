@@ -30,6 +30,6 @@ func (l *changeLog) DeleteSeries(del labels.Labels, intervals tombstones.Interva
 	_, _ = fmt.Fprintf(l.w, "Deleted %v %v\n", del.String(), intervals)
 }
 
-func (l *changeLog) ModifySeries(old labels.Labels, new labels.Labels) {
+func (l *changeLog) ModifySeries(old, new labels.Labels) {
 	_, _ = fmt.Fprintf(l.w, "Relabelled %v %v\n", old.String(), new.String())
 }

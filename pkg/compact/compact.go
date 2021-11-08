@@ -71,7 +71,7 @@ type syncerMetrics struct {
 	blocksMarkedForDeletion   prometheus.Counter
 }
 
-func newSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion prometheus.Counter, garbageCollectedBlocks prometheus.Counter) *syncerMetrics {
+func newSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter) *syncerMetrics {
 	var m syncerMetrics
 
 	m.garbageCollectedBlocks = garbageCollectedBlocks
@@ -96,7 +96,7 @@ func newSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion prometh
 
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewMetaSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter *block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion prometheus.Counter, garbageCollectedBlocks prometheus.Counter, blockSyncConcurrency int) (*Syncer, error) {
+func NewMetaSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, duplicateBlocksFilter *block.DeduplicateFilter, ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks prometheus.Counter, blockSyncConcurrency int) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -240,6 +240,7 @@ type DefaultGrouper struct {
 	verticalCompactions      *prometheus.CounterVec
 	garbageCollectedBlocks   prometheus.Counter
 	blocksMarkedForDeletion  prometheus.Counter
+	blocksMarkedForNoCompact prometheus.Counter
 	hashFunc                 metadata.HashFunc
 }
 
@@ -252,6 +253,7 @@ func NewDefaultGrouper(
 	reg prometheus.Registerer,
 	blocksMarkedForDeletion prometheus.Counter,
 	garbageCollectedBlocks prometheus.Counter,
+	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
 ) *DefaultGrouper {
 	return &DefaultGrouper{
@@ -279,9 +281,10 @@ func NewDefaultGrouper(
 			Name: "thanos_compact_group_vertical_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 		}, []string{"group"}),
-		garbageCollectedBlocks:  garbageCollectedBlocks,
-		blocksMarkedForDeletion: blocksMarkedForDeletion,
-		hashFunc:                hashFunc,
+		blocksMarkedForNoCompact: blocksMarkedForNoCompact,
+		garbageCollectedBlocks:   garbageCollectedBlocks,
+		blocksMarkedForDeletion:  blocksMarkedForDeletion,
+		hashFunc:                 hashFunc,
 	}
 }
 
@@ -309,6 +312,7 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.verticalCompactions.WithLabelValues(groupKey),
 				g.garbageCollectedBlocks,
 				g.blocksMarkedForDeletion,
+				g.blocksMarkedForNoCompact,
 				g.hashFunc,
 			)
 			if err != nil {
@@ -346,6 +350,7 @@ type Group struct {
 	verticalCompactions         prometheus.Counter
 	groupGarbageCollectedBlocks prometheus.Counter
 	blocksMarkedForDeletion     prometheus.Counter
+	blocksMarkedForNoCompact    prometheus.Counter
 	hashFunc                    metadata.HashFunc
 }
 
@@ -365,6 +370,7 @@ func NewGroup(
 	verticalCompactions prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForDeletion prometheus.Counter,
+	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
 ) (*Group, error) {
 	if logger == nil {
@@ -385,6 +391,7 @@ func NewGroup(
 		verticalCompactions:         verticalCompactions,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
 		blocksMarkedForDeletion:     blocksMarkedForDeletion,
+		blocksMarkedForNoCompact:    blocksMarkedForNoCompact,
 		hashFunc:                    hashFunc,
 	}
 	return g, nil
@@ -393,6 +400,19 @@ func NewGroup(
 // Key returns an identifier for the group.
 func (cg *Group) Key() string {
 	return cg.key
+}
+
+func (cg *Group) deleteFromGroup(target map[ulid.ULID]struct{}) {
+	cg.mtx.Lock()
+	defer cg.mtx.Unlock()
+	var newGroupMeta []*metadata.Meta
+	for _, meta := range cg.metasByMinTime {
+		if _, found := target[meta.BlockMeta.ULID]; !found {
+			newGroupMeta = append(newGroupMeta, meta)
+		}
+	}
+
+	cg.metasByMinTime = newGroupMeta
 }
 
 // AppendMeta the block with the given meta to the group.
@@ -461,6 +481,190 @@ func (cg *Group) Labels() labels.Labels {
 // Resolution returns the common downsampling resolution of blocks in the group.
 func (cg *Group) Resolution() int64 {
 	return cg.resolution
+}
+
+// CompactProgressMetrics contains Prometheus metrics related to compaction progress.
+type CompactProgressMetrics struct {
+	NumberOfCompactionRuns   *prometheus.GaugeVec
+	NumberOfCompactionBlocks *prometheus.GaugeVec
+}
+
+// ProgressCalculator calculates the progress of the compaction process for a given slice of Groups.
+type ProgressCalculator interface {
+	ProgressCalculate(ctx context.Context, groups []*Group) error
+}
+
+// CompactionProgressCalculator contains a planner and ProgressMetrics, which are updated during the compaction simulation process.
+type CompactionProgressCalculator struct {
+	planner Planner
+	*CompactProgressMetrics
+}
+
+// NewCompactProgressCalculator creates a new CompactionProgressCalculator.
+func NewCompactionProgressCalculator(reg prometheus.Registerer, planner *tsdbBasedPlanner) *CompactionProgressCalculator {
+	return &CompactionProgressCalculator{
+		planner: planner,
+		CompactProgressMetrics: &CompactProgressMetrics{
+			NumberOfCompactionRuns: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_compactions",
+				Help: "number of compactions to be done",
+			}, []string{"group"}),
+			NumberOfCompactionBlocks: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_compaction_blocks",
+				Help: "number of blocks planned to be compacted",
+			}, []string{"group"}),
+		},
+	}
+}
+
+// ProgressCalculate calculates the number of blocks and compaction runs in the planning process of the given groups.
+func (ps *CompactionProgressCalculator) ProgressCalculate(ctx context.Context, groups []*Group) error {
+	groupCompactions := make(map[string]int, len(groups))
+	groupBlocks := make(map[string]int, len(groups))
+
+	for len(groups) > 0 {
+		tmpGroups := make([]*Group, 0, len(groups))
+		for _, g := range groups {
+			if len(g.IDs()) == 1 {
+				continue
+			}
+			plan, err := ps.planner.Plan(ctx, g.metasByMinTime)
+			if err != nil {
+				return errors.Wrapf(err, "could not plan")
+			}
+			if len(plan) == 0 {
+				continue
+			}
+			groupCompactions[g.key]++
+
+			toRemove := make(map[ulid.ULID]struct{}, len(plan))
+			metas := make([]*tsdb.BlockMeta, 0, len(plan))
+			for _, p := range plan {
+				metas = append(metas, &p.BlockMeta)
+				toRemove[p.BlockMeta.ULID] = struct{}{}
+			}
+			g.deleteFromGroup(toRemove)
+
+			groupBlocks[g.key] += len(plan)
+
+			if len(g.metasByMinTime) == 0 {
+				continue
+			}
+
+			newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
+			if err := g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta, Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: g.Resolution()}, Labels: g.Labels().Map()}}); err != nil {
+				return errors.Wrapf(err, "append meta")
+			}
+			tmpGroups = append(tmpGroups, g)
+		}
+
+		groups = tmpGroups
+	}
+
+	ps.CompactProgressMetrics.NumberOfCompactionRuns.Reset()
+	ps.CompactProgressMetrics.NumberOfCompactionBlocks.Reset()
+
+	for key, iters := range groupCompactions {
+		ps.CompactProgressMetrics.NumberOfCompactionRuns.WithLabelValues(key).Add(float64(iters))
+		ps.CompactProgressMetrics.NumberOfCompactionBlocks.WithLabelValues(key).Add(float64(groupBlocks[key]))
+	}
+
+	return nil
+}
+
+// DownsampleProgressMetrics contains Prometheus metrics related to downsampling progress.
+type DownsampleProgressMetrics struct {
+	NumberOfBlocksDownsampled *prometheus.GaugeVec
+}
+
+// DownsampleProgressCalculator contains DownsampleMetrics, which are updated during the downsampling simulation process.
+type DownsampleProgressCalculator struct {
+	*DownsampleProgressMetrics
+}
+
+// NewDownsampleProgressCalculator creates a new DownsampleProgressCalculator.
+func NewDownsampleProgressCalculator(reg prometheus.Registerer) *DownsampleProgressCalculator {
+	return &DownsampleProgressCalculator{
+		DownsampleProgressMetrics: &DownsampleProgressMetrics{
+			NumberOfBlocksDownsampled: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_downsample_blocks",
+				Help: "number of blocks to be downsampled",
+			}, []string{"group"}),
+		},
+	}
+}
+
+// ProgressCalculate calculates the number of blocks to be downsampled for the given groups.
+func (ds *DownsampleProgressCalculator) ProgressCalculate(ctx context.Context, groups []*Group) error {
+	sources5m := map[ulid.ULID]struct{}{}
+	sources1h := map[ulid.ULID]struct{}{}
+	groupBlocks := make(map[string]int, len(groups))
+
+	for _, group := range groups {
+		for _, m := range group.metasByMinTime {
+			switch m.Thanos.Downsample.Resolution {
+			case downsample.ResLevel0:
+				continue
+			case downsample.ResLevel1:
+				for _, id := range m.Compaction.Sources {
+					sources5m[id] = struct{}{}
+				}
+			case downsample.ResLevel2:
+				for _, id := range m.Compaction.Sources {
+					sources1h[id] = struct{}{}
+				}
+			default:
+				return errors.Errorf("unexpected downsampling resolution %d", m.Thanos.Downsample.Resolution)
+			}
+
+		}
+	}
+
+	for _, group := range groups {
+		for _, m := range group.metasByMinTime {
+			switch m.Thanos.Downsample.Resolution {
+			case downsample.ResLevel0:
+				missing := false
+				for _, id := range m.Compaction.Sources {
+					if _, ok := sources5m[id]; !ok {
+						missing = true
+						break
+					}
+				}
+				if !missing {
+					continue
+				}
+
+				if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
+					continue
+				}
+				groupBlocks[group.key]++
+			case downsample.ResLevel1:
+				missing := false
+				for _, id := range m.Compaction.Sources {
+					if _, ok := sources1h[id]; !ok {
+						missing = true
+						break
+					}
+				}
+				if !missing {
+					continue
+				}
+
+				if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
+					continue
+				}
+				groupBlocks[group.key]++
+			}
+		}
+	}
+
+	ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.Reset()
+	for key, blocks := range groupBlocks {
+		ds.DownsampleProgressMetrics.NumberOfBlocksDownsampled.WithLabelValues(key).Add(float64(blocks))
+	}
+
+	return nil
 }
 
 // Planner returns blocks to compact.
@@ -538,6 +742,26 @@ func (e Issue347Error) Error() string {
 // IsIssue347Error returns true if the base error is a Issue347Error.
 func IsIssue347Error(err error) bool {
 	_, ok := errors.Cause(err).(Issue347Error)
+	return ok
+}
+
+// OutOfOrderChunkError is a type wrapper for OOO chunk error from validating block index.
+type OutOfOrderChunksError struct {
+	err error
+	id  ulid.ULID
+}
+
+func (e OutOfOrderChunksError) Error() string {
+	return e.err.Error()
+}
+
+func outOfOrderChunkError(err error, brokenBlock ulid.ULID) OutOfOrderChunksError {
+	return OutOfOrderChunksError{err: err, id: brokenBlock}
+}
+
+// IsOutOfOrderChunk returns true if the base error is a OutOfOrderChunkError.
+func IsOutOfOrderChunkError(err error) bool {
+	_, ok := errors.Cause(err).(OutOfOrderChunksError)
 	return ok
 }
 
@@ -749,6 +973,10 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			return false, ulid.ULID{}, halt(errors.Wrapf(err, "block with not healthy index found %s; Compaction level %v; Labels: %v", bdir, meta.Compaction.Level, meta.Thanos.Labels))
 		}
 
+		if err := stats.OutOfOrderChunksErr(); err != nil {
+			return false, ulid.ULID{}, outOfOrderChunkError(errors.Wrapf(err, "blocks with out-of-order chunks are dropped from compaction:  %s", bdir), meta.ULID)
+		}
+
 		if err := stats.Issue347OutsideChunksErr(); err != nil {
 			return false, ulid.ULID{}, issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", bdir), meta.ULID)
 		}
@@ -759,7 +987,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 		toCompactDirs = append(toCompactDirs, bdir)
 	}
-	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", fmt.Sprintf("%v", toCompactDirs), "duration", time.Since(begin))
+	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", fmt.Sprintf("%v", toCompactDirs), "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
 	begin = time.Now()
 	compID, err = comp.Compact(dir, toCompactDirs, nil)
@@ -784,7 +1012,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		cg.verticalCompactions.Inc()
 	}
 	level.Info(cg.logger).Log("msg", "compacted blocks", "new", compID,
-		"blocks", fmt.Sprintf("%v", toCompactDirs), "duration", time.Since(begin), "overlapping_blocks", overlappingBlocks)
+		"blocks", fmt.Sprintf("%v", toCompactDirs), "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "overlapping_blocks", overlappingBlocks)
 
 	bdir := filepath.Join(dir, compID.String())
 	index := filepath.Join(bdir, block.IndexFilename)
@@ -821,7 +1049,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	if err := block.Upload(ctx, cg.logger, cg.bkt, bdir, cg.hashFunc); err != nil {
 		return false, ulid.ULID{}, retry(errors.Wrapf(err, "upload of %s failed", compID))
 	}
-	level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin))
+	level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
 	// Mark for deletion the blocks we just compacted from the group and bucket so they do not get included
 	// into the next planning cycle.
@@ -852,14 +1080,15 @@ func (cg *Group) deleteBlock(id ulid.ULID, bdir string) error {
 
 // BucketCompactor compacts blocks in a bucket.
 type BucketCompactor struct {
-	logger      log.Logger
-	sy          *Syncer
-	grouper     Grouper
-	comp        Compactor
-	planner     Planner
-	compactDir  string
-	bkt         objstore.Bucket
-	concurrency int
+	logger                         log.Logger
+	sy                             *Syncer
+	grouper                        Grouper
+	comp                           Compactor
+	planner                        Planner
+	compactDir                     string
+	bkt                            objstore.Bucket
+	concurrency                    int
+	skipBlocksWithOutOfOrderChunks bool
 }
 
 // NewBucketCompactor creates a new bucket compactor.
@@ -872,19 +1101,21 @@ func NewBucketCompactor(
 	compactDir string,
 	bkt objstore.Bucket,
 	concurrency int,
+	skipBlocksWithOutOfOrderChunks bool,
 ) (*BucketCompactor, error) {
 	if concurrency <= 0 {
 		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
 	}
 	return &BucketCompactor{
-		logger:      logger,
-		sy:          sy,
-		grouper:     grouper,
-		planner:     planner,
-		comp:        comp,
-		compactDir:  compactDir,
-		bkt:         bkt,
-		concurrency: concurrency,
+		logger:                         logger,
+		sy:                             sy,
+		grouper:                        grouper,
+		planner:                        planner,
+		comp:                           comp,
+		compactDir:                     compactDir,
+		bkt:                            bkt,
+		concurrency:                    concurrency,
+		skipBlocksWithOutOfOrderChunks: skipBlocksWithOutOfOrderChunks,
 	}, nil
 }
 
@@ -939,6 +1170,23 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 							continue
 						}
 					}
+					// If block has out of order chunk and it has been configured to skip it,
+					// then we can mark the block for no compaction so that the next compaction run
+					// will skip it.
+					if IsOutOfOrderChunkError(err) && c.skipBlocksWithOutOfOrderChunks {
+						if err := block.MarkForNoCompact(
+							ctx,
+							c.logger,
+							c.bkt,
+							err.(OutOfOrderChunksError).id,
+							metadata.OutOfOrderChunksNoCompactReason,
+							"OutofOrderChunk: marking block with out-of-order series/chunks to as no compact to unblock compaction", g.blocksMarkedForNoCompact); err == nil {
+							mtx.Lock()
+							finishedAllGroups = false
+							mtx.Unlock()
+							continue
+						}
+					}
 					errChan <- errors.Wrapf(err, "group %s", g.Key())
 					return
 				}
@@ -979,6 +1227,10 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		var groupErrs errutil.MultiError
 	groupLoop:
 		for _, g := range groups {
+			// Ignore groups with only one block because there is nothing to compact.
+			if len(g.IDs()) == 1 {
+				continue
+			}
 			select {
 			case groupErr := <-errChan:
 				groupErrs.Add(groupErr)

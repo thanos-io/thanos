@@ -29,6 +29,14 @@ var (
 	errEmptyConfigurationFile = errors.New("configuration file is empty")
 )
 
+type ReceiverMode string
+
+const (
+	RouterOnly     ReceiverMode = "RouterOnly"
+	IngestorOnly   ReceiverMode = "IngestorOnly"
+	RouterIngestor ReceiverMode = "RouterIngestor"
+)
+
 // HashringConfig represents the configuration for a hashring
 // a receive node knows about.
 type HashringConfig struct {
@@ -142,7 +150,7 @@ func (cw *ConfigWatcher) Run(ctx context.Context) {
 		case event := <-cw.watcher.Events:
 			// fsnotify sometimes sends a bunch of events without name or operation.
 			// It's unclear what they are and why they are sent - filter them out.
-			if len(event.Name) == 0 {
+			if event.Name == "" {
 				break
 			}
 			// Everything but a CHMOD requires rereading.

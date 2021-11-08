@@ -7,7 +7,7 @@ local utils = import '../lib/utils.libsonnet';
     selector: error 'must provide selector for Thanos Store dashboard',
     title: error 'must provide title for Thanos Store dashboard',
     dashboard:: {
-      selector: std.join(', ', thanos.dashboard.selector + ['job="$job"']),
+      selector: std.join(', ', thanos.dashboard.selector + ['job=~"$job"']),
       dimensions: std.join(', ', thanos.dashboard.dimensions + ['job']),
     },
   },
@@ -225,7 +225,7 @@ local utils = import '../lib/utils.libsonnet';
         g.resourceUtilizationRow(thanos.store.dashboard.selector, thanos.store.dashboard.dimensions)
       ),
 
-    __overviewRows__+:: [
+    __overviewRows__+:: if thanos.store == null then [] else [
       g.row('Store')
       .addPanel(
         g.panel('gPRC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +

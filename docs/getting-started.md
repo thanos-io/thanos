@@ -1,10 +1,3 @@
----
-weight: 1
-type: docs
-title: Getting Started
-menu: thanos
----
-
 # Getting started
 
 Thanos provides a global query view, high availability, data backup with historical, cheap data access as its core features in a single binary.
@@ -87,7 +80,7 @@ If you want to add yourself to this list, let us know!
 
 ## Operating
 
-See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mixin/README.md) We also have example Grafana dashboards [here](../examples/dashboards/dashboards.md) and some [alerts](../examples/alerts/alerts.md) to get you started.
+See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mixin/README.md) We also have example Grafana dashboards [here](https://github.com/thanos-io/thanos/blob/main/examples/dashboards/dashboards.md) and some [alerts](https://github.com/thanos-io/thanos/blob/main/examples/alerts/alerts.md) to get you started.
 
 ## Talks
 

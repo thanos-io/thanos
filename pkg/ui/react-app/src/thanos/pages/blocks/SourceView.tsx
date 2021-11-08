@@ -2,16 +2,22 @@ import React, { FC } from 'react';
 import { Block, BlocksPool } from './block';
 import { BlockSpan } from './BlockSpan';
 import styles from './blocks.module.css';
+import { getBlockByUlid, getBlocksByCompactionLevel } from './helpers';
 
 export const BlocksRow: FC<{
   blocks: Block[];
   gridMinTime: number;
   gridMaxTime: number;
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
-}> = ({ blocks, gridMinTime, gridMaxTime, selectBlock }) => {
+  blockSearch: string;
+  compactionLevel: number;
+}> = ({ blocks, gridMinTime, gridMaxTime, selectBlock, blockSearch, compactionLevel }) => {
+  let filteredBlocks = getBlockByUlid(blocks, blockSearch);
+  filteredBlocks = getBlocksByCompactionLevel(filteredBlocks, compactionLevel);
+
   return (
     <div className={styles.row}>
-      {blocks.map<JSX.Element>((b) => (
+      {filteredBlocks.map<JSX.Element>((b) => (
         <BlockSpan selectBlock={selectBlock} block={b} gridMaxTime={gridMaxTime} gridMinTime={gridMinTime} key={b.ulid} />
       ))}
     </div>
@@ -24,9 +30,19 @@ export interface SourceViewProps {
   gridMinTime: number;
   gridMaxTime: number;
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
+  blockSearch: string;
+  compactionLevel: number;
 }
 
-export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, gridMinTime, selectBlock }) => {
+export const SourceView: FC<SourceViewProps> = ({
+  data,
+  title,
+  gridMaxTime,
+  gridMinTime,
+  selectBlock,
+  blockSearch,
+  compactionLevel,
+}) => {
   return (
     <>
       <div className={styles.source}>
@@ -43,6 +59,8 @@ export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, grid
                   key={`${k}-${i}`}
                   gridMaxTime={gridMaxTime}
                   gridMinTime={gridMinTime}
+                  blockSearch={blockSearch}
+                  compactionLevel={compactionLevel}
                 />
               ))}
             </React.Fragment>

@@ -7,7 +7,7 @@ local utils = import '../lib/utils.libsonnet';
     selector: error 'must provide selector for Thanos Sidecar dashboard',
     title: error 'must provide title for Thanos Sidecar dashboard',
     dashboard:: {
-      selector: std.join(', ', thanos.dashboard.selector + ['job="$job"']),
+      selector: std.join(', ', thanos.dashboard.selector + ['job=~"$job"']),
       dimensions: std.join(', ', thanos.dashboard.dimensions + ['job']),
     },
   },
@@ -90,7 +90,7 @@ local utils = import '../lib/utils.libsonnet';
         g.resourceUtilizationRow(thanos.sidecar.dashboard.selector, thanos.sidecar.dashboard.dimensions)
       ),
 
-    __overviewRows__+:: [
+    __overviewRows__+:: if thanos.sidecar == null then [] else [
       g.row('Sidecar')
       .addPanel(
         g.panel('gPRC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +

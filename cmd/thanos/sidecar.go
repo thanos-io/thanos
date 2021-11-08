@@ -29,7 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
-	thanoshttp "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/logging"
 	meta "github.com/thanos-io/thanos/pkg/metadata"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
@@ -138,10 +138,6 @@ func runSidecar(
 			Name: "thanos_sidecar_prometheus_up",
 			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
 		})
-		lastHeartbeat := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_sidecar_last_heartbeat_success_time_seconds",
-			Help: "Timestamp of the last successful heartbeat in seconds.",
-		})
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -191,7 +187,6 @@ func runSidecar(
 				)
 				promUp.Set(1)
 				statusProber.Ready()
-				lastHeartbeat.SetToCurrentTime()
 				return nil
 			})
 			if err != nil {
@@ -213,7 +208,6 @@ func runSidecar(
 					promUp.Set(0)
 				} else {
 					promUp.Set(1)
-					lastHeartbeat.SetToCurrentTime()
 				}
 
 				return nil
@@ -234,7 +228,7 @@ func runSidecar(
 		t := exthttp.NewTransport()
 		t.MaxIdleConnsPerHost = conf.connection.maxIdleConnsPerHost
 		t.MaxIdleConns = conf.connection.maxIdleConns
-		c := promclient.NewClient(&http.Client{Transport: tracing.HTTPTripperware(logger, t)}, logger, thanoshttp.ThanosUserAgent)
+		c := promclient.NewClient(&http.Client{Transport: tracing.HTTPTripperware(logger, t)}, logger, httpconfig.ThanosUserAgent)
 
 		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {
@@ -391,7 +385,7 @@ func (s *promMetadata) UpdateLabels(ctx context.Context) error {
 	return nil
 }
 
-func (s *promMetadata) UpdateTimestamps(mint int64, maxt int64) {
+func (s *promMetadata) UpdateTimestamps(mint, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -410,7 +404,7 @@ func (s *promMetadata) Labels() labels.Labels {
 	return s.labels
 }
 
-func (s *promMetadata) Timestamps() (mint int64, maxt int64) {
+func (s *promMetadata) Timestamps() (mint, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 

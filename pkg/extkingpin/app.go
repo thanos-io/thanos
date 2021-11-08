@@ -111,7 +111,7 @@ func (a *App) Parse() (cmd string, setup SetupFunc) {
 	return cmd, a.setups[cmd]
 }
 
-func (a *App) Command(cmd string, help string) AppClause {
+func (a *App) Command(cmd, help string) AppClause {
 	c := a.app.Command(cmd, help)
 	return &appClause{
 		c:          c,
@@ -129,7 +129,7 @@ type appClause struct {
 	prefix string
 }
 
-func (a *appClause) Command(cmd string, help string) AppClause {
+func (a *appClause) Command(cmd, help string) AppClause {
 	c := a.c.Command(cmd, help)
 	return &appClause{
 		c:          c,

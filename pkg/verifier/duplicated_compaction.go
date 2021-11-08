@@ -131,7 +131,7 @@ func duplicatedBlocks(blocks []tsdb.BlockMeta) (res [][]tsdb.BlockMeta) {
 	return res
 }
 
-func sameULIDSlices(a []ulid.ULID, b []ulid.ULID) bool {
+func sameULIDSlices(a, b []ulid.ULID) bool {
 	if len(a) != len(b) {
 		return false
 	}

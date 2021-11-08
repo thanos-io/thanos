@@ -90,7 +90,7 @@ func TestQueue_Push_Relabelled_Alerts(t *testing.T) {
 	)
 }
 
-func assertSameHosts(t *testing.T, expected []*url.URL, found []*url.URL) {
+func assertSameHosts(t *testing.T, expected, found []*url.URL) {
 	testutil.Equals(t, len(expected), len(found))
 
 	host := map[string]struct{}{}

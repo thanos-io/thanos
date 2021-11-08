@@ -28,7 +28,7 @@ Click below snippet to start the Querier.
 ```
 docker run -d --net=host --rm \
     --name querier \
-    quay.io/thanos/thanos:v0.21.1 \
+    quay.io/thanos/thanos:v0.23.1 \
     query \
     --http-address 0.0.0.0:29090 \
     --query.replica-label replica \

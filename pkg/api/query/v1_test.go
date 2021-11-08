@@ -76,7 +76,7 @@ type endpointTestCase struct {
 type responeCompareFunction func(interface{}, interface{}) bool
 
 // Checks if both responses have Stats present or not.
-func lookupStats(a interface{}, b interface{}) bool {
+func lookupStats(a, b interface{}) bool {
 	ra := a.(*queryData)
 	rb := b.(*queryData)
 	return (ra.Stats == nil && rb.Stats == nil) || (ra.Stats != nil && rb.Stats != nil)
@@ -703,7 +703,7 @@ func TestMetadataEndpoints(t *testing.T) {
 
 	opts := tsdb.DefaultOptions()
 	opts.RetentionDuration = math.MaxInt64
-	db, err := tsdb.Open(dir, nil, nil, opts)
+	db, err := tsdb.Open(dir, nil, nil, opts, nil)
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
@@ -1195,6 +1195,93 @@ func TestMetadataEndpoints(t *testing.T) {
 	}
 
 	for i, test := range tests {
+		if ok := testEndpoint(t, test, strings.TrimSpace(fmt.Sprintf("#%d %s", i, test.query.Encode())), reflect.DeepEqual); !ok {
+			return
+		}
+	}
+}
+
+func TestStoresEndpoint(t *testing.T) {
+	apiWithNotEndpoints := &QueryAPI{
+		endpointStatus: func() []query.EndpointStatus {
+			return []query.EndpointStatus{}
+		},
+	}
+	apiWithValidEndpoints := &QueryAPI{
+		endpointStatus: func() []query.EndpointStatus {
+			return []query.EndpointStatus{
+				{
+					Name:          "endpoint-1",
+					ComponentType: component.Store,
+				},
+				{
+					Name:          "endpoint-2",
+					ComponentType: component.Store,
+				},
+				{
+					Name:          "endpoint-3",
+					ComponentType: component.Sidecar,
+				},
+			}
+		},
+	}
+	apiWithInvalidEndpoint := &QueryAPI{
+		endpointStatus: func() []query.EndpointStatus {
+			return []query.EndpointStatus{
+				{
+					Name:          "endpoint-1",
+					ComponentType: component.Store,
+				},
+				{
+					Name: "endpoint-2",
+				},
+			}
+		},
+	}
+
+	testCases := []endpointTestCase{
+		{
+			endpoint: apiWithNotEndpoints.stores,
+			method:   http.MethodGet,
+			response: map[string][]query.EndpointStatus{},
+		},
+		{
+			endpoint: apiWithValidEndpoints.stores,
+			method:   http.MethodGet,
+			response: map[string][]query.EndpointStatus{
+				"store": {
+					{
+						Name:          "endpoint-1",
+						ComponentType: component.Store,
+					},
+					{
+						Name:          "endpoint-2",
+						ComponentType: component.Store,
+					},
+				},
+				"sidecar": {
+					{
+						Name:          "endpoint-3",
+						ComponentType: component.Sidecar,
+					},
+				},
+			},
+		},
+		{
+			endpoint: apiWithInvalidEndpoint.stores,
+			method:   http.MethodGet,
+			response: map[string][]query.EndpointStatus{
+				"store": {
+					{
+						Name:          "endpoint-1",
+						ComponentType: component.Store,
+					},
+				},
+			},
+		},
+	}
+
+	for i, test := range testCases {
 		if ok := testEndpoint(t, test, strings.TrimSpace(fmt.Sprintf("#%d %s", i, test.query.Encode())), reflect.DeepEqual); !ok {
 			return
 		}

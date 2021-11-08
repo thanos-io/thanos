@@ -15,19 +15,14 @@ jobs:
     name: React UI test on Node ${{ matrix.node }}
     steps:
       - uses: actions/checkout@v2
-      - name: Setup node
-        uses: actions/setup-node@v1
+      - name: install nodejs
+        uses: actions/setup-node@v2
         with:
           node-version: ${{ matrix.node }}
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
-
-      - uses: actions/cache@v1
-        id: yarn-cache
+      - uses: actions/cache@v2
         with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('pkg/ui/react-app/yarn.lock') }}
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-node-
       - run: make react-app-test

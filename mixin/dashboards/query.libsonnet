@@ -100,7 +100,7 @@ local utils = import '../lib/utils.libsonnet';
         g.resourceUtilizationRow(thanos.query.dashboard.selector, thanos.query.dashboard.dimensions)
       ),
 
-    __overviewRows__+:: [
+    __overviewRows__+:: if thanos.query == null then [] else [
       g.row('Instant Query')
       .addPanel(
         g.panel('Requests Rate', 'Shows rate of requests against /query for the given time.') +

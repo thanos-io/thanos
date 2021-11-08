@@ -1,9 +1,3 @@
----
-type: docs
-title: Compactor
-menu: components
----
-
 # Compactor
 
 The `thanos compact` command applies the compaction procedure of the Prometheus 2.0 storage engine to block data stored in object storage. It is generally not semantically concurrency safe and must be deployed as a singleton against a bucket.
@@ -74,7 +68,7 @@ In Prometheus, this can be triggered by setting hidden flag in Prometheus and pu
 
 In Thanos, it works similarly, but on bigger scale and using external labels for grouping as explained in [Compaction section](#compaction).
 
-In both systems, series with the same labels are merged together. In prometheus, merging samples is **naive**. It works by deduplicating samples within exactly the same timestamps. Otherwise samples are added in sorted by time order. Thanos also support a new penalty based samples merger and it is explained in [Deduplication](#Vertical Compaction Use Cases).
+In both systems, series with the same labels are merged together. In prometheus, merging samples is **naive**. It works by deduplicating samples within exactly the same timestamps. Otherwise samples are added in sorted by time order. Thanos also support a new penalty based samples merger and it is explained in [Deduplication](#vertical-compaction-use-cases).
 
 > **NOTE:** Both Prometheus and Thanos default behaviour is to fail compaction if any overlapping blocks are spotted. (For Thanos, within the same external labels).
 
@@ -290,6 +284,10 @@ Flags:
                                 Repeat interval for syncing the blocks between
                                 local and remote view for /global Block Viewer
                                 UI.
+      --block-viewer.global.sync-block-timeout=5m  
+                                Maximum time for syncing the blocks between
+                                local and remote view for /global Block Viewer
+                                UI.
       --bucket-web-label=BUCKET-WEB-LABEL  
                                 Prometheus label to use as timeline title in the
                                 bucket web UI
@@ -342,6 +340,9 @@ Flags:
                                 loaded, or compactor is ignoring the deletion
                                 because it's compacting the block at the same
                                 time.
+      --downsample.concurrency=1  
+                                Number of goroutines to use when downsampling
+                                blocks.
       --downsampling.disable    Disables downsampling. This is not recommended
                                 as querying long time ranges without
                                 non-downsampled data is not efficient and useful
@@ -375,6 +376,8 @@ Flags:
                                 Path to YAML file that contains object store
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
+      --progress-metrics        Enables the progress metrics, indicating the
+                                progress of compaction and downsampling
       --retention.resolution-1h=0d  
                                 How long to retain samples of resolution 2 (1
                                 hour) in bucket. Setting this to 0d will retain

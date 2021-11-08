@@ -113,7 +113,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
 		Default("3m").DurationVar(&sc.syncInterval)
 
-	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when constructing index-cache.json blocks from object storage.").
+	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when constructing index-cache.json blocks from object storage. Must be equal or greater than 1.").
 		Default("20").IntVar(&sc.blockSyncConcurrency)
 
 	cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
@@ -415,7 +415,7 @@ func runStore(
 
 		// Configure Request Logging for HTTP calls.
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
-		api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, "", flagsMap)
+		api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, "", flagsMap, bkt)
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {

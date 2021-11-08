@@ -556,6 +556,32 @@ func TestGapBasedPartitioner_Partition(t *testing.T) {
 	}
 }
 
+func TestBucketStoreConfig_validate(t *testing.T) {
+	tests := map[string]struct {
+		config   *BucketStore
+		expected error
+	}{
+		"should pass on valid config": {
+			config: &BucketStore{
+				blockSyncConcurrency: 1,
+			},
+			expected: nil,
+		},
+		"should fail on blockSyncConcurrency < 1": {
+			config: &BucketStore{
+				blockSyncConcurrency: 0,
+			},
+			expected: errBlockSyncConcurrencyNotValid,
+		},
+	}
+
+	for testName, testData := range tests {
+		t.Run(testName, func(t *testing.T) {
+			testutil.Equals(t, testData.expected, testData.config.validate())
+		})
+	}
+}
+
 func TestBucketStore_Info(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 
@@ -876,7 +902,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 	}
 }
 
-func expectedTouchedBlockOps(all []ulid.ULID, expected []ulid.ULID, cached []ulid.ULID) []string {
+func expectedTouchedBlockOps(all, expected, cached []ulid.ULID) []string {
 	var ops []string
 	for _, id := range all {
 		blockCached := false
@@ -1025,7 +1051,7 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = tmpDir
 	headOpts.ChunkRange = 1000
-	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 	testutil.Ok(t, err)
 	defer func() {
 		testutil.Ok(t, h.Close())
@@ -1144,11 +1170,11 @@ func benchmarkExpandedPostings(
 				partitioner:       NewGapBasedPartitioner(PartitionerMaxGapSize),
 			}
 
-			indexr := newBucketIndexReader(context.Background(), b)
+			indexr := newBucketIndexReader(b)
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
-				p, err := indexr.ExpandedPostings(c.matchers)
+				p, err := indexr.ExpandedPostings(context.Background(), c.matchers)
 				testutil.Ok(t, err)
 				testutil.Equals(t, c.expectedLen, len(p))
 			}
@@ -1391,7 +1417,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	// This allows to pick time range that will correspond to number of series picked 1:1.
 	{
 		// Block 1.
-		h, err := tsdb.NewHead(nil, nil, nil, headOpts)
+		h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1430,7 +1456,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 	var b2 *bucketBlock
 	{
 		// Block 2, do not load this block yet.
-		h, err := tsdb.NewHead(nil, nil, nil, headOpts)
+		h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1470,7 +1496,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		bkt:             objstore.WithNoopInstr(bkt),
 		logger:          logger,
 		indexCache:      indexCache,
-		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0, nil),
+		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0, indexheader.NewReaderPoolMetrics(nil)),
 		metrics:         newBucketStoreMetrics(nil),
 		blockSets: map[uint64]*bucketBlockSet{
 			labels.Labels{{Name: "ext1", Value: "1"}}.Hash(): {blocks: [][]*bucketBlock{{b1, b2}}},
@@ -1675,7 +1701,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	headOpts.ChunkDirRoot = filepath.Join(tmpDir, "block")
 	headOpts.ChunkRange = 10000000000
 
-	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -1818,11 +1844,11 @@ func TestBigEndianPostingsCount(t *testing.T) {
 	testutil.Equals(t, count, c)
 }
 
-func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Labels, blockIndex int, totalSamples int, random *rand.Rand, step int64) ulid.ULID {
+func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Labels, blockIndex, totalSamples int, random *rand.Rand, step int64) ulid.ULID {
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = dir
 	headOpts.ChunkRange = int64(totalSamples) * step
-	h, err := tsdb.NewHead(nil, nil, nil, headOpts)
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
@@ -2225,8 +2251,6 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 }
 
 func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMeta *metadata.Meta, blk *bucketBlock, aggrs []storepb.Aggr) {
-	ctx := context.Background()
-
 	// Run the same number of queries per goroutine.
 	queriesPerWorker := b.N / concurrency
 
@@ -2263,10 +2287,10 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				// must be called only from the goroutine running the Benchmark function.
 				testutil.Ok(b, err)
 
-				indexReader := blk.indexReader(ctx)
-				chunkReader := blk.chunkReader(ctx)
+				indexReader := blk.indexReader()
+				chunkReader := blk.chunkReader()
 
-				seriesSet, _, err := blockSeries(nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates)
+				seriesSet, _, err := blockSeries(context.Background(), nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates)
 				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).

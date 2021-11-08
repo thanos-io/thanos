@@ -191,8 +191,8 @@ func (stream *exemplarsStream) receive(ctx context.Context) error {
 			if err := stream.server.Send(exemplarspb.NewWarningExemplarsResponse(err)); err != nil {
 				return errors.Wrapf(err, "sending exemplars error to server %v", stream.server)
 			}
-
-			continue
+			// Not an error if response strategy is warning.
+			return nil
 		}
 
 		if w := exemplar.GetWarning(); w != "" {

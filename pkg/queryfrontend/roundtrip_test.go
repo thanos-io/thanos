@@ -507,6 +507,14 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 		End:   2 * hour,
 	}
 
+	// Same query params as testRequest, but with Matchers
+	testRequestWithMatchers := &ThanosLabelsRequest{
+		Path:     "/api/v1/labels",
+		Start:    0,
+		End:      2 * hour,
+		Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+	}
+
 	// Same query params as testRequest, but with storeMatchers
 	testRequestWithStoreMatchers := &ThanosLabelsRequest{
 		Path:          "/api/v1/labels",
@@ -520,6 +528,14 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 		Start: 0,
 		End:   2 * hour,
 		Label: "foo",
+	}
+
+	testLabelValuesRequestFooWithMatchers := &ThanosLabelsRequest{
+		Path:     "/api/v1/label/foo/values",
+		Start:    0,
+		End:      2 * hour,
+		Label:    "foo",
+		Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
 	}
 
 	testLabelValuesRequestBar := &ThanosLabelsRequest{
@@ -565,10 +581,14 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 	}{
 		{name: "first request", req: testRequest, expected: 1},
 		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
-		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 2},
-		{name: "label values request label name foo", req: testLabelValuesRequestFoo, expected: 3},
-		{name: "same label values query, use cache", req: testLabelValuesRequestFoo, expected: 3},
-		{name: "label values request different label", req: testLabelValuesRequestBar, expected: 4},
+		{name: "matchers requests won't go to cache", req: testRequestWithMatchers, expected: 2},
+		{name: "same matchers requests, use cache", req: testRequestWithMatchers, expected: 2},
+		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 3},
+		{name: "label values request label name foo", req: testLabelValuesRequestFoo, expected: 4},
+		{name: "same label values query, use cache", req: testLabelValuesRequestFoo, expected: 4},
+		{name: "label values query with matchers, won't go to cache", req: testLabelValuesRequestFooWithMatchers, expected: 5},
+		{name: "same label values query with matchers, use cache", req: testLabelValuesRequestFooWithMatchers, expected: 5},
+		{name: "label values request different label", req: testLabelValuesRequestBar, expected: 6},
 		{
 			name: "request but will be partitioned",
 			req: &ThanosLabelsRequest{
@@ -576,7 +596,7 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 				Start: 0,
 				End:   25 * hour,
 			},
-			expected: 6,
+			expected: 8,
 		},
 		{
 			name: "same query as the previous one",
@@ -585,7 +605,7 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 				Start: 0,
 				End:   25 * hour,
 			},
-			expected: 6,
+			expected: 8,
 		},
 	} {
 

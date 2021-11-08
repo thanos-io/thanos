@@ -6,6 +6,7 @@ package extkingpin
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/prometheus/common/model"
@@ -26,6 +27,7 @@ func RegisterGRPCFlags(cmd FlagClause) (
 	grpcTLSSrvCert *string,
 	grpcTLSSrvKey *string,
 	grpcTLSSrvClientCA *string,
+	grpcMaxConnectionAge *time.Duration,
 ) {
 	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.").
 		Default("0.0.0.0:10901").String()
@@ -34,12 +36,14 @@ func RegisterGRPCFlags(cmd FlagClause) (
 	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
 	grpcTLSSrvKey = cmd.Flag("grpc-server-tls-key", "TLS Key for the gRPC server, leave blank to disable TLS").Default("").String()
 	grpcTLSSrvClientCA = cmd.Flag("grpc-server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
+	grpcMaxConnectionAge = cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-read the tls certificates and redo the TLS handshake ").Default("60m").Duration()
 
 	return grpcBindAddr,
 		grpcGracePeriod,
 		grpcTLSSrvCert,
 		grpcTLSSrvKey,
-		grpcTLSSrvClientCA
+		grpcTLSSrvClientCA,
+		grpcMaxConnectionAge
 }
 
 // RegisterCommonObjStoreFlags register flags commonly used to configure http servers with.

@@ -102,7 +102,7 @@ type Queue struct {
 	dropped prometheus.Counter
 }
 
-func relabelLabels(lset labels.Labels, excludeLset []string) (toAdd labels.Labels, toExclude labels.Labels) {
+func relabelLabels(lset labels.Labels, excludeLset []string) (toAdd, toExclude labels.Labels) {
 	for _, ln := range excludeLset {
 		toExclude = append(toExclude, labels.Label{Name: ln})
 	}

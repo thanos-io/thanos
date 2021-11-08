@@ -2,6 +2,8 @@
   display: flex;
   --top: 72px;
   min-height: calc(100vh - var(--top));
+  position: relative;
+  z-index: 1;
 }
 
 .grid {
@@ -187,4 +189,14 @@
 }
 .level-6 {
   background: var(--level-6);
+}
+
+.blockInput {
+  margin-bottom: 12px;
+}
+
+.blockFilter {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
 }

@@ -89,6 +89,7 @@ groups:
 			}
 		},
 		labels.FromStrings("replica", "1"),
+		"http://localhost",
 	)
 	testutil.Ok(t, thanosRuleMgr.Update(1*time.Second, []string{filepath.Join(dir, "rule.yaml")}))
 
@@ -106,7 +107,12 @@ groups:
 func TestUpdate_Error_UpdatePartial(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test_rule_rule_groups")
 	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dataDir, err := ioutil.TempDir("", "test_rule_data")
+	testutil.Ok(t, err)
+	defer func() {
+		testutil.Ok(t, os.RemoveAll(dir))
+		testutil.Ok(t, os.RemoveAll(dataDir))
+	}()
 	err = os.MkdirAll(filepath.Join(dir, "subdir"), 0775)
 	testutil.Ok(t, err)
 
@@ -171,7 +177,7 @@ groups:
 	thanosRuleMgr := NewManager(
 		context.Background(),
 		reg,
-		dir,
+		dataDir,
 		rules.ManagerOptions{
 			Logger:    log.NewLogfmtLogger(os.Stderr),
 			Queryable: nopQueryable{},
@@ -182,6 +188,7 @@ groups:
 			}
 		},
 		labels.FromStrings("replica", "1"),
+		"http://localhost",
 	)
 	err = thanosRuleMgr.Update(10*time.Second, []string{
 		filepath.Join(dir, "no_strategy.yaml"),
@@ -200,13 +207,13 @@ groups:
 	// Also, check metrics: Regression test: https://github.com/thanos-io/thanos/issues/3083
 	testutil.Equals(t,
 		map[string]float64{
-			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/abort.yaml;something2,strategy=abort}", dir):            1,
-			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/bdir/no_strategy.yaml;something8,strategy=abort}", dir): 1,
-			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/combined.yaml;something6,strategy=abort}", dir):         1,
-			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/combined.yaml;something7,strategy=abort}", dir):         1,
-			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT/no_strategy.yaml;something1,strategy=abort}", dir):      1,
-			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/WARN/combined.yaml;something5,strategy=warn}", dir):           1,
-			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/WARN/warn.yaml;something3,strategy=warn}", dir):               1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT%s/abort.yaml;something2,strategy=abort}", dataDir, dir):              1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT%s/subdir/no_strategy.yaml;something8,strategy=abort}", dataDir, dir): 1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT%s/combined.yaml;something6,strategy=abort}", dataDir, dir):           1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT%s/combined.yaml;something7,strategy=abort}", dataDir, dir):           1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/ABORT%s/no_strategy.yaml;something1,strategy=abort}", dataDir, dir):        1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/WARN%s/combined.yaml;something5,strategy=warn}", dataDir, dir):             1,
+			fmt.Sprintf("prometheus_rule_group_rules{rule_group=%s/.tmp-rules/WARN%s/warn.yaml;something3,strategy=warn}", dataDir, dir):                 1,
 		},
 		extprom.CurrentGaugeValuesFor(t, reg, "prometheus_rule_group_rules"),
 	)
@@ -328,6 +335,7 @@ func TestManager_Rules(t *testing.T) {
 			}
 		},
 		labels.FromStrings("replica", "test1"),
+		"http://localhost",
 	)
 	testutil.Ok(t, thanosRuleMgr.Update(60*time.Second, []string{
 		filepath.Join(curr, "../../examples/alerts/alerts.yaml"),
@@ -369,6 +377,7 @@ groups:
 			}
 		},
 		nil,
+		"http://localhost",
 	)
 
 	// We need to run the underlying rule managers to update them more than

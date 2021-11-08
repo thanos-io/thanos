@@ -111,7 +111,7 @@ func TestReaders(t *testing.T) {
 				if id == id1 {
 					testutil.Equals(t, 1, br.version)
 					testutil.Equals(t, 2, br.indexVersion)
-					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 69}, br.toc)
+					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 70}, br.toc)
 					testutil.Equals(t, int64(710), br.indexLastPostingEnd)
 					testutil.Equals(t, 8, br.symbols.Size())
 					testutil.Equals(t, 0, len(br.postingsV1))
@@ -458,7 +458,7 @@ func getSymbolTable(b index.ByteSlice) (map[uint32]string, error) {
 // readSymbols reads the symbol table fully into memory and allocates proper strings for them.
 // Strings backed by the mmap'd memory would cause memory faults if applications keep using them
 // after the reader is closed.
-func readSymbols(bs index.ByteSlice, version int, off int) ([]string, map[uint32]string, error) {
+func readSymbols(bs index.ByteSlice, version, off int) ([]string, map[uint32]string, error) {
 	if off == 0 {
 		return nil, nil, nil
 	}
