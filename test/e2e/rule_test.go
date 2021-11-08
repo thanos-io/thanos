@@ -507,11 +507,12 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
+	// Wait until remote write samples are written to receivers successfully.
+	testutil.Ok(t, r.WaitSumMetricsWithOptions(e2e.GreaterOrEqual(1), []string{"prometheus_remote_storage_samples_total"}, e2e.WaitMissingMetrics()))
+
 	t.Run("can fetch remote-written samples from receiver", func(t *testing.T) {
 		testRecordedSamples := "test_absent_metric"
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), testRecordedSamples, func() time.Time {
-			return time.Now()
-		}, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), testRecordedSamples, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{

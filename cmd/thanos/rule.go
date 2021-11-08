@@ -336,7 +336,8 @@ func runRule(
 	var (
 		appendable storage.Appendable
 		queryable  storage.Queryable
-		db         *tsdb.DB
+		tsdbDB     *tsdb.DB
+		agentDB    *agent.DB
 	)
 
 	rwCfgYAML, err := conf.rwConfig.Content()
@@ -361,15 +362,15 @@ func runRule(
 			return errors.Wrap(err, "applying config to remote storage")
 		}
 
-		db, err := agent.Open(logger, reg, remoteStore, walDir, agentOpts)
+		agentDB, err = agent.Open(logger, reg, remoteStore, walDir, agentOpts)
 		if err != nil {
 			return errors.Wrap(err, "start remote write agent db")
 		}
-		fanoutStore := storage.NewFanout(logger, db, remoteStore)
+		fanoutStore := storage.NewFanout(logger, agentDB, remoteStore)
 		appendable = fanoutStore
 		queryable = fanoutStore
 	} else {
-		db, err = tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
+		tsdbDB, err = tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
 		if err != nil {
 			return errors.Wrap(err, "open TSDB")
 		}
@@ -383,13 +384,13 @@ func runRule(
 			done := make(chan struct{})
 			g.Add(func() error {
 				<-done
-				return db.Close()
+				return tsdbDB.Close()
 			}, func(error) {
 				close(done)
 			})
 		}
-		appendable = db
-		queryable = db
+		appendable = tsdbDB
+		queryable = tsdbDB
 	}
 
 	// Build the Alertmanager clients.
@@ -585,11 +586,10 @@ func runRule(
 		grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
 		grpcserver.WithTLSConfig(tlsCfg),
 	}
-	if db != nil {
-		tsdbStore := store.NewTSDBStore(logger, db, component.Rule, conf.lset)
+	if tsdbDB != nil {
+		tsdbStore := store.NewTSDBStore(logger, tsdbDB, component.Rule, conf.lset)
 		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)))
 	}
-	// TODO: Add rules API implementation when ready.
 	s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe, options...)
 
 	g.Add(func() error {
