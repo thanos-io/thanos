@@ -1,8 +1,8 @@
 ---
 type: proposal
 title: Thanos Routing Receive and Ingesting Receive
-status: accepted
-menu: proposals-accepted
+status: done
+menu: proposals-done
 ---
 
 ### Related Tickets
