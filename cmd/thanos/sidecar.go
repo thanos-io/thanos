@@ -30,12 +30,15 @@ import (
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/info"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
 	meta "github.com/thanos-io/thanos/pkg/metadata"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/reloader"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -43,6 +46,7 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -241,12 +245,46 @@ func runSidecar(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
+		exemplarSrv := exemplars.NewPrometheus(conf.prometheus.url, c, m.Labels)
+
+		infoSrv := info.NewInfoServer(
+			component.Sidecar.String(),
+			info.WithLabelSet(func() []labelpb.ZLabelSet {
+				return promStore.LabelSet()
+			}),
+			info.WithStoreInfo(func() *infopb.StoreInfo {
+				mint, maxt := promStore.Timestamps()
+				return &infopb.StoreInfo{
+					MinTime: mint,
+					MaxTime: maxt,
+				}
+			}),
+			info.WithExemplarsInfo(func() *infopb.ExemplarsInfo {
+				// Currently Exemplars API does not expose metadata such as min/max time,
+				// so we are using default minimum and maximum possible values as min/max time.
+				return &infopb.ExemplarsInfo{
+					MinTime: query.MinTime,
+					MaxTime: query.MaxTime,
+				}
+			}),
+			info.WithRulesInfo(func() *infopb.RulesInfo {
+				return &infopb.RulesInfo{}
+			}),
+			info.WithTargetInfo(func() *infopb.TargetsInfo {
+				return &infopb.TargetsInfo{}
+			}),
+			info.WithMetricMetadataInfo(func() *infopb.MetricMetadataInfo {
+				return &infopb.MetricMetadataInfo{}
+			}),
+		)
+
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(targets.RegisterTargetsServer(targets.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
-			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewPrometheus(conf.prometheus.url, c, m.Labels))),
+			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarSrv)),
+			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpc.bindAddress),
 			grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
 			grpcserver.WithTLSConfig(tlsCfg),

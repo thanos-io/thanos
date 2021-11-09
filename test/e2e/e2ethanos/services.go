@@ -150,6 +150,7 @@ type QuerierBuilder struct {
 	targetAddresses      []string
 	exemplarAddresses    []string
 	enableFeatures       []string
+	endpoints            []string
 
 	tracingConfig string
 }
@@ -196,6 +197,11 @@ func (q *QuerierBuilder) WithExemplarAddresses(exemplarAddresses ...string) *Que
 
 func (q *QuerierBuilder) WithMetadataAddresses(metadataAddresses ...string) *QuerierBuilder {
 	q.metadataAddresses = metadataAddresses
+	return q
+}
+
+func (q *QuerierBuilder) WithEndpoints(endpoints ...string) *QuerierBuilder {
+	q.endpoints = endpoints
 	return q
 }
 
@@ -295,6 +301,10 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 
 	for _, feature := range q.enableFeatures {
 		args = append(args, "--enable-feature="+feature)
+	}
+
+	for _, addr := range q.endpoints {
+		args = append(args, "--endpoint="+addr)
 	}
 
 	if len(q.fileSDStoreAddresses) > 0 {

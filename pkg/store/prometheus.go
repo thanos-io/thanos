@@ -48,8 +48,8 @@ type PrometheusStore struct {
 	buffers          sync.Pool
 	component        component.StoreAPI
 	externalLabelsFn func() labels.Labels
-	timestamps       func() (mint int64, maxt int64)
 	promVersion      func() string
+	timestamps       func() (mint int64, maxt int64)
 
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 
@@ -84,8 +84,8 @@ func NewPrometheusStore(
 		client:                        client,
 		component:                     component,
 		externalLabelsFn:              externalLabelsFn,
-		timestamps:                    timestamps,
 		promVersion:                   promVersion,
+		timestamps:                    timestamps,
 		remoteReadAcceptableResponses: []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS, prompb.ReadRequest_SAMPLES},
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
@@ -606,4 +606,24 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	sort.Strings(vals)
 	return &storepb.LabelValuesResponse{Values: vals}, nil
+}
+
+func (p *PrometheusStore) LabelSet() []labelpb.ZLabelSet {
+	lset := p.externalLabelsFn()
+
+	labels := make([]labelpb.ZLabel, 0, len(lset))
+	labels = append(labels, labelpb.ZLabelsFromPromLabels(lset)...)
+
+	labelset := []labelpb.ZLabelSet{}
+	if len(labels) > 0 {
+		labelset = append(labelset, labelpb.ZLabelSet{
+			Labels: labels,
+		})
+	}
+
+	return labelset
+}
+
+func (p *PrometheusStore) Timestamps() (mint int64, maxt int64) {
+	return p.timestamps()
 }
