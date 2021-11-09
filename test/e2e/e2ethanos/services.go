@@ -65,16 +65,32 @@ func DefaultImage() string {
 	return "thanos"
 }
 
-func NewPrometheus(e e2e.Environment, name, config, promImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, string, error) {
+func defaultPromHttpConfig() string {
+	// username: test, secret: test(bcrypt hash)
+	return `basic_auth:
+  username: test
+  password: test
+`
+}
+
+func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, string, error) {
 	dir := filepath.Join(e.SharedDir(), "data", "prometheus", name)
 	container := filepath.Join(ContainerSharedDir, "data", "prometheus", name)
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, "", errors.Wrap(err, "create prometheus dir")
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(dir, "prometheus.yml"), []byte(config), 0600); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(dir, "prometheus.yml"), []byte(promConfig), 0600); err != nil {
 		return nil, "", errors.Wrap(err, "creating prom config failed")
 	}
+
+	if len(webConfig) > 0 {
+		if err := ioutil.WriteFile(filepath.Join(dir, "web-config.yml"), []byte(webConfig), 0600); err != nil {
+			return nil, "", errors.Wrap(err, "creating web-config failed")
+		}
+	}
+
+	probe := e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200)
 
 	args := e2e.BuildArgs(map[string]string{
 		"--config.file":                     filepath.Join(container, "prometheus.yml"),
@@ -87,6 +103,11 @@ func NewPrometheus(e e2e.Environment, name, config, promImage string, enableFeat
 	if len(enableFeatures) > 0 {
 		args = append(args, fmt.Sprintf("--enable-feature=%s", strings.Join(enableFeatures, ",")))
 	}
+	if len(webConfig) > 0 {
+		args = append(args, fmt.Sprintf("--web.config.file=%s", filepath.Join(container, "web-config.yml")))
+		// If auth is enabled then prober would get 401 error.
+		probe = e2e.NewHTTPReadinessProbe("http", "/-/ready", 401, 401)
+	}
 	prom := e2e.NewInstrumentedRunnable(
 		e,
 		fmt.Sprintf("prometheus-%s", name),
@@ -95,7 +116,7 @@ func NewPrometheus(e e2e.Environment, name, config, promImage string, enableFeat
 		e2e.StartOptions{
 			Image:            promImage,
 			Command:          e2e.NewCommandWithoutEntrypoint("prometheus", args...),
-			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+			Readiness:        probe,
 			User:             strconv.Itoa(os.Getuid()),
 			WaitReadyBackoff: &defaultBackoffConfig,
 		},
@@ -104,29 +125,33 @@ func NewPrometheus(e e2e.Environment, name, config, promImage string, enableFeat
 	return prom, container, nil
 }
 
-func NewPrometheusWithSidecar(e e2e.Environment, name, config, promImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
-	return NewPrometheusWithSidecarCustomImage(e, name, config, promImage, DefaultImage(), enableFeatures...)
+func NewPrometheusWithSidecar(e e2e.Environment, name, promConfig, webConfig, promImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
+	return NewPrometheusWithSidecarCustomImage(e, name, promConfig, webConfig, promImage, DefaultImage(), enableFeatures...)
 }
 
-func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, config, promImage string, sidecarImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
-	prom, dataDir, err := NewPrometheus(e, name, config, promImage, enableFeatures...)
+func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, webConfig, promImage string, sidecarImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
+	prom, dataDir, err := NewPrometheus(e, name, promConfig, webConfig, promImage, enableFeatures...)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	args := map[string]string{
+		"--debug.name":        fmt.Sprintf("sidecar-%v", name),
+		"--grpc-address":      ":9091",
+		"--grpc-grace-period": "0s",
+		"--http-address":      ":8080",
+		"--prometheus.url":    "http://" + prom.InternalEndpoint("http"),
+		"--tsdb.path":         dataDir,
+		"--log.level":         infoLogLevel,
+	}
+	if len(webConfig) > 0 {
+		args["--prometheus.http-client"] = defaultPromHttpConfig()
+	}
 	sidecar := NewService(
 		e,
 		fmt.Sprintf("sidecar-%s", name),
 		sidecarImage,
-		e2e.NewCommand("sidecar", e2e.BuildArgs(map[string]string{
-			"--debug.name":        fmt.Sprintf("sidecar-%v", name),
-			"--grpc-address":      ":9091",
-			"--grpc-grace-period": "0s",
-			"--http-address":      ":8080",
-			"--prometheus.url":    "http://" + prom.InternalEndpoint("http"),
-			"--tsdb.path":         dataDir,
-			"--log.level":         infoLogLevel,
-		})...),
+		e2e.NewCommand("sidecar", e2e.BuildArgs(args)...),
 		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		8080,
 		9091,

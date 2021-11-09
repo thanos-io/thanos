@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"math"
-	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -26,7 +25,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
-	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
@@ -49,7 +47,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 func registerSidecar(app *extkingpin.App) {
@@ -88,6 +85,22 @@ func runSidecar(
 	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 ) error {
+	httpConfContentYaml, err := conf.prometheus.httpClient.Content()
+	if err != nil {
+		return errors.Wrap(err, "getting http client config")
+	}
+	httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
+	if err != nil {
+		return errors.Wrap(err, "parsing http config YAML")
+	}
+
+	httpClient, err := httpconfig.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
+	if err != nil {
+		return errors.Wrap(err, "Improper http client config")
+	}
+
+	reloader.SetHttpClient(*httpClient)
+
 	var m = &promMetadata{
 		promURL: conf.prometheus.url,
 
@@ -97,7 +110,7 @@ func runSidecar(
 		maxt: math.MaxInt64,
 
 		limitMinTime: conf.limitMinTime,
-		client:       promclient.NewWithTracingClient(logger, "thanos-sidecar"),
+		client:       promclient.NewWithTracingClient(logger, httpClient, "thanos-sidecar"),
 	}
 
 	confContentYaml, err := conf.objStore.Content()
@@ -229,10 +242,7 @@ func runSidecar(
 		})
 	}
 	{
-		t := exthttp.NewTransport()
-		t.MaxIdleConnsPerHost = conf.connection.maxIdleConnsPerHost
-		t.MaxIdleConns = conf.connection.maxIdleConns
-		c := promclient.NewClient(&http.Client{Transport: tracing.HTTPTripperware(logger, t)}, logger, httpconfig.ThanosUserAgent)
+		c := promclient.NewWithTracingClient(logger, httpClient, httpconfig.ThanosUserAgent)
 
 		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {
@@ -473,7 +483,6 @@ type sidecarConfig struct {
 	http         httpConfig
 	grpc         grpcConfig
 	prometheus   prometheusConfig
-	connection   connConfig
 	tsdb         tsdbConfig
 	reloader     reloaderConfig
 	reqLogConfig *extflag.PathOrContent
@@ -486,7 +495,6 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.http.registerFlag(cmd)
 	sc.grpc.registerFlag(cmd)
 	sc.prometheus.registerFlag(cmd)
-	sc.connection.registerFlag(cmd)
 	sc.tsdb.registerFlag(cmd)
 	sc.reloader.registerFlag(cmd)
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)

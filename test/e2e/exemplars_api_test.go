@@ -43,6 +43,7 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 		e,
 		"prom1",
 		defaultPromConfig("ha", 0, "", "", "localhost:9090", qUnitiated.InternalEndpoint("http")),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 		e2ethanos.FeatureExemplarStorage,
 	)
@@ -51,6 +52,7 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 		e,
 		"prom2",
 		defaultPromConfig("ha", 1, "", "", "localhost:9090", qUnitiated.InternalEndpoint("http")),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 		e2ethanos.FeatureExemplarStorage,
 	)
