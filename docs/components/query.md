@@ -373,7 +373,7 @@ Flags:
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
       --store=<store> ...        Deprecation Warning - This flag is deprecated
-                                 and replaced with `endpoints`. Addresses of
+                                 and replaced with `endpoint`. Addresses of
                                  statically configured store API servers
                                  (repeatable). The scheme may be prefixed with
                                  'dns+' or 'dnssrv+' to detect store API servers
