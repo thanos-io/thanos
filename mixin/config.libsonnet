@@ -30,7 +30,7 @@
   },
   query_frontend+:: {
     selector: 'job=~".*thanos-query-frontend.*"',
-    title: '%(prefix)sQueryFrontend' % $.dashboard.prefix,
+    title: '%(prefix)sQuery Frontend' % $.dashboard.prefix,
   },
   store+:: {
     selector: 'job=~".*thanos-store.*"',

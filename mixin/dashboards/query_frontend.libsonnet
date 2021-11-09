@@ -29,6 +29,9 @@ local utils = import '../lib/utils.libsonnet';
           g.panel('Duration', 'Shows how long has it taken to handle requests in quantiles.') +
           g.latencyPanel('http_request_duration_seconds', queryFrontendHandlerSelector, thanos.query_frontend.dashboard.dimensions)
         )
+      )
+      .addRow(
+        g.resourceUtilizationRow(thanos.query_frontend.dashboard.selector, thanos.query_frontend.dashboard.dimensions)
       ),
   },
 }
