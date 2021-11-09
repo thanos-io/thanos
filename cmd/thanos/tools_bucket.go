@@ -6,8 +6,10 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -72,6 +74,15 @@ var (
 		},
 	}
 	inspectColumns = []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-DOWN", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "LABELS", "RESOLUTION", "SOURCE"}
+	outputTypes    = []string{"table", "tsv", "csv"}
+)
+
+type outputType string
+
+const (
+	TABLE outputType = "table"
+	CSV   outputType = "csv"
+	TSV   outputType = "tsv"
 )
 
 type bucketRewriteConfig struct {
@@ -445,6 +456,8 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	tbc := &bucketInspectConfig{}
 	tbc.registerBucketInspectFlag(cmd)
 
+	output := cmd.Flag("output", "Output format for result. Currently supports table, cvs, tsv.").Default("table").Enum(outputTypes...)
+
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 
 		// Parse selector.
@@ -487,7 +500,17 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			blockMetas = append(blockMetas, meta)
 		}
 
-		return printTable(blockMetas, selectorLabels, tbc.sortBy)
+		var opPrinter tablePrinter
+		op := outputType(*output)
+		switch op {
+		case TABLE:
+			opPrinter = printTable
+		case TSV:
+			opPrinter = printTSV
+		case CSV:
+			opPrinter = printCSV
+		}
+		return printBlockData(blockMetas, selectorLabels, tbc.sortBy, opPrinter)
 	})
 }
 
@@ -804,7 +827,56 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	})
 }
 
-func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string) error {
+type tablePrinter func(w io.Writer, t Table) error
+
+func printTable(w io.Writer, t Table) error {
+	table := tablewriter.NewWriter(w)
+	table.SetHeader(t.Header)
+	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
+	table.SetCenterSeparator("|")
+	table.SetAutoWrapText(false)
+	table.SetReflowDuringAutoWrap(false)
+	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	table.AppendBulk(t.Lines)
+	table.Render()
+	return nil
+}
+
+func printCSV(w io.Writer, t Table) error {
+	csv := csv.NewWriter(w)
+	err := csv.Write(t.Header)
+	if err != nil {
+		return err
+	}
+	err = csv.WriteAll(t.Lines)
+	if err != nil {
+		return err
+	}
+	csv.Flush()
+	return nil
+}
+
+func newTSVWriter(w io.Writer) *csv.Writer {
+	writer := csv.NewWriter(w)
+	writer.Comma = rune('\t')
+	return writer
+}
+
+func printTSV(w io.Writer, t Table) error {
+	tsv := newTSVWriter(w)
+	err := tsv.Write(t.Header)
+	if err != nil {
+		return err
+	}
+	err = tsv.WriteAll(t.Lines)
+	if err != nil {
+		return err
+	}
+	tsv.Flush()
+	return nil
+}
+
+func printBlockData(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string, printer tablePrinter) error {
 	header := inspectColumns
 
 	var lines [][]string
@@ -856,17 +928,10 @@ func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortB
 
 	t := Table{Header: header, Lines: lines, SortIndices: sortByColNum}
 	sort.Sort(t)
-
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader(t.Header)
-	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
-	table.SetCenterSeparator("|")
-	table.SetAutoWrapText(false)
-	table.SetReflowDuringAutoWrap(false)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	table.AppendBulk(t.Lines)
-	table.Render()
-
+	err := printer(os.Stdout, t)
+	if err != nil {
+		return errors.Errorf("unable to write output.")
+	}
 	return nil
 }
 
