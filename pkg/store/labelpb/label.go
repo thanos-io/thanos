@@ -29,22 +29,36 @@ func noAllocBytes(buf string) []byte {
 	return *(*[]byte)(unsafe.Pointer(&buf))
 }
 
-// ZLabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed labels.Labels.
-func ZLabelsFromPromLabels(lset labels.Labels) []ZLabel {
-	return *(*[]ZLabel)(unsafe.Pointer(&lset))
+// ProtobufLabelsFromPromLabels converts Prometheus labels to a slice pointers to labelpb.Label.
+func ProtobufLabelsFromPromLabels(lset labels.Labels) []*Label {
+	labels := make([]*Label, 0, len(lset))
+	for _, lbl := range lset {
+		labels = append(labels, &Label{Name: lbl.Name, Value: lbl.Value})
+	}
+
+	return labels
 }
 
-// ZLabelsToPromLabels convert slice of labelpb.ZLabel to Prometheus labels in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed []ZLabel.
-// NOTE: Use with care. ZLabels holds memory from the whole protobuf unmarshal, so the returned
-// Prometheus Labels will hold this memory as well.
-func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
-	return *(*labels.Labels)(unsafe.Pointer(&lset))
+// ZLabelSetFromProtobufLabels converts a slice of pointers to labelpb.Label to a pointer to a ZLabelSet.
+func ZLabelSetFromProtobufLabels(lset []*Label) *ZLabelSet {
+	if len(lset) == 0 {
+		return nil
+	}
+	return &ZLabelSet{Labels: lset}
+}
+
+// ProtobufLabelsToPromLabels converts a slice of pointers labelpb.Label to Prometheus labels.
+func ProtobufLabelsToPromLabels(lset []*Label) labels.Labels {
+	promLabels := make([]labels.Label, 0, len(lset))
+	for _, lbl := range lset {
+		promLabels = append(promLabels, labels.Label{Name: lbl.Name, Value: lbl.Value})
+	}
+
+	return promLabels
 }
 
 // ReAllocZLabelsStrings re-allocates all underlying bytes for string, detaching it from bigger memory pool.
-func ReAllocZLabelsStrings(lset *[]ZLabel) {
+func ReAllocZLabelsStrings(lset *[]*Label) {
 	for j, l := range *lset {
 		// NOTE: This trick converts from string to byte without copy, but copy when creating string.
 		(*lset)[j].Name = string(noAllocBytes(l.Name))
@@ -65,7 +79,7 @@ func LabelsToPromLabels(lset []Label) labels.Labels {
 }
 
 // ZLabelSetsToPromLabelSets converts slice of labelpb.ZLabelSet to slice of Prometheus labels.
-func ZLabelSetsToPromLabelSets(lss ...ZLabelSet) []labels.Labels {
+func ZLabelSetsToPromLabelSets(lss ...*ZLabelSet) []labels.Labels {
 	res := make([]labels.Labels, 0, len(lss))
 	for _, ls := range lss {
 		res = append(res, ls.PromLabels())
@@ -249,6 +263,14 @@ func (m *ZLabel) Compare(other ZLabel) int {
 	return strings.Compare(m.Value, other.Value)
 }
 
+// Compare compares two labels.
+func (m *Label) Compare(other *Label) int {
+	if c := strings.Compare(m.Name, other.Name); c != 0 {
+		return c
+	}
+	return strings.Compare(m.Value, other.Value)
+}
+
 // ExtendSortedLabels extend given labels by extend in labels format.
 // The type conversion is done safely, which means we don't modify extend labels underlying array.
 //
@@ -295,7 +317,7 @@ func (m *ZLabelSet) UnmarshalJSON(entry []byte) error {
 		return errors.Wrapf(err, "labels: labels field unmarshal: %v", string(entry))
 	}
 	sort.Sort(lbls)
-	m.Labels = ZLabelsFromPromLabels(lbls)
+	m.Labels = ProtobufLabelsFromPromLabels(lbls)
 	return nil
 }
 
@@ -305,7 +327,10 @@ func (m *ZLabelSet) MarshalJSON() ([]byte, error) {
 
 // PromLabels return Prometheus labels.Labels without extra allocation.
 func (m *ZLabelSet) PromLabels() labels.Labels {
-	return ZLabelsToPromLabels(m.Labels)
+	if len(m.Labels) == 0{
+		fmt.Println("nil")
+	} 
+	return ProtobufLabelsToPromLabels(m.Labels)
 }
 
 // DeepCopy copies labels and each label's string to separate bytes.
@@ -319,7 +344,7 @@ func DeepCopy(lbls []ZLabel) []ZLabel {
 }
 
 // HashWithPrefix returns a hash for the given prefix and labels.
-func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
+func HashWithPrefix(prefix string, lbls []*Label) uint64 {
 	// Use xxhash.Sum64(b) for fast path as it's faster.
 	b := make([]byte, 0, 1024)
 	b = append(b, prefix...)
@@ -347,7 +372,7 @@ func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
 }
 
 // ZLabelSets is a sortable list of ZLabelSet. It assumes the label pairs in each ZLabelSet element are already sorted.
-type ZLabelSets []ZLabelSet
+type ZLabelSets []*ZLabelSet
 
 func (z ZLabelSets) Len() int { return len(z) }
 

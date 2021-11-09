@@ -27,7 +27,7 @@ import (
 )
 
 func TestWriter(t *testing.T) {
-	lbls := []labelpb.ZLabel{{Name: "__name__", Value: "test"}}
+	lbls := []*labelpb.Label{{Name: "__name__", Value: "test"}}
 	tests := map[string]struct {
 		reqs             []*prompb.WriteRequest
 		expectedErr      error
@@ -36,19 +36,19 @@ func TestWriter(t *testing.T) {
 	}{
 		"should succeed on valid series with exemplars": {
 			reqs: []*prompb.WriteRequest{{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: lbls,
 						// Ingesting an exemplar requires a sample to create the series first.
-						Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
-						Exemplars: []prompb.Exemplar{
+						Samples: []*prompb.Sample{{Value: 1, Timestamp: 10}},
+						Exemplars: []*prompb.Exemplar{
 							{
-								Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "123"}},
+								Labels:    []*labelpb.Label{{Name: "traceID", Value: "123"}},
 								Value:     111,
 								Timestamp: 11,
 							},
 							{
-								Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "234"}},
+								Labels:    []*labelpb.Label{{Name: "traceID", Value: "234"}},
 								Value:     112,
 								Timestamp: 12,
 							},
@@ -62,14 +62,14 @@ func TestWriter(t *testing.T) {
 		"should error out on valid series with out of order exemplars": {
 			reqs: []*prompb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*prompb.TimeSeries{
 						{
 							Labels: lbls,
 							// Ingesting an exemplar requires a sample to create the series first.
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
-							Exemplars: []prompb.Exemplar{
+							Samples: []*prompb.Sample{{Value: 1, Timestamp: 10}},
+							Exemplars: []*prompb.Exemplar{
 								{
-									Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "123"}},
+									Labels:    []*labelpb.Label{{Name: "traceID", Value: "123"}},
 									Value:     111,
 									Timestamp: 11,
 								},
@@ -78,12 +78,12 @@ func TestWriter(t *testing.T) {
 					},
 				},
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*prompb.TimeSeries{
 						{
 							Labels: lbls,
-							Exemplars: []prompb.Exemplar{
+							Exemplars: []*prompb.Exemplar{
 								{
-									Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "1234"}},
+									Labels:    []*labelpb.Label{{Name: "traceID", Value: "1234"}},
 									Value:     111,
 									Timestamp: 10,
 								},
@@ -98,14 +98,14 @@ func TestWriter(t *testing.T) {
 		"should error out when exemplar label length exceeds the limit": {
 			reqs: []*prompb.WriteRequest{
 				{
-					Timeseries: []prompb.TimeSeries{
+					Timeseries: []*prompb.TimeSeries{
 						{
 							Labels: lbls,
 							// Ingesting an exemplar requires a sample to create the series first.
-							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
-							Exemplars: []prompb.Exemplar{
+							Samples: []*prompb.Sample{{Value: 1, Timestamp: 10}},
+							Exemplars: []*prompb.Exemplar{
 								{
-									Labels:    []labelpb.ZLabel{{Name: strings.Repeat("a", exemplar.ExemplarMaxLabelSetLength), Value: "1"}},
+									Labels:    []*labelpb.Label{{Name: strings.Repeat("a", exemplar.ExemplarMaxLabelSetLength), Value: "1"}},
 									Value:     111,
 									Timestamp: 11,
 								},

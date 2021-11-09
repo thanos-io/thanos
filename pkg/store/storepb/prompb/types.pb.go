@@ -10,10 +10,8 @@ import (
 	math "math"
 	math_bits "math/bits"
 
-	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
-	_ "github.com/thanos-io/thanos/pkg/store/labelpb"
-	github_com_thanos_io_thanos_pkg_store_labelpb "github.com/thanos-io/thanos/pkg/store/labelpb"
+	labelpb "github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -130,10 +128,13 @@ func (Chunk_Encoding) EnumDescriptor() ([]byte, []int) {
 type MetricMetadata struct {
 	// Represents the metric type, these match the set from Prometheus.
 	// Refer to pkg/textparse/interface.go for details.
-	Type             MetricMetadata_MetricType `protobuf:"varint,1,opt,name=type,proto3,enum=prometheus_copy.MetricMetadata_MetricType" json:"type,omitempty"`
-	MetricFamilyName string                    `protobuf:"bytes,2,opt,name=metric_family_name,json=metricFamilyName,proto3" json:"metric_family_name,omitempty"`
-	Help             string                    `protobuf:"bytes,4,opt,name=help,proto3" json:"help,omitempty"`
-	Unit             string                    `protobuf:"bytes,5,opt,name=unit,proto3" json:"unit,omitempty"`
+	Type                 MetricMetadata_MetricType `protobuf:"varint,1,opt,name=type,proto3,enum=prometheus_copy.MetricMetadata_MetricType" json:"type,omitempty"`
+	MetricFamilyName     string                    `protobuf:"bytes,2,opt,name=metric_family_name,json=metricFamilyName,proto3" json:"metric_family_name,omitempty"`
+	Help                 string                    `protobuf:"bytes,4,opt,name=help,proto3" json:"help,omitempty"`
+	Unit                 string                    `protobuf:"bytes,5,opt,name=unit,proto3" json:"unit,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
+	XXX_unrecognized     []byte                    `json:"-"`
+	XXX_sizecache        int32                     `json:"-"`
 }
 
 func (m *MetricMetadata) Reset()         { *m = MetricMetadata{} }
@@ -198,8 +199,11 @@ func (m *MetricMetadata) GetUnit() string {
 }
 
 type Sample struct {
-	Value     float64 `protobuf:"fixed64,1,opt,name=value,proto3" json:"value,omitempty"`
-	Timestamp int64   `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Value                float64  `protobuf:"fixed64,1,opt,name=value,proto3" json:"value,omitempty"`
+	Timestamp            int64    `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *Sample) Reset()         { *m = Sample{} }
@@ -251,11 +255,14 @@ func (m *Sample) GetTimestamp() int64 {
 
 type Exemplar struct {
 	// Optional, can be empty.
-	Labels []github_com_thanos_io_thanos_pkg_store_labelpb.ZLabel `protobuf:"bytes,1,rep,name=labels,proto3,customtype=github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel" json:"labels"`
-	Value  float64                                                `protobuf:"fixed64,2,opt,name=value,proto3" json:"value,omitempty"`
+	Labels []*labelpb.Label `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels,omitempty"`
+	Value  float64          `protobuf:"fixed64,2,opt,name=value,proto3" json:"value,omitempty"`
 	// timestamp is in ms format, see pkg/timestamp/timestamp.go for
 	// conversion from time.Time to Prometheus timestamp.
-	Timestamp int64 `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Timestamp            int64    `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *Exemplar) Reset()         { *m = Exemplar{} }
@@ -291,6 +298,13 @@ func (m *Exemplar) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Exemplar proto.InternalMessageInfo
 
+func (m *Exemplar) GetLabels() []*labelpb.Label {
+	if m != nil {
+		return m.Labels
+	}
+	return nil
+}
+
 func (m *Exemplar) GetValue() float64 {
 	if m != nil {
 		return m.Value
@@ -309,9 +323,12 @@ func (m *Exemplar) GetTimestamp() int64 {
 type TimeSeries struct {
 	// Labels have to be sorted by label names and without duplicated label names.
 	// TODO(bwplotka): Don't use zero copy ZLabels, see https://github.com/thanos-io/thanos/pull/3279 for details.
-	Labels    []github_com_thanos_io_thanos_pkg_store_labelpb.ZLabel `protobuf:"bytes,1,rep,name=labels,proto3,customtype=github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel" json:"labels"`
-	Samples   []Sample                                               `protobuf:"bytes,2,rep,name=samples,proto3" json:"samples"`
-	Exemplars []Exemplar                                             `protobuf:"bytes,3,rep,name=exemplars,proto3" json:"exemplars"`
+	Labels               []*labelpb.Label `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels,omitempty"`
+	Samples              []*Sample        `protobuf:"bytes,2,rep,name=samples,proto3" json:"samples,omitempty"`
+	Exemplars            []*Exemplar      `protobuf:"bytes,3,rep,name=exemplars,proto3" json:"exemplars,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_unrecognized     []byte           `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
 }
 
 func (m *TimeSeries) Reset()         { *m = TimeSeries{} }
@@ -347,14 +364,21 @@ func (m *TimeSeries) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_TimeSeries proto.InternalMessageInfo
 
-func (m *TimeSeries) GetSamples() []Sample {
+func (m *TimeSeries) GetLabels() []*labelpb.Label {
+	if m != nil {
+		return m.Labels
+	}
+	return nil
+}
+
+func (m *TimeSeries) GetSamples() []*Sample {
 	if m != nil {
 		return m.Samples
 	}
 	return nil
 }
 
-func (m *TimeSeries) GetExemplars() []Exemplar {
+func (m *TimeSeries) GetExemplars() []*Exemplar {
 	if m != nil {
 		return m.Exemplars
 	}
@@ -363,9 +387,12 @@ func (m *TimeSeries) GetExemplars() []Exemplar {
 
 // Matcher specifies a rule, which can match or set of labels or not.
 type LabelMatcher struct {
-	Type  LabelMatcher_Type `protobuf:"varint,1,opt,name=type,proto3,enum=prometheus_copy.LabelMatcher_Type" json:"type,omitempty"`
-	Name  string            `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Value string            `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Type                 LabelMatcher_Type `protobuf:"varint,1,opt,name=type,proto3,enum=prometheus_copy.LabelMatcher_Type" json:"type,omitempty"`
+	Name                 string            `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Value                string            `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
 func (m *LabelMatcher) Reset()         { *m = LabelMatcher{} }
@@ -423,13 +450,16 @@ func (m *LabelMatcher) GetValue() string {
 }
 
 type ReadHints struct {
-	StepMs   int64    `protobuf:"varint,1,opt,name=step_ms,json=stepMs,proto3" json:"step_ms,omitempty"`
-	Func     string   `protobuf:"bytes,2,opt,name=func,proto3" json:"func,omitempty"`
-	StartMs  int64    `protobuf:"varint,3,opt,name=start_ms,json=startMs,proto3" json:"start_ms,omitempty"`
-	EndMs    int64    `protobuf:"varint,4,opt,name=end_ms,json=endMs,proto3" json:"end_ms,omitempty"`
-	Grouping []string `protobuf:"bytes,5,rep,name=grouping,proto3" json:"grouping,omitempty"`
-	By       bool     `protobuf:"varint,6,opt,name=by,proto3" json:"by,omitempty"`
-	RangeMs  int64    `protobuf:"varint,7,opt,name=range_ms,json=rangeMs,proto3" json:"range_ms,omitempty"`
+	StepMs               int64    `protobuf:"varint,1,opt,name=step_ms,json=stepMs,proto3" json:"step_ms,omitempty"`
+	Func                 string   `protobuf:"bytes,2,opt,name=func,proto3" json:"func,omitempty"`
+	StartMs              int64    `protobuf:"varint,3,opt,name=start_ms,json=startMs,proto3" json:"start_ms,omitempty"`
+	EndMs                int64    `protobuf:"varint,4,opt,name=end_ms,json=endMs,proto3" json:"end_ms,omitempty"`
+	Grouping             []string `protobuf:"bytes,5,rep,name=grouping,proto3" json:"grouping,omitempty"`
+	By                   bool     `protobuf:"varint,6,opt,name=by,proto3" json:"by,omitempty"`
+	RangeMs              int64    `protobuf:"varint,7,opt,name=range_ms,json=rangeMs,proto3" json:"range_ms,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ReadHints) Reset()         { *m = ReadHints{} }
@@ -517,10 +547,13 @@ func (m *ReadHints) GetRangeMs() int64 {
 // Chunk represents a TSDB chunk.
 // Time range [min, max] is inclusive.
 type Chunk struct {
-	MinTimeMs int64          `protobuf:"varint,1,opt,name=min_time_ms,json=minTimeMs,proto3" json:"min_time_ms,omitempty"`
-	MaxTimeMs int64          `protobuf:"varint,2,opt,name=max_time_ms,json=maxTimeMs,proto3" json:"max_time_ms,omitempty"`
-	Type      Chunk_Encoding `protobuf:"varint,3,opt,name=type,proto3,enum=prometheus_copy.Chunk_Encoding" json:"type,omitempty"`
-	Data      []byte         `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	MinTimeMs            int64          `protobuf:"varint,1,opt,name=min_time_ms,json=minTimeMs,proto3" json:"min_time_ms,omitempty"`
+	MaxTimeMs            int64          `protobuf:"varint,2,opt,name=max_time_ms,json=maxTimeMs,proto3" json:"max_time_ms,omitempty"`
+	Type                 Chunk_Encoding `protobuf:"varint,3,opt,name=type,proto3,enum=prometheus_copy.Chunk_Encoding" json:"type,omitempty"`
+	Data                 []byte         `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_unrecognized     []byte         `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
 func (m *Chunk) Reset()         { *m = Chunk{} }
@@ -587,9 +620,12 @@ func (m *Chunk) GetData() []byte {
 // ChunkedSeries represents single, encoded time series.
 type ChunkedSeries struct {
 	// Labels should be sorted.
-	Labels []github_com_thanos_io_thanos_pkg_store_labelpb.ZLabel `protobuf:"bytes,1,rep,name=labels,proto3,customtype=github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel" json:"labels"`
+	Labels []*labelpb.Label `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels,omitempty"`
 	// Chunks will be in start time order and may overlap.
-	Chunks []Chunk `protobuf:"bytes,2,rep,name=chunks,proto3" json:"chunks"`
+	Chunks               []*Chunk `protobuf:"bytes,2,rep,name=chunks,proto3" json:"chunks,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ChunkedSeries) Reset()         { *m = ChunkedSeries{} }
@@ -625,7 +661,14 @@ func (m *ChunkedSeries) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ChunkedSeries proto.InternalMessageInfo
 
-func (m *ChunkedSeries) GetChunks() []Chunk {
+func (m *ChunkedSeries) GetLabels() []*labelpb.Label {
+	if m != nil {
+		return m.Labels
+	}
+	return nil
+}
+
+func (m *ChunkedSeries) GetChunks() []*Chunk {
 	if m != nil {
 		return m.Chunks
 	}
@@ -649,57 +692,52 @@ func init() {
 func init() { proto.RegisterFile("store/storepb/prompb/types.proto", fileDescriptor_166e07899dab7c14) }
 
 var fileDescriptor_166e07899dab7c14 = []byte{
-	// 796 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x55, 0x4f, 0x8f, 0xdb, 0x44,
-	0x14, 0xcf, 0xd8, 0x8e, 0x1d, 0xbf, 0xfd, 0x83, 0x35, 0x2a, 0xd4, 0xbb, 0x42, 0x59, 0xcb, 0xa7,
-	0x08, 0x81, 0x23, 0xb5, 0x15, 0x5c, 0x0a, 0xd2, 0x6e, 0xe5, 0x6e, 0x2b, 0x70, 0xa2, 0x4e, 0xb2,
-	0x02, 0x7a, 0x89, 0x26, 0xce, 0xd4, 0xb1, 0x1a, 0xff, 0x91, 0x67, 0x82, 0x36, 0xdf, 0x82, 0x33,
-	0x37, 0xc4, 0x8d, 0x1b, 0x7c, 0x8a, 0x1e, 0x7b, 0x44, 0x1c, 0x2a, 0xb4, 0x7b, 0xe2, 0x5b, 0xa0,
-	0x19, 0x3b, 0xf5, 0xa6, 0x4b, 0xaf, 0xbd, 0xac, 0xde, 0xfb, 0xfd, 0xde, 0x3f, 0xbf, 0xf7, 0xdb,
-	0x09, 0x78, 0x5c, 0x14, 0x15, 0x1b, 0xaa, 0xbf, 0xe5, 0x7c, 0x58, 0x56, 0x45, 0x56, 0xce, 0x87,
-	0x62, 0x53, 0x32, 0x1e, 0x94, 0x55, 0x21, 0x0a, 0xfc, 0x91, 0xc4, 0x98, 0x58, 0xb2, 0x35, 0x9f,
-	0xc5, 0x45, 0xb9, 0x39, 0xbe, 0x93, 0x14, 0x49, 0xa1, 0xb8, 0xa1, 0xb4, 0xea, 0xb0, 0xe3, 0xa3,
-	0xba, 0xd0, 0x8a, 0xce, 0xd9, 0x6a, 0xb7, 0x82, 0xff, 0xab, 0x06, 0x87, 0x11, 0x13, 0x55, 0x1a,
-	0x47, 0x4c, 0xd0, 0x05, 0x15, 0x14, 0x7f, 0x03, 0x86, 0x8c, 0x70, 0x91, 0x87, 0x06, 0x87, 0xf7,
-	0x3e, 0x0b, 0xde, 0xe9, 0x11, 0xec, 0x86, 0x37, 0xee, 0x74, 0x53, 0x32, 0xa2, 0xf2, 0xf0, 0xe7,
-	0x80, 0x33, 0x85, 0xcd, 0x5e, 0xd0, 0x2c, 0x5d, 0x6d, 0x66, 0x39, 0xcd, 0x98, 0xab, 0x79, 0x68,
-	0x60, 0x13, 0xa7, 0x66, 0x1e, 0x2b, 0x62, 0x44, 0x33, 0x86, 0x31, 0x18, 0x4b, 0xb6, 0x2a, 0x5d,
-	0x43, 0xf1, 0xca, 0x96, 0xd8, 0x3a, 0x4f, 0x85, 0xdb, 0xad, 0x31, 0x69, 0xfb, 0x1b, 0x80, 0xb6,
-	0x13, 0xde, 0x03, 0xeb, 0x62, 0xf4, 0xed, 0x68, 0xfc, 0xfd, 0xc8, 0xe9, 0x48, 0xe7, 0xd1, 0xf8,
-	0x62, 0x34, 0x0d, 0x89, 0x83, 0xb0, 0x0d, 0xdd, 0xf3, 0xd3, 0x8b, 0xf3, 0xd0, 0xd1, 0xf0, 0x01,
-	0xd8, 0x4f, 0x9e, 0x4e, 0xa6, 0xe3, 0x73, 0x72, 0x1a, 0x39, 0x3a, 0xc6, 0x70, 0xa8, 0x98, 0x16,
-	0x33, 0x64, 0xea, 0xe4, 0x22, 0x8a, 0x4e, 0xc9, 0x8f, 0x4e, 0x17, 0xf7, 0xc0, 0x78, 0x3a, 0x7a,
-	0x3c, 0x76, 0x4c, 0xbc, 0x0f, 0xbd, 0xc9, 0xf4, 0x74, 0x1a, 0x4e, 0xc2, 0xa9, 0x63, 0xf9, 0x0f,
-	0xc1, 0x9c, 0xd0, 0xac, 0x5c, 0x31, 0x7c, 0x07, 0xba, 0x3f, 0xd1, 0xd5, 0xba, 0xde, 0x0d, 0x22,
-	0xb5, 0x83, 0x3f, 0x05, 0x5b, 0xa4, 0x19, 0xe3, 0x82, 0x66, 0xa5, 0xfa, 0x4e, 0x9d, 0xb4, 0x80,
-	0xff, 0x1b, 0x82, 0x5e, 0x78, 0xc9, 0xb2, 0x72, 0x45, 0x2b, 0x1c, 0x83, 0xa9, 0xae, 0xc0, 0x5d,
-	0xe4, 0xe9, 0x83, 0xbd, 0x7b, 0x07, 0x81, 0x58, 0xd2, 0xbc, 0xe0, 0xc1, 0x77, 0x12, 0x3d, 0x7b,
-	0xf8, 0xea, 0xcd, 0x49, 0xe7, 0xef, 0x37, 0x27, 0x0f, 0x92, 0x54, 0x2c, 0xd7, 0xf3, 0x20, 0x2e,
-	0xb2, 0x61, 0x1d, 0xf0, 0x45, 0x5a, 0x34, 0xd6, 0xb0, 0x7c, 0x99, 0x0c, 0x77, 0x0e, 0x1a, 0x3c,
-	0x57, 0xd9, 0xa4, 0x29, 0xdd, 0x4e, 0xa9, 0xbd, 0x77, 0x4a, 0xfd, 0xdd, 0x29, 0xff, 0x45, 0x00,
-	0xd3, 0x34, 0x63, 0x13, 0x56, 0xa5, 0x8c, 0x7f, 0x98, 0x39, 0xbf, 0x02, 0x8b, 0xab, 0xbd, 0x72,
-	0x57, 0x53, 0x5d, 0xee, 0xde, 0xd2, 0x5a, 0xbd, 0xf7, 0x33, 0x43, 0xf6, 0x23, 0xdb, 0x68, 0xfc,
-	0x35, 0xd8, 0xac, 0xd9, 0x28, 0x77, 0x75, 0x95, 0x7a, 0x74, 0x2b, 0x75, 0xbb, 0xf3, 0x26, 0xb9,
-	0xcd, 0xf0, 0x7f, 0x41, 0xb0, 0xaf, 0x26, 0x89, 0xa8, 0x88, 0x97, 0xac, 0xc2, 0x5f, 0xee, 0x28,
-	0xde, 0xbf, 0x55, 0xea, 0x66, 0x70, 0x70, 0x43, 0xe9, 0x18, 0x8c, 0x1b, 0xda, 0x56, 0x76, 0xbb,
-	0x7c, 0x5d, 0x81, 0xb5, 0xe3, 0x0f, 0xc0, 0x50, 0xba, 0x35, 0x41, 0x0b, 0x9f, 0x39, 0x1d, 0x6c,
-	0x81, 0x3e, 0x0a, 0x9f, 0x39, 0x48, 0x02, 0x44, 0x6a, 0x55, 0x02, 0x24, 0x74, 0x74, 0xff, 0x0f,
-	0x04, 0x36, 0x61, 0x74, 0xf1, 0x24, 0xcd, 0x05, 0xc7, 0x77, 0xc1, 0xe2, 0x82, 0x95, 0xb3, 0x8c,
-	0xab, 0xe1, 0x74, 0x62, 0x4a, 0x37, 0xe2, 0xb2, 0xf5, 0x8b, 0x75, 0x1e, 0x6f, 0x5b, 0x4b, 0x1b,
-	0x1f, 0x41, 0x8f, 0x0b, 0x5a, 0x09, 0x19, 0x5d, 0x1f, 0xd8, 0x52, 0x7e, 0xc4, 0xf1, 0xc7, 0x60,
-	0xb2, 0x7c, 0x21, 0x09, 0x43, 0x11, 0x5d, 0x96, 0x2f, 0x22, 0x8e, 0x8f, 0xa1, 0x97, 0x54, 0xc5,
-	0xba, 0x4c, 0xf3, 0xc4, 0xed, 0x7a, 0xfa, 0xc0, 0x26, 0x6f, 0x7d, 0x7c, 0x08, 0xda, 0x7c, 0xe3,
-	0x9a, 0x1e, 0x1a, 0xf4, 0x88, 0x36, 0xdf, 0xc8, 0xea, 0x15, 0xcd, 0x13, 0x26, 0x8b, 0x58, 0x75,
-	0x75, 0xe5, 0x47, 0xdc, 0xff, 0x13, 0x41, 0xf7, 0xd1, 0x72, 0x9d, 0xbf, 0xc4, 0x7d, 0xd8, 0xcb,
-	0xd2, 0x7c, 0x26, 0x75, 0xd5, 0xce, 0x6c, 0x67, 0x69, 0x2e, 0xb5, 0x15, 0x71, 0xc5, 0xd3, 0xcb,
-	0xb7, 0x7c, 0xf3, 0xcf, 0x92, 0xd1, 0xcb, 0x86, 0xbf, 0xdf, 0x5c, 0x42, 0x57, 0x97, 0x38, 0xb9,
-	0x75, 0x09, 0xd5, 0x25, 0x08, 0xf3, 0xb8, 0x58, 0xa4, 0x79, 0xd2, 0x9e, 0x41, 0xbe, 0x44, 0xea,
-	0xd3, 0xf6, 0x89, 0xb2, 0x7d, 0x0f, 0x7a, 0xdb, 0xa8, 0xdd, 0xc7, 0xc2, 0x02, 0xfd, 0x87, 0x31,
-	0x71, 0x90, 0xff, 0x3b, 0x82, 0x03, 0x55, 0x8e, 0x2d, 0x3e, 0xa4, 0xe8, 0x1f, 0x80, 0x19, 0xcb,
-	0xae, 0x5b, 0xcd, 0x7f, 0xf2, 0xff, 0xdf, 0xd8, 0xa8, 0xb6, 0x89, 0x3d, 0xf3, 0x5e, 0x5d, 0xf5,
-	0xd1, 0xeb, 0xab, 0x3e, 0xfa, 0xe7, 0xaa, 0x8f, 0x7e, 0xbe, 0xee, 0x77, 0x5e, 0x5f, 0xf7, 0x3b,
-	0x7f, 0x5d, 0xf7, 0x3b, 0xcf, 0xcd, 0xfa, 0x67, 0x61, 0x6e, 0xaa, 0xf7, 0xfc, 0xfe, 0x7f, 0x01,
-	0x00, 0x00, 0xff, 0xff, 0x98, 0xc8, 0x2e, 0xfd, 0x35, 0x06, 0x00, 0x00,
+	// 719 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x54, 0xdd, 0x6a, 0xdb, 0x48,
+	0x14, 0xce, 0x48, 0xb2, 0x64, 0x9d, 0x24, 0x5e, 0x31, 0x64, 0x37, 0x4a, 0x58, 0xbc, 0x46, 0xb0,
+	0x60, 0x96, 0x45, 0x61, 0x13, 0xd8, 0xde, 0x94, 0x82, 0x1b, 0x94, 0x1f, 0x5a, 0xd9, 0x64, 0x6c,
+	0xd3, 0x9f, 0x1b, 0x33, 0xb6, 0x27, 0xb6, 0xa8, 0xf5, 0x83, 0x66, 0x5c, 0xe2, 0x57, 0xe9, 0x4d,
+	0xe9, 0x23, 0xb4, 0x4f, 0xd1, 0xcb, 0x3e, 0x42, 0xc9, 0x93, 0x94, 0x19, 0xd9, 0x51, 0x1c, 0xb7,
+	0xd0, 0xde, 0x98, 0x39, 0xdf, 0xf7, 0x9d, 0x73, 0xe6, 0xe8, 0x7c, 0x1e, 0x68, 0x70, 0x91, 0xe6,
+	0xec, 0x48, 0xfd, 0x66, 0xc3, 0xa3, 0x2c, 0x4f, 0xe3, 0x6c, 0x78, 0x24, 0x16, 0x19, 0xe3, 0x7e,
+	0x96, 0xa7, 0x22, 0xc5, 0xbf, 0x49, 0x8c, 0x89, 0x29, 0x9b, 0xf3, 0xc1, 0x28, 0xcd, 0x16, 0x87,
+	0x07, 0x45, 0xca, 0x8c, 0x0e, 0xd9, 0x6c, 0x5d, 0xeb, 0x7d, 0xd0, 0xa0, 0x16, 0x32, 0x91, 0x47,
+	0xa3, 0x90, 0x09, 0x3a, 0xa6, 0x82, 0xe2, 0x27, 0x60, 0x48, 0x85, 0x8b, 0x1a, 0xa8, 0x59, 0x3b,
+	0xfe, 0xc7, 0x7f, 0x50, 0xcd, 0x5f, 0x97, 0x2f, 0xc3, 0xde, 0x22, 0x63, 0x44, 0xe5, 0xe1, 0x7f,
+	0x01, 0xc7, 0x0a, 0x1b, 0x5c, 0xd3, 0x38, 0x9a, 0x2d, 0x06, 0x09, 0x8d, 0x99, 0xab, 0x35, 0x50,
+	0xd3, 0x26, 0x4e, 0xc1, 0x9c, 0x29, 0xa2, 0x4d, 0x63, 0x86, 0x31, 0x18, 0x53, 0x36, 0xcb, 0x5c,
+	0x43, 0xf1, 0xea, 0x2c, 0xb1, 0x79, 0x12, 0x09, 0xb7, 0x52, 0x60, 0xf2, 0xec, 0x2d, 0x00, 0xca,
+	0x4e, 0x78, 0x1b, 0xac, 0x7e, 0xfb, 0x59, 0xbb, 0xf3, 0xa2, 0xed, 0x6c, 0xc9, 0xe0, 0xb4, 0xd3,
+	0x6f, 0xf7, 0x02, 0xe2, 0x20, 0x6c, 0x43, 0xe5, 0xbc, 0xd5, 0x3f, 0x0f, 0x1c, 0x0d, 0xef, 0x82,
+	0x7d, 0x71, 0xd9, 0xed, 0x75, 0xce, 0x49, 0x2b, 0x74, 0x74, 0x8c, 0xa1, 0xa6, 0x98, 0x12, 0x33,
+	0x64, 0x6a, 0xb7, 0x1f, 0x86, 0x2d, 0xf2, 0xca, 0xa9, 0xe0, 0x2a, 0x18, 0x97, 0xed, 0xb3, 0x8e,
+	0x63, 0xe2, 0x1d, 0xa8, 0x76, 0x7b, 0xad, 0x5e, 0xd0, 0x0d, 0x7a, 0x8e, 0xe5, 0x3d, 0x06, 0xb3,
+	0x4b, 0xe3, 0x6c, 0xc6, 0xf0, 0x1e, 0x54, 0xde, 0xd2, 0xd9, 0xbc, 0xf8, 0x36, 0x88, 0x14, 0x01,
+	0xfe, 0x13, 0x6c, 0x11, 0xc5, 0x8c, 0x0b, 0x1a, 0x67, 0x6a, 0x4e, 0x9d, 0x94, 0x80, 0xc7, 0xa0,
+	0x1a, 0xdc, 0xb0, 0x38, 0x9b, 0xd1, 0x1c, 0xff, 0x0d, 0xa6, 0x5a, 0x02, 0x77, 0x51, 0x43, 0x6f,
+	0x6e, 0x1f, 0xef, 0xfa, 0x62, 0x4a, 0x93, 0x94, 0xfb, 0xcf, 0x25, 0x4a, 0x96, 0x64, 0xd9, 0x46,
+	0xfb, 0x61, 0x1b, 0xfd, 0x61, 0x9b, 0xf7, 0x08, 0xa0, 0x17, 0xc5, 0xac, 0xcb, 0xf2, 0x88, 0xf1,
+	0x9f, 0xed, 0xf4, 0x1f, 0x58, 0x5c, 0x8d, 0xc6, 0x5d, 0x4d, 0xe9, 0xf6, 0x37, 0xd6, 0x5d, 0x8c,
+	0x4e, 0x56, 0x3a, 0xfc, 0x08, 0x6c, 0xb6, 0x9c, 0x87, 0xbb, 0xba, 0x4a, 0x3a, 0xd8, 0x48, 0x5a,
+	0x4d, 0x4c, 0x4a, 0xad, 0xf7, 0x0e, 0xc1, 0x8e, 0xea, 0x1e, 0x52, 0x31, 0x9a, 0xb2, 0x1c, 0xff,
+	0xbf, 0x66, 0x34, 0x6f, 0xa3, 0xc8, 0x7d, 0xb1, 0x7f, 0xcf, 0x60, 0x18, 0x8c, 0x7b, 0x96, 0x52,
+	0xe7, 0xf2, 0x93, 0xe9, 0x0a, 0x2c, 0x02, 0xaf, 0x09, 0x86, 0xb2, 0x8b, 0x09, 0x5a, 0x70, 0xe5,
+	0x6c, 0x61, 0x0b, 0xf4, 0x76, 0x70, 0xe5, 0x20, 0x09, 0x10, 0x69, 0x11, 0x09, 0x90, 0xc0, 0xd1,
+	0xbd, 0x8f, 0x08, 0x6c, 0xc2, 0xe8, 0xf8, 0x22, 0x4a, 0x04, 0xc7, 0xfb, 0x60, 0x71, 0xc1, 0xb2,
+	0x41, 0xcc, 0xd5, 0xe5, 0x74, 0x62, 0xca, 0x30, 0xe4, 0xb2, 0xf5, 0xf5, 0x3c, 0x19, 0xad, 0x5a,
+	0xcb, 0x33, 0x3e, 0x80, 0x2a, 0x17, 0x34, 0x17, 0x52, 0x5d, 0xac, 0xc5, 0x52, 0x71, 0xc8, 0xf1,
+	0xef, 0x60, 0xb2, 0x64, 0x2c, 0x09, 0x43, 0x11, 0x15, 0x96, 0x8c, 0x43, 0x8e, 0x0f, 0xa1, 0x3a,
+	0xc9, 0xd3, 0x79, 0x16, 0x25, 0x13, 0xb7, 0xd2, 0xd0, 0x9b, 0x36, 0xb9, 0x8b, 0x71, 0x0d, 0xb4,
+	0xe1, 0xc2, 0x35, 0x1b, 0xa8, 0x59, 0x25, 0xda, 0x70, 0x21, 0xab, 0xe7, 0x34, 0x99, 0x30, 0x59,
+	0xc4, 0x2a, 0xaa, 0xab, 0x38, 0xe4, 0xde, 0x27, 0x04, 0x95, 0xd3, 0xe9, 0x3c, 0x79, 0x83, 0xeb,
+	0xb0, 0x1d, 0x47, 0xc9, 0x40, 0xba, 0xa1, 0xbc, 0xb3, 0x1d, 0x47, 0x89, 0x74, 0x44, 0xc8, 0x15,
+	0x4f, 0x6f, 0xee, 0xf8, 0xa5, 0x47, 0x63, 0x7a, 0xb3, 0xe4, 0x4f, 0x96, 0x9b, 0xd0, 0xd5, 0x26,
+	0xfe, 0xda, 0xd8, 0x84, 0xea, 0xe2, 0x07, 0xc9, 0x28, 0x1d, 0x47, 0xc9, 0xa4, 0x5c, 0x83, 0x7c,
+	0x00, 0xd4, 0x68, 0x3b, 0x44, 0x9d, 0xbd, 0x06, 0x54, 0x57, 0xaa, 0xf5, 0xff, 0xa8, 0x05, 0xfa,
+	0xcb, 0x0e, 0x71, 0x90, 0x77, 0x0d, 0xbb, 0xaa, 0x1a, 0x1b, 0xff, 0x9a, 0x53, 0x7d, 0x30, 0x47,
+	0x32, 0x6f, 0x65, 0xd4, 0x3f, 0xbe, 0x7f, 0x49, 0xb2, 0x54, 0x3d, 0xdd, 0xfb, 0x7c, 0x5b, 0x47,
+	0x5f, 0x6e, 0xeb, 0xe8, 0xeb, 0x6d, 0x1d, 0xbd, 0x36, 0x8b, 0x67, 0x72, 0x68, 0xaa, 0x57, 0xef,
+	0xe4, 0x5b, 0x00, 0x00, 0x00, 0xff, 0xff, 0x68, 0x26, 0x5f, 0xa2, 0x45, 0x05, 0x00, 0x00,
 }
 
 func (m *MetricMetadata) Marshal() (dAtA []byte, err error) {
@@ -722,6 +760,10 @@ func (m *MetricMetadata) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Unit) > 0 {
 		i -= len(m.Unit)
 		copy(dAtA[i:], m.Unit)
@@ -771,6 +813,10 @@ func (m *Sample) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Timestamp != 0 {
 		i = encodeVarintTypes(dAtA, i, uint64(m.Timestamp))
 		i--
@@ -805,6 +851,10 @@ func (m *Exemplar) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Timestamp != 0 {
 		i = encodeVarintTypes(dAtA, i, uint64(m.Timestamp))
 		i--
@@ -819,11 +869,11 @@ func (m *Exemplar) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if len(m.Labels) > 0 {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
 			{
-				size := m.Labels[iNdEx].Size()
-				i -= size
-				if _, err := m.Labels[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+				size, err := m.Labels[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
 					return 0, err
 				}
+				i -= size
 				i = encodeVarintTypes(dAtA, i, uint64(size))
 			}
 			i--
@@ -853,6 +903,10 @@ func (m *TimeSeries) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Exemplars) > 0 {
 		for iNdEx := len(m.Exemplars) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -884,11 +938,11 @@ func (m *TimeSeries) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if len(m.Labels) > 0 {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
 			{
-				size := m.Labels[iNdEx].Size()
-				i -= size
-				if _, err := m.Labels[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+				size, err := m.Labels[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
 					return 0, err
 				}
+				i -= size
 				i = encodeVarintTypes(dAtA, i, uint64(size))
 			}
 			i--
@@ -918,6 +972,10 @@ func (m *LabelMatcher) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Value) > 0 {
 		i -= len(m.Value)
 		copy(dAtA[i:], m.Value)
@@ -960,6 +1018,10 @@ func (m *ReadHints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.RangeMs != 0 {
 		i = encodeVarintTypes(dAtA, i, uint64(m.RangeMs))
 		i--
@@ -1029,6 +1091,10 @@ func (m *Chunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Data) > 0 {
 		i -= len(m.Data)
 		copy(dAtA[i:], m.Data)
@@ -1074,6 +1140,10 @@ func (m *ChunkedSeries) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Chunks) > 0 {
 		for iNdEx := len(m.Chunks) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -1091,11 +1161,11 @@ func (m *ChunkedSeries) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if len(m.Labels) > 0 {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
 			{
-				size := m.Labels[iNdEx].Size()
-				i -= size
-				if _, err := m.Labels[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+				size, err := m.Labels[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
 					return 0, err
 				}
+				i -= size
 				i = encodeVarintTypes(dAtA, i, uint64(size))
 			}
 			i--
@@ -1137,6 +1207,9 @@ func (m *MetricMetadata) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovTypes(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1151,6 +1224,9 @@ func (m *Sample) Size() (n int) {
 	}
 	if m.Timestamp != 0 {
 		n += 1 + sovTypes(uint64(m.Timestamp))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1172,6 +1248,9 @@ func (m *Exemplar) Size() (n int) {
 	}
 	if m.Timestamp != 0 {
 		n += 1 + sovTypes(uint64(m.Timestamp))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1200,6 +1279,9 @@ func (m *TimeSeries) Size() (n int) {
 			n += 1 + l + sovTypes(uint64(l))
 		}
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1219,6 +1301,9 @@ func (m *LabelMatcher) Size() (n int) {
 	l = len(m.Value)
 	if l > 0 {
 		n += 1 + l + sovTypes(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1254,6 +1339,9 @@ func (m *ReadHints) Size() (n int) {
 	if m.RangeMs != 0 {
 		n += 1 + sovTypes(uint64(m.RangeMs))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1276,6 +1364,9 @@ func (m *Chunk) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovTypes(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1296,6 +1387,9 @@ func (m *ChunkedSeries) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovTypes(uint64(l))
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1462,6 +1556,7 @@ func (m *MetricMetadata) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1542,6 +1637,7 @@ func (m *Sample) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1609,7 +1705,7 @@ func (m *Exemplar) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Labels = append(m.Labels, github_com_thanos_io_thanos_pkg_store_labelpb.ZLabel{})
+			m.Labels = append(m.Labels, &labelpb.Label{})
 			if err := m.Labels[len(m.Labels)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1656,6 +1752,7 @@ func (m *Exemplar) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1723,7 +1820,7 @@ func (m *TimeSeries) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Labels = append(m.Labels, github_com_thanos_io_thanos_pkg_store_labelpb.ZLabel{})
+			m.Labels = append(m.Labels, &labelpb.Label{})
 			if err := m.Labels[len(m.Labels)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1757,7 +1854,7 @@ func (m *TimeSeries) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Samples = append(m.Samples, Sample{})
+			m.Samples = append(m.Samples, &Sample{})
 			if err := m.Samples[len(m.Samples)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1791,7 +1888,7 @@ func (m *TimeSeries) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Exemplars = append(m.Exemplars, Exemplar{})
+			m.Exemplars = append(m.Exemplars, &Exemplar{})
 			if err := m.Exemplars[len(m.Exemplars)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1808,6 +1905,7 @@ func (m *TimeSeries) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1941,6 +2039,7 @@ func (m *LabelMatcher) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2151,6 +2250,7 @@ func (m *ReadHints) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2292,6 +2392,7 @@ func (m *Chunk) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2359,7 +2460,7 @@ func (m *ChunkedSeries) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Labels = append(m.Labels, github_com_thanos_io_thanos_pkg_store_labelpb.ZLabel{})
+			m.Labels = append(m.Labels, &labelpb.Label{})
 			if err := m.Labels[len(m.Labels)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -2393,7 +2494,7 @@ func (m *ChunkedSeries) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Chunks = append(m.Chunks, Chunk{})
+			m.Chunks = append(m.Chunks, &Chunk{})
 			if err := m.Chunks[len(m.Chunks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -2410,6 +2511,7 @@ func (m *ChunkedSeries) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}

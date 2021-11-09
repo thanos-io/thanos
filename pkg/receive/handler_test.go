@@ -334,15 +334,15 @@ func TestReceiveQuorum(t *testing.T) {
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
 	commitErrFn := func() error { return errors.New("failed to commit") }
 	wreq1 := &prompb.WriteRequest{
-		Timeseries: []prompb.TimeSeries{
+		Timeseries: []*prompb.TimeSeries{
 			{
-				Labels: []labelpb.ZLabel{
+				Labels: []*labelpb.Label{
 					{
 						Name:  "foo",
 						Value: "bar",
 					},
 				},
-				Samples: []prompb.Sample{
+				Samples: []*prompb.Sample{
 					{
 						Value:     1,
 						Timestamp: 1,
@@ -651,7 +651,7 @@ func TestReceiveQuorum(t *testing.T) {
 					var expectedMin int
 					n := a.appender.(*fakeAppender).Get(lset)
 					got := uint64(len(n))
-					if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts) {
+					if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, ts) {
 						// We have len(handlers) copies of each sample because the test case
 						// is run once for each handler and they all use the same appender.
 						expectedMin = int((tc.replicationFactor/2)+1) * len(ts.Samples)
@@ -670,15 +670,15 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
 	commitErrFn := func() error { return errors.New("failed to commit") }
 	wreq1 := &prompb.WriteRequest{
-		Timeseries: []prompb.TimeSeries{
+		Timeseries: []*prompb.TimeSeries{
 			{
-				Labels: []labelpb.ZLabel{
+				Labels: []*labelpb.Label{
 					{
 						Name:  "foo",
 						Value: "bar",
 					},
 				},
-				Samples: []prompb.Sample{
+				Samples: []*prompb.Sample{
 					{
 						Value:     1,
 						Timestamp: 1,
@@ -993,7 +993,7 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 					var expected int
 					n := a.appender.(*fakeAppender).Get(lset)
 					got := uint64(len(n))
-					if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts) {
+					if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, ts) {
 						// We have len(handlers) copies of each sample because the test case
 						// is run once for each handler and they all use the same appender.
 						expected = len(handlers) * len(ts.Samples)
@@ -1120,14 +1120,14 @@ func (a *tsOverrideAppender) GetRef(lset labels.Labels) (uint64, labels.Labels) 
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would
 // be send to Thanos receive.
 // It has one sample and allow passing multiple series, in same manner as typical Prometheus would batch it.
-func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byte {
-	r := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, 0, len(series))}
+func serializeSeriesWithOneSample(t testing.TB, series [][]*labelpb.Label) []byte {
+	r := &prompb.WriteRequest{Timeseries: make([]*prompb.TimeSeries, 0, len(series))}
 
 	for _, s := range series {
-		r.Timeseries = append(r.Timeseries, prompb.TimeSeries{
+		r.Timeseries = append(r.Timeseries, &prompb.TimeSeries{
 			Labels: s,
 			// Timestamp does not matter, it will be overridden.
-			Samples: []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}},
+			Samples: []*prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}},
 		})
 	}
 	body, err := proto.Marshal(r)
@@ -1172,13 +1172,13 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	}{
 		{
 			name: "typical labels under 1KB, 500 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
-				series := make([][]labelpb.ZLabel, 500)
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]*labelpb.Label {
+				series := make([][]*labelpb.Label, 500)
 				for s := 0; s < len(series); s++ {
-					lbls := make([]labelpb.ZLabel, 10)
+					lbls := make([]*labelpb.Label, 10)
 					for i := 0; i < len(lbls); i++ {
 						// Label ~20B name, 50B value.
-						lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+						lbls[i] = &labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 					}
 					series[s] = lbls
 				}
@@ -1187,13 +1187,13 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 		{
 			name: "typical labels under 1KB, 5000 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
-				series := make([][]labelpb.ZLabel, 5000)
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]*labelpb.Label {
+				series := make([][]*labelpb.Label, 5000)
 				for s := 0; s < len(series); s++ {
-					lbls := make([]labelpb.ZLabel, 10)
+					lbls := make([]*labelpb.Label, 10)
 					for i := 0; i < len(lbls); i++ {
 						// Label ~20B name, 50B value.
-						lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+						lbls[i] = &labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 					}
 					series[s] = lbls
 				}
@@ -1202,8 +1202,8 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 		{
 			name: "extremely large label value 10MB, 10 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
-				series := make([][]labelpb.ZLabel, 10)
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]*labelpb.Label {
+				series := make([][]*labelpb.Label, 10)
 				for s := 0; s < len(series); s++ {
 					lbl := &strings.Builder{}
 					lbl.Grow(1024 * 1024 * 10) // 10MB.
@@ -1211,7 +1211,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 					for i := 0; i < lbl.Cap()/len(word); i++ {
 						_, _ = lbl.WriteString(word)
 					}
-					series[s] = []labelpb.ZLabel{{Name: "__name__", Value: lbl.String()}}
+					series[s] = []*labelpb.Label{{Name: "__name__", Value: lbl.String()}}
 				}
 				return series
 			}()),

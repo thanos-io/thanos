@@ -329,7 +329,7 @@ func sortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
 	// With the re-ordered label sets, re-sorting all series aligns the same series
 	// from different replicas sequentially.
 	sort.Slice(set, func(i, j int) bool {
-		return labels.Compare(labelpb.ZLabelsToPromLabels(set[i].Labels), labelpb.ZLabelsToPromLabels(set[j].Labels)) < 0
+		return labels.Compare(labelpb.ProtobufLabelsToPromLabels(set[i].Labels), labelpb.ProtobufLabelsToPromLabels(set[j].Labels)) < 0
 	})
 }
 

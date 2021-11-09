@@ -9,7 +9,6 @@ import (
 	math "math"
 	math_bits "math/bits"
 
-	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 )
 
@@ -25,8 +24,11 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type Label struct {
-	Name  string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Value                string   `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *Label) Reset()         { *m = Label{} }
@@ -62,8 +64,25 @@ func (m *Label) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Label proto.InternalMessageInfo
 
+func (m *Label) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *Label) GetValue() string {
+	if m != nil {
+		return m.Value
+	}
+	return ""
+}
+
 type LabelSet struct {
-	Labels []Label `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels"`
+	Labels               []*Label `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *LabelSet) Reset()         { *m = LabelSet{} }
@@ -99,8 +118,18 @@ func (m *LabelSet) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelSet proto.InternalMessageInfo
 
+func (m *LabelSet) GetLabels() []*Label {
+	if m != nil {
+		return m.Labels
+	}
+	return nil
+}
+
 type ZLabelSet struct {
-	Labels []ZLabel `protobuf:"bytes,1,rep,name=labels,proto3,customtype=ZLabel" json:"labels"`
+	Labels               []*Label `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ZLabelSet) Reset()         { *m = ZLabelSet{} }
@@ -136,6 +165,13 @@ func (m *ZLabelSet) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ZLabelSet proto.InternalMessageInfo
 
+func (m *ZLabelSet) GetLabels() []*Label {
+	if m != nil {
+		return m.Labels
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*Label)(nil), "thanos.Label")
 	proto.RegisterType((*LabelSet)(nil), "thanos.LabelSet")
@@ -145,21 +181,18 @@ func init() {
 func init() { proto.RegisterFile("store/labelpb/types.proto", fileDescriptor_cdcc9e7dae4870e8) }
 
 var fileDescriptor_cdcc9e7dae4870e8 = []byte{
-	// 212 bytes of a gzipped FileDescriptorProto
+	// 162 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2c, 0x2e, 0xc9, 0x2f,
 	0x4a, 0xd5, 0xcf, 0x49, 0x4c, 0x4a, 0xcd, 0x29, 0x48, 0xd2, 0x2f, 0xa9, 0x2c, 0x48, 0x2d, 0xd6,
-	0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x62, 0x2b, 0xc9, 0x48, 0xcc, 0xcb, 0x2f, 0x96, 0x12, 0x49,
-	0xcf, 0x4f, 0xcf, 0x07, 0x0b, 0xe9, 0x83, 0x58, 0x10, 0x59, 0x25, 0x43, 0x2e, 0x56, 0x1f, 0x90,
-	0x26, 0x21, 0x21, 0x2e, 0x96, 0xbc, 0xc4, 0xdc, 0x54, 0x09, 0x46, 0x05, 0x46, 0x0d, 0xce, 0x20,
-	0x30, 0x5b, 0x48, 0x84, 0x8b, 0xb5, 0x2c, 0x31, 0xa7, 0x34, 0x55, 0x82, 0x09, 0x2c, 0x08, 0xe1,
-	0x28, 0x99, 0x73, 0x71, 0x80, 0xb5, 0x04, 0xa7, 0x96, 0x08, 0x69, 0x73, 0xb1, 0x81, 0xed, 0x2c,
-	0x96, 0x60, 0x54, 0x60, 0xd6, 0xe0, 0x36, 0xe2, 0xd5, 0x83, 0xd8, 0xa6, 0x07, 0x56, 0xe1, 0xc4,
-	0x72, 0xe2, 0x9e, 0x3c, 0x43, 0x10, 0x54, 0x89, 0x92, 0x13, 0x17, 0x67, 0x14, 0x5c, 0xa7, 0x29,
-	0x7e, 0x9d, 0x7c, 0x20, 0x9d, 0xb7, 0xee, 0xc9, 0xb3, 0x41, 0x74, 0xc0, 0xcc, 0x70, 0x52, 0x3d,
-	0xf1, 0x50, 0x8e, 0xe1, 0xc4, 0x23, 0x39, 0xc6, 0x0b, 0x8f, 0xe4, 0x18, 0x1f, 0x3c, 0x92, 0x63,
-	0x9c, 0xf0, 0x58, 0x8e, 0xe1, 0xc2, 0x63, 0x39, 0x86, 0x1b, 0x8f, 0xe5, 0x18, 0xa2, 0xd8, 0xa1,
-	0x01, 0x90, 0xc4, 0x06, 0xf6, 0x9d, 0x31, 0x20, 0x00, 0x00, 0xff, 0xff, 0xd0, 0x80, 0xe8, 0x16,
-	0x18, 0x01, 0x00, 0x00,
+	0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x62, 0x2b, 0xc9, 0x48, 0xcc, 0xcb, 0x2f, 0x56, 0x32, 0xe4,
+	0x62, 0xf5, 0x01, 0x49, 0x0b, 0x09, 0x71, 0xb1, 0xe4, 0x25, 0xe6, 0xa6, 0x4a, 0x30, 0x2a, 0x30,
+	0x6a, 0x70, 0x06, 0x81, 0xd9, 0x42, 0x22, 0x5c, 0xac, 0x65, 0x89, 0x39, 0xa5, 0xa9, 0x12, 0x4c,
+	0x60, 0x41, 0x08, 0x47, 0xc9, 0x90, 0x8b, 0x03, 0xac, 0x25, 0x38, 0xb5, 0x44, 0x48, 0x95, 0x8b,
+	0x0d, 0x6c, 0x7a, 0xb1, 0x04, 0xa3, 0x02, 0xb3, 0x06, 0xb7, 0x11, 0xaf, 0x1e, 0xc4, 0x5c, 0x3d,
+	0xb0, 0x8a, 0x20, 0xa8, 0xa4, 0x92, 0x11, 0x17, 0x67, 0x14, 0x89, 0x7a, 0x9c, 0x44, 0x4f, 0x3c,
+	0x92, 0x63, 0xbc, 0xf0, 0x48, 0x8e, 0xf1, 0xc1, 0x23, 0x39, 0xc6, 0x28, 0x76, 0xa8, 0x27, 0x92,
+	0xd8, 0xc0, 0xee, 0x37, 0x06, 0x04, 0x00, 0x00, 0xff, 0xff, 0x9a, 0xcd, 0x3d, 0x7d, 0xdc, 0x00,
+	0x00, 0x00,
 }
 
 func (m *Label) Marshal() (dAtA []byte, err error) {
@@ -182,6 +215,10 @@ func (m *Label) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Value) > 0 {
 		i -= len(m.Value)
 		copy(dAtA[i:], m.Value)
@@ -219,6 +256,10 @@ func (m *LabelSet) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Labels) > 0 {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -256,14 +297,18 @@ func (m *ZLabelSet) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Labels) > 0 {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
 			{
-				size := m.Labels[iNdEx].Size()
-				i -= size
-				if _, err := m.Labels[iNdEx].MarshalTo(dAtA[i:]); err != nil {
+				size, err := m.Labels[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
 					return 0, err
 				}
+				i -= size
 				i = encodeVarintTypes(dAtA, i, uint64(size))
 			}
 			i--
@@ -298,6 +343,9 @@ func (m *Label) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovTypes(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -313,6 +361,9 @@ func (m *LabelSet) Size() (n int) {
 			n += 1 + l + sovTypes(uint64(l))
 		}
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -327,6 +378,9 @@ func (m *ZLabelSet) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovTypes(uint64(l))
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -442,6 +496,7 @@ func (m *Label) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -509,7 +564,7 @@ func (m *LabelSet) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Labels = append(m.Labels, Label{})
+			m.Labels = append(m.Labels, &Label{})
 			if err := m.Labels[len(m.Labels)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -526,6 +581,7 @@ func (m *LabelSet) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -593,7 +649,7 @@ func (m *ZLabelSet) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Labels = append(m.Labels, ZLabel{})
+			m.Labels = append(m.Labels, &Label{})
 			if err := m.Labels[len(m.Labels)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -610,6 +666,7 @@ func (m *ZLabelSet) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}

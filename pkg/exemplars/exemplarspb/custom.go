@@ -22,7 +22,7 @@ type ExemplarStore struct {
 // UnmarshalJSON implements json.Unmarshaler.
 func (m *Exemplar) UnmarshalJSON(b []byte) error {
 	v := struct {
-		Labels    labelpb.ZLabelSet
+		Labels    *labelpb.ZLabelSet
 		TimeStamp model.Time
 		Value     model.SampleValue
 	}{}
@@ -44,7 +44,7 @@ func (m *Exemplar) MarshalJSON() ([]byte, error) {
 		TimeStamp model.Time        `json:"timestamp"`
 		Value     model.SampleValue `json:"value"`
 	}{
-		Labels:    labelpb.ZLabelsToPromLabels(m.Labels.Labels),
+		Labels:    labelpb.ProtobufLabelsToPromLabels(m.Labels.Labels),
 		TimeStamp: model.Time(m.Ts),
 		Value:     model.SampleValue(m.Value),
 	}
@@ -76,10 +76,10 @@ func (s *ExemplarData) SetSeriesLabels(ls labels.Labels) {
 	var result labelpb.ZLabelSet
 
 	if len(ls) > 0 {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
+		result = labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(ls)}
 	}
 
-	s.SeriesLabels = result
+	s.SeriesLabels = &result
 }
 
 // Compare is used for sorting and comparing exemplars. Start from timestamp, then labels, finally values.
@@ -99,9 +99,9 @@ func (e1 *Exemplar) Compare(e2 *Exemplar) int {
 
 func ExemplarsFromPromExemplars(exemplars []exemplar.Exemplar) []*Exemplar {
 	ex := make([]*Exemplar, 0, len(exemplars))
-	for _, e := range exemplars {
+	for _, e := range exemplars { 
 		ex = append(ex, &Exemplar{
-			Labels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(e.Labels)},
+			Labels: labelpb.ZLabelSetFromProtobufLabels(labelpb.ProtobufLabelsFromPromLabels(e.Labels)),
 			Value:  e.Value,
 			Ts:     e.Ts,
 		})

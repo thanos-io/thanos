@@ -23,10 +23,12 @@ type RuleGroup struct {
 	Rules          []Rule    `json:"rules"`
 	Interval       float64   `json:"interval"`
 	EvaluationTime float64   `json:"evaluationTime"`
-	LastEvaluation time.Time `json:"lastEvaluation"`
+	LastEvaluation time.Time `json:"lastEvaluation,omitempty"`
 
 	PartialResponseStrategy string `json:"partialResponseStrategy"`
 }
+
+//RuleGroupCopy is used in custom MarshalJSON to marshal protobuf.Timestamp into pretty timestamp
 
 // https://github.com/prometheus/prometheus/blob/c530b4b456cc5f9ec249f771dff187eb7715dc9b/web/api/v1/api.go#L1016
 // MarshalJSON marshals a rulegroup while ensuring that `rules' is always non-empty.
@@ -34,6 +36,16 @@ func (r *RuleGroup) MarshalJSON() ([]byte, error) {
 	if r.Rules == nil {
 		r.Rules = make([]Rule, 0)
 	}
+
+	// 	r1 := &RuleGroupCopy{
+	// 		Name: r.Name,
+	// 		File: r.File,
+	// 		Rules: r.Rules,
+	// 		Interval: r.Interval,
+	// 		EvaluationTime: r.EvaluationTime,
+	// 		LastEvaluation: timestampToTime(r.LastEvaluation),
+	// 		PartialResponseStrategy: r.PartialResponseStrategy,
+	// 	}
 	type plain RuleGroup
 	return json.Marshal((*plain)(r))
 }
@@ -45,11 +57,11 @@ type AlertAPI struct {
 }
 
 type Alert struct {
-	Labels      labels.Labels `json:"labels"`
-	Annotations labels.Labels `json:"annotations"`
-	State       string        `json:"state"`
-	ActiveAt    *time.Time    `json:"activeAt,omitempty"`
-	Value       string        `json:"value"`
+	Labels      *labels.Labels `json:"labels"`
+	Annotations *labels.Labels `json:"annotations"`
+	State       string         `json:"state"`
+	ActiveAt    time.Time      `json:"activeAt,omitempty"`
+	Value       string         `json:"value"`
 
 	PartialResponseStrategy string `json:"partialResponseStrategy"`
 }
@@ -66,7 +78,7 @@ type AlertingRule struct {
 	Health         rules.RuleHealth `json:"health"`
 	LastError      string           `json:"lastError,omitempty"`
 	EvaluationTime float64          `json:"evaluationTime"`
-	LastEvaluation time.Time        `json:"lastEvaluation"`
+	LastEvaluation time.Time        `json:"lastEvaluation,omitempty"`
 	// Type of an AlertingRule is always "alerting".
 	Type string `json:"type"`
 }

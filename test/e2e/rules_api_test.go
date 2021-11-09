@@ -17,6 +17,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 
+	protobuf "github.com/gogo/protobuf/types"
 	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/query"
@@ -26,6 +27,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
+
+func timeToProtoTimestamp(t time.Time) *protobuf.Timestamp {
+	timestamp, _ := protobuf.TimestampProto(t)
+	return timestamp
+}
 
 func TestRulesAPI_Fanout(t *testing.T) {
 	t.Parallel()
@@ -101,14 +107,15 @@ func TestRulesAPI_Fanout(t *testing.T) {
 
 	ruleAndAssert(t, ctx, q.HTTPEndpoint(), "", []*rulespb.RuleGroup{
 		{
-			Name: "example_abort",
-			File: "/shared/rules/rules.yaml",
+			Name:           "example_abort",
+			File:           "/shared/rules/rules.yaml",
+			LastEvaluation: (*rulespb.Timestamp)(timeToProtoTimestamp(time.Time{})),
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+					Labels: &labelpb.ZLabelSet{Labels: []*labelpb.Label{
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
 					}},
@@ -116,28 +123,30 @@ func TestRulesAPI_Fanout(t *testing.T) {
 			},
 		},
 		{
-			Name: "example_abort",
-			File: "/shared/thanos-rules/rules-0.yaml",
+			Name:           "example_abort",
+			File:           "/shared/thanos-rules/rules-0.yaml",
+			LastEvaluation: (*rulespb.Timestamp)(timeToProtoTimestamp(time.Time{})),
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+					Labels: &labelpb.ZLabelSet{Labels: []*labelpb.Label{
 						{Name: "severity", Value: "page"},
 					}},
 				}),
 			},
 		},
 		{
-			Name: "example_warn",
-			File: "/shared/thanos-rules/rules-1.yaml",
+			Name:           "example_warn",
+			File:           "/shared/thanos-rules/rules-1.yaml",
+			LastEvaluation: (*rulespb.Timestamp)(timeToProtoTimestamp(time.Time{})),
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_WarnOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+					Labels: &labelpb.ZLabelSet{Labels: []*labelpb.Label{
 						{Name: "severity", Value: "page"},
 					}},
 				}),
@@ -169,7 +178,7 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 		}
 
 		for ig, g := range res {
-			res[ig].LastEvaluation = time.Time{}
+			res[ig].LastEvaluation = (*rulespb.Timestamp)(timeToProtoTimestamp(time.Time{}))
 			res[ig].EvaluationDurationSeconds = 0
 			res[ig].Interval = 0
 			res[ig].PartialResponseStrategy = 0

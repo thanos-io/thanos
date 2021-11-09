@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
@@ -79,16 +80,27 @@ func (t1 *ActiveTarget) CompareState(t2 *ActiveTarget) int {
 		return d
 	}
 
-	if t1.LastScrape.Before(t2.LastScrape) {
+	if rulespb.TimestampToTime(t1.LastScrape).Before(rulespb.TimestampToTime(t2.LastScrape)) {
 		return 1
 	}
 
-	if t1.LastScrape.After(t2.LastScrape) {
+	if rulespb.TimestampToTime(t1.LastScrape).After(rulespb.TimestampToTime(t2.LastScrape)) {
 		return -1
 	}
 
 	return 0
 }
+
+// func (t1 *ActiveTarget) UnmarshalJSON(data []byte) error {
+// 	t := ActiveTarget{}
+// 	if err:= json.Unmarshal(data,&t);err!=nil{
+// 		return err
+// 	}
+
+// 	t1 = &t
+
+// 	return nil
+// }
 
 func (t1 *DroppedTarget) Compare(t2 *DroppedTarget) int {
 	if d := labels.Compare(t1.DiscoveredLabels.PromLabels(), t2.DiscoveredLabels.PromLabels()); d != 0 {
@@ -102,28 +114,28 @@ func (t *ActiveTarget) SetLabels(ls labels.Labels) {
 	var result labelpb.ZLabelSet
 
 	if len(ls) > 0 {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
+		result = labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(ls)}
 	}
 
-	t.Labels = result
+	t.Labels = &result
 }
 
 func (t *ActiveTarget) SetDiscoveredLabels(ls labels.Labels) {
 	var result labelpb.ZLabelSet
 
 	if len(ls) > 0 {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
+		result = labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(ls)}
 	}
 
-	t.DiscoveredLabels = result
+	t.DiscoveredLabels = &result
 }
 
 func (t *DroppedTarget) SetDiscoveredLabels(ls labels.Labels) {
 	var result labelpb.ZLabelSet
 
 	if len(ls) > 0 {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
+		result = labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(ls)}
 	}
 
-	t.DiscoveredLabels = result
+	t.DiscoveredLabels = &result
 }

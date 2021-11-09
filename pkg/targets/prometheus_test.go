@@ -22,7 +22,16 @@ import (
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
+	protobuf "github.com/gogo/protobuf/types"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+
 )
+
+
+func timeToProtoTimestamp(t time.Time) *protobuf.Timestamp{
+	timestamp,_ := protobuf.TimestampProto(t)
+	return timestamp
+}
 
 func TestPrometheus_Targets_e2e(t *testing.T) {
 	p, err := e2eutil.NewPrometheus()
@@ -79,14 +88,14 @@ scrape_configs:
 	expected := &targetspb.TargetDiscovery{
 		ActiveTargets: []*targetspb.ActiveTarget{
 			{
-				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				DiscoveredLabels: &labelpb.ZLabelSet{Labels: []*labelpb.Label{
 					{Name: "__address__", Value: p.Addr()},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
 					{Name: "job", Value: "myself"},
 					{Name: "replica", Value: "test1"},
 				}},
-				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				Labels: &labelpb.ZLabelSet{Labels: []*labelpb.Label{
 					{Name: "instance", Value: p.Addr()},
 					{Name: "job", Value: "myself"},
 					{Name: "replica", Value: "test1"},
@@ -95,13 +104,13 @@ scrape_configs:
 				ScrapeUrl:          fmt.Sprintf("http://%s/metrics", p.Addr()),
 				GlobalUrl:          "",
 				Health:             targetspb.TargetHealth_UP,
-				LastScrape:         time.Time{},
+				LastScrape:         rulespb.TimeToTimestamp(time.Time{}),
 				LastScrapeDuration: 0,
 			},
 		},
 		DroppedTargets: []*targetspb.DroppedTarget{
 			{
-				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				DiscoveredLabels: &labelpb.ZLabelSet{Labels: []*labelpb.Label{
 					{Name: "__address__", Value: "localhost:80"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -150,7 +159,7 @@ scrape_configs:
 
 			for i := range targets.ActiveTargets {
 				targets.ActiveTargets[i].LastScrapeDuration = 0
-				targets.ActiveTargets[i].LastScrape = time.Time{}
+				targets.ActiveTargets[i].LastScrape = rulespb.TimeToTimestamp(time.Time{})
 				targets.ActiveTargets[i].LastError = ""
 				targets.ActiveTargets[i].GlobalUrl = ""
 			}

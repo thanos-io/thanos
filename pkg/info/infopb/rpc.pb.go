@@ -10,7 +10,6 @@ import (
 	math "math"
 	math_bits "math/bits"
 
-	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	labelpb "github.com/thanos-io/thanos/pkg/store/labelpb"
 	grpc "google.golang.org/grpc"
@@ -30,6 +29,9 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type InfoRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *InfoRequest) Reset()         { *m = InfoRequest{} }
@@ -66,8 +68,8 @@ func (m *InfoRequest) XXX_DiscardUnknown() {
 var xxx_messageInfo_InfoRequest proto.InternalMessageInfo
 
 type InfoResponse struct {
-	LabelSets     []labelpb.ZLabelSet `protobuf:"bytes,1,rep,name=label_sets,json=labelSets,proto3" json:"label_sets"`
-	ComponentType string              `protobuf:"bytes,2,opt,name=ComponentType,proto3" json:"ComponentType,omitempty"`
+	LabelSets     []*labelpb.ZLabelSet `protobuf:"bytes,1,rep,name=label_sets,json=labelSets,proto3" json:"label_sets,omitempty"`
+	ComponentType string               `protobuf:"bytes,2,opt,name=ComponentType,proto3" json:"ComponentType,omitempty"`
 	/// StoreInfo holds the metadata related to Store API if exposed by the component otherwise it will be null.
 	Store *StoreInfo `protobuf:"bytes,3,opt,name=store,proto3" json:"store,omitempty"`
 	/// RulesInfo holds the metadata related to Rules API if exposed by the component otherwise it will be null.
@@ -77,7 +79,10 @@ type InfoResponse struct {
 	/// TargetsInfo holds the metadata related to Targets API if exposed by the component otherwise it will be null.
 	Targets *TargetsInfo `protobuf:"bytes,6,opt,name=targets,proto3" json:"targets,omitempty"`
 	/// ExemplarsInfo holds the metadata related to Exemplars API if exposed by the component otherwise it will be null.
-	Exemplars *ExemplarsInfo `protobuf:"bytes,7,opt,name=exemplars,proto3" json:"exemplars,omitempty"`
+	Exemplars            *ExemplarsInfo `protobuf:"bytes,7,opt,name=exemplars,proto3" json:"exemplars,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_unrecognized     []byte         `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
 func (m *InfoResponse) Reset()         { *m = InfoResponse{} }
@@ -113,10 +118,62 @@ func (m *InfoResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_InfoResponse proto.InternalMessageInfo
 
+func (m *InfoResponse) GetLabelSets() []*labelpb.ZLabelSet {
+	if m != nil {
+		return m.LabelSets
+	}
+	return nil
+}
+
+func (m *InfoResponse) GetComponentType() string {
+	if m != nil {
+		return m.ComponentType
+	}
+	return ""
+}
+
+func (m *InfoResponse) GetStore() *StoreInfo {
+	if m != nil {
+		return m.Store
+	}
+	return nil
+}
+
+func (m *InfoResponse) GetRules() *RulesInfo {
+	if m != nil {
+		return m.Rules
+	}
+	return nil
+}
+
+func (m *InfoResponse) GetMetricMetadata() *MetricMetadataInfo {
+	if m != nil {
+		return m.MetricMetadata
+	}
+	return nil
+}
+
+func (m *InfoResponse) GetTargets() *TargetsInfo {
+	if m != nil {
+		return m.Targets
+	}
+	return nil
+}
+
+func (m *InfoResponse) GetExemplars() *ExemplarsInfo {
+	if m != nil {
+		return m.Exemplars
+	}
+	return nil
+}
+
 /// StoreInfo holds the metadata related to Store API exposed by the component.
 type StoreInfo struct {
-	MinTime int64 `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
-	MaxTime int64 `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
+	MinTime              int64    `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
+	MaxTime              int64    `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *StoreInfo) Reset()         { *m = StoreInfo{} }
@@ -152,8 +209,25 @@ func (m *StoreInfo) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_StoreInfo proto.InternalMessageInfo
 
+func (m *StoreInfo) GetMinTime() int64 {
+	if m != nil {
+		return m.MinTime
+	}
+	return 0
+}
+
+func (m *StoreInfo) GetMaxTime() int64 {
+	if m != nil {
+		return m.MaxTime
+	}
+	return 0
+}
+
 /// RulesInfo holds the metadata related to Rules API exposed by the component.
 type RulesInfo struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *RulesInfo) Reset()         { *m = RulesInfo{} }
@@ -191,6 +265,9 @@ var xxx_messageInfo_RulesInfo proto.InternalMessageInfo
 
 /// MetricMetadataInfo holds the metadata related to Metadata API exposed by the component.
 type MetricMetadataInfo struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *MetricMetadataInfo) Reset()         { *m = MetricMetadataInfo{} }
@@ -228,6 +305,9 @@ var xxx_messageInfo_MetricMetadataInfo proto.InternalMessageInfo
 
 /// TargetsInfo holds the metadata related to Targets API exposed by the component.
 type TargetsInfo struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *TargetsInfo) Reset()         { *m = TargetsInfo{} }
@@ -265,8 +345,11 @@ var xxx_messageInfo_TargetsInfo proto.InternalMessageInfo
 
 /// EXemplarsInfo holds the metadata related to Exemplars API exposed by the component.
 type ExemplarsInfo struct {
-	MinTime int64 `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
-	MaxTime int64 `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
+	MinTime              int64    `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
+	MaxTime              int64    `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ExemplarsInfo) Reset()         { *m = ExemplarsInfo{} }
@@ -302,6 +385,20 @@ func (m *ExemplarsInfo) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ExemplarsInfo proto.InternalMessageInfo
 
+func (m *ExemplarsInfo) GetMinTime() int64 {
+	if m != nil {
+		return m.MinTime
+	}
+	return 0
+}
+
+func (m *ExemplarsInfo) GetMaxTime() int64 {
+	if m != nil {
+		return m.MaxTime
+	}
+	return 0
+}
+
 func init() {
 	proto.RegisterType((*InfoRequest)(nil), "thanos.info.InfoRequest")
 	proto.RegisterType((*InfoResponse)(nil), "thanos.info.InfoResponse")
@@ -315,35 +412,32 @@ func init() {
 func init() { proto.RegisterFile("info/infopb/rpc.proto", fileDescriptor_a1214ec45d2bf952) }
 
 var fileDescriptor_a1214ec45d2bf952 = []byte{
-	// 437 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x93, 0xcf, 0x6e, 0xd3, 0x40,
-	0x10, 0xc6, 0xed, 0x26, 0x4d, 0xf0, 0x98, 0x80, 0x58, 0x15, 0xb4, 0xc9, 0xc1, 0x8d, 0xac, 0x1e,
-	0x72, 0x40, 0xb6, 0x14, 0x24, 0x84, 0xc4, 0x89, 0x56, 0x95, 0x40, 0xa2, 0x17, 0x37, 0xa7, 0x5e,
-	0xa2, 0x4d, 0x99, 0x06, 0x4b, 0xde, 0x3f, 0x78, 0xb7, 0x52, 0x7a, 0xe3, 0x11, 0x78, 0xac, 0x1c,
-	0x7b, 0xe4, 0x84, 0x20, 0x79, 0x11, 0xb4, 0xbb, 0x6e, 0x89, 0x45, 0x4f, 0xbd, 0xd8, 0xbb, 0xfb,
-	0xfb, 0xbe, 0xd9, 0x99, 0xf1, 0x18, 0x5e, 0x96, 0xe2, 0x4a, 0xe6, 0xf6, 0xa1, 0x16, 0x79, 0xad,
-	0x2e, 0x33, 0x55, 0x4b, 0x23, 0x49, 0x6c, 0xbe, 0x32, 0x21, 0x75, 0x66, 0xc1, 0x68, 0xa8, 0x8d,
-	0xac, 0x31, 0xaf, 0xd8, 0x02, 0x2b, 0xb5, 0xc8, 0xcd, 0x8d, 0x42, 0xed, 0x75, 0xa3, 0x83, 0xa5,
-	0x5c, 0x4a, 0xb7, 0xcc, 0xed, 0xca, 0x9f, 0xa6, 0x03, 0x88, 0x3f, 0x89, 0x2b, 0x59, 0xe0, 0xb7,
-	0x6b, 0xd4, 0x26, 0xfd, 0xde, 0x81, 0xa7, 0x7e, 0xaf, 0x95, 0x14, 0x1a, 0xc9, 0x5b, 0x00, 0x17,
-	0x6c, 0xae, 0xd1, 0x68, 0x1a, 0x8e, 0x3b, 0x93, 0x78, 0xfa, 0x22, 0x6b, 0xae, 0xbc, 0xf8, 0x6c,
-	0xd1, 0x39, 0x9a, 0xe3, 0xee, 0xfa, 0xd7, 0x61, 0x50, 0x44, 0x55, 0xb3, 0xd7, 0xe4, 0x08, 0x06,
-	0x27, 0x92, 0x2b, 0x29, 0x50, 0x98, 0xd9, 0x8d, 0x42, 0xba, 0x37, 0x0e, 0x27, 0x51, 0xd1, 0x3e,
-	0x24, 0xaf, 0x61, 0xdf, 0x25, 0x4c, 0x3b, 0xe3, 0x70, 0x12, 0x4f, 0x5f, 0x65, 0x3b, 0xb5, 0x64,
-	0xe7, 0x96, 0xb8, 0x64, 0xbc, 0xc8, 0xaa, 0xeb, 0xeb, 0x0a, 0x35, 0xed, 0x3e, 0xa0, 0x2e, 0x2c,
-	0xf1, 0x6a, 0x27, 0x22, 0x1f, 0xe1, 0x39, 0x47, 0x53, 0x97, 0x97, 0x73, 0x8e, 0x86, 0x7d, 0x61,
-	0x86, 0xd1, 0x7d, 0xe7, 0x3b, 0x6c, 0xf9, 0xce, 0x9c, 0xe6, 0xac, 0x91, 0xb8, 0x00, 0xcf, 0x78,
-	0xeb, 0x8c, 0x4c, 0xa1, 0x6f, 0x58, 0xbd, 0xb4, 0x0d, 0xe8, 0xb9, 0x08, 0xb4, 0x15, 0x61, 0xe6,
-	0x99, 0xb3, 0xde, 0x09, 0xc9, 0x3b, 0x88, 0x70, 0x85, 0x5c, 0x55, 0xac, 0xd6, 0xb4, 0xef, 0x5c,
-	0xa3, 0x96, 0xeb, 0xf4, 0x8e, 0x3a, 0xdf, 0x3f, 0x71, 0xfa, 0x01, 0xa2, 0xfb, 0xca, 0xc9, 0x10,
-	0x9e, 0xf0, 0x52, 0xcc, 0x4d, 0xc9, 0x91, 0x86, 0xe3, 0x70, 0xd2, 0x29, 0xfa, 0xbc, 0x14, 0xb3,
-	0x92, 0xa3, 0x43, 0x6c, 0xe5, 0xd1, 0x5e, 0x83, 0xd8, 0xca, 0xa2, 0x34, 0x86, 0xe8, 0xbe, 0x1d,
-	0xe9, 0x01, 0x90, 0xff, 0x6b, 0xb4, 0xdf, 0x7d, 0x27, 0xef, 0xf4, 0x14, 0x06, 0xad, 0x84, 0x1e,
-	0x77, 0xf1, 0xf4, 0x04, 0xba, 0xce, 0xfd, 0xbe, 0x79, 0xb7, 0x1b, 0xb5, 0x33, 0x68, 0xa3, 0xe1,
-	0x03, 0xc4, 0x8f, 0xdc, 0xf1, 0xd1, 0xfa, 0x4f, 0x12, 0xac, 0x37, 0x49, 0x78, 0xbb, 0x49, 0xc2,
-	0xdf, 0x9b, 0x24, 0xfc, 0xb1, 0x4d, 0x82, 0xdb, 0x6d, 0x12, 0xfc, 0xdc, 0x26, 0xc1, 0x45, 0xcf,
-	0xff, 0x00, 0x8b, 0x9e, 0x9b, 0xdf, 0x37, 0x7f, 0x03, 0x00, 0x00, 0xff, 0xff, 0xc9, 0x9c, 0xd8,
-	0x20, 0x16, 0x03, 0x00, 0x00,
+	// 399 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x92, 0xcf, 0x6f, 0xd3, 0x30,
+	0x14, 0xc7, 0xe5, 0x76, 0x6b, 0xc9, 0x0b, 0x05, 0x61, 0x0d, 0xe4, 0xf6, 0x50, 0xa2, 0x88, 0x43,
+	0x0e, 0x28, 0x41, 0xe1, 0x82, 0xc4, 0x09, 0xa6, 0x49, 0x20, 0xb1, 0x4b, 0xd6, 0xd3, 0x2e, 0x95,
+	0x33, 0xde, 0x20, 0x52, 0xfc, 0x83, 0xd8, 0x93, 0xba, 0xff, 0x90, 0x23, 0x7f, 0x02, 0xea, 0x9f,
+	0xc1, 0x09, 0xd9, 0x4e, 0x4b, 0x23, 0x7a, 0xda, 0x25, 0x3f, 0xfc, 0xf9, 0x7c, 0x5f, 0x9e, 0x9d,
+	0x07, 0xcf, 0x1b, 0x79, 0xab, 0x0a, 0x77, 0xd1, 0x75, 0xd1, 0xe9, 0x9b, 0x5c, 0x77, 0xca, 0x2a,
+	0x1a, 0xdb, 0xef, 0x5c, 0x2a, 0x93, 0x3b, 0xb0, 0x98, 0x1b, 0xab, 0x3a, 0x2c, 0x5a, 0x5e, 0x63,
+	0xab, 0xeb, 0xc2, 0xde, 0x6b, 0x34, 0xc1, 0x4b, 0x67, 0x10, 0x7f, 0x96, 0xb7, 0xaa, 0xc2, 0x1f,
+	0x77, 0x68, 0x6c, 0xfa, 0x67, 0x04, 0x8f, 0xc3, 0xbb, 0xd1, 0x4a, 0x1a, 0xa4, 0x6f, 0x00, 0x7c,
+	0x6c, 0x6d, 0xd0, 0x1a, 0x46, 0x92, 0x71, 0x16, 0x97, 0xcf, 0xf2, 0xbe, 0xf8, 0xf5, 0x17, 0x87,
+	0xae, 0xd0, 0x56, 0x51, 0xdb, 0x3f, 0x19, 0xfa, 0x0a, 0x66, 0xe7, 0x4a, 0x68, 0x25, 0x51, 0xda,
+	0xd5, 0xbd, 0x46, 0x36, 0x4a, 0x48, 0x16, 0x55, 0xc3, 0x45, 0xfa, 0x1a, 0x4e, 0x7d, 0x53, 0x6c,
+	0x9c, 0x90, 0x2c, 0x2e, 0x5f, 0xe4, 0x07, 0xfd, 0xe6, 0x57, 0x8e, 0xf8, 0x36, 0x82, 0xe4, 0xec,
+	0xee, 0xae, 0x45, 0xc3, 0x4e, 0x8e, 0xd8, 0x95, 0x23, 0xc1, 0xf6, 0x12, 0xfd, 0x04, 0x4f, 0x05,
+	0xda, 0xae, 0xb9, 0x59, 0x0b, 0xb4, 0xfc, 0x2b, 0xb7, 0x9c, 0x9d, 0xfa, 0xdc, 0xcb, 0x41, 0xee,
+	0xd2, 0x3b, 0x97, 0xbd, 0xe2, 0x0b, 0x3c, 0x11, 0x83, 0x35, 0x5a, 0xc2, 0xd4, 0xf2, 0xee, 0x9b,
+	0xdb, 0xfa, 0xc4, 0x57, 0x60, 0x83, 0x0a, 0xab, 0xc0, 0x7c, 0x74, 0x27, 0xd2, 0x77, 0x10, 0xe1,
+	0x06, 0x85, 0x6e, 0x79, 0x67, 0xd8, 0xd4, 0xa7, 0x16, 0x83, 0xd4, 0xc5, 0x8e, 0xfa, 0xdc, 0x3f,
+	0x39, 0xfd, 0x00, 0xd1, 0x7e, 0xe7, 0x74, 0x0e, 0x8f, 0x44, 0x23, 0xd7, 0xb6, 0x11, 0xc8, 0x48,
+	0x42, 0xb2, 0x71, 0x35, 0x15, 0x8d, 0x5c, 0x35, 0x02, 0x3d, 0xe2, 0x9b, 0x80, 0x46, 0x3d, 0xe2,
+	0x1b, 0x87, 0xd2, 0x18, 0xa2, 0xfd, 0x71, 0xa4, 0x67, 0x40, 0xff, 0xdf, 0xa3, 0xfb, 0xe3, 0x07,
+	0x7d, 0xa7, 0x17, 0x30, 0x1b, 0x34, 0xf4, 0xb0, 0x0f, 0x97, 0xe7, 0x70, 0xe2, 0xd3, 0xef, 0xfb,
+	0xfb, 0xf0, 0xa0, 0x0e, 0x46, 0x6c, 0x31, 0x3f, 0x42, 0xc2, 0xb0, 0x7d, 0x3c, 0xfb, 0xb9, 0x5d,
+	0x92, 0x5f, 0xdb, 0x25, 0xf9, 0xbd, 0x5d, 0x92, 0xeb, 0x49, 0x18, 0xea, 0x7a, 0xe2, 0x27, 0xf5,
+	0xed, 0xdf, 0x00, 0x00, 0x00, 0xff, 0xff, 0xc6, 0xdb, 0x96, 0x3e, 0xea, 0x02, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -448,6 +542,10 @@ func (m *InfoRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return len(dAtA) - i, nil
 }
 
@@ -471,6 +569,10 @@ func (m *InfoResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Exemplars != nil {
 		{
 			size, err := m.Exemplars.MarshalToSizedBuffer(dAtA[:i])
@@ -575,6 +677,10 @@ func (m *StoreInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.MaxTime != 0 {
 		i = encodeVarintRpc(dAtA, i, uint64(m.MaxTime))
 		i--
@@ -608,6 +714,10 @@ func (m *RulesInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return len(dAtA) - i, nil
 }
 
@@ -631,6 +741,10 @@ func (m *MetricMetadataInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return len(dAtA) - i, nil
 }
 
@@ -654,6 +768,10 @@ func (m *TargetsInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return len(dAtA) - i, nil
 }
 
@@ -677,6 +795,10 @@ func (m *ExemplarsInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.MaxTime != 0 {
 		i = encodeVarintRpc(dAtA, i, uint64(m.MaxTime))
 		i--
@@ -707,6 +829,9 @@ func (m *InfoRequest) Size() (n int) {
 	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -746,6 +871,9 @@ func (m *InfoResponse) Size() (n int) {
 		l = m.Exemplars.Size()
 		n += 1 + l + sovRpc(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -761,6 +889,9 @@ func (m *StoreInfo) Size() (n int) {
 	if m.MaxTime != 0 {
 		n += 1 + sovRpc(uint64(m.MaxTime))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -770,6 +901,9 @@ func (m *RulesInfo) Size() (n int) {
 	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -779,6 +913,9 @@ func (m *MetricMetadataInfo) Size() (n int) {
 	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -788,6 +925,9 @@ func (m *TargetsInfo) Size() (n int) {
 	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -802,6 +942,9 @@ func (m *ExemplarsInfo) Size() (n int) {
 	}
 	if m.MaxTime != 0 {
 		n += 1 + sovRpc(uint64(m.MaxTime))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -853,6 +996,7 @@ func (m *InfoRequest) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -920,7 +1064,7 @@ func (m *InfoResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LabelSets = append(m.LabelSets, labelpb.ZLabelSet{})
+			m.LabelSets = append(m.LabelSets, &labelpb.ZLabelSet{})
 			if err := m.LabelSets[len(m.LabelSets)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -1149,6 +1293,7 @@ func (m *InfoResponse) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1237,6 +1382,7 @@ func (m *StoreInfo) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1287,6 +1433,7 @@ func (m *RulesInfo) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1337,6 +1484,7 @@ func (m *MetricMetadataInfo) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1387,6 +1535,7 @@ func (m *TargetsInfo) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1475,6 +1624,7 @@ func (m *ExemplarsInfo) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}

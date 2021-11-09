@@ -68,7 +68,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		errs errutil.MultiError
 	)
 	for _, t := range wreq.Timeseries {
-		lset := labelpb.ZLabelsToPromLabels(t.Labels)
+		lset := labelpb.ProtobufLabelsToPromLabels(t.Labels)
 
 		// Check if the TSDB has cached reference for those labels.
 		ref, lset = getRef.GetRef(lset)
@@ -76,7 +76,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
 			labelpb.ReAllocZLabelsStrings(&t.Labels)
-			lset = labelpb.ZLabelsToPromLabels(t.Labels)
+			lset = labelpb.ProtobufLabelsToPromLabels(t.Labels)
 		}
 
 		// Append as many valid samples as possible, but keep track of the errors.
@@ -99,7 +99,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		// We drop the exemplars in case the series doesn't exist.
 		if ref != 0 && len(t.Exemplars) > 0 {
 			for _, ex := range t.Exemplars {
-				exLset := labelpb.ZLabelsToPromLabels(ex.Labels)
+				exLset := labelpb.ProtobufLabelsToPromLabels(ex.Labels)
 				logger := log.With(r.logger, "exemplarLset", exLset, "exemplar", ex.String())
 
 				_, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{

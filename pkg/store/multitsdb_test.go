@@ -146,7 +146,7 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: math.MaxInt64,
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
@@ -195,7 +195,7 @@ func TestTenantSeriesSetServert_NotLeakingIfNotExhausted(t *testing.T) {
 		for s.Next() {
 			l, c := s.At()
 
-			testutil.Equals(t, labelpb.ZLabelsToPromLabels(resps[i].GetSeries().Labels), l)
+			testutil.Equals(t, labelpb.ProtobufLabelsToPromLabels(resps[i].GetSeries().Labels), l)
 			testutil.Equals(t, resps[i].GetSeries().Chunks, c)
 
 			i++

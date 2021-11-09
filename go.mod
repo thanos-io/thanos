@@ -22,7 +22,7 @@ require (
 	github.com/efficientgo/e2e v0.11.1-0.20210829161758-f4cc6dbdc6ea
 	github.com/efficientgo/tools/extkingpin v0.0.0-20210609125236-d73259166f20
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
-	github.com/fatih/structtag v1.1.0
+	github.com/fatih/structtag v1.2.0
 	github.com/felixge/fgprof v0.9.1
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.4.9

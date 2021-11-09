@@ -33,10 +33,14 @@ for dir in ${DIRS}; do
     -I=. \
     -I="${GOGOPROTO_PATH}" \
     ${dir}/*.proto
+  protoc-go-inject-tag -input=${dir}/*pb.go
+  
 
   pushd ${dir}
   sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
   sed -i.bak -E 's/_ \"google\/protobuf\"//g' *.pb.go
+  sed -i.bak -E 's/protobuf \"google\/protobuf\"/protobuf \"github.com\/gogo\/protobuf\/types\"/g' *.pb.go
+
   # We cannot do Mstore/storepb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb,\ due to protobuf v1 bug.
   # TODO(bwplotka): Consider removing in v2.
   sed -i.bak -E 's/\"store\/storepb\"/\"github.com\/thanos-io\/thanos\/pkg\/store\/storepb\"/g' *.pb.go
