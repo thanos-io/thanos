@@ -252,6 +252,9 @@ Query node exposing PromQL enabled Query API with data retrieved from multiple
 store nodes.
 
 Flags:
+      --alert.query-url=ALERT.QUERY-URL  
+                                 The external Thanos Query URL that would be set
+                                 in all alerts 'Source' field.
       --enable-feature= ...      Comma separated experimental feature names to
                                  enable.The current list of features is
                                  promql-negative-offset and promql-at-modifier.
