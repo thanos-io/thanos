@@ -9,7 +9,7 @@ import "store/labelpb/types.proto";
 //import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
-option go_package = "rulespb";
+option go_package = "store/rulespb";
 
 // option (gogoproto.sizer_all) = true;
 // option (gogoproto.marshaler_all) = true;

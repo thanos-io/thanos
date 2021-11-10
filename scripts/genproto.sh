@@ -21,17 +21,22 @@ fi
 
 mkdir -p /tmp/protobin/
 cp ${PROTOC_GEN_GOGOFAST_BIN} /tmp/protobin/protoc-gen-gogofast
+cp ${PROTOC_GEN_GO_BIN} /tmp/protobin/protoc-gen-go
 PATH=${PATH}:/tmp/protobin
 GOGOPROTO_ROOT="$(GO111MODULE=on go list -modfile=.bingo/protoc-gen-gogofast.mod -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
-GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
+GOPROTO_ROOT="$(GO111MODULE=on go list -modfile=.bingo/protoc-gen-go.mod -f '{{ .Dir }}' -m github.com/golang/protobuf)"
 
-DIRS="store/storepb/ store/storepb/prompb/ store/labelpb rules/rulespb targets/targetspb store/hintspb queryfrontend metadata/metadatapb exemplars/exemplarspb info/infopb"
+GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
+GOPROTO_ROOT="${GOPROTO_ROOT}:${GOPROTO_ROOT}/protobuf"
+echo "${GOPROTO_ROOT}!"
+
+DIRS="store/storepb store/storepb/prompb/ store/labelpb rules/rulespb targets/targetspb store/hintspb queryfrontend metadata/metadatapb exemplars/exemplarspb info/infopb"
 echo "generating code"
 pushd "pkg"
 for dir in ${DIRS}; do
-  ${PROTOC_BIN} --gogofast_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,plugins=grpc:. \
-    -I=. \
-    -I="${GOGOPROTO_PATH}" \
+  ${PROTOC_BIN} --go_out=. \
+  -I=/home/giedrius/dev/thanos/proto/include/ \
+  -I=. \
     ${dir}/*.proto
   protoc-go-inject-tag -input=${dir}/*pb.go
   

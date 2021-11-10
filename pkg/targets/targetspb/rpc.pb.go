@@ -10,6 +10,7 @@ import (
 	io "io"
 	math "math"
 	math_bits "math/bits"
+
 	rulespb "github.com/thanos-io/thanos/pkg/rules/rulespb"
 
 	proto "github.com/gogo/protobuf/proto"

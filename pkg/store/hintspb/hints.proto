@@ -7,7 +7,7 @@ package hintspb;
 //import "gogoproto/gogo.proto";
 import "store/storepb/types.proto";
 
-option go_package = "hintspb";
+option go_package = "store/hintspb";
 
 // option (gogoproto.sizer_all) = true;
 // option (gogoproto.marshaler_all) = true;
