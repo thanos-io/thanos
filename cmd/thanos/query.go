@@ -101,21 +101,24 @@ func registerQuery(app *extkingpin.App) {
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
-	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
+	endpoints := cmd.Flag("endpoint", "Addresses of statically configured Thanos API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
+		PlaceHolder("<endpoint>").Strings()
+
+	stores := cmd.Flag("store", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
 		PlaceHolder("<store>").Strings()
 
 	// TODO(bwplotka): Hidden because we plan to extract discovery to separate API: https://github.com/thanos-io/thanos/issues/2600.
-	ruleEndpoints := cmd.Flag("rule", "Experimental: Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
+	ruleEndpoints := cmd.Flag("rule", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
 		Hidden().PlaceHolder("<rule>").Strings()
 
-	metadataEndpoints := cmd.Flag("metadata", "Experimental: Addresses of statically configured metadata API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect metadata API servers through respective DNS lookups.").
+	metadataEndpoints := cmd.Flag("metadata", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured metadata API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect metadata API servers through respective DNS lookups.").
 		Hidden().PlaceHolder("<metadata>").Strings()
 
-	exemplarEndpoints := cmd.Flag("exemplar", "Experimental: Addresses of statically configured exemplars API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect exemplars API servers through respective DNS lookups.").
+	exemplarEndpoints := cmd.Flag("exemplar", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured exemplars API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect exemplars API servers through respective DNS lookups.").
 		Hidden().PlaceHolder("<exemplar>").Strings()
 
 	// TODO(atunik): Hidden because we plan to extract discovery to separate API: https://github.com/thanos-io/thanos/issues/2600.
-	targetEndpoints := cmd.Flag("target", "Experimental: Addresses of statically configured target API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect target API servers through respective DNS lookups.").
+	targetEndpoints := cmd.Flag("target", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured target API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect target API servers through respective DNS lookups.").
 		Hidden().PlaceHolder("<target>").Strings()
 
 	strictStores := cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
@@ -264,6 +267,7 @@ func registerQuery(app *extkingpin.App) {
 			*queryReplicaLabels,
 			selectorLset,
 			getFlagsMap(cmd.Flags()),
+			*endpoints,
 			*stores,
 			*ruleEndpoints,
 			*targetEndpoints,
@@ -329,6 +333,7 @@ func runQuery(
 	queryReplicaLabels []string,
 	selectorLset labels.Labels,
 	flagsMap map[string]string,
+	endpointAddrs []string,
 	storeAddrs []string,
 	ruleAddrs []string,
 	targetAddrs []string,
@@ -376,6 +381,12 @@ func runQuery(
 		}
 	}
 
+	dnsEndpointProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_query_endpoints_", reg),
+		dns.ResolverType(dnsSDResolver),
+	)
+
 	dnsRuleProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_query_rule_apis_", reg),
@@ -410,7 +421,14 @@ func runQuery(
 					specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
 				}
 
-				for _, dnsProvider := range []*dns.Provider{dnsStoreProvider, dnsRuleProvider, dnsExemplarProvider, dnsMetadataProvider, dnsTargetProvider} {
+				for _, dnsProvider := range []*dns.Provider{
+					dnsStoreProvider,
+					dnsRuleProvider,
+					dnsExemplarProvider,
+					dnsMetadataProvider,
+					dnsTargetProvider,
+					dnsEndpointProvider,
+				} {
 					var tmpSpecs []query.EndpointSpec
 
 					for _, addr := range dnsProvider.Addresses() {
@@ -526,6 +544,10 @@ func runQuery(
 				}
 				if err := dnsExemplarProvider.Resolve(resolveCtx, exemplarAddrs); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for exemplarsAPI", "err", err)
+				}
+				if err := dnsEndpointProvider.Resolve(resolveCtx, endpointAddrs); err != nil {
+					level.Error(logger).Log("msg", "failed to resolve addresses passed using endpoint flag", "err", err)
+
 				}
 				return nil
 			})

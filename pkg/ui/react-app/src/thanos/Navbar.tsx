@@ -34,9 +34,9 @@ const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
       children: [
         { name: 'Runtime & Build Information', uri: '/status' },
         { name: 'Command-Line Flags', uri: '/flags' },
-        // TODO(onprem): Uncomment after `--target` flag on Querier becomes
-        // non-hidden or we move to `--endpoint`.
-        // { name: 'Targets', uri: '/targets' },
+        { name: 'Alerts', uri: '/alerts' },
+        { name: 'Targets', uri: '/targets' },
+        { name: 'Rules', uri: '/rules' },
       ],
     },
   ],

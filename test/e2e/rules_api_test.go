@@ -48,6 +48,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		e,
 		"prom1",
 		defaultPromConfig("ha", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml")),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
@@ -55,6 +56,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		e,
 		"prom2",
 		defaultPromConfig("ha", 1, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml")),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
