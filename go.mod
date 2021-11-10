@@ -43,7 +43,6 @@ require (
 	github.com/leanovate/gopter v0.2.4
 	github.com/lightstep/lightstep-tracer-go v0.18.1
 	github.com/lovoo/gcloud-opentracing v0.3.0
-	github.com/mailgun/groupcache/v2 v2.2.1
 	github.com/miekg/dns v1.1.43
 	github.com/minio/minio-go/v7 v7.0.10
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
@@ -64,6 +63,7 @@ require (
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.31
 	github.com/uber/jaeger-client-go v2.29.1+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
+	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
 	github.com/weaveworks/common v0.0.0-20210901124008-1fa3f9fa874c
 	go.elastic.co/apm v1.11.0
 	go.elastic.co/apm/module/apmot v1.11.0

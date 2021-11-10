@@ -7,12 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
+	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/mailgun/groupcache/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -21,14 +21,15 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/cache/cachekey"
+	"github.com/vimeo/galaxycache"
+	galaxyhttp "github.com/vimeo/galaxycache/http"
 	"gopkg.in/yaml.v2"
 )
 
 type Groupcache struct {
-	dns    *dns.Provider
-	Pool   *groupcache.HTTPPool
-	group  *groupcache.Group
-	logger log.Logger
+	galaxy   *galaxycache.Galaxy
+	universe *galaxycache.Universe
+	logger   log.Logger
 }
 
 // GroupcacheConfig holds the in-memory cache config.
@@ -77,26 +78,27 @@ func parseGroupcacheConfig(conf []byte) (GroupcacheConfig, error) {
 }
 
 // NewGroupcache creates a new Groupcache instance.
-func NewGroupcache(name string, logger log.Logger, reg prometheus.Registerer, conf []byte, groupname, basepath string, r *route.Router, bucket objstore.Bucket) (*Groupcache, error) {
+func NewGroupcache(logger log.Logger, reg prometheus.Registerer, conf []byte, basepath string, r *route.Router, bucket objstore.Bucket) (*Groupcache, error) {
 	config, err := parseGroupcacheConfig(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewGroupcacheWithConfig(name, logger, reg, config, groupname, basepath, r, bucket)
+	return NewGroupcacheWithConfig(logger, reg, config, basepath, r, bucket)
 }
 
 // NewGroupcacheWithConfig creates a new Groupcache instance with the given config.
-func NewGroupcacheWithConfig(name string, logger log.Logger, reg prometheus.Registerer, conf GroupcacheConfig, groupname, basepath string, r *route.Router, bucket objstore.Bucket) (*Groupcache, error) {
+func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf GroupcacheConfig, basepath string, r *route.Router, bucket objstore.Bucket) (*Groupcache, error) {
 	dnsGroupcacheProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_store_groupcache_", reg),
 		dns.ResolverType(conf.DNSSDResolver),
 	)
 
-	pool := groupcache.NewHTTPPoolOpts(conf.SelfURL, &groupcache.HTTPPoolOptions{
+	httpProto := galaxyhttp.NewHTTPFetchProtocol(&galaxyhttp.HTTPOptions{
 		BasePath: basepath,
 	})
+	universe := galaxycache.NewUniverse(httpProto, conf.SelfURL)
 
 	ticker := time.NewTicker(conf.DNSInterval)
 
@@ -105,17 +107,21 @@ func NewGroupcacheWithConfig(name string, logger log.Logger, reg prometheus.Regi
 			if err := dnsGroupcacheProvider.Resolve(context.Background(), conf.Peers); err != nil {
 				level.Error(logger).Log("msg", "failed to resolve addresses for groupcache", "err", err)
 			} else {
-				pool.Set(dnsGroupcacheProvider.Addresses()...)
+				universe.Set(dnsGroupcacheProvider.Addresses()...)
 			}
 
 			<-ticker.C
 		}
 	}()
 
-	r.Get(basepath, pool.ServeHTTP)
+	mux := http.NewServeMux()
+	galaxyhttp.RegisterHTTPHandler(universe, &galaxyhttp.HTTPOptions{
+		BasePath: basepath,
+	}, mux)
+	r.Get(basepath, mux.ServeHTTP)
 
-	group := groupcache.NewGroup(conf.GroupcacheGroup, int64(conf.MaxSize), groupcache.GetterFunc(
-		func(ctx context.Context, id string, dest groupcache.Sink) error {
+	galaxy := universe.NewGalaxy(conf.GroupcacheGroup, int64(conf.MaxSize), galaxycache.GetterFunc(
+		func(ctx context.Context, id string, dest galaxycache.Codec) error {
 			parsedData, err := cachekey.ParseBucketCacheKey(id)
 			if err != nil {
 				return err
@@ -132,7 +138,7 @@ func NewGroupcacheWithConfig(name string, logger log.Logger, reg prometheus.Regi
 				if err != nil {
 					return err
 				}
-				err = dest.SetString(string(finalAttrs), time.Now().Add(5*time.Minute))
+				err = dest.UnmarshalBinary(finalAttrs)
 				if err != nil {
 					return err
 				}
@@ -152,7 +158,7 @@ func NewGroupcacheWithConfig(name string, logger log.Logger, reg prometheus.Regi
 					return err
 				}
 
-				err = dest.SetBytes(b, time.Now().Add(5*time.Minute))
+				err = dest.UnmarshalBinary(b)
 				if err != nil {
 					return err
 				}
@@ -162,7 +168,7 @@ func NewGroupcacheWithConfig(name string, logger log.Logger, reg prometheus.Regi
 					return err
 				}
 
-				err = dest.SetString(strconv.FormatBool(exists), time.Now().Add(5*time.Minute))
+				err = dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)))
 				if err != nil {
 					return err
 				}
@@ -178,7 +184,7 @@ func NewGroupcacheWithConfig(name string, logger log.Logger, reg prometheus.Regi
 					return err
 				}
 
-				err = dest.SetBytes(b, time.Now().Add(5*time.Minute))
+				err = dest.UnmarshalBinary(b)
 				if err != nil {
 					return err
 				}
@@ -189,10 +195,9 @@ func NewGroupcacheWithConfig(name string, logger log.Logger, reg prometheus.Regi
 	))
 
 	return &Groupcache{
-		dns:    dnsGroupcacheProvider,
-		Pool:   pool,
-		group:  group,
-		logger: logger,
+		logger:   logger,
+		galaxy:   galaxy,
+		universe: universe,
 	}, nil
 }
 
@@ -204,19 +209,19 @@ func (c *Groupcache) Fetch(ctx context.Context, keys []string) map[string][]byte
 	data := map[string][]byte{}
 
 	for _, k := range keys {
-		var keyData []byte
+		codec := galaxycache.ByteCodec{}
 
-		if err := c.group.Get(ctx, k, groupcache.AllocatingByteSliceSink(&keyData)); err != nil {
+		if err := c.galaxy.Get(ctx, k, &codec); err != nil {
 			level.Error(c.logger).Log("msg", "failed fetching data from groupcache", "err", err, "key", k)
 			continue
 		}
 
-		data[k] = keyData
+		data[k] = codec
 	}
 
 	return data
 }
 
 func (c *Groupcache) Name() string {
-	return c.group.Name()
+	return c.galaxy.Name()
 }

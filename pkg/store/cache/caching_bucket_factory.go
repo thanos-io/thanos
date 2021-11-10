@@ -100,9 +100,9 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 			return nil, errors.Wrapf(err, "failed to create inmemory cache")
 		}
 	case string(GroupcacheBucketCacheProvider):
-		const basePath = "/_groupcache/"
+		const basePath = "/_galaxycache/"
 
-		c, err = cache.NewGroupcache("caching-bucket", logger, reg, backendConfig, bucket.Name(), basePath, r, bucket)
+		c, err = cache.NewGroupcache(logger, reg, backendConfig, basePath, r, bucket)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create groupcache")
 		}
