@@ -303,7 +303,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 			},
 		},
 		{
-			// In this test case, all the blocks are marked for deletion since the retention period is 0d i.e. indefinitely long retention.
+			// In this test case, none of the blocks are marked for deletion since the retention period is 0d i.e. indefinitely long retention.
 			testName: "zero_day_test",
 			input: retInput{
 				meta: []*metadata.Meta{
