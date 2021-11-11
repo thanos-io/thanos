@@ -54,7 +54,7 @@ Natively Prometheus does not store external labels anywhere. This is why externa
 
 Because not all object storage providers implement a safe locking mechanism, you need to ensure on your own that only a single Compactor is running against a single stream of blocks on a single bucket. Running more than one Compactor may result in [Overlap Issues](../operating/troubleshooting.md#overlaps) which have to be resolved manually.
 
-This rule also means that there could be a problem when both compacted and non-compacted blocks are being uploaded by a sidecar. This is why the "upload compacted" function still lives under a separate `--shipper.upload-compacted` flag that helps to ensure that compacted blocks are uploaded before anything else. The signleton rule is also why local Prometheus compaction has to be disabled in order to use Thanos Sidecar with the upload option. Use - at your own risk! - the hidden `--shipper.ignore-unequal-block-size` flag to disable this check.
+This rule also means that there could be a problem when both compacted and non-compacted blocks are being uploaded by a sidecar. This is why the "upload compacted" function still lives under a separate `--shipper.upload-compacted` flag that helps to ensure that compacted blocks are uploaded before anything else. The singleton rule is also why local Prometheus compaction has to be disabled in order to use Thanos Sidecar with the upload option. Use - at your own risk! - the hidden `--shipper.ignore-unequal-block-size` flag to disable this check.
 
 > **NOTE:** In future versions of Thanos it's possible that both restrictions will be removed once [vertical compaction](#vertical-compactions) reaches production status.
 
@@ -70,17 +70,17 @@ In Thanos, this works similarly, but on a bigger scale and using external labels
 
 In both systems, series with the same labels are merged together. In Prometheus, merging samples is **naive**. It works by deduplicating samples within exactly the same timestamps. Otherwise samples are merged and sorted by timestamp. Thanos also supports a new penalty based samples merging strategy, which is explained in [Deduplication](#vertical-compaction-use-cases).
 
-> **NOTE:** Both Prometheus' and Thanos' default behaviour is to fail compaction if any overlapping blocks are spotted. (For Thanos, within the same external labels).
+> **NOTE:** Both Prometheus' and Thanos' default behaviour is to fail compaction if any overlapping blocks are spotted. (For Thanos, with the same external labels).
 
 #### Vertical Compaction Use Cases
 
 The following are valid use cases for vertical compaction:
 
 * **Races** between multiple compactions, for example multiple Thanos compactors or between Thanos and Prometheus compactions. While this will cause extra computational overhead for Compactor it's safe to enable vertical compaction for this case.
-* **Backfilling**. If you want to add blocks of data to any stream where there already is existing data for this time range, you will need to enable vertical compaction.
+* **Backfilling**. If you want to add blocks of data to any stream where there already is existing data for some time range, you will need to enable vertical compaction.
 * **Offline deduplication** of series. It's very common to have the same data replicated into multiple streams. We can distinguish two common strategies for deduplications, `one-to-one` and `penalty`:
   * `one-to-one` deduplication is when multiple series (with the same labels) from different blocks for the same time range have **exactly** the same samples: Same values and timestamps. This is very common when using [Receivers](receive.md) with replication greater than 1 as receiver replication copies samples exactly (same timestamps and values) to different receive instances.
-  * `penalty` deduplication is when the same data is **duplicated logically**, i.e. the same application is scraped from two different Prometheis. This usually requires more complex deduplication algorithms. or example one that is used to [deduplicate on the fly on the Querier](query.md#run-time-deduplication-of-ha-groups). This is common case when Prometheus HA replicas are used. You can enable this deduplication strategy via the `--deduplication.func=penalty` flag.
+  * `penalty` deduplication is when the same data is **duplicated logically**, i.e. the same application is scraped from two different Prometheis. This usually requires more complex deduplication algorithms. For example, one that is used to [deduplicate on the fly on the Querier](query.md#run-time-deduplication-of-ha-groups). This is a common case when Prometheus HA replicas are used. You can enable this deduplication strategy via the `--deduplication.func=penalty` flag.
 
 #### Vertical Compaction Risks
 
