@@ -88,6 +88,10 @@ This project is intended to be used as a library. You can extend and customize d
     selector: 'job=~".*thanos-query.*"',
     title: '%(prefix)sQuery' % $.dashboard.prefix,
   },
+  query_frontend+:: {
+    selector: 'job=~".*thanos-query-frontend.*"',
+    title: '%(prefix)sQuery Frontend' % $.dashboard.prefix,
+  },
   store+:: {
     selector: 'job=~".*thanos-store.*"',
     title: '%(prefix)sStore' % $.dashboard.prefix,
