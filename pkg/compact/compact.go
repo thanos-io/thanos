@@ -669,7 +669,7 @@ func (ds *DownsampleProgressCalculator) ProgressCalculate(ctx context.Context, g
 
 // RetentionProgressMetrics contains Prometheus metrics related to retention progress.
 type RetentionProgressMetrics struct {
-	NumberOfBlocksDeleted *prometheus.GaugeVec
+	NumberOfBlocksToDelete *prometheus.GaugeVec
 }
 
 // RetentionProgressCalculator contains RetentionProgressMetrics, which are updated during the retention simulation process.
@@ -683,8 +683,8 @@ func NewRetentionProgressCalculator(reg prometheus.Registerer, retentionByResolu
 	return &RetentionProgressCalculator{
 		retentionByResolution: retentionByResolution,
 		RetentionProgressMetrics: &RetentionProgressMetrics{
-			NumberOfBlocksDeleted: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-				Name: "thanos_compact_todo_deleted_blocks",
+			NumberOfBlocksToDelete: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_deletion_blocks",
 				Help: "number of blocks that have crossed their retention period",
 			}, []string{"group"}),
 		},
@@ -708,9 +708,9 @@ func (rs *RetentionProgressCalculator) ProgressCalculate(ctx context.Context, gr
 		}
 	}
 
-	rs.RetentionProgressMetrics.NumberOfBlocksDeleted.Reset()
+	rs.RetentionProgressMetrics.NumberOfBlocksToDelete.Reset()
 	for key, blocks := range groupBlocks {
-		rs.RetentionProgressMetrics.NumberOfBlocksDeleted.WithLabelValues(key).Add(float64(blocks))
+		rs.RetentionProgressMetrics.NumberOfBlocksToDelete.WithLabelValues(key).Add(float64(blocks))
 	}
 
 	return nil

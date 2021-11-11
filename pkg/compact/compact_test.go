@@ -337,7 +337,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 			metrics := ps.RetentionProgressMetrics
 			testutil.Ok(t, err)
 			for key := range tcase.expected {
-				a, err := metrics.NumberOfBlocksDeleted.GetMetricWithLabelValues(key)
+				a, err := metrics.NumberOfBlocksToDelete.GetMetricWithLabelValues(key)
 				testutil.Ok(t, err)
 				testutil.Equals(t, tcase.expected[key], promtestutil.ToFloat64(a))
 			}
