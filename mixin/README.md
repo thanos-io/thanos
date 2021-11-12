@@ -113,8 +113,7 @@ This project is intended to be used as a library. You can extend and customize d
     thanosPrometheusCommonDimensions: 'namespace, pod',
     title: '%(prefix)sSidecar' % $.dashboard.prefix,
   },
-  // TODO(kakkoyun): Fix naming convention: bucketReplicate
-  bucket_replicate+:: {
+  bucketReplicate+:: {
     selector: 'job=~".*thanos-bucket-replicate.*"',
     title: '%(prefix)sBucketReplicate' % $.dashboard.prefix,
   },
