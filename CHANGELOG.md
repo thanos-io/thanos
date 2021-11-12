@@ -24,6 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4576](https://github.com/thanos-io/thanos/pull/4576) UI: add filter compaction level to the Block UI.
 - [#4731](https://github.com/thanos-io/thanos/pull/4731) Rule: add stateless mode to ruler according to https://thanos.io/tip/proposals-accepted/202005-scalable-rule-storage.md/. Continue https://github.com/thanos-io/thanos/pull/4250.
 - [#4612](https://github.com/thanos-io/thanos/pull/4612) Sidecar: add `--prometheus.http-client` and `--prometheus.http-client-file` flag for sidecar to connect Prometheus with basic auth or TLS.
+- [#4848](https://github.com/thanos-io/thanos/pull/4848) Compactor: added Prometheus metric for tracking the progress of retention.
 
 ### Fixed
 

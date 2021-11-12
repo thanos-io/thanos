@@ -26,7 +26,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -205,6 +204,149 @@ func createBlockMeta(id uint64, minTime, maxTime int64, labels map[string]string
 	return m
 }
 
+func TestRetentionProgressCalculate(t *testing.T) {
+	logger := log.NewNopLogger()
+	reg := prometheus.NewRegistry()
+
+	var bkt objstore.Bucket
+	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "")
+
+	type groupedResult map[string]float64
+
+	type retInput struct {
+		meta   []*metadata.Meta
+		resMap map[ResolutionLevel]time.Duration
+	}
+
+	keys := make([]string, 3)
+	m := make([]metadata.Meta, 3)
+	m[0].Thanos.Labels = map[string]string{"a": "1"}
+	m[0].Thanos.Downsample.Resolution = downsample.ResLevel0
+	m[1].Thanos.Labels = map[string]string{"b": "2"}
+	m[1].Thanos.Downsample.Resolution = downsample.ResLevel1
+	m[2].Thanos.Labels = map[string]string{"a": "1", "b": "2"}
+	m[2].Thanos.Downsample.Resolution = downsample.ResLevel2
+	for ind, meta := range m {
+		keys[ind] = DefaultGroupKey(meta.Thanos)
+	}
+
+	ps := NewRetentionProgressCalculator(reg, nil)
+
+	for _, tcase := range []struct {
+		testName string
+		input    retInput
+		expected groupedResult
+	}{
+		{
+			// In this test case, blocks belonging to multiple groups are tested. All blocks in the first group and the first block in the second group are beyond their retention period. In the second group, the second block still has some time before its retention period and hence, is not marked to be deleted.
+			testName: "multi_group_test",
+			input: retInput{
+				meta: []*metadata.Meta{
+					createBlockMeta(6, 1, int64(time.Now().Add(-6*30*24*time.Hour).Unix()*1000), map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{}),
+					createBlockMeta(9, 1, int64(time.Now().Add(-9*30*24*time.Hour).Unix()*1000), map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{}),
+					createBlockMeta(7, 1, int64(time.Now().Add(-4*30*24*time.Hour).Unix()*1000), map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{}),
+					createBlockMeta(8, 1, int64(time.Now().Add(-1*30*24*time.Hour).Unix()*1000), map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{}),
+					createBlockMeta(10, 1, int64(time.Now().Add(-4*30*24*time.Hour).Unix()*1000), map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{}),
+				},
+				resMap: map[ResolutionLevel]time.Duration{
+					ResolutionLevel(downsample.ResLevel0): 5 * 30 * 24 * time.Hour, // 5 months retention.
+					ResolutionLevel(downsample.ResLevel1): 3 * 30 * 24 * time.Hour, // 3 months retention.
+					ResolutionLevel(downsample.ResLevel2): 6 * 30 * 24 * time.Hour, // 6 months retention.
+				},
+			},
+			expected: groupedResult{
+				keys[0]: 2.0,
+				keys[1]: 1.0,
+				keys[2]: 0.0,
+			},
+		}, {
+			// In this test case, all the blocks are retained since they have not yet crossed their retention period.
+			testName: "retain_test",
+			input: retInput{
+				meta: []*metadata.Meta{
+					createBlockMeta(6, 1, int64(time.Now().Add(-6*30*24*time.Hour).Unix()*1000), map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{}),
+					createBlockMeta(7, 1, int64(time.Now().Add(-4*30*24*time.Hour).Unix()*1000), map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{}),
+					createBlockMeta(8, 1, int64(time.Now().Add(-7*30*24*time.Hour).Unix()*1000), map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{}),
+				},
+				resMap: map[ResolutionLevel]time.Duration{
+					ResolutionLevel(downsample.ResLevel0): 10 * 30 * 24 * time.Hour, // 10 months retention.
+					ResolutionLevel(downsample.ResLevel1): 12 * 30 * 24 * time.Hour, // 12 months retention.
+					ResolutionLevel(downsample.ResLevel2): 16 * 30 * 24 * time.Hour, // 6 months retention.
+				},
+			},
+			expected: groupedResult{
+				keys[0]: 0,
+				keys[1]: 0,
+				keys[2]: 0,
+			},
+		},
+		{
+			// In this test case, all the blocks are deleted since they are past their retention period.
+			testName: "delete_test",
+			input: retInput{
+				meta: []*metadata.Meta{
+					createBlockMeta(6, 1, int64(time.Now().Add(-6*30*24*time.Hour).Unix()*1000), map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{}),
+					createBlockMeta(7, 1, int64(time.Now().Add(-4*30*24*time.Hour).Unix()*1000), map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{}),
+					createBlockMeta(8, 1, int64(time.Now().Add(-7*30*24*time.Hour).Unix()*1000), map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{}),
+				},
+				resMap: map[ResolutionLevel]time.Duration{
+					ResolutionLevel(downsample.ResLevel0): 3 * 30 * 24 * time.Hour, // 3 months retention.
+					ResolutionLevel(downsample.ResLevel1): 1 * 30 * 24 * time.Hour, // 1 months retention.
+					ResolutionLevel(downsample.ResLevel2): 6 * 30 * 24 * time.Hour, // 6 months retention.
+				},
+			},
+			expected: groupedResult{
+				keys[0]: 1,
+				keys[1]: 1,
+				keys[2]: 1,
+			},
+		},
+		{
+			// In this test case, none of the blocks are marked for deletion since the retention period is 0d i.e. indefinitely long retention.
+			testName: "zero_day_test",
+			input: retInput{
+				meta: []*metadata.Meta{
+					createBlockMeta(6, 1, int64(time.Now().Add(-6*30*24*time.Hour).Unix()*1000), map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{}),
+					createBlockMeta(7, 1, int64(time.Now().Add(-4*30*24*time.Hour).Unix()*1000), map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{}),
+					createBlockMeta(8, 1, int64(time.Now().Add(-7*30*24*time.Hour).Unix()*1000), map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{}),
+				},
+				resMap: map[ResolutionLevel]time.Duration{
+					ResolutionLevel(downsample.ResLevel0): 0,
+					ResolutionLevel(downsample.ResLevel1): 0,
+					ResolutionLevel(downsample.ResLevel2): 0,
+				},
+			},
+			expected: groupedResult{
+				keys[0]: 0,
+				keys[1]: 0,
+				keys[2]: 0,
+			},
+		},
+	} {
+		if ok := t.Run(tcase.testName, func(t *testing.T) {
+			blocks := make(map[ulid.ULID]*metadata.Meta, len(tcase.input.meta))
+			for _, meta := range tcase.input.meta {
+				blocks[meta.ULID] = meta
+			}
+			groups, err := grouper.Groups(blocks)
+			testutil.Ok(t, err)
+			ps.retentionByResolution = tcase.input.resMap
+			err = ps.ProgressCalculate(context.Background(), groups)
+			testutil.Ok(t, err)
+			metrics := ps.RetentionProgressMetrics
+			testutil.Ok(t, err)
+			for key := range tcase.expected {
+				a, err := metrics.NumberOfBlocksToDelete.GetMetricWithLabelValues(key)
+				testutil.Ok(t, err)
+				testutil.Equals(t, tcase.expected[key], promtestutil.ToFloat64(a))
+			}
+		}); !ok {
+			return
+		}
+	}
+}
+
 func TestCompactProgressCalculate(t *testing.T) {
 	type planResult struct {
 		compactionBlocks, compactionRuns float64
@@ -213,7 +355,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
-	unRegisterer := &receive.UnRegisterer{Registerer: reg}
 	planner := NewTSDBBasedPlanner(logger, []int64{
 		int64(1 * time.Hour / time.Millisecond),
 		int64(2 * time.Hour / time.Millisecond),
@@ -230,6 +371,8 @@ func TestCompactProgressCalculate(t *testing.T) {
 	for ind, meta := range m {
 		keys[ind] = DefaultGroupKey(meta.Thanos)
 	}
+
+	ps := NewCompactionProgressCalculator(reg, planner)
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
@@ -316,7 +459,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 			}
 			groups, err := grouper.Groups(blocks)
 			testutil.Ok(t, err)
-			ps := NewCompactionProgressCalculator(unRegisterer, planner)
 			err = ps.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
 			metrics := ps.CompactProgressMetrics
@@ -337,7 +479,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 
 func TestDownsampleProgressCalculate(t *testing.T) {
 	reg := prometheus.NewRegistry()
-	unRegisterer := &receive.UnRegisterer{Registerer: reg}
 	logger := log.NewNopLogger()
 	type groupedResult map[string]float64
 
@@ -352,6 +493,8 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 	for ind, meta := range m {
 		keys[ind] = DefaultGroupKey(meta.Thanos)
 	}
+
+	ds := NewDownsampleProgressCalculator(reg)
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for downsample progress tests"})
@@ -438,7 +581,6 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			groups, err := grouper.Groups(blocks)
 			testutil.Ok(t, err)
 
-			ds := NewDownsampleProgressCalculator(unRegisterer)
 			err = ds.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
 			metrics := ds.DownsampleProgressMetrics

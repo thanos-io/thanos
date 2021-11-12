@@ -462,6 +462,7 @@ func runCompact(
 	if conf.compactionProgressMetrics {
 		g.Add(func() error {
 			ps := compact.NewCompactionProgressCalculator(reg, tsdbPlanner)
+			rs := compact.NewRetentionProgressCalculator(reg, retentionByResolution)
 			var ds *compact.DownsampleProgressCalculator
 			if !conf.disableDownsampling {
 				ds = compact.NewDownsampleProgressCalculator(reg)
@@ -476,11 +477,20 @@ func runCompact(
 				metas := sy.Metas()
 				groups, err := grouper.Groups(metas)
 				if err != nil {
-					return errors.Wrapf(err, "could not group metadata")
+					return errors.Wrapf(err, "could not group metadata for compaction")
 				}
 
 				if err = ps.ProgressCalculate(ctx, groups); err != nil {
 					return errors.Wrapf(err, "could not calculate compaction progress")
+				}
+
+				retGroups, err := grouper.Groups(metas)
+				if err != nil {
+					return errors.Wrapf(err, "could not group metadata for retention")
+				}
+
+				if err = rs.ProgressCalculate(ctx, retGroups); err != nil {
+					return errors.Wrapf(err, "could not calculate retention progress")
 				}
 
 				if !conf.disableDownsampling {
