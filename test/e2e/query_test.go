@@ -23,10 +23,12 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -99,6 +101,155 @@ basic_auth_users:
 func sortResults(res model.Vector) {
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].String() < res[j].String()
+	})
+}
+
+func BenchmarkQueryRangeInterval(b *testing.B) {
+	e, err := e2e.NewDockerEnvironment("bench_query")
+	testutil.Ok(b, err)
+	b.Cleanup(e2ethanos.CleanScenario(b, e))
+
+	var optimizedQ, unoptimizedQ *e2e.InstrumentedRunnable
+
+	now := time.Now()
+
+	// Prepare data:
+	// [----------------------- a=2 ------------------][-------- a=1 -------------]
+	// [----------][----------][----------][----------][--------------------------]
+	// -16h   -14h -14h   -12h  -12h  -10h -10h    -8h -8h                     now
+
+	// Newer Thanos with the optimization.
+	{
+		const promName = "alone"
+
+		prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, promName, defaultPromConfig("prom-alone", 0, "", ""), "", e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(b, err)
+
+		optimizedQ, err = e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).Build()
+		testutil.Ok(b, err)
+
+		prometheusData := filepath.Join(e.SharedDir(), "data", "prometheus", promName)
+		extLset := labels.FromStrings("ext1", "value1", "replica", "1")
+		extLset2 := labels.FromStrings("ext1", "value2", "replica", "1")
+
+		series := []labels.Labels{labels.FromStrings("a", "1")}
+		series2 := []labels.Labels{labels.FromStrings("a", "2")}
+
+		generatedDataDir := filepath.Join(e.SharedDir(), "tmp")
+		now := time.Now()
+
+		id1, err := e2eutil.CreateBlock(context.Background(), generatedDataDir, series, 100000, timestamp.FromTime(now.Add(-8*time.Hour)), timestamp.FromTime(now), extLset, 0, metadata.NoneFunc)
+		testutil.Ok(b, err)
+		testutil.Ok(b, os.Rename(filepath.Join(generatedDataDir, id1.String()), filepath.Join(prometheusData, id1.String())))
+
+		id2, err := e2eutil.CreateBlock(context.Background(), generatedDataDir, series2, 100000, timestamp.FromTime(now.Add(-10*time.Hour)), timestamp.FromTime(now.Add(-8*time.Hour)), extLset2, 0, metadata.NoneFunc)
+		testutil.Ok(b, err)
+		testutil.Ok(b, os.Rename(filepath.Join(generatedDataDir, id2.String()), filepath.Join(prometheusData, id2.String())))
+
+		id3, err := e2eutil.CreateBlock(context.Background(), generatedDataDir, series2, 100000, timestamp.FromTime(now.Add(-12*time.Hour)), timestamp.FromTime(now.Add(-10*time.Hour)), extLset2, 0, metadata.NoneFunc)
+		testutil.Ok(b, err)
+		testutil.Ok(b, os.Rename(filepath.Join(generatedDataDir, id3.String()), filepath.Join(prometheusData, id3.String())))
+
+		id4, err := e2eutil.CreateBlock(context.Background(), generatedDataDir, series2, 100000, timestamp.FromTime(now.Add(-14*time.Hour)), timestamp.FromTime(now.Add(-12*time.Hour)), extLset2, 0, metadata.NoneFunc)
+		testutil.Ok(b, err)
+		testutil.Ok(b, os.Rename(filepath.Join(generatedDataDir, id4.String()), filepath.Join(prometheusData, id4.String())))
+
+		id5, err := e2eutil.CreateBlock(context.Background(), generatedDataDir, series2, 100000, timestamp.FromTime(now.Add(-16*time.Hour)), timestamp.FromTime(now.Add(-14*time.Hour)), extLset2, 0, metadata.NoneFunc)
+		testutil.Ok(b, err)
+		testutil.Ok(b, os.Rename(filepath.Join(generatedDataDir, id5.String()), filepath.Join(prometheusData, id5.String())))
+
+		testutil.Ok(b, e2e.StartAndWaitReady(prom1, sidecar1, optimizedQ))
+
+		testutil.Ok(b, optimizedQ.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	}
+
+	// Older Thanos without the optimization.
+	{
+		const promName = "alone2"
+
+		prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecarCustomImage(e, promName,
+			defaultPromConfig("prom-alone", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(),
+			"quay.io/thanos/thanos:main-2021-11-12-aa7e9f33") // Just before the optimization.
+		testutil.Ok(b, err)
+
+		unoptimizedQ, err = e2ethanos.NewQuerierBuilder(e, "2", sidecar2.InternalEndpoint("grpc")).Build()
+		testutil.Ok(b, err)
+
+		prometheusData := filepath.Join(e.SharedDir(), "data", "prometheus", promName)
+		extLset := labels.FromStrings("ext1", "value1", "replica", "1")
+		extLset2 := labels.FromStrings("ext1", "value2", "replica", "1")
+		series := []labels.Labels{labels.FromStrings("a", "1")}
+		series2 := []labels.Labels{labels.FromStrings("a", "2")}
+
+		generatedDataDir := filepath.Join(e.SharedDir(), "tmp")
+
+		id1, err := e2eutil.CreateBlock(context.Background(), generatedDataDir, series, 100000, timestamp.FromTime(now.Add(-8*time.Hour)), timestamp.FromTime(now), extLset, 0, metadata.NoneFunc)
+		testutil.Ok(b, err)
+		testutil.Ok(b, os.Rename(filepath.Join(generatedDataDir, id1.String()), filepath.Join(prometheusData, id1.String())))
+
+		id2, err := e2eutil.CreateBlock(context.Background(), generatedDataDir, series2, 100000, timestamp.FromTime(now.Add(-10*time.Hour)), timestamp.FromTime(now.Add(-8*time.Hour)), extLset2, 0, metadata.NoneFunc)
+		testutil.Ok(b, err)
+		testutil.Ok(b, os.Rename(filepath.Join(generatedDataDir, id2.String()), filepath.Join(prometheusData, id2.String())))
+
+		id3, err := e2eutil.CreateBlock(context.Background(), generatedDataDir, series2, 100000, timestamp.FromTime(now.Add(-12*time.Hour)), timestamp.FromTime(now.Add(-10*time.Hour)), extLset2, 0, metadata.NoneFunc)
+		testutil.Ok(b, err)
+		testutil.Ok(b, os.Rename(filepath.Join(generatedDataDir, id3.String()), filepath.Join(prometheusData, id3.String())))
+
+		id4, err := e2eutil.CreateBlock(context.Background(), generatedDataDir, series2, 100000, timestamp.FromTime(now.Add(-14*time.Hour)), timestamp.FromTime(now.Add(-12*time.Hour)), extLset2, 0, metadata.NoneFunc)
+		testutil.Ok(b, err)
+		testutil.Ok(b, os.Rename(filepath.Join(generatedDataDir, id4.String()), filepath.Join(prometheusData, id4.String())))
+
+		id5, err := e2eutil.CreateBlock(context.Background(), generatedDataDir, series2, 100000, timestamp.FromTime(now.Add(-16*time.Hour)), timestamp.FromTime(now.Add(-14*time.Hour)), extLset2, 0, metadata.NoneFunc)
+		testutil.Ok(b, err)
+		testutil.Ok(b, os.Rename(filepath.Join(generatedDataDir, id5.String()), filepath.Join(prometheusData, id5.String())))
+
+		testutil.Ok(b, e2e.StartAndWaitReady(prom2, sidecar2, unoptimizedQ))
+
+		testutil.Ok(b, unoptimizedQ.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	}
+
+	b.Run("unoptimized sidecar, worst case, one big block", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			rangeQuery(b, context.Background(), unoptimizedQ.Endpoint("http"),
+				`rate({a="1"}[5m])`, timestamp.FromTime(now.Add(-8*time.Hour)), timestamp.FromTime(now), (20*60)+1,
+				promclient.QueryOptions{
+					Deduplicate: true,
+				}, func(res model.Matrix) error { return nil },
+			)
+		}
+	})
+
+	b.Run("unoptimized sidecar, small blocks with 2h step", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			rangeQuery(b, context.Background(), unoptimizedQ.Endpoint("http"),
+				`rate({a="2"}[5m])`, timestamp.FromTime(now.Add(-16*time.Hour)), timestamp.FromTime(now.Add(-8*time.Hour)), 2*60*60,
+				promclient.QueryOptions{
+					Deduplicate: true,
+				}, func(res model.Matrix) error { return nil },
+			)
+		}
+	})
+
+	b.Run("optimized sidecar, worst case, one big block", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			rangeQuery(b, context.Background(), optimizedQ.Endpoint("http"),
+				`rate({a="1"}[5m])`, timestamp.FromTime(now.Add(-8*time.Hour)), timestamp.FromTime(now), (20*60)+1,
+				promclient.QueryOptions{
+					Deduplicate: true,
+				}, func(res model.Matrix) error { return nil },
+			)
+		}
+	})
+
+	b.Run("optimized sidecar, small blocks with 2h step", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			rangeQuery(b, context.Background(), optimizedQ.Endpoint("http"),
+				`rate({a="2"}[5m])`, timestamp.FromTime(now.Add(-16*time.Hour)), timestamp.FromTime(now.Add(-8*time.Hour)), 2*60*60,
+				promclient.QueryOptions{
+					Deduplicate: true,
+				}, func(res model.Matrix) error { return nil },
+			)
+		}
 	})
 }
 
@@ -604,17 +755,16 @@ func checkNetworkRequests(t *testing.T, addr string) {
 	}))
 }
 
-func mustURLParse(t *testing.T, addr string) *url.URL {
+func mustURLParse(t testing.TB, addr string) *url.URL {
 	u, err := url.Parse(addr)
 	testutil.Ok(t, err)
 
 	return u
 }
 
-func instantQuery(t *testing.T, ctx context.Context, addr, q string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
+func instantQuery(t testing.TB, ctx context.Context, addr, q string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
 	t.Helper()
 
-	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q)
 	var result model.Vector
 
 	logger := log.NewLogfmtLogger(os.Stdout)
@@ -715,7 +865,7 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.M
 }
 
 //nolint:unparam
-func rangeQuery(t *testing.T, ctx context.Context, addr, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) error) {
+func rangeQuery(t testing.TB, ctx context.Context, addr, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) error) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)

@@ -137,6 +137,10 @@ func (p *PrometheusStore) putBuffer(b *[]byte) {
 	p.buffers.Put(b)
 }
 
+type timerange struct {
+	mintime, maxtime int64
+}
+
 // Series returns all series for a requested time range and label matcher.
 func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_SeriesServer) error {
 	extLset := p.externalLabelsFn()
@@ -156,6 +160,17 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	availableMinTime, _ := p.timestamps()
 	if r.MinTime < availableMinTime {
 		r.MinTime = availableMinTime
+	}
+
+	timeranges := []timerange{}
+	// Range must be at least four times smaller than the step otherwise
+	// this optimization does not make sense. Deduced this from BenchmarkQueryRangeInterval.
+	if r.Range != 0 && r.Range*4 < r.Step {
+		for ts := r.MinTime; ts <= r.MaxTime; ts += r.Step {
+			timeranges = append(timeranges, timerange{ts, ts + r.Range})
+		}
+	} else {
+		timeranges = []timerange{{r.MinTime, r.MaxTime}}
 	}
 
 	if r.SkipChunks {
@@ -179,29 +194,33 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		return nil
 	}
 
-	q := &prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
-	for _, m := range matchers {
-		pm := &prompb.LabelMatcher{Name: m.Name, Value: m.Value}
+	queries := []*prompb.Query{}
+	for _, tr := range timeranges {
+		q := &prompb.Query{StartTimestampMs: tr.mintime, EndTimestampMs: tr.maxtime}
+		for _, m := range matchers {
+			pm := &prompb.LabelMatcher{Name: m.Name, Value: m.Value}
 
-		switch m.Type {
-		case labels.MatchEqual:
-			pm.Type = prompb.LabelMatcher_EQ
-		case labels.MatchNotEqual:
-			pm.Type = prompb.LabelMatcher_NEQ
-		case labels.MatchRegexp:
-			pm.Type = prompb.LabelMatcher_RE
-		case labels.MatchNotRegexp:
-			pm.Type = prompb.LabelMatcher_NRE
-		default:
-			return errors.New("unrecognized matcher type")
+			switch m.Type {
+			case labels.MatchEqual:
+				pm.Type = prompb.LabelMatcher_EQ
+			case labels.MatchNotEqual:
+				pm.Type = prompb.LabelMatcher_NEQ
+			case labels.MatchRegexp:
+				pm.Type = prompb.LabelMatcher_RE
+			case labels.MatchNotRegexp:
+				pm.Type = prompb.LabelMatcher_NRE
+			default:
+				return errors.New("unrecognized matcher type")
+			}
+			q.Matchers = append(q.Matchers, pm)
 		}
-		q.Matchers = append(q.Matchers, pm)
+		queries = append(queries, q)
 	}
 
 	queryPrometheusSpan, ctx := tracing.StartSpan(s.Context(), "query_prometheus")
-	queryPrometheusSpan.SetTag("query.request", q.String())
+	queryPrometheusSpan.SetTag("query.request", queries[0].String())
 
-	httpResp, err := p.startPromRemoteRead(ctx, q)
+	httpResp, err := p.startPromRemoteRead(ctx, queries)
 	if err != nil {
 		queryPrometheusSpan.Finish()
 		return errors.Wrap(err, "query Prometheus")
@@ -233,35 +252,39 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_Series
 
 	span, _ := tracing.StartSpan(ctx, "transform_and_respond")
 	defer span.Finish()
-	span.SetTag("series_count", len(resp.Results[0].Timeseries))
+	seriesCount := 0
+	for _, r := range resp.Results {
+		for _, e := range r.Timeseries {
+			seriesCount++
+			lset := labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(e.Labels), extLset)
+			if len(e.Samples) == 0 {
+				// As found in https://github.com/thanos-io/thanos/issues/381
+				// Prometheus can give us completely empty time series. Ignore these with log until we figure out that
+				// this is expected from Prometheus perspective.
+				level.Warn(p.logger).Log(
+					"msg",
+					"found timeseries without any chunk. See https://github.com/thanos-io/thanos/issues/381 for details",
+					"lset",
+					fmt.Sprintf("%v", lset),
+				)
+				continue
+			}
 
-	for _, e := range resp.Results[0].Timeseries {
-		lset := labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(e.Labels), extLset)
-		if len(e.Samples) == 0 {
-			// As found in https://github.com/thanos-io/thanos/issues/381
-			// Prometheus can give us completely empty time series. Ignore these with log until we figure out that
-			// this is expected from Prometheus perspective.
-			level.Warn(p.logger).Log(
-				"msg",
-				"found timeseries without any chunk. See https://github.com/thanos-io/thanos/issues/381 for details",
-				"lset",
-				fmt.Sprintf("%v", lset),
-			)
-			continue
-		}
+			aggregatedChunks, err := p.chunkSamples(e, MaxSamplesPerChunk)
+			if err != nil {
+				return err
+			}
 
-		aggregatedChunks, err := p.chunkSamples(e, MaxSamplesPerChunk)
-		if err != nil {
-			return err
-		}
-
-		if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
-			Labels: labelpb.ZLabelsFromPromLabels(lset),
-			Chunks: aggregatedChunks,
-		})); err != nil {
-			return err
+			if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
+				Labels: labelpb.ZLabelsFromPromLabels(lset),
+				Chunks: aggregatedChunks,
+			})); err != nil {
+				return err
+			}
 		}
 	}
+	span.SetTag("series_count", seriesCount)
+
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_SAMPLED request.", "series", len(resp.Results[0].Timeseries))
 	return nil
 }
@@ -338,7 +361,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 	querySpan.SetTag("processed.chunks", seriesStats.Chunks)
 	querySpan.SetTag("processed.samples", seriesStats.Samples)
 	querySpan.SetTag("processed.bytes", bodySizer.BytesCount())
-	level.Debug(p.logger).Log("msg", "handled ReadRequest_STREAMED_XOR_CHUNKS request.", "frames", framesNum)
+	level.Debug(p.logger).Log("msg", "handled ReadRequest_STREAMED_XOR_CHUNKS request.", "frames", framesNum, "samples", seriesStats.Samples)
 	return nil
 }
 
@@ -421,9 +444,9 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 	return chks, nil
 }
 
-func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Query) (presp *http.Response, err error) {
+func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, queries []*prompb.Query) (presp *http.Response, err error) {
 	reqb, err := proto.Marshal(&prompb.ReadRequest{
-		Queries:               []*prompb.Query{q},
+		Queries:               queries,
 		AcceptedResponseTypes: p.remoteReadAcceptableResponses,
 	})
 	if err != nil {
