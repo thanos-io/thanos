@@ -12,6 +12,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#4857](https://github.com/thanos-io/thanos/pull/4857) Sidecar: optimize data retrieval from Prometheus with range vectors; in the worst case this leads to about 10% query duration reduction, with a bigger range/step difference (and with more data) this can lead to up to 20x reduction of query duration.
 - [#4228](https://github.com/thanos-io/thanos/pull/4228) Tools `thanos bucket inspect`: Add flag `--output` to provide output method (table,csv,tsv).
 - [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: add `exemplar.partial-response` flag to control partial response.
 - [#4679](https://github.com/thanos-io/thanos/pull/4679) Added `enable-feature` flag to enable negative offsets and @ modifier, similar to Prometheus.
@@ -24,7 +25,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4576](https://github.com/thanos-io/thanos/pull/4576) UI: add filter compaction level to the Block UI.
 - [#4731](https://github.com/thanos-io/thanos/pull/4731) Rule: add stateless mode to ruler according to https://thanos.io/tip/proposals-accepted/202005-scalable-rule-storage.md/. Continue https://github.com/thanos-io/thanos/pull/4250.
 - [#4612](https://github.com/thanos-io/thanos/pull/4612) Sidecar: add `--prometheus.http-client` and `--prometheus.http-client-file` flag for sidecar to connect Prometheus with basic auth or TLS.
-- [#4857](https://github.com/thanos-io/thanos/pull/4857) Sidecar: optimize data retrieval from Prometheus with range vectors; in the worst case this leads to about 10% query duration reduction, with a bigger range/step difference (and with more data) this can lead to up to 20x reduction of query duration.
+- [#4848](https://github.com/thanos-io/thanos/pull/4848) Compactor: added Prometheus metric for tracking the progress of retention.
 
 ### Fixed
 
