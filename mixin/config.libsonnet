@@ -28,6 +28,10 @@
     selector: 'job=~".*thanos-query.*"',
     title: '%(prefix)sQuery' % $.dashboard.prefix,
   },
+  queryFrontend+:: {
+    selector: 'job=~".*thanos-query-frontend.*"',
+    title: '%(prefix)sQuery Frontend' % $.dashboard.prefix,
+  },
   store+:: {
     selector: 'job=~".*thanos-store.*"',
     title: '%(prefix)sStore' % $.dashboard.prefix,
