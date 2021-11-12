@@ -26,7 +26,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -208,7 +207,6 @@ func createBlockMeta(id uint64, minTime, maxTime int64, labels map[string]string
 func TestRetentionProgressCalculate(t *testing.T) {
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
-	unRegisterer := &receive.UnRegisterer{Registerer: reg}
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
@@ -232,6 +230,8 @@ func TestRetentionProgressCalculate(t *testing.T) {
 	for ind, meta := range m {
 		keys[ind] = DefaultGroupKey(meta.Thanos)
 	}
+
+	ps := NewRetentionProgressCalculator(reg, nil)
 
 	for _, tcase := range []struct {
 		testName string
@@ -331,7 +331,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 			}
 			groups, err := grouper.Groups(blocks)
 			testutil.Ok(t, err)
-			ps := NewRetentionProgressCalculator(unRegisterer, tcase.input.resMap)
+			ps.retentionByResolution = tcase.input.resMap
 			err = ps.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
 			metrics := ps.RetentionProgressMetrics
@@ -355,7 +355,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
-	unRegisterer := &receive.UnRegisterer{Registerer: reg}
 	planner := NewTSDBBasedPlanner(logger, []int64{
 		int64(1 * time.Hour / time.Millisecond),
 		int64(2 * time.Hour / time.Millisecond),
@@ -372,6 +371,8 @@ func TestCompactProgressCalculate(t *testing.T) {
 	for ind, meta := range m {
 		keys[ind] = DefaultGroupKey(meta.Thanos)
 	}
+
+	ps := NewCompactionProgressCalculator(reg, planner)
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
@@ -458,7 +459,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 			}
 			groups, err := grouper.Groups(blocks)
 			testutil.Ok(t, err)
-			ps := NewCompactionProgressCalculator(unRegisterer, planner)
 			err = ps.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
 			metrics := ps.CompactProgressMetrics
@@ -479,7 +479,6 @@ func TestCompactProgressCalculate(t *testing.T) {
 
 func TestDownsampleProgressCalculate(t *testing.T) {
 	reg := prometheus.NewRegistry()
-	unRegisterer := &receive.UnRegisterer{Registerer: reg}
 	logger := log.NewNopLogger()
 	type groupedResult map[string]float64
 
@@ -494,6 +493,8 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 	for ind, meta := range m {
 		keys[ind] = DefaultGroupKey(meta.Thanos)
 	}
+
+	ds := NewDownsampleProgressCalculator(reg)
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for downsample progress tests"})
@@ -580,7 +581,6 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			groups, err := grouper.Groups(blocks)
 			testutil.Ok(t, err)
 
-			ds := NewDownsampleProgressCalculator(unRegisterer)
 			err = ds.ProgressCalculate(context.Background(), groups)
 			testutil.Ok(t, err)
 			metrics := ds.DownsampleProgressMetrics
