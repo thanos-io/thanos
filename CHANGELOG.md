@@ -36,6 +36,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4792](https://github.com/thanos-io/thanos/pull/4792) Store: Fix data race in BucketedBytes pool.
 - [#4769](https://github.com/thanos-io/thanos/pull/4769) Query-frontend+api: add "X-Request-ID" field and other fields to start call log.
 
+### Changed
+
+- [#4864](https://github.com/thanos-io/thanos/pull/4864) UI: Remove the old PromQL editor
+
 ## [v0.23.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.10.1
 
 - [#4714](https://github.com/thanos-io/thanos/pull/4714) EndpointSet: Do not use unimplemented yet new InfoAPI to obtain metadata (avoids unnecessary HTTP roundtrip, instrumentation/alerts spam and logs).
