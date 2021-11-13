@@ -32,9 +32,10 @@ type Query struct {
 	now     func() model.Time
 }
 
-func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefix, prefixHeader string) *Query {
+func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefix, prefixHeader, alertQueryURL string) *Query {
 	tmplVariables := map[string]string{
 		"Component": component.Query.String(),
+		"queryURL":  alertQueryURL,
 	}
 	runtimeInfo := api.GetRuntimeInfoFunc(logger)
 
