@@ -299,6 +299,12 @@ Flags:
                                 happen at the end of an iteration.
       --compact.concurrency=1   Number of goroutines to use when compacting
                                 groups.
+      --compact.progress-interval=5m  
+                                Frequency of calculating the compaction progress
+                                in the background when --wait has been enabled.
+                                Setting it to "0s" disables it. Now compaction,
+                                downsampling and retention progress are
+                                supported.
       --consistency-delay=30m   Minimum age of fresh (non-compacted) blocks
                                 before they are being processed. Malformed
                                 blocks older than the maximum of
@@ -376,8 +382,6 @@ Flags:
                                 Path to YAML file that contains object store
                                 configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
-      --progress-metrics        Enables the progress metrics, indicating the
-                                progress of compaction and downsampling
       --retention.resolution-1h=0d  
                                 How long to retain samples of resolution 2 (1
                                 hour) in bucket. Setting this to 0d will retain

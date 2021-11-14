@@ -459,57 +459,6 @@ func runCompact(
 		return cleanPartialMarked()
 	}
 
-	if conf.compactionProgressMetrics {
-		g.Add(func() error {
-			ps := compact.NewCompactionProgressCalculator(reg, tsdbPlanner)
-			rs := compact.NewRetentionProgressCalculator(reg, retentionByResolution)
-			var ds *compact.DownsampleProgressCalculator
-			if !conf.disableDownsampling {
-				ds = compact.NewDownsampleProgressCalculator(reg)
-			}
-
-			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
-
-				if err := sy.SyncMetas(ctx); err != nil {
-					return errors.Wrapf(err, "could not sync metas")
-				}
-
-				metas := sy.Metas()
-				groups, err := grouper.Groups(metas)
-				if err != nil {
-					return errors.Wrapf(err, "could not group metadata for compaction")
-				}
-
-				if err = ps.ProgressCalculate(ctx, groups); err != nil {
-					return errors.Wrapf(err, "could not calculate compaction progress")
-				}
-
-				retGroups, err := grouper.Groups(metas)
-				if err != nil {
-					return errors.Wrapf(err, "could not group metadata for retention")
-				}
-
-				if err = rs.ProgressCalculate(ctx, retGroups); err != nil {
-					return errors.Wrapf(err, "could not calculate retention progress")
-				}
-
-				if !conf.disableDownsampling {
-					groups, err = grouper.Groups(metas)
-					if err != nil {
-						return errors.Wrapf(err, "could not group metadata into downsample groups")
-					}
-					if err := ds.ProgressCalculate(ctx, groups); err != nil {
-						return errors.Wrapf(err, "could not calculate downsampling progress")
-					}
-				}
-
-				return nil
-			})
-		}, func(err error) {
-			cancel()
-		})
-	}
-
 	g.Add(func() error {
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
@@ -588,6 +537,58 @@ func runCompact(
 			})
 		}
 
+		// Periodically calculate the progress of compaction, downsampling and retention.
+		if conf.progressCalculateInterval > 0 {
+			g.Add(func() error {
+				ps := compact.NewCompactionProgressCalculator(reg, tsdbPlanner)
+				rs := compact.NewRetentionProgressCalculator(reg, retentionByResolution)
+				var ds *compact.DownsampleProgressCalculator
+				if !conf.disableDownsampling {
+					ds = compact.NewDownsampleProgressCalculator(reg)
+				}
+
+				return runutil.Repeat(conf.progressCalculateInterval, ctx.Done(), func() error {
+
+					if err := sy.SyncMetas(ctx); err != nil {
+						return errors.Wrapf(err, "could not sync metas")
+					}
+
+					metas := sy.Metas()
+					groups, err := grouper.Groups(metas)
+					if err != nil {
+						return errors.Wrapf(err, "could not group metadata for compaction")
+					}
+
+					if err = ps.ProgressCalculate(ctx, groups); err != nil {
+						return errors.Wrapf(err, "could not calculate compaction progress")
+					}
+
+					retGroups, err := grouper.Groups(metas)
+					if err != nil {
+						return errors.Wrapf(err, "could not group metadata for retention")
+					}
+
+					if err = rs.ProgressCalculate(ctx, retGroups); err != nil {
+						return errors.Wrapf(err, "could not calculate retention progress")
+					}
+
+					if !conf.disableDownsampling {
+						groups, err = grouper.Groups(metas)
+						if err != nil {
+							return errors.Wrapf(err, "could not group metadata into downsample groups")
+						}
+						if err := ds.ProgressCalculate(ctx, groups); err != nil {
+							return errors.Wrapf(err, "could not calculate downsampling progress")
+						}
+					}
+
+					return nil
+				})
+			}, func(err error) {
+				cancel()
+			})
+		}
+
 		g.Add(func() error {
 			iterCtx, iterCancel := context.WithTimeout(ctx, conf.blockViewerSyncBlockTimeout)
 			_, _, _ = f.Fetch(iterCtx)
@@ -642,12 +643,10 @@ type compactConfig struct {
 	enableVerticalCompaction                       bool
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
-	compactionProgressMetrics                      bool
+	progressCalculateInterval                      time.Duration
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
-	cmd.Flag("progress-metrics", "Enables the progress metrics, indicating the progress of compaction and downsampling").Default("true").BoolVar(&cc.compactionProgressMetrics)
-
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)
 	cmd.Flag("debug.accept-malformed-index",
@@ -694,6 +693,8 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("5m").DurationVar(&cc.blockViewerSyncBlockTimeout)
 	cmd.Flag("compact.cleanup-interval", "How often we should clean up partially uploaded blocks and blocks with deletion mark in the background when --wait has been enabled. Setting it to \"0s\" disables it - the cleaning will only happen at the end of an iteration.").
 		Default("5m").DurationVar(&cc.cleanupBlocksInterval)
+	cmd.Flag("compact.progress-interval", "Frequency of calculating the compaction progress in the background when --wait has been enabled. Setting it to \"0s\" disables it. Now compaction, downsampling and retention progress are supported.").
+		Default("5m").DurationVar(&cc.progressCalculateInterval)
 
 	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").IntVar(&cc.compactionConcurrency)
