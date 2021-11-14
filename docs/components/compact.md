@@ -300,11 +300,11 @@ Flags:
       --compact.concurrency=1   Number of goroutines to use when compacting
                                 groups.
       --compact.progress-interval=5m  
-                                How often we should calculate the compaction
-                                progress in the background when --wait has been
-                                enabled. Setting it to "0s" disables it. Now
-                                compaction, downsampling and retention progress
-                                are supported.
+                                Frequency of calculating the compaction progress
+                                in the background when --wait has been enabled.
+                                Setting it to "0s" disables it. Now compaction,
+                                downsampling and retention progress are
+                                supported.
       --consistency-delay=30m   Minimum age of fresh (non-compacted) blocks
                                 before they are being processed. Malformed
                                 blocks older than the maximum of

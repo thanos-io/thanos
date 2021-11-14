@@ -693,7 +693,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("5m").DurationVar(&cc.blockViewerSyncBlockTimeout)
 	cmd.Flag("compact.cleanup-interval", "How often we should clean up partially uploaded blocks and blocks with deletion mark in the background when --wait has been enabled. Setting it to \"0s\" disables it - the cleaning will only happen at the end of an iteration.").
 		Default("5m").DurationVar(&cc.cleanupBlocksInterval)
-	cmd.Flag("compact.progress-interval", "How often we should calculate the compaction progress in the background when --wait has been enabled. Setting it to \"0s\" disables it. Now compaction, downsampling and retention progress are supported.").
+	cmd.Flag("compact.progress-interval", "Frequency of calculating the compaction progress in the background when --wait has been enabled. Setting it to \"0s\" disables it. Now compaction, downsampling and retention progress are supported.").
 		Default("5m").DurationVar(&cc.progressCalculateInterval)
 
 	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
