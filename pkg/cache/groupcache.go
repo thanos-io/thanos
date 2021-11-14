@@ -26,6 +26,19 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type CacheStatsCollector struct {
+	galaxy *galaxycache.Galaxy
+
+	// GalaxyCache Metric descriptions.
+	gets              *prometheus.Desc
+	loads             *prometheus.Desc
+	peerLoads         *prometheus.Desc
+	peerLoadErrors    *prometheus.Desc
+	backendLoads      *prometheus.Desc
+	backendLoadErrors *prometheus.Desc
+	cacheHits         *prometheus.Desc
+}
+
 type Groupcache struct {
 	galaxy   *galaxycache.Galaxy
 	universe *galaxycache.Universe
@@ -107,7 +120,10 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 			if err := dnsGroupcacheProvider.Resolve(context.Background(), conf.Peers); err != nil {
 				level.Error(logger).Log("msg", "failed to resolve addresses for groupcache", "err", err)
 			} else {
-				universe.Set(dnsGroupcacheProvider.Addresses()...)
+				err := universe.Set(dnsGroupcacheProvider.Addresses()...)
+				if err != nil {
+					level.Error(logger).Log("msg", "failed to set peers for groupcache", "err", err)
+				}
 			}
 
 			<-ticker.C
@@ -194,6 +210,9 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 		},
 	))
 
+	// Register GalaxyCache stats.
+	RegisterCacheStatsCollector(galaxy, reg)
+
 	return &Groupcache{
 		logger:   logger,
 		galaxy:   galaxy,
@@ -224,4 +243,42 @@ func (c *Groupcache) Fetch(ctx context.Context, keys []string) map[string][]byte
 
 func (c *Groupcache) Name() string {
 	return c.galaxy.Name()
+}
+
+func RegisterCacheStatsCollector(galaxy *galaxycache.Galaxy, reg prometheus.Registerer) {
+	gets := prometheus.NewDesc("thanos_cache_groupcache_get_requests_total", "Total number of get requests, including from peers.", nil, nil)
+	loads := prometheus.NewDesc("thanos_cache_groupcache_loads_total", "Total number of loads from backend (gets - cacheHits).", nil, nil)
+	peerLoads := prometheus.NewDesc("thanos_cache_groupcache_peer_loads_total", "Total number of loads from peers (remote load or remote cache hit).", nil, nil)
+	peerLoadErrors := prometheus.NewDesc("thanos_cache_groupcache_peer_load_errors_total", "Total number of errors from peer loads.", nil, nil)
+	backendLoads := prometheus.NewDesc("thanos_cache_groupcache_backend_loads_total", "Total number of direct backend loads.", nil, nil)
+	backendLoadErrors := prometheus.NewDesc("thanos_cache_groupcache_backend_load_errors_total", "Total number of errors on direct backend loads.", nil, nil)
+	cacheHits := prometheus.NewDesc("thanos_cache_groupcache_hits_total", "Total number of cache hits.", []string{"type"}, nil)
+
+	collector := &CacheStatsCollector{
+		galaxy:            galaxy,
+		gets:              gets,
+		loads:             loads,
+		peerLoads:         peerLoads,
+		peerLoadErrors:    peerLoadErrors,
+		backendLoads:      backendLoads,
+		backendLoadErrors: backendLoadErrors,
+		cacheHits:         cacheHits,
+	}
+	reg.MustRegister(collector)
+}
+
+func (s CacheStatsCollector) Collect(ch chan<- prometheus.Metric) {
+	stats := s.galaxy.Stats
+	ch <- prometheus.MustNewConstMetric(s.gets, prometheus.CounterValue, float64(stats.Gets))
+	ch <- prometheus.MustNewConstMetric(s.loads, prometheus.CounterValue, float64(stats.Loads))
+	ch <- prometheus.MustNewConstMetric(s.peerLoads, prometheus.CounterValue, float64(stats.PeerLoads))
+	ch <- prometheus.MustNewConstMetric(s.peerLoadErrors, prometheus.CounterValue, float64(stats.PeerLoadErrors))
+	ch <- prometheus.MustNewConstMetric(s.backendLoads, prometheus.CounterValue, float64(stats.BackendLoads))
+	ch <- prometheus.MustNewConstMetric(s.backendLoadErrors, prometheus.CounterValue, float64(stats.BackendLoadErrors))
+	ch <- prometheus.MustNewConstMetric(s.cacheHits, prometheus.CounterValue, float64(stats.MaincacheHits), galaxycache.MainCache.String())
+	ch <- prometheus.MustNewConstMetric(s.cacheHits, prometheus.CounterValue, float64(stats.HotcacheHits), galaxycache.HotCache.String())
+}
+
+func (s CacheStatsCollector) Describe(ch chan<- *prometheus.Desc) {
+	prometheus.DescribeByCollect(s, ch)
 }
