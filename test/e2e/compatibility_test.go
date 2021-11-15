@@ -4,7 +4,6 @@
 package e2e_test
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -55,8 +54,8 @@ scrape_configs:
 	testutil.Ok(t, e2e.StartAndWaitReady(prom))
 
 	// Start separate sidecar + Querier
-	sidecar := e2edb.NewThanosSidecar(e, "sidecar", prom)
-	querySidecar := e2edb.NewThanosQuerier(e, "query_sidecar", []string{sidecar.InternalEndpoint("grpc")})
+	sidecar := e2edb.NewThanosSidecar(e, "sidecar", prom, e2edb.WithImage("thanos"))
+	querySidecar := e2edb.NewThanosQuerier(e, "query_sidecar", []string{sidecar.InternalEndpoint("grpc")}, e2edb.WithImage("thanos"))
 	testutil.Ok(t, e2e.StartAndWaitReady(sidecar, querySidecar))
 
 	// Start noop promql-compliance-tester. See https://github.com/prometheus/compliance/tree/main/promql on how to build local docker image.
@@ -73,26 +72,27 @@ scrape_configs:
 		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "receive.yaml"),
 			[]byte(promLabelsPromQLConfig(prom, queryReceive, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
 
-		stdout, stderr, err := compliance.Exec(e2e.NewCommand("-config-file", filepath.Join(compliance.InternalDir(), "receive.yaml")))
+		stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "receive.yaml")))
+		t.Log(stdout, stderr)
 		testutil.Ok(t, err)
-		fmt.Println(stdout, stderr)
 	})
 	t.Run("sidecar", func(t *testing.T) {
 		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "sidecar.yaml"),
 			[]byte(promLabelsPromQLConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
 
-		stdout, stderr, err := compliance.Exec(e2e.NewCommand("-config-file", filepath.Join(compliance.InternalDir(), "sidecar.yaml")))
+		stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "sidecar.yaml")))
+		t.Log(stdout, stderr)
 		testutil.Ok(t, err)
-		fmt.Println(stdout, stderr)
+
 	})
 }
 
 func promLabelsPromQLConfig(reference *e2edb.Prometheus, target e2e.Runnable, dropLabels []string) string {
 	return `reference_target_config:
-  query_url: '` + reference.InternalEndpoint("http") + `'
+  query_url: 'http://` + reference.InternalEndpoint("http") + `'
 
 test_target_config:
-  query_url: '` + target.InternalEndpoint("http") + `'
+  query_url: 'http://` + target.InternalEndpoint("http") + `'
 
 query_tweaks:
   - note: 'Thanos requires adding "external_labels" to distinguish Prometheus servers, leading to extra labels in query results that need to be stripped before comparing results.'
@@ -100,7 +100,7 @@ query_tweaks:
     drop_result_labels:
 ` + func() (ret string) {
 		for _, l := range dropLabels {
-			ret += `      - ` + l
+			ret += `      - ` + l + "\n"
 		}
 		return ret
 	}()
