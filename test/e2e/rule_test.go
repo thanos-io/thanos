@@ -98,6 +98,21 @@ groups:
     annotations:
       summary: "I always complain and I have been loaded via sighup signal."
 `
+	testAlertRuleWithLimit = `
+groups:
+- name: example_with_limit
+  interval: 1s
+  limit: 1
+  partial_response_strategy: "WARN"
+  rules:
+  - alert: TestAlert_WithLimit
+    expr: up
+    labels:
+      severity: page
+    annotations:
+      summary: "with limit"
+`
+
 	testRuleRecordAbsentMetric = `
 groups:
 - name: example_record_rules

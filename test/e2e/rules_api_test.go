@@ -42,7 +42,8 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	thanosRulesSubDir := filepath.Join("thanos-rules")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), thanosRulesSubDir), os.ModePerm))
 	createRuleFiles(t, filepath.Join(e.SharedDir(), thanosRulesSubDir))
-
+	// We create a rule group with limit.
+	createRuleFile(t, filepath.Join(e.SharedDir(), thanosRulesSubDir, "rules-with-limit.yaml"), testAlertRuleWithLimit)
 	// 2x Prometheus.
 	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
 		e,
@@ -129,6 +130,21 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_WarnOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+						{Name: "severity", Value: "page"},
+					}},
+				}),
+			},
+		},
+		{
+			Name:  "example_with_limit",
+			File:  "/shared/thanos-rules/rules-with-limit.yaml",
+			Limit: 1,
+			Rules: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:  "TestAlert_WithLimit",
+					State: rulespb.AlertState_FIRING,
+					Query: "up",
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
