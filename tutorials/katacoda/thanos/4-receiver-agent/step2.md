@@ -51,7 +51,7 @@ docker run -d --net=host --rm \
 -v /root/prom-batmobile-data:/prometheus \
 -u root \
 --name prom-agent-batmobile \
-quay.io/prometheus/prometheus:main \
+quay.io/prometheus/prometheus:v2.32.0-beta.0 \
 --enable-feature=agent \
 --config.file=/etc/prometheus/prometheus.yaml \
 --storage.agent.path=/prometheus \
@@ -90,7 +90,7 @@ docker run -d --net=host --rm \
 -v /root/prom-batcopter-data:/prometheus \
 -u root \
 --name prom-agent-batcopter \
-quay.io/prometheus/prometheus:main \
+quay.io/prometheus/prometheus:v2.32.0-beta.0 \
 --enable-feature=agent \
 --config.file=/etc/prometheus/prometheus.yaml \
 --storage.agent.path=/prometheus \

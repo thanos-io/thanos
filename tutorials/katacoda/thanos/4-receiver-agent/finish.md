@@ -16,7 +16,7 @@ See next courses for other tutorials about different deployment models and more 
 
 ## Further Reading
 
-TBD
+* [Prometheus Blog Post](https://prometheus.io/blog/2021/11/16/agent/)
 
 ### Feedback
 
