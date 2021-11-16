@@ -397,17 +397,17 @@ func runQuery(
 		}
 	}
 
-	dnsEndpointProvider := dns.NewProvider(
-		logger,
-		extprom.WrapRegistererWithPrefix("thanos_query_endpoints_", reg),
-		dns.ResolverType(dnsSDResolver),
-	)
-
 	for _, endpoint := range strictEndpoints {
 		if dns.IsDynamicNode(endpoint) {
 			return errors.Errorf("%s is a dynamically specified endpoint i.e. it uses SD and that is not permitted under strict mode. Use --endpoint for this", endpoint)
 		}
 	}
+
+	dnsEndpointProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_query_endpoints_", reg),
+		dns.ResolverType(dnsSDResolver),
+	)
 
 	dnsRuleProvider := dns.NewProvider(
 		logger,
