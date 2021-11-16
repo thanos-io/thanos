@@ -51,10 +51,10 @@ docker run -d --net=host --rm \
 -v /root/prom-batmobile-data:/prometheus \
 -u root \
 --name prom-agent-batmobile \
-quay.io/bwplotka/prometheus:agent1 \
---agent \
+quay.io/prometheus/prometheus:v2.32.0-beta.0 \
+--enable-feature=agent \
 --config.file=/etc/prometheus/prometheus.yaml \
---storage.tsdb.path=/prometheus \
+--storage.agent.path=/prometheus \
 --web.listen-address=:9090
 ```{{execute}}
 
@@ -90,10 +90,10 @@ docker run -d --net=host --rm \
 -v /root/prom-batcopter-data:/prometheus \
 -u root \
 --name prom-agent-batcopter \
-quay.io/bwplotka/prometheus:agent1 \
---agent \
+quay.io/prometheus/prometheus:v2.32.0-beta.0 \
+--enable-feature=agent \
 --config.file=/etc/prometheus/prometheus.yaml \
---storage.tsdb.path=/prometheus \
+--storage.agent.path=/prometheus \
 --web.listen-address=:9091
 ```{{execute}}
 
