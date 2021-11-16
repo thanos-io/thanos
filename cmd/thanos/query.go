@@ -121,8 +121,11 @@ func registerQuery(app *extkingpin.App) {
 	targetEndpoints := cmd.Flag("target", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured target API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect target API servers through respective DNS lookups.").
 		Hidden().PlaceHolder("<target>").Strings()
 
-	strictStores := cmd.Flag("store-strict", "Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
+	strictStores := cmd.Flag("store-strict", "Deprecation Warning - This flag is deprecated and replaced with `endpoint-strict`. Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
 		PlaceHolder("<staticstore>").Strings()
+
+	strictEndpoints := cmd.Flag("endpoint-strict", "Addresses of only statically configured Thanos API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
+		PlaceHolder("<staticendpoint>").Strings()
 
 	fileSDFiles := cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
@@ -288,6 +291,7 @@ func registerQuery(app *extkingpin.App) {
 			time.Duration(*instantDefaultMaxSourceResolution),
 			*defaultMetadataTimeRange,
 			*strictStores,
+			*strictEndpoints,
 			*webDisableCORS,
 			enableAtModifier,
 			enableNegativeOffset,
@@ -355,6 +359,7 @@ func runQuery(
 	instantDefaultMaxSourceResolution time.Duration,
 	defaultMetadataTimeRange time.Duration,
 	strictStores []string,
+	strictEndpoints []string,
 	disableCORS bool,
 	enableAtModifier bool,
 	enableNegativeOffset bool,
@@ -398,6 +403,12 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
+	for _, endpoint := range strictEndpoints {
+		if dns.IsDynamicNode(endpoint) {
+			return errors.Errorf("%s is a dynamically specified endpoint i.e. it uses SD and that is not permitted under strict mode. Use --endpoint for this", endpoint)
+		}
+	}
+
 	dnsRuleProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_query_rule_apis_", reg),
@@ -429,6 +440,10 @@ func runQuery(
 			func() (specs []query.EndpointSpec) {
 				// Add strict & static nodes.
 				for _, addr := range strictStores {
+					specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
+				}
+
+				for _, addr := range strictEndpoints {
 					specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
 				}
 
