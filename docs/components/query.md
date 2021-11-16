@@ -263,6 +263,11 @@ Flags:
                                  prefixed with 'dns+' or 'dnssrv+' to detect
                                  Thanos API servers through respective DNS
                                  lookups.
+      --endpoint-strict=<staticendpoint> ...  
+                                 Addresses of only statically configured Thanos
+                                 API servers that are always used, even if the
+                                 health check fails. Useful if you have a
+                                 caching layer on top.
       --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -382,10 +387,12 @@ Flags:
                                  'dns+' or 'dnssrv+' to detect store API servers
                                  through respective DNS lookups.
       --store-strict=<staticstore> ...  
-                                 Addresses of only statically configured store
-                                 API servers that are always used, even if the
-                                 health check fails. Useful if you have a
-                                 caching layer on top.
+                                 Deprecation Warning - This flag is deprecated
+                                 and replaced with `endpoint-strict`. Addresses
+                                 of only statically configured store API servers
+                                 that are always used, even if the health check
+                                 fails. Useful if you have a caching layer on
+                                 top.
       --store.response-timeout=0ms  
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored
