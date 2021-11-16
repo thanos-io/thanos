@@ -604,7 +604,7 @@ func checkNetworkRequests(t *testing.T, addr string) {
 	}))
 }
 
-func mustURLParse(t *testing.T, addr string) *url.URL {
+func mustURLParse(t testing.TB, addr string) *url.URL {
 	u, err := url.Parse(addr)
 	testutil.Ok(t, err)
 

@@ -53,7 +53,7 @@ func exec(cmd string, args ...string) error {
 func createData() (perr error) {
 	profile := os.Getenv("BLOCK_PROFILE")
 	if profile == "" {
-		profile = defaultProfile
+		profile = defaultProfile //	Use "continuous-1w-1series-10000apps" if you have ~10GB of memory for creation phase.
 	}
 
 	fmt.Println("Re-creating data (can take minutes)...")
@@ -66,16 +66,16 @@ func createData() (perr error) {
 	if err := exec(
 		"sh", "-c",
 		fmt.Sprintf("mkdir -p %s && "+
-			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p %s --labels 'cluster=\"eu-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
-			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", store1Data, profile, maxTimeOld, store1Data),
+			"docker run -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block plan -p %s --labels 'cluster=\"eu-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block gen --output.dir /shared", store1Data, profile, maxTimeOld, store1Data),
 	); err != nil {
 		return err
 	}
 	if err := exec(
 		"sh", "-c",
 		fmt.Sprintf("mkdir -p %s && "+
-			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p %s --labels 'cluster=\"us-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
-			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", store2Data, profile, maxTimeOld, store2Data),
+			"docker run -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block plan -p %s --labels 'cluster=\"us-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block gen --output.dir /shared", store2Data, profile, maxTimeOld, store2Data),
 	); err != nil {
 		return err
 	}
@@ -83,16 +83,16 @@ func createData() (perr error) {
 	if err := exec(
 		"sh", "-c",
 		fmt.Sprintf("mkdir -p %s && "+
-			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p %s --max-time=%s | "+
-			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", prom1Data, profile, maxTimeFresh, prom1Data),
+			"docker run -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block plan -p %s --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block gen --output.dir /shared", prom1Data, profile, maxTimeFresh, prom1Data),
 	); err != nil {
 		return err
 	}
 	if err := exec(
 		"sh", "-c",
 		fmt.Sprintf("mkdir -p %s && "+
-			"docker run -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block plan -p %s --max-time=%s | "+
-			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.2.0-rc.1 block gen --output.dir /shared", prom2Data, profile, maxTimeFresh, prom2Data),
+			"docker run -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block plan -p %s --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block gen --output.dir /shared", prom2Data, profile, maxTimeFresh, prom2Data),
 	); err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func createData() (perr error) {
 }
 
 // TestReadOnlyThanosSetup runs read only Thanos setup that has data from `maxTimeFresh - 2w` to `maxTimeOld`, with extra monitoring and tracing for full playground experience.
-// Run with test args `-test.timeout 9999m`.
+// Run with test args `-timeout 9999m`.
 func TestReadOnlyThanosSetup(t *testing.T) {
 	t.Skip("This is interactive test - it will run until you will kill it or curl 'finish' endpoint. Comment and run as normal test to use it!")
 
@@ -181,7 +181,10 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 		"store1",
 		bkt1Config,
 		e2edb.WithImage("thanos:latest"),
-		e2edb.WithFlagOverride(map[string]string{"--tracing.config": string(jaegerConfig)}),
+		e2edb.WithFlagOverride(map[string]string{
+			"--tracing.config":    string(jaegerConfig),
+			"--consistency-delay": "0s",
+		}),
 	)
 
 	bkt2Config, err := yaml.Marshal(client.BucketConfig{
@@ -201,7 +204,10 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 		"store2",
 		bkt2Config,
 		e2edb.WithImage("thanos:latest"),
-		e2edb.WithFlagOverride(map[string]string{"--tracing.config": string(jaegerConfig)}),
+		e2edb.WithFlagOverride(map[string]string{
+			"--tracing.config":    string(jaegerConfig),
+			"--consistency-delay": "0s",
+		}),
 	)
 
 	// Create two Prometheus replicas in HA, and one separate one (short term storage + scraping).
@@ -327,7 +333,7 @@ global:
 	// Wait until we have 5 gRPC connections.
 	testutil.Ok(t, query1.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-	const path = "graph?g0.expr=sum(continuous_app_metric99)%20by%20(cluster%2C%20replica)&g0.tab=0&g0.stacked=0&g0.range_input=2w&g0.max_source_resolution=0s&g0.deduplicate=0&g0.partial_response=0&g0.store_matches=%5B%5D&g0.end_input=2021-07-27%2000%3A00%3A00"
+	const path = "graph?g0.expr=sum(continuous_app_metric0)%20by%20(cluster%2C%20replica)&g0.tab=0&g0.stacked=0&g0.range_input=2w&g0.max_source_resolution=0s&g0.deduplicate=0&g0.partial_response=0&g0.store_matches=%5B%5D&g0.end_input=2021-07-27%2000%3A00%3A00"
 	testutil.Ok(t, e2einteractive.OpenInBrowser(fmt.Sprintf("http://%s/%s", query1.Endpoint("http"), path)))
 	testutil.Ok(t, e2einteractive.OpenInBrowser(fmt.Sprintf("http://%s/%s", prom2.Endpoint("http"), path)))
 
