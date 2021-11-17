@@ -478,7 +478,11 @@ metafile_content_ttl: 0s`
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(store3))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", store1.InternalEndpoint("grpc")).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1",
+		store1.InternalEndpoint("grpc"),
+		store2.InternalEndpoint("grpc"),
+		store3.InternalEndpoint("grpc"),
+	).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -509,14 +513,18 @@ metafile_content_ttl: 0s`
 
 	// Wait for store to sync blocks.
 	// thanos_blocks_meta_synced: 1x loadedMeta 0x labelExcludedMeta 0x TooFreshMeta.
-	testutil.Ok(t, store1.WaitSumMetrics(e2e.Equals(1), "thanos_blocks_meta_synced"))
-	testutil.Ok(t, store1.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
+	for _, st := range []*e2e.InstrumentedRunnable{store1, store2, store3} {
+		t.Run(st.Name(), func(t *testing.T) {
+			testutil.Ok(t, st.WaitSumMetrics(e2e.Equals(1), "thanos_blocks_meta_synced"))
+			testutil.Ok(t, st.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
-	testutil.Ok(t, store1.WaitSumMetrics(e2e.Equals(1), "thanos_bucket_store_blocks_loaded"))
-	testutil.Ok(t, store1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_drops_total"))
-	testutil.Ok(t, store1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
+			testutil.Ok(t, st.WaitSumMetrics(e2e.Equals(1), "thanos_bucket_store_blocks_loaded"))
+			testutil.Ok(t, st.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_drops_total"))
+			testutil.Ok(t, st.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
+		})
+	}
 
-	t.Run("query with cache miss", func(t *testing.T) {
+	t.Run("query with groupcache loading from object storage", func(t *testing.T) {
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
@@ -531,10 +539,17 @@ metafile_content_ttl: 0s`
 			},
 		)
 
-		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_cache_groupcache_loads_total`}))
+		for _, st := range []*e2e.InstrumentedRunnable{store1, store2, store3} {
+			testutil.Ok(t, st.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_cache_groupcache_loads_total`}))
+			testutil.Ok(t, st.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_store_bucket_cache_operation_hits_total`}, e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "config", "chunks"))))
+		}
 	})
 
 	t.Run("query with cache hit", func(t *testing.T) {
+		retrievedMetrics, err := store1.SumMetrics([]string{`thanos_cache_groupcache_hits_total`, `thanos_cache_groupcache_loads_total`})
+		testutil.Ok(t, err)
+		testutil.Assert(t, len(retrievedMetrics) == 2)
+
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
@@ -549,6 +564,7 @@ metafile_content_ttl: 0s`
 			},
 		)
 
-		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_cache_groupcache_hits_total`}))
+		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Greater(retrievedMetrics[0]), []string{`thanos_cache_groupcache_hits_total`}))
+		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Equals(retrievedMetrics[1]), []string{`thanos_cache_groupcache_loads_total`}))
 	})
 }

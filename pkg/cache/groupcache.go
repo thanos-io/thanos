@@ -26,19 +26,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type CacheStatsCollector struct {
-	galaxy *galaxycache.Galaxy
-
-	// GalaxyCache Metric descriptions.
-	gets              *prometheus.Desc
-	loads             *prometheus.Desc
-	peerLoads         *prometheus.Desc
-	peerLoadErrors    *prometheus.Desc
-	backendLoads      *prometheus.Desc
-	backendLoadErrors *prometheus.Desc
-	cacheHits         *prometheus.Desc
-}
-
 type Groupcache struct {
 	galaxy   *galaxycache.Galaxy
 	universe *galaxycache.Universe
@@ -102,17 +89,16 @@ func NewGroupcache(logger log.Logger, reg prometheus.Registerer, conf []byte, ba
 
 // NewGroupcacheWithConfig creates a new Groupcache instance with the given config.
 func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf GroupcacheConfig, basepath string, r *route.Router, bucket objstore.Bucket) (*Groupcache, error) {
-	dnsGroupcacheProvider := dns.NewProvider(
-		logger,
-		extprom.WrapRegistererWithPrefix("thanos_store_groupcache_", reg),
-		dns.ResolverType(conf.DNSSDResolver),
-	)
-
 	httpProto := galaxyhttp.NewHTTPFetchProtocol(&galaxyhttp.HTTPOptions{
 		BasePath: basepath,
 	})
 	universe := galaxycache.NewUniverse(httpProto, conf.SelfURL)
 
+	dnsGroupcacheProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_store_groupcache_", reg),
+		dns.ResolverType(conf.DNSSDResolver),
+	)
 	ticker := time.NewTicker(conf.DNSInterval)
 
 	go func() {
@@ -208,7 +194,6 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 		},
 	))
 
-	// Register GalaxyCache stats.
 	RegisterCacheStatsCollector(galaxy, reg)
 
 	return &Groupcache{
@@ -245,6 +230,20 @@ func (c *Groupcache) Name() string {
 	return c.galaxy.Name()
 }
 
+type CacheStatsCollector struct {
+	galaxy *galaxycache.Galaxy
+
+	// GalaxyCache Metric descriptions.
+	gets              *prometheus.Desc
+	loads             *prometheus.Desc
+	peerLoads         *prometheus.Desc
+	peerLoadErrors    *prometheus.Desc
+	backendLoads      *prometheus.Desc
+	backendLoadErrors *prometheus.Desc
+	cacheHits         *prometheus.Desc
+}
+
+// RegisterCacheStatsCollector registers a groupcache metrics collector.
 func RegisterCacheStatsCollector(galaxy *galaxycache.Galaxy, reg prometheus.Registerer) {
 	gets := prometheus.NewDesc("thanos_cache_groupcache_get_requests_total", "Total number of get requests, including from peers.", nil, nil)
 	loads := prometheus.NewDesc("thanos_cache_groupcache_loads_total", "Total number of loads from backend (gets - cacheHits).", nil, nil)
