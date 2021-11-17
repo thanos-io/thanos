@@ -11,7 +11,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
     },
   },
   grafanaDashboards+:: {
-    [if thanos.bucketReplicate != null then 'bucketReplicate.json']:
+    [if thanos.bucketReplicate != null then 'bucket_replicate.json']:
       g.dashboard(thanos.bucketReplicate.title)
       .addRow(
         g.row('Bucket Replicate Runs')

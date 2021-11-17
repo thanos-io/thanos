@@ -12,4 +12,17 @@
   },
 
   joinLabels(labels): std.join(', ', std.filter(function(x) std.length(std.stripChars(x, ' ')) > 0, labels)),
+
+  firstCharUppercase(parts): std.join(
+    '',
+    [
+      std.join(
+        '',
+        [std.asciiUpper(std.stringChars(part)[0]), std.substr(part, 1, std.length(part) - 1)]
+      )
+      for part in parts[1:std.length(parts)]
+    ]
+  ),
+
+  toCamelCase(parts): std.join('', [parts[0], self.firstCharUppercase(parts)]),
 }
