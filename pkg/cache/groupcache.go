@@ -235,7 +235,9 @@ func (c *Groupcache) Fetch(ctx context.Context, keys []string) map[string][]byte
 			continue
 		}
 
-		data[k] = codec
+		if len(codec) > 0 {
+			data[k] = codec
+		}
 	}
 
 	return data
