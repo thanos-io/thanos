@@ -154,14 +154,21 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 				if err != nil {
 					return err
 				}
-				err = dest.UnmarshalBinary(finalAttrs)
+				return dest.UnmarshalBinary(finalAttrs)
+			case cachekey.IterVerb:
+				var list []string
+				if err := bucket.Iter(ctx, parsedData.Name, func(s string) error {
+					list = append(list, s)
+					return nil
+				}); err != nil {
+					return err
+				}
+
+				encodedList, err := json.Marshal(list)
 				if err != nil {
 					return err
 				}
-			case cachekey.IterVerb:
-				// Not supported.
-
-				return nil
+				return dest.UnmarshalBinary(encodedList)
 			case cachekey.ContentVerb:
 				rc, err := bucket.Get(ctx, parsedData.Name)
 				if err != nil {
@@ -174,20 +181,14 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 					return err
 				}
 
-				err = dest.UnmarshalBinary(b)
-				if err != nil {
-					return err
-				}
+				return dest.UnmarshalBinary(b)
 			case cachekey.ExistsVerb:
 				exists, err := bucket.Exists(ctx, parsedData.Name)
 				if err != nil {
 					return err
 				}
 
-				err = dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)))
-				if err != nil {
-					return err
-				}
+				return dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)))
 			case cachekey.SubrangeVerb:
 				rc, err := bucket.GetRange(ctx, parsedData.Name, parsedData.Start, parsedData.End-parsedData.Start)
 				if err != nil {
@@ -200,10 +201,7 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 					return err
 				}
 
-				err = dest.UnmarshalBinary(b)
-				if err != nil {
-					return err
-				}
+				return dest.UnmarshalBinary(b)
 			}
 
 			return nil
