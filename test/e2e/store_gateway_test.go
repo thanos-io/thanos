@@ -532,7 +532,6 @@ metafile_content_ttl: 0s`
 		)
 
 		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_cache_groupcache_loads_total`}))
-		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Equals(0), []string{`thanos_cache_groupcache_hits_total`}))
 	})
 
 	t.Run("query with cache hit", func(t *testing.T) {

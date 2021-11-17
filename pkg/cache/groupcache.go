@@ -267,18 +267,17 @@ func RegisterCacheStatsCollector(galaxy *galaxycache.Galaxy, reg prometheus.Regi
 	reg.MustRegister(collector)
 }
 
-func (s CacheStatsCollector) Collect(ch chan<- prometheus.Metric) {
-	stats := s.galaxy.Stats
-	ch <- prometheus.MustNewConstMetric(s.gets, prometheus.CounterValue, float64(stats.Gets))
-	ch <- prometheus.MustNewConstMetric(s.loads, prometheus.CounterValue, float64(stats.Loads))
-	ch <- prometheus.MustNewConstMetric(s.peerLoads, prometheus.CounterValue, float64(stats.PeerLoads))
-	ch <- prometheus.MustNewConstMetric(s.peerLoadErrors, prometheus.CounterValue, float64(stats.PeerLoadErrors))
-	ch <- prometheus.MustNewConstMetric(s.backendLoads, prometheus.CounterValue, float64(stats.BackendLoads))
-	ch <- prometheus.MustNewConstMetric(s.backendLoadErrors, prometheus.CounterValue, float64(stats.BackendLoadErrors))
-	ch <- prometheus.MustNewConstMetric(s.cacheHits, prometheus.CounterValue, float64(stats.MaincacheHits), galaxycache.MainCache.String())
-	ch <- prometheus.MustNewConstMetric(s.cacheHits, prometheus.CounterValue, float64(stats.HotcacheHits), galaxycache.HotCache.String())
+func (s *CacheStatsCollector) Collect(ch chan<- prometheus.Metric) {
+	ch <- prometheus.MustNewConstMetric(s.gets, prometheus.CounterValue, float64(s.galaxy.Stats.Gets.Get()))
+	ch <- prometheus.MustNewConstMetric(s.loads, prometheus.CounterValue, float64(s.galaxy.Stats.Loads.Get()))
+	ch <- prometheus.MustNewConstMetric(s.peerLoads, prometheus.CounterValue, float64(s.galaxy.Stats.PeerLoads.Get()))
+	ch <- prometheus.MustNewConstMetric(s.peerLoadErrors, prometheus.CounterValue, float64(s.galaxy.Stats.PeerLoadErrors.Get()))
+	ch <- prometheus.MustNewConstMetric(s.backendLoads, prometheus.CounterValue, float64(s.galaxy.Stats.BackendLoads.Get()))
+	ch <- prometheus.MustNewConstMetric(s.backendLoadErrors, prometheus.CounterValue, float64(s.galaxy.Stats.BackendLoadErrors.Get()))
+	ch <- prometheus.MustNewConstMetric(s.cacheHits, prometheus.CounterValue, float64(s.galaxy.Stats.MaincacheHits.Get()), galaxycache.MainCache.String())
+	ch <- prometheus.MustNewConstMetric(s.cacheHits, prometheus.CounterValue, float64(s.galaxy.Stats.HotcacheHits.Get()), galaxycache.HotCache.String())
 }
 
-func (s CacheStatsCollector) Describe(ch chan<- *prometheus.Desc) {
+func (s *CacheStatsCollector) Describe(ch chan<- *prometheus.Desc) {
 	prometheus.DescribeByCollect(s, ch)
 }
