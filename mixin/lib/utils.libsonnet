@@ -28,5 +28,5 @@
 
   componentParts(name): std.split(name, '_'),
 
-  sanitizeComponent(name): if std.length(self.componentParts(name)) > 1 then self.toCamelCase(self.componentParts(name)) else name,
+  sanitizeComponentName(name): if std.length(self.componentParts(name)) > 1 then self.toCamelCase(self.componentParts(name)) else name,
 }
