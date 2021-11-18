@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/rules"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -563,6 +564,7 @@ config:
 									{Name: "prometheus", Value: "p1"},
 									{Name: "severity", Value: "page"},
 								}},
+								Health: string(rules.HealthGood),
 							}),
 						},
 					},

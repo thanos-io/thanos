@@ -102,11 +102,11 @@ groups:
 groups:
 - name: example_with_limit
   interval: 1s
-  limit: 1
   partial_response_strategy: "WARN"
+  limit: 1
   rules:
   - alert: TestAlert_WithLimit
-    expr: up
+    expr: 'promhttp_metric_handler_requests_total' # It has more than one labels.
     labels:
       severity: page
     annotations:

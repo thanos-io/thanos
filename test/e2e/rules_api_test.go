@@ -16,6 +16,7 @@ import (
 	"github.com/efficientgo/e2e"
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/rules"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -105,6 +106,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
 					}},
+					Health: string(rules.HealthGood),
 				}),
 			},
 		},
@@ -119,6 +121,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
+					Health: string(rules.HealthGood),
 				}),
 			},
 		},
@@ -133,6 +136,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
+					Health: string(rules.HealthGood),
 				}),
 			},
 		},
@@ -143,11 +147,12 @@ func TestRulesAPI_Fanout(t *testing.T) {
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_WithLimit",
-					State: rulespb.AlertState_FIRING,
-					Query: "up",
+					State: rulespb.AlertState_INACTIVE,
+					Query: `promhttp_metric_handler_requests_total`,
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
+					Health: string(rules.HealthBad),
 				}),
 			},
 		},
@@ -191,12 +196,14 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 						State:  alert.State,
 						Query:  alert.Query,
 						Labels: alert.Labels,
+						Health: alert.Health,
 					})
 				} else if rec := r.GetRecording(); rec != nil {
 					res[ig].Rules[ir] = rulespb.NewAlertingRule(&rulespb.Alert{
 						Name:   rec.Name,
 						Query:  rec.Query,
 						Labels: rec.Labels,
+						Health: rec.Health,
 					})
 				}
 			}
