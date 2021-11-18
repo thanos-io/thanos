@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/exemplar"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -23,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"gopkg.in/yaml.v3"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -385,9 +387,7 @@ groups:
 	// We need to run the underlying rule managers to update them more than
 	// once (otherwise there's a deadlock).
 	thanosRuleMgr.Run()
-	defer func() {
-		thanosRuleMgr.Stop()
-	}()
+	t.Cleanup(thanosRuleMgr.Stop)
 
 	err = thanosRuleMgr.Update(1*time.Second, []string{
 		filepath.Join(dir, "no_strategy.yaml"),
@@ -403,11 +403,12 @@ groups:
 func TestManagerRunRulesWithRuleGroupLimit(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test_rule_rule_groups")
 	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	t.Cleanup(func() { testutil.Ok(t, os.RemoveAll(dir)) })
 	filename := filepath.Join(dir, "with_limit.yaml")
 	testutil.Ok(t, ioutil.WriteFile(filename, []byte(`
 groups:
 - name: "something1"
+  interval: 1ms
   limit: 1
   rules:
   - alert: "some"
@@ -441,14 +442,17 @@ groups:
 		"http://localhost",
 	)
 	thanosRuleMgr.Run()
-	defer func() {
-		thanosRuleMgr.Stop()
-	}()
+	t.Cleanup(thanosRuleMgr.Stop)
 	testutil.Ok(t, thanosRuleMgr.Update(time.Millisecond, []string{filename}))
 	testutil.Equals(t, 1, len(thanosRuleMgr.protoRuleGroups()))
 	testutil.Equals(t, 1, len(thanosRuleMgr.protoRuleGroups()[0].Rules))
-	testutil.Equals(t, string(rules.HealthUnknown), thanosRuleMgr.protoRuleGroups()[0].Rules[0].GetAlert().Health)
-	time.Sleep(time.Millisecond * 2)
-	testutil.Equals(t, string(rules.HealthBad), thanosRuleMgr.protoRuleGroups()[0].Rules[0].GetAlert().Health)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	testutil.Ok(t, runutil.Retry(time.Millisecond, ctx.Done(), func() error {
+		if thanosRuleMgr.protoRuleGroups()[0].Rules[0].GetAlert().Health != string(rules.HealthBad) {
+			return errors.New("expect HealthBad")
+		}
+		return nil
+	}))
 	testutil.Equals(t, "exceeded limit of 1 with 2 alerts", thanosRuleMgr.protoRuleGroups()[0].Rules[0].GetAlert().LastError)
 }
