@@ -25,4 +25,8 @@
   ),
 
   toCamelCase(parts): std.join('', [parts[0], self.firstCharUppercase(parts)]),
+
+  componentParts(name): std.split(name, '_'),
+
+  sanitizeComponent(name): if std.length(self.componentParts(name)) > 1 then self.toCamelCase(self.componentParts(name)) else name,
 }
