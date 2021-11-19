@@ -12,9 +12,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/relabel"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/prometheus/prometheus/model/relabel"
 	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 )

@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"

@@ -16,7 +16,7 @@ import (
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexutil "github.com/cortexproject/cortex/pkg/util"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/weaveworks/common/httpgrpc"

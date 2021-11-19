@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/prometheus/storage"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 
 	"github.com/go-kit/kit/log"
@@ -21,10 +23,11 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
+
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -563,7 +566,7 @@ func rewrite(
 	var (
 		postings = index.NewMemPostings()
 		values   = map[string]stringset{}
-		i        = uint64(0)
+		i        = storage.SeriesRef(0)
 		series   = []seriesRepair{}
 	)
 

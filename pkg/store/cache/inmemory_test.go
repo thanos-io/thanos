@@ -16,7 +16,9 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/storage"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -119,19 +121,19 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
-	uid := func(id uint64) ulid.ULID { return ulid.MustNew(id, nil) }
+	uid := func(id storage.SeriesRef) ulid.ULID { return ulid.MustNew(uint64(id), nil) }
 	lbl := labels.Label{Name: "foo", Value: "bar"}
 	ctx := context.Background()
 
 	for _, tt := range []struct {
 		typ string
-		set func(uint64, []byte)
-		get func(uint64) ([]byte, bool)
+		set func(storage.SeriesRef, []byte)
+		get func(storage.SeriesRef) ([]byte, bool)
 	}{
 		{
 			typ: cacheTypePostings,
-			set: func(id uint64, b []byte) { cache.StorePostings(ctx, uid(id), lbl, b) },
-			get: func(id uint64) ([]byte, bool) {
+			set: func(id storage.SeriesRef, b []byte) { cache.StorePostings(ctx, uid(id), lbl, b) },
+			get: func(id storage.SeriesRef) ([]byte, bool) {
 				hits, _ := cache.FetchMultiPostings(ctx, uid(id), []labels.Label{lbl})
 				b, ok := hits[lbl]
 
@@ -140,9 +142,9 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 		},
 		{
 			typ: cacheTypeSeries,
-			set: func(id uint64, b []byte) { cache.StoreSeries(ctx, uid(id), id, b) },
-			get: func(id uint64) ([]byte, bool) {
-				hits, _ := cache.FetchMultiSeries(ctx, uid(id), []uint64{id})
+			set: func(id storage.SeriesRef, b []byte) { cache.StoreSeries(ctx, uid(id), id, b) },
+			get: func(id storage.SeriesRef) ([]byte, bool) {
+				hits, _ := cache.FetchMultiSeries(ctx, uid(id), []storage.SeriesRef{id})
 				b, ok := hits[id]
 
 				return b, ok
@@ -287,7 +289,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings)))
 	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
 
-	sHits, sMisses := cache.FetchMultiSeries(ctx, id, []uint64{1234})
+	sHits, sMisses := cache.FetchMultiSeries(ctx, id, []storage.SeriesRef{1234})
 	testutil.Equals(t, map[uint64][]byte{1234: {222, 223, 224}}, sHits, "key exists")
 	testutil.Equals(t, emptySeriesMisses, sMisses)
 
@@ -317,7 +319,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, emptyPostingsHits, pHits, "no such key")
 	testutil.Equals(t, []labels.Label{lbls}, pMisses)
 
-	sHits, sMisses = cache.FetchMultiSeries(ctx, id, []uint64{1234})
+	sHits, sMisses = cache.FetchMultiSeries(ctx, id, []storage.SeriesRef{1234})
 	testutil.Equals(t, emptySeriesHits, sHits, "no such key")
 	testutil.Equals(t, []uint64{1234}, sMisses)
 
