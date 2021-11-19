@@ -5,12 +5,12 @@ There exists Grafana dashboards for each component (not all of them complete) ta
 - [Thanos Overview](overview.json)
 - [Thanos Compact](compact.json)
 - [Thanos Querier](query.json)
-- [Thanos Query Frontend](query_frontend.json)
+- [Thanos Query Frontend](query-frontend.json)
 - [Thanos Store](store.json)
 - [Thanos Receiver](receive.json)
 - [Thanos Sidecar](sidecar.json)
 - [Thanos Ruler](rule.json)
-- [Thanos Replicate](bucket_replicate.json)
+- [Thanos Replicate](bucket-replicate.json)
 
 You can import them via `Import -> Paste JSON` in Grafana. These dashboards require Grafana 5 or above, importing them in older versions are known not to work.
 

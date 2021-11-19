@@ -43,7 +43,7 @@ In the code and documentation prefer non-offensive terminology, for example:
 
 Thanos is a distributed system comprised of several services and CLI tools as listed [here](cmd/thanos).
 
-When we refer to them in a technical capacity we use the verbal form: `store`, `compact`, `rule`, `query`, `query_frontend`. This includes:
+When we refer to them in a technical capacity we use the verbal form: `store`, `compact`, `rule`, `query`, `query-frontend`. This includes:
 
 * Code
 * Metrics
