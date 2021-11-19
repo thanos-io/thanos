@@ -220,8 +220,8 @@ func (f *fakeAppendable) Appender(_ context.Context) (storage.Appender, error) {
 
 type fakeAppender struct {
 	sync.Mutex
-	samples     map[uint64][]prompb.Sample
-	exemplars   map[uint64][]exemplar.Exemplar
+	samples     map[storage.SeriesRef][]prompb.Sample
+	exemplars   map[storage.SeriesRef][]exemplar.Exemplar
 	appendErr   func() error
 	commitErr   func() error
 	rollbackErr func() error
@@ -241,7 +241,7 @@ func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppend
 		rollbackErr = nilErrFn
 	}
 	return &fakeAppender{
-		samples:     make(map[uint64][]prompb.Sample),
+		samples:     make(map[storage.SeriesRef][]prompb.Sample),
 		appendErr:   appendErr,
 		commitErr:   commitErr,
 		rollbackErr: rollbackErr,
@@ -251,34 +251,34 @@ func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppend
 func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
 	f.Lock()
 	defer f.Unlock()
-	s := f.samples[l.Hash()]
+	s := f.samples[storage.SeriesRef(l.Hash())]
 	res := make([]prompb.Sample, len(s))
 	copy(res, s)
 	return res
 }
 
-func (f *fakeAppender) Append(ref uint64, l labels.Labels, t int64, v float64) (uint64, error) {
+func (f *fakeAppender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
 	f.Lock()
 	defer f.Unlock()
 	if ref == 0 {
-		ref = l.Hash()
+		ref = storage.SeriesRef(l.Hash())
 	}
 	f.samples[ref] = append(f.samples[ref], prompb.Sample{Timestamp: t, Value: v})
 	return ref, f.appendErr()
 }
 
-func (f *fakeAppender) AppendExemplar(ref uint64, l labels.Labels, e exemplar.Exemplar) (uint64, error) {
+func (f *fakeAppender) AppendExemplar(ref storage.SeriesRef, l labels.Labels, e exemplar.Exemplar) (storage.SeriesRef, error) {
 	f.Lock()
 	defer f.Unlock()
 	if ref == 0 {
-		ref = l.Hash()
+		ref = storage.SeriesRef(l.Hash())
 	}
 	f.exemplars[ref] = append(f.exemplars[ref], e)
 	return ref, f.appendErr()
 }
 
-func (f *fakeAppender) GetRef(l labels.Labels) (uint64, labels.Labels) {
-	return l.Hash(), l
+func (f *fakeAppender) GetRef(l labels.Labels) (storage.SeriesRef, labels.Labels) {
+	return storage.SeriesRef(l.Hash()), l
 }
 
 func (f *fakeAppender) Commit() error {
@@ -1109,12 +1109,12 @@ type tsOverrideAppender struct {
 
 var cnt int64
 
-func (a *tsOverrideAppender) Append(ref uint64, l labels.Labels, _ int64, v float64) (uint64, error) {
+func (a *tsOverrideAppender) Append(ref storage.SeriesRef, l labels.Labels, _ int64, v float64) (storage.SeriesRef, error) {
 	cnt += a.interval
 	return a.Appender.Append(ref, l, cnt, v)
 }
 
-func (a *tsOverrideAppender) GetRef(lset labels.Labels) (uint64, labels.Labels) {
+func (a *tsOverrideAppender) GetRef(lset labels.Labels) (storage.SeriesRef, labels.Labels) {
 	return a.Appender.(storage.GetRef).GetRef(lset)
 }
 
