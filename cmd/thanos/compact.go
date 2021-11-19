@@ -42,9 +42,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
-	"github.com/thanos-io/thanos/pkg/ui"
-
 	"github.com/thanos-io/thanos/pkg/tracing"
+	"github.com/thanos-io/thanos/pkg/ui"
 )
 
 var (
@@ -160,10 +159,6 @@ func newCompactMetrics(reg *prometheus.Registry, deleteDelay time.Duration) *com
 	})
 	return m
 }
-
-type contextKey struct{}
-
-var tracerKey = contextKey{}
 
 func runCompact(
 	g *run.Group,
@@ -422,7 +417,7 @@ func runCompact(
 	}
 
 	compactMainFn := func() error {
-		if err := compactor.Compact(ctx, tracer); err != nil {
+		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction")
 		}
 
