@@ -972,7 +972,8 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	// the ctx here comes from bucketCompactor.compact and hence has the groups parent span in it
 	// hence, no need to create a new context here
-	span, ctx := tracing.StartSpan(ctx, "compaction_group", opentracing.Tags{})
+	var span opentracing.Span
+	span, ctx = tracing.StartSpan(ctx, "compaction_group", opentracing.Tags{})
 	defer span.Finish()
 
 	// Check for overlapped blocks.
@@ -1153,6 +1154,10 @@ func (cg *Group) deleteBlock(id ulid.ULID, bdir string) error {
 	return nil
 }
 
+type contextKey struct{}
+
+var tracerKey = contextKey{}
+
 // BucketCompactor compacts blocks in a bucket.
 type BucketCompactor struct {
 	logger                         log.Logger
@@ -1195,7 +1200,9 @@ func NewBucketCompactor(
 }
 
 // Compact runs compaction over bucket.
-func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
+func (c *BucketCompactor) Compact(ctx context.Context, tracer opentracing.Tracer) (rerr error) {
+	ctx = tracing.ContextWithTracer(ctx, tracer)
+
 	defer func() {
 		// Do not remove the compactDir if an error has occurred
 		// because potentially on the next run we would not have to download
@@ -1227,12 +1234,11 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			go func() {
 				defer wg.Done()
 				for g := range groupChan {
-					ctx := tracing.CopyTraceContext(context.Background(), workCtx)
-					ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-					defer cancel()
+					workCtx = tracing.CopyTraceContext(workCtx, ctx)
+					workCtx = tracing.ContextWithTracer(workCtx, tracer)
 					// adding a parent span to ctx for overall compaction
 					// do not need to add a separate span since the parent span is not used separately here - can parent span be passed from original compaction function?
-					_, ctx = tracing.StartSpan(ctx, "compaction", opentracing.Tags{})
+					_, ctx = tracing.StartSpan(workCtx, "compaction", opentracing.Tags{})
 					var err error
 					var shouldRerunGroup bool
 					// done in a child span derived from the parent span in ctx

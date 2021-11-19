@@ -43,6 +43,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
+
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 var (
@@ -159,6 +161,10 @@ func newCompactMetrics(reg *prometheus.Registry, deleteDelay time.Duration) *com
 	return m
 }
 
+type contextKey struct{}
+
+var tracerKey = contextKey{}
+
 func runCompact(
 	g *run.Group,
 	logger log.Logger,
@@ -183,6 +189,11 @@ func runCompact(
 		httpserver.WithGracePeriod(time.Duration(conf.http.gracePeriod)),
 		httpserver.WithTLSConfig(conf.http.tlsConfig),
 	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// adding tracer to ctx
+	ctx = tracing.ContextWithTracer(ctx, tracer)
 
 	g.Add(func() error {
 		statusProber.Healthy()
@@ -299,8 +310,6 @@ func runCompact(
 		level.Warn(logger).Log("msg", "Max compaction level is lower than should be", "current", conf.maxCompactionLevel, "default", compactions.maxLevel())
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	defer func() {
 		if rerr != nil {
 			cancel()
@@ -413,7 +422,7 @@ func runCompact(
 	}
 
 	compactMainFn := func() error {
-		if err := compactor.Compact(ctx); err != nil {
+		if err := compactor.Compact(ctx, tracer); err != nil {
 			return errors.Wrap(err, "compaction")
 		}
 
