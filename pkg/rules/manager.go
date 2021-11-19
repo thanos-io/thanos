@@ -44,6 +44,7 @@ func (g Group) toProto() *rulespb.RuleGroup {
 		Name:                    g.Name(),
 		File:                    g.OriginalFile,
 		Interval:                g.Interval().Seconds(),
+		Limit:                   int64(g.Limit()),
 		PartialResponseStrategy: g.PartialResponseStrategy,
 		// UTC needed due to https://github.com/gogo/protobuf/issues/519.
 		LastEvaluation:            g.GetLastEvaluation().UTC(),
