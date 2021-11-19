@@ -20,9 +20,9 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
-/// Info represents the API that is responsible for gathering metadata about the all APIs supported by the component.
+// Info represents the API that is responsible for gathering metadata about the all APIs supported by the component.
 service Info {
-    /// Info returns the metadata (Eg. LabelSets, Min/Max time) about all the APIs the component supports.
+    // Info returns the metadata (Eg. LabelSets, Min/Max time) about all the APIs the component supports.
     rpc Info(InfoRequest) returns (InfoResponse);
 }
 
@@ -32,41 +32,41 @@ message InfoResponse {
     repeated ZLabelSet label_sets      = 1 [(gogoproto.nullable) = false];
     string ComponentType               = 2;
     
-    /// StoreInfo holds the metadata related to Store API if exposed by the component otherwise it will be null.
+    // StoreInfo holds the metadata related to Store API if exposed by the component otherwise it will be null.
     StoreInfo store                    = 3;    
 
-    /// RulesInfo holds the metadata related to Rules API if exposed by the component otherwise it will be null.
+    // RulesInfo holds the metadata related to Rules API if exposed by the component otherwise it will be null.
     RulesInfo rules                    = 4;
     
-    /// MetricMetadataInfo holds the metadata related to Metadata API if exposed by the component otherwise it will be null.
+    // MetricMetadataInfo holds the metadata related to Metadata API if exposed by the component otherwise it will be null.
     MetricMetadataInfo metric_metadata = 5;
     
-    /// TargetsInfo holds the metadata related to Targets API if exposed by the component otherwise it will be null.
+    // TargetsInfo holds the metadata related to Targets API if exposed by the component otherwise it will be null.
     TargetsInfo targets                = 6;
     
-    /// ExemplarsInfo holds the metadata related to Exemplars API if exposed by the component otherwise it will be null.
+    // ExemplarsInfo holds the metadata related to Exemplars API if exposed by the component otherwise it will be null.
     ExemplarsInfo exemplars            = 7;
 }
 
-/// StoreInfo holds the metadata related to Store API exposed by the component.
+// StoreInfo holds the metadata related to Store API exposed by the component.
 message StoreInfo {
     int64 min_time = 1;
     int64 max_time = 2;
 }
 
-/// RulesInfo holds the metadata related to Rules API exposed by the component.
+// RulesInfo holds the metadata related to Rules API exposed by the component.
 message RulesInfo {
 }
 
-/// MetricMetadataInfo holds the metadata related to Metadata API exposed by the component.
+// MetricMetadataInfo holds the metadata related to Metadata API exposed by the component.
 message MetricMetadataInfo {
 }
 
-/// TargetsInfo holds the metadata related to Targets API exposed by the component.
+// TargetsInfo holds the metadata related to Targets API exposed by the component.
 message TargetsInfo {
 }
 
-/// EXemplarsInfo holds the metadata related to Exemplars API exposed by the component.
+// ExemplarsInfo holds the metadata related to Exemplars API exposed by the component.
 message ExemplarsInfo {
     int64 min_time = 1;
     int64 max_time = 2;

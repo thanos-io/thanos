@@ -26,53 +26,99 @@ type InfoServer struct {
 
 func NewInfoServer(
 	component string,
-	options ...func(*InfoServer),
+	options ...ServerOption,
 ) *InfoServer {
 	srv := &InfoServer{
 		component: component,
 	}
 
 	for _, o := range options {
-		o(srv)
+		o.applyServerOption(srv)
 	}
 
 	return srv
 }
 
-func WithLabelSet(getLabelSet func() []labelpb.ZLabelSet) func(*InfoServer) {
-	return func(s *InfoServer) {
-		s.getLabelSet = getLabelSet
-	}
+type ServerOption interface {
+	applyServerOption(*InfoServer)
 }
 
-func WithStoreInfo(getStoreInfo func() *infopb.StoreInfo) func(*InfoServer) {
-	return func(s *InfoServer) {
-		s.getStoreInfo = getStoreInfo
-	}
+type serverOptionFunc func(*InfoServer)
+
+func (fn serverOptionFunc) applyServerOption(cfg *InfoServer) {
+	fn(cfg)
 }
 
-func WithRulesInfo(getRulesInfo func() *infopb.RulesInfo) func(*InfoServer) {
-	return func(s *InfoServer) {
-		s.getRulesInfo = getRulesInfo
+func WithLabelSetFunc(getLabelSet ...func() []labelpb.ZLabelSet) ServerOption {
+	if len(getLabelSet) == 0 {
+		return serverOptionFunc(func(s *InfoServer) {
+			s.getLabelSet = func() []labelpb.ZLabelSet { return []labelpb.ZLabelSet{} }
+		})
 	}
+
+	return serverOptionFunc(func(s *InfoServer) {
+		s.getLabelSet = getLabelSet[0]
+	})
 }
 
-func WithExemplarsInfo(getExemplarsInfo func() *infopb.ExemplarsInfo) func(*InfoServer) {
-	return func(s *InfoServer) {
-		s.getExemplarsInfo = getExemplarsInfo
+func WithStoreInfoFunc(getStoreInfo ...func() *infopb.StoreInfo) ServerOption {
+	if len(getStoreInfo) == 0 {
+		return serverOptionFunc(func(s *InfoServer) {
+			s.getStoreInfo = func() *infopb.StoreInfo { return &infopb.StoreInfo{} }
+		})
 	}
+
+	return serverOptionFunc(func(s *InfoServer) {
+		s.getStoreInfo = getStoreInfo[0]
+	})
 }
 
-func WithTargetInfo(getTargetsInfo func() *infopb.TargetsInfo) func(*InfoServer) {
-	return func(s *InfoServer) {
-		s.getTargetsInfo = getTargetsInfo
+func WithRulesInfoFunc(getRulesInfo ...func() *infopb.RulesInfo) ServerOption {
+	if len(getRulesInfo) == 0 {
+		return serverOptionFunc(func(s *InfoServer) {
+			s.getRulesInfo = func() *infopb.RulesInfo { return &infopb.RulesInfo{} }
+		})
 	}
+
+	return serverOptionFunc(func(s *InfoServer) {
+		s.getRulesInfo = getRulesInfo[0]
+	})
 }
 
-func WithMetricMetadataInfo(getMetricMetadataInfo func() *infopb.MetricMetadataInfo) func(*InfoServer) {
-	return func(s *InfoServer) {
-		s.getMetricMetadataInfo = getMetricMetadataInfo
+func WithExemplarsInfoFunc(getExemplarsInfo ...func() *infopb.ExemplarsInfo) ServerOption {
+	if len(getExemplarsInfo) == 0 {
+		return serverOptionFunc(func(s *InfoServer) {
+			s.getExemplarsInfo = func() *infopb.ExemplarsInfo { return &infopb.ExemplarsInfo{} }
+		})
 	}
+
+	return serverOptionFunc(func(s *InfoServer) {
+		s.getExemplarsInfo = getExemplarsInfo[0]
+	})
+}
+
+func WithTargetsInfoFunc(getTargetsInfo ...func() *infopb.TargetsInfo) ServerOption {
+	if len(getTargetsInfo) == 0 {
+		return serverOptionFunc(func(s *InfoServer) {
+			s.getTargetsInfo = func() *infopb.TargetsInfo { return &infopb.TargetsInfo{} }
+		})
+	}
+
+	return serverOptionFunc(func(s *InfoServer) {
+		s.getTargetsInfo = getTargetsInfo[0]
+	})
+}
+
+func WithMetricMetadataInfoFunc(getMetricMetadataInfo ...func() *infopb.MetricMetadataInfo) ServerOption {
+	if len(getMetricMetadataInfo) == 0 {
+		return serverOptionFunc(func(s *InfoServer) {
+			s.getMetricMetadataInfo = func() *infopb.MetricMetadataInfo { return &infopb.MetricMetadataInfo{} }
+		})
+	}
+
+	return serverOptionFunc(func(s *InfoServer) {
+		s.getMetricMetadataInfo = getMetricMetadataInfo[0]
+	})
 }
 
 // RegisterInfoServer register info server.

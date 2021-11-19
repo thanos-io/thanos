@@ -68,15 +68,15 @@ var xxx_messageInfo_InfoRequest proto.InternalMessageInfo
 type InfoResponse struct {
 	LabelSets     []labelpb.ZLabelSet `protobuf:"bytes,1,rep,name=label_sets,json=labelSets,proto3" json:"label_sets"`
 	ComponentType string              `protobuf:"bytes,2,opt,name=ComponentType,proto3" json:"ComponentType,omitempty"`
-	/// StoreInfo holds the metadata related to Store API if exposed by the component otherwise it will be null.
+	// StoreInfo holds the metadata related to Store API if exposed by the component otherwise it will be null.
 	Store *StoreInfo `protobuf:"bytes,3,opt,name=store,proto3" json:"store,omitempty"`
-	/// RulesInfo holds the metadata related to Rules API if exposed by the component otherwise it will be null.
+	// RulesInfo holds the metadata related to Rules API if exposed by the component otherwise it will be null.
 	Rules *RulesInfo `protobuf:"bytes,4,opt,name=rules,proto3" json:"rules,omitempty"`
-	/// MetricMetadataInfo holds the metadata related to Metadata API if exposed by the component otherwise it will be null.
+	// MetricMetadataInfo holds the metadata related to Metadata API if exposed by the component otherwise it will be null.
 	MetricMetadata *MetricMetadataInfo `protobuf:"bytes,5,opt,name=metric_metadata,json=metricMetadata,proto3" json:"metric_metadata,omitempty"`
-	/// TargetsInfo holds the metadata related to Targets API if exposed by the component otherwise it will be null.
+	// TargetsInfo holds the metadata related to Targets API if exposed by the component otherwise it will be null.
 	Targets *TargetsInfo `protobuf:"bytes,6,opt,name=targets,proto3" json:"targets,omitempty"`
-	/// ExemplarsInfo holds the metadata related to Exemplars API if exposed by the component otherwise it will be null.
+	// ExemplarsInfo holds the metadata related to Exemplars API if exposed by the component otherwise it will be null.
 	Exemplars *ExemplarsInfo `protobuf:"bytes,7,opt,name=exemplars,proto3" json:"exemplars,omitempty"`
 }
 
@@ -113,7 +113,7 @@ func (m *InfoResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_InfoResponse proto.InternalMessageInfo
 
-/// StoreInfo holds the metadata related to Store API exposed by the component.
+// StoreInfo holds the metadata related to Store API exposed by the component.
 type StoreInfo struct {
 	MinTime int64 `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
 	MaxTime int64 `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
@@ -152,7 +152,7 @@ func (m *StoreInfo) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_StoreInfo proto.InternalMessageInfo
 
-/// RulesInfo holds the metadata related to Rules API exposed by the component.
+// RulesInfo holds the metadata related to Rules API exposed by the component.
 type RulesInfo struct {
 }
 
@@ -189,7 +189,7 @@ func (m *RulesInfo) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RulesInfo proto.InternalMessageInfo
 
-/// MetricMetadataInfo holds the metadata related to Metadata API exposed by the component.
+// MetricMetadataInfo holds the metadata related to Metadata API exposed by the component.
 type MetricMetadataInfo struct {
 }
 
@@ -226,7 +226,7 @@ func (m *MetricMetadataInfo) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_MetricMetadataInfo proto.InternalMessageInfo
 
-/// TargetsInfo holds the metadata related to Targets API exposed by the component.
+// TargetsInfo holds the metadata related to Targets API exposed by the component.
 type TargetsInfo struct {
 }
 
@@ -263,7 +263,7 @@ func (m *TargetsInfo) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_TargetsInfo proto.InternalMessageInfo
 
-/// EXemplarsInfo holds the metadata related to Exemplars API exposed by the component.
+// ExemplarsInfo holds the metadata related to Exemplars API exposed by the component.
 type ExemplarsInfo struct {
 	MinTime int64 `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
 	MaxTime int64 `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
@@ -358,7 +358,7 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type InfoClient interface {
-	/// Info returns the metadata (Eg. LabelSets, Min/Max time) about all the APIs the component supports.
+	// Info returns the metadata (Eg. LabelSets, Min/Max time) about all the APIs the component supports.
 	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
 }
 
@@ -381,7 +381,7 @@ func (c *infoClient) Info(ctx context.Context, in *InfoRequest, opts ...grpc.Cal
 
 // InfoServer is the server API for Info service.
 type InfoServer interface {
-	/// Info returns the metadata (Eg. LabelSets, Min/Max time) about all the APIs the component supports.
+	// Info returns the metadata (Eg. LabelSets, Min/Max time) about all the APIs the component supports.
 	Info(context.Context, *InfoRequest) (*InfoResponse, error)
 }
 
