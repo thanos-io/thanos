@@ -974,7 +974,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 
 	// Success with no refetches.
 	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 100))
-	testutil.Equals(t, map[uint64][]byte{
+	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2:  []byte("aaaaaaaaaa"),
 		13: []byte("bbbbbbbbbb"),
 		24: []byte("cccccccccc"),
@@ -984,7 +984,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	// Success with 2 refetches.
 	r.loadedSeries = map[storage.SeriesRef][]byte{}
 	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 15))
-	testutil.Equals(t, map[uint64][]byte{
+	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2:  []byte("aaaaaaaaaa"),
 		13: []byte("bbbbbbbbbb"),
 		24: []byte("cccccccccc"),
@@ -994,7 +994,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	// Success with refetch on first element.
 	r.loadedSeries = map[storage.SeriesRef][]byte{}
 	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2}, false, 2, 5))
-	testutil.Equals(t, map[uint64][]byte{
+	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2: []byte("aaaaaaaaaa"),
 	}, r.loadedSeries)
 	testutil.Equals(t, float64(3), promtest.ToFloat64(s.seriesRefetches))
