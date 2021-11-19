@@ -242,8 +242,8 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	ctx := context.Background()
 	emptyPostingsHits := map[labels.Label][]byte{}
 	emptyPostingsMisses := []labels.Label(nil)
-	emptySeriesHits := map[uint64][]byte{}
-	emptySeriesMisses := []uint64(nil)
+	emptySeriesHits := map[storage.SeriesRef][]byte{}
+	emptySeriesMisses := []storage.SeriesRef(nil)
 
 	pHits, pMisses := cache.FetchMultiPostings(ctx, id, []labels.Label{lbls})
 	testutil.Equals(t, emptyPostingsHits, pHits, "no such key")
@@ -290,7 +290,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
 
 	sHits, sMisses := cache.FetchMultiSeries(ctx, id, []storage.SeriesRef{1234})
-	testutil.Equals(t, map[uint64][]byte{1234: {222, 223, 224}}, sHits, "key exists")
+	testutil.Equals(t, map[storage.SeriesRef][]byte{1234: {222, 223, 224}}, sHits, "key exists")
 	testutil.Equals(t, emptySeriesMisses, sMisses)
 
 	lbls2 := labels.Label{Name: "test", Value: "124"}
@@ -321,7 +321,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 
 	sHits, sMisses = cache.FetchMultiSeries(ctx, id, []storage.SeriesRef{1234})
 	testutil.Equals(t, emptySeriesHits, sHits, "no such key")
-	testutil.Equals(t, []uint64{1234}, sMisses)
+	testutil.Equals(t, []storage.SeriesRef{1234}, sMisses)
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls2})
 	testutil.Equals(t, map[labels.Label][]byte{lbls2: v}, pHits)
