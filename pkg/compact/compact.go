@@ -18,6 +18,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
+	opentracing_log "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -1006,6 +1007,8 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	// Once we have a plan we need to download the actual data.
 	begin := time.Now()
 
+	// ctx contains the parent span for this function's processes.
+	// each block will have a child span from it.
 	toCompactDirs := make([]string, 0, len(toCompact))
 	for _, meta := range toCompact {
 		bdir := filepath.Join(dir, meta.ULID.String())
@@ -1016,7 +1019,11 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			uniqueSources[s] = struct{}{}
 		}
 
-		tracing.DoInSpan(ctx, "compaction_block_download", func(ctx context.Context) {
+		// creating a child block span's context, identified by the block ID.
+		blockSpan, blockCtx := tracing.StartSpan(ctx, meta.ULID.String()+"_block")
+		defer blockSpan.Finish()
+
+		tracing.DoInSpan(blockCtx, "compaction_block_download", func(ctx context.Context) {
 			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir)
 		}, opentracing.Tags{"block ID": meta.ULID})
 
@@ -1026,7 +1033,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 		// Ensure all input blocks are valid.
 		var stats block.HealthStats
-		tracing.DoInSpan(ctx, "compaction_block_healthcheck", func(ctx context.Context) {
+		tracing.DoInSpan(blockCtx, "compaction_block_healthcheck", func(ctx context.Context) {
 			stats, err = block.GatherIndexHealthStats(cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 		}, opentracing.Tags{"block ID": meta.ULID})
 		if err != nil {
@@ -1038,16 +1045,22 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 
 		if err := stats.OutOfOrderChunksErr(); err != nil {
-			return false, ulid.ULID{}, outOfOrderChunkError(errors.Wrapf(err, "blocks with out-of-order chunks are dropped from compaction:  %s", bdir), meta.ULID)
+			oooErr := outOfOrderChunkError(errors.Wrapf(err, "blocks with out-of-order chunks are dropped from compaction:  %s", bdir), meta.ULID)
+			blockSpan.LogFields(opentracing_log.Error(oooErr))
+			return false, ulid.ULID{}, oooErr
 		}
 
 		if err := stats.Issue347OutsideChunksErr(); err != nil {
-			return false, ulid.ULID{}, issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", bdir), meta.ULID)
+			outsideChunkErr := issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", bdir), meta.ULID)
+			blockSpan.LogFields(opentracing_log.Error(outsideChunkErr))
+			return false, ulid.ULID{}, outsideChunkErr
 		}
 
 		if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
-			return false, ulid.ULID{}, errors.Wrapf(err,
+			promErr := errors.Wrapf(err,
 				"block id %s, try running with --debug.accept-malformed-index", meta.ULID)
+			blockSpan.LogFields(opentracing_log.Error(promErr))
+			return false, ulid.ULID{}, promErr
 		}
 		toCompactDirs = append(toCompactDirs, bdir)
 	}
@@ -1325,6 +1338,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		}
 		close(groupChan)
 		wg.Wait()
+		// consider closing group span here
 
 		// Collect any other error reported by the workers, or any error reported
 		// while we were waiting for the last batch of groups to run the compaction.
