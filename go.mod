@@ -9,6 +9,7 @@ require (
 	github.com/Azure/go-autorest/autorest/azure/auth v0.5.8
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/alecthomas/units v0.0.0-20210927113745-59d0afb8317a
+	github.com/alicebob/miniredis/v2 v2.14.3
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
 	github.com/baidubce/bce-sdk-go v0.9.81
 	github.com/blang/semver/v4 v4.0.0
@@ -29,11 +30,13 @@ require (
 	github.com/fsnotify/fsnotify v1.5.1
 	github.com/go-kit/log v0.2.0
 	github.com/go-openapi/strfmt v0.21.0
+	github.com/go-redis/redis/v8 v8.11.4
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/golang/snappy v0.0.4
 	github.com/googleapis/gax-go v2.0.2+incompatible
+	github.com/grafana/dskit v0.0.0-20210908150159-fcf48cb19aa4
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2 v2.0.0-20201002093600-73cf2ae9d891
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.0.0-rc.2.0.20201207153454-9f6bf00c00a7
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
