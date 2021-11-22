@@ -1136,7 +1136,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	// into the next planning cycle.
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
 	for _, meta := range toCompact {
-		tracing.DoInSpan(ctx, "compaction_block_upload", func(ctx context.Context) {
+		tracing.DoInSpan(ctx, "compaction_block_delete", func(ctx context.Context) {
 			err = cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()))
 		})
 		if err != nil {
@@ -1336,8 +1336,6 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		}
 		close(groupChan)
 		wg.Wait()
-		// consider closing group span here
-
 		// Collect any other error reported by the workers, or any error reported
 		// while we were waiting for the last batch of groups to run the compaction.
 		close(errChan)
