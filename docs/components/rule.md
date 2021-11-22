@@ -8,7 +8,7 @@ The `thanos rule` command evaluates Prometheus recording and alerting rules agai
 
 By default, rule evaluation results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
 
-Rule also has a stateless mode which sends rule evaluation results to some remote storages via remote write for better scalability. This way, rule nodes only work as a data producer and the remote receive nodes work as source store nodes.
+Rule also has a stateless mode which sends rule evaluation results to some remote storages via remote write for better scalability. This way, rule nodes only work as a data producer and the remote receive nodes work as source store nodes. It means that Thanos Rule in this mode does _not_ expose the StoreAPI.
 
 You can think of Rule as a simplified Prometheus that does not require a sidecar and does not scrape and do PromQL evaluation (no QueryAPI).
 
@@ -230,7 +230,7 @@ thanos rule \
 The remote write config file is exactly the same as the [Prometheus remote write config format](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
 
 **NOTE:**
-1. Remote write metadata config is not supported in this mode and will be ignored if provided in the remote write configuration.
+1. Metadata config is not supported in this mode and will be ignored if provided in the remote write configuration.
 2. Ruler won't expose Store API for querying data if stateless mode is enabled. If the remote storage is thanos receiver then you can use that to query rule evaluation results.
 
 ## Flags
