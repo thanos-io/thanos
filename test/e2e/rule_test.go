@@ -98,6 +98,21 @@ groups:
     annotations:
       summary: "I always complain and I have been loaded via sighup signal."
 `
+	testAlertRuleWithLimit = `
+groups:
+- name: example_with_limit
+  interval: 1s
+  partial_response_strategy: "WARN"
+  limit: 1
+  rules:
+  - alert: TestAlert_WithLimit
+    expr: 'promhttp_metric_handler_requests_total' # It has more than one labels.
+    labels:
+      severity: page
+    annotations:
+      summary: "with limit"
+`
+
 	testRuleRecordAbsentMetric = `
 groups:
 - name: example_record_rules
