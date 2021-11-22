@@ -11,6 +11,9 @@ import (
 	"google.golang.org/grpc"
 )
 
+// InfoServer implements the corresponding protobuf interface
+// to provide information on which APIs are exposed by the given
+// component.
 type InfoServer struct {
 	infopb.UnimplementedInfoServer
 
@@ -24,112 +27,125 @@ type InfoServer struct {
 	getMetricMetadataInfo func() *infopb.MetricMetadataInfo
 }
 
+// NewInfoServer creates a new server instance for given component
+// and with the specified options.
 func NewInfoServer(
 	component string,
-	options ...ServerOption,
+	options ...ServerOptionFunc,
 ) *InfoServer {
 	srv := &InfoServer{
 		component: component,
 	}
 
 	for _, o := range options {
-		o.applyServerOption(srv)
+		o(srv)
 	}
 
 	return srv
 }
 
-type ServerOption interface {
-	applyServerOption(*InfoServer)
-}
+// ServerOptionFunc represents a functional option to configure info server.
+type ServerOptionFunc func(*InfoServer)
 
-type serverOptionFunc func(*InfoServer)
-
-func (fn serverOptionFunc) applyServerOption(cfg *InfoServer) {
-	fn(cfg)
-}
-
-func WithLabelSetFunc(getLabelSet ...func() []labelpb.ZLabelSet) ServerOption {
+// WithLabelSetFunc determines the function that should be executed to obtain
+// the label set information. If no function is provided, the default empty
+// label set is returned. Only the first function from the list is considered.
+func WithLabelSetFunc(getLabelSet ...func() []labelpb.ZLabelSet) ServerOptionFunc {
 	if len(getLabelSet) == 0 {
-		return serverOptionFunc(func(s *InfoServer) {
+		return func(s *InfoServer) {
 			s.getLabelSet = func() []labelpb.ZLabelSet { return []labelpb.ZLabelSet{} }
-		})
+		}
 	}
 
-	return serverOptionFunc(func(s *InfoServer) {
+	return func(s *InfoServer) {
 		s.getLabelSet = getLabelSet[0]
-	})
+	}
 }
 
-func WithStoreInfoFunc(getStoreInfo ...func() *infopb.StoreInfo) ServerOption {
+// WithStoreInfoFunc determines the function that should be executed to obtain
+// the store information. If no function is provided, the default empty
+// store info is returned. Only the first function from the list is considered.
+func WithStoreInfoFunc(getStoreInfo ...func() *infopb.StoreInfo) ServerOptionFunc {
 	if len(getStoreInfo) == 0 {
-		return serverOptionFunc(func(s *InfoServer) {
+		return func(s *InfoServer) {
 			s.getStoreInfo = func() *infopb.StoreInfo { return &infopb.StoreInfo{} }
-		})
+		}
 	}
 
-	return serverOptionFunc(func(s *InfoServer) {
+	return func(s *InfoServer) {
 		s.getStoreInfo = getStoreInfo[0]
-	})
+	}
 }
 
-func WithRulesInfoFunc(getRulesInfo ...func() *infopb.RulesInfo) ServerOption {
+// WithRulesInfoFunc determines the function that should be executed to obtain
+// the rules information. If no function is provided, the default empty
+// rules info is returned. Only the first function from the list is considered.
+func WithRulesInfoFunc(getRulesInfo ...func() *infopb.RulesInfo) ServerOptionFunc {
 	if len(getRulesInfo) == 0 {
-		return serverOptionFunc(func(s *InfoServer) {
+		return func(s *InfoServer) {
 			s.getRulesInfo = func() *infopb.RulesInfo { return &infopb.RulesInfo{} }
-		})
+		}
 	}
 
-	return serverOptionFunc(func(s *InfoServer) {
+	return func(s *InfoServer) {
 		s.getRulesInfo = getRulesInfo[0]
-	})
+	}
 }
 
-func WithExemplarsInfoFunc(getExemplarsInfo ...func() *infopb.ExemplarsInfo) ServerOption {
+// WithExemplarsInfoFunc determines the function that should be executed to obtain
+// the exemplars information. If no function is provided, the default empty
+// exemplars info is returned. Only the first function from the list is considered.
+func WithExemplarsInfoFunc(getExemplarsInfo ...func() *infopb.ExemplarsInfo) ServerOptionFunc {
 	if len(getExemplarsInfo) == 0 {
-		return serverOptionFunc(func(s *InfoServer) {
+		return func(s *InfoServer) {
 			s.getExemplarsInfo = func() *infopb.ExemplarsInfo { return &infopb.ExemplarsInfo{} }
-		})
+		}
 	}
 
-	return serverOptionFunc(func(s *InfoServer) {
+	return func(s *InfoServer) {
 		s.getExemplarsInfo = getExemplarsInfo[0]
-	})
+	}
 }
 
-func WithTargetsInfoFunc(getTargetsInfo ...func() *infopb.TargetsInfo) ServerOption {
+// WithTargetsInfoFunc determines the function that should be executed to obtain
+// the targets information. If no function is provided, the default empty
+// targets info is returned. Only the first function from the list is considered.
+func WithTargetsInfoFunc(getTargetsInfo ...func() *infopb.TargetsInfo) ServerOptionFunc {
 	if len(getTargetsInfo) == 0 {
-		return serverOptionFunc(func(s *InfoServer) {
+		return func(s *InfoServer) {
 			s.getTargetsInfo = func() *infopb.TargetsInfo { return &infopb.TargetsInfo{} }
-		})
+		}
 	}
 
-	return serverOptionFunc(func(s *InfoServer) {
+	return func(s *InfoServer) {
 		s.getTargetsInfo = getTargetsInfo[0]
-	})
+	}
 }
 
-func WithMetricMetadataInfoFunc(getMetricMetadataInfo ...func() *infopb.MetricMetadataInfo) ServerOption {
+// WithTargetsInfoFunc determines the function that should be executed to obtain
+// the targets information. If no function is provided, the default empty
+// targets info is returned. Only the first function from the list is considered.
+func WithMetricMetadataInfoFunc(getMetricMetadataInfo ...func() *infopb.MetricMetadataInfo) ServerOptionFunc {
 	if len(getMetricMetadataInfo) == 0 {
-		return serverOptionFunc(func(s *InfoServer) {
+		return func(s *InfoServer) {
 			s.getMetricMetadataInfo = func() *infopb.MetricMetadataInfo { return &infopb.MetricMetadataInfo{} }
-		})
+		}
 	}
 
-	return serverOptionFunc(func(s *InfoServer) {
+	return func(s *InfoServer) {
 		s.getMetricMetadataInfo = getMetricMetadataInfo[0]
-	})
+	}
 }
 
-// RegisterInfoServer register info server.
+// RegisterInfoServer registers the info server.
 func RegisterInfoServer(infoSrv infopb.InfoServer) func(*grpc.Server) {
 	return func(s *grpc.Server) {
 		infopb.RegisterInfoServer(s, infoSrv)
 	}
 }
 
+// Info returns the information about label set and available APIs exposed by the component.
 func (srv *InfoServer) Info(ctx context.Context, req *infopb.InfoRequest) (*infopb.InfoResponse, error) {
-
 	if srv.getLabelSet == nil {
 		srv.getLabelSet = func() []labelpb.ZLabelSet { return nil }
 	}
