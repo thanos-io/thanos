@@ -99,7 +99,7 @@ replace (
 	// Custom fork with missing packages required to update to pass. (From https://github.com/prometheus/prometheus/pull/9824)
 	github.com/prometheus/prometheus => github.com/pstibrany/prometheus v1.8.2-0.20211119145100-0bfb0c12cbb5
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
-	// google.golang.org/grpc => google.golang.org/grpc v1.29.1
+	google.golang.org/grpc => google.golang.org/grpc v1.40.0
 
 	// Overriding to use latest commit
 	gopkg.in/alecthomas/kingpin.v2 => github.com/alecthomas/kingpin v1.3.8-0.20210301060133-17f40c25f497
