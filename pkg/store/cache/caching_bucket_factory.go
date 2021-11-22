@@ -43,6 +43,8 @@ type CachingWithBackendConfig struct {
 	// Maximum number of GetRange requests issued by this bucket for single GetRange call. Zero or negative value = unlimited.
 	MaxChunksGetRangeRequests int `yaml:"max_chunks_get_range_requests"`
 
+	MetafileMaxSize model.Bytes `yaml:"metafile_max_size"`
+
 	// TTLs for various cache items.
 	ChunkObjectAttrsTTL time.Duration `yaml:"chunk_object_attrs_ttl"`
 	ChunkSubrangeTTL    time.Duration `yaml:"chunk_subrange_ttl"`
@@ -54,7 +56,6 @@ type CachingWithBackendConfig struct {
 	MetafileExistsTTL      time.Duration `yaml:"metafile_exists_ttl"`
 	MetafileDoesntExistTTL time.Duration `yaml:"metafile_doesnt_exist_ttl"`
 	MetafileContentTTL     time.Duration `yaml:"metafile_content_ttl"`
-	MetafileMaxSize        model.Bytes   `yaml:"metafile_max_size"`
 }
 
 func (cfg *CachingWithBackendConfig) Defaults() {
@@ -103,7 +104,10 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	case string(GroupcacheBucketCacheProvider):
 		const basePath = "/_galaxycache/"
 
-		c, err = cache.NewGroupcache(logger, reg, backendConfig, basePath, r, bucket)
+		c, err = cache.NewGroupcache(logger, reg, backendConfig, basePath, r, bucket,
+			isTSDBChunkFile, isMetaFile, isBlocksRootDir,
+			config.MetafileExistsTTL, config.MetafileDoesntExistTTL, config.MetafileContentTTL,
+			config.ChunkObjectAttrsTTL, config.ChunkSubrangeTTL, config.BlocksIterTTL)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create groupcache")
 		}

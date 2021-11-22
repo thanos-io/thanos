@@ -103,6 +103,8 @@ replace (
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20211119115433-692a54649ed7
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
+
+	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
 	google.golang.org/grpc => google.golang.org/grpc v1.40.0
 
 	// Overriding to use latest commit

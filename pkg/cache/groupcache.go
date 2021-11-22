@@ -78,17 +78,21 @@ func parseGroupcacheConfig(conf []byte) (GroupcacheConfig, error) {
 }
 
 // NewGroupcache creates a new Groupcache instance.
-func NewGroupcache(logger log.Logger, reg prometheus.Registerer, conf []byte, basepath string, r *route.Router, bucket objstore.Bucket) (*Groupcache, error) {
+func NewGroupcache(logger log.Logger, reg prometheus.Registerer, conf []byte, basepath string, r *route.Router, bucket objstore.Bucket,
+	isTSDBChunkFile, isMetaFile, isBlocksRootDir func(path string) bool,
+	MetaFileExistsTTL, MetafileDoesntExistTTL, MetafileContentTTL, ChunkObjectAttrsTTL, ChunkSubrangeTTL, BlocksIterTTL time.Duration) (*Groupcache, error) {
 	config, err := parseGroupcacheConfig(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewGroupcacheWithConfig(logger, reg, config, basepath, r, bucket)
+	return NewGroupcacheWithConfig(logger, reg, config, basepath, r, bucket, isTSDBChunkFile, isMetaFile, isBlocksRootDir, MetaFileExistsTTL, MetafileDoesntExistTTL, MetafileContentTTL, ChunkObjectAttrsTTL, ChunkSubrangeTTL, BlocksIterTTL)
 }
 
 // NewGroupcacheWithConfig creates a new Groupcache instance with the given config.
-func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf GroupcacheConfig, basepath string, r *route.Router, bucket objstore.Bucket) (*Groupcache, error) {
+func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf GroupcacheConfig, basepath string, r *route.Router, bucket objstore.Bucket,
+	isTSDBChunkFile, isMetaFile, isBlocksRootDir func(path string) bool,
+	MetaFileExistsTTL, MetafileDoesntExistTTL, MetafileContentTTL, ChunkObjectAttrsTTL, ChunkSubrangeTTL, BlocksIterTTL time.Duration) (*Groupcache, error) {
 	httpProto := galaxyhttp.NewHTTPFetchProtocol(&galaxyhttp.HTTPOptions{
 		BasePath: basepath,
 	})
@@ -140,7 +144,11 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 				if err != nil {
 					return err
 				}
-				return dest.UnmarshalBinary(finalAttrs)
+
+				if isTSDBChunkFile(parsedData.Name) {
+					return dest.UnmarshalBinary(finalAttrs, time.Now().Add(ChunkObjectAttrsTTL))
+				}
+				panic("caching bucket layer must not call on unconfigured paths")
 			case cachekey.IterVerb:
 				var list []string
 				if err := bucket.Iter(ctx, parsedData.Name, func(s string) error {
@@ -154,7 +162,11 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 				if err != nil {
 					return err
 				}
-				return dest.UnmarshalBinary(encodedList)
+
+				if isBlocksRootDir(parsedData.Name) {
+					return dest.UnmarshalBinary(encodedList, time.Now().Add(BlocksIterTTL))
+				}
+				panic("caching bucket layer must not call on unconfigured paths")
 			case cachekey.ContentVerb:
 				rc, err := bucket.Get(ctx, parsedData.Name)
 				if err != nil {
@@ -167,14 +179,26 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 					return err
 				}
 
-				return dest.UnmarshalBinary(b)
+				if isMetaFile(parsedData.Name) {
+					return dest.UnmarshalBinary(b, time.Now().Add(MetafileContentTTL))
+				}
+				panic("caching bucket layer must not call on unconfigured paths")
+
 			case cachekey.ExistsVerb:
 				exists, err := bucket.Exists(ctx, parsedData.Name)
 				if err != nil {
 					return err
 				}
 
-				return dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)))
+				if isMetaFile(parsedData.Name) {
+					if exists {
+						return dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)), time.Now().Add(MetaFileExistsTTL))
+					} else {
+						return dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)), time.Now().Add(MetafileDoesntExistTTL))
+					}
+				}
+				panic("caching bucket layer must not call on unconfigured paths")
+
 			case cachekey.SubrangeVerb:
 				rc, err := bucket.GetRange(ctx, parsedData.Name, parsedData.Start, parsedData.End-parsedData.Start)
 				if err != nil {
@@ -187,7 +211,11 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 					return err
 				}
 
-				return dest.UnmarshalBinary(b)
+				if isTSDBChunkFile(parsedData.Name) {
+					return dest.UnmarshalBinary(b, time.Now().Add(ChunkSubrangeTTL))
+				}
+				panic("caching bucket layer must not call on unconfigured paths")
+
 			}
 
 			return nil
@@ -218,8 +246,14 @@ func (c *Groupcache) Fetch(ctx context.Context, keys []string) map[string][]byte
 			continue
 		}
 
-		if len(codec) > 0 {
-			data[k] = codec
+		retrievedData, _, err := codec.MarshalBinary()
+		if err != nil {
+			level.Error(c.logger).Log("msg", "failed retrieving data", "err", err, "key", k)
+			continue
+		}
+
+		if len(retrievedData) > 0 {
+			data[k] = retrievedData
 		}
 	}
 
