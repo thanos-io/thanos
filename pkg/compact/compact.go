@@ -1019,12 +1019,12 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 
 		// creating a child block span's context, identified by the block ID.
-		blockSpan, blockCtx := tracing.StartSpan(ctx, "block_operations", opentracing.Tags{"block ID": meta.ULID})
+		blockSpan, blockCtx := tracing.StartSpan(ctx, "block_operations", opentracing.Tags{"block.id": meta.ULID})
 		defer blockSpan.Finish()
 
 		tracing.DoInSpan(blockCtx, "compaction_block_download", func(ctx context.Context) {
 			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir)
-		}, opentracing.Tags{"block ID": meta.ULID})
+		}, opentracing.Tags{"block.id": meta.ULID})
 
 		if err != nil {
 			return false, ulid.ULID{}, retry(errors.Wrapf(err, "download block %s", meta.ULID))
@@ -1034,7 +1034,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		var stats block.HealthStats
 		tracing.DoInSpan(blockCtx, "compaction_block_healthcheck", func(ctx context.Context) {
 			stats, err = block.GatherIndexHealthStats(cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
-		}, opentracing.Tags{"block ID": meta.ULID})
+		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
 			return false, ulid.ULID{}, errors.Wrapf(err, "gather index issues for block %s", bdir)
 		}
@@ -1136,7 +1136,10 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	// into the next planning cycle.
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
 	for _, meta := range toCompact {
-		if err := cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String())); err != nil {
+		tracing.DoInSpan(ctx, "compaction_block_upload", func(ctx context.Context) {
+			err = cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()))
+		})
+		if err != nil {
 			return false, ulid.ULID{}, retry(errors.Wrapf(err, "mark old block for deletion from bucket"))
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
