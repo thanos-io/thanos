@@ -15,9 +15,8 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"gopkg.in/yaml.v2"
 
-	"github.com/thanos-io/thanos/pkg/httpconfig"
-
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 )
 
 type AlertingConfig struct {

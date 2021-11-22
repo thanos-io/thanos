@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	thanosmodel "github.com/thanos-io/thanos/pkg/model"
-
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -23,10 +21,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+
 	thanosblock "github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	thanosmodel "github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"

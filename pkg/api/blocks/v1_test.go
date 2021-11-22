@@ -21,6 +21,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
+
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"

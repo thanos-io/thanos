@@ -13,11 +13,10 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
-
-	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )

@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/prometheus/prometheus/model/timestamp"
+	"gopkg.in/alecthomas/kingpin.v2"
+
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 func TestTimeOrDurationValue(t *testing.T) {

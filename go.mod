@@ -96,8 +96,8 @@ replace (
 	github.com/minio/minio-go/v7 => github.com/bwplotka/minio-go/v7 v7.0.11-0.20210324165441-f9927e5255a6
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
 	// github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20211119115433-692a54649ed7
-	// Custom fork with missing packages (testing, before upstreaming).
-	github.com/prometheus/prometheus => github.com/pstibrany/prometheus v1.8.2-0.20211119134801-de51b7b3200a
+	// Custom fork with missing packages required to update to pass. (From https://github.com/prometheus/prometheus/pull/9824)
+	github.com/prometheus/prometheus => github.com/pstibrany/prometheus v1.8.2-0.20211119145100-0bfb0c12cbb5
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
 	// google.golang.org/grpc => google.golang.org/grpc v1.29.1
 

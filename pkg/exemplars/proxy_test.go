@@ -14,12 +14,13 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+	"go.uber.org/atomic"
+	"google.golang.org/grpc"
+
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"go.uber.org/atomic"
-	"google.golang.org/grpc"
 )
 
 type testExemplarClient struct {
