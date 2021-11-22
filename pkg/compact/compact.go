@@ -1055,7 +1055,6 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
 			return false, ulid.ULID{}, errors.Wrapf(err,
 				"block id %s, try running with --debug.accept-malformed-index", meta.ULID)
-
 		}
 		toCompactDirs = append(toCompactDirs, bdir)
 	}
@@ -1236,17 +1235,11 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			go func() {
 				defer wg.Done()
 				for g := range groupChan {
-					workCtx = tracing.CopyTraceContext(workCtx, ctx)
-					// adding a parent span to ctx for overall compaction
-					// do not need to add a separate span since the parent span is not used separately here - can parent span be passed from original compaction function?
-					var groupSpan tracing.Span
-					groupSpan, ctx = tracing.StartSpan(workCtx, "compaction", opentracing.Tags{"group key": g.Key()})
-					defer groupSpan.Finish() // added to avoid parent spans being finished before child
 					var err error
 					var shouldRerunGroup bool
 					// done in a child span derived from the parent span in ctx
-					tracing.DoInSpan(ctx, "group_compaction", func(ctx context.Context) {
-						shouldRerunGroup, _, err = g.Compact(ctx, c.compactDir, c.planner, c.comp)
+					tracing.DoInSpan(ctx, "group_compaction", func(workCtx context.Context) {
+						shouldRerunGroup, _, err = g.Compact(workCtx, c.compactDir, c.planner, c.comp)
 					}) //not adding group key for group_compaction since it is already added to "compaction" parent span
 					//DoInSpan internally runs startSpan
 					if err == nil {
@@ -1259,7 +1252,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 					}
 
 					if IsIssue347Error(err) {
-						if err := RepairIssue347(ctx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err); err == nil {
+						if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err); err == nil {
 							mtx.Lock()
 							finishedAllGroups = false
 							mtx.Unlock()
