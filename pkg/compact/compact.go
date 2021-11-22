@@ -18,7 +18,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
-	opentracing_log "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -1020,7 +1019,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 
 		// creating a child block span's context, identified by the block ID.
-		blockSpan, blockCtx := tracing.StartSpan(ctx, meta.ULID.String()+"_block")
+		blockSpan, blockCtx := tracing.StartSpan(ctx, "block_operations", opentracing.Tags{"block ID": meta.ULID})
 		defer blockSpan.Finish()
 
 		tracing.DoInSpan(blockCtx, "compaction_block_download", func(ctx context.Context) {
@@ -1045,22 +1044,18 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 
 		if err := stats.OutOfOrderChunksErr(); err != nil {
-			oooErr := outOfOrderChunkError(errors.Wrapf(err, "blocks with out-of-order chunks are dropped from compaction:  %s", bdir), meta.ULID)
-			blockSpan.LogFields(opentracing_log.Error(oooErr))
-			return false, ulid.ULID{}, oooErr
+			return false, ulid.ULID{}, outOfOrderChunkError(errors.Wrapf(err, "blocks with out-of-order chunks are dropped from compaction:  %s", bdir), meta.ULID)
 		}
 
 		if err := stats.Issue347OutsideChunksErr(); err != nil {
-			outsideChunkErr := issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", bdir), meta.ULID)
-			blockSpan.LogFields(opentracing_log.Error(outsideChunkErr))
-			return false, ulid.ULID{}, outsideChunkErr
+			return false, ulid.ULID{}, issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", bdir), meta.ULID)
+
 		}
 
 		if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
-			promErr := errors.Wrapf(err,
+			return false, ulid.ULID{}, errors.Wrapf(err,
 				"block id %s, try running with --debug.accept-malformed-index", meta.ULID)
-			blockSpan.LogFields(opentracing_log.Error(promErr))
-			return false, ulid.ULID{}, promErr
+
 		}
 		toCompactDirs = append(toCompactDirs, bdir)
 	}
