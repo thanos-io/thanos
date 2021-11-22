@@ -8,7 +8,7 @@ The `thanos rule` command evaluates Prometheus recording and alerting rules agai
 
 By default, rule evaluation results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
 
-Rule also has a stateless mode which sends rule evaluation results to some remote storages via remote write for better scalability. This way, rule nodes only work as a data producer and the remote receive nodes work as source store nodes. It means that Thanos Rule in this mode does _not_ expose the StoreAPI.
+Rule also has a stateless mode which sends rule evaluation results to some remote storages via remote write for better scalability. This way, rule nodes only work as a data producer and the remote receive nodes work as source store nodes. It means that Thanos Rule in this mode does *not* expose the StoreAPI.
 
 You can think of Rule as a simplified Prometheus that does not require a sidecar and does not scrape and do PromQL evaluation (no QueryAPI).
 
