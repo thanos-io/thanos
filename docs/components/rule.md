@@ -229,7 +229,7 @@ thanos rule \
 
 The remote write config file is exactly the same as the [Prometheus remote write config format](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
 
-**NOTE:** 
+**NOTE:**
 1. Remote write metadata config is not supported in this mode and will be ignored if provided in the remote write configuration.
 2. Ruler won't expose Store API for querying data if stateless mode is enabled. If the remote storage is thanos receiver then you can use that to query rule evaluation results.
 
