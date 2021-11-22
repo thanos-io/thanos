@@ -7,7 +7,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -158,7 +158,7 @@ func (l *lazyPopulatableChunk) Compact() {
 func (w *Compactor) write(ctx context.Context, symbols index.StringIter, populatedSet storage.ChunkSeriesSet, sWriter block.SeriesWriter, p ProgressLogger) error {
 	var (
 		chks []chunks.Meta
-		ref  uint64
+		ref  storage.SeriesRef
 	)
 
 	for symbols.Next() {
