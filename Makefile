@@ -363,7 +363,7 @@ jsonnet-format: $(JSONNETFMT)
 		xargs -n 1 -- $(JSONNETFMT_CMD) -i
 
 .PHONY: jsonnet-lint
-jsonnet-lint: $(JSONNET_LINT) ${JSONNET_VENDOR_DIR}
+jsonnet-lint: $(JSONNET_LINT) jsonnet-vendor
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
 		xargs -n 1 -- $(JSONNET_LINT) -J ${JSONNET_VENDOR_DIR}
 
@@ -399,4 +399,3 @@ $(PROTOC):
 	@echo ">> installing protoc@${PROTOC_VERSION}"
 	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(GOBIN)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(GOBIN)/protoc-$(PROTOC_VERSION)"
-
