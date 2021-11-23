@@ -156,6 +156,7 @@ func registerRule(app *extkingpin.App) {
 
 		agentOpts := &agent.Options{
 			WALCompression: *walCompression,
+			NoLockfile:     *noLockFile,
 		}
 
 		// Parse and check query configuration.
