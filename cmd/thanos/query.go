@@ -38,6 +38,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/info"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/metadata"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -47,6 +49,7 @@ import (
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
@@ -437,7 +440,7 @@ func runQuery(
 		endpoints = query.NewEndpointSet(
 			logger,
 			reg,
-			func() (specs []query.EndpointSpec) {
+			func() (specs []*query.GRPCEndpointSpec) {
 				// Add strict & static nodes.
 				for _, addr := range strictStores {
 					specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
@@ -455,7 +458,7 @@ func runQuery(
 					dnsTargetProvider,
 					dnsEndpointProvider,
 				} {
-					var tmpSpecs []query.EndpointSpec
+					var tmpSpecs []*query.GRPCEndpointSpec
 
 					for _, addr := range dnsProvider.Addresses() {
 						tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpec(addr, false))
@@ -671,12 +674,29 @@ func runQuery(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
+		infoSrv := info.NewInfoServer(
+			component.Query.String(),
+			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return proxy.LabelSet() }),
+			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
+				minTime, maxTime := proxy.TimeRange()
+				return &infopb.StoreInfo{
+					MinTime: minTime,
+					MaxTime: maxTime,
+				}
+			}),
+			info.WithExemplarsInfoFunc(),
+			info.WithRulesInfoFunc(),
+			info.WithMetricMetadataInfoFunc(),
+			info.WithTargetsInfoFunc(),
+		)
+
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithServer(targets.RegisterTargetsServer(targetsProxy)),
 			grpcserver.WithServer(metadata.RegisterMetadataServer(metadataProxy)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarsProxy)),
+			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -696,8 +716,8 @@ func runQuery(
 	return nil
 }
 
-func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.EndpointSpec) []query.EndpointSpec {
-	set := make(map[string]query.EndpointSpec)
+func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []*query.GRPCEndpointSpec) []*query.GRPCEndpointSpec {
+	set := make(map[string]*query.GRPCEndpointSpec)
 	for _, spec := range specs {
 		addr := spec.Addr()
 		if _, ok := set[addr]; ok {
@@ -706,7 +726,7 @@ func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus
 		}
 		set[addr] = spec
 	}
-	deduplicated := make([]query.EndpointSpec, 0, len(set))
+	deduplicated := make([]*query.GRPCEndpointSpec, 0, len(set))
 	for _, value := range set {
 		deduplicated = append(deduplicated, value)
 	}

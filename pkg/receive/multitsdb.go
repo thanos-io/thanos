@@ -29,7 +29,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type MultiTSDB struct {
@@ -262,11 +261,11 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 	return merr.Err()
 }
 
-func (t *MultiTSDB) TSDBStores() map[string]storepb.StoreServer {
+func (t *MultiTSDB) TSDBStores() map[string]store.InfoStoreServer {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	res := make(map[string]storepb.StoreServer, len(t.tenants))
+	res := make(map[string]store.InfoStoreServer, len(t.tenants))
 	for k, tenant := range t.tenants {
 		s := tenant.store()
 		if s != nil {

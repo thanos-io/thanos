@@ -388,10 +388,10 @@ func runStore(
 
 	infoSrv := info.NewInfoServer(
 		component.Store.String(),
-		info.WithLabelSet(func() []labelpb.ZLabelSet {
+		info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
 			return bs.LabelSet()
 		}),
-		info.WithStoreInfo(func() *infopb.StoreInfo {
+		info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 			mint, maxt := bs.TimeRange()
 			return &infopb.StoreInfo{
 				MinTime: mint,

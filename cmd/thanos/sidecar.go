@@ -37,7 +37,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/reloader"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -260,33 +259,20 @@ func runSidecar(
 
 		infoSrv := info.NewInfoServer(
 			component.Sidecar.String(),
-			info.WithLabelSet(func() []labelpb.ZLabelSet {
+			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
 				return promStore.LabelSet()
 			}),
-			info.WithStoreInfo(func() *infopb.StoreInfo {
+			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 				mint, maxt := promStore.Timestamps()
 				return &infopb.StoreInfo{
 					MinTime: mint,
 					MaxTime: maxt,
 				}
 			}),
-			info.WithExemplarsInfo(func() *infopb.ExemplarsInfo {
-				// Currently Exemplars API does not expose metadata such as min/max time,
-				// so we are using default minimum and maximum possible values as min/max time.
-				return &infopb.ExemplarsInfo{
-					MinTime: query.MinTime,
-					MaxTime: query.MaxTime,
-				}
-			}),
-			info.WithRulesInfo(func() *infopb.RulesInfo {
-				return &infopb.RulesInfo{}
-			}),
-			info.WithTargetInfo(func() *infopb.TargetsInfo {
-				return &infopb.TargetsInfo{}
-			}),
-			info.WithMetricMetadataInfo(func() *infopb.MetricMetadataInfo {
-				return &infopb.MetricMetadataInfo{}
-			}),
+			info.WithExemplarsInfoFunc(),
+			info.WithRulesInfoFunc(),
+			info.WithTargetsInfoFunc(),
+			info.WithMetricMetadataInfoFunc(),
 		)
 
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
