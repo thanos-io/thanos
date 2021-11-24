@@ -23,23 +23,17 @@ mkdir -p /tmp/protobin/
 cp ${PROTOC_GEN_GOGOFAST_BIN} /tmp/protobin/protoc-gen-gogofast
 cp ${PROTOC_GEN_GO_BIN} /tmp/protobin/protoc-gen-go
 PATH=${PATH}:/tmp/protobin
-GOGOPROTO_ROOT="$(GO111MODULE=on go list -modfile=.bingo/protoc-gen-gogofast.mod -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
-GOPROTO_ROOT="$(GO111MODULE=on go list -modfile=.bingo/protoc-gen-go.mod -f '{{ .Dir }}' -m github.com/golang/protobuf)"
-
-GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
-GOPROTO_ROOT="${GOPROTO_ROOT}:${GOPROTO_ROOT}/protobuf"
-echo "${GOPROTO_ROOT}!"
 
 DIRS="store/storepb store/storepb/prompb/ store/labelpb rules/rulespb targets/targetspb store/hintspb queryfrontend metadata/metadatapb exemplars/exemplarspb info/infopb"
 echo "generating code"
 pushd "pkg"
 for dir in ${DIRS}; do
-  ${PROTOC_BIN} --go_out=. \
-  -I=/home/giedrius/dev/thanos/proto/include/ \
+  ${PROTOC_BIN} --go_out=Mgoogle/protobuf/any.proto=protobuf/:. --go-grpc_out=. \
   -I=. \
+  -I=protobuf \
     ${dir}/*.proto
   protoc-go-inject-tag -input=${dir}/*pb.go
-  
+
 
   pushd ${dir}
   sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go

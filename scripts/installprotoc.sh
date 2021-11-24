@@ -57,3 +57,4 @@ PACKAGE="protoc-${PROTOC_VERSION}-${OS}-${ARCH}.zip"
 PACKAGE_DOWNLOAD_URL="${PROTOC_DOWNLOAD_URL}/${PACKAGE}"
 curl -LSs ${PACKAGE_DOWNLOAD_URL} -o ${TMP_GOPATH}/${PACKAGE}
 unzip -qqj ${TMP_GOPATH}/${PACKAGE} "bin/protoc" -d "${TMP_GOPATH}/bin/"
+unzip -qqj ${TMP_GOPATH}/${PACKAGE} -d "protobuf"
