@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"

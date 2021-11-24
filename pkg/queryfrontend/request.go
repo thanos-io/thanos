@@ -9,8 +9,8 @@ import (
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/timestamp"
 )
 
 // TODO(yeya24): add partial result when needed.

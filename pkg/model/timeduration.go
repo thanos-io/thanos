@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 

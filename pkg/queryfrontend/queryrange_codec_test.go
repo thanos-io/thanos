@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/weaveworks/common/httpgrpc"
 
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
