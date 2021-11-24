@@ -31,8 +31,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type ResolutionLevel int64
@@ -766,7 +766,10 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 		return false, ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
 	}
 
-	shouldRerun, compID, err := cg.compact(ctx, subDir, planner, comp)
+	var err error
+	tracing.DoInSpan(ctx, "group_compaction", func(ctx context.Context) {
+		shouldRerun, compID, err = cg.compact(ctx, subDir, planner, comp)
+	}, opentracing.Tags{"group key": cg.Key()})
 	if err != nil {
 		cg.compactionFailures.Inc()
 		return false, ulid.ULID{}, err
@@ -988,7 +991,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	var toCompact []*metadata.Meta
 	tracing.DoInSpan(ctx, "compaction_planning", func(ctx context.Context) {
 		toCompact, err = planner.Plan(ctx, cg.metasByMinTime)
-	}, opentracing.Tags{"group key": cg.Key()})
+	})
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "plan compaction")
 	}
@@ -1009,6 +1012,8 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	// ctx contains the parent span for this function's processes.
 	// each block will have a child span from it.
 	toCompactDirs := make([]string, 0, len(toCompact))
+	var blockSpan tracing.Span
+	var blockCtx context.Context
 	for _, meta := range toCompact {
 		bdir := filepath.Join(dir, meta.ULID.String())
 		for _, s := range meta.Compaction.Sources {
@@ -1019,8 +1024,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 
 		// creating a child block span's context, identified by the block ID.
-		blockSpan, blockCtx := tracing.StartSpan(ctx, "block_operations", opentracing.Tags{"block.id": meta.ULID})
-		defer blockSpan.Finish()
+		blockSpan, blockCtx = tracing.StartSpan(ctx, "block_operations", opentracing.Tags{"block.id": meta.ULID})
 
 		tracing.DoInSpan(blockCtx, "compaction_block_download", func(ctx context.Context) {
 			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir)
@@ -1058,6 +1062,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 		toCompactDirs = append(toCompactDirs, bdir)
 	}
+	blockSpan.Finish()
 	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", fmt.Sprintf("%v", toCompactDirs), "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
 	begin = time.Now()
@@ -1137,7 +1142,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	for _, meta := range toCompact {
 		tracing.DoInSpan(ctx, "compaction_block_delete", func(ctx context.Context) {
 			err = cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()))
-		})
+		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
 			return false, ulid.ULID{}, retry(errors.Wrapf(err, "mark old block for deletion from bucket"))
 		}
@@ -1238,11 +1243,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 					var err error
 					var shouldRerunGroup bool
 					// done in a child span derived from the parent span in ctx
-					tracing.DoInSpan(ctx, "group_compaction", func(workCtx context.Context) {
-						shouldRerunGroup, _, err = g.Compact(workCtx, c.compactDir, c.planner, c.comp)
-					}) //not adding group key for group_compaction since it is already added to "compaction" parent span
-					//DoInSpan internally runs startSpan
-					if err == nil {
+					if shouldRerunGroup, _, err = g.Compact(workCtx, c.compactDir, c.planner, c.comp); err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()
 							finishedAllGroups = false
@@ -1329,6 +1330,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		}
 		close(groupChan)
 		wg.Wait()
+
 		// Collect any other error reported by the workers, or any error reported
 		// while we were waiting for the last batch of groups to run the compaction.
 		close(errChan)
