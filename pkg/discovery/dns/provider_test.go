@@ -8,8 +8,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 

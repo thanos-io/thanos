@@ -20,15 +20,17 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
-	"github.com/go-kit/kit/log"
-	"github.com/thanos-io/thanos/pkg/testutil"
-	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
+	"github.com/go-kit/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 
-	thTLS "github.com/thanos-io/thanos/pkg/tls"
+	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
+
 	pb "google.golang.org/grpc/examples/features/proto/echo"
+
+	thTLS "github.com/thanos-io/thanos/pkg/tls"
 )
 
 var serverName = "thanos"

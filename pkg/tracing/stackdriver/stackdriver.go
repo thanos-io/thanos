@@ -7,7 +7,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
 	"gopkg.in/yaml.v2"
 )

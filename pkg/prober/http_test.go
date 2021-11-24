@@ -11,9 +11,10 @@ import (
 	"path"
 	"testing"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 

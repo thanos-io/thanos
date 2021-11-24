@@ -16,7 +16,7 @@ import (
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/mwitkow/go-conntrack"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
