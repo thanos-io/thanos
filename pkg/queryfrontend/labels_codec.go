@@ -107,7 +107,7 @@ func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange
 	}
 }
 
-func (c labelsCodec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Request, error) {
+func (c labelsCodec) DecodeRequest(_ context.Context, r *http.Request, _ []string) (queryrange.Request, error) {
 	if err := r.ParseForm(); err != nil {
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
 	}
