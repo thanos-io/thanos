@@ -276,6 +276,8 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 				MaxResolutionWindow:     r.MaxResolutionWindow,
 				SkipChunks:              r.SkipChunks,
 				PartialResponseDisabled: r.PartialResponseDisabled,
+				Hints:                   r.Hints,
+				QueryHints:              r.QueryHints,
 			}
 			wg = &sync.WaitGroup{}
 		)

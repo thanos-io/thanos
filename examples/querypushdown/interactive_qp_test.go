@@ -1,0 +1,339 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+package querypushdown_test
+
+import (
+	"fmt"
+	"os"
+	execlib "os/exec"
+	"path/filepath"
+	"strconv"
+	"testing"
+
+	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
+	e2einteractive "github.com/efficientgo/e2e/interactive"
+	e2emonitoring "github.com/efficientgo/e2e/monitoring"
+	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
+	"github.com/thanos-io/thanos/pkg/objstore/s3"
+	"github.com/thanos-io/thanos/pkg/testutil"
+	tracingclient "github.com/thanos-io/thanos/pkg/tracing/client"
+	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
+	"gopkg.in/yaml.v2"
+)
+
+const (
+	data           = "data"
+	defaultProfile = "continuous-1w-1series-10000apps"
+	thanosImage    = "thanos:latest" // Local image build when you run `make docker` from root of the Thanos repo.
+)
+
+var (
+	maxTimeFresh = `2021-07-27T00:00:00Z`
+	maxTimeOld   = `2021-07-20T00:00:00Z`
+
+	store1Data = func() string { a, _ := filepath.Abs(filepath.Join(data, "store1")); return a }()
+	store2Data = func() string { a, _ := filepath.Abs(filepath.Join(data, "store2")); return a }()
+	prom1Data  = func() string { a, _ := filepath.Abs(filepath.Join(data, "prom1")); return a }()
+	prom2Data  = func() string { a, _ := filepath.Abs(filepath.Join(data, "prom2")); return a }()
+)
+
+func exec(cmd string, args ...string) error {
+	if o, err := execlib.Command(cmd, args...).CombinedOutput(); err != nil {
+		return errors.Wrap(err, string(o))
+	}
+	return nil
+}
+
+// createData generates some blocks for us to play with and makes them
+// available to store and Prometheus instances.
+//
+// You can choose different profiles by setting the BLOCK_PROFILE environment variable.
+// Available profiles can be found at https://github.com/thanos-io/thanosbench/blob/master/pkg/blockgen/profiles.go#L28
+func createData() (perr error) {
+	profile := os.Getenv("BLOCK_PROFILE")
+	if profile == "" {
+		profile = defaultProfile //	Use "continuous-1w-1series-10000apps" if you have ~10GB of memory for creation phase.
+	}
+
+	fmt.Println("Re-creating data (can take minutes)...")
+	defer func() {
+		if perr != nil {
+			_ = os.RemoveAll(data)
+		}
+	}()
+
+	if err := exec(
+		"sh", "-c",
+		fmt.Sprintf("mkdir -p %s && "+
+			"docker run -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block plan -p %s --labels 'cluster=\"eu-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block gen --output.dir /shared", store1Data, profile, maxTimeOld, store1Data),
+	); err != nil {
+		return err
+	}
+	if err := exec(
+		"sh", "-c",
+		fmt.Sprintf("mkdir -p %s && "+
+			"docker run -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block plan -p %s --labels 'cluster=\"us-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block gen --output.dir /shared", store2Data, profile, maxTimeOld, store2Data),
+	); err != nil {
+		return err
+	}
+
+	if err := exec(
+		"sh", "-c",
+		fmt.Sprintf("mkdir -p %s && "+
+			"docker run -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block plan -p %s --labels 'cluster=\"eu-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block gen --output.dir /shared", prom1Data, profile, maxTimeFresh, prom1Data),
+	); err != nil {
+		return err
+	}
+	if err := exec(
+		"sh", "-c",
+		fmt.Sprintf("mkdir -p %s && "+
+			"docker run -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block plan -p %s --labels 'cluster=\"us-1\"' --labels 'replica=\"0\"' --max-time=%s | "+
+			"docker run -v %s/:/shared -i quay.io/thanos/thanosbench:v0.3.0-rc.0 block gen --output.dir /shared", prom2Data, profile, maxTimeFresh, prom2Data),
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+// TestReadOnlyThanosSetup runs read only Thanos setup that has data from `maxTimeFresh - 2w` to `maxTimeOld`, with extra monitoring and tracing for full playground experience.
+// Run with test args `-timeout 9999m`.
+func TestReadOnlyThanosSetup(t *testing.T) {
+	// t.Skip("This is interactive test - it will run until you will kill it or curl 'finish' endpoint. Comment and run as normal test to use it!")
+
+	// Create series of TSDB blocks. Cache them to 'data' dir so we don't need to re-create on every run.
+	_, err := os.Stat(data)
+	if os.IsNotExist(err) {
+		testutil.Ok(t, createData())
+	} else {
+		testutil.Ok(t, err)
+		fmt.Println("Skipping blocks generation, found data directory.")
+	}
+
+	e, err := e2e.NewDockerEnvironment("interactive")
+	testutil.Ok(t, err)
+	t.Cleanup(e.Close)
+
+	m, err := e2emonitoring.Start(e)
+	testutil.Ok(t, err)
+
+	// Initialize object storage with two buckets (our long term storage).
+	//
+	//	┌──────────────┐
+	//	│              │
+	//	│    Minio     │
+	//	│              │
+	//	├──────────────┼──────────────────────────────────────────────────┐
+	//	│ Bucket: bkt1 │ {cluster=eu1, replica=0} 10k series [t-2w, t-1w] │
+	//	├──────────────┼──────────────────────────────────────────────────┘
+	//	│              │
+	//	├──────────────┼──────────────────────────────────────────────────┐
+	//	│ Bucket: bkt2 │ {cluster=us1, replica=0} 10k series [t-2w, t-1w] │
+	//	└──────────────┴──────────────────────────────────────────────────┘
+	//
+	m1 := e2edb.NewMinio(e, "minio-1", "default")
+	testutil.Ok(t, exec("cp", "-r", store1Data+"/.", filepath.Join(m1.Dir(), "bkt1")))
+	testutil.Ok(t, exec("cp", "-r", store2Data+"/.", filepath.Join(m1.Dir(), "bkt2")))
+
+	// Setup Jaeger.
+	// TODO(bwplotka): Move this to  e2e project.
+	j := e.Runnable("tracing").WithPorts(map[string]int{"http-front": 16686, "jaeger.thrift": 14268}).Init(e2e.StartOptions{Image: "jaegertracing/all-in-one:1.25"})
+	testutil.Ok(t, e2e.StartAndWaitReady(j))
+
+	jaegerConfig, err := yaml.Marshal(tracingclient.TracingConfig{
+		Type: tracingclient.JAEGER,
+		Config: jaeger.Config{
+			ServiceName:  "thanos",
+			SamplerType:  "const",
+			SamplerParam: 1,
+			Endpoint:     "http://" + j.InternalEndpoint("jaeger.thrift") + "/api/traces",
+		},
+	})
+	testutil.Ok(t, err)
+
+	// Create two store gateways, one for each bucket (access point to long term storage).
+	//	                    ┌───────────┐
+	//	                    │           │
+	//	┌──────────────┐    │  Store 1  │
+	//	│ Bucket: bkt1 │◄───┤           │
+	//	├──────────────┼    └───────────┘
+	//	│              │
+	//	├──────────────┼    ┌───────────┐
+	//	│ Bucket: bkt2 │◄───┤           │
+	//	└──────────────┴    │  Store 2  │
+	//	                    │           │
+	//	                    └───────────┘
+	bkt1Config, err := yaml.Marshal(client.BucketConfig{
+		Type: client.S3,
+		Config: s3.Config{
+			Bucket:    "bkt1",
+			AccessKey: e2edb.MinioAccessKey,
+			SecretKey: e2edb.MinioSecretKey,
+			Endpoint:  m1.InternalEndpoint("http"),
+			Insecure:  true,
+		},
+	})
+	testutil.Ok(t, err)
+	store1 := e2edb.NewThanosStore(
+		e,
+		"store1",
+		bkt1Config,
+		e2edb.WithImage(thanosImage),
+		e2edb.WithFlagOverride(map[string]string{
+			"--tracing.config":                    string(jaegerConfig),
+			"--consistency-delay":                 "0s",
+			"--store.grpc.series-max-concurrency": "100",
+		}),
+	)
+
+	bkt2Config, err := yaml.Marshal(client.BucketConfig{
+		Type: client.S3,
+		Config: s3.Config{
+			Bucket:    "bkt2",
+			AccessKey: e2edb.MinioAccessKey,
+			SecretKey: e2edb.MinioSecretKey,
+			Endpoint:  m1.InternalEndpoint("http"),
+			Insecure:  true,
+		},
+	})
+	testutil.Ok(t, err)
+
+	store2 := e2edb.NewThanosStore(
+		e,
+		"store2",
+		bkt2Config,
+		e2edb.WithImage(thanosImage),
+		e2edb.WithFlagOverride(map[string]string{
+			"--tracing.config":                    string(jaegerConfig),
+			"--consistency-delay":                 "0s",
+			"--store.grpc.series-max-concurrency": "100",
+		}),
+	)
+
+	// DEBUG Change Proms to disk reading stores for same implementation.
+	// TODO(bwplotka): Support StoreBlockAPI
+
+	store3 := diskReadingStore(e, "store-prom1", thanosImage, jaegerConfig)
+	store4 := diskReadingStore(e, "store-prom2", thanosImage, jaegerConfig)
+
+	testutil.Ok(t, exec("cp", "-r", prom1Data+"/.", store3.Dir()))
+	testutil.Ok(t, exec("cp", "-r", prom2Data+"/.", store4.Dir()))
+
+	testutil.Ok(t, e2e.StartAndWaitReady(m1))
+	testutil.Ok(t, e2e.StartAndWaitReady(store3, store4, store1, store2))
+
+	// Let's start query on top of all those 5 store APIs (global query engine).
+	//
+	//  ┌──────────────┐
+	//  │              │
+	//  │    Minio     │                                                       ┌───────────┐
+	//  │              │                                                       │           │
+	//  ├──────────────┼──────────────────────────────────────────────────┐    │  Store 1  │◄──────┐
+	//  │ Bucket: bkt1 │ {cluster=eu1, replica=0} 10k series [t-2w, t-1w] │◄───┤           │       │
+	//  ├──────────────┼──────────────────────────────────────────────────┘    └───────────┘       │
+	//  │              │                                                                           │
+	//  ├──────────────┼──────────────────────────────────────────────────┐    ┌───────────┐       │
+	//  │ Bucket: bkt2 │ {cluster=us1, replica=0} 10k series [t-2w, t-1w] │◄───┤           │       │
+	//  └──────────────┴──────────────────────────────────────────────────┘    │  Store 2  │◄──────┤
+	//                                                                         │           │       │
+	//                                                                         └───────────┘       │
+	//                                                                                             │
+	//                                                                                             │
+	//                                                                                             │      ┌───────────────┐
+	//                                                                         ┌────────────┐      │      │               │
+	//                    ┌───────────────────────────────────────────────┐    │            │      ├──────┤    Querier    │◄────── PromQL
+	//                    │ {cluster=eu1, replica=0} 10k series [t-1w, t] │◄───┤  Prom-ha0  │      │      │               │
+	//                    └───────────────────────────────────────────────┘    │            │      │      └───────────────┘
+	//                                                                         ├────────────┤      │
+	//                                                                         │   Sidecar  │◄─────┤
+	//                                                                         └────────────┘      │
+	//                                                                                             │
+	//                                                                         ┌────────────┐      │
+	//                    ┌───────────────────────────────────────────────┐    │            │      │
+	//                    │ {cluster=eu1, replica=1} 10k series [t-1w, t] │◄───┤  Prom-ha1  │      │
+	//                    └───────────────────────────────────────────────┘    │            │      │
+	//                                                                         ├────────────┤      │
+	//                                                                         │   Sidecar  │◄─────┤
+	//                                                                         └────────────┘      │
+	//                                                                                             │
+	//                                                                         ┌────────────┐      │
+	//                    ┌───────────────────────────────────────────────┐    │            │      │
+	//                    │ {cluster=us1, replica=0} 10k series [t-1w, t] │◄───┤  Prom 2    │      │
+	//                    └───────────────────────────────────────────────┘    │            │      │
+	//                                                                         ├────────────┤      │
+	//                                                                         │   Sidecar  │◄─────┘
+	//                                                                         └────────────┘
+	//
+	query1 := e2edb.NewThanosQuerier(
+		e,
+		"query1",
+		[]string{
+			store1.InternalEndpoint("grpc"),
+			store2.InternalEndpoint("grpc"),
+			store3.InternalEndpoint("grpc"),
+			store4.InternalEndpoint("grpc"),
+		},
+		e2edb.WithImage(thanosImage),
+		e2edb.WithFlagOverride(map[string]string{"--tracing.config": string(jaegerConfig)}),
+	)
+	testutil.Ok(t, e2e.StartAndWaitReady(query1))
+
+	// Wait until we have 5 gRPC connections.
+	testutil.Ok(t, query1.WaitSumMetricsWithOptions(e2e.Equals(4), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+
+	testutil.Ok(t, e2einteractive.OpenInBrowser(fmt.Sprintf("http://%s", query1.Endpoint("http"))))
+	fmt.Println(fmt.Sprintf("http://%s/%s", query1.Endpoint("http"), "graph?g0.expr=sum(count_over_time(continuous_app_metric0%5B2w%5D))%20by%20(cluster%2C%20replica)&g0.tab=1&g0.stacked=0&g0.range_input=1h&g0.max_source_resolution=0s&g0.deduplicate=0&g0.partial_response=0&g0.store_matches=%5B%5D&g0.end_input=2021-07-27%2000%3A00%3A00&g0.moment_input=2021-07-27%2000%3A00%3A00"))
+	fmt.Println(fmt.Sprintf("http://%s/%s", query1.Endpoint("http"), "api/v1/query?query=sum%28count_over_time%28continuous_app_metric0%5B2w%5D%29%29+by+%28cluster%2C+replica%29&dedup=false&partial_response=false&time=1627344000"))
+
+	// Tracing endpoint.
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+j.Endpoint("http-front")))
+	// Monitoring Endpoint.
+	testutil.Ok(t, m.OpenUserInterfaceInBrowser())
+	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
+}
+
+func diskReadingStore(env e2e.Environment, name string, image string, jaegerConfig []byte) *e2e.InstrumentedRunnable {
+	ports := map[string]int{
+		"http": 9090,
+		"grpc": 9091,
+	}
+
+	f := e2e.NewInstrumentedRunnable(env, name, ports, "http")
+
+	dir1Config, err := yaml.Marshal(client.BucketConfig{
+		Type: client.FILESYSTEM,
+		Config: filesystem.Config{
+			Directory: f.InternalDir(),
+		},
+	})
+	if err != nil {
+		return e2e.NewErrInstrumentedRunnable(name, err)
+	}
+
+	args := map[string]string{
+		"--debug.name":      name,
+		"--grpc-address":    fmt.Sprintf(":%d", ports["grpc"]),
+		"--http-address":    fmt.Sprintf(":%d", ports["http"]),
+		"--log.level":       "info",
+		"--data-dir":        f.InternalDir(),
+		"--objstore.config": string(dir1Config),
+		// Accelerated sync time for quicker test (3m by default).
+		"--sync-block-duration":               "3s",
+		"--block-sync-concurrency":            "1",
+		"--store.grpc.series-max-concurrency": "100",
+		"--tracing.config":                    string(jaegerConfig),
+		"--consistency-delay":                 "0s",
+	}
+	return f.Init(e2e.StartOptions{
+		Image:     image,
+		Command:   e2e.NewCommand("store", e2e.BuildKingpinArgs(args)...),
+		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		User:      strconv.Itoa(os.Getuid()),
+	})
+}

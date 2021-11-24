@@ -33,6 +33,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/thanos-io/thanos/pkg/store/promqlaggr"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -1071,6 +1072,14 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
+				}
+
+				if len(req.QueryHints) > 0 {
+					// TODO(bwplotka): Pushdown query to blocks. Of course this has to be smarter e.g
+					// We need to ensure blocks are disjoint (they are in our demo deployment), data deduplicated and
+					// and concurrency limit sets. We also potentially need to shard query across time/series within block too,
+					// right not is defined by block.
+					part = promqlaggr.AggregatedSeriesSet(newCtx, part, req.MinTime, req.MaxTime, req.QueryHints, req.Aggregates)
 				}
 
 				mtx.Lock()

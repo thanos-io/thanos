@@ -108,10 +108,34 @@ message SeriesRequest {
   google.protobuf.Any hints = 9;
 
   // Query step size in milliseconds.
+  // Deprecated: Use query_hints instead.
   int64 step = 10;
 
   // Range vector selector range in milliseconds.
+  // Deprecated: Use query_hints instead.
   int64 range = 11;
+
+  // query_hints represents aggregations and grouping that are safe to pushdown
+  // to be evaluated on server side if possible.
+  repeated QueryHints query_hints = 12 [(gogoproto.nullable) = false];
+}
+
+// Similar to SelectHints.
+message QueryHints {
+  // TODO(bwplotka) Define this so it works across multiple nested query-pushdownable functions.
+  // Range vector selector range in milliseconds if any.
+
+  // Query step size in milliseconds.
+  int64 step = 1;
+
+  // String representation of surrounding function or aggregation.
+  string func =2;
+  // List of label names used in aggregation.
+  repeated string grouping = 3 [(gogoproto.nullable) = false];
+  // Indicate whether it is without or by.
+  bool by = 4;
+  int64 range = 5;
+
 }
 
 enum Aggr {

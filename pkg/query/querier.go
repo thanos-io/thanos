@@ -5,6 +5,7 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -18,7 +19,6 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	promgate "github.com/prometheus/prometheus/util/gate"
 
-	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -33,7 +33,7 @@ import (
 // replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behavior of proxy.
-type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable
+type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, query string) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy storepb.StoreServer, maxConcurrentSelects int, selectTimeout time.Duration) QueryableCreator {
@@ -41,7 +41,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 		extprom.WrapRegistererWithPrefix("concurrent_selects_", reg),
 	).NewHistogram(gate.DurationHistogramOpts)
 
-	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable {
+	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, query string) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabels:       replicaLabels,
@@ -56,6 +56,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 			},
 			maxConcurrentSelects: maxConcurrentSelects,
 			selectTimeout:        selectTimeout,
+			query:                query,
 		}
 	}
 }
@@ -72,11 +73,12 @@ type queryable struct {
 	gateProviderFn       func() gate.Gate
 	maxConcurrentSelects int
 	selectTimeout        time.Duration
+	query                string
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.query), nil
 }
 
 type querier struct {
@@ -93,6 +95,7 @@ type querier struct {
 	skipChunks          bool
 	selectGate          gate.Gate
 	selectTimeout       time.Duration
+	query               string // TODO(bwplotka): Ideally we have all info in PromQL hints.
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -109,6 +112,7 @@ func newQuerier(
 	partialResponse, skipChunks bool,
 	selectGate gate.Gate,
 	selectTimeout time.Duration,
+	query string,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -135,11 +139,13 @@ func newQuerier(
 		maxResolutionMillis: maxResolutionMillis,
 		partialResponse:     partialResponse,
 		skipChunks:          skipChunks,
+		query:               query,
 	}
 }
 
-func (q *querier) isDedupEnabled() bool {
-	return q.deduplicate && len(q.replicaLabels) > 0
+func (q *querier) isQueryPushdownEnabled() bool {
+	// TODO(bwplotka): DEBUG: Disabling dedup and using this param to control pushdown yes/no (lazy Bartek).
+	return q.deduplicate // && len(q.replicaLabels) > 0
 }
 
 type seriesServer struct {
@@ -266,6 +272,33 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
 
+	var h []storepb.QueryHints
+	if q.isQueryPushdownEnabled() && hints != nil {
+		fmt.Printf("Select hints: %v\n", *hints)
+
+		// TODO(bwplotka): Yolo, this has to be more extandable, abstracted away.
+		// Querier StoreAPI needs also decide which nodes are safe to push down in terms of overlaps and duplication.
+		// In this demo dateset we ensured data is disjoint, so it's safe to do it always.
+		if hints.Func != "avg" && hints.Func != "avg_over_time" && hints.Func != "topk" {
+			h = append(h, storepb.QueryHints{
+				Step:     hints.Step,
+				Func:     hints.Func,
+				Range:    hints.Range,
+				By:       hints.By,
+				Grouping: hints.Grouping,
+			})
+
+			// TODO(bwplotka): Ideally PromQL gives us all nested hints that will be pushed
+			if strings.HasPrefix(q.query, "sum(count_over_time(") && strings.HasSuffix(q.query, "by (cluster, replica)") {
+				fmt.Println("our query!")
+				h = append(h, storepb.QueryHints{
+					Func:     "sum",
+					By:       true,
+					Grouping: []string{"cluster", "replica"},
+				})
+			}
+		}
+	}
 	// TODO(bwplotka): Use inprocess gRPC.
 	resp := &seriesServer{ctx: ctx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
@@ -278,6 +311,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		SkipChunks:              q.skipChunks,
 		Step:                    hints.Step,
 		Range:                   hints.Range,
+		QueryHints:              h,
 	}, resp); err != nil {
 		return nil, errors.Wrap(err, "proxy Series()")
 	}
@@ -287,30 +321,8 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		warns = append(warns, errors.New(w))
 	}
 
-	if !q.isDedupEnabled() {
-		// Return data without any deduplication.
-		return &promSeriesSet{
-			mint:  q.mint,
-			maxt:  q.maxt,
-			set:   newStoreSeriesSet(resp.seriesSet),
-			aggrs: aggrs,
-			warns: warns,
-		}, nil
-	}
-
-	// TODO(fabxc): this could potentially pushed further down into the store API to make true streaming possible.
-	sortDedupLabels(resp.seriesSet, q.replicaLabels)
-	set := &promSeriesSet{
-		mint:  q.mint,
-		maxt:  q.maxt,
-		set:   newStoreSeriesSet(resp.seriesSet),
-		aggrs: aggrs,
-		warns: warns,
-	}
-
-	// The merged series set assembles all potentially-overlapping time ranges of the same series into a single one.
-	// TODO(bwplotka): We could potentially dedup on chunk level, use chunk iterator for that when available.
-	return dedup.NewSeriesSet(set, q.replicaLabels, len(aggrs) == 1 && aggrs[0] == storepb.Aggr_COUNTER), nil
+	// Return data without any deduplication.
+	return storepb.NewPromSeriesSet(q.mint, q.maxt, newStoreSeriesSet(resp.seriesSet), aggrs, warns), nil
 }
 
 // sortDedupLabels re-sorts the set so that the same series with different replica
