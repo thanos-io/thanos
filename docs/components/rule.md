@@ -208,7 +208,7 @@ Advanced relabelling configuration is possible with the `--alert.relabel-config`
 
 Stateless ruler enables nearly indefinite horizontal scalability. Ruler doesn't have a fully functional TSDB for storing evaluation results, but uses a WAL only storage and sends data to some remote storage via remote write.
 
-The WAL only storage reuses the upstream [Prometheus agent](https://prometheus.io/blog/2021/11/16/agent/) and it is compatible with the old TSDB data. For more design purpose of this mode, please refer to the [proposal](https://thanos.io/tip/proposals-accepted/202005-scalable-rule-storage.md/).
+The WAL only storage reuses the upstream [Prometheus agent](https://prometheus.io/blog/2021/11/16/agent/) and it is compatible with the old TSDB data. For more design purpose of this mode, please refer to the [proposal](https://thanos.io/tip/proposals-done/202005-scalable-rule-storage.md/).
 
 Stateless mode can be enabled by providing `--remote-write.config` or `--remote-write.config-file` flag. For example:
 

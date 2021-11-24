@@ -2,7 +2,7 @@
 type: proposal
 title: Scalable Rule Storage
 status: complete
-menu: proposals-accepted
+menu: proposals-done
 ---
 
 ## Summary
