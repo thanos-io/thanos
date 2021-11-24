@@ -973,9 +973,6 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
-	// the ctx here comes from bucketCompactor.compact and hence has the groups parent span in it
-	// hence, no need to create a new context/span here
-
 	// Check for overlapped blocks.
 	overlappingBlocks := false
 	if err := cg.areBlocksOverlapping(nil); err != nil {
@@ -1012,8 +1009,6 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	// ctx contains the parent span for this function's processes.
 	// each block will have a child span from it.
 	toCompactDirs := make([]string, 0, len(toCompact))
-	var blockSpan tracing.Span
-	var blockCtx context.Context
 	for _, meta := range toCompact {
 		bdir := filepath.Join(dir, meta.ULID.String())
 		for _, s := range meta.Compaction.Sources {
@@ -1023,10 +1018,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			uniqueSources[s] = struct{}{}
 		}
 
-		// creating a child block span's context, identified by the block ID.
-		blockSpan, blockCtx = tracing.StartSpan(ctx, "block_operations", opentracing.Tags{"block.id": meta.ULID})
-
-		tracing.DoInSpan(blockCtx, "compaction_block_download", func(ctx context.Context) {
+		tracing.DoInSpan(ctx, "compaction_block_download", func(ctx context.Context) {
 			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir)
 		}, opentracing.Tags{"block.id": meta.ULID})
 
@@ -1036,7 +1028,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 		// Ensure all input blocks are valid.
 		var stats block.HealthStats
-		tracing.DoInSpan(blockCtx, "compaction_block_healthcheck", func(ctx context.Context) {
+		tracing.DoInSpan(ctx, "compaction_block_healthcheck", func(ctx context.Context) {
 			stats, err = block.GatherIndexHealthStats(cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
@@ -1062,7 +1054,6 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 		toCompactDirs = append(toCompactDirs, bdir)
 	}
-	blockSpan.Finish()
 	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", fmt.Sprintf("%v", toCompactDirs), "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
 	begin = time.Now()
