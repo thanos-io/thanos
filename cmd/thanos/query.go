@@ -191,20 +191,24 @@ func registerQuery(app *extkingpin.App) {
 			}
 		}
 
-		if dup := firstDuplicate(*stores); dup != "" {
-			return errors.Errorf("Address %s is duplicated for --store flag.", dup)
+		if err := validateAddrs(*endpoints); err != nil {
+			return errors.Wrap(err, "validating --endpoint flags")
 		}
 
-		if dup := firstDuplicate(*ruleEndpoints); dup != "" {
-			return errors.Errorf("Address %s is duplicated for --rule flag.", dup)
+		if err := validateAddrs(*stores); err != nil {
+			return errors.Wrap(err, "validating --store flags")
 		}
 
-		if dup := firstDuplicate(*metadataEndpoints); dup != "" {
-			return errors.Errorf("Address %s is duplicated for --metadata flag.", dup)
+		if err := validateAddrs(*ruleEndpoints); err != nil {
+			return errors.Wrap(err, "validating --rule flags")
 		}
 
-		if dup := firstDuplicate(*exemplarEndpoints); dup != "" {
-			return errors.Errorf("Address %s is duplicated for --exemplar flag.", dup)
+		if err := validateAddrs(*metadataEndpoints); err != nil {
+			return errors.Wrap(err, "validating --metadata flags")
+		}
+
+		if err := validateAddrs(*exemplarEndpoints); err != nil {
+			return errors.Wrap(err, "validating --exemplar flags")
 		}
 
 		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
@@ -217,8 +221,8 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		if dup := firstDuplicate(*targetEndpoints); dup != "" {
-			return errors.Errorf("Address %s is duplicated for --target flag.", dup)
+		if err := validateAddrs(*targetEndpoints); err != nil {
+			return errors.Wrap(err, "validating --target flags")
 		}
 
 		var fileSD *file.Discovery
@@ -733,20 +737,29 @@ func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus
 	return deduplicated
 }
 
-// firstDuplicate returns the first duplicate string in the given string slice
-// or empty string if none was found.
-func firstDuplicate(ss []string) string {
+// validateAddrs checks an address slice for duplicates and empty or invalid elements.
+func validateAddrs(addrs []string) error {
 	set := map[string]struct{}{}
 
-	for _, s := range ss {
-		if _, ok := set[s]; ok {
-			return s
+	for _, addr := range addrs {
+		if addr == "" {
+			return errors.New("Address is empty.")
 		}
 
-		set[s] = struct{}{}
+		qtypeAndName := strings.SplitN(addr, "+", 2)
+		hostAndPort := strings.SplitN(addr, ":", 2)
+		if len(qtypeAndName) != 2 && len(hostAndPort) != 2 {
+			return errors.Errorf("Address %s is not of <host>:<port> format or a valid DNS query.", addr)
+		}
+
+		if _, ok := set[addr]; ok {
+			return errors.Errorf("Address %s is duplicated.", addr)
+		}
+
+		set[addr] = struct{}{}
 	}
 
-	return ""
+	return nil
 }
 
 // engineFactory creates from 1 to 3 promql.Engines depending on
