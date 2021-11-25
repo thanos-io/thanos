@@ -14,24 +14,24 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/thanos-io/thanos/pkg/extprom"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -766,7 +766,10 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 		return false, ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
 	}
 
-	shouldRerun, compID, err := cg.compact(ctx, subDir, planner, comp)
+	var err error
+	tracing.DoInSpan(ctx, "group_compaction", func(ctx context.Context) {
+		shouldRerun, compID, err = cg.compact(ctx, subDir, planner, comp)
+	}, opentracing.Tags{"group.key": cg.Key()})
 	if err != nil {
 		cg.compactionFailures.Inc()
 		return false, ulid.ULID{}, err
@@ -970,9 +973,6 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
-	// the ctx here comes from bucketCompactor.compact and hence has the groups parent span in it
-	// hence, no need to create a new context/span here
-
 	// Check for overlapped blocks.
 	overlappingBlocks := false
 	if err := cg.areBlocksOverlapping(nil); err != nil {
@@ -988,7 +988,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	var toCompact []*metadata.Meta
 	tracing.DoInSpan(ctx, "compaction_planning", func(ctx context.Context) {
 		toCompact, err = planner.Plan(ctx, cg.metasByMinTime)
-	}, opentracing.Tags{"group key": cg.Key()})
+	})
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "plan compaction")
 	}
@@ -1018,7 +1018,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 		tracing.DoInSpan(ctx, "compaction_block_download", func(ctx context.Context) {
 			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir)
-		}, opentracing.Tags{"block ID": meta.ULID})
+		}, opentracing.Tags{"block.id": meta.ULID})
 
 		if err != nil {
 			return false, ulid.ULID{}, retry(errors.Wrapf(err, "download block %s", meta.ULID))
@@ -1028,7 +1028,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		var stats block.HealthStats
 		tracing.DoInSpan(ctx, "compaction_block_healthcheck", func(ctx context.Context) {
 			stats, err = block.GatherIndexHealthStats(cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
-		}, opentracing.Tags{"block ID": meta.ULID})
+		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
 			return false, ulid.ULID{}, errors.Wrapf(err, "gather index issues for block %s", bdir)
 		}
@@ -1128,7 +1128,10 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	// into the next planning cycle.
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
 	for _, meta := range toCompact {
-		if err := cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String())); err != nil {
+		tracing.DoInSpan(ctx, "compaction_block_delete", func(ctx context.Context) {
+			err = cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()))
+		}, opentracing.Tags{"block.id": meta.ULID})
+		if err != nil {
 			return false, ulid.ULID{}, retry(errors.Wrapf(err, "mark old block for deletion from bucket"))
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
@@ -1225,19 +1228,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			go func() {
 				defer wg.Done()
 				for g := range groupChan {
-					workCtx = tracing.CopyTraceContext(workCtx, ctx)
-					// adding a parent span to ctx for overall compaction
-					// do not need to add a separate span since the parent span is not used separately here - can parent span be passed from original compaction function?
-					var groupSpan tracing.Span
-					groupSpan, ctx = tracing.StartSpan(workCtx, "compaction", opentracing.Tags{"group key": g.Key()})
-					defer groupSpan.Finish() // added to avoid parent spans being finished before child
-					var err error
-					var shouldRerunGroup bool
-					// done in a child span derived from the parent span in ctx
-					tracing.DoInSpan(ctx, "group_compaction", func(ctx context.Context) {
-						shouldRerunGroup, _, err = g.Compact(ctx, c.compactDir, c.planner, c.comp)
-					}) //not adding group key for group_compaction since it is already added to "compaction" parent span
-					//DoInSpan internally runs startSpan
+					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp)
 					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()
@@ -1248,7 +1239,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 					}
 
 					if IsIssue347Error(err) {
-						if err := RepairIssue347(ctx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err); err == nil {
+						if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err); err == nil {
 							mtx.Lock()
 							finishedAllGroups = false
 							mtx.Unlock()

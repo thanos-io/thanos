@@ -12,7 +12,7 @@ local utils = import '../lib/utils.libsonnet';
     },
   },
   grafanaDashboards+:: {
-    [if thanos.queryFrontend != null then 'queryFrontend.json']:
+    [if thanos.queryFrontend != null then 'query_frontend.json']:
       local queryFrontendHandlerSelector = utils.joinLabels([thanos.queryFrontend.dashboard.selector, 'handler="query-frontend"']);
       local queryFrontendTripperwareSelector = utils.joinLabels([thanos.queryFrontend.dashboard.selector, 'tripperware="query_range"']);
       local queryFrontendOpSelector = utils.joinLabels([thanos.queryFrontend.dashboard.selector, 'op="query_range"']);

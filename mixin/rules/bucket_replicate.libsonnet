@@ -1,10 +1,10 @@
 {
   local thanos = self,
-  bucket_replicate+:: {
+  bucketReplicate+:: {
     selector: error 'must provide selector for Thanos Bucket Replicate dashboard',
   },
   prometheusRules+:: {
-    groups+: if thanos.bucket_replicate == null then [] else [
+    groups+: if thanos.bucketReplicate == null then [] else [
       {
         name: 'thanos-bucket-replicate.rules',
         rules: [],

@@ -15,8 +15,8 @@ import (
 
 	"github.com/alecthomas/units"
 	extflag "github.com/efficientgo/tools/extkingpin"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -185,11 +185,6 @@ func runCompact(
 		httpserver.WithTLSConfig(conf.http.tlsConfig),
 	)
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// adding tracer to ctx
-	ctx = tracing.ContextWithTracer(ctx, tracer)
-
 	g.Add(func() error {
 		statusProber.Healthy()
 
@@ -304,6 +299,11 @@ func runCompact(
 	if conf.maxCompactionLevel < compactions.maxLevel() {
 		level.Warn(logger).Log("msg", "Max compaction level is lower than should be", "current", conf.maxCompactionLevel, "default", compactions.maxLevel())
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// adding tracer to ctx
+	ctx = tracing.ContextWithTracer(ctx, tracer)
 
 	defer func() {
 		if rerr != nil {

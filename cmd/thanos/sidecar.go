@@ -11,8 +11,8 @@ import (
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
@@ -21,7 +21,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -36,7 +37,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/reloader"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -259,33 +259,20 @@ func runSidecar(
 
 		infoSrv := info.NewInfoServer(
 			component.Sidecar.String(),
-			info.WithLabelSet(func() []labelpb.ZLabelSet {
+			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
 				return promStore.LabelSet()
 			}),
-			info.WithStoreInfo(func() *infopb.StoreInfo {
+			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 				mint, maxt := promStore.Timestamps()
 				return &infopb.StoreInfo{
 					MinTime: mint,
 					MaxTime: maxt,
 				}
 			}),
-			info.WithExemplarsInfo(func() *infopb.ExemplarsInfo {
-				// Currently Exemplars API does not expose metadata such as min/max time,
-				// so we are using default minimum and maximum possible values as min/max time.
-				return &infopb.ExemplarsInfo{
-					MinTime: query.MinTime,
-					MaxTime: query.MaxTime,
-				}
-			}),
-			info.WithRulesInfo(func() *infopb.RulesInfo {
-				return &infopb.RulesInfo{}
-			}),
-			info.WithTargetInfo(func() *infopb.TargetsInfo {
-				return &infopb.TargetsInfo{}
-			}),
-			info.WithMetricMetadataInfo(func() *infopb.MetricMetadataInfo {
-				return &infopb.MetricMetadataInfo{}
-			}),
+			info.WithExemplarsInfoFunc(),
+			info.WithRulesInfoFunc(),
+			info.WithTargetsInfoFunc(),
+			info.WithMetricMetadataInfoFunc(),
 		)
 
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,

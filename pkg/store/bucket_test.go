@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/leanovate/gopter"
@@ -30,8 +30,8 @@ import (
 	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -969,12 +969,12 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	r := bucketIndexReader{
 		block:        b,
 		stats:        &queryStats{},
-		loadedSeries: map[uint64][]byte{},
+		loadedSeries: map[storage.SeriesRef][]byte{},
 	}
 
 	// Success with no refetches.
-	testutil.Ok(t, r.loadSeries(context.TODO(), []uint64{2, 13, 24}, false, 2, 100))
-	testutil.Equals(t, map[uint64][]byte{
+	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 100))
+	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2:  []byte("aaaaaaaaaa"),
 		13: []byte("bbbbbbbbbb"),
 		24: []byte("cccccccccc"),
@@ -982,9 +982,9 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	testutil.Equals(t, float64(0), promtest.ToFloat64(s.seriesRefetches))
 
 	// Success with 2 refetches.
-	r.loadedSeries = map[uint64][]byte{}
-	testutil.Ok(t, r.loadSeries(context.TODO(), []uint64{2, 13, 24}, false, 2, 15))
-	testutil.Equals(t, map[uint64][]byte{
+	r.loadedSeries = map[storage.SeriesRef][]byte{}
+	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 15))
+	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2:  []byte("aaaaaaaaaa"),
 		13: []byte("bbbbbbbbbb"),
 		24: []byte("cccccccccc"),
@@ -992,9 +992,9 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	testutil.Equals(t, float64(2), promtest.ToFloat64(s.seriesRefetches))
 
 	// Success with refetch on first element.
-	r.loadedSeries = map[uint64][]byte{}
-	testutil.Ok(t, r.loadSeries(context.TODO(), []uint64{2}, false, 2, 5))
-	testutil.Equals(t, map[uint64][]byte{
+	r.loadedSeries = map[storage.SeriesRef][]byte{}
+	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2}, false, 2, 5))
+	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2: []byte("aaaaaaaaaa"),
 	}, r.loadedSeries)
 	testutil.Equals(t, float64(3), promtest.ToFloat64(s.seriesRefetches))
@@ -1007,7 +1007,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	testutil.Ok(t, bkt.Upload(context.Background(), filepath.Join(b.meta.ULID.String(), block.IndexFilename), bytes.NewReader(buf.Get())))
 
 	// Fail, but no recursion at least.
-	testutil.NotOk(t, r.loadSeries(context.TODO(), []uint64{2, 13, 24}, false, 1, 15))
+	testutil.NotOk(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 1, 15))
 }
 
 func TestBucketIndexReader_ExpandedPostings(t *testing.T) {
