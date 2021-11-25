@@ -1045,7 +1045,6 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 		if err := stats.Issue347OutsideChunksErr(); err != nil {
 			return false, ulid.ULID{}, issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", bdir), meta.ULID)
-
 		}
 
 		if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
@@ -1231,10 +1230,8 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			go func() {
 				defer wg.Done()
 				for g := range groupChan {
-					var err error
-					var shouldRerunGroup bool
-					// done in a child span derived from the parent span in ctx
-					if shouldRerunGroup, _, err = g.Compact(workCtx, c.compactDir, c.planner, c.comp); err == nil {
+					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp)
+					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()
 							finishedAllGroups = false
