@@ -9,7 +9,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -91,6 +91,30 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 		})
 	}
 	return res, nil
+}
+
+func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
+	labels := labelpb.ZLabelsFromPromLabels(s.extLset)
+	labelSets := []labelpb.ZLabelSet{}
+	if len(labels) > 0 {
+		labelSets = append(labelSets, labelpb.ZLabelSet{
+			Labels: labels,
+		})
+	}
+
+	return labelSets
+}
+
+func (s *TSDBStore) TimeRange() (int64, int64) {
+	var minTime int64 = math.MinInt64
+	startTime, err := s.db.StartTime()
+	if err == nil {
+		// Since we always use tsdb.DB  implementation,
+		// StartTime should never return error.
+		minTime = startTime
+	}
+
+	return minTime, math.MaxInt64
 }
 
 // CloseDelegator allows to delegate close (releasing resources used by request to the server).

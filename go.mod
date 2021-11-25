@@ -17,7 +17,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.2
 	github.com/chromedp/cdproto v0.0.0-20200424080200-0de008e41fa0
 	github.com/chromedp/chromedp v0.5.3
-	github.com/cortexproject/cortex v1.10.1-0.20211006150606-fb15b432e267
+	github.com/cortexproject/cortex v1.10.1-0.20211124141505-4e9fc3a2b5ab
 	github.com/davecgh/go-spew v1.1.1
 	github.com/efficientgo/e2e v0.11.2-0.20211027134903-67d538984a47
 	github.com/efficientgo/tools/core v0.0.0-20210829154005-c7bad8450208
@@ -27,7 +27,7 @@ require (
 	github.com/felixge/fgprof v0.9.1
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.5.1
-	github.com/go-kit/kit v0.11.0
+	github.com/go-kit/log v0.2.0
 	github.com/go-openapi/strfmt v0.21.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
@@ -63,7 +63,7 @@ require (
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.31
 	github.com/uber/jaeger-client-go v2.29.1+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
-	github.com/weaveworks/common v0.0.0-20210901124008-1fa3f9fa874c
+	github.com/weaveworks/common v0.0.0-20210913144402-035033b78a78
 	go.elastic.co/apm v1.11.0
 	go.elastic.co/apm/module/apmot v1.11.0
 	go.uber.org/atomic v1.9.0
@@ -95,9 +95,7 @@ replace (
 	// TODO: Remove this: https://github.com/thanos-io/thanos/issues/3967.
 	github.com/minio/minio-go/v7 => github.com/bwplotka/minio-go/v7 v7.0.11-0.20210324165441-f9927e5255a6
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
-	// github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20211119115433-692a54649ed7
-	// Custom fork with missing packages required to update to pass. (From https://github.com/prometheus/prometheus/pull/9824)
-	github.com/prometheus/prometheus => github.com/pstibrany/prometheus v1.8.2-0.20211119145100-0bfb0c12cbb5
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20211119115433-692a54649ed7
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
 	google.golang.org/grpc => google.golang.org/grpc v1.40.0
 

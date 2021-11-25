@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/alecthomas/units"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	grpclogging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
@@ -22,6 +22,7 @@ import (
 	commonmodel "github.com/prometheus/common/model"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
+
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -388,10 +389,10 @@ func runStore(
 
 	infoSrv := info.NewInfoServer(
 		component.Store.String(),
-		info.WithLabelSet(func() []labelpb.ZLabelSet {
+		info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
 			return bs.LabelSet()
 		}),
-		info.WithStoreInfo(func() *infopb.StoreInfo {
+		info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 			mint, maxt := bs.TimeRange()
 			return &infopb.StoreInfo{
 				MinTime: mint,

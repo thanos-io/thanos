@@ -11,8 +11,8 @@ import (
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
@@ -30,6 +30,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/info"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -39,6 +41,7 @@ import (
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
 
@@ -311,20 +314,35 @@ func setupAndRunGRPCServer(g *run.Group,
 				s.Shutdown(errors.New("reload hashrings"))
 			}
 
+			mts := store.NewMultiTSDBStore(
+				logger,
+				reg,
+				comp,
+				dbs.TSDBStores,
+			)
 			rw := store.ReadWriteTSDBStore{
-				StoreServer: store.NewMultiTSDBStore(
-					logger,
-					reg,
-					comp,
-					dbs.TSDBStores,
-				),
+				StoreServer:          mts,
 				WriteableStoreServer: webHandler,
 			}
+
+			infoSrv := info.NewInfoServer(
+				component.Receive.String(),
+				info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return mts.LabelSet() }),
+				info.WithStoreInfoFunc(func() *infopb.StoreInfo {
+					minTime, maxTime := mts.TimeRange()
+					return &infopb.StoreInfo{
+						MinTime: minTime,
+						MaxTime: maxTime,
+					}
+				}),
+				info.WithExemplarsInfoFunc(),
+			)
 
 			s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 				grpcserver.WithServer(store.RegisterStoreServer(rw)),
 				grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 				grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
+				grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 				grpcserver.WithListen(*conf.grpcBindAddr),
 				grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
 				grpcserver.WithTLSConfig(tlsCfg),

@@ -172,7 +172,7 @@ func TestQueryRangeCodec_DecodeRequest(t *testing.T) {
 			testutil.Ok(t, err)
 
 			codec := NewThanosQueryRangeCodec(tc.partialResponse)
-			req, err := codec.DecodeRequest(context.Background(), r)
+			req, err := codec.DecodeRequest(context.Background(), r, nil)
 			if tc.expectedError != nil {
 				testutil.Equals(t, err, tc.expectedError)
 			} else {
@@ -301,7 +301,7 @@ func BenchmarkQueryRangeCodecEncodeAndDecodeRequest(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		reqEnc, err := codec.EncodeRequest(ctx, req)
 		testutil.Ok(b, err)
-		_, err = codec.DecodeRequest(ctx, reqEnc)
+		_, err = codec.DecodeRequest(ctx, reqEnc, nil)
 		testutil.Ok(b, err)
 	}
 }

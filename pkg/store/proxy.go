@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -165,6 +165,56 @@ func (s *ProxyStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.I
 	}
 
 	return res, nil
+}
+
+func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
+	stores := s.stores()
+	if len(stores) == 0 {
+		return []labelpb.ZLabelSet{}
+	}
+
+	mergedLabelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
+	for _, st := range stores {
+		for _, lset := range st.LabelSets() {
+			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
+			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
+		}
+	}
+
+	labelSets := make([]labelpb.ZLabelSet, 0, len(mergedLabelSets))
+	for _, v := range mergedLabelSets {
+		labelSets = append(labelSets, v)
+	}
+
+	// We always want to enforce announcing the subset of data that
+	// selector-labels represents. If no label-sets are announced by the
+	// store-proxy's discovered stores, then we still want to enforce
+	// announcing this subset by announcing the selector as the label-set.
+	selectorLabels := labelpb.ZLabelsFromPromLabels(s.selectorLabels)
+	if len(labelSets) == 0 && len(selectorLabels) > 0 {
+		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: selectorLabels})
+	}
+
+	return labelSets
+}
+func (s *ProxyStore) TimeRange() (int64, int64) {
+	stores := s.stores()
+	if len(stores) == 0 {
+		return math.MinInt64, math.MaxInt64
+	}
+
+	var minTime, maxTime int64 = math.MaxInt64, math.MinInt64
+	for _, s := range stores {
+		storeMinTime, storeMaxTime := s.TimeRange()
+		if storeMinTime < minTime {
+			minTime = storeMinTime
+		}
+		if storeMaxTime > maxTime {
+			maxTime = storeMaxTime
+		}
+	}
+
+	return minTime, maxTime
 }
 
 // cancelableRespSender is a response channel that does need to be exhausted on cancel.
