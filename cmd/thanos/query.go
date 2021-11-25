@@ -104,25 +104,25 @@ func registerQuery(app *extkingpin.App) {
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
-	endpoints := cmd.Flag("endpoint", "Addresses of statically configured Thanos API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
-		PlaceHolder("<endpoint>").Strings()
+	endpoints := extkingpin.Addrs(cmd.Flag("endpoint", "Addresses of statically configured Thanos API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
+		PlaceHolder("<endpoint>"))
 
-	stores := cmd.Flag("store", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
-		PlaceHolder("<store>").Strings()
+	stores := extkingpin.Addrs(cmd.Flag("store", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
+		PlaceHolder("<store>"))
 
 	// TODO(bwplotka): Hidden because we plan to extract discovery to separate API: https://github.com/thanos-io/thanos/issues/2600.
-	ruleEndpoints := cmd.Flag("rule", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
-		Hidden().PlaceHolder("<rule>").Strings()
+	ruleEndpoints := extkingpin.Addrs(cmd.Flag("rule", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured rules API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect rule API servers through respective DNS lookups.").
+		Hidden().PlaceHolder("<rule>"))
 
-	metadataEndpoints := cmd.Flag("metadata", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured metadata API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect metadata API servers through respective DNS lookups.").
-		Hidden().PlaceHolder("<metadata>").Strings()
+	metadataEndpoints := extkingpin.Addrs(cmd.Flag("metadata", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured metadata API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect metadata API servers through respective DNS lookups.").
+		Hidden().PlaceHolder("<metadata>"))
 
-	exemplarEndpoints := cmd.Flag("exemplar", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured exemplars API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect exemplars API servers through respective DNS lookups.").
-		Hidden().PlaceHolder("<exemplar>").Strings()
+	exemplarEndpoints := extkingpin.Addrs(cmd.Flag("exemplar", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured exemplars API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect exemplars API servers through respective DNS lookups.").
+		Hidden().PlaceHolder("<exemplar>"))
 
 	// TODO(atunik): Hidden because we plan to extract discovery to separate API: https://github.com/thanos-io/thanos/issues/2600.
-	targetEndpoints := cmd.Flag("target", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured target API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect target API servers through respective DNS lookups.").
-		Hidden().PlaceHolder("<target>").Strings()
+	targetEndpoints := extkingpin.Addrs(cmd.Flag("target", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Experimental: Addresses of statically configured target API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect target API servers through respective DNS lookups.").
+		Hidden().PlaceHolder("<target>"))
 
 	strictStores := cmd.Flag("store-strict", "Deprecation Warning - This flag is deprecated and replaced with `endpoint-strict`. Addresses of only statically configured store API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
 		PlaceHolder("<staticstore>").Strings()
@@ -191,26 +191,6 @@ func registerQuery(app *extkingpin.App) {
 			}
 		}
 
-		if err := validateAddrs(*endpoints); err != nil {
-			return errors.Wrap(err, "validating --endpoint flags")
-		}
-
-		if err := validateAddrs(*stores); err != nil {
-			return errors.Wrap(err, "validating --store flags")
-		}
-
-		if err := validateAddrs(*ruleEndpoints); err != nil {
-			return errors.Wrap(err, "validating --rule flags")
-		}
-
-		if err := validateAddrs(*metadataEndpoints); err != nil {
-			return errors.Wrap(err, "validating --metadata flags")
-		}
-
-		if err := validateAddrs(*exemplarEndpoints); err != nil {
-			return errors.Wrap(err, "validating --exemplar flags")
-		}
-
 		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
@@ -219,10 +199,6 @@ func registerQuery(app *extkingpin.App) {
 		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(*reqLogDecision, reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
-		}
-
-		if err := validateAddrs(*targetEndpoints); err != nil {
-			return errors.Wrap(err, "validating --target flags")
 		}
 
 		var fileSD *file.Discovery
@@ -735,31 +711,6 @@ func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus
 		deduplicated = append(deduplicated, value)
 	}
 	return deduplicated
-}
-
-// validateAddrs checks an address slice for duplicates and empty or invalid elements.
-func validateAddrs(addrs []string) error {
-	set := map[string]struct{}{}
-
-	for _, addr := range addrs {
-		if addr == "" {
-			return errors.New("Address is empty.")
-		}
-
-		qtypeAndName := strings.SplitN(addr, "+", 2)
-		hostAndPort := strings.SplitN(addr, ":", 2)
-		if len(qtypeAndName) != 2 && len(hostAndPort) != 2 {
-			return errors.Errorf("Address %s is not of <host>:<port> format or a valid DNS query.", addr)
-		}
-
-		if _, ok := set[addr]; ok {
-			return errors.Errorf("Address %s is duplicated.", addr)
-		}
-
-		set[addr] = struct{}{}
-	}
-
-	return nil
 }
 
 // engineFactory creates from 1 to 3 promql.Engines depending on
