@@ -9,12 +9,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
+
+	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type testMetadataClient struct {

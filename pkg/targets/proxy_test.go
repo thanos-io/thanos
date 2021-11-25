@@ -9,11 +9,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
-	"google.golang.org/grpc"
 )
 
 type testTargetsClient struct {
