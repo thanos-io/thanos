@@ -74,7 +74,6 @@ func TestInfo(t *testing.T) {
 			sidecar1.InternalEndpoint("grpc"),
 			sidecar2.InternalEndpoint("grpc"),
 			sidecar3.InternalEndpoint("grpc"),
-			sidecar3.InternalEndpoint("grpc"),
 			store.InternalEndpoint("grpc"),
 		).
 		Build()
