@@ -1006,8 +1006,6 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	// Once we have a plan we need to download the actual data.
 	begin := time.Now()
 
-	// ctx contains the parent span for this function's processes.
-	// each block will have a child span from it.
 	toCompactDirs := make([]string, 0, len(toCompact))
 	for _, meta := range toCompact {
 		bdir := filepath.Join(dir, meta.ULID.String())

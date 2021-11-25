@@ -301,8 +301,6 @@ func runCompact(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-
-	// adding tracer to ctx
 	ctx = tracing.ContextWithTracer(ctx, tracer)
 
 	defer func() {
