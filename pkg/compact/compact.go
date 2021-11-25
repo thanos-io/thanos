@@ -769,7 +769,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 	var err error
 	tracing.DoInSpan(ctx, "group_compaction", func(ctx context.Context) {
 		shouldRerun, compID, err = cg.compact(ctx, subDir, planner, comp)
-	}, opentracing.Tags{"group key": cg.Key()})
+	}, opentracing.Tags{"group.key": cg.Key()})
 	if err != nil {
 		cg.compactionFailures.Inc()
 		return false, ulid.ULID{}, err
