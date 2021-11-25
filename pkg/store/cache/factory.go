@@ -54,7 +54,8 @@ func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Reg
 			cache, err = NewRemoteIndexCache(logger, memcached, reg)
 		}
 	case string(REDIS):
-		redisCache, err := cacheutil.NewRedisClient(logger, "index-cache", backendConfig, reg)
+		var redisCache cacheutil.RemoteCacheClient
+		redisCache, err = cacheutil.NewRedisClient(logger, "index-cache", backendConfig, reg)
 		if err == nil {
 			cache, err = NewRemoteIndexCache(logger, redisCache, reg)
 		}

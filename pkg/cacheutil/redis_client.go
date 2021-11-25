@@ -5,17 +5,21 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/gate"
 	"gopkg.in/yaml.v3"
 )
 
 var (
-	defaultRedisClientConfig = RedisClientConfig{}
+	defaultRedisClientConfig = RedisClientConfig{
+		MaxGetMultiConcurrency: 100,
+	}
 )
 
 // RedisClientConfig is the config accepted by RedisClient.
@@ -61,6 +65,10 @@ type RedisClientConfig struct {
 	// Connection age at which client retires (closes) the connection.
 	// Default is to not close aged connections.
 	MaxConnAge time.Duration `yaml:"max_conn_age"`
+
+	// MaxGetMultiConcurrency specifies the maximum number of concurrent GetMulti() operations.
+	// If set to 0, concurrency is unlimited.
+	MaxGetMultiConcurrency int `yaml:"max_get_multi_concurrency"`
 }
 
 func (c *RedisClientConfig) validate() error {
@@ -73,6 +81,11 @@ func (c *RedisClientConfig) validate() error {
 // RedisClient is a wrap of redis.Client.
 type RedisClient struct {
 	*redis.Client
+	config RedisClientConfig
+
+	// getMultiGate used to enforce the max number of concurrent GetMulti() operations.
+	getMultiGate gate.Gate
+
 	logger           log.Logger
 	durationSet      prometheus.Observer
 	durationSetMulti prometheus.Observer
@@ -115,6 +128,10 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 	c := &RedisClient{
 		Client: redisClient,
 		logger: logger,
+		getMultiGate: gate.New(
+			extprom.WrapRegistererWithPrefix("thanos_redis_getmulti_", reg),
+			config.MaxGetMultiConcurrency,
+		),
 	}
 	duration := promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "thanos_redis_operation_duration_seconds",
@@ -153,11 +170,22 @@ func (c *RedisClient) SetMulti(ctx context.Context, data map[string][]byte, ttl 
 		return
 	}
 	c.durationSetMulti.Observe(time.Since(start).Seconds())
-	return
 }
 
 // GetMulti implement RemoteCacheClient.
 func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]byte {
+	if len(keys) == 0 {
+		return nil
+	}
+	// Wait until we get a free slot from the gate, if the max
+	// concurrency should be enforced.
+	if c.config.MaxGetMultiConcurrency > 0 {
+		if err := c.getMultiGate.Start(ctx); err != nil {
+			level.Warn(c.logger).Log("msg", "getMultiGate err", "err", err, "items", len(keys))
+			return nil
+		}
+		defer c.getMultiGate.Done()
+	}
 	start := time.Now()
 	resp, err := c.MGet(ctx, keys...).Result()
 	if err != nil {

@@ -27,7 +27,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Step:  60 * seconds,
 			},
-			expected: "up:60000:0",
+			expected: "fe::up:60000:0",
 		},
 		{
 			name: "non downsampling resolution specified",
@@ -36,7 +36,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Step:  60 * seconds,
 			},
-			expected: "up:60000:0:2",
+			expected: "fe::up:60000:0:2",
 		},
 		{
 			name: "10s step",
@@ -45,7 +45,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Step:  10 * seconds,
 			},
-			expected: "up:10000:0:2",
+			expected: "fe::up:10000:0:2",
 		},
 		{
 			name: "1m downsampling resolution",
@@ -55,7 +55,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: 60 * seconds,
 			},
-			expected: "up:10000:0:2",
+			expected: "fe::up:10000:0:2",
 		},
 		{
 			name: "5m downsampling resolution, different cache key",
@@ -65,7 +65,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: 300 * seconds,
 			},
-			expected: "up:10000:0:1",
+			expected: "fe::up:10000:0:1",
 		},
 		{
 			name: "1h downsampling resolution, different cache key",
@@ -75,14 +75,14 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: hour,
 			},
-			expected: "up:10000:0:0",
+			expected: "fe::up:10000:0:0",
 		},
 		{
 			name: "label names, no matcher",
 			req: &ThanosLabelsRequest{
 				Start: 0,
 			},
-			expected: ":[]:0",
+			expected: "fe:::[]:0",
 		},
 		{
 			name: "label names, single matcher",
@@ -90,7 +90,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start:    0,
 				Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
 			},
-			expected: `:[[foo="bar"]]:0`,
+			expected: `fe:::[[foo="bar"]]:0`,
 		},
 		{
 			name: "label names, multiple matchers",
@@ -101,7 +101,7 @@ func TestGenerateCacheKey(t *testing.T) {
 					{labels.MustNewMatcher(labels.MatchEqual, "baz", "qux")},
 				},
 			},
-			expected: `:[[foo="bar"] [baz="qux"]]:0`,
+			expected: `fe:::[[foo="bar"] [baz="qux"]]:0`,
 		},
 		{
 			name: "label values, no matcher",
@@ -109,7 +109,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Label: "up",
 			},
-			expected: "up:[]:0",
+			expected: "fe::up:[]:0",
 		},
 		{
 			name: "label values, single matcher",
@@ -118,7 +118,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Label:    "up",
 				Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
 			},
-			expected: `up:[[foo="bar"]]:0`,
+			expected: `fe::up:[[foo="bar"]]:0`,
 		},
 		{
 			name: "label values, multiple matchers",
@@ -130,7 +130,7 @@ func TestGenerateCacheKey(t *testing.T) {
 					{labels.MustNewMatcher(labels.MatchEqual, "baz", "qux")},
 				},
 			},
-			expected: `up:[[foo="bar"] [baz="qux"]]:0`,
+			expected: `fe::up:[[foo="bar"] [baz="qux"]]:0`,
 		},
 	} {
 		key := splitter.GenerateCacheKey("", tc.req)
