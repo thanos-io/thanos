@@ -6,7 +6,7 @@ import { faInfinity } from '@fortawesome/free-solid-svg-icons';
 import { ToggleMoreLess } from '../../../components/ToggleMoreLess';
 import { useLocalStorage } from '../../../hooks/useLocalStorage';
 import { getColor } from '../../../pages/targets/target';
-import { formatRelative, formatTime, parseTime } from '../../../utils';
+import { formatRelative, formatTime, parseTime, isValidTime } from '../../../utils';
 import { Store } from './store';
 import StoreLabels from './StoreLabels';
 
@@ -21,8 +21,6 @@ export const columns = [
   'Last Successful Health Check',
   'Last Message',
 ];
-
-export const MAX_TIME = 9223372036854775807;
 
 export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) => {
   const [{ expanded }, setOptions] = useLocalStorage(`store-pool-${title}-expanded`, { expanded: true });
@@ -57,13 +55,13 @@ export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) =>
                     <StoreLabels labelSets={labelSets} />
                   </td>
                   <td data-testid="minTime">
-                    {minTime >= MAX_TIME ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(minTime)}
+                    {isValidTime(minTime) ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(minTime)}
                   </td>
                   <td data-testid="maxTime">
-                    {maxTime >= MAX_TIME ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(maxTime)}
+                    {isValidTime(maxTime) ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(maxTime)}
                   </td>
                   <td data-testid="lastCheck">
-                    {parseTime(lastCheck) >= MAX_TIME ? (
+                    {isValidTime(parseTime(lastCheck)) ? (
                       <FontAwesomeIcon icon={faInfinity} />
                     ) : (
                       formatRelative(lastCheck, now())

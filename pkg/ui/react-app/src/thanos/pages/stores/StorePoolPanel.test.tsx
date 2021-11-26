@@ -1,10 +1,10 @@
 import React from 'react';
 import { mount } from 'enzyme';
 import { Button, Collapse, Table, Badge } from 'reactstrap';
-import StorePoolPanel, { StorePoolPanelProps, MAX_TIME } from './StorePoolPanel';
+import StorePoolPanel, { StorePoolPanelProps } from './StorePoolPanel';
 import StoreLabels from './StoreLabels';
 import { getColor } from '../../../pages/targets/target';
-import { formatTime, parseTime } from '../../../utils';
+import { formatTime, parseTime, isValidTime } from '../../../utils';
 import { sampleAPIResponse } from './__testdata__/testdata';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -88,7 +88,7 @@ describe('StorePoolPanel', () => {
         const td = row.find({ 'data-testid': 'minTime' });
         expect(td).toHaveLength(1);
 
-        if (minTime >= MAX_TIME) {
+        if (isValidTime(minTime)) {
           const infinityIcon = td.find(FontAwesomeIcon);
           expect(infinityIcon).toHaveLength(1);
         } else {
@@ -100,7 +100,7 @@ describe('StorePoolPanel', () => {
         const td = row.find({ 'data-testid': 'maxTime' });
         expect(td).toHaveLength(1);
 
-        if (maxTime >= MAX_TIME) {
+        if (isValidTime(maxTime)) {
           const infinityIcon = td.find(FontAwesomeIcon);
           expect(infinityIcon).toHaveLength(1);
         } else {
@@ -112,7 +112,7 @@ describe('StorePoolPanel', () => {
         const td = row.find({ 'data-testid': 'lastCheck' });
         expect(td).toHaveLength(1);
 
-        if (parseTime(lastCheck) >= MAX_TIME) {
+        if (isValidTime(parseTime(lastCheck))) {
           const infinityIcon = td.find(FontAwesomeIcon);
           expect(infinityIcon).toHaveLength(1);
         }
