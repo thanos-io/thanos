@@ -46,13 +46,9 @@ var (
 		},
 		Expiration: 24 * time.Hour,
 	}
-	defaultRedisConfig = RedisResponseCacheConfig{
-		Redis: cacheutil.RedisClientConfig{
-			DialTimeout:  5 * time.Second,
-			ReadTimeout:  3 * time.Second,
-			WriteTimeout: 3 * time.Second,
-			IdleTimeout:  5 * time.Minute,
-		},
+	// DefaultRedisConfig is default redis config for queryfrontend.
+	DefaultRedisConfig = RedisResponseCacheConfig{
+		Redis:      cacheutil.DefaultRedisClientConfig,
 		Expiration: 24 * time.Hour,
 	}
 )
@@ -154,7 +150,7 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 			},
 		}, nil
 	case string(REDIS):
-		config := defaultRedisConfig
+		config := DefaultRedisConfig
 		if err := yaml.UnmarshalStrict(backendConfig, &config); err != nil {
 			return nil, err
 		}

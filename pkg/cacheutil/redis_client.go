@@ -1,8 +1,12 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package cacheutil
 
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -13,12 +17,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v3"
 )
 
 var (
-	defaultRedisClientConfig = RedisClientConfig{
+	// DefaultRedisClientConfig is default redis config.
+	DefaultRedisClientConfig = RedisClientConfig{
+		DialTimeout:            time.Second * 5,
+		ReadTimeout:            time.Second * 3,
+		WriteTimeout:           time.Second * 3,
+		PoolSize:               100,
+		MinIdleConns:           10,
+		IdleTimeout:            time.Minute * 5,
 		MaxGetMultiConcurrency: 100,
+		GetMultiBatchSize:      100,
+		MaxSetMultiConcurrency: 100,
+		SetMultiBatchSize:      100,
 	}
 )
 
@@ -38,19 +53,15 @@ type RedisClientConfig struct {
 	Password string `yaml:"password"`
 
 	// DialTimeout specifies the client dial timeout.
-	// Default is 5 seconds.
 	DialTimeout time.Duration `yaml:"dial_timeout"`
 
 	// ReadTimeout specifies the client read timeout.
-	// Default is 3 seconds.
 	ReadTimeout time.Duration `yaml:"read_timeout"`
 
 	// WriteTimeout specifies the client write timeout.
-	// Default is ReadTimeout.
 	WriteTimeout time.Duration `yaml:"write_timeout"`
 
 	// Maximum number of socket connections.
-	// Default is 10 connections per every available CPU as reported by runtime.GOMAXPROCS.
 	PoolSize int `yaml:"pool_size"`
 
 	// MinIdleConns specifies the minimum number of idle connections which is useful when establishing
@@ -59,16 +70,26 @@ type RedisClientConfig struct {
 
 	// Amount of time after which client closes idle connections.
 	// Should be less than server's timeout.
-	// Default is 5 minutes. -1 disables idle timeout check.
+	// -1 disables idle timeout check.
 	IdleTimeout time.Duration `yaml:"idle_timeout"`
 
 	// Connection age at which client retires (closes) the connection.
-	// Default is to not close aged connections.
+	// Default 0 is to not close aged connections.
 	MaxConnAge time.Duration `yaml:"max_conn_age"`
 
 	// MaxGetMultiConcurrency specifies the maximum number of concurrent GetMulti() operations.
 	// If set to 0, concurrency is unlimited.
 	MaxGetMultiConcurrency int `yaml:"max_get_multi_concurrency"`
+
+	// GetMultiBatchSize specifies the maximum size per batch for mget.
+	GetMultiBatchSize int `yaml:"get_multi_batch_size"`
+
+	// MaxSetMultiConcurrency specifies the maximum number of concurrent SetMulti() operations.
+	// If set to 0, concurrency is unlimited.
+	MaxSetMultiConcurrency int `yaml:"max_set_multi_concurrency"`
+
+	// SetMultiBatchSize specifies the maximum size per batch for pipeline set.
+	SetMultiBatchSize int `yaml:"set_multi_batch_size"`
 }
 
 func (c *RedisClientConfig) validate() error {
@@ -85,6 +106,8 @@ type RedisClient struct {
 
 	// getMultiGate used to enforce the max number of concurrent GetMulti() operations.
 	getMultiGate gate.Gate
+	// setMultiGate used to enforce the max number of concurrent SetMulti() operations.
+	setMultiGate gate.Gate
 
 	logger           log.Logger
 	durationSet      prometheus.Observer
@@ -127,10 +150,15 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 
 	c := &RedisClient{
 		Client: redisClient,
+		config: config,
 		logger: logger,
 		getMultiGate: gate.New(
 			extprom.WrapRegistererWithPrefix("thanos_redis_getmulti_", reg),
 			config.MaxGetMultiConcurrency,
+		),
+		setMultiGate: gate.New(
+			extprom.WrapRegistererWithPrefix("thanos_redis_setmulti_", reg),
+			config.MaxSetMultiConcurrency,
 		),
 	}
 	duration := promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
@@ -158,15 +186,58 @@ func (c *RedisClient) SetAsync(ctx context.Context, key string, value []byte, tt
 
 // SetMulti set multiple keys and value.
 func (c *RedisClient) SetMulti(ctx context.Context, data map[string][]byte, ttl time.Duration) {
+	if len(data) == 0 {
+		return
+	}
 	start := time.Now()
-	_, err := c.Pipelined(ctx, func(p redis.Pipeliner) error {
-		for key, val := range data {
-			p.SetEX(ctx, key, val, ttl)
+	// Split multi keys to batch.
+	var batches []map[string][]byte
+	if c.config.SetMultiBatchSize > 0 {
+		batch := len(data)/c.config.SetMultiBatchSize + 1
+		batches = make([]map[string][]byte, batch)
+		for i := 0; i < batch; i++ {
+			batches[i] = make(map[string][]byte)
 		}
-		return nil
-	})
-	if err != nil {
-		level.Warn(c.logger).Log("msg", "failed to mset items into redis", "err", err, "items", len(data))
+		var idx int
+		for k, v := range data {
+			batches[idx/c.config.SetMultiBatchSize][k] = v
+			idx++
+		}
+	} else {
+		batches = []map[string][]byte{data}
+	}
+	g, ctx := errgroup.WithContext(ctx)
+	for _, v := range batches {
+		v := v
+		// Wait until we get a free slot from the gate, if the max
+		// concurrency should be enforced.
+		if c.config.MaxSetMultiConcurrency > 0 {
+			if err := c.setMultiGate.Start(ctx); err != nil {
+				level.Warn(c.logger).Log("msg", "setMultiGate err", "err", err, "items", len(data))
+				return
+			}
+		}
+		g.Go(func() error {
+			if c.config.MaxSetMultiConcurrency > 0 {
+				defer c.setMultiGate.Done()
+			}
+			_, err := c.Pipelined(ctx, func(p redis.Pipeliner) error {
+				for key, val := range v {
+					p.SetEX(ctx, key, val, ttl)
+				}
+				return nil
+			})
+			if err != nil {
+				level.Warn(c.logger).Log("msg", "failed to set multi items from redis",
+					"err", err, "items", len(data))
+				return nil
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		level.Warn(c.logger).Log("msg", "failed to set multi items from redis", "err", err,
+			"items", len(data))
 		return
 	}
 	c.durationSetMulti.Observe(time.Since(start).Seconds())
@@ -177,40 +248,61 @@ func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]
 	if len(keys) == 0 {
 		return nil
 	}
-	// Wait until we get a free slot from the gate, if the max
-	// concurrency should be enforced.
-	if c.config.MaxGetMultiConcurrency > 0 {
-		if err := c.getMultiGate.Start(ctx); err != nil {
-			level.Warn(c.logger).Log("msg", "getMultiGate err", "err", err, "items", len(keys))
-			return nil
-		}
-		defer c.getMultiGate.Done()
-	}
 	start := time.Now()
-	resp, err := c.MGet(ctx, keys...).Result()
-	if err != nil {
-		level.Warn(c.logger).Log("msg", "failed to mget items from redis", "err", err, "items", len(resp))
+	// Split multi keys to batch.
+	var keysBatches [][]string
+	if c.config.GetMultiBatchSize > 0 {
+		batch := len(keys)/c.config.GetMultiBatchSize + 1
+		keysBatches = make([][]string, batch)
+		var idx int
+		for _, v := range keys {
+			keysBatches[idx/c.config.GetMultiBatchSize] = append(keysBatches[idx/c.config.GetMultiBatchSize], v)
+			idx++
+		}
+	} else {
+		keysBatches = [][]string{keys}
+	}
+	results := make(map[string][]byte, len(keys))
+	var mu sync.Mutex
+	g, ctx := errgroup.WithContext(ctx)
+	for _, v := range keysBatches {
+		v := v
+		// Wait until we get a free slot from the gate, if the max
+		// concurrency should be enforced.
+		if c.config.MaxGetMultiConcurrency > 0 {
+			if err := c.getMultiGate.Start(ctx); err != nil {
+				level.Warn(c.logger).Log("msg", "getMultiGate err", "err", err, "items", len(keys))
+				return nil
+			}
+		}
+		g.Go(func() error {
+			if c.config.MaxGetMultiConcurrency > 0 {
+				defer c.getMultiGate.Done()
+			}
+			resp, err := c.MGet(ctx, v...).Result()
+			if err != nil {
+				level.Warn(c.logger).Log("msg", "failed to mget items from redis", "err", err, "items", len(resp))
+				return nil
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			for i := 0; i < len(resp); i++ {
+				key := v[i]
+				switch val := resp[i].(type) {
+				case string:
+					results[key] = []byte(val)
+				case nil: // miss
+				default:
+					level.Warn(c.logger).Log("msg",
+						fmt.Sprintf("unexpected redis mget result type:%T %v", resp[i], resp[i]))
+				}
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		level.Warn(c.logger).Log("msg", "failed to mget items from redis", "err", err, "items", len(keys))
 		return nil
-	}
-	var hits int
-	for i := 0; i < len(resp); i++ {
-		if resp[i] != nil {
-			hits++
-		}
-	}
-	results := make(map[string][]byte, hits)
-	for i := 0; i < len(resp); i++ {
-		v := resp[i]
-		switch vv := v.(type) {
-		case string:
-			results[keys[i]] = []byte(vv)
-		case []byte:
-			results[keys[i]] = vv
-		case nil: // miss
-		default:
-			level.Warn(c.logger).Log("msg",
-				fmt.Sprintf("unexpected redis mget result type:%T %v", v, v))
-		}
 	}
 	c.durationGetMulti.Observe(time.Since(start).Seconds())
 	return results
@@ -225,7 +317,7 @@ func (c *RedisClient) Stop() {
 
 // parseRedisClientConfig unmarshals a buffer into a RedisClientConfig with default values.
 func parseRedisClientConfig(conf []byte) (RedisClientConfig, error) {
-	config := defaultRedisClientConfig
+	config := DefaultRedisClientConfig
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return RedisClientConfig{}, err
 	}

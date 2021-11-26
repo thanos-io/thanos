@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package cache
+package cacheutil
 
 import (
 	"context"
@@ -12,12 +12,10 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
-	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestRedisCache(t *testing.T) {
+func TestRedisClient(t *testing.T) {
 	// Init some data to conveniently define test cases later one.
 	key1 := "key1"
 	key2 := "key2"
@@ -88,38 +86,53 @@ func TestRedisCache(t *testing.T) {
 		testutil.Ok(t, err)
 	}
 	defer s.Close()
-	logger := log.NewLogfmtLogger(os.Stderr)
-	reg := prometheus.NewRegistry()
-	cfg := cacheutil.RedisClientConfig{
-		Addr:                   s.Addr(),
-		DialTimeout:            time.Second,
-		ReadTimeout:            time.Second,
-		WriteTimeout:           time.Second,
-		MinIdleConns:           10,
-		MaxConnAge:             time.Minute * 10,
-		IdleTimeout:            time.Minute * 5,
-		MaxGetMultiConcurrency: 2,
-		GetMultiBatchSize:      2,
-	}
-	c, err := cacheutil.NewRedisClientWithConfig(logger, t.Name(), cfg, reg)
-	if err != nil {
-		testutil.Ok(t, err)
+	redisConfigs := []struct {
+		name        string
+		redisConfig func() RedisClientConfig
+	}{
+		{
+			name: "MaxConcurrency>0",
+			redisConfig: func() RedisClientConfig {
+				cfg := DefaultRedisClientConfig
+				cfg.Addr = s.Addr()
+				cfg.MaxGetMultiConcurrency = 2
+				cfg.GetMultiBatchSize = 2
+				cfg.MaxSetMultiConcurrency = 2
+				cfg.SetMultiBatchSize = 2
+				return cfg
+			},
+		},
+		{
+			name: "MaxConcurrency=0",
+			redisConfig: func() RedisClientConfig {
+				cfg := DefaultRedisClientConfig
+				cfg.Addr = s.Addr()
+				cfg.MaxGetMultiConcurrency = 0
+				cfg.GetMultiBatchSize = 0
+				cfg.MaxSetMultiConcurrency = 0
+				cfg.SetMultiBatchSize = 0
+				return cfg
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer s.FlushAll()
-			c := NewRedisCache(tt.name, logger, c, reg)
-			// Store the cache expected before running the test.
-			ctx := context.Background()
-			c.Store(ctx, tt.args.data, time.Hour)
-
-			// Fetch postings from cached and assert on it.
-			hits := c.Fetch(ctx, tt.args.fetchKeys)
-			testutil.Equals(t, tt.want.hits, hits)
-
-			// Assert on metrics.
-			testutil.Equals(t, float64(len(tt.args.fetchKeys)), prom_testutil.ToFloat64(c.requests))
-			testutil.Equals(t, float64(len(tt.want.hits)), prom_testutil.ToFloat64(c.hits))
+			for _, redisConfig := range redisConfigs {
+				t.Run(tt.name+redisConfig.name, func(t *testing.T) {
+					logger := log.NewLogfmtLogger(os.Stderr)
+					reg := prometheus.NewRegistry()
+					c, err := NewRedisClientWithConfig(logger, t.Name(), redisConfig.redisConfig(), reg)
+					if err != nil {
+						testutil.Ok(t, err)
+					}
+					defer c.Stop()
+					defer s.FlushAll()
+					ctx := context.Background()
+					c.SetMulti(ctx, tt.args.data, time.Hour)
+					hits := c.GetMulti(ctx, tt.args.fetchKeys)
+					testutil.Equals(t, tt.want.hits, hits)
+				})
+			}
 		})
 	}
 }
