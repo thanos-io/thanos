@@ -1026,7 +1026,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 		// Ensure all input blocks are valid.
 		var stats block.HealthStats
-		tracing.DoInSpan(ctx, "compaction_block_healthcheck", func(ctx context.Context) {
+		tracing.DoInSpan(ctx, "compaction_block_healthstats", func(ctx context.Context) {
 			stats, err = block.GatherIndexHealthStats(cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
