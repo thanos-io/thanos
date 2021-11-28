@@ -90,17 +90,8 @@ func TestRedisCache(t *testing.T) {
 	defer s.Close()
 	logger := log.NewLogfmtLogger(os.Stderr)
 	reg := prometheus.NewRegistry()
-	cfg := cacheutil.RedisClientConfig{
-		Addr:                   s.Addr(),
-		DialTimeout:            time.Second,
-		ReadTimeout:            time.Second,
-		WriteTimeout:           time.Second,
-		MinIdleConns:           10,
-		MaxConnAge:             time.Minute * 10,
-		IdleTimeout:            time.Minute * 5,
-		MaxGetMultiConcurrency: 2,
-		GetMultiBatchSize:      2,
-	}
+	cfg := cacheutil.DefaultRedisClientConfig
+	cfg.Addr = s.Addr()
 	c, err := cacheutil.NewRedisClientWithConfig(logger, t.Name(), cfg, reg)
 	if err != nil {
 		testutil.Ok(t, err)

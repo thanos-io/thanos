@@ -306,7 +306,7 @@ While the remaining settings are **optional**:
 
 ### Redis index cache
 
-The `memcached` index cache allows to use [Redis](https://redis.io) as cache backend. This cache type is configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
+The `redis` index cache allows to use [Redis](https://redis.io) as cache backend. This cache type is configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=cacheutil.RedisClientConfig"
 type: REDIS
