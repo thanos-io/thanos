@@ -767,8 +767,9 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 	}
 
 	var err error
-	tracing.DoInSpan(ctx, "group_compaction", func(ctx context.Context) {
+	tracing.DoInSpanWithErr(ctx, "group_compaction", func(ctx context.Context) error {
 		shouldRerun, compID, err = cg.compact(ctx, subDir, planner, comp)
+		return err
 	}, opentracing.Tags{"group.key": cg.Key()})
 	if err != nil {
 		cg.compactionFailures.Inc()
@@ -986,8 +987,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	}
 
 	var toCompact []*metadata.Meta
-	tracing.DoInSpan(ctx, "compaction_planning", func(ctx context.Context) {
+	tracing.DoInSpanWithErr(ctx, "compaction_planning", func(ctx context.Context) error {
 		toCompact, err = planner.Plan(ctx, cg.metasByMinTime)
+		return err
 	})
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "plan compaction")
@@ -1016,8 +1018,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			uniqueSources[s] = struct{}{}
 		}
 
-		tracing.DoInSpan(ctx, "compaction_block_download", func(ctx context.Context) {
+		tracing.DoInSpanWithErr(ctx, "compaction_block_download", func(ctx context.Context) error {
 			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir)
+			return err
 		}, opentracing.Tags{"block.id": meta.ULID})
 
 		if err != nil {
@@ -1026,8 +1029,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 		// Ensure all input blocks are valid.
 		var stats block.HealthStats
-		tracing.DoInSpan(ctx, "compaction_block_healthstats", func(ctx context.Context) {
+		tracing.DoInSpanWithErr(ctx, "compaction_block_healthstats", func(ctx context.Context) error {
 			stats, err = block.GatherIndexHealthStats(cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+			return err
 		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
 			return false, ulid.ULID{}, errors.Wrapf(err, "gather index issues for block %s", bdir)
@@ -1054,8 +1058,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", fmt.Sprintf("%v", toCompactDirs), "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
 	begin = time.Now()
-	tracing.DoInSpan(ctx, "compaction", func(ctx context.Context) {
+	tracing.DoInSpanWithErr(ctx, "compaction", func(ctx context.Context) error {
 		compID, err = comp.Compact(dir, toCompactDirs, nil)
+        return err
 	})
 
 	if err != nil {
@@ -1099,8 +1104,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	}
 
 	// Ensure the output block is valid.
-	tracing.DoInSpan(ctx, "compaction_verify_index", func(ctx context.Context) {
+	tracing.DoInSpanWithErr(ctx, "compaction_verify_index", func(ctx context.Context) error {
 		err = block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime)
+		return err
 	})
 	if !cg.acceptMalformedIndex && err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
@@ -1116,8 +1122,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	begin = time.Now()
 
-	tracing.DoInSpan(ctx, "compaction_block_upload", func(ctx context.Context) {
+	tracing.DoInSpanWithErr(ctx, "compaction_block_upload", func(ctx context.Context) error {
 		err = block.Upload(ctx, cg.logger, cg.bkt, bdir, cg.hashFunc)
+		return err
 	})
 	if err != nil {
 		return false, ulid.ULID{}, retry(errors.Wrapf(err, "upload of %s failed", compID))
@@ -1128,8 +1135,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	// into the next planning cycle.
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
 	for _, meta := range toCompact {
-		tracing.DoInSpan(ctx, "compaction_block_delete", func(ctx context.Context) {
+		tracing.DoInSpanWithErr(ctx, "compaction_block_delete", func(ctx context.Context) error {
 			err = cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()))
+			return err
 		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
 			return false, ulid.ULID{}, retry(errors.Wrapf(err, "mark old block for deletion from bucket"))
