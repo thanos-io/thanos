@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 	opentracing_log "github.com/opentracing/opentracing-go/log"
 )
 
@@ -80,7 +81,9 @@ func DoInSpanWithErr(ctx context.Context, operationName string, doFn func(contex
 	span, newCtx := StartSpan(ctx, operationName, opts...)
 	defer span.Finish()
 	err := doFn(newCtx)
-	span.LogFields(opentracing_log.Error(err))
+	if err != nil {
+		ext.LogError(span, err, opentracing_log.Error(err))
+	}
 }
 
 // DoInSpan executes function doFn inside new span with `operationName` name and hooking as child to a span found within given context if any.
