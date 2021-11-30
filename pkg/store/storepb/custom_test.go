@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -524,5 +525,146 @@ func TestMatchersToString_Translate(t *testing.T) {
 			testutil.Equals(t, promMs, promMsParsed)
 		})
 
+	}
+}
+
+func TestSeriesRequestToPromQL(t *testing.T) {
+	ts := []struct {
+		name     string
+		r        *SeriesRequest
+		expected string
+	}{
+		{
+			name: "Single matcher regular expression",
+			r: &SeriesRequest{
+				Matchers: []LabelMatcher{
+					{
+						Type:  LabelMatcher_RE,
+						Name:  "namespace",
+						Value: "kube-.+",
+					},
+				},
+				QueryHints: &QueryHints{
+					Func: &Func{
+						Name: "max",
+					},
+				},
+			},
+			expected: `max ({namespace=~"kube-.+"})`,
+		},
+		{
+			name: "Single matcher regular expression with grouping",
+			r: &SeriesRequest{
+				Matchers: []LabelMatcher{
+					{
+						Type:  LabelMatcher_RE,
+						Name:  "namespace",
+						Value: "kube-.+",
+					},
+				},
+				QueryHints: &QueryHints{
+					Func: &Func{
+						Name: "max",
+					},
+					Grouping: &Grouping{
+						By:     false,
+						Labels: []string{"container", "pod"},
+					},
+				},
+			},
+			expected: `max without (container,pod) ({namespace=~"kube-.+"})`,
+		},
+		{
+			name: "Multiple matchers with grouping",
+			r: &SeriesRequest{
+				Matchers: []LabelMatcher{
+					{
+						Type:  LabelMatcher_EQ,
+						Name:  "__name__",
+						Value: "kube_pod_info",
+					},
+					{
+						Type:  LabelMatcher_RE,
+						Name:  "namespace",
+						Value: "kube-.+",
+					},
+				},
+				QueryHints: &QueryHints{
+					Func: &Func{
+						Name: "max",
+					},
+					Grouping: &Grouping{
+						By:     false,
+						Labels: []string{"container", "pod"},
+					},
+				},
+			},
+			expected: `max without (container,pod) ({__name__="kube_pod_info", namespace=~"kube-.+"})`,
+		},
+		{
+			name: "Query with vector range selector",
+			r: &SeriesRequest{
+				Matchers: []LabelMatcher{
+					{
+						Type:  LabelMatcher_EQ,
+						Name:  "__name__",
+						Value: "kube_pod_info",
+					},
+					{
+						Type:  LabelMatcher_RE,
+						Name:  "namespace",
+						Value: "kube-.+",
+					},
+				},
+				QueryHints: &QueryHints{
+					Func: &Func{
+						Name: "max_over_time",
+					},
+					Range: &Range{
+						Millis: 10 * time.Minute.Milliseconds(),
+					},
+				},
+			},
+			expected: `max_over_time ({__name__="kube_pod_info", namespace=~"kube-.+"}[600000ms])`,
+		},
+		{
+			name: "Query with grouping and vector range selector",
+			r: &SeriesRequest{
+				Matchers: []LabelMatcher{
+					{
+						Type:  LabelMatcher_EQ,
+						Name:  "__name__",
+						Value: "kube_pod_info",
+					},
+					{
+						Type:  LabelMatcher_RE,
+						Name:  "namespace",
+						Value: "kube-.+",
+					},
+				},
+				QueryHints: &QueryHints{
+					Func: &Func{
+						Name: "max",
+					},
+					Grouping: &Grouping{
+						By:     false,
+						Labels: []string{"container", "pod"},
+					},
+					Range: &Range{
+						Millis: 10 * time.Minute.Milliseconds(),
+					},
+				},
+			},
+			expected: `max without (container,pod) ({__name__="kube_pod_info", namespace=~"kube-.+"}[600000ms])`,
+		},
+	}
+
+	for _, tc := range ts {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.r.ToPromQL()
+			if tc.expected != actual {
+				t.Fatalf("invalid promql result, got %s, want %s", actual, tc.expected)
+			}
+		})
 	}
 }
