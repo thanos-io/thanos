@@ -1060,9 +1060,8 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	begin = time.Now()
 	tracing.DoInSpanWithErr(ctx, "compaction", func(ctx context.Context) error {
 		compID, err = comp.Compact(dir, toCompactDirs, nil)
-        return err
+		return err
 	})
-
 	if err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact blocks %v", toCompactDirs))
 	}
