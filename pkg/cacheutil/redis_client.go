@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -51,6 +52,9 @@ type RedisClientConfig struct {
 	// or the User Password when connecting to a Redis 6.0 instance, or greater,
 	// that is using the Redis ACL system.
 	Password string `yaml:"password"`
+
+	// DB Database to be selected after connecting to the server.
+	DB int `yaml:"db"`
 
 	// DialTimeout specifies the client dial timeout.
 	DialTimeout time.Duration `yaml:"dial_timeout"`
@@ -136,6 +140,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		Addr:         config.Addr,
 		Username:     config.Username,
 		Password:     config.Password,
+		DB:           config.DB,
 		DialTimeout:  config.DialTimeout,
 		ReadTimeout:  config.ReadTimeout,
 		WriteTimeout: config.WriteTimeout,
@@ -237,7 +242,7 @@ func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]
 			key := currentKeys[i]
 			switch val := resp[i].(type) {
 			case string:
-				results[key] = []byte(val)
+				results[key] = stringToBytes(val)
 			case nil: // miss
 			default:
 				level.Warn(c.logger).Log("msg",
@@ -259,6 +264,16 @@ func (c *RedisClient) Stop() {
 	if err := c.Close(); err != nil {
 		level.Error(c.logger).Log("msg", "redis close err")
 	}
+}
+
+// stringToBytes converts string to byte slice. (copied from vendor/github.com/go-redis/redis/v8/internal/util/unsafe.go)
+func stringToBytes(s string) []byte {
+	return *(*[]byte)(unsafe.Pointer(
+		&struct {
+			string
+			Cap int
+		}{s, len(s)},
+	))
 }
 
 // doWithBatch do func with batch and gate. batchSize==0 means one batch. gate==nil means no gate.

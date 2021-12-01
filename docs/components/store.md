@@ -314,6 +314,7 @@ config:
   addr: ""
   username: ""
   password: ""
+  db: 0
   dial_timeout: 5s
   read_timeout: 3s
   write_timeout: 3s
@@ -335,6 +336,7 @@ While the remaining settings are **optional**:
 
 - `username`: the username to connect redis, only redis 6.0 and grater need this field.
 - `password`: the password to connect redis.
+- `db`: the database to be selected after connecting to the server.
 - `dial_timeout`: the redis dial timeout.
 - `read_timeout`: the redis read timeout.
 - `write_timeout`: the redis write timeout.

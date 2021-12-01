@@ -105,6 +105,7 @@ config:
   addr: ""
   username: ""
   password: ""
+  db: 0
   dial_timeout: 5s
   read_timeout: 3s
   write_timeout: 3s
