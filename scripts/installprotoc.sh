@@ -6,6 +6,7 @@ set -u
 
 PROTOC_VERSION=${PROTOC_VERSION:-3.4.0}
 TMP_GOPATH=${TMP_GOPATH:-/tmp/thanos-go}
+TMP_PROTOPATH=${TMP_PROTOPATH:-/tmp/proto}
 PROTOC_DOWNLOAD_URL="https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}"
 
 OS=$(go env GOOS)
@@ -57,4 +58,4 @@ PACKAGE="protoc-${PROTOC_VERSION}-${OS}-${ARCH}.zip"
 PACKAGE_DOWNLOAD_URL="${PROTOC_DOWNLOAD_URL}/${PACKAGE}"
 curl -LSs ${PACKAGE_DOWNLOAD_URL} -o ${TMP_GOPATH}/${PACKAGE}
 unzip -qqj ${TMP_GOPATH}/${PACKAGE} "bin/protoc" -d "${TMP_GOPATH}/bin/"
-unzip -qqj ${TMP_GOPATH}/${PACKAGE} -d "pkg/google/protobuf/"
+unzip -qq ${TMP_GOPATH}/${PACKAGE} "include/*" -d "${TMP_PROTOPATH}"

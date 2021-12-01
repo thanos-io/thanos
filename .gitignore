@@ -31,6 +31,7 @@ pkg/ui/static/react
 
 tmp/bin
 examples/tmp/
+/tmp/proto/
 
 # Ignore the MacOS Trash (DS-Store)
 .DS_Store

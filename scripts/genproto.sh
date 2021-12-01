@@ -8,7 +8,7 @@ set -u
 PROTOC_BIN=${PROTOC_BIN:-protoc}
 GOIMPORTS_BIN=${GOIMPORTS_BIN:-goimports}
 PROTOC_GEN_GOGOFAST_BIN=${PROTOC_GEN_GOGOFAST_BIN:-protoc-gen-gogofast}
-
+INCLUDE_PATH=${INCLUDE_PATH:-/tmp/proto/include}
 if ! [[ "scripts/genproto.sh" =~ $0 ]]; then
   echo "must be run from repository root"
   exit 255
@@ -30,6 +30,7 @@ pushd "pkg"
 for dir in ${DIRS}; do
   ${PROTOC_BIN} --go_out=. \
   -I=. \
+  -I=${INCLUDE_PATH} \
   ${dir}/*.proto
   protoc-go-inject-tag -input=${dir}/*pb.go
 
