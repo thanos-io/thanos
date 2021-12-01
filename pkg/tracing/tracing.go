@@ -8,7 +8,6 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
-	opentracing_log "github.com/opentracing/opentracing-go/log"
 )
 
 const (
@@ -82,7 +81,7 @@ func DoInSpanWithErr(ctx context.Context, operationName string, doFn func(contex
 	defer span.Finish()
 	err := doFn(newCtx)
 	if err != nil {
-		ext.LogError(span, err, opentracing_log.Error(err))
+		ext.LogError(span, err)
 	}
 }
 

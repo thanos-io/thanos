@@ -767,7 +767,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 	}
 
 	var err error
-	tracing.DoInSpanWithErr(ctx, "group_compaction", func(ctx context.Context) error {
+	tracing.DoInSpanWithErr(ctx, "compaction_group", func(ctx context.Context) error {
 		shouldRerun, compID, err = cg.compact(ctx, subDir, planner, comp)
 		return err
 	}, opentracing.Tags{"group.key": cg.Key()})
@@ -1022,14 +1022,13 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir)
 			return err
 		}, opentracing.Tags{"block.id": meta.ULID})
-
 		if err != nil {
 			return false, ulid.ULID{}, retry(errors.Wrapf(err, "download block %s", meta.ULID))
 		}
 
 		// Ensure all input blocks are valid.
 		var stats block.HealthStats
-		tracing.DoInSpanWithErr(ctx, "compaction_block_healthstats", func(ctx context.Context) error {
+		tracing.DoInSpanWithErr(ctx, "compaction_block_health_stats", func(ctx context.Context) error {
 			stats, err = block.GatherIndexHealthStats(cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 			return err
 		}, opentracing.Tags{"block.id": meta.ULID})
