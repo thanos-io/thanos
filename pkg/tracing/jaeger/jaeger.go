@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-    "strings"
+	"strings"
 
 	"github.com/thanos-io/thanos/pkg/tracing"
 
