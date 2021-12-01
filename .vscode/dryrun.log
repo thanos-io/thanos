@@ -1,0 +1,8 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory '/home/infracloud/Desktop/thanos'
+ 
+# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+echo "(re)installing /home/infracloud/go/bin/alertmanager-v0.20.0"
+cd .bingo/ && /usr/local/go/bin/go build -mod=mod -modfile=alertmanager.mod -o=/home/infracloud/go/bin/alertmanager-v0.20.0 "github.com/prometheus/alertmanager/cmd/alertmanager"
+make: Leaving directory '/home/infracloud/Desktop/thanos'
+ 

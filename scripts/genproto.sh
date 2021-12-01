@@ -28,10 +28,9 @@ DIRS="store/storepb store/storepb/prompb/ store/labelpb rules/rulespb targets/ta
 echo "generating code"
 pushd "pkg"
 for dir in ${DIRS}; do
-  ${PROTOC_BIN} --go_out=Mgoogle/protobuf/any.proto=protobuf/:. --go-grpc_out=. \
+  ${PROTOC_BIN} --go_out=. \
   -I=. \
-  -I=protobuf \
-    ${dir}/*.proto
+  ${dir}/*.proto
   protoc-go-inject-tag -input=${dir}/*pb.go
 
 

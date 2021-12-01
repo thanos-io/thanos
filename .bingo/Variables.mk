@@ -129,10 +129,10 @@ $(PROMU): $(BINGO_DIR)/promu.mod
 	@echo "(re)installing $(GOBIN)/promu-v0.5.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=promu.mod -o=$(GOBIN)/promu-v0.5.0 "github.com/prometheus/promu"
 
-PROTOC_GEN_GO := $(GOBIN)/protoc-gen-go-v1.5.2
+PROTOC_GEN_GO := $(GOBIN)/protoc-gen-go
 $(PROTOC_GEN_GO): $(BINGO_DIR)/protoc-gen-go.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/protoc-gen-go-v1.5.2"
+	@echo "(re)installing $(GOBIN)/protoc-gen-go
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=protoc-gen-go.mod -o=$(GOBIN)/protoc-gen-go-v1.5.2 "github.com/golang/protobuf/protoc-gen-go"
 
 PROTOC_GEN_GOGOFAST := $(GOBIN)/protoc-gen-gogofast-v1.3.2
