@@ -320,6 +320,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			metadata.ReceiveSource,
 			false,
 			t.allowOutOfOrderUpload,
+			true, // Just set this to true as a temporary default until query is clarified.
 			t.hashFunc,
 		)
 	}

@@ -332,7 +332,7 @@ func runSidecar(
 			}
 
 			s := shipper.New(logger, reg, conf.tsdb.path, bkt, m.Labels, metadata.SidecarSource,
-				conf.shipper.uploadCompacted, conf.shipper.allowOutOfOrderUpload, metadata.HashFunc(conf.shipper.hashFunc))
+				conf.shipper.uploadCompacted, conf.shipper.allowOutOfOrderUpload, conf.shipper.ignoreOverlap, metadata.HashFunc(conf.shipper.hashFunc))
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {
