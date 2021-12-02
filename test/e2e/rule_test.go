@@ -408,7 +408,7 @@ func TestRule(t *testing.T) {
 	})
 
 	t.Run("query alerts", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "ALERTS", time.Now, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return "ALERTS" }, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
@@ -526,7 +526,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	testutil.Ok(t, r.WaitSumMetricsWithOptions(e2e.GreaterOrEqual(1), []string{"prometheus_remote_storage_samples_total"}, e2e.WaitMissingMetrics()))
 
 	t.Run("can fetch remote-written samples from receiver", func(t *testing.T) {
-		testRecordedSamples := "test_absent_metric"
+		testRecordedSamples := func() string { return "test_absent_metric" }
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), testRecordedSamples, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{

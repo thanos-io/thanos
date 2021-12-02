@@ -10,15 +10,16 @@ import (
 	"os"
 
 	trace "cloud.google.com/go/trace/apiv1"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/googleapis/gax-go"
 	gcloudtracer "github.com/lovoo/gcloud-opentracing"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/version"
-	"github.com/thanos-io/thanos/pkg/tracing"
 	pb "google.golang.org/genproto/googleapis/devtools/cloudtrace/v1"
+
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type tracer struct {

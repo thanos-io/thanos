@@ -1,5 +1,3 @@
-local grafana = import 'grafonnet/grafana.libsonnet';
-local template = grafana.template;
 local utils = import '../utils.libsonnet';
 
 (import 'grafana-builder/grafana.libsonnet') +

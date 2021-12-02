@@ -12,8 +12,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+
 	httputil "github.com/thanos-io/thanos/pkg/server/http"
 )
 

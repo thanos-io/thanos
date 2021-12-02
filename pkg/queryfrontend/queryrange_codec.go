@@ -53,7 +53,7 @@ func NewThanosQueryRangeCodec(partialResponse bool) *queryRangeCodec {
 	}
 }
 
-func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request) (queryrange.Request, error) {
+func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request, _ []string) (queryrange.Request, error) {
 	var (
 		result ThanosQueryRangeRequest
 		err    error
