@@ -161,12 +161,17 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 		return &cortexcache.Config{
 			Redis: cortexcache.RedisConfig{
 				Endpoint:    config.Redis.Addr,
-				Timeout:     config.Redis.ReadTimeout, // There are some gap.
+				Timeout:     config.Redis.ReadTimeout,
 				Expiration:  config.Expiration,
+				DB:          config.Redis.DB,
 				PoolSize:    config.Redis.PoolSize,
 				Password:    flagext.Secret{Value: config.Redis.Password},
 				IdleTimeout: config.Redis.IdleTimeout,
 				MaxConnAge:  config.Redis.MaxConnAge,
+			},
+			Background: cortexcache.BackgroundConfig{
+				WriteBackBuffer:     config.Redis.MaxSetMultiConcurrency * config.Redis.SetMultiBatchSize,
+				WriteBackGoroutines: config.Redis.MaxSetMultiConcurrency,
 			},
 		}, nil
 	default:

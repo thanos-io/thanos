@@ -266,7 +266,7 @@ func (c *RedisClient) Stop() {
 	}
 }
 
-// stringToBytes converts string to byte slice. (copied from vendor/github.com/go-redis/redis/v8/internal/util/unsafe.go)
+// stringToBytes converts string to byte slice (copied from vendor/github.com/go-redis/redis/v8/internal/util/unsafe.go).
 func stringToBytes(s string) []byte {
 	return *(*[]byte)(unsafe.Pointer(
 		&struct {
