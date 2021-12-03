@@ -99,7 +99,7 @@ func New(
 	uploadCompacted bool,
 	allowOutOfOrderUploads bool,
 	ignoreOverlap bool,
-    hashFunc metadata.HashFunc,
+	hashFunc metadata.HashFunc,
 ) *Shipper {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -117,8 +117,8 @@ func New(
 		source:                 source,
 		allowOutOfOrderUploads: allowOutOfOrderUploads,
 		uploadCompacted:        uploadCompacted,
-        ignoreOverlap: ignoreOverlap,
-        hashFunc:               hashFunc,
+		ignoreOverlap:          ignoreOverlap,
+		hashFunc:               hashFunc,
 	}
 }
 
