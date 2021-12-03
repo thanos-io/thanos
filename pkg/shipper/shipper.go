@@ -294,7 +294,6 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		}
 
 		if m.Compaction.Level > 1 && !s.ignoreOverlap {
-			// check here for shipper flag
 			if err := checker.IsOverlapping(ctx, m.BlockMeta); err != nil {
 				if !s.allowOutOfOrderUploads {
 					return 0, errors.Errorf("Found overlap or error during sync, cannot upload compacted block, details: %v", err)
