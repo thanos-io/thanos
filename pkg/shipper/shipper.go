@@ -82,7 +82,6 @@ type Shipper struct {
 
 	uploadCompacted        bool
 	allowOutOfOrderUploads bool
-	ignoreOverlap          bool
 	hashFunc               metadata.HashFunc
 }
 
@@ -98,7 +97,6 @@ func New(
 	source metadata.SourceType,
 	uploadCompacted bool,
 	allowOutOfOrderUploads bool,
-	ignoreOverlap bool,
 	hashFunc metadata.HashFunc,
 ) *Shipper {
 	if logger == nil {
@@ -117,7 +115,6 @@ func New(
 		source:                 source,
 		allowOutOfOrderUploads: allowOutOfOrderUploads,
 		uploadCompacted:        uploadCompacted,
-		ignoreOverlap:          ignoreOverlap,
 		hashFunc:               hashFunc,
 	}
 }
@@ -293,21 +290,15 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 			continue
 		}
 
-		if m.Compaction.Level > 1 && !s.ignoreOverlap {
+		// Skip overlap check if out of order uploads is enabled.
+		if m.Compaction.Level > 1 && !s.allowOutOfOrderUploads {
 			if err := checker.IsOverlapping(ctx, m.BlockMeta); err != nil {
-				if !s.allowOutOfOrderUploads {
-					return 0, errors.Errorf("Found overlap or error during sync, cannot upload compacted block, details: %v", err)
-				}
-				level.Error(s.logger).Log("msg", "found overlap or error during sync, cannot upload compacted block", "err", err)
-				uploadErrs++
-				continue
+				return 0, errors.Errorf("Found overlap or error during sync, cannot upload compacted block, details: %v", err)
 			}
 		}
 
 		if err := s.upload(ctx, m); err != nil {
-			// If the ignoreOverlap flag is true, no check happens.
-			// If the ignoreOverlap flag is false and OOO uploads are not allowed, it will result in an error.
-			if !s.ignoreOverlap && !s.allowOutOfOrderUploads {
+			if !s.allowOutOfOrderUploads {
 				return 0, errors.Wrapf(err, "upload %v", m.ULID)
 			}
 

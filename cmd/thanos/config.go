@@ -125,7 +125,6 @@ type shipperConfig struct {
 	uploadCompacted       bool
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
-	ignoreOverlap         bool
 	hashFunc              string
 }
 
@@ -141,9 +140,6 @@ func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig 
 			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
 			"about order.").
 		Default("false").Hidden().BoolVar(&sc.allowOutOfOrderUpload)
-	cmd.Flag("shipper.ignore-overlap",
-		"If true, shipper will skip checking for overlaps and allow uploading out of order blocks. Uploading out of order blocks is acceptable when vertical compaction is enabled at the compactor side.").
-		Default("false").Hidden().BoolVar(&sc.ignoreOverlap)
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&sc.hashFunc, "SHA256", "")
 	return sc
