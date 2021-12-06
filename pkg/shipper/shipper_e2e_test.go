@@ -351,3 +351,154 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		testutil.Assert(t, ok == false, "fifth block was reuploaded")
 	})
 }
+
+// TestShipper_SyncOverlapBlocks_e2e is a unit test for the functionality by allowOutOfOrderUploads flag. This allows compacted(compaction level greater than 1) blocks to be uploaded despite overlapping time ranges.
+func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
+	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
+		dir, err := ioutil.TempDir("", "shipper-e2e-test")
+		testutil.Ok(t, err)
+		defer func() {
+			testutil.Ok(t, os.RemoveAll(dir))
+		}()
+
+		bkt := objstore.NewInMemBucket()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		extLset := labels.FromStrings("prometheus", "prom-1")
+
+		testutil.Ok(t, p.Start())
+
+		logger := log.NewNopLogger()
+		upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
+		defer upcancel()
+		testutil.Ok(t, p.WaitPrometheusUp(upctx, logger))
+
+		p.DisableCompaction()
+		testutil.Ok(t, p.Restart())
+
+		upctx2, upcancel2 := context.WithTimeout(ctx, 10*time.Second)
+		defer upcancel2()
+		testutil.Ok(t, p.WaitPrometheusUp(upctx2, logger))
+
+		// Here, the allowOutOfOrderUploads flag is set to true, which allows blocks with overlaps to be uploaded.
+		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, true, true, metadata.NoneFunc)
+
+		// Creating 2 overlapping blocks - both uploaded when OOO uploads allowed.
+		var (
+			expBlocks = map[ulid.ULID]struct{}{}
+			expFiles  = map[string][]byte{}
+			randr     = rand.New(rand.NewSource(0))
+			ids       = []ulid.ULID{}
+		)
+
+		id := make([]ulid.ULID, 2)
+		tmp := make([]string, 2)
+		m := make([]metadata.Meta, 2)
+
+		for i := 0; i < 2; i++ {
+			id[i] = ulid.MustNew(uint64(i), randr)
+
+			bdir := filepath.Join(dir, id[i].String())
+			tmp := bdir + ".tmp"
+
+			testutil.Ok(t, os.Mkdir(tmp, 0777))
+
+			m[i] = metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{
+					Version: 1,
+					ULID:    id[i],
+					Stats: tsdb.BlockStats{
+						NumSamples: 1,
+					},
+					Compaction: tsdb.BlockMetaCompaction{
+						Level: 2,
+					},
+				},
+				Thanos: metadata.Thanos{
+					Source: metadata.TestSource,
+				},
+			}
+		}
+
+		m[0].BlockMeta.MinTime = 10
+		m[0].BlockMeta.MaxTime = 20
+
+		m[1].BlockMeta.MinTime = 15
+		m[1].BlockMeta.MaxTime = 17
+
+		for i := 0; i < 2; i++ {
+			bdir := filepath.Join(dir, m[i].BlockMeta.ULID.String())
+			tmp[i] = bdir + ".tmp"
+
+			metab, err := json.Marshal(&m[i])
+			testutil.Ok(t, err)
+
+			testutil.Ok(t, ioutil.WriteFile(tmp[i]+"/meta.json", metab, 0666))
+			testutil.Ok(t, ioutil.WriteFile(tmp[i]+"/index", []byte("indexcontents"), 0666))
+
+			// Running shipper while a block is being written to temp dir should not trigger uploads.
+			b, err := shipper.Sync(ctx)
+			testutil.Ok(t, err)
+			testutil.Equals(t, 0, b)
+
+			shipMeta, err := ReadMetaFile(dir)
+			testutil.Ok(t, err)
+			if len(shipMeta.Uploaded) == 0 {
+				shipMeta.Uploaded = []ulid.ULID{}
+			}
+			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
+
+			testutil.Ok(t, os.MkdirAll(tmp[i]+"/chunks", 0777))
+			testutil.Ok(t, ioutil.WriteFile(tmp[i]+"/chunks/0001", []byte("chunkcontents1"), 0666))
+			testutil.Ok(t, ioutil.WriteFile(tmp[i]+"/chunks/0002", []byte("chunkcontents2"), 0666))
+
+			testutil.Ok(t, os.Rename(tmp[i], bdir))
+
+			// After rename sync should upload the block.
+			b, err = shipper.Sync(ctx)
+			testutil.Ok(t, err)
+			testutil.Equals(t, 1, b)
+			ids = append(ids, id[i])
+
+			// The external labels must be attached to the meta file on upload.
+			m[i].Thanos.Labels = extLset.Map()
+			m[i].Thanos.SegmentFiles = []string{"0001", "0002"}
+			m[i].Thanos.Files = []metadata.File{
+				{RelPath: "chunks/0001", SizeBytes: 14},
+				{RelPath: "chunks/0002", SizeBytes: 14},
+				{RelPath: "index", SizeBytes: 13},
+				{RelPath: "meta.json"},
+			}
+
+			buf := bytes.Buffer{}
+			testutil.Ok(t, m[i].Write(&buf))
+
+			expBlocks[id[i]] = struct{}{}
+			expFiles[id[i].String()+"/meta.json"] = buf.Bytes()
+			expFiles[id[i].String()+"/index"] = []byte("indexcontents")
+			expFiles[id[i].String()+"/chunks/0001"] = []byte("chunkcontents1")
+			expFiles[id[i].String()+"/chunks/0002"] = []byte("chunkcontents2")
+
+			// The shipper meta file should show all blocks as uploaded except the compacted one.
+			shipMeta, err = ReadMetaFile(dir)
+			testutil.Ok(t, err)
+			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
+		}
+
+		for id := range expBlocks {
+			ok, _ := bkt.Exists(ctx, path.Join(id.String(), block.MetaFilename))
+			testutil.Assert(t, ok, "block %s was not uploaded", id)
+		}
+
+		for fn, exp := range expFiles {
+			rc, err := bkt.Get(ctx, fn)
+			testutil.Ok(t, err)
+			act, err := ioutil.ReadAll(rc)
+			testutil.Ok(t, err)
+			testutil.Ok(t, rc.Close())
+			testutil.Equals(t, string(exp), string(act))
+		}
+	})
+}
