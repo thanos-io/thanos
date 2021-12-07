@@ -79,6 +79,7 @@ jobs:
           at: .
       # Register qemu to support multi-arch.
       - run: docker run --privileged linuxkit/binfmt:v0.7
+      - run: make crossbuild
       - run: make docker-build
       - run: make docker-test
       # Upload to both dockerhub and quay.io.
