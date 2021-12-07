@@ -104,7 +104,6 @@ jobs:
           destination: releases
       # Register qemu to support multi-arch.
       - run: docker run --privileged linuxkit/binfmt:v0.7
-      - run: ln -s .build/linux-amd64/thanos thanos
       - run: make docker-build
       - run: make docker-test
       # Upload to both dockerhub and quay.io.

@@ -178,7 +178,9 @@ GET_SHA = $(shell echo '$1'_SHA | tr '[:lower:]' '[:upper:]')
 docker-build: $(BUILD_DOCKER_ARCHS)
 $(BUILD_DOCKER_ARCHS): docker-build-%:
 	@docker build -t "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)" \
-		--build-arg BASE_DOCKER_SHA=$($(call GET_SHA,$*)) -f Dockerfile.multi-stage .
+  --build-arg BASE_DOCKER_SHA=$($(call GET_SHA,$*)) \
+  --build-arg ARCH="$*" \
+  -f Dockerfile.multi-arch .
 
 .PHONY: docker-test $(TEST_DOCKER_ARCHS)
 docker-test: $(TEST_DOCKER_ARCHS)
