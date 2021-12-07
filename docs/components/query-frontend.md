@@ -95,6 +95,35 @@ config:
   expiration: 24h
 ```
 
+#### Redis
+
+The default redis config is:
+
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=queryfrontend.RedisResponseCacheConfig"
+type: REDIS
+config:
+  addr: ""
+  username: ""
+  password: ""
+  db: 0
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_size: 100
+  min_idle_conns: 10
+  idle_timeout: 5m0s
+  max_conn_age: 0s
+  max_get_multi_concurrency: 100
+  get_multi_batch_size: 100
+  max_set_multi_concurrency: 100
+  set_multi_batch_size: 100
+  expiration: 24h0m0s
+```
+
+`expiration` specifies redis cache valid time. If set to 0s, so using a default of 24 hours expiration time.
+
+Other cache configuration parameters, you can refer to [redis-index-cache](store.md#redis-index-cache).
+
 ### Slow Query Log
 
 Query Frontend supports `--query-frontend.log-queries-longer-than` flag to log queries running longer than some duration.
