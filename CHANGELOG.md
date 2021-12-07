@@ -48,6 +48,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4777](https://github.com/thanos-io/thanos/pull/4777) Query: Fix data race in exemplars server.
 - [#4811](https://github.com/thanos-io/thanos/pull/4811) Query: Fix data race in metadata, rules, and targets servers.
 - [#4795](https://github.com/thanos-io/thanos/pull/4795) Query: Fix deadlock in endpointset.
+- [#4928](https://github.com/thanos-io/thanos/pull/4928) Azure: Only create an http client once, to conserve memory.
 
 ### Changed
 
