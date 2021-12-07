@@ -30,6 +30,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4868](https://github.com/thanos-io/thanos/pull/4868) Rule: Support ruleGroup limit introduced by Prometheus v2.31.0.
 - [#4897](https://github.com/thanos-io/thanos/pull/4897) Querier: Add validation for querier address flags.
 - [#4903](https://github.com/thanos-io/thanos/pull/4903) Compactor: Added tracing support for compaction.
+- [#4909](https://github.com/thanos-io/thanos/pull/4909) Compactor: Add flag --max-time / --min-time to filter blocks that are ready to be compacted.
 
 ### Fixed
 
