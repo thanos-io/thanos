@@ -131,11 +131,11 @@ for _, st := range s.stores() {
 			// Schedule streamSeriesSet that translates gRPC streamed response
 			// into seriesSet (if series) or respCh if warnings.
 			seriesSet = append(seriesSet, startStreamSeriesSet(seriesCtx, reqLogger, span, closeSeries,
-				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout, s.metrics.emptyStreamResponses))
+				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout, s.metrics.emptyStreamResponses, seriesStatsCh))
 		}
 ```
 
-[Propagating the `SeriesStats` in the `SeriesSet` object via channel](https://github.com/thanos-io/thanos/blob/de0e3848ff6085acf89a5f77e053c555a2cce550/pkg/store/proxy.go#L362):
+[Propagating the `SeriesStats` via channel](https://github.com/thanos-io/thanos/blob/de0e3848ff6085acf89a5f77e053c555a2cce550/pkg/store/proxy.go#L362):
 ```go
 func startStreamSeriesSet(
   ctx context.Context,
@@ -171,7 +171,7 @@ The `seriesStats` sent to the channel on response [here](https://github.com/than
 ```go
 if series := rr.r.GetSeries(); series != nil {
 				seriesStats.Count(series)
-                seriesStatsCh<- seriesStats // Propogate the stats for this response 
+				seriesStatsCh<- seriesStats // Propogate the stats for this response 
 
 				select {
 				case s.recvCh <- series:
