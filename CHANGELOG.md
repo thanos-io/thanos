@@ -12,12 +12,13 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## v0.24.0 - In Progress
 
-## [v0.24.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.24) - 2021.11.28
+## [v0.24.0-rc.1](https://github.com/thanos-io/thanos/tree/release-0.24) - 2021.12.09
 
 ### Added
 
 - [#4228](https://github.com/thanos-io/thanos/pull/4228) Tools `thanos bucket inspect`: Add flag `--output` to provide output method (table,csv,tsv).
 - [#4282](https://github.com/thanos-io/thanos/pull/4282) Query: *breaking :warning:* Add `--endpoint` flag to the querier. The `--store` flag will eventually be replaced.
+- [#4636](https://github.com/thanos-io/thanos/pull/4636) Azure: Support authentication using user-assigned managed identity
 - [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: Add `exemplar.partial-response` flag to control partial response.
 - [#4679](https://github.com/thanos-io/thanos/pull/4679) Query: Add `enable-feature` flag to enable negative offsets and `@` modifier, similar to Prometheus.
 - [#4696](https://github.com/thanos-io/thanos/pull/4696) Query: Add cache name to tracing spans.
@@ -30,6 +31,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4731](https://github.com/thanos-io/thanos/pull/4731) Rule: Add stateless mode to ruler.
 - [#4612](https://github.com/thanos-io/thanos/pull/4612) Sidecar: Add `--prometheus.http-client` and `--prometheus.http-client-file` flag for sidecar to connect to Prometheus with basic auth or TLS.
 - [#4847](https://github.com/thanos-io/thanos/pull/4847) Query: Add `--alert.query-url` which is used in the UI for rules/alerts pages. By default the HTTP listen address is used for this URL.
+- [#4848](https://github.com/thanos-io/thanos/pull/4848) Compactor: added Prometheus metric for tracking the progress of retention.
 - [#4856](https://github.com/thanos-io/thanos/pull/4856) Mixin: Add Query Frontend to Grafana dashboard.
 - [#4874](https://github.com/thanos-io/thanos/pull/4874) Query: Add `--endpoint-strict` flag to statically configure Thanos API server endpoints. It is similar to `--store-strict` but supports passing any Thanos gRPC APIs: StoreAPI, MetadataAPI, RulesAPI, TargetsAPI and ExemplarsAPI.
 - [#4868](https://github.com/thanos-io/thanos/pull/4868) Rule: Support ruleGroup limit introduced by Prometheus v2.31.0.
