@@ -122,7 +122,7 @@ export function formatTime(time: number): string {
   return moment.utc(time).format('YYYY-MM-DD HH:mm:ss');
 }
 
-export const isValidTime = (t: number): boolean => t <= MIN_TIME || t >= MAX_TIME;
+export const isValidTime = (t: number): boolean => t > MIN_TIME && t < MAX_TIME;
 
 export const now = (): number => moment().valueOf();
 

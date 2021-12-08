@@ -2,7 +2,7 @@ import React, { FC } from 'react';
 import { Container, Collapse, Table, Badge } from 'reactstrap';
 import { now } from 'moment';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faInfinity } from '@fortawesome/free-solid-svg-icons';
+import { faMinus } from '@fortawesome/free-solid-svg-icons';
 import { ToggleMoreLess } from '../../../components/ToggleMoreLess';
 import { useLocalStorage } from '../../../hooks/useLocalStorage';
 import { getColor } from '../../../pages/targets/target';
@@ -16,11 +16,25 @@ export const columns = [
   'Endpoint',
   'Status',
   'Announced LabelSets',
-  'Min Time',
-  'Max Time',
+  'Min Time (UTC)',
+  'Max Time (UTC)',
   'Last Successful Health Check',
   'Last Message',
 ];
+
+export const storeTimeRangeMsg = (validMin: boolean, validMax: boolean): string => {
+  if (!validMin && !validMax) {
+    return "This store's time range data is not available";
+  }
+  if (!validMin && validMax) {
+    return 'This store has no minimum time limit';
+  }
+  if (validMin && !validMax) {
+    return 'This store has no maximum time limit';
+  }
+
+  return '';
+};
 
 export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) => {
   const [{ expanded }, setOptions] = useLocalStorage(`store-pool-${title}-expanded`, { expanded: true });
@@ -44,27 +58,31 @@ export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) =>
               const { name, minTime, maxTime, labelSets, lastCheck, lastError } = store;
               const health = lastError ? 'down' : 'up';
               const color = getColor(health);
+              const validMinTime = isValidTime(minTime);
+              const validMaxTime = isValidTime(maxTime);
 
               return (
                 <tr key={name}>
-                  <td data-testid="endpoint">{name}</td>
+                  <td data-testid="endpoint" title={storeTimeRangeMsg(validMinTime, validMaxTime)}>
+                    {name}
+                  </td>
                   <td data-testid="health">
                     <Badge color={color}>{health.toUpperCase()}</Badge>
                   </td>
                   <td data-testid="storeLabels">
                     <StoreLabels labelSets={labelSets} />
                   </td>
-                  <td data-testid="minTime">
-                    {isValidTime(minTime) ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(minTime)}
+                  <td data-testid="minTime" title={storeTimeRangeMsg(validMinTime, validMaxTime)}>
+                    {validMinTime ? formatTime(minTime) : <FontAwesomeIcon icon={faMinus} />}
                   </td>
-                  <td data-testid="maxTime">
-                    {isValidTime(maxTime) ? <FontAwesomeIcon icon={faInfinity} /> : formatTime(maxTime)}
+                  <td data-testid="maxTime" title={storeTimeRangeMsg(validMinTime, validMaxTime)}>
+                    {validMaxTime ? formatTime(maxTime) : <FontAwesomeIcon icon={faMinus} />}
                   </td>
                   <td data-testid="lastCheck">
                     {isValidTime(parseTime(lastCheck)) ? (
-                      <FontAwesomeIcon icon={faInfinity} />
-                    ) : (
                       formatRelative(lastCheck, now())
+                    ) : (
+                      <FontAwesomeIcon icon={faMinus} />
                     )}{' '}
                     ago
                   </td>
