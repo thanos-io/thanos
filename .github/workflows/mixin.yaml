@@ -1,0 +1,46 @@
+name: mixin
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.16
+
+      - name: Generate
+        run: make examples
+
+      - name: Check
+        run: make check-examples
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Linters (Static Analysis) for Jsonnet (mixin)
+    steps:
+      - name: Checkout code into the Go module directory.
+        uses: actions/checkout@v2
+
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16.x
+
+      - name: Format
+        run: |
+          make jsonnet-format
+          git diff --exit-code
+
+      - name: Linting
+        run: make jsonnet-lint

@@ -237,7 +237,7 @@ test-e2e: docker
 	@echo ">> cleaning docker environment."
 	@docker system prune -f --volumes
 	@echo ">> cleaning e2e test garbage."
-	@rm -rf ./test/e2e/e2e_integration_test*
+	@rm -rf ./test/e2e/e2e_*
 	@echo ">> running /test/e2e tests."
 	# NOTE(bwplotka):
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 to limit to single CPU to reproduce small 1CPU machine.
@@ -363,7 +363,7 @@ jsonnet-format: $(JSONNETFMT)
 		xargs -n 1 -- $(JSONNETFMT_CMD) -i
 
 .PHONY: jsonnet-lint
-jsonnet-lint: $(JSONNET_LINT) ${JSONNET_VENDOR_DIR}
+jsonnet-lint: $(JSONNET_LINT) jsonnet-vendor
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
 		xargs -n 1 -- $(JSONNET_LINT) -J ${JSONNET_VENDOR_DIR}
 
@@ -399,4 +399,3 @@ $(PROTOC):
 	@echo ">> installing protoc@${PROTOC_VERSION}"
 	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(GOBIN)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(GOBIN)/protoc-$(PROTOC_VERSION)"
-

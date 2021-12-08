@@ -7,11 +7,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/thanos-io/thanos/pkg/tracing"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber/jaeger-client-go"
@@ -52,7 +53,7 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 	}
 
 	cfg.Headers = &jaeger.HeadersConfig{
-		JaegerDebugHeader: tracing.ForceTracingBaggageKey,
+		JaegerDebugHeader: strings.ToLower(tracing.ForceTracingBaggageKey),
 	}
 	cfg.Headers.ApplyDefaults()
 	jaegerTracer, closer, err = cfg.NewTracer(

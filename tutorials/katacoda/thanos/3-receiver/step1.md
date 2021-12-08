@@ -7,6 +7,7 @@ Let's imagine that you run a company called `Wayne Enterprises`. This company ru
 However, these sites are special. For security reasons, they do not expose public endpoints to the Prometheus instances running there, and so cannot be accessed directly from other parts of your infrastructure.
 
 As the person responsible for implementing monitoring these sites, you have two requirements to meet:
+
 1. Implement a global view of this data. `Wayne Enterprises` needs to know what is happening in all parts of the company - including secret ones!
 1. Global view must be queryable in near real-time. We can't afford any delay in monitoring these locations!
 
@@ -57,9 +58,10 @@ Verify that `prometheus-batcave` is running by navigating to the [Batcave Promet
   This lets us tell Prometheus to dynamically reload its configuration, which will be useful later in this tutorial.
 </details>
 
+
 ### Batcomputer
 
-Almost exactly the same configuration as above, execpt we run the Prometheus instance on port `9091`.
+Almost exactly the same configuration as above, except we run the Prometheus instance on port `9091`.
 
 <pre class="file" data-filename="prometheus-batcomputer.yaml" data-target="replace">
 global:

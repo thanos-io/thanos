@@ -9,8 +9,8 @@ import (
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/ulid"
@@ -152,7 +152,7 @@ var LogDecision = map[string]Decision{
 }
 
 // MapAllowedLevels allows to map a given level to a list of allowed level.
-// Convention taken from go-kit/level v0.10.0 https://godoc.org/github.com/go-kit/kit/log/level#AllowAll.
+// Convention taken from go-kit/level v0.10.0 https://godoc.org/github.com/go-kit/log/level#AllowAll.
 var MapAllowedLevels = map[string][]string{
 	"DEBUG": {"INFO", "DEBUG", "WARN", "ERROR"},
 	"ERROR": {"ERROR"},

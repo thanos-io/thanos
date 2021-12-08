@@ -8,11 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/storage"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -84,7 +86,7 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			memcached := newMockedMemcachedClient(testData.mockedErr)
-			c, err := NewMemcachedIndexCache(log.NewNopLogger(), memcached, nil)
+			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil)
 			testutil.Ok(t, err)
 
 			// Store the postings expected before running the test.
@@ -121,16 +123,16 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 		setup          []mockedSeries
 		mockedErr      error
 		fetchBlockID   ulid.ULID
-		fetchIds       []uint64
-		expectedHits   map[uint64][]byte
-		expectedMisses []uint64
+		fetchIds       []storage.SeriesRef
+		expectedHits   map[storage.SeriesRef][]byte
+		expectedMisses []storage.SeriesRef
 	}{
 		"should return no hits on empty cache": {
 			setup:          []mockedSeries{},
 			fetchBlockID:   block1,
-			fetchIds:       []uint64{1, 2},
+			fetchIds:       []storage.SeriesRef{1, 2},
 			expectedHits:   nil,
-			expectedMisses: []uint64{1, 2},
+			expectedMisses: []storage.SeriesRef{1, 2},
 		},
 		"should return no misses on 100% hit ratio": {
 			setup: []mockedSeries{
@@ -139,8 +141,8 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 				{block: block2, id: 1, value: value3},
 			},
 			fetchBlockID: block1,
-			fetchIds:     []uint64{1, 2},
-			expectedHits: map[uint64][]byte{
+			fetchIds:     []storage.SeriesRef{1, 2},
+			expectedHits: map[storage.SeriesRef][]byte{
 				1: value1,
 				2: value2,
 			},
@@ -152,9 +154,9 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 				{block: block2, id: 1, value: value3},
 			},
 			fetchBlockID:   block1,
-			fetchIds:       []uint64{1, 2},
-			expectedHits:   map[uint64][]byte{1: value1},
-			expectedMisses: []uint64{2},
+			fetchIds:       []storage.SeriesRef{1, 2},
+			expectedHits:   map[storage.SeriesRef][]byte{1: value1},
+			expectedMisses: []storage.SeriesRef{2},
 		},
 		"should return no hits on memcached error": {
 			setup: []mockedSeries{
@@ -164,16 +166,16 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 			},
 			mockedErr:      errors.New("mocked error"),
 			fetchBlockID:   block1,
-			fetchIds:       []uint64{1, 2},
+			fetchIds:       []storage.SeriesRef{1, 2},
 			expectedHits:   nil,
-			expectedMisses: []uint64{1, 2},
+			expectedMisses: []storage.SeriesRef{1, 2},
 		},
 	}
 
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			memcached := newMockedMemcachedClient(testData.mockedErr)
-			c, err := NewMemcachedIndexCache(log.NewNopLogger(), memcached, nil)
+			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil)
 			testutil.Ok(t, err)
 
 			// Store the series expected before running the test.
@@ -204,7 +206,7 @@ type mockedPostings struct {
 
 type mockedSeries struct {
 	block ulid.ULID
-	id    uint64
+	id    storage.SeriesRef
 	value []byte
 }
 

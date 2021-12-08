@@ -6,7 +6,9 @@
 
 The `thanos rule` command evaluates Prometheus recording and alerting rules against chosen query API via repeated `--query` (or FileSD via `--query.sd`). If more than one query is passed, round robin balancing is performed.
 
-Rule results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
+By default, rule evaluation results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
+
+Rule also has a stateless mode which sends rule evaluation results to some remote storages via remote write for better scalability. This way, rule nodes only work as a data producer and the remote receive nodes work as source store nodes. It means that Thanos Rule in this mode does *not* expose the StoreAPI.
 
 You can think of Rule as a simplified Prometheus that does not require a sidecar and does not scrape and do PromQL evaluation (no QueryAPI).
 
@@ -22,7 +24,7 @@ thanos rule \
     --query                "query.example.org" \
     --query                "query2.example.org" \
     --objstore.config-file "bucket.yml" \
-    --label                'monitor_cluster="cluster1"'
+    --label                'monitor_cluster="cluster1"' \
     --label                'replica="A"'
 ```
 
@@ -202,6 +204,35 @@ In case of Ruler in HA you need to make sure you have the following labelling se
 
 Advanced relabelling configuration is possible with the `--alert.relabel-config` and `--alert.relabel-config-file` flags. The configuration format is identical to the [`alert_relabel_configs`](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#alert_relabel_configs) field of Prometheus. Note that Thanos Ruler drops the labels listed in `--alert.label-drop` before alert relabelling.
 
+## Stateless Ruler via Remote Write
+
+Stateless ruler enables nearly indefinite horizontal scalability. Ruler doesn't have a fully functional TSDB for storing evaluation results, but uses a WAL only storage and sends data to some remote storage via remote write.
+
+The WAL only storage reuses the upstream [Prometheus agent](https://prometheus.io/blog/2021/11/16/agent/) and it is compatible with the old TSDB data. For more design purpose of this mode, please refer to the [proposal](https://thanos.io/tip/proposals-done/202005-scalable-rule-storage.md/).
+
+Stateless mode can be enabled by providing `--remote-write.config` or `--remote-write.config-file` flag. For example:
+
+```bash
+thanos rule \
+    --data-dir                  "/path/to/data" \
+    --eval-interval             "30s" \
+    --rule-file                 "/path/to/rules/*.rules.yaml" \
+    --alert.query-url           "http://0.0.0.0:9090" \ # This tells what query URL to link to in UI.
+    --alertmanagers.url         "http://alert.thanos.io" \
+    --query                     "query.example.org" \
+    --query                     "query2.example.org" \
+    --objstore.config-file      "bucket.yml" \
+    --label                     'monitor_cluster="cluster1"' \
+    --label                     'replica="A"' \
+    --remote-write.config-file  'rw-config.yaml'
+```
+
+The remote write config file is exactly the same as the [Prometheus remote write config format](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
+
+**NOTE:**
+1. `metadata_config` is not supported in this mode and will be ignored if provided in the remote write configuration.
+2. Ruler won't expose Store API for querying data if stateless mode is enabled. If the remote storage is thanos receiver then you can use that to query rule evaluation results.
+
 ## Flags
 
 ```$ mdox-exec="thanos rule --help"
@@ -344,6 +375,26 @@ Flags:
                                  (repeatable).
       --query.sd-interval=5m     Refresh interval to re-read file SD files.
                                  (used as a fallback)
+      --remote-write.config=<content>  
+                                 Alternative to 'remote-write.config-file' flag
+                                 (mutually exclusive). Content of YAML config
+                                 for the remote-write server where samples
+                                 should be sent to (see
+                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
+                                 This automatically enables stateless mode for
+                                 ruler and no series will be stored in the
+                                 ruler's TSDB. If an empty config (or file) is
+                                 provided, the flag is ignored and ruler is run
+                                 with its own TSDB.
+      --remote-write.config-file=<file-path>  
+                                 Path to YAML config for the remote-write server
+                                 where samples should be sent to (see
+                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
+                                 This automatically enables stateless mode for
+                                 ruler and no series will be stored in the
+                                 ruler's TSDB. If an empty config (or file) is
+                                 provided, the flag is ignored and ruler is run
+                                 with its own TSDB.
       --request.logging-config=<content>  
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content of YAML file

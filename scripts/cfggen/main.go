@@ -12,12 +12,13 @@ import (
 	"strings"
 
 	"github.com/fatih/structtag"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
@@ -64,11 +65,13 @@ var (
 	indexCacheConfigs = map[storecache.IndexCacheProvider]interface{}{
 		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},
 		storecache.MEMCACHED: cacheutil.MemcachedClientConfig{},
+		storecache.REDIS:     cacheutil.DefaultRedisClientConfig,
 	}
 
 	queryfrontendCacheConfigs = map[queryfrontend.ResponseCacheProvider]interface{}{
 		queryfrontend.INMEMORY:  queryfrontend.InMemoryResponseCacheConfig{},
 		queryfrontend.MEMCACHED: queryfrontend.MemcachedResponseCacheConfig{},
+		queryfrontend.REDIS:     queryfrontend.DefaultRedisConfig,
 	}
 )
 

@@ -161,11 +161,14 @@ This controls if query results should be deduplicated using the replica labels.
 | `max_source_resolution` | `Float64/time.Duration/model.Duration` | `step / 5` or `0` if `query.auto-downsampling` is false (default: False) | `5m`    |
 |                         |                                        |                                                                          |         |
 
-Max source resolution is max resolution in seconds we want to use for data we query for. This means that for value:
+Max source resolution is max resolution in seconds we want to use for data we query for.
 
-* 0 -> we will use only raw data.
-* 5m -> we will use max 5m downsampling.
-* 1h -> we will use max 1h downsampling.
+Available options:
+
+* `auto` - Select downsample resolution automatically based on the query.
+* `0` - Only use raw data.
+* `5m` - Use max 5m downsampling.
+* `1h` - Use max 1h downsampling.
 
 ### Partial Response Strategy
 
@@ -252,9 +255,22 @@ Query node exposing PromQL enabled Query API with data retrieved from multiple
 store nodes.
 
 Flags:
+      --alert.query-url=ALERT.QUERY-URL  
+                                 The external Thanos Query URL that would be set
+                                 in all alerts 'Source' field.
       --enable-feature= ...      Comma separated experimental feature names to
                                  enable.The current list of features is
                                  promql-negative-offset and promql-at-modifier.
+      --endpoint=<endpoint> ...  Addresses of statically configured Thanos API
+                                 servers (repeatable). The scheme may be
+                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 Thanos API servers through respective DNS
+                                 lookups.
+      --endpoint-strict=<staticendpoint> ...  
+                                 Addresses of only statically configured Thanos
+                                 API servers that are always used, even if the
+                                 health check fails. Useful if you have a
+                                 caching layer on top.
       --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -367,16 +383,19 @@ Flags:
       --selector-label=<name>="<value>" ...  
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
-      --store=<store> ...        Addresses of statically configured store API
-                                 servers (repeatable). The scheme may be
-                                 prefixed with 'dns+' or 'dnssrv+' to detect
-                                 store API servers through respective DNS
-                                 lookups.
+      --store=<store> ...        Deprecation Warning - This flag is deprecated
+                                 and replaced with `endpoint`. Addresses of
+                                 statically configured store API servers
+                                 (repeatable). The scheme may be prefixed with
+                                 'dns+' or 'dnssrv+' to detect store API servers
+                                 through respective DNS lookups.
       --store-strict=<staticstore> ...  
-                                 Addresses of only statically configured store
-                                 API servers that are always used, even if the
-                                 health check fails. Useful if you have a
-                                 caching layer on top.
+                                 Deprecation Warning - This flag is deprecated
+                                 and replaced with `endpoint-strict`. Addresses
+                                 of only statically configured store API servers
+                                 that are always used, even if the health check
+                                 fails. Useful if you have a caching layer on
+                                 top.
       --store.response-timeout=0ms  
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored

@@ -7,13 +7,20 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
+	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+
 	"github.com/thanos-io/thanos/pkg/api"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 // BlocksAPI is a very simple API used by Thanos Block Viewer.
@@ -23,6 +30,7 @@ type BlocksAPI struct {
 	globalBlocksInfo *BlocksInfo
 	loadedBlocksInfo *BlocksInfo
 	disableCORS      bool
+	bkt              objstore.Bucket
 }
 
 type BlocksInfo struct {
@@ -32,8 +40,27 @@ type BlocksInfo struct {
 	Err         error           `json:"err"`
 }
 
+type ActionType int32
+
+const (
+	Deletion ActionType = iota
+	NoCompaction
+	Unknown
+)
+
+func parse(s string) ActionType {
+	switch s {
+	case "DELETION":
+		return Deletion
+	case "NO_COMPACTION":
+		return NoCompaction
+	default:
+		return Unknown
+	}
+}
+
 // NewBlocksAPI creates a simple API to be used by Thanos Block Viewer.
-func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap map[string]string) *BlocksAPI {
+func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap map[string]string, bkt objstore.Bucket) *BlocksAPI {
 	return &BlocksAPI{
 		baseAPI: api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:  logger,
@@ -46,6 +73,7 @@ func NewBlocksAPI(logger log.Logger, disableCORS bool, label string, flagsMap ma
 			Label:  label,
 		},
 		disableCORS: disableCORS,
+		bkt:         bkt,
 	}
 }
 
@@ -55,6 +83,43 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 	instr := api.GetInstr(tracer, logger, ins, logMiddleware, bapi.disableCORS)
 
 	r.Get("/blocks", instr("blocks", bapi.blocks))
+	r.Post("/blocks/mark", instr("blocks_mark", bapi.markBlock))
+}
+
+func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.ApiError) {
+	idParam := r.FormValue("id")
+	actionParam := r.FormValue("action")
+	detailParam := r.FormValue("detail")
+
+	if idParam == "" {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("ID cannot be empty")}
+	}
+
+	if actionParam == "" {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("Action cannot be empty")}
+	}
+
+	id, err := ulid.Parse(idParam)
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("ULID %q is not valid: %v", idParam, err)}
+	}
+
+	actionType := parse(actionParam)
+	switch actionType {
+	case Deletion:
+		err := block.MarkForDeletion(r.Context(), bapi.logger, bapi.bkt, id, detailParam, promauto.With(nil).NewCounter(prometheus.CounterOpts{}))
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		}
+	case NoCompaction:
+		err := block.MarkForNoCompact(r.Context(), bapi.logger, bapi.bkt, id, metadata.ManualNoCompactReason, detailParam, promauto.With(nil).NewCounter(prometheus.CounterOpts{}))
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+		}
+	default:
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("not supported marker %v", actionParam)}
+	}
+	return nil, nil, nil
 }
 
 func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiError) {

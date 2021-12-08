@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/rules"
 )
 
@@ -24,6 +24,7 @@ type RuleGroup struct {
 	Interval       float64   `json:"interval"`
 	EvaluationTime float64   `json:"evaluationTime"`
 	LastEvaluation time.Time `json:"lastEvaluation"`
+	Limit          int       `json:"limit"`
 
 	PartialResponseStrategy string `json:"partialResponseStrategy"`
 }

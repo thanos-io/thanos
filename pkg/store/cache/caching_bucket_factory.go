@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
@@ -28,6 +28,7 @@ type BucketCacheProvider string
 const (
 	InMemoryBucketCacheProvider   BucketCacheProvider = "IN-MEMORY"  // In-memory cache-provider for caching bucket.
 	MemcachedBucketCacheProvider  BucketCacheProvider = "MEMCACHED"  // Memcached cache-provider for caching bucket.
+	RedisBucketCacheProvider      BucketCacheProvider = "REDIS"      // Redis cache-provider for caching bucket.
 	GroupcacheBucketCacheProvider BucketCacheProvider = "GROUPCACHE" // Groupcache cache-provider for caching bucket.
 )
 
@@ -88,7 +89,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 
 	switch strings.ToUpper(string(config.Type)) {
 	case string(MemcachedBucketCacheProvider):
-		var memcached cacheutil.MemcachedClient
+		var memcached cacheutil.RemoteCacheClient
 		memcached, err := cacheutil.NewMemcachedClient(logger, "caching-bucket", backendConfig, reg)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create memcached client")
@@ -107,6 +108,12 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 			return nil, errors.Wrap(err, "failed to create groupcache")
 		}
 
+	case string(RedisBucketCacheProvider):
+		redisCache, err := cacheutil.NewRedisClient(logger, "caching-bucket", backendConfig, reg)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to create memcached client")
+		}
+		c = cache.NewRedisCache("caching-bucket", logger, redisCache, reg)
 	default:
 		return nil, errors.Errorf("unsupported cache type: %s", config.Type)
 	}

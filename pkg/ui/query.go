@@ -11,9 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/component"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -32,9 +33,10 @@ type Query struct {
 	now     func() model.Time
 }
 
-func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefix, prefixHeader string) *Query {
+func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefix, prefixHeader, alertQueryURL string) *Query {
 	tmplVariables := map[string]string{
 		"Component": component.Query.String(),
+		"queryURL":  alertQueryURL,
 	}
 	runtimeInfo := api.GetRuntimeInfoFunc(logger)
 

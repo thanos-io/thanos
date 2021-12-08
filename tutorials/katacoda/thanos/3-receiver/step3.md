@@ -1,6 +1,6 @@
 # Configure Prometheus Remote Write
 
-Our problem in the last step was that we have have not yet configured Prometheus to `remote_write` to our `Thanos Receive` instance.
+Our problem in the last step was that we have not yet configured Prometheus to `remote_write` to our `Thanos Receive` instance.
 
 We need to tell `prometheus-batcave` & `prometheus-batcomputer` where to write their data to.
 

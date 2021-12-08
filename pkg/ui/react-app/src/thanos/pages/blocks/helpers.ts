@@ -137,3 +137,12 @@ export const getBlockByUlid = (blocks: Block[], ulid: string): Block[] => {
   const blockResult = blocks.filter((block, index) => resultIndex.includes(index));
   return blockResult;
 };
+
+export const getBlocksByCompactionLevel = (blocks: Block[], compactionLevel: number): Block[] => {
+  if (compactionLevel === 0 || Number.isNaN(compactionLevel)) {
+    return blocks;
+  }
+
+  const blockResult = blocks.filter((block) => block.compaction.level === compactionLevel);
+  return blockResult;
+};

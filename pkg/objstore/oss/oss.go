@@ -18,7 +18,7 @@ import (
 	"time"
 
 	alioss "github.com/aliyun/aliyun-oss-go-sdk/oss"
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 

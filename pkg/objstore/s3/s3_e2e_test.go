@@ -11,7 +11,8 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
+
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 

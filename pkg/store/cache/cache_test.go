@@ -11,9 +11,10 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/prometheus/prometheus/model/labels"
 	"golang.org/x/crypto/blake2b"
+
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestMain(m *testing.M) {

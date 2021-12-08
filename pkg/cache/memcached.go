@@ -7,8 +7,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -18,7 +18,7 @@ import (
 // MemcachedCache is a memcached-based cache.
 type MemcachedCache struct {
 	logger    log.Logger
-	memcached cacheutil.MemcachedClient
+	memcached cacheutil.RemoteCacheClient
 	name      string
 
 	// Metrics.
@@ -27,7 +27,7 @@ type MemcachedCache struct {
 }
 
 // NewMemcachedCache makes a new MemcachedCache.
-func NewMemcachedCache(name string, logger log.Logger, memcached cacheutil.MemcachedClient, reg prometheus.Registerer) *MemcachedCache {
+func NewMemcachedCache(name string, logger log.Logger, memcached cacheutil.RemoteCacheClient, reg prometheus.Registerer) *MemcachedCache {
 	c := &MemcachedCache{
 		logger:    logger,
 		memcached: memcached,
