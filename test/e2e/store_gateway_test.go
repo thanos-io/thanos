@@ -526,7 +526,7 @@ metafile_content_ttl: 0s`
 	}
 
 	t.Run("query with groupcache loading from object storage", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -551,7 +551,7 @@ metafile_content_ttl: 0s`
 		testutil.Ok(t, err)
 		testutil.Assert(t, len(retrievedMetrics) == 2)
 
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
