@@ -551,11 +551,11 @@ func NewTSDBRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Aler
 	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, nil)
 }
 
-func NewStatelessRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg *config.RemoteWriteConfig) (*e2e.InstrumentedRunnable, error) {
+func NewStatelessRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) (*e2e.InstrumentedRunnable, error) {
 	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, remoteWriteCfg)
 }
 
-func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg *config.RemoteWriteConfig) (*e2e.InstrumentedRunnable, error) {
+func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) (*e2e.InstrumentedRunnable, error) {
 	dir := filepath.Join(e.SharedDir(), "data", "rule", name)
 	container := filepath.Join(ContainerSharedDir, "data", "rule", name)
 
@@ -592,7 +592,9 @@ func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Alertman
 		"--resend-delay":                  "5s",
 	}
 	if remoteWriteCfg != nil {
-		rwCfgBytes, err := yaml.Marshal(remoteWriteCfg)
+		rwCfgBytes, err := yaml.Marshal(struct {
+			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
+		}{remoteWriteCfg})
 		if err != nil {
 			return nil, errors.Wrapf(err, "generate remote write config: %v", remoteWriteCfg)
 		}
