@@ -8,6 +8,12 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## [v0.23.2-rc.0](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.12.09
+
+### Fixed
+
+- [#4795](https://github.com/thanos-io/thanos/pull/4795) Query: Fix deadlock in endpointset.
+
 ## [v0.23.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.10.1
 
 ### Fixed
