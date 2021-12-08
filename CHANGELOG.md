@@ -32,6 +32,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4903](https://github.com/thanos-io/thanos/pull/4903) Compactor: Added tracing support for compaction.
 - [#4909](https://github.com/thanos-io/thanos/pull/4909) Compactor: Add flag --max-time / --min-time to filter blocks that are ready to be compacted.
 - [#4942](https://github.com/thanos-io/thanos/pull/4942) Tracing: add `traceid_128bit` support for jaeger.
+- [#4888](https://github.com/thanos-io/thanos/pull/4888) Cache: support redis cache backend.
 
 ### Fixed
 
