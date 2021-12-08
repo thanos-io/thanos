@@ -127,7 +127,7 @@ The following example shows how the logging config can be supplied to the `sidec
               level: ERROR
               decision:
                 log_start: false
-                log_end: true          
+                log_end: true
         - --tsdb.path=/prometheus-data
 ```
 
