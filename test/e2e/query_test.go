@@ -6,6 +6,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -101,6 +102,40 @@ func sortResults(res model.Vector) {
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].String() < res[j].String()
 	})
+}
+
+func TestSidecarNotReady(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e_test_query")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), "", e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+	testutil.Ok(t, prom.Stop())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Sidecar should not be ready - it cannot accept traffic if Prometheus is down.
+	testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() (rerr error) {
+		req, err := http.NewRequestWithContext(ctx, "GET", "http://"+sidecar.Endpoint("http")+"/-/ready", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer runutil.CloseWithErrCapture(&rerr, resp.Body, "closing resp body")
+
+		if resp.StatusCode == 200 {
+			return fmt.Errorf("got status code %d", resp.StatusCode)
+		}
+		return nil
+	}))
 }
 
 func TestQuery(t *testing.T) {
