@@ -12,12 +12,15 @@ arch = $(shell uname -m)
 # just visit https://quay.io/repository/prometheus/busybox?tag=latest&tab=tags.
 # TODO(bwplotka): Pinning is important but somehow quay kills the old images, so make sure to update regularly.
 # Update at 2021.12.08
+AMD64_SHA="97a9aacc097e5dbdec33b0d671adea0785e76d26ff2b979ee28570baf6a9155d"
+ARM64_SHA="5feb736d32e5b57f4944691d00b581f1f9192b3732cab03e3b6034cf0d1c8f2c"
+ 
 ifeq ($(arch), x86_64)
     # amd64
-    BASE_DOCKER_SHA="97a9aacc097e5dbdec33b0d671adea0785e76d26ff2b979ee28570baf6a9155d"
+    BASE_DOCKER_SHA=$(AMD64_SHA)
 else ifeq ($(arch), armv8)
     # arm64
-    BASE_DOCKER_SHA="5feb736d32e5b57f4944691d00b581f1f9192b3732cab03e3b6034cf0d1c8f2c"
+    BASE_DOCKER_SHA=$(ARM64_SHA)
 else
     echo >&2 "only support amd64 or arm64 arch" && exit 1
 endif
