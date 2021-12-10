@@ -126,7 +126,7 @@ func registerRule(app *extkingpin.App) {
 	cmd.Flag("eval-interval", "The default evaluation interval to use.").
 		Default("30s").DurationVar(&conf.evalInterval)
 
-	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write server where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
+	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
 	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
 
@@ -350,18 +350,21 @@ func runRule(
 	}
 
 	if len(rwCfgYAML) > 0 {
-		var rwCfg config.RemoteWriteConfig
-		if err := yaml.Unmarshal(rwCfgYAML, &rwCfg); err != nil {
-			return err
+		var rwCfg struct {
+			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
 		}
-		walDir := filepath.Join(conf.dataDir, rwCfg.Name)
+		if err := yaml.Unmarshal(rwCfgYAML, &rwCfg); err != nil {
+			return errors.Wrapf(err, "failed to parse remote write config %v", string(rwCfgYAML))
+		}
+
+		walDir := filepath.Join(conf.dataDir, "wal")
 		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
 		remoteStore := remote.NewStorage(logger, reg, func() (int64, error) {
 			return 0, nil
 		}, walDir, 1*time.Minute, nil)
 		if err := remoteStore.ApplyConfig(&config.Config{
 			GlobalConfig:       config.DefaultGlobalConfig,
-			RemoteWriteConfigs: []*config.RemoteWriteConfig{&rwCfg},
+			RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
 		}); err != nil {
 			return errors.Wrap(err, "applying config to remote storage")
 		}

@@ -86,7 +86,7 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			memcached := newMockedMemcachedClient(testData.mockedErr)
-			c, err := NewMemcachedIndexCache(log.NewNopLogger(), memcached, nil)
+			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil)
 			testutil.Ok(t, err)
 
 			// Store the postings expected before running the test.
@@ -175,7 +175,7 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			memcached := newMockedMemcachedClient(testData.mockedErr)
-			c, err := NewMemcachedIndexCache(log.NewNopLogger(), memcached, nil)
+			c, err := NewRemoteIndexCache(log.NewNopLogger(), memcached, nil)
 			testutil.Ok(t, err)
 
 			// Store the series expected before running the test.
