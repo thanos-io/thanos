@@ -53,7 +53,7 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 	c.hits.WithLabelValues(cacheTypePostings)
 	c.hits.WithLabelValues(cacheTypeSeries)
 
-	level.Info(logger).Log("msg", "created cacheClient index cache")
+	level.Info(logger).Log("msg", "created index cache")
 
 	return c, nil
 }

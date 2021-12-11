@@ -34,7 +34,6 @@ func (t thanosCacheKeyGenerator) GenerateCacheKey(userID string, r queryrange.Re
 		i := 0
 		for ; i < len(t.resolutions) && t.resolutions[i] > tr.MaxSourceResolution; i++ {
 		}
-		// Cache key should have a unique prefix. `fe` represents frontend.
 		return fmt.Sprintf("fe:%s:%s:%d:%d:%d", userID, tr.Query, tr.Step, currentInterval, i)
 	case *ThanosLabelsRequest:
 		return fmt.Sprintf("fe:%s:%s:%s:%d", userID, tr.Label, tr.Matchers, currentInterval)
