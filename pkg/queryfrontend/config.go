@@ -13,6 +13,7 @@ import (
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/grafana/dskit/flagext"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 
@@ -28,6 +29,7 @@ type ResponseCacheProvider string
 const (
 	INMEMORY  ResponseCacheProvider = "IN-MEMORY"
 	MEMCACHED ResponseCacheProvider = "MEMCACHED"
+	REDIS     ResponseCacheProvider = "REDIS"
 )
 
 var (
@@ -42,6 +44,11 @@ var (
 			MaxItemSize:               model.Bytes(1024 * 1024),
 			DNSProviderUpdateInterval: 10 * time.Second,
 		},
+		Expiration: 24 * time.Hour,
+	}
+	// DefaultRedisConfig is default redis config for queryfrontend.
+	DefaultRedisConfig = RedisResponseCacheConfig{
+		Redis:      cacheutil.DefaultRedisClientConfig,
 		Expiration: 24 * time.Hour,
 	}
 )
@@ -59,6 +66,13 @@ type InMemoryResponseCacheConfig struct {
 // MemcachedResponseCacheConfig holds the configs for the memcache cache provider.
 type MemcachedResponseCacheConfig struct {
 	Memcached cacheutil.MemcachedClientConfig `yaml:",inline"`
+	// Expiration sets a global expiration limit for all cached items.
+	Expiration time.Duration `yaml:"expiration"`
+}
+
+// RedisResponseCacheConfig holds the configs for the redis cache provider.
+type RedisResponseCacheConfig struct {
+	Redis cacheutil.RedisClientConfig `yaml:",inline"`
 	// Expiration sets a global expiration limit for all cached items.
 	Expiration time.Duration `yaml:"expiration"`
 }
@@ -133,6 +147,31 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 			Background: cortexcache.BackgroundConfig{
 				WriteBackBuffer:     config.Memcached.MaxAsyncBufferSize,
 				WriteBackGoroutines: config.Memcached.MaxAsyncConcurrency,
+			},
+		}, nil
+	case string(REDIS):
+		config := DefaultRedisConfig
+		if err := yaml.UnmarshalStrict(backendConfig, &config); err != nil {
+			return nil, err
+		}
+		if config.Expiration <= 0 {
+			level.Warn(logger).Log("msg", "redis cache valid time set to 0, so using a default of 24 hours expiration time")
+			config.Expiration = 24 * time.Hour
+		}
+		return &cortexcache.Config{
+			Redis: cortexcache.RedisConfig{
+				Endpoint:    config.Redis.Addr,
+				Timeout:     config.Redis.ReadTimeout,
+				Expiration:  config.Expiration,
+				DB:          config.Redis.DB,
+				PoolSize:    config.Redis.PoolSize,
+				Password:    flagext.Secret{Value: config.Redis.Password},
+				IdleTimeout: config.Redis.IdleTimeout,
+				MaxConnAge:  config.Redis.MaxConnAge,
+			},
+			Background: cortexcache.BackgroundConfig{
+				WriteBackBuffer:     config.Redis.MaxSetMultiConcurrency * config.Redis.SetMultiBatchSize,
+				WriteBackGoroutines: config.Redis.MaxSetMultiConcurrency,
 			},
 		}, nil
 	default:

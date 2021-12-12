@@ -65,11 +65,13 @@ var (
 	indexCacheConfigs = map[storecache.IndexCacheProvider]interface{}{
 		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},
 		storecache.MEMCACHED: cacheutil.MemcachedClientConfig{},
+		storecache.REDIS:     cacheutil.DefaultRedisClientConfig,
 	}
 
 	queryfrontendCacheConfigs = map[queryfrontend.ResponseCacheProvider]interface{}{
 		queryfrontend.INMEMORY:  queryfrontend.InMemoryResponseCacheConfig{},
 		queryfrontend.MEMCACHED: queryfrontend.MemcachedResponseCacheConfig{},
+		queryfrontend.REDIS:     queryfrontend.DefaultRedisConfig,
 	}
 )
 
