@@ -354,7 +354,6 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 
 // TestShipper_SyncOverlapBlocks_e2e is a unit test for the functionality by allowOutOfOrderUploads flag. This allows compacted(compaction level greater than 1) blocks to be uploaded despite overlapping time ranges.
 func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
-	var p *e2eutil.Prometheus
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	dir, err := ioutil.TempDir("", "shipper-e2e-test")
