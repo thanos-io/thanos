@@ -14,7 +14,7 @@ arch = $(shell uname -m)
 # Update at 2021.12.08
 AMD64_SHA="97a9aacc097e5dbdec33b0d671adea0785e76d26ff2b979ee28570baf6a9155d"
 ARM64_SHA="5feb736d32e5b57f4944691d00b581f1f9192b3732cab03e3b6034cf0d1c8f2c"
- 
+
 ifeq ($(arch), x86_64)
     # amd64
     BASE_DOCKER_SHA=$(AMD64_SHA)
@@ -206,12 +206,11 @@ docker-manifest:
 	@DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
 
 .PHONY: docker-push $(PUSH_DOCKER_ARCHS)
-docker-push: ## Pushes 'thanos' docker image build to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)".
+docker-push: ## Pushes Thanos docker image build to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)".
 docker-push: $(PUSH_DOCKER_ARCHS)
 $(PUSH_DOCKER_ARCHS): docker-push-%:
 	@echo ">> pushing image"
-	@docker tag "thanos" "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
-	@docker push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
+	@docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
 
 .PHONY: docs
 docs: ## Regenerates flags in docs for all thanos commands localise links, ensure GitHub format.
