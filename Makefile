@@ -12,15 +12,24 @@ arch = $(shell uname -m)
 # just visit https://quay.io/repository/prometheus/busybox?tag=latest&tab=tags.
 # TODO(bwplotka): Pinning is important but somehow quay kills the old images, so make sure to update regularly.
 # Update at 2021.12.08
+AMD64_SHA="97a9aacc097e5dbdec33b0d671adea0785e76d26ff2b979ee28570baf6a9155d"
+ARM64_SHA="5feb736d32e5b57f4944691d00b581f1f9192b3732cab03e3b6034cf0d1c8f2c"
+ 
 ifeq ($(arch), x86_64)
     # amd64
-    BASE_DOCKER_SHA="97a9aacc097e5dbdec33b0d671adea0785e76d26ff2b979ee28570baf6a9155d"
+    BASE_DOCKER_SHA=$(AMD64_SHA)
 else ifeq ($(arch), armv8)
     # arm64
-    BASE_DOCKER_SHA="5feb736d32e5b57f4944691d00b581f1f9192b3732cab03e3b6034cf0d1c8f2c"
+    BASE_DOCKER_SHA=$(ARM64_SHA)
 else
     echo >&2 "only support amd64 or arm64 arch" && exit 1
 endif
+DOCKER_ARCHS       ?= amd64 arm64
+# Generate two target: docker-xxx-amd64, docker-xxx-arm64.
+# Run make docker-xxx -n to see the result with dry run.
+BUILD_DOCKER_ARCHS = $(addprefix docker-build-,$(DOCKER_ARCHS))
+TEST_DOCKER_ARCHS  = $(addprefix docker-test-,$(DOCKER_ARCHS))
+PUSH_DOCKER_ARCHS  = $(addprefix docker-push-,$(DOCKER_ARCHS))
 
 # Ensure everything works even if GOPATH is not set, which is often the case.
 # The `go env GOPATH` will work for all cases for Go 1.8+.
@@ -134,11 +143,20 @@ build: check-git deps $(PROMU)
 	@echo ">> building Thanos binary in $(PREFIX)"
 	@$(PROMU) build --prefix $(PREFIX)
 
+GIT_BRANCH=$(shell $(GIT) rev-parse --abbrev-ref HEAD)
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
+ifeq ($(GIT_BRANCH), main)
+crossbuild: | $(PROMU)
+	@echo ">> crossbuilding all binaries"
+	# we only care about below two for the main branch
+	$(PROMU) crossbuild -v -p linux/amd64 -p linux/arm64
+else
 crossbuild: | $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
+endif
+
 
 .PHONY: deps
 deps: ## Ensures fresh go.mod and go.sum.
@@ -164,9 +182,33 @@ docker-multi-stage:
 	@echo ">> building docker image 'thanos' with Dockerfile.multi-stage"
 	@docker build -f Dockerfile.multi-stage -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 
-.PHONY: docker-push
+GET_SHA = $(shell echo '$1'_SHA | tr '[:lower:]' '[:upper:]')
+# docker-build builds docker images with multiple architectures.
+.PHONY: docker-build $(BUILD_DOCKER_ARCHS)
+docker-build: $(BUILD_DOCKER_ARCHS)
+$(BUILD_DOCKER_ARCHS): docker-build-%:
+	@docker build -t "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)" \
+  --build-arg BASE_DOCKER_SHA=$($(call GET_SHA,$*)) \
+  --build-arg ARCH="$*" \
+  -f Dockerfile.multi-arch .
+
+.PHONY: docker-test $(TEST_DOCKER_ARCHS)
+docker-test: $(TEST_DOCKER_ARCHS)
+$(TEST_DOCKER_ARCHS): docker-test-%:
+	@echo ">> testing image"
+	@docker run "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)" --help
+
+# docker-manifest push docker manifest to support multiple architectures.
+.PHONY: docker-manifest
+docker-manifest:
+	@echo ">> creating and pushing manifest"
+	@DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create -a "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)" $(foreach ARCH,$(DOCKER_ARCHS),$(DOCKER_IMAGE_REPO)-linux-$(ARCH):$(DOCKER_IMAGE_TAG))
+	@DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
+
+.PHONY: docker-push $(PUSH_DOCKER_ARCHS)
 docker-push: ## Pushes 'thanos' docker image build to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)".
-docker-push:
+docker-push: $(PUSH_DOCKER_ARCHS)
+$(PUSH_DOCKER_ARCHS): docker-push-%:
 	@echo ">> pushing image"
 	@docker tag "thanos" "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
 	@docker push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
