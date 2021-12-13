@@ -187,7 +187,7 @@ GET_SHA = $(shell echo '$1'_SHA | tr '[:lower:]' '[:upper:]')
 .PHONY: docker-build $(BUILD_DOCKER_ARCHS)
 docker-build: $(BUILD_DOCKER_ARCHS)
 $(BUILD_DOCKER_ARCHS): docker-build-%:
-	@docker build -t "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)" \
+	@docker build -t "thanos-linux-$*" \
   --build-arg BASE_DOCKER_SHA=$($(call GET_SHA,$*)) \
   --build-arg ARCH="$*" \
   -f Dockerfile.multi-arch .
@@ -210,6 +210,7 @@ docker-push: ## Pushes Thanos docker image build to "$(DOCKER_IMAGE_REPO):$(DOCK
 docker-push: $(PUSH_DOCKER_ARCHS)
 $(PUSH_DOCKER_ARCHS): docker-push-%:
 	@echo ">> pushing image"
+	@docker tag "thanos-linux-$*" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
 	@docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
 
 .PHONY: docs
