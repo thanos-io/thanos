@@ -78,7 +78,7 @@ jobs:
       - attach_workspace:
           at: .
       # Register qemu to support multi-arch.
-      - run: docker run --privileged linuxkit/binfmt:v0.7
+      - run: docker run --privileged tonistiigi/binfmt:qemu-v6.1.0 --install all
       - run: make crossbuild
       - run: make docker-build
       - run: make docker-test
@@ -104,7 +104,7 @@ jobs:
           path: .tarballs
           destination: releases
       # Register qemu to support multi-arch.
-      - run: docker run --privileged linuxkit/binfmt:v0.7
+      - run: docker run --privileged tonistiigi/binfmt:qemu-v6.1.0 --install all
       - run: make docker-build
       - run: make docker-test
       # Upload to both dockerhub and quay.io.
