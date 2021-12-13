@@ -163,6 +163,63 @@ http_config:
 	}
 }
 
+func TestParseConfig_CustomHTTPConfigWithTLS(t *testing.T) {
+	input := []byte(`bucket: abcd
+insecure: false
+http_config:
+  tls_config:
+    ca_file: /certs/ca.crt
+    cert_file: /certs/cert.crt
+    key_file: /certs/key.key
+    server_name: server
+    insecure_skip_verify: false
+  `)
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+
+	if cfg.HTTPConfig.TLSConfig.CAFile != "/certs/ca.crt" {
+		t.Errorf("parsing of ca_file failed: got %v, expected %v",
+			cfg.HTTPConfig.TLSConfig.CAFile, "/certs/ca.crt")
+	}
+
+	if cfg.HTTPConfig.TLSConfig.CertFile != "/certs/cert.crt" {
+		t.Errorf("parsing of cert_file failed: got %v, expected %v",
+			cfg.HTTPConfig.TLSConfig.CertFile, "/certs/cert.crt")
+	}
+
+	if cfg.HTTPConfig.TLSConfig.KeyFile != "/certs/key.key" {
+		t.Errorf("parsing of key_file failed: got %v, expected %v",
+			cfg.HTTPConfig.TLSConfig.KeyFile, "/certs/key.key")
+	}
+
+	if cfg.HTTPConfig.TLSConfig.ServerName != "server" {
+		t.Errorf("parsing of server_name failed: got %v, expected %v",
+			cfg.HTTPConfig.TLSConfig.ServerName, "server")
+	}
+
+	if cfg.HTTPConfig.TLSConfig.InsecureSkipVerify {
+		t.Errorf("parsing of insecure_skip_verify failed: got %v, expected %v", cfg.HTTPConfig.InsecureSkipVerify, false)
+	}
+}
+
+func TestParseConfig_CustomLegacyInsecureSkipVerify(t *testing.T) {
+	input := []byte(`bucket: abcd
+insecure: false
+http_config:
+  insecure_skip_verify: true
+  tls_config:
+    insecure_skip_verify: false
+  `)
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+	transport, err := DefaultTransport(cfg)
+	testutil.Ok(t, err)
+
+	if !transport.TLSClientConfig.InsecureSkipVerify {
+		t.Errorf("parsing of insecure_skip_verify failed: got %v, expected %v", transport.TLSClientConfig.InsecureSkipVerify, true)
+	}
+}
+
 func TestValidate_OK(t *testing.T) {
 	input := []byte(`bucket: "bucket-name"
 endpoint: "s3-endpoint"
