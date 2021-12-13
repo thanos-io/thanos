@@ -143,7 +143,7 @@ build: check-git deps $(PROMU)
 	@echo ">> building Thanos binary in $(PREFIX)"
 	@$(PROMU) build --prefix $(PREFIX)
 
-GIT_BRANCH=$(GIT) rev-parse --abbrev-ref HEAD
+GIT_BRANCH=$(shell $(GIT) rev-parse --abbrev-ref HEAD)
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
 ifeq ($(GIT_BRANCH), main)
