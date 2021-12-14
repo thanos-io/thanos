@@ -847,7 +847,7 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 			},
 		},
 	} {
-		f := NewDeduplicateFilter()
+		f := NewDeduplicateFilter(1)
 		if ok := t.Run(tcase.name, func(t *testing.T) {
 			m := newTestFetcherMetrics()
 			metas := make(map[ulid.ULID]*metadata.Meta)
@@ -1130,7 +1130,7 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B) {
 		cases []map[ulid.ULID]*metadata.Meta
 	)
 
-	dedupFilter := NewDeduplicateFilter()
+	dedupFilter := NewDeduplicateFilter(1)
 	synced := extprom.NewTxGaugeVec(reg, prometheus.GaugeOpts{}, []string{"state"})
 
 	for blocksNum := 10; blocksNum <= 10000; blocksNum *= 10 {

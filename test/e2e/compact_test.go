@@ -29,7 +29,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
@@ -629,7 +628,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		m, err := block.DownloadMeta(ctx, logger, bkt, blocksWithHashes[0])
 		testutil.Ok(t, err)
 
-		randBlockDir := filepath.Join(p, compact.DefaultGroupKey(m.Thanos), "ITISAVERYRANDULIDFORTESTS0")
+		randBlockDir := filepath.Join(p, m.Thanos.GroupKey(), "ITISAVERYRANDULIDFORTESTS0")
 		testutil.Ok(t, os.MkdirAll(randBlockDir, os.ModePerm))
 
 		f, err := os.Create(filepath.Join(randBlockDir, "index"))
@@ -691,7 +690,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 			testutil.Ok(t, err)
 
 			delete(m.Thanos.Labels, "replica")
-			testutil.Ok(t, block.Download(ctx, logger, bkt, id, filepath.Join(p, "compact", compact.DefaultGroupKey(m.Thanos), id.String())))
+			testutil.Ok(t, block.Download(ctx, logger, bkt, id, filepath.Join(p, "compact", m.Thanos.GroupKey(), id.String())))
 		}
 
 		extArgs := []string{"--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica"}

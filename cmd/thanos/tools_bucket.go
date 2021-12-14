@@ -777,7 +777,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, tbc.deleteDelay/2, block.FetcherConcurrency)
-		duplicateBlocksFilter := block.NewDeduplicateFilter()
+		duplicateBlocksFilter := block.NewDeduplicateFilter(block.FetcherConcurrency)
 		blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, tbc.deleteDelay, stubCounter, stubCounter)
 
 		ctx := context.Background()
@@ -1303,7 +1303,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, tbc.deleteDelay/2, block.FetcherConcurrency)
-		duplicateBlocksFilter := block.NewDeduplicateFilter()
+		duplicateBlocksFilter := block.NewDeduplicateFilter(block.FetcherConcurrency)
 		stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 
 		var sy *compact.Syncer

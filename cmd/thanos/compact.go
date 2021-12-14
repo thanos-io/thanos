@@ -228,7 +228,7 @@ func runCompact(
 	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 	// This is to make sure compactor will not accidentally perform compactions with gap instead.
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
-	duplicateBlocksFilter := block.NewDeduplicateFilter()
+	duplicateBlocksFilter := block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency)
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt, conf.blockMetaFetchConcurrency)
 	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig)
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
@@ -432,7 +432,7 @@ func runCompact(
 			}
 
 			for _, meta := range sy.Metas() {
-				groupKey := compact.DefaultGroupKey(meta.Thanos)
+				groupKey := meta.Thanos.GroupKey()
 				downsampleMetrics.downsamples.WithLabelValues(groupKey)
 				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
 			}

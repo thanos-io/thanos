@@ -121,7 +121,7 @@ func TestGroupKey(t *testing.T) {
 		},
 	} {
 		if ok := t.Run("", func(t *testing.T) {
-			testutil.Equals(t, tcase.expected, DefaultGroupKey(tcase.input))
+			testutil.Equals(t, tcase.expected, tcase.input.GroupKey())
 		}); !ok {
 			return
 		}

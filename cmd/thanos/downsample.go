@@ -24,7 +24,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -85,7 +84,7 @@ func RunDownsample(
 	}
 
 	metaFetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
-		block.NewDeduplicateFilter(),
+		block.NewDeduplicateFilter(block.FetcherConcurrency),
 	}, nil)
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
@@ -120,7 +119,7 @@ func RunDownsample(
 			}
 
 			for _, meta := range metas {
-				groupKey := compact.DefaultGroupKey(meta.Thanos)
+				groupKey := meta.Thanos.GroupKey()
 				metrics.downsamples.WithLabelValues(groupKey)
 				metrics.downsampleFailures.WithLabelValues(groupKey)
 			}
@@ -244,10 +243,10 @@ func downsampleBucket(
 					errMsg = "downsampling to 60 min"
 				}
 				if err := processDownsampling(ctx, logger, bkt, m, dir, resolution, hashFunc, metrics); err != nil {
-					metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
+					metrics.downsampleFailures.WithLabelValues(m.Thanos.GroupKey()).Inc()
 					return errors.Wrap(err, errMsg)
 				}
-				metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
+				metrics.downsamples.WithLabelValues(m.Thanos.GroupKey()).Inc()
 			}
 			return nil
 		})

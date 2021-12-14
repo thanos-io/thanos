@@ -587,12 +587,13 @@ var _ MetadataFilter = &DeduplicateFilter{}
 // Not go-routine safe.
 type DeduplicateFilter struct {
 	duplicateIDs []ulid.ULID
+	concurrency  int
 	mu           sync.Mutex
 }
 
 // NewDeduplicateFilter creates DeduplicateFilter.
-func NewDeduplicateFilter() *DeduplicateFilter {
-	return &DeduplicateFilter{}
+func NewDeduplicateFilter(concurrency int) *DeduplicateFilter {
+	return &DeduplicateFilter{concurrency: concurrency}
 }
 
 // Filter filters out duplicate blocks that can be formed
@@ -601,31 +602,35 @@ func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metad
 	f.duplicateIDs = f.duplicateIDs[:0]
 
 	var wg sync.WaitGroup
+	var groupChan = make(chan []*metadata.Meta)
 
-	metasByResolution := make(map[int64][]*metadata.Meta)
-	for _, meta := range metas {
-		res := meta.Thanos.Downsample.Resolution
-		metasByResolution[res] = append(metasByResolution[res], meta)
-	}
-
-	for res := range metasByResolution {
+	//Start up workers to deduplicate work groups when they're ready
+	for i := 0; i < f.concurrency; i++ {
 		wg.Add(1)
-		go func(res int64) {
+		go func() {
 			defer wg.Done()
-			f.filterForResolution(NewNode(&metadata.Meta{
-				BlockMeta: tsdb.BlockMeta{
-					ULID: ulid.MustNew(uint64(0), nil),
-				},
-			}), metasByResolution[res], metas, synced)
-		}(res)
+			for group := range groupChan {
+				f.filterGroup(group, metas, synced)
+			}
+		}()
 	}
 
+	// We need only look within a compaction group for duplicates, so splitting by group key gives us parallelizable streams.
+	metasByCompactionGroup := make(map[string][]*metadata.Meta)
+	for _, meta := range metas {
+		groupKey := meta.Thanos.GroupKey()
+		metasByCompactionGroup[groupKey] = append(metasByCompactionGroup[groupKey], meta)
+	}
+	for _, group := range metasByCompactionGroup {
+		groupChan <- group
+	}
+	close(groupChan)
 	wg.Wait()
 
 	return nil
 }
 
-func (f *DeduplicateFilter) filterForResolution(root *Node, metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec) {
+func (f *DeduplicateFilter) filterGroup(metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec) {
 	sort.Slice(metaSlice, func(i, j int) bool {
 		ilen := len(metaSlice[i].Compaction.Sources)
 		jlen := len(metaSlice[j].Compaction.Sources)
@@ -637,19 +642,29 @@ func (f *DeduplicateFilter) filterForResolution(root *Node, metaSlice []*metadat
 		return ilen-jlen > 0
 	})
 
-	for _, meta := range metaSlice {
-		addNodeBySources(root, NewNode(meta))
-	}
+	var coveringSet []*metadata.Meta
+	childLoop:
+	for _, child := range metaSlice {
+		childSources := child.Compaction.Sources
+		id := child.ULID
+		for _, parent := range coveringSet {
+			parentSources := parent.Compaction.Sources
 
-	duplicateULIDs := getNonRootIDs(root)
-	for _, id := range duplicateULIDs {
-		f.mu.Lock()
-		if metas[id] != nil {
-			f.duplicateIDs = append(f.duplicateIDs, id)
+			// child's sources are present in parent's sources, filter it out.
+			if contains(parentSources, childSources) {
+				f.mu.Lock()
+				if metas[id] != nil {
+					f.duplicateIDs = append(f.duplicateIDs, id)
+				}
+				synced.WithLabelValues(duplicateMeta).Inc()
+				delete(metas, id)
+				f.mu.Unlock()
+				continue childLoop
+			}
 		}
-		synced.WithLabelValues(duplicateMeta).Inc()
-		delete(metas, id)
-		f.mu.Unlock()
+
+		// Child's sources not covered by any member of coveringSet, add it to coveringSet
+		coveringSet = append(coveringSet, child)
 	}
 }
 
@@ -658,6 +673,7 @@ func (f *DeduplicateFilter) DuplicateIDs() []ulid.ULID {
 	return f.duplicateIDs
 }
 
+<<<<<<< HEAD
 func addNodeBySources(root, add *Node) bool {
 	var rootNode *Node
 	childSources := add.Compaction.Sources
@@ -686,6 +702,8 @@ func addNodeBySources(root, add *Node) bool {
 	return addNodeBySources(rootNode, add)
 }
 
+=======
+>>>>>>> Move group key function to the metadata package. Deduplicate within compaction groups and in parallel.
 func contains(s1, s2 []ulid.ULID) bool {
 	for _, a := range s2 {
 		found := false

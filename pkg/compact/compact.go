@@ -218,16 +218,6 @@ type Grouper interface {
 	Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Group, err error)
 }
 
-// DefaultGroupKey returns a unique identifier for the group the block belongs to, based on
-// the DefaultGrouper logic. It considers the downsampling resolution and the block's labels.
-func DefaultGroupKey(meta metadata.Thanos) string {
-	return defaultGroupKey(meta.Downsample.Resolution, labels.FromMap(meta.Labels))
-}
-
-func defaultGroupKey(res int64, lbls labels.Labels) string {
-	return fmt.Sprintf("%d@%v", res, lbls.Hash())
-}
-
 // DefaultGrouper is the Thanos built-in grouper. It groups blocks based on downsample
 // resolution and block's labels.
 type DefaultGrouper struct {
@@ -295,7 +285,7 @@ func NewDefaultGrouper(
 func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Group, err error) {
 	groups := map[string]*Group{}
 	for _, m := range blocks {
-		groupKey := DefaultGroupKey(m.Thanos)
+		groupKey := m.Thanos.GroupKey()
 		group, ok := groups[groupKey]
 		if !ok {
 			lbls := labels.FromMap(m.Thanos.Labels)
