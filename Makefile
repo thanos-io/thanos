@@ -197,7 +197,7 @@ $(BUILD_DOCKER_ARCHS): docker-build-%:
 docker-test: $(TEST_DOCKER_ARCHS)
 $(TEST_DOCKER_ARCHS): docker-test-%:
 	@echo ">> testing image"
-	@docker run "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)" --help
+	@docker run "thanos-linux-$*" --help
 
 # docker-manifest push docker manifest to support multiple architectures.
 .PHONY: docker-manifest
