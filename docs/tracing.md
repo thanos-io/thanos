@@ -94,6 +94,7 @@ config:
   password: ""
   agent_host: ""
   agent_port: 0
+  traceid_128bit: false
 ```
 
 ### Stackdriver
