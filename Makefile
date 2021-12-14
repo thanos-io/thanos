@@ -10,10 +10,11 @@ BASE_DOCKER_SHA=''
 arch = $(shell uname -m)
 # Run `DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect quay.io/prometheus/busybox:latest` to get SHA or
 # just visit https://quay.io/repository/prometheus/busybox?tag=latest&tab=tags.
-# TODO(bwplotka): Pinning is important but somehow quay kills the old images, so make sure to update regularly.
-# Update at 2021.12.08
-AMD64_SHA="97a9aacc097e5dbdec33b0d671adea0785e76d26ff2b979ee28570baf6a9155d"
-ARM64_SHA="5feb736d32e5b57f4944691d00b581f1f9192b3732cab03e3b6034cf0d1c8f2c"
+# TODO(bwplotka): https://github.com/thanos-io/thanos/issues/4949
+# Pinning is important but somehow quay kills the old images, so make sure to update regularly.
+# Update at 2021.12.14
+AMD64_SHA="c05b6700b0cab2e59ee0ff8d8d72eb0bb324f50732b87742e9a6024322ee83a1"
+ARM64_SHA="bcdd37d8cf48c8740b5ccb8fee5c5d36badaae112d34fd92be4723eb36c9cd5d"
 
 ifeq ($(arch), x86_64)
     # amd64
