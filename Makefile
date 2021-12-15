@@ -12,9 +12,9 @@ arch = $(shell uname -m)
 # just visit https://quay.io/repository/prometheus/busybox?tag=latest&tab=tags.
 # TODO(bwplotka): https://github.com/thanos-io/thanos/issues/4949
 # Pinning is important but somehow quay kills the old images, so make sure to update regularly.
-# Update at 2021.12.14
-AMD64_SHA="c05b6700b0cab2e59ee0ff8d8d72eb0bb324f50732b87742e9a6024322ee83a1"
-ARM64_SHA="bcdd37d8cf48c8740b5ccb8fee5c5d36badaae112d34fd92be4723eb36c9cd5d"
+# Update at 2021.12.15
+AMD64_SHA="2548dd93c438f7cf8b68dc2ff140189d9bcdae7130d3941524becc31573ec9e3"
+ARM64_SHA="768a51a5f71827471e6e58f0d6200c2fa24f2cb5cde1ecbd67fe28f93d4ef464"
 
 ifeq ($(arch), x86_64)
     # amd64
