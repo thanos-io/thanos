@@ -13,8 +13,8 @@ arch = $(shell uname -m)
 # TODO(bwplotka): https://github.com/thanos-io/thanos/issues/4949
 # Pinning is important but somehow quay kills the old images, so make sure to update regularly.
 # Update at 2021.12.15
-AMD64_SHA="2548dd93c438f7cf8b68dc2ff140189d9bcdae7130d3941524becc31573ec9e3"
-ARM64_SHA="768a51a5f71827471e6e58f0d6200c2fa24f2cb5cde1ecbd67fe28f93d4ef464"
+AMD64_SHA="768a51a5f71827471e6e58f0d6200c2fa24f2cb5cde1ecbd67fe28f93d4ef464"
+ARM64_SHA="042d6195e1793b226d1632117cccb4c4906c8ab393b8b68328ad43cf59c64f9d"
 
 ifeq ($(arch), x86_64)
     # amd64
