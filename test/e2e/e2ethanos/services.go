@@ -371,7 +371,13 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	return args, nil
 }
 
+// RemoteWriteEndpoint is a full address of remote write endpoint in Thanos Receive.
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
+
+// PrometheusRemoteWriteEndpoint is a full address of remote write endpoint in Prometheus.
+func PrometheusRemoteWriteEndpoint(addr string) string {
+	return fmt.Sprintf("http://%s/api/v1/write", addr)
+}
 
 // NewUninitiatedReceiver returns a future receiver that can be initiated. It is useful
 // for obtaining a receiver address for hashring before the receiver is started.

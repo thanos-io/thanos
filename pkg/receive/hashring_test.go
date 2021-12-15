@@ -8,27 +8,23 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestHashringGet(t *testing.T) {
 	ts := &prompb.TimeSeries{
 		Labels: []labelpb.ZLabel{
-			{
-				Name:  "foo",
-				Value: "bar",
-			},
-			{
-				Name:  "baz",
-				Value: "qux",
-			},
+			{Name: "foo", Value: "bar"},
+			{Name: "baz", Value: "qux"},
 		},
 	}
 
 	for _, tc := range []struct {
 		name   string
 		cfg    []HashringConfig
-		nodes  map[string]struct{}
 		tenant string
+
+		expectedNode string
 	}{
 		{
 			name:   "empty",
@@ -42,7 +38,7 @@ func TestHashringGet(t *testing.T) {
 					Endpoints: []string{"node1"},
 				},
 			},
-			nodes: map[string]struct{}{"node1": {}},
+			expectedNode: "node1",
 		},
 		{
 			name: "specific",
@@ -55,8 +51,8 @@ func TestHashringGet(t *testing.T) {
 					Endpoints: []string{"node1"},
 				},
 			},
-			nodes:  map[string]struct{}{"node2": {}},
-			tenant: "tenant2",
+			tenant:       "tenant2",
+			expectedNode: "node2",
 		},
 		{
 			name: "many tenants",
@@ -74,8 +70,8 @@ func TestHashringGet(t *testing.T) {
 					Tenants:   []string{"tenant3"},
 				},
 			},
-			nodes:  map[string]struct{}{"node1": {}},
-			tenant: "tenant1",
+			tenant:       "tenant1",
+			expectedNode: "node1",
 		},
 		{
 			name: "many tenants error",
@@ -106,12 +102,8 @@ func TestHashringGet(t *testing.T) {
 					Endpoints: []string{"node4", "node5", "node6"},
 				},
 			},
-			nodes: map[string]struct{}{
-				"node1": {},
-				"node2": {},
-				"node3": {},
-			},
-			tenant: "tenant1",
+			tenant:       "tenant1",
+			expectedNode: "node2",
 		},
 		{
 			name: "many nodes default",
@@ -124,27 +116,18 @@ func TestHashringGet(t *testing.T) {
 					Endpoints: []string{"node4", "node5", "node6"},
 				},
 			},
-			nodes: map[string]struct{}{
-				"node4": {},
-				"node5": {},
-				"node6": {},
-			},
+			expectedNode: "node4",
 		},
 	} {
-		hs := newMultiHashring(tc.cfg)
-		h, err := hs.Get(tc.tenant, ts)
-		if tc.nodes != nil {
-			if err != nil {
-				t.Errorf("case %q: got unexpected error: %v", tc.name, err)
-				continue
+		t.Run("", func(t *testing.T) {
+			hs := newMultiHashring(tc.cfg)
+			h, err := hs.Get(tc.tenant, ts)
+			if tc.expectedNode != "" {
+				testutil.Ok(t, err)
+				testutil.Equals(t, tc.expectedNode, h)
+				return
 			}
-			if _, ok := tc.nodes[h]; !ok {
-				t.Errorf("case %q: got unexpected node %q", tc.name, h)
-			}
-			continue
-		}
-		if err == nil {
-			t.Errorf("case %q: expected error", tc.name)
-		}
+			testutil.NotOk(t, err)
+		})
 	}
 }

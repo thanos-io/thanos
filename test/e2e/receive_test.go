@@ -5,9 +5,6 @@ package e2e_test
 
 import (
 	"context"
-	"log"
-	"net/http"
-	"net/http/httputil"
 	"testing"
 	"time"
 
@@ -18,21 +15,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
-
-type DebugTransport struct{}
-
-func (DebugTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	_, err := httputil.DumpRequestOut(r, false)
-	if err != nil {
-		return nil, err
-	}
-	return http.DefaultTransport.RoundTrip(r)
-}
-
-func ErrorHandler(_ http.ResponseWriter, _ *http.Request, err error) {
-	log.Print("Response from receiver")
-	log.Print(err)
-}
 
 func TestReceive(t *testing.T) {
 	t.Parallel()
@@ -672,4 +654,58 @@ func TestReceive(t *testing.T) {
 			},
 		})
 	})
+}
+
+func TestReceiveRestartModes(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	e, err := e2e.NewDockerEnvironment("e2e_test_receive_restarts")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	r1 := e2ethanos.NewUninitiatedReceiver(e, "1")
+	r2 := e2ethanos.NewUninitiatedReceiver(e, "2")
+	r3 := e2ethanos.NewUninitiatedReceiver(e, "3")
+
+	h := receive.HashringConfig{
+		Endpoints: []string{
+			r1.InternalEndpoint("grpc"),
+			r2.InternalEndpoint("grpc"),
+			r3.InternalEndpoint("grpc"),
+		},
+	}
+
+	receive1, err := e2ethanos.NewRoutingAndIngestingReceiverFromService(r1, e.SharedDir(), 3, h)
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(receive1))
+
+	req1 := fakeSamples{{"i1", 1}, {"i2", 10}, {"i3", 100}}.toTimeSeries(t)
+	t.Run("only one replica is up, expect failure", func(t *testing.T) {
+		err := doRemoteWrite(ctx, e2ethanos.RemoteWriteEndpoint(receive1.Endpoint("remote-write")), req1)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, "server returned HTTP status 503 Service Unavailable: 3 (sorted) errors: replicate write request for endpoint e2e_test_receive_restarts-receive-1:9091: "+
+			"quorum not reached: target not ready; replicate write request for endpoint e2e_test_receive_restarts-receive-2:9091: quorum not reached: "+
+			"target not ready; replicate write request for endpoint e2e_test_receive_restarts-receive-3:9091: quorum not reached: target not ready", err.Error())
+
+		appended, err := receive1.SumMetrics([]string{"prometheus_tsdb_head_samples_appended_total"})
+		testutil.Ok(t, err)
+		testutil.Equals(t, []float64{3}, appended)
+
+	})
+
+	// Repro of https://github.com/thanos-io/thanos/discussions/4853.
+	t.Run("retry is NOT idempotent", func(t *testing.T) {
+		err := doRemoteWrite(ctx, e2ethanos.RemoteWriteEndpoint(receive1.Endpoint("remote-write")), req1)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, "server returned HTTP status 503 Service Unavailable: 3 (sorted) errors: replicate write request for endpoint e2e_test_receive_restarts-receive-1:9091: "+
+			"quorum not reached: target not available; replicate write request for endpoint e2e_test_receive_restarts-receive-2:9091: "+
+			"quorum not reached: target not available; replicate write request for endpoint e2e_test_receive_restarts-receive-3:9091: "+
+			"quorum not reached: target not available", err.Error())
+
+		appended, err := receive1.SumMetrics([]string{"prometheus_tsdb_head_samples_appended_total"})
+		testutil.Ok(t, err)
+		testutil.Equals(t, []float64{3}, appended)
+	})
+
 }

@@ -615,35 +615,56 @@ config:
 	}
 }
 
-type fakeMetricSample struct {
-	label string
-	value int64
+type fakeSample struct {
+	instance string
+	value    int64
 }
 
-func newSample(s fakeMetricSample) model.Sample {
-	return model.Sample{
-		Metric: map[model.LabelName]model.LabelValue{
-			"__name__": "my_fake_metric",
-			"instance": model.LabelValue(s.label),
-		},
-		Value:     model.SampleValue(s.value),
-		Timestamp: model.Now(),
+type fakeSamples []fakeSample
+
+func (samples fakeSamples) toTimeSeries(t testing.TB) []prompb.TimeSeries {
+	now := time.Now()
+	dup := make(map[string]struct{}, len(samples))
+
+	// Transform samples to series. Error out if we see same series, might be programmatic error.
+	ret := make([]prompb.TimeSeries, len(samples))
+	for i, s := range samples {
+		if _, ok := dup[s.instance]; ok {
+			t.Errorf("instance %v duplicated, expected unique samples", s.instance)
+			return nil
+		}
+		dup[s.instance] = struct{}{}
+
+		ret[i] = prompb.TimeSeries{
+			Labels: []prompb.Label{
+				{Name: "__name__", Value: "my_fake_metric"},
+				{Name: "instance", Value: s.instance},
+			},
+			Samples: []prompb.Sample{
+				{
+					Value:     float64(s.value),
+					Timestamp: timestamp.FromTime(now),
+				},
+			},
+		}
 	}
+
+	return ret
 }
 
 func TestSidecarQueryEvaluation(t *testing.T) {
 	t.Parallel()
 
 	ts := []struct {
-		prom1Samples []fakeMetricSample
-		prom2Samples []fakeMetricSample
+		prom1Samples fakeSamples
+		prom2Samples fakeSamples
 		query        string
 		result       model.Vector
 	}{
 		{
 			query:        "max (my_fake_metric)",
-			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
-			prom2Samples: []fakeMetricSample{{"i1", 3}, {"i2", 4}, {"i3", 10}},
+			prom1Samples: []fakeSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
+			prom2Samples: []fakeSample{{"i1", 3}, {"i2", 4}, {"i3", 10}},
 			result: []*model.Sample{
 				{
 					Metric: map[model.LabelName]model.LabelValue{},
@@ -653,8 +674,8 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 		},
 		{
 			query:        "max by (instance) (my_fake_metric)",
-			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
-			prom2Samples: []fakeMetricSample{{"i1", 3}, {"i2", 4}, {"i3", 10}},
+			prom1Samples: []fakeSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
+			prom2Samples: []fakeSample{{"i1", 3}, {"i2", 4}, {"i3", 10}},
 			result: []*model.Sample{
 				{
 					Metric: map[model.LabelName]model.LabelValue{"instance": "i1"},
@@ -672,8 +693,8 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 		},
 		{
 			query:        "group by (instance) (my_fake_metric)",
-			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
-			prom2Samples: []fakeMetricSample{{"i1", 3}, {"i2", 4}},
+			prom1Samples: []fakeSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
+			prom2Samples: []fakeSample{{"i1", 3}, {"i2", 4}},
 			result: []*model.Sample{
 				{
 					Metric: map[model.LabelName]model.LabelValue{"instance": "i1"},
@@ -691,8 +712,8 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 		},
 		{
 			query:        "max_over_time(my_fake_metric[10m])",
-			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}},
-			prom2Samples: []fakeMetricSample{{"i1", 3}},
+			prom1Samples: []fakeSample{{"i1", 1}, {"i2", 5}},
+			prom2Samples: []fakeSample{{"i1", 3}},
 			result: []*model.Sample{
 				{
 					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p1"},
@@ -710,8 +731,8 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 		},
 		{
 			query:        "min_over_time(my_fake_metric[10m])",
-			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}},
-			prom2Samples: []fakeMetricSample{{"i1", 3}},
+			prom1Samples: []fakeSample{{"i1", 1}, {"i2", 5}},
+			prom2Samples: []fakeSample{{"i1", 3}},
 			result: []*model.Sample{
 				{
 					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p1"},
@@ -757,8 +778,8 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 			t.Cleanup(cancel)
 
-			testutil.Ok(t, synthesizeSamples(ctx, prom1, tc.prom1Samples))
-			testutil.Ok(t, synthesizeSamples(ctx, prom2, tc.prom2Samples))
+			testutil.Ok(t, doRemoteWrite(ctx, e2ethanos.PrometheusRemoteWriteEndpoint(prom1.Endpoint("http")), tc.prom1Samples.toTimeSeries(t)))
+			testutil.Ok(t, doRemoteWrite(ctx, e2ethanos.PrometheusRemoteWriteEndpoint(prom2.Endpoint("http")), tc.prom2Samples.toTimeSeries(t)))
 
 			testQuery := func() string { return tc.query }
 			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{
@@ -954,13 +975,8 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 	}))
 }
 
-func synthesizeSamples(ctx context.Context, prometheus *e2e.InstrumentedRunnable, testSamples []fakeMetricSample) error {
-	samples := make([]model.Sample, len(testSamples))
-	for i, s := range testSamples {
-		samples[i] = newSample(s)
-	}
-
-	remoteWriteURL, err := url.Parse("http://" + prometheus.Endpoint("http") + "/api/v1/write")
+func doRemoteWrite(ctx context.Context, addr string, ts []prompb.TimeSeries) error {
+	remoteWriteURL, err := url.Parse(addr)
 	if err != nil {
 		return err
 	}
@@ -973,33 +989,11 @@ func synthesizeSamples(ctx context.Context, prometheus *e2e.InstrumentedRunnable
 		return err
 	}
 
-	samplespb := make([]prompb.TimeSeries, 0, len(samples))
-	for _, sample := range samples {
-		labelspb := make([]prompb.Label, 0, len(sample.Metric))
-		for labelKey, labelValue := range sample.Metric {
-			labelspb = append(labelspb, prompb.Label{
-				Name:  string(labelKey),
-				Value: string(labelValue),
-			})
-		}
-		samplespb = append(samplespb, prompb.TimeSeries{
-			Labels: labelspb,
-			Samples: []prompb.Sample{
-				{
-					Value:     float64(sample.Value),
-					Timestamp: sample.Timestamp.Time().Unix() * 1000,
-				},
-			},
-		})
-	}
-
-	sample := &prompb.WriteRequest{
-		Timeseries: samplespb,
-	}
-
 	var buf []byte
 	pBuf := proto.NewBuffer(nil)
-	if err := pBuf.Marshal(sample); err != nil {
+	if err := pBuf.Marshal(&prompb.WriteRequest{
+		Timeseries: ts,
+	}); err != nil {
 		return err
 	}
 

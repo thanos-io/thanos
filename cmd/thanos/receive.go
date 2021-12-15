@@ -374,7 +374,8 @@ func setupAndRunGRPCServer(g *run.Group,
 
 // setupHashring sets up the hashring configuration provided.
 // If no hashring is provided, we setup a single node hashring with local endpoint.
-func setupHashring(g *run.Group,
+func setupHashring(
+	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
 	conf *receiveConfig,
@@ -442,7 +443,6 @@ func setupHashring(g *run.Group,
 
 	cancel := make(chan struct{})
 	g.Add(func() error {
-
 		if enableIngestion {
 			defer close(hashringChangedChan)
 		}
@@ -459,10 +459,10 @@ func setupHashring(g *run.Group,
 				level.Info(logger).Log("msg", msg)
 
 				if enableIngestion {
-					// send a signal to tsdb to reload, and then restart the gRPC server.
+					// Send a signal to tsdb to reload, and then restart the gRPC server.
 					hashringChangedChan <- struct{}{}
 				} else {
-					// we dont need tsdb to reload, so restart the gRPC server.
+					// We dont need tsdb to reload, so restart the gRPC server.
 					level.Info(logger).Log("msg", "server has reloaded, ready to start accepting requests")
 					statusProber.Ready()
 					reloadGRPCServer <- struct{}{}

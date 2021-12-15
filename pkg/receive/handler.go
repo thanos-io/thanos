@@ -347,24 +347,30 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = h.handleRequest(ctx, rep, tenant, &wreq)
-	if err != nil {
-		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
+	if err == nil {
+		return
 	}
 
+	errMsg := ""
+	if sortable, ok := err.(errutil.SortableError); ok {
+		errMsg = sortable.SortedError()
+	} else {
+		errMsg = err.Error()
+	}
+
+	level.Debug(h.logger).Log("msg", "failed to handle request", "err", errMsg)
 	switch determineWriteErrorCause(err, 1) {
-	case nil:
-		return
 	case errNotReady:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		http.Error(w, errMsg, http.StatusServiceUnavailable)
 	case errUnavailable:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		http.Error(w, errMsg, http.StatusServiceUnavailable)
 	case errConflict:
-		http.Error(w, err.Error(), http.StatusConflict)
+		http.Error(w, errMsg, http.StatusConflict)
 	case errBadReplica:
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, errMsg, http.StatusBadRequest)
 	default:
-		level.Error(h.logger).Log("err", err, "msg", "internal server error")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		level.Error(h.logger).Log("err", errMsg, "msg", "internal server error")
+		http.Error(w, errMsg, http.StatusInternalServerError)
 	}
 }
 
