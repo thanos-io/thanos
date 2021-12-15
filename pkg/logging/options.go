@@ -6,6 +6,7 @@ package logging
 import (
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
@@ -69,6 +70,12 @@ func WithFilter(f FilterLogging) Option {
 	}
 }
 
+func WithLevelledLogger(f LevelledLogging) Option {
+	return func(o *options) {
+		o.levelledLogger = f
+	}
+}
+
 // Interface for the additional methods.
 
 // Types for the Options.
@@ -104,6 +111,9 @@ type DurationToFields func(duration time.Duration) Fields
 // FilterLogging makes sure only the logs with level=lvl gets logged, or filtered.
 type FilterLogging func(logger log.Logger) log.Logger
 
+// LevelledLogging configures the logger to log at a specified level.
+type LevelledLogging func(logger log.Logger) log.Logger
+
 // DefaultFilterLogging allows logs from all levels to be logged in output.
 func DefaultFilterLogging(logger log.Logger) log.Logger {
 	return level.NewFilter(logger, level.AllowAll())
@@ -115,6 +125,7 @@ type options struct {
 	codeFunc          ErrorToCode
 	durationFieldFunc DurationToFields
 	filterLog         FilterLogging
+	levelledLogger    LevelledLogging
 }
 
 // DefaultCodeToLevel is the helper mapper that maps HTTP Response codes to log levels.
@@ -123,6 +134,21 @@ func DefaultCodeToLevel(logger log.Logger, code int) log.Logger {
 		return level.Debug(logger)
 	}
 	return level.Error(logger)
+}
+
+func DefaultLevelledLogger(logger log.Logger, lvl string) log.Logger {
+	switch strings.ToUpper(lvl) {
+	case "INFO":
+		return level.Info(logger)
+	case "DEBUG":
+		return level.Debug(logger)
+	case "WARN":
+		return level.Warn(logger)
+	case "ERROR":
+		return level.Error(logger)
+	default:
+		return level.Debug(logger)
+	}
 }
 
 // DefaultCodeToLevelGRPC is the helper mapper that maps gRPC Response codes to log levels.

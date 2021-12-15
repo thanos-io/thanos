@@ -24,17 +24,17 @@ type HTTPServerMiddleware struct {
 }
 
 func (m *HTTPServerMiddleware) preCall(name string, start time.Time, r *http.Request) {
-	logger := m.opts.filterLog(m.logger)
-	level.Debug(logger).Log("http.start_time", start.String(), "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "thanos.method_name", name, "msg", "started call")
+	m.opts.levelledLogger(m.opts.filterLog(m.logger)).Log(
+		"http.start_time", start.String(), "http.method", fmt.Sprintf("%s %s", r.Method, r.URL),
+		"http.request_id", r.Header.Get("X-Request-ID"), "thanos.method_name", name, "msg", "started call")
 }
 
 func (m *HTTPServerMiddleware) postCall(name string, start time.Time, wrapped *httputil.ResponseWriterWithStatus, r *http.Request) {
-	status := wrapped.Status()
-	logger := log.With(m.logger, "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "http.status_code", fmt.Sprintf("%d", status),
-		"http.time_ms", fmt.Sprintf("%v", durationToMilliseconds(time.Since(start))), "http.remote_addr", r.RemoteAddr, "thanos.method_name", name)
-
-	logger = m.opts.filterLog(logger)
-	m.opts.levelFunc(logger, status).Log("msg", "finished call")
+	m.opts.levelledLogger(m.opts.filterLog(m.logger)).Log(
+		"http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"),
+		"http.status_code", wrapped.Status(), "http.time_ms", fmt.Sprintf("%v", durationToMilliseconds(time.Since(start))),
+		"http.remote_addr", r.RemoteAddr, "thanos.method_name", name,
+		"msg", "finished call")
 }
 
 func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) http.HandlerFunc {
@@ -161,7 +161,9 @@ func NewHTTPOption(configYAML []byte) ([]Option, error) {
 		WithFilter(func(logger log.Logger) log.Logger {
 			return level.NewFilter(logger, getLevel(globalLevel))
 		}),
-		WithLevels(DefaultCodeToLevel),
+		WithLevelledLogger(func(logger log.Logger) log.Logger {
+			return DefaultLevelledLogger(logger, globalLevel)
+		}),
 	}
 
 	if len(reqLogConfig.HTTP.Config) == 0 {
