@@ -168,7 +168,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 	}
 	duration := promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "thanos_redis_operation_duration_seconds",
-		Help:    "Duration of operations against memcached.",
+		Help:    "Duration of operations against redis.",
 		Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 3, 6, 10},
 	}, []string{"operation"})
 	c.durationSet = duration.WithLabelValues(opSet)
