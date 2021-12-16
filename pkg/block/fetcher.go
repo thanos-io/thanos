@@ -23,7 +23,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
-	"github.com/prometheus/prometheus/tsdb"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 
@@ -673,37 +672,6 @@ func (f *DeduplicateFilter) DuplicateIDs() []ulid.ULID {
 	return f.duplicateIDs
 }
 
-<<<<<<< HEAD
-func addNodeBySources(root, add *Node) bool {
-	var rootNode *Node
-	childSources := add.Compaction.Sources
-	for _, node := range root.Children {
-		parentSources := node.Compaction.Sources
-
-		// Block exists with same sources, add as child.
-		if contains(parentSources, childSources) && contains(childSources, parentSources) {
-			node.Children = append(node.Children, add)
-			return true
-		}
-
-		// Block's sources are present in other block's sources, add as child.
-		if contains(parentSources, childSources) {
-			rootNode = node
-			break
-		}
-	}
-
-	// Block cannot be attached to any child nodes, add it as child of root.
-	if rootNode == nil {
-		root.Children = append(root.Children, add)
-		return true
-	}
-
-	return addNodeBySources(rootNode, add)
-}
-
-=======
->>>>>>> Move group key function to the metadata package. Deduplicate within compaction groups and in parallel.
 func contains(s1, s2 []ulid.ULID) bool {
 	for _, a := range s2 {
 		found := false

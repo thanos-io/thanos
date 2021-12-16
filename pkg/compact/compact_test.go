@@ -228,7 +228,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 	m[2].Thanos.Labels = map[string]string{"a": "1", "b": "2"}
 	m[2].Thanos.Downsample.Resolution = downsample.ResLevel2
 	for ind, meta := range m {
-		keys[ind] = DefaultGroupKey(meta.Thanos)
+		keys[ind] = meta.Thanos.GroupKey()
 	}
 
 	ps := NewRetentionProgressCalculator(reg, nil)
@@ -369,7 +369,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 	m[2].Thanos.Labels = map[string]string{"a": "1", "b": "2"}
 	m[2].Thanos.Downsample.Resolution = 1
 	for ind, meta := range m {
-		keys[ind] = DefaultGroupKey(meta.Thanos)
+		keys[ind] = meta.Thanos.GroupKey()
 	}
 
 	ps := NewCompactionProgressCalculator(reg, planner)
@@ -491,7 +491,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 	m[2].Thanos.Labels = map[string]string{"a": "1", "b": "2"}
 	m[2].Thanos.Downsample.Resolution = downsample.ResLevel2
 	for ind, meta := range m {
-		keys[ind] = DefaultGroupKey(meta.Thanos)
+		keys[ind] = meta.Thanos.GroupKey()
 	}
 
 	ds := NewDownsampleProgressCalculator(reg)

@@ -623,7 +623,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			[]block.MetadataFilter{
 				block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
 				block.NewLabelShardedMetaFilter(relabelConfig),
-				block.NewDeduplicateFilter(),
+				block.NewDeduplicateFilter(block.FetcherConcurrency),
 			}, nil)
 		if err != nil {
 			return err
