@@ -74,6 +74,12 @@ config:
     idle_conn_timeout: 1m30s
     response_header_timeout: 2m
     insecure_skip_verify: false
+    tls_config:
+      ca_file: /certs/ca.crt
+      cert_file: /certs/cert.crt
+      key_file: /certs/key.key
+      server_name: server
+      insecure_skip_verify: false
     tls_handshake_timeout: 10s
     expect_continue_timeout: 1s
     max_idle_conns: 100
@@ -104,6 +110,8 @@ Please refer to the documentation of [the Transport type](https://golang.org/pkg
 `part_size` is specified in bytes and refers to the minimum file size used for multipart uploads, as some custom S3 implementations may have different requirements. A value of `0` means to use a default 128 MiB size.
 
 Set `list_objects_version: "v1"` for S3 compatible APIs that don't support ListObjectsV2 (e.g. some versions of Ceph). Default value (`""`) is equivalent to `"v2"`.
+
+`http_config.tls_config` allows configuring TLS connections. Please refer to the document of [tls_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#tls_config) for detailed information on what each option does.
 
 For debug and testing purposes you can set
 
