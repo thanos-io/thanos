@@ -17,7 +17,7 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 
@@ -209,7 +209,7 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		t.Cleanup(cancel)
 
-		id, err := b.Create(ctx, dir, 0, b.hashFunc)
+		id, err := b.Create(ctx, dir, 0, b.hashFunc, 120)
 		testutil.Ok(t, err)
 		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 			return objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String())

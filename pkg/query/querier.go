@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -33,7 +33,7 @@ import (
 // replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behavior of proxy.
-type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable
+type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, enableQueryPushdown, skipChunks bool) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy storepb.StoreServer, maxConcurrentSelects int, selectTimeout time.Duration) QueryableCreator {
@@ -41,7 +41,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 		extprom.WrapRegistererWithPrefix("concurrent_selects_", reg),
 	).NewHistogram(gate.DurationHistogramOpts)
 
-	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable {
+	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, enableQueryPushdown, skipChunks bool) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabels:       replicaLabels,
@@ -56,6 +56,7 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 			},
 			maxConcurrentSelects: maxConcurrentSelects,
 			selectTimeout:        selectTimeout,
+			enableQueryPushdown:  enableQueryPushdown,
 		}
 	}
 }
@@ -72,11 +73,12 @@ type queryable struct {
 	gateProviderFn       func() gate.Gate
 	maxConcurrentSelects int
 	selectTimeout        time.Duration
+	enableQueryPushdown  bool
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout), nil
 }
 
 type querier struct {
@@ -90,6 +92,7 @@ type querier struct {
 	deduplicate         bool
 	maxResolutionMillis int64
 	partialResponse     bool
+	enableQueryPushdown bool
 	skipChunks          bool
 	selectGate          gate.Gate
 	selectTimeout       time.Duration
@@ -106,7 +109,7 @@ func newQuerier(
 	proxy storepb.StoreServer,
 	deduplicate bool,
 	maxResolutionMillis int64,
-	partialResponse, skipChunks bool,
+	partialResponse, enableQueryPushdown bool, skipChunks bool,
 	selectGate gate.Gate,
 	selectTimeout time.Duration,
 ) *querier {
@@ -135,6 +138,7 @@ func newQuerier(
 		maxResolutionMillis: maxResolutionMillis,
 		partialResponse:     partialResponse,
 		skipChunks:          skipChunks,
+		enableQueryPushdown: enableQueryPushdown,
 	}
 }
 
@@ -191,6 +195,20 @@ func aggrsFromFunc(f string) []storepb.Aggr {
 	}
 	// In the default case, we retrieve count and sum to compute an average.
 	return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}
+}
+
+func storeHintsFromPromHints(hints *storage.SelectHints) *storepb.QueryHints {
+	return &storepb.QueryHints{
+		StepMillis: hints.Step,
+		Func: &storepb.Func{
+			Name: hints.Func,
+		},
+		Grouping: &storepb.Grouping{
+			By:     hints.By,
+			Labels: hints.Grouping,
+		},
+		Range: &storepb.Range{Millis: hints.Range},
+	}
 }
 
 func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Matcher) storage.SeriesSet {
@@ -268,12 +286,17 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 
 	// TODO(bwplotka): Use inprocess gRPC.
 	resp := &seriesServer{ctx: ctx}
+	var queryHints *storepb.QueryHints
+	if q.enableQueryPushdown {
+		queryHints = storeHintsFromPromHints(hints)
+	}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
 		MinTime:                 hints.Start,
 		MaxTime:                 hints.End,
 		Matchers:                sms,
 		MaxResolutionWindow:     q.maxResolutionMillis,
 		Aggregates:              aggrs,
+		QueryHints:              queryHints,
 		PartialResponseDisabled: !q.partialResponse,
 		SkipChunks:              q.skipChunks,
 		Step:                    hints.Step,

@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -275,6 +275,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 				Aggregates:              r.Aggregates,
 				MaxResolutionWindow:     r.MaxResolutionWindow,
 				SkipChunks:              r.SkipChunks,
+				QueryHints:              r.QueryHints,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			}
 			wg = &sync.WaitGroup{}

@@ -14,6 +14,8 @@ localLinksStyle:
   hugo:
     indexFileName: "_index.md"
 
+linkPrefixForNonMarkdownResources: "https://github.com/thanos-io/thanos/blob/main"
+
 transformations:
 
   - glob: "$(EXTERNAL_GLOB_REL)CHANGELOG.md"

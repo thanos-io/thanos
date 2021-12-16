@@ -167,7 +167,7 @@ func TestReceive(t *testing.T) {
 
 		expectedReplicationFactor := 2.0
 
-		queryAndAssert(t, ctx, q.Endpoint("http"), "count(up) by (prometheus)", promclient.QueryOptions{
+		queryAndAssert(t, ctx, q.Endpoint("http"), func() string { return "count(up) by (prometheus)" }, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		}, model.Vector{
 			&model.Sample{
@@ -280,7 +280,7 @@ func TestReceive(t *testing.T) {
 
 		expectedReplicationFactor := 3.0
 
-		queryAndAssert(t, ctx, q.Endpoint("http"), "count(up) by (prometheus)", promclient.QueryOptions{
+		queryAndAssert(t, ctx, q.Endpoint("http"), func() string { return "count(up) by (prometheus)" }, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		}, model.Vector{
 			&model.Sample{

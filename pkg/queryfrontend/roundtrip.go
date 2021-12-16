@@ -12,7 +12,7 @@ import (
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/cortexproject/cortex/pkg/util/validation"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -203,7 +203,7 @@ func newQueryRangeTripperware(
 	}
 
 	return func(next http.RoundTripper) http.RoundTripper {
-		rt := queryrange.NewRoundTripper(next, codec, queryRangeMiddleware...)
+		rt := queryrange.NewRoundTripper(next, codec, nil, queryRangeMiddleware...)
 		return queryrange.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			return rt.RoundTrip(r)
 		})
@@ -265,7 +265,7 @@ func newLabelsTripperware(
 		)
 	}
 	return func(next http.RoundTripper) http.RoundTripper {
-		rt := queryrange.NewRoundTripper(next, codec, labelsMiddleware...)
+		rt := queryrange.NewRoundTripper(next, codec, nil, labelsMiddleware...)
 		return queryrange.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			return rt.RoundTrip(r)
 		})
