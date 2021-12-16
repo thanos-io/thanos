@@ -642,7 +642,7 @@ func (f *DeduplicateFilter) filterGroup(metaSlice []*metadata.Meta, metas map[ul
 	})
 
 	var coveringSet []*metadata.Meta
-	childLoop:
+childLoop:
 	for _, child := range metaSlice {
 		childSources := child.Compaction.Sources
 		id := child.ULID
