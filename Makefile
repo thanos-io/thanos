@@ -1,4 +1,6 @@
 include .bingo/Variables.mk
+include .busybox-versions
+
 FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 MD_FILES_TO_FORMAT = $(shell find docs -name "*.md") $(shell find examples -name "*.md") $(filter-out mixin/runbook.md, $(shell find mixin -name "*.md")) $(shell ls *.md)
 
@@ -8,20 +10,14 @@ DOCKER_CI_TAG     ?= test
 
 BASE_DOCKER_SHA=''
 arch = $(shell uname -m)
-# Run `DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect quay.io/prometheus/busybox:latest` to get SHA or
-# just visit https://quay.io/repository/prometheus/busybox?tag=latest&tab=tags.
-# TODO(bwplotka): https://github.com/thanos-io/thanos/issues/4949
-# Pinning is important but somehow quay kills the old images, so make sure to update regularly.
-# Update at 2021.12.15
-AMD64_SHA="768a51a5f71827471e6e58f0d6200c2fa24f2cb5cde1ecbd67fe28f93d4ef464"
-ARM64_SHA="042d6195e1793b226d1632117cccb4c4906c8ab393b8b68328ad43cf59c64f9d"
 
+# The include .busybox-versions includes the SHA's of all the platforms, which can be used as var.
 ifeq ($(arch), x86_64)
     # amd64
-    BASE_DOCKER_SHA=$(AMD64_SHA)
+    BASE_DOCKER_SHA=${amd64}
 else ifeq ($(arch), armv8)
     # arm64
-    BASE_DOCKER_SHA=$(ARM64_SHA)
+    BASE_DOCKER_SHA=${arm64}
 else
     echo >&2 "only support amd64 or arm64 arch" && exit 1
 endif
