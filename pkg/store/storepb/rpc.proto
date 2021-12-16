@@ -80,18 +80,18 @@ message InfoResponse {
   repeated Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
   int64 min_time = 2;
   int64 max_time = 3;
-  StoreType storeType  = 4;
+  StoreType storeType = 4;
   // label_sets is an unsorted list of `ZLabelSet`s.
   repeated ZLabelSet label_sets = 5 [(gogoproto.nullable) = false];
 }
 
 message SeriesRequest {
-  int64 min_time                 = 1;
-  int64 max_time                 = 2;
+  int64 min_time = 1;
+  int64 max_time = 2;
   repeated LabelMatcher matchers = 3 [(gogoproto.nullable) = false];
 
   int64 max_resolution_window = 4;
-  repeated Aggr aggregates    = 5;
+  repeated Aggr aggregates = 5;
 
   // Deprecated. Use partial_response_strategy instead.
   bool partial_response_disabled = 6;
@@ -108,18 +108,56 @@ message SeriesRequest {
   google.protobuf.Any hints = 9;
 
   // Query step size in milliseconds.
+  // Deprecated: Use query_hints instead.
   int64 step = 10;
 
   // Range vector selector range in milliseconds.
+  // Deprecated: Use query_hints instead.
   int64 range = 11;
+
+  // query_hints are the hints coming from the PromQL engine when
+  // requesting a storage.SeriesSet for a given expression.
+  QueryHints query_hints = 12;
+}
+
+// Analogous to storage.SelectHints.
+message QueryHints {
+  // Query step size in milliseconds.
+  int64 step_millis = 1;
+
+  // The surrounding function or aggregation.
+  Func func = 2;
+
+  // The grouping expression
+  Grouping grouping = 4;
+
+  // Range vector selector.
+  Range range = 5;
+}
+
+message Func {
+  // The function or aggregation name
+  string name = 1;
+}
+
+message Grouping {
+  // Indicate whether it is without or by.
+  bool by = 1;
+
+  // List of label names used in the grouping.
+  repeated string labels = 3;
+}
+
+message Range {
+  int64 millis = 1;
 }
 
 enum Aggr {
-  RAW     = 0;
-  COUNT   = 1;
-  SUM     = 2;
-  MIN     = 3;
-  MAX     = 4;
+  RAW = 0;
+  COUNT = 1;
+  SUM = 2;
+  MIN = 3;
+  MAX = 4;
   COUNTER = 5;
 }
 
@@ -160,7 +198,7 @@ message LabelNamesRequest {
 }
 
 message LabelNamesResponse {
-  repeated string names    = 1;
+  repeated string names = 1;
   repeated string warnings = 2;
 
   /// hints is an opaque data structure that can be used to carry additional information from
@@ -190,7 +228,7 @@ message LabelValuesRequest {
 }
 
 message LabelValuesResponse {
-  repeated string values   = 1;
+  repeated string values = 1;
   repeated string warnings = 2;
 
   /// hints is an opaque data structure that can be used to carry additional information from

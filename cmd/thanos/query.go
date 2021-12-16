@@ -58,6 +58,7 @@ import (
 const (
 	promqlNegativeOffset = "promql-negative-offset"
 	promqlAtModifier     = "promql-at-modifier"
+	queryPushdown        = "query-pushdown"
 )
 
 // registerQuery registers a query command.
@@ -160,7 +161,7 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
-	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+promqlNegativeOffset+" and "+promqlAtModifier+".").Default("").Strings()
+	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+promqlNegativeOffset+", "+promqlAtModifier+" and "+queryPushdown+".").Default("").Strings()
 
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
 		Hidden().Default("true").Bool()
@@ -181,13 +182,16 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Wrap(err, "parse federation labels")
 		}
 
-		var enableNegativeOffset, enableAtModifier bool
+		var enableNegativeOffset, enableAtModifier, enableQueryPushdown bool
 		for _, feature := range *featureList {
 			if feature == promqlNegativeOffset {
 				enableNegativeOffset = true
 			}
 			if feature == promqlAtModifier {
 				enableAtModifier = true
+			}
+			if feature == queryPushdown {
+				enableQueryPushdown = true
 			}
 		}
 
@@ -278,6 +282,7 @@ func registerQuery(app *extkingpin.App) {
 			*webDisableCORS,
 			enableAtModifier,
 			enableNegativeOffset,
+			enableQueryPushdown,
 			*alertQueryURL,
 			component.Query,
 		)
@@ -346,6 +351,7 @@ func runQuery(
 	disableCORS bool,
 	enableAtModifier bool,
 	enableNegativeOffset bool,
+	enableQueryPushdown bool,
 	alertQueryURL string,
 	comp component.Component,
 ) error {
@@ -614,6 +620,7 @@ func runQuery(
 			enableTargetPartialResponse,
 			enableMetricMetadataPartialResponse,
 			enableExemplarPartialResponse,
+			enableQueryPushdown,
 			queryReplicaLabels,
 			flagsMap,
 			defaultRangeQueryStep,
