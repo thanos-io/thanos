@@ -380,9 +380,6 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			return err
 		}
 
-		// Temporary placeholder values - should I add deleteDelay as a parameter for Ls too?
-		f := block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, 1)
-
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
 		if err != nil {
 			return err
@@ -447,6 +444,9 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 		}
 
 		if tbc.excludeDelete {
+			// Temporary placeholder values - should I add deleteDelay as a parameter for Ls too?
+			f := block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, 1)
+
 			// Created fetcherMetrics since Filter required an *extprom.TxGaugeVec.
 			fetcherMetrics := block.NewFetcherMetrics(reg, nil, nil)
 			err = f.Filter(ctx, metas, fetcherMetrics.Synced)
