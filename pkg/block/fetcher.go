@@ -642,22 +642,16 @@ func (f *DeduplicateFilter) filterGroup(metaSlice []*metadata.Meta, metas map[ul
 	})
 
 	var coveringSet []*metadata.Meta
+	var duplicates []ulid.ULID
 childLoop:
 	for _, child := range metaSlice {
 		childSources := child.Compaction.Sources
-		id := child.ULID
 		for _, parent := range coveringSet {
 			parentSources := parent.Compaction.Sources
 
 			// child's sources are present in parent's sources, filter it out.
 			if contains(parentSources, childSources) {
-				f.mu.Lock()
-				if metas[id] != nil {
-					f.duplicateIDs = append(f.duplicateIDs, id)
-				}
-				synced.WithLabelValues(duplicateMeta).Inc()
-				delete(metas, id)
-				f.mu.Unlock()
+				duplicates = append(duplicates, child.ULID)
 				continue childLoop
 			}
 		}
@@ -665,6 +659,16 @@ childLoop:
 		// Child's sources not covered by any member of coveringSet, add it to coveringSet
 		coveringSet = append(coveringSet, child)
 	}
+
+	f.mu.Lock()
+	for _, duplicate := range duplicates {
+		if metas[duplicate] != nil {
+			f.duplicateIDs = append(f.duplicateIDs, duplicate)
+		}
+		synced.WithLabelValues(duplicateMeta).Inc()
+		delete(metas, duplicate)
+	}
+	f.mu.Unlock()
 }
 
 // DuplicateIDs returns slice of block ids that are filtered out by DeduplicateFilter.
