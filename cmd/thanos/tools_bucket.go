@@ -107,7 +107,8 @@ type bucketVerifyConfig struct {
 }
 
 type bucketLsConfig struct {
-	output string
+	output        string
+	excludeDelete bool
 }
 
 type bucketWebConfig struct {
@@ -168,6 +169,8 @@ func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClaus
 func (tbc *bucketLsConfig) registerBucketLsFlag(cmd extkingpin.FlagClause) *bucketLsConfig {
 	cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
 		Short('o').Default("").StringVar(&tbc.output)
+	cmd.Flag("exclude-delete", "Exclude blocks marked for deletion.").
+		Default("false").BoolVar(&tbc.excludeDelete)
 	return tbc
 }
 
@@ -377,6 +380,9 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			return err
 		}
 
+		// Temporary placeholder values - should I add deleteDelay as a parameter for Ls too?
+		f := block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, 1)
+
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
 		if err != nil {
 			return err
@@ -438,6 +444,15 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 		metas, _, err := fetcher.Fetch(ctx)
 		if err != nil {
 			return err
+		}
+
+		if tbc.excludeDelete {
+			// Created fetcherMetrics since Filter required an *extprom.TxGaugeVec.
+			fetcherMetrics := block.NewFetcherMetrics(reg, nil, nil)
+			err = f.Filter(ctx, metas, fetcherMetrics.Synced)
+			if err != nil {
+				return err
+			}
 		}
 
 		for _, meta := range metas {
