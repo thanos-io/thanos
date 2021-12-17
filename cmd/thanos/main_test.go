@@ -153,7 +153,7 @@ func TestRegression4960_Deadlock(t *testing.T) {
 	testutil.Ok(t, err)
 
 	metrics := newDownsampleMetrics(prometheus.NewRegistry())
-	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(meta.Thanos))))
+	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.GroupKey())))
 	metaFetcher, err := block.NewMetaFetcher(nil, block.FetcherConcurrency, bkt, "", nil, nil, nil)
 	testutil.Ok(t, err)
 
