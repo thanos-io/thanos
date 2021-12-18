@@ -380,9 +380,16 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
-		if err != nil {
-			return err
+		var fetcher *block.MetaFetcher
+
+		if tbc.excludeDelete {
+			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, block.FetcherConcurrency)
+			fetcher, err = block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), []block.MetadataFilter{ignoreDeletionMarkFilter}, nil)
+			if err != nil {
+				return err
+			}
+		} else {
+			fetcher, err = block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
 		}
 
 		// Dummy actor to immediately kill the group after the run function returns.
@@ -441,18 +448,6 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 		metas, _, err := fetcher.Fetch(ctx)
 		if err != nil {
 			return err
-		}
-
-		if tbc.excludeDelete {
-			// Temporary placeholder values - should I add deleteDelay as a parameter for Ls too?
-			f := block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, 1)
-
-			// Created fetcherMetrics since Filter required an *extprom.TxGaugeVec.
-			fetcherMetrics := block.NewFetcherMetrics(reg, nil, nil)
-			err = f.Filter(ctx, metas, fetcherMetrics.Synced)
-			if err != nil {
-				return err
-			}
 		}
 
 		for _, meta := range metas {
