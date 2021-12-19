@@ -380,16 +380,15 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			return err
 		}
 
-		var fetcher *block.MetaFetcher
+		var filters []block.MetadataFilter
 
 		if tbc.excludeDelete {
 			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, block.FetcherConcurrency)
-			fetcher, err = block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), []block.MetadataFilter{ignoreDeletionMarkFilter}, nil)
-			if err != nil {
-				return err
-			}
-		} else {
-			fetcher, err = block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
+			filters = append(filters, ignoreDeletionMarkFilter)
+		}
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters, nil)
+		if err != nil {
+			return err
 		}
 
 		// Dummy actor to immediately kill the group after the run function returns.
