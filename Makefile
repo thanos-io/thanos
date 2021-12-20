@@ -285,11 +285,11 @@ test-e2e:
 	@echo ">> cleaning e2e test garbage."
 	@rm -rf ./test/e2e/e2e_*
 	@echo ">> Getting gotesplit binary in the tmp dir."
-	scripts/gotesplit.sh -b /tmp
+	scripts/gotesplit.sh -b /tmp/bin
 	@echo ">> running /test/e2e tests."
 	# NOTE(bwplotka):
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 to limit to single CPU to reproduce small 1CPU machine.
-	@/tmp/gotesplit -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e/... -- ${GOTEST_OPTS}
+	@/tmp/bin/gotesplit -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e/... -- ${GOTEST_OPTS}
 
 .PHONY: test-e2e-local
 test-e2e-local: ## Runs all thanos e2e tests locally.
