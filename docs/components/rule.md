@@ -262,22 +262,22 @@ Ruler evaluating Prometheus rules against given Query nodes, exposing Store API
 and storing old blocks in bucket.
 
 Flags:
-      --alert.label-drop=ALERT.LABEL-DROP ...  
+      --alert.label-drop=ALERT.LABEL-DROP ...
                                  Labels by name to drop before sending to
                                  alertmanager. This allows alert to be
                                  deduplicated on replica label (repeated).
                                  Similar Prometheus alert relabelling
-      --alert.query-url=ALERT.QUERY-URL  
+      --alert.query-url=ALERT.QUERY-URL
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
-      --alert.relabel-config=<content>  
+      --alert.relabel-config=<content>
                                  Alternative to 'alert.relabel-config-file' flag
                                  (mutually exclusive). Content of YAML file that
                                  contains alert relabelling configuration.
-      --alert.relabel-config-file=<file-path>  
+      --alert.relabel-config-file=<file-path>
                                  Path to YAML file that contains alert
                                  relabelling configuration.
-      --alertmanagers.config=<content>  
+      --alertmanagers.config=<content>
                                  Alternative to 'alertmanagers.config-file' flag
                                  (mutually exclusive). Content of YAML file that
                                  contains alerting configuration. See format
@@ -286,19 +286,19 @@ Flags:
                                  If defined, it takes precedence over the
                                  '--alertmanagers.url' and
                                  '--alertmanagers.send-timeout' flags.
-      --alertmanagers.config-file=<file-path>  
+      --alertmanagers.config-file=<file-path>
                                  Path to YAML file that contains alerting
                                  configuration. See format details:
                                  https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--alertmanagers.url' and
                                  '--alertmanagers.send-timeout' flags.
-      --alertmanagers.sd-dns-interval=30s  
+      --alertmanagers.sd-dns-interval=30s
                                  Interval between DNS resolutions of
                                  Alertmanager hosts.
-      --alertmanagers.send-timeout=10s  
+      --alertmanagers.send-timeout=10s
                                  Timeout for sending alerts to Alertmanager
-      --alertmanagers.url=ALERTMANAGERS.URL ...  
+      --alertmanagers.url=ALERTMANAGERS.URL ...
                                  Alertmanager replica URLs to push firing
                                  alerts. Ruler claims success if push to at
                                  least one alertmanager from discovered
@@ -311,7 +311,7 @@ Flags:
                                  prefix for the regular Alertmanager API path.
       --data-dir="data/"         data directory
       --eval-interval=30s        The default evaluation interval to use.
-      --grpc-address="0.0.0.0:10901"  
+      --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
@@ -319,7 +319,7 @@ Flags:
                                  GRPC Server.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
-      --grpc-server-tls-client-ca=""  
+      --grpc-server-tls-client-ca=""
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
@@ -333,14 +333,14 @@ Flags:
                                  Possible values are: "", "SHA256".
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
-      --http-address="0.0.0.0:10902"  
+      --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
       --http.config=""           [EXPERIMENTAL] Path to the configuration file
                                  that can enable TLS or authentication for all
                                  HTTP endpoints.
-      --label=<name>="<value>" ...  
+      --label=<name>="<value>" ...
                                  Labels to be applied to all generated metrics
                                  (repeated). Similar to external labels for
                                  Prometheus, used to identify ruler and its
@@ -357,13 +357,13 @@ Flags:
                                  LogStartAndFinishCall: Logs the start and
                                  finish call of the requests. NoLogCall: Disable
                                  request logging.
-      --objstore.config=<content>  
+      --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
                                  (mutually exclusive). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>  
+      --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
@@ -379,7 +379,7 @@ Flags:
                                  https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
-      --query.config-file=<file-path>  
+      --query.config-file=<file-path>
                                  Path to YAML file that contains query API
                                  servers configuration. See format details:
                                  https://thanos.io/tip/components/rule.md/#configuration.
@@ -387,15 +387,15 @@ Flags:
                                  '--query' and '--query.sd-files' flags.
       --query.http-method=POST   HTTP method to use when sending queries.
                                  Possible options: [GET, POST]
-      --query.sd-dns-interval=30s  
+      --query.sd-dns-interval=30s
                                  Interval between DNS resolutions.
-      --query.sd-files=<path> ...  
+      --query.sd-files=<path> ...
                                  Path to file that contains addresses of query
                                  API servers. The path can be a glob pattern
                                  (repeatable).
       --query.sd-interval=5m     Refresh interval to re-read file SD files.
                                  (used as a fallback)
-      --remote-write.config=<content>  
+      --remote-write.config=<content>
                                  Alternative to 'remote-write.config-file' flag
                                  (mutually exclusive). Content of YAML config
                                  for the remote-write configurations, that
@@ -407,7 +407,7 @@ Flags:
                                  ruler's TSDB. If an empty config (or file) is
                                  provided, the flag is ignored and ruler is run
                                  with its own TSDB.
-      --remote-write.config-file=<file-path>  
+      --remote-write.config-file=<file-path>
                                  Path to YAML config for the remote-write
                                  configurations, that specify servers where
                                  samples should be sent to (see
@@ -417,13 +417,13 @@ Flags:
                                  ruler's TSDB. If an empty config (or file) is
                                  provided, the flag is ignored and ruler is run
                                  with its own TSDB.
-      --request.logging-config=<content>  
+      --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content of YAML file
                                  with request logging configuration. See format
                                  details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging-config-file=<file-path>  
+      --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
@@ -431,18 +431,18 @@ Flags:
                                  an alert to Alertmanager.
       --rule-file=rules/ ...     Rule files that should be used by rule manager.
                                  Can be in glob format (repeated).
-      --shipper.upload-compacted  
+      --shipper.upload-compacted
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.
                                  Works only if compaction is disabled on
                                  Prometheus. Do it once and then disable the
                                  flag when done.
-      --tracing.config=<content>  
+      --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>  
+      --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
