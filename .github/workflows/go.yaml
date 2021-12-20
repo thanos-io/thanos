@@ -82,4 +82,4 @@ jobs:
         run: make test-e2e
 
       - name: Test
-        run: bin/gotesplit -total ${{ matrix.parallelism }} -index ${{ matrix.index }} ./... -- $GOTEST_OPTS
+        run: bin/gotesplit -total ${{ matrix.parallelism }} -index ${{ matrix.index }} ./... -- -failfast -timeout 10m -v
