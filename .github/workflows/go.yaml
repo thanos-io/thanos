@@ -79,7 +79,4 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
       - name: Preparing e2e docker-based tests.
-        run: make test-e2e
-
-      - name: Test
-        run: bin/gotesplit -total ${{ matrix.parallelism }} -index ${{ matrix.index }} ./test/e2e/... -- -failfast -timeout 10m -v
+        run: make test-e2e GH_PARALLEL=${{ matrix.parallelism }} GH_INDEX=${{ matrix.index }}
