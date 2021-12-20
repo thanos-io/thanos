@@ -274,13 +274,13 @@ test-local:
 test-e2e: ## Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
 test-e2e: docker
 	@echo ">> cleaning docker environment."
-	@docker system prune -f --volumes
+
 	@echo ">> cleaning e2e test garbage."
-	@rm -rf ./test/e2e/e2e_*
+
 	@echo ">> running /test/e2e tests."
 	# NOTE(bwplotka):
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 to limit to single CPU to reproduce small 1CPU machine.
-	@export GOTEST_OPTS=${GOTEST_OPTS}
+	@export GOTEST_OPTS= $(GOTEST_OPTS)
 
 .PHONY: test-e2e-local
 test-e2e-local: ## Runs all thanos e2e tests locally.
