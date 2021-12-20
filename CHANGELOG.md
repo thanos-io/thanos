@@ -8,7 +8,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## [v0.23.2](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.12.17
+## [v0.23.2-rc.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.12.20
 
 ### Fixed
 
