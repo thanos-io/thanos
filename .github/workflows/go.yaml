@@ -3,7 +3,6 @@ name: go
 on:
   push:
     branches:
-      - main
     tags:
   pull_request:
 
@@ -55,6 +54,11 @@ jobs:
       - name: Linting & vetting.
         run: make go-lint
   e2e:
+    strategy:
+      fail-fast: true
+      matrix:
+        parallelism: [3]
+        index: [0,1,2]  
     runs-on: ubuntu-latest
     name: Thanos end-to-end tests
     env:
@@ -74,4 +78,4 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
       - name: Run e2e docker-based tests.
-        run: make test-e2e
+        run: make test-e2e GH_PARALLEL=${{ matrix.parallelism }} GH_INDEX=${{ matrix.index }}
