@@ -55,6 +55,11 @@ jobs:
       - name: Linting & vetting.
         run: make go-lint
   e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        parallelism: [3]
+        index: [0,1,2]  
     runs-on: ubuntu-latest
     name: Thanos end-to-end tests
     env:
@@ -73,5 +78,8 @@ jobs:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
-      - name: Run e2e docker-based tests.
+      - name: Preparing e2e docker-based tests.
         run: make test-e2e
+
+      - name: Test
+        run: bin/gotesplit -total ${{ matrix.parallelism }} -index ${{ matrix.index }} ./... -- $GOTEST_OPTS

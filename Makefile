@@ -280,7 +280,7 @@ test-e2e: docker
 	@echo ">> running /test/e2e tests."
 	# NOTE(bwplotka):
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 to limit to single CPU to reproduce small 1CPU machine.
-	@go test $(GOTEST_OPTS) ./test/e2e/...
+	@export GOTEST_OPTS=${GOTEST_OPTS}
 
 .PHONY: test-e2e-local
 test-e2e-local: ## Runs all thanos e2e tests locally.
