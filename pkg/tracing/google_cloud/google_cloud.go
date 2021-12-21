@@ -8,14 +8,14 @@ import (
 	"os"
 
 	cloudtrace "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/semconv"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"gopkg.in/yaml.v2"
 )
 
@@ -33,7 +33,7 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 		return nil, err
 	}
 
-	exporter, err := cloudtrace.NewExporter(
+	exporter, err := cloudtrace.New(
 		cloudtrace.WithContext(ctx),
 		cloudtrace.WithProjectID(config.ProjectId),
 	)
@@ -46,14 +46,15 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 }
 
 func newTracerProvider(ctx context.Context, logger log.Logger, processor tracesdk.SpanProcessor, sampleFactor uint64, serviceName string) *tracesdk.TracerProvider {
-	fraction := 1 / float64(sampleFactor)
-	if sampleFactor == 0 {
-		fraction = 0
-	}
-
+	// Even if resource.New returns error, the resource will be valid - log the error and continue.
 	resource, err := resource.New(ctx, resource.WithAttributes(collectAttributes(serviceName)...))
 	if err != nil {
 		level.Warn(logger).Log("msg", "detecting resources for tracing provider failed", "err", err)
+	}
+
+	fraction := 1 / float64(sampleFactor)
+	if sampleFactor == 0 {
+		fraction = 0
 	}
 
 	tp := tracesdk.NewTracerProvider(

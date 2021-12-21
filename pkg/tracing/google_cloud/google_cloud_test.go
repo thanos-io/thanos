@@ -10,7 +10,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -152,7 +152,7 @@ func TestContextTracing_ForceTracing(t *testing.T) {
 	testutil.Equals(t, 3, countSampledSpans(exp.GetSpans()))
 }
 
-func countSampledSpans(ss []*tracesdk.SpanSnapshot) int {
+func countSampledSpans(ss tracetest.SpanStubs) int {
 	var count int
 	for _, s := range ss {
 		if s.SpanContext.IsSampled() {

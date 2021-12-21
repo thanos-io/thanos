@@ -30,6 +30,7 @@ func Bridge(tp *tracesdk.TracerProvider, l log.Logger) (opentracing.Tracer, io.C
 		level.Error(l).Log("msg", "OpenTelemetry ErrorHandler", "err", err)
 	}))
 	otel.SetTextMapPropagator(propagation.TraceContext{})
+	otel.SetTracerProvider(tp)
 
 	bridgeTracer, _ := bridge.NewTracerPair(tp.Tracer(""))
 	bridgeTracer.SetWarningHandler(func(warn string) {

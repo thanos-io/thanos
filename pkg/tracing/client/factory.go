@@ -20,7 +20,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/pkg/tracing/lightstep"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
-	"gopkg.in/yaml.v2"
 )
 
 type TracingProvider string

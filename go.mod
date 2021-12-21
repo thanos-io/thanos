@@ -7,7 +7,7 @@ require (
 	github.com/Azure/azure-storage-blob-go v0.13.0
 	github.com/Azure/go-autorest/autorest/adal v0.9.17
 	github.com/Azure/go-autorest/autorest/azure/auth v0.5.8
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v0.20.0
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.0.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/alecthomas/units v0.0.0-20210927113745-59d0afb8317a
 	github.com/alicebob/miniredis/v2 v2.14.3
@@ -72,10 +72,10 @@ require (
 	github.com/weaveworks/common v0.0.0-20210913144402-035033b78a78
 	go.elastic.co/apm v1.11.0
 	go.elastic.co/apm/module/apmot v1.11.0
-	go.opentelemetry.io/otel v0.20.0
-	go.opentelemetry.io/otel/bridge/opentracing v0.20.0
-	go.opentelemetry.io/otel/sdk v0.20.0
-	go.opentelemetry.io/otel/trace v0.20.0
+	go.opentelemetry.io/otel v1.3.0
+	go.opentelemetry.io/otel/bridge/opentracing v1.3.0
+	go.opentelemetry.io/otel/sdk v1.3.0
+	go.opentelemetry.io/otel/trace v1.3.0
 	go.uber.org/atomic v1.9.0
 	go.uber.org/automaxprocs v1.4.0
 	go.uber.org/goleak v1.1.12
@@ -125,8 +125,10 @@ require (
 	github.com/elastic/go-windows v1.0.1 // indirect
 	github.com/envoyproxy/go-control-plane v0.10.1 // indirect
 	github.com/envoyproxy/protoc-gen-validate v0.6.2 // indirect
-	github.com/felixge/httpsnoop v1.0.1 // indirect
+	github.com/felixge/httpsnoop v1.0.2 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
+	github.com/go-logr/logr v1.2.1 // indirect
+	github.com/go-logr/stdr v1.2.0 // indirect
 	github.com/go-openapi/analysis v0.20.0 // indirect
 	github.com/go-openapi/errors v0.20.0 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
@@ -188,7 +190,6 @@ require (
 	go.elastic.co/fastjson v1.1.0 // indirect
 	go.mongodb.org/mongo-driver v1.7.3 // indirect
 	go.opencensus.io v0.23.0 // indirect
-	go.opentelemetry.io/otel/metric v0.20.0 // indirect
 	golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359 // indirect
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
