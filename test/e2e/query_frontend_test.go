@@ -391,7 +391,7 @@ func TestQueryFrontend(t *testing.T) {
 // "The query splitting test case is flaky because we are using the current timestamp to send queries, which makes the splitting behavior non-deterministic"
 // (Wiard)
 // This should be resolved in a much better way, but for now it removes the flakyness.
-func DidItSplitValue(n float64, nightSwitch bool) float64 {
+func didItSplitValue(n float64, nightSwitch bool) float64 {
 
 	currentTime := time.Now()
 
@@ -497,13 +497,13 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 
 	// https://github.com/thanos-io/thanos/issues/3570
 	// "The query splitting test case is flaky because we are using the current timestamp to send queries, which makes the splitting behavior non-deterministic"
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(DidItSplitValue(1, true)), "cortex_cache_fetched_keys"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(didItSplitValue(1, true)), "cortex_cache_fetched_keys"))
 
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "cortex_cache_hits"))
 
 	// https://github.com/thanos-io/thanos/issues/3570
 	// "The query splitting test case is flaky because we are using the current timestamp to send queries, which makes the splitting behavior non-deterministic"
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(DidItSplitValue(1, false)), "thanos_frontend_split_queries_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(didItSplitValue(1, false)), "thanos_frontend_split_queries_total"))
 
 	// Run the same range query again, the result can be retrieved from cache directly.
 	rangeQuery(
@@ -531,8 +531,8 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 
 	// https://github.com/thanos-io/thanos/issues/3570
 	// "The query splitting test case is flaky because we are using the current timestamp to send queries, which makes the splitting behavior non-deterministic"
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(DidItSplitValue(2, false)), "thanos_frontend_split_queries_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(didItSplitValue(2, false)), "thanos_frontend_split_queries_total"))
 
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(DidItSplitValue(2, true)), "cortex_cache_fetched_keys"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(DidItSplitValue(1, true)), "cortex_cache_hits"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(didItSplitValue(2, true)), "cortex_cache_fetched_keys"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(didItSplitValue(1, true)), "cortex_cache_hits"))
 }
