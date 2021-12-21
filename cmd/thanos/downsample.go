@@ -251,7 +251,7 @@ func downsampleBucket(
 					errMsg = "downsampling to 60 min"
 				}
 				if err := processDownsampling(workerCtx, logger, bkt, m, dir, resolution, hashFunc, metrics); err != nil {
-          metrics.downsampleFailures.WithLabelValues(m.Thanos.GroupKey()).Inc()
+					metrics.downsampleFailures.WithLabelValues(m.Thanos.GroupKey()).Inc()
 					errCh <- errors.Wrap(err, errMsg)
 
 				}
