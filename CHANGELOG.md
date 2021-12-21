@@ -108,10 +108,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4123](https://github.com/thanos-io/thanos/pull/4123) Query: match external labels for exemplars API.
 
 ### Changed
-- 
+-
 
 ### Removed
-- 
+-
 
 ## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.04.28
 
