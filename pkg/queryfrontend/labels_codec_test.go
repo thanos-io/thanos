@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/weaveworks/common/httpgrpc"
 
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
@@ -194,7 +194,7 @@ func TestLabelsCodec_DecodeRequest(t *testing.T) {
 			testutil.Ok(t, err)
 
 			codec := NewThanosLabelsCodec(tc.partialResponse, 2*time.Hour)
-			req, err := codec.DecodeRequest(context.Background(), r)
+			req, err := codec.DecodeRequest(context.Background(), r, nil)
 			if tc.expectedError != nil {
 				testutil.Equals(t, tc.expectedError, err)
 			} else {
@@ -541,7 +541,7 @@ func BenchmarkLabelsCodecEncodeAndDecodeRequest(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			reqEnc, err := codec.EncodeRequest(ctx, req)
 			testutil.Ok(b, err)
-			_, err = codec.DecodeRequest(ctx, reqEnc)
+			_, err = codec.DecodeRequest(ctx, reqEnc, nil)
 			testutil.Ok(b, err)
 		}
 	})
@@ -562,7 +562,7 @@ func BenchmarkLabelsCodecEncodeAndDecodeRequest(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			reqEnc, err := codec.EncodeRequest(ctx, req)
 			testutil.Ok(b, err)
-			_, err = codec.DecodeRequest(ctx, reqEnc)
+			_, err = codec.DecodeRequest(ctx, reqEnc, nil)
 			testutil.Ok(b, err)
 		}
 	})

@@ -12,9 +12,11 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
+
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -140,7 +142,7 @@ func matchPostings(t testing.TB, ix tsdb.IndexReader, m *labels.Matcher) index.P
 }
 
 func toUint64Postings(p index.Postings) (*uint64Postings, error) {
-	var vals []uint64
+	var vals []storage.SeriesRef
 	for p.Next() {
 		vals = append(vals, p.At())
 	}
@@ -149,11 +151,11 @@ func toUint64Postings(p index.Postings) (*uint64Postings, error) {
 
 // Postings with no decoding step.
 type uint64Postings struct {
-	vals []uint64
+	vals []storage.SeriesRef
 	ix   int
 }
 
-func (p *uint64Postings) At() uint64 {
+func (p *uint64Postings) At() storage.SeriesRef {
 	if p.ix < 0 || p.ix >= len(p.vals) {
 		return 0
 	}
@@ -168,7 +170,7 @@ func (p *uint64Postings) Next() bool {
 	return false
 }
 
-func (p *uint64Postings) Seek(x uint64) bool {
+func (p *uint64Postings) Seek(x storage.SeriesRef) bool {
 	if p.At() >= x {
 		return true
 	}
@@ -200,14 +202,14 @@ func BenchmarkEncodePostings(b *testing.B) {
 	const max = 1000000
 	r := rand.New(rand.NewSource(0))
 
-	p := make([]uint64, max)
+	p := make([]storage.SeriesRef, max)
 
 	for ix := 1; ix < len(p); ix++ {
 		// Use normal distribution, with stddev=64 (i.e. most values are < 64).
 		// This is very rough approximation of experiments with real blocks.v
 		d := math.Abs(r.NormFloat64()*64) + 1
 
-		p[ix] = p[ix-1] + uint64(d)
+		p[ix] = p[ix-1] + storage.SeriesRef(d)
 	}
 
 	for _, count := range []int{10000, 100000, 1000000} {

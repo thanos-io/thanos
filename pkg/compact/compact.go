@@ -14,23 +14,25 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/thanos-io/thanos/pkg/extprom"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type ResolutionLevel int64
@@ -667,6 +669,55 @@ func (ds *DownsampleProgressCalculator) ProgressCalculate(ctx context.Context, g
 	return nil
 }
 
+// RetentionProgressMetrics contains Prometheus metrics related to retention progress.
+type RetentionProgressMetrics struct {
+	NumberOfBlocksToDelete *prometheus.GaugeVec
+}
+
+// RetentionProgressCalculator contains RetentionProgressMetrics, which are updated during the retention simulation process.
+type RetentionProgressCalculator struct {
+	*RetentionProgressMetrics
+	retentionByResolution map[ResolutionLevel]time.Duration
+}
+
+// NewRetentionProgressCalculator creates a new RetentionProgressCalculator.
+func NewRetentionProgressCalculator(reg prometheus.Registerer, retentionByResolution map[ResolutionLevel]time.Duration) *RetentionProgressCalculator {
+	return &RetentionProgressCalculator{
+		retentionByResolution: retentionByResolution,
+		RetentionProgressMetrics: &RetentionProgressMetrics{
+			NumberOfBlocksToDelete: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_deletion_blocks",
+				Help: "number of blocks that have crossed their retention period",
+			}, []string{"group"}),
+		},
+	}
+}
+
+// ProgressCalculate calculates the number of blocks to be retained for the given groups.
+func (rs *RetentionProgressCalculator) ProgressCalculate(ctx context.Context, groups []*Group) error {
+	groupBlocks := make(map[string]int, len(groups))
+
+	for _, group := range groups {
+		for _, m := range group.metasByMinTime {
+			retentionDuration := rs.retentionByResolution[ResolutionLevel(m.Thanos.Downsample.Resolution)]
+			if retentionDuration.Seconds() == 0 {
+				continue
+			}
+			maxTime := time.Unix(m.MaxTime/1000, 0)
+			if time.Now().After(maxTime.Add(retentionDuration)) {
+				groupBlocks[group.key]++
+			}
+		}
+	}
+
+	rs.RetentionProgressMetrics.NumberOfBlocksToDelete.Reset()
+	for key, blocks := range groupBlocks {
+		rs.RetentionProgressMetrics.NumberOfBlocksToDelete.WithLabelValues(key).Add(float64(blocks))
+	}
+
+	return nil
+}
+
 // Planner returns blocks to compact.
 type Planner interface {
 	// Plan returns a list of blocks that should be compacted into single one.
@@ -715,7 +766,11 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 		return false, ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
 	}
 
-	shouldRerun, compID, err := cg.compact(ctx, subDir, planner, comp)
+	var err error
+	tracing.DoInSpanWithErr(ctx, "compaction_group", func(ctx context.Context) error {
+		shouldRerun, compID, err = cg.compact(ctx, subDir, planner, comp)
+		return err
+	}, opentracing.Tags{"group.key": cg.Key()})
 	if err != nil {
 		cg.compactionFailures.Inc()
 		return false, ulid.ULID{}, err
@@ -931,7 +986,11 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		overlappingBlocks = true
 	}
 
-	toCompact, err := planner.Plan(ctx, cg.metasByMinTime)
+	var toCompact []*metadata.Meta
+	tracing.DoInSpanWithErr(ctx, "compaction_planning", func(ctx context.Context) error {
+		toCompact, err = planner.Plan(ctx, cg.metasByMinTime)
+		return err
+	})
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "plan compaction")
 	}
@@ -959,12 +1018,20 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			uniqueSources[s] = struct{}{}
 		}
 
-		if err := block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir); err != nil {
+		tracing.DoInSpanWithErr(ctx, "compaction_block_download", func(ctx context.Context) error {
+			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir)
+			return err
+		}, opentracing.Tags{"block.id": meta.ULID})
+		if err != nil {
 			return false, ulid.ULID{}, retry(errors.Wrapf(err, "download block %s", meta.ULID))
 		}
 
 		// Ensure all input blocks are valid.
-		stats, err := block.GatherIndexHealthStats(cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+		var stats block.HealthStats
+		tracing.DoInSpanWithErr(ctx, "compaction_block_health_stats", func(ctx context.Context) error {
+			stats, err = block.GatherIndexHealthStats(cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+			return err
+		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
 			return false, ulid.ULID{}, errors.Wrapf(err, "gather index issues for block %s", bdir)
 		}
@@ -990,7 +1057,10 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", fmt.Sprintf("%v", toCompactDirs), "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
 	begin = time.Now()
-	compID, err = comp.Compact(dir, toCompactDirs, nil)
+	tracing.DoInSpanWithErr(ctx, "compaction", func(ctx context.Context) error {
+		compID, err = comp.Compact(dir, toCompactDirs, nil)
+		return err
+	})
 	if err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact blocks %v", toCompactDirs))
 	}
@@ -1032,7 +1102,11 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	}
 
 	// Ensure the output block is valid.
-	if err := block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime); !cg.acceptMalformedIndex && err != nil {
+	tracing.DoInSpanWithErr(ctx, "compaction_verify_index", func(ctx context.Context) error {
+		err = block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime)
+		return err
+	})
+	if !cg.acceptMalformedIndex && err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
@@ -1046,7 +1120,11 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	begin = time.Now()
 
-	if err := block.Upload(ctx, cg.logger, cg.bkt, bdir, cg.hashFunc); err != nil {
+	tracing.DoInSpanWithErr(ctx, "compaction_block_upload", func(ctx context.Context) error {
+		err = block.Upload(ctx, cg.logger, cg.bkt, bdir, cg.hashFunc)
+		return err
+	})
+	if err != nil {
 		return false, ulid.ULID{}, retry(errors.Wrapf(err, "upload of %s failed", compID))
 	}
 	level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
@@ -1055,7 +1133,11 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	// into the next planning cycle.
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
 	for _, meta := range toCompact {
-		if err := cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String())); err != nil {
+		tracing.DoInSpanWithErr(ctx, "compaction_block_delete", func(ctx context.Context) error {
+			err = cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()))
+			return err
+		}, opentracing.Tags{"block.id": meta.ULID})
+		if err != nil {
 			return false, ulid.ULID{}, retry(errors.Wrapf(err, "mark old block for deletion from bucket"))
 		}
 		cg.groupGarbageCollectedBlocks.Inc()

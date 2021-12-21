@@ -8,11 +8,13 @@ import (
 	"io"
 	"strings"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
 	"github.com/thanos-io/thanos/pkg/tracing/google_cloud"
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"

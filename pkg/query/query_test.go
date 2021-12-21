@@ -11,8 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/storage"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -53,7 +54,7 @@ func TestQuerier_Proxy(t *testing.T) {
 					name:        fmt.Sprintf("store number %v", i),
 				})
 			}
-			return q(true, nil, nil, 0, false, false)
+			return q(true, nil, nil, 0, false, false, false)
 		}
 
 		for _, fn := range files {

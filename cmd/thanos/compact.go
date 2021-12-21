@@ -15,8 +15,8 @@ import (
 
 	"github.com/alecthomas/units"
 	extflag "github.com/efficientgo/tools/extkingpin"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -42,6 +42,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
@@ -230,6 +232,7 @@ func runCompact(
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt, conf.blockMetaFetchConcurrency)
 	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig)
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
+	timePartitionMetaFilter := block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime)
 
 	baseMetaFetcher, err := block.NewBaseFetcher(logger, conf.blockMetaFetchConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
@@ -269,6 +272,7 @@ func runCompact(
 				ignoreDeletionMarkFilter,
 				duplicateBlocksFilter,
 				noCompactMarkerFilter,
+				timePartitionMetaFilter,
 			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels)},
 		)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
@@ -300,6 +304,7 @@ func runCompact(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	ctx = tracing.ContextWithTracer(ctx, tracer)
 
 	defer func() {
 		if rerr != nil {
@@ -459,47 +464,6 @@ func runCompact(
 		return cleanPartialMarked()
 	}
 
-	if conf.compactionProgressMetrics {
-		g.Add(func() error {
-			ps := compact.NewCompactionProgressCalculator(reg, tsdbPlanner)
-			var ds *compact.DownsampleProgressCalculator
-			if !conf.disableDownsampling {
-				ds = compact.NewDownsampleProgressCalculator(reg)
-			}
-
-			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
-
-				if err := sy.SyncMetas(ctx); err != nil {
-					return errors.Wrapf(err, "could not sync metas")
-				}
-
-				metas := sy.Metas()
-				groups, err := grouper.Groups(metas)
-				if err != nil {
-					return errors.Wrapf(err, "could not group metadata")
-				}
-
-				if err = ps.ProgressCalculate(ctx, groups); err != nil {
-					return errors.Wrapf(err, "could not calculate compaction progress")
-				}
-
-				if !conf.disableDownsampling {
-					groups, err = grouper.Groups(metas)
-					if err != nil {
-						return errors.Wrapf(err, "could not group metadata into downsample groups")
-					}
-					if err := ds.ProgressCalculate(ctx, groups); err != nil {
-						return errors.Wrapf(err, "could not calculate downsampling progress")
-					}
-				}
-
-				return nil
-			})
-		}, func(err error) {
-			cancel()
-		})
-	}
-
 	g.Add(func() error {
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
@@ -578,6 +542,58 @@ func runCompact(
 			})
 		}
 
+		// Periodically calculate the progress of compaction, downsampling and retention.
+		if conf.progressCalculateInterval > 0 {
+			g.Add(func() error {
+				ps := compact.NewCompactionProgressCalculator(reg, tsdbPlanner)
+				rs := compact.NewRetentionProgressCalculator(reg, retentionByResolution)
+				var ds *compact.DownsampleProgressCalculator
+				if !conf.disableDownsampling {
+					ds = compact.NewDownsampleProgressCalculator(reg)
+				}
+
+				return runutil.Repeat(conf.progressCalculateInterval, ctx.Done(), func() error {
+
+					if err := sy.SyncMetas(ctx); err != nil {
+						return errors.Wrapf(err, "could not sync metas")
+					}
+
+					metas := sy.Metas()
+					groups, err := grouper.Groups(metas)
+					if err != nil {
+						return errors.Wrapf(err, "could not group metadata for compaction")
+					}
+
+					if err = ps.ProgressCalculate(ctx, groups); err != nil {
+						return errors.Wrapf(err, "could not calculate compaction progress")
+					}
+
+					retGroups, err := grouper.Groups(metas)
+					if err != nil {
+						return errors.Wrapf(err, "could not group metadata for retention")
+					}
+
+					if err = rs.ProgressCalculate(ctx, retGroups); err != nil {
+						return errors.Wrapf(err, "could not calculate retention progress")
+					}
+
+					if !conf.disableDownsampling {
+						groups, err = grouper.Groups(metas)
+						if err != nil {
+							return errors.Wrapf(err, "could not group metadata into downsample groups")
+						}
+						if err := ds.ProgressCalculate(ctx, groups); err != nil {
+							return errors.Wrapf(err, "could not calculate downsampling progress")
+						}
+					}
+
+					return nil
+				})
+			}, func(err error) {
+				cancel()
+			})
+		}
+
 		g.Add(func() error {
 			iterCtx, iterCancel := context.WithTimeout(ctx, conf.blockViewerSyncBlockTimeout)
 			_, _, _ = f.Fetch(iterCtx)
@@ -632,12 +648,11 @@ type compactConfig struct {
 	enableVerticalCompaction                       bool
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
-	compactionProgressMetrics                      bool
+	progressCalculateInterval                      time.Duration
+	filterConf                                     *store.FilterConfig
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
-	cmd.Flag("progress-metrics", "Enables the progress metrics, indicating the progress of compaction and downsampling").Default("true").BoolVar(&cc.compactionProgressMetrics)
-
 	cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").BoolVar(&cc.haltOnError)
 	cmd.Flag("debug.accept-malformed-index",
@@ -684,6 +699,8 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("5m").DurationVar(&cc.blockViewerSyncBlockTimeout)
 	cmd.Flag("compact.cleanup-interval", "How often we should clean up partially uploaded blocks and blocks with deletion mark in the background when --wait has been enabled. Setting it to \"0s\" disables it - the cleaning will only happen at the end of an iteration.").
 		Default("5m").DurationVar(&cc.cleanupBlocksInterval)
+	cmd.Flag("compact.progress-interval", "Frequency of calculating the compaction progress in the background when --wait has been enabled. Setting it to \"0s\" disables it. Now compaction, downsampling and retention progress are supported.").
+		Default("5m").DurationVar(&cc.progressCalculateInterval)
 
 	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").IntVar(&cc.compactionConcurrency)
@@ -725,6 +742,12 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&cc.hashFunc, "SHA256", "")
+
+	cc.filterConf = &store.FilterConfig{}
+	cmd.Flag("min-time", "Start of time range limit to compact. Thanos Compactor will compact only blocks, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("0000-01-01T00:00:00Z").SetValue(&cc.filterConf.MinTime)
+	cmd.Flag("max-time", "End of time range limit to compact. Thanos Compactor will compact only blocks, which happened earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("9999-12-31T23:59:59Z").SetValue(&cc.filterConf.MaxTime)
 
 	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
 

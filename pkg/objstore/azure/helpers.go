@@ -17,8 +17,8 @@ import (
 	blob "github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -104,6 +104,10 @@ func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.
 		retryOptions.TryTimeout = time.Until(deadline)
 	}
 
+	client := http.Client{
+		Transport: DefaultTransport(conf),
+	}
+
 	p := blob.NewPipeline(credentials, blob.PipelineOptions{
 		Retry:     retryOptions,
 		Telemetry: blob.TelemetryOptions{Value: "Thanos"},
@@ -117,10 +121,6 @@ func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.
 		},
 		HTTPSender: pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 			return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-				client := http.Client{
-					Transport: DefaultTransport(conf),
-				}
-
 				resp, err := client.Do(request.WithContext(ctx))
 
 				return pipeline.NewHTTPResponse(resp), err

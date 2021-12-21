@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -36,6 +36,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 		e,
 		"prom1",
 		defaultPromConfig("ha", 0, "", "", "localhost:9090", "localhost:80"),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
@@ -43,6 +44,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 		e,
 		"prom2",
 		defaultPromConfig("ha", 1, "", "", "localhost:9090", "localhost:80"),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)

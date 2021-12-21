@@ -180,7 +180,7 @@ Thanos receivers identify the replica number of a write request via a 0-indexed 
 --receive.replica-header=THANOS-REPLICA
 ```
 
-If the header is present in a request, the receiver will look for the replica-th node of the hashring that should handle the request. If it is the receiver itself, then the request is stored locally, else it is forwarded to the correct endpoint. If the replica number of the request exceeds the configured replication factor or the total number of nodes in the target hashring, the receiver responds with an error. If the header is not present in a request, then the receiver will replicate the request to `REPLCIATION_FACTOR` nodes, setting the replica header on each request to ensure it is not replicated further.
+If the header is present in a request, the receiver will look for the replica-th node of the hashring that should handle the request. If it is the receiver itself, then the request is stored locally, else it is forwarded to the correct endpoint. If the replica number of the request exceeds the configured replication factor or the total number of nodes in the target hashring, the receiver responds with an error. If the header is not present in a request, then the receiver will replicate the request to `REPLICATION_FACTOR` nodes, setting the replica header on each request to ensure it is not replicated further.
 
 Note that replicating write requests may require additional compaction and deduplication of object storage as well as significantly increase infrastructure cost.
 

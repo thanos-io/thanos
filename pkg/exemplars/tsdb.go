@@ -6,7 +6,7 @@ package exemplars
 import (
 	"github.com/gogo/status"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"google.golang.org/grpc/codes"
 
