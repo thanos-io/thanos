@@ -387,6 +387,27 @@ func TestQueryFrontend(t *testing.T) {
 	})
 }
 
+// https://github.com/thanos-io/thanos/issues/3570
+// "The query splitting test case is flaky because we are using the current timestamp to send queries, which makes the splitting behavior non-deterministic"
+// (Wiard)
+// This should be resolved in a much better way, but for now it removes the flakyness.
+func DidItSplitValue(n float64, nightSwitch bool) float64 {
+
+	currentTime := time.Now()
+
+	// Some metrics DO NOT increase if the query range is from 'now -1hour' if it the hour is "0". Then just return the expected value.
+	if nightSwitch && currentTime.Hour() == 0 {
+		return n
+	}
+
+	// For the rest, if it is hour "0" or "1", the query is split, and we should expect double it's values.
+	if currentTime.Hour() == 1 || currentTime.Hour() == 0 {
+		return n * 2
+	}
+
+	return n
+}
+
 func TestQueryFrontendMemcachedCache(t *testing.T) {
 	t.Parallel()
 
@@ -474,11 +495,15 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range"))),
 	)
 
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_fetched_keys"))
+	// https://github.com/thanos-io/thanos/issues/3570
+	// "The query splitting test case is flaky because we are using the current timestamp to send queries, which makes the splitting behavior non-deterministic"
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(DidItSplitValue(1, true)), "cortex_cache_fetched_keys"))
+
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "cortex_cache_hits"))
 
-	// Query is only 2h so it won't be split.
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_frontend_split_queries_total"))
+	// https://github.com/thanos-io/thanos/issues/3570
+	// "The query splitting test case is flaky because we are using the current timestamp to send queries, which makes the splitting behavior non-deterministic"
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(DidItSplitValue(1, false)), "thanos_frontend_split_queries_total"))
 
 	// Run the same range query again, the result can be retrieved from cache directly.
 	rangeQuery(
@@ -504,10 +529,10 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range"))),
 	)
 
-	// Query is only 2h so it won't be split.
-	// If it was split this would be increase by more then 1.
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "thanos_frontend_split_queries_total"))
+	// https://github.com/thanos-io/thanos/issues/3570
+	// "The query splitting test case is flaky because we are using the current timestamp to send queries, which makes the splitting behavior non-deterministic"
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(DidItSplitValue(2, false)), "thanos_frontend_split_queries_total"))
 
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_cache_fetched_keys"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_hits"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(DidItSplitValue(2, true)), "cortex_cache_fetched_keys"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(DidItSplitValue(1, true)), "cortex_cache_hits"))
 }
