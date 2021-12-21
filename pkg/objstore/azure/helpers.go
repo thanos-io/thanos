@@ -18,6 +18,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -140,7 +141,7 @@ func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.
 }
 
 func DefaultTransport(config Config) (*http.Transport, error) {
-	tlsConfig, err := NewTLSConfig(&config.HTTPConfig.TLSConfig)
+	tlsConfig, err := objstore.NewTLSConfig(&config.HTTPConfig.TLSConfig)
 	if err != nil {
 		return nil, err
 	}
