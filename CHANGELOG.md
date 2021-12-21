@@ -36,6 +36,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4917](https://github.com/thanos-io/thanos/pull/4917) Query: add initial query pushdown for a subset of aggregations. Can be enabled with `--enable-feature=query-pushdown` on Thanos Query.
 - [#4888](https://github.com/thanos-io/thanos/pull/4888) Cache: support redis cache backend.
 - [#4946](https://github.com/thanos-io/thanos/pull/4946) Store: Support tls_config configuration for the s3 minio client.
+- [#4974](https://github.com/thanos-io/thanos/pull/4974) Store: Support tls_config configuration for connecting with Azure storage.
 
 ### Fixed
 

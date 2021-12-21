@@ -347,6 +347,12 @@ config:
     max_idle_conns_per_host: 0
     max_conns_per_host: 0
     disable_compression: false
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
 ```
 
 If `msi_resource` is used, authentication is done via system-assigned managed identity. The value for Azure should be `https://<storage-account-name>.blob.core.windows.net`.
