@@ -456,17 +456,18 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 	metrics.Synced.WithLabelValues(NoMeta).Set(resp.noMetas)
 	metrics.Synced.WithLabelValues(CorruptedMeta).Set(resp.corruptedMetas)
 
-	for _, filter := range filters {
-		// NOTE: filter can update synced metric accordingly to the reason of the exclude.
-		if err := filter.Filter(ctx, metas, metrics.Synced); err != nil {
-			return nil, nil, errors.Wrap(err, "filter metas")
-		}
-	}
-
+	// Modifying first means we potentially waste some effort, but lets filters see the same data the clients will, which is important for correct deduplication.
 	for _, m := range modifiers {
 		// NOTE: modifier can update modified metric accordingly to the reason of the modification.
 		if err := m.Modify(ctx, metas, metrics.Modified); err != nil {
 			return nil, nil, errors.Wrap(err, "modify metas")
+		}
+	}
+
+	for _, filter := range filters {
+		// NOTE: filter can update synced metric accordingly to the reason of the exclude.
+		if err := filter.Filter(ctx, metas, metrics.Synced); err != nil {
+			return nil, nil, errors.Wrap(err, "filter metas")
 		}
 	}
 
