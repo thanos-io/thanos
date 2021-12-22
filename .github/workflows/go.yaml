@@ -10,6 +10,11 @@ on:
 # TODO(bwplotka): Add tests here.
 jobs:
   cross-build-check:
+    strategy:
+      fail-fast: true
+      matrix:
+        parallelism: [2]
+        index: [0,1]  
     runs-on: ubuntu-latest
     name: Go build for different platform"
     env:
@@ -29,7 +34,7 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
       - name: Cross build check.
-        run: make crossbuild
+        run: make crossbuild CI_PARALLELISM=${{ matrix.parallelism }} CI_PARALLELISM_THREAD=${{ matrix.index }}
   lint:
     runs-on: ubuntu-latest
     name: Linters (Static Analysis) for Go
