@@ -387,12 +387,12 @@ func TestQueryFrontend(t *testing.T) {
 	})
 }
 
-// (Wiard) Query splitting behaviour is somewhat non-deterministric, due to the fact that we use a literal timestamp.FromTime(now.Add(-time.Hour).
+// (Wiard) Query splitting behavior is somewhat non-deterministric, due to the fact that we use a literal timestamp.FromTime(now.Add(-time.Hour).
 // If the start and end time falls between a new day (passed 23:59), it will see this as '24h' (default --query-range.split-interval).
 // My guess is that certain behavior has an underlying bug or that I'm a lost in the complexity.
 // It will need to double the testing values if the hour is "1" for thanos_frontend_split_queries_total and cortex_cache_*
 // However, only thanos_frontend_split_queries_total will need to double its value on hour 0. cortex_cache_*'s do not.
-// This test needs to be fixed properly and possibly requires more debugging, especially on the non-logical behaviour (or more documentation is required).
+// This test needs to be fixed properly and possibly requires more debugging, especially on the non-logical behavior (or more documentation is required).
 // https://github.com/thanos-io/thanos/issues/3570 - however, for now it won't fail tests if ran between hour 0 and 1.
 func doubleValueIfSplit(n float64, whenPartialOvernight bool) float64 {
 
