@@ -259,16 +259,20 @@ func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *store
 
 	externalLbls := p.externalLabelsFn()
 	for _, vector := range matrix {
-		lbls := make([]labels.Label, 0, len(externalLbls)+len(vector.Metric))
+		seriesLbls := labels.Labels(make([]labels.Label, 0, len(vector.Metric)))
+
 		// Attach labels from samples.
 		for k, v := range vector.Metric {
-			lbls = append(lbls, labels.FromStrings(string(k), string(v))...)
+			seriesLbls = append(seriesLbls, labels.FromStrings(string(k), string(v))...)
 		}
+		sort.Slice(seriesLbls, func(i, j int) bool {
+			return seriesLbls.Less(i, j)
+		})
 		// Attach external labels for compatibility with remote read.
-		lbls = append(lbls, externalLbls...)
+		finalLbls := labelpb.ExtendSortedLabels(seriesLbls, externalLbls)
 
 		series := &prompb.TimeSeries{
-			Labels:  labelpb.ZLabelsFromPromLabels(lbls),
+			Labels:  labelpb.ZLabelsFromPromLabels(finalLbls),
 			Samples: prompb.SamplesFromSamplePairs(vector.Values),
 		}
 
