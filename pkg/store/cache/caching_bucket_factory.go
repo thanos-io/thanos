@@ -104,10 +104,17 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	case string(GroupcacheBucketCacheProvider):
 		const basePath = "/_galaxycache/"
 
-		c, err = cache.NewGroupcache(logger, reg, backendConfig, basePath, r, bucket,
-			isTSDBChunkFile, isMetaFile, isBlocksRootDir,
-			config.MetafileExistsTTL, config.MetafileDoesntExistTTL, config.MetafileContentTTL,
-			config.ChunkObjectAttrsTTL, config.ChunkSubrangeTTL, config.BlocksIterTTL)
+		groupcacheCfg := cache.NewCachingBucketConfig()
+
+		// Configure cache.
+		groupcacheCfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectAttrsTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
+		groupcacheCfg.CacheExists("meta.jsons", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
+		groupcacheCfg.CacheGet("meta.jsons", c, isMetaFile, int(config.MetafileMaxSize), config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
+
+		// Cache Iter requests for root.
+		groupcacheCfg.CacheIter("blocks-iter", c, isBlocksRootDir, config.BlocksIterTTL, JSONIterCodec{})
+
+		c, err = cache.NewGroupcache(logger, reg, backendConfig, basePath, r, bucket, groupcacheCfg)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create groupcache")
 		}
@@ -124,7 +131,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 
 	// Include interactions with cache in the traces.
 	c = cache.NewTracingCache(c)
-	cfg := NewCachingBucketConfig()
+	cfg := cache.NewCachingBucketConfig()
 
 	// Configure cache.
 	cfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectAttrsTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)

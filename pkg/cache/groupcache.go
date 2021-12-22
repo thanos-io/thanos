@@ -78,21 +78,18 @@ func parseGroupcacheConfig(conf []byte) (GroupcacheConfig, error) {
 }
 
 // NewGroupcache creates a new Groupcache instance.
-func NewGroupcache(logger log.Logger, reg prometheus.Registerer, conf []byte, basepath string, r *route.Router, bucket objstore.Bucket,
-	isTSDBChunkFile, isMetaFile, isBlocksRootDir func(path string) bool,
-	MetaFileExistsTTL, MetafileDoesntExistTTL, MetafileContentTTL, ChunkObjectAttrsTTL, ChunkSubrangeTTL, BlocksIterTTL time.Duration) (*Groupcache, error) {
+func NewGroupcache(logger log.Logger, reg prometheus.Registerer, conf []byte, basepath string, r *route.Router, bucket objstore.Bucket, cfg *CachingBucketConfig) (*Groupcache, error) {
 	config, err := parseGroupcacheConfig(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewGroupcacheWithConfig(logger, reg, config, basepath, r, bucket, isTSDBChunkFile, isMetaFile, isBlocksRootDir, MetaFileExistsTTL, MetafileDoesntExistTTL, MetafileContentTTL, ChunkObjectAttrsTTL, ChunkSubrangeTTL, BlocksIterTTL)
+	return NewGroupcacheWithConfig(logger, reg, config, basepath, r, bucket, cfg)
 }
 
 // NewGroupcacheWithConfig creates a new Groupcache instance with the given config.
 func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf GroupcacheConfig, basepath string, r *route.Router, bucket objstore.Bucket,
-	isTSDBChunkFile, isMetaFile, isBlocksRootDir func(path string) bool,
-	MetaFileExistsTTL, MetafileDoesntExistTTL, MetafileContentTTL, ChunkObjectAttrsTTL, ChunkSubrangeTTL, BlocksIterTTL time.Duration) (*Groupcache, error) {
+	cfg *CachingBucketConfig) (*Groupcache, error) {
 	httpProto := galaxyhttp.NewHTTPFetchProtocol(&galaxyhttp.HTTPOptions{
 		BasePath: basepath,
 	})
@@ -135,6 +132,12 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 
 			switch parsedData.Verb {
 			case cachekey.AttributesVerb:
+				_, attrCfg := cfg.FindAttributesConfig(parsedData.Name)
+				if attrCfg == nil {
+					// TODO: Debug this. Why? Attributes get called for Chunks.
+					panic("caching bucket layer must not call on unconfigured paths")
+				}
+
 				attrs, err := bucket.Attributes(ctx, parsedData.Name)
 				if err != nil {
 					return err
@@ -145,11 +148,13 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 					return err
 				}
 
-				if isTSDBChunkFile(parsedData.Name) {
-					return dest.UnmarshalBinary(finalAttrs, time.Now().Add(ChunkObjectAttrsTTL))
-				}
-				panic("caching bucket layer must not call on unconfigured paths")
+				return dest.UnmarshalBinary(finalAttrs, time.Now().Add(attrCfg.TTL))
 			case cachekey.IterVerb:
+				_, iterCfg := cfg.FindIterConfig(parsedData.Name)
+				if iterCfg == nil {
+					panic("caching bucket layer must not call on unconfigured paths")
+				}
+
 				var list []string
 				if err := bucket.Iter(ctx, parsedData.Name, func(s string) error {
 					list = append(list, s)
@@ -163,11 +168,12 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 					return err
 				}
 
-				if isBlocksRootDir(parsedData.Name) {
-					return dest.UnmarshalBinary(encodedList, time.Now().Add(BlocksIterTTL))
-				}
-				panic("caching bucket layer must not call on unconfigured paths")
+				return dest.UnmarshalBinary(encodedList, time.Now().Add(iterCfg.TTL))
 			case cachekey.ContentVerb:
+				_, contentCfg := cfg.FindGetConfig(parsedData.Name)
+				if contentCfg == nil {
+					panic("caching bucket layer must not call on unconfigured paths")
+				}
 				rc, err := bucket.Get(ctx, parsedData.Name)
 				if err != nil {
 					return err
@@ -179,27 +185,28 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 					return err
 				}
 
-				if isMetaFile(parsedData.Name) {
-					return dest.UnmarshalBinary(b, time.Now().Add(MetafileContentTTL))
-				}
-				panic("caching bucket layer must not call on unconfigured paths")
-
+				return dest.UnmarshalBinary(b, time.Now().Add(contentCfg.ContentTTL))
 			case cachekey.ExistsVerb:
+				_, existsCfg := cfg.FindExistConfig(parsedData.Name)
+				if existsCfg == nil {
+					panic("caching bucket layer must not call on unconfigured paths")
+				}
 				exists, err := bucket.Exists(ctx, parsedData.Name)
 				if err != nil {
 					return err
 				}
 
-				if isMetaFile(parsedData.Name) {
-					if exists {
-						return dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)), time.Now().Add(MetaFileExistsTTL))
-					} else {
-						return dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)), time.Now().Add(MetafileDoesntExistTTL))
-					}
+				if exists {
+					return dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)), time.Now().Add(existsCfg.ExistsTTL))
+				} else {
+					return dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)), time.Now().Add(existsCfg.DoesntExistTTL))
 				}
-				panic("caching bucket layer must not call on unconfigured paths")
 
 			case cachekey.SubrangeVerb:
+				_, subrangeCfg := cfg.FindGetRangeConfig(parsedData.Name)
+				if subrangeCfg == nil {
+					panic("caching bucket layer must not call on unconfigured paths")
+				}
 				rc, err := bucket.GetRange(ctx, parsedData.Name, parsedData.Start, parsedData.End-parsedData.Start)
 				if err != nil {
 					return err
@@ -211,10 +218,7 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 					return err
 				}
 
-				if isTSDBChunkFile(parsedData.Name) {
-					return dest.UnmarshalBinary(b, time.Now().Add(ChunkSubrangeTTL))
-				}
-				panic("caching bucket layer must not call on unconfigured paths")
+				return dest.UnmarshalBinary(b, time.Now().Add(subrangeCfg.SubrangeTTL))
 
 			}
 

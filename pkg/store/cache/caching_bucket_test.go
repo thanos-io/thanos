@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 
+	thanoscache "github.com/thanos-io/thanos/pkg/cache"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/cache/cachekey"
@@ -236,7 +237,7 @@ func TestChunksCaching(t *testing.T) {
 				tc.init()
 			}
 
-			cfg := NewCachingBucketConfig()
+			cfg := thanoscache.NewCachingBucketConfig()
 			cfg.CacheGetRange("chunks", cache, isTSDBChunkFile, subrangeSize, time.Hour, time.Hour, tc.maxGetRangeRequests)
 
 			cachingBucket, err := NewCachingBucket(inmem, cfg, nil, nil)
@@ -354,7 +355,7 @@ func TestMergeRanges(t *testing.T) {
 func TestInvalidOffsetAndLength(t *testing.T) {
 	b := &testBucket{objstore.NewInMemBucket()}
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	cfg.CacheGetRange("chunks", newMockCache(), func(string) bool { return true }, 10000, time.Hour, time.Hour, 3)
 
 	c, err := NewCachingBucket(b, cfg, nil, nil)
@@ -398,7 +399,7 @@ func TestCachedIter(t *testing.T) {
 	cache := newMockCache()
 
 	const cfgName = "dirs"
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	cfg.CacheIter(cfgName, cache, func(string) bool { return true }, 5*time.Minute, JSONIterCodec{})
 
 	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
@@ -460,7 +461,7 @@ func TestExists(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "test"
 	cfg.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
 
@@ -486,7 +487,7 @@ func TestExistsCachingDisabled(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "test"
 	cfg.CacheExists(cfgName, cache, func(string) bool { return false }, 10*time.Minute, 2*time.Minute)
 
@@ -523,7 +524,7 @@ func TestGet(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "metafile"
 	cfg.CacheGet(cfgName, cache, matchAll, 1024, 10*time.Minute, 10*time.Minute, 2*time.Minute)
 	cfg.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
@@ -554,7 +555,7 @@ func TestGetTooBigObject(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "metafile"
 	// Only allow 5 bytes to be cached.
 	cfg.CacheGet(cfgName, cache, matchAll, 5, 10*time.Minute, 10*time.Minute, 2*time.Minute)
@@ -577,7 +578,7 @@ func TestGetPartialRead(t *testing.T) {
 
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "metafile"
 	cfg.CacheGet(cfgName, cache, matchAll, 1024, 10*time.Minute, 10*time.Minute, 2*time.Minute)
 	cfg.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
@@ -636,7 +637,7 @@ func TestAttributes(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "test"
 	cfg.CacheAttributes(cfgName, cache, matchAll, time.Minute)
 
