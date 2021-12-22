@@ -405,6 +405,7 @@ To configure Tencent Account to use COS as storage store you need to set these p
 type: COS
 config:
   bucket: ""
+  endpoint: ""
   region: ""
   app_id: ""
   secret_key: ""
@@ -419,6 +420,12 @@ config:
     max_conns_per_host: 0
 ```
 
+The `secret_key` and `secret_id` field is required.
+The `http_config` field is optional for optimize HTTP transport settings.
+There are two ways to configure the required bucket information:
+  1. Provide the values of `bucket`, `region` and `app_id` keys.
+  2. Provide the values of `endpoint` key with url format when you want to specific vpc internal endpoint. Please refer to the document of [endpoint](https://intl.cloud.tencent.com/document/product/436/6224) for more detail.
+  
 Set the flags `--objstore.config-file` to reference to the configuration file.
 
 #### AliYun OSS
