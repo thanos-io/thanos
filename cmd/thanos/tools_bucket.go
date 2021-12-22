@@ -107,7 +107,8 @@ type bucketVerifyConfig struct {
 }
 
 type bucketLsConfig struct {
-	output string
+	output        string
+	excludeDelete bool
 }
 
 type bucketWebConfig struct {
@@ -168,6 +169,8 @@ func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClaus
 func (tbc *bucketLsConfig) registerBucketLsFlag(cmd extkingpin.FlagClause) *bucketLsConfig {
 	cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
 		Short('o').Default("").StringVar(&tbc.output)
+	cmd.Flag("exclude-delete", "Exclude blocks marked for deletion.").
+		Default("false").BoolVar(&tbc.excludeDelete)
 	return tbc
 }
 
@@ -377,7 +380,13 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
+		var filters []block.MetadataFilter
+
+		if tbc.excludeDelete {
+			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, block.FetcherConcurrency)
+			filters = append(filters, ignoreDeletionMarkFilter)
+		}
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters, nil)
 		if err != nil {
 			return err
 		}
