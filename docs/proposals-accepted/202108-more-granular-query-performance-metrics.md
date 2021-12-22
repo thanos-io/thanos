@@ -30,10 +30,12 @@ There's a few reason why measuring the latency on the query and query_range endp
   * This is less critical as response size can be approximated from number of series/number of samples
 
 ### Audience
+
 * Thanos' developers and maintainers who would like to better understand the series/sample funnel before a request is processed more systematically
 * Thanos' users who would like to better understand and enforce SLO's around query performance with respect to number of series/samples a query invariably touches
 
 ## Non-Goals
+
 * Any performance related optimizations
 * Any approach that involves sampling of queries (traces already sample the aforementioned data)
 
@@ -208,4 +210,5 @@ tl;dr: We add a `seriesStats` channel that receives `storepb.SeriesStatsCounter`
 * This doesn't capture the entire query performance, only the thanos/store select phase query performance. To measure the entire query path latency we will need to propagate the stats further and aggregate them in the HTTP handlers for the `query` and `query_range`
 
 # Alternatives
+
 * Add the `seriesStats` to the `SeriesResponse` and aggregate it in the `responseCh`, this would enable us to propagate the seriesStats further up/in other components if need be
