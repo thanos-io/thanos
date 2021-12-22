@@ -9,6 +9,9 @@ DOCKER_CI_TAG     ?= test
 GH_PARALLEL ?= 1
 GH_INDEX ?= 0
 
+CI_PARALLELISM ?= 1
+CI_PARALLELISM_THREAD ?= 0
+
 BASE_DOCKER_SHA=''
 arch = $(shell uname -m)
 # Run `DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect quay.io/prometheus/busybox:latest` to get SHA or
@@ -154,11 +157,11 @@ ifeq ($(GIT_BRANCH), main)
 crossbuild: | $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	# we only care about below two for the main branch
-	$(PROMU) crossbuild -v -p linux/amd64 -p linux/arm64
+	$(PROMU) crossbuild -v -p linux/amd64 -p linux/arm64 --parallelism $(CI_PARALLELISM) --parallelism-thread $(CI_PARALLELISM_THREAD)
 else
 crossbuild: | $(PROMU)
 	@echo ">> crossbuilding all binaries"
-	$(PROMU) crossbuild -v
+	$(PROMU) crossbuild -v --parallelism $(CI_PARALLELISM) --parallelism-thread $(CI_PARALLELISM_THREAD)
 endif
 
 
