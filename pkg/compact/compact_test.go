@@ -170,7 +170,7 @@ func BenchmarkGatherNoCompactionMarkFilter_Filter(b *testing.B) {
 				for n := 0; n <= b.N; n++ {
 					slowBucket := objstore.WithNoopInstr(objstore.WithDelay(bkt, time.Millisecond*2))
 					f := NewGatherNoCompactionMarkFilter(logger, slowBucket, i)
-					testutil.Ok(b, f.Filter(ctx, metas, m))
+					testutil.Ok(b, f.Filter(ctx, metas, m, nil))
 				}
 			})
 		}

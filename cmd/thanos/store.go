@@ -308,7 +308,7 @@ func runStore(
 			block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
 			ignoreDeletionMarkFilter,
 			block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
-		}, nil)
+		})
 	if err != nil {
 		return errors.Wrap(err, "meta fetcher")
 	}

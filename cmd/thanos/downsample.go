@@ -86,7 +86,7 @@ func RunDownsample(
 
 	metaFetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
 		block.NewDeduplicateFilter(block.FetcherConcurrency),
-	}, nil)
+	})
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}

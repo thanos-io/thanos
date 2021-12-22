@@ -330,7 +330,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
 			return err
 		}
@@ -386,7 +386,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, block.FetcherConcurrency)
 			filters = append(filters, ignoreDeletionMarkFilter)
 		}
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters, nil)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
 			return err
 		}
@@ -486,7 +486,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
 			return err
 		}
@@ -633,7 +633,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 				block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
 				block.NewLabelShardedMetaFilter(relabelConfig),
 				block.NewDeduplicateFilter(block.FetcherConcurrency),
-			}, nil)
+			})
 		if err != nil {
 			return err
 		}
@@ -803,7 +803,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 					block.NewConsistencyDelayMetaFilter(logger, tbc.consistencyDelay, extprom.WrapRegistererWithPrefix(extpromPrefix, reg)),
 					ignoreDeletionMarkFilter,
 					duplicateBlocksFilter,
-				}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, make([]string, 0))},
+				},
 			)
 			sy, err = compact.NewMetaSyncer(
 				logger,
@@ -1327,7 +1327,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 					block.NewConsistencyDelayMetaFilter(logger, tbc.consistencyDelay, extprom.WrapRegistererWithPrefix(extpromPrefix, reg)),
 					duplicateBlocksFilter,
 					ignoreDeletionMarkFilter,
-				}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, make([]string, 0))},
+				},
 			)
 			sy, err = compact.NewMetaSyncer(
 				logger,

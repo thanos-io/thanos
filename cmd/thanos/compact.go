@@ -270,10 +270,11 @@ func runCompact(
 				labelShardedMetaFilter,
 				consistencyDelayMetaFilter,
 				ignoreDeletionMarkFilter,
+				block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels),
 				duplicateBlocksFilter,
 				noCompactMarkerFilter,
 				timePartitionMetaFilter,
-			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels)},
+			},
 		)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			compactorView.Set(blocks, err)
@@ -524,7 +525,7 @@ func runCompact(
 
 		// Separate fetcher for global view.
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of the block as well.
-		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, nil, "component", "globalBucketUI")
+		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, "component", "globalBucketUI")
 		f.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			global.Set(blocks, err)
 			api.SetGlobal(blocks, err)

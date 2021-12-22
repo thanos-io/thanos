@@ -97,7 +97,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		duplicateBlocksFilter := block.NewDeduplicateFilter(fetcherConcurrency)
 		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{
 			duplicateBlocksFilter,
-		}, nil)
+		})
 		testutil.Ok(t, err)
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
@@ -201,7 +201,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 			ignoreDeletionMarkFilter,
 			duplicateBlocksFilter,
 			noCompactMarkerFilter,
-		}, nil)
+		})
 		testutil.Ok(t, err)
 
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
@@ -516,7 +516,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 		metaFetcher, err := block.NewMetaFetcher(nil, 32, objstore.WithNoopInstr(bkt), "", nil, []block.MetadataFilter{
 			ignoreDeletionMarkFilter,
 			duplicateBlocksFilter,
-		}, nil)
+		})
 		testutil.Ok(t, err)
 
 		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 1)
