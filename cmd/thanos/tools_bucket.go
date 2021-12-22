@@ -6,8 +6,10 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -18,8 +20,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/olekukonko/tablewriter"
@@ -29,12 +31,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	prommodel "github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
+	"gopkg.in/yaml.v3"
+
 	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -56,9 +62,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/ui"
 	"github.com/thanos-io/thanos/pkg/verifier"
-	"golang.org/x/text/language"
-	"golang.org/x/text/message"
-	"gopkg.in/yaml.v3"
 )
 
 const extpromPrefix = "thanos_bucket_"
@@ -72,6 +75,15 @@ var (
 		},
 	}
 	inspectColumns = []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-DOWN", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "LABELS", "RESOLUTION", "SOURCE"}
+	outputTypes    = []string{"table", "tsv", "csv"}
+)
+
+type outputType string
+
+const (
+	TABLE outputType = "table"
+	CSV   outputType = "csv"
+	TSV   outputType = "tsv"
 )
 
 type bucketRewriteConfig struct {
@@ -95,7 +107,8 @@ type bucketVerifyConfig struct {
 }
 
 type bucketLsConfig struct {
-	output string
+	output        string
+	excludeDelete bool
 }
 
 type bucketWebConfig struct {
@@ -156,6 +169,8 @@ func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClaus
 func (tbc *bucketLsConfig) registerBucketLsFlag(cmd extkingpin.FlagClause) *bucketLsConfig {
 	cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
 		Short('o').Default("").StringVar(&tbc.output)
+	cmd.Flag("exclude-delete", "Exclude blocks marked for deletion.").
+		Default("false").BoolVar(&tbc.excludeDelete)
 	return tbc
 }
 
@@ -365,7 +380,13 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
+		var filters []block.MetadataFilter
+
+		if tbc.excludeDelete {
+			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, block.FetcherConcurrency)
+			filters = append(filters, ignoreDeletionMarkFilter)
+		}
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters, nil)
 		if err != nil {
 			return err
 		}
@@ -445,6 +466,8 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	tbc := &bucketInspectConfig{}
 	tbc.registerBucketInspectFlag(cmd)
 
+	output := cmd.Flag("output", "Output format for result. Currently supports table, cvs, tsv.").Default("table").Enum(outputTypes...)
+
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 
 		// Parse selector.
@@ -487,7 +510,17 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			blockMetas = append(blockMetas, meta)
 		}
 
-		return printTable(blockMetas, selectorLabels, tbc.sortBy)
+		var opPrinter tablePrinter
+		op := outputType(*output)
+		switch op {
+		case TABLE:
+			opPrinter = printTable
+		case TSV:
+			opPrinter = printTSV
+		case CSV:
+			opPrinter = printCSV
+		}
+		return printBlockData(blockMetas, selectorLabels, tbc.sortBy, opPrinter)
 	})
 }
 
@@ -551,7 +584,17 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 
 		flagsMap := getFlagsMap(cmd.Flags())
 
-		api := v1.NewBlocksAPI(logger, tbc.webDisableCORS, tbc.label, flagsMap)
+		confContentYaml, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
+		if err != nil {
+			return errors.Wrap(err, "bucket client")
+		}
+
+		api := v1.NewBlocksAPI(logger, tbc.webDisableCORS, tbc.label, flagsMap, bkt)
 
 		// Configure Request Logging for HTTP calls.
 		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
@@ -573,16 +616,6 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 
 		if tbc.interval < (tbc.timeout * 2) {
 			level.Warn(logger).Log("msg", "Refresh interval should be at least 2 times the timeout")
-		}
-
-		confContentYaml, err := objStoreConfig.Content()
-		if err != nil {
-			return err
-		}
-
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
-		if err != nil {
-			return errors.Wrap(err, "bucket client")
 		}
 
 		relabelContentYaml, err := selectorRelabelConf.Content()
@@ -804,7 +837,56 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	})
 }
 
-func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string) error {
+type tablePrinter func(w io.Writer, t Table) error
+
+func printTable(w io.Writer, t Table) error {
+	table := tablewriter.NewWriter(w)
+	table.SetHeader(t.Header)
+	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
+	table.SetCenterSeparator("|")
+	table.SetAutoWrapText(false)
+	table.SetReflowDuringAutoWrap(false)
+	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	table.AppendBulk(t.Lines)
+	table.Render()
+	return nil
+}
+
+func printCSV(w io.Writer, t Table) error {
+	csv := csv.NewWriter(w)
+	err := csv.Write(t.Header)
+	if err != nil {
+		return err
+	}
+	err = csv.WriteAll(t.Lines)
+	if err != nil {
+		return err
+	}
+	csv.Flush()
+	return nil
+}
+
+func newTSVWriter(w io.Writer) *csv.Writer {
+	writer := csv.NewWriter(w)
+	writer.Comma = rune('\t')
+	return writer
+}
+
+func printTSV(w io.Writer, t Table) error {
+	tsv := newTSVWriter(w)
+	err := tsv.Write(t.Header)
+	if err != nil {
+		return err
+	}
+	err = tsv.WriteAll(t.Lines)
+	if err != nil {
+		return err
+	}
+	tsv.Flush()
+	return nil
+}
+
+func printBlockData(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string, printer tablePrinter) error {
 	header := inspectColumns
 
 	var lines [][]string
@@ -856,17 +938,10 @@ func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortB
 
 	t := Table{Header: header, Lines: lines, SortIndices: sortByColNum}
 	sort.Sort(t)
-
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader(t.Header)
-	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
-	table.SetCenterSeparator("|")
-	table.SetAutoWrapText(false)
-	table.SetReflowDuringAutoWrap(false)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	table.AppendBulk(t.Lines)
-	table.Render()
-
+	err := printer(os.Stdout, t)
+	if err != nil {
+		return errors.Errorf("unable to write output.")
+	}
 	return nil
 }
 
@@ -1133,8 +1208,8 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				}
 
 				if tbc.dryRun {
-					level.Info(logger).Log("msg", "dry run finished. Changes should be printed to stderr")
-					return nil
+					level.Info(logger).Log("msg", "dry run finished. Changes should be printed to stderr", "Block ID", id)
+					continue
 				}
 
 				level.Info(logger).Log("msg", "wrote new block after modifications; flushing", "source", id, "new", newID)

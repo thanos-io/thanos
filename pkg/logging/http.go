@@ -12,8 +12,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+
 	httputil "github.com/thanos-io/thanos/pkg/server/http"
 )
 
@@ -22,9 +23,9 @@ type HTTPServerMiddleware struct {
 	logger log.Logger
 }
 
-func (m *HTTPServerMiddleware) preCall(start time.Time) {
+func (m *HTTPServerMiddleware) preCall(name string, start time.Time, r *http.Request) {
 	logger := m.opts.filterLog(m.logger)
-	level.Debug(logger).Log("http.start_time", start.String(), "msg", "started call")
+	level.Debug(logger).Log("http.start_time", start.String(), "http.method", fmt.Sprintf("%s %s", r.Method, r.URL), "http.request_id", r.Header.Get("X-Request-ID"), "thanos.method_name", name, "msg", "started call")
 }
 
 func (m *HTTPServerMiddleware) postCall(name string, start time.Time, wrapped *httputil.ResponseWriterWithStatus, r *http.Request) {
@@ -68,7 +69,7 @@ func (m *HTTPServerMiddleware) HTTPMiddleware(name string, next http.Handler) ht
 			next.ServeHTTP(w, r)
 
 		case LogStartAndFinishCall:
-			m.preCall(start)
+			m.preCall(name, start, r)
 			next.ServeHTTP(wrapped, r)
 			m.postCall(name, start, wrapped, r)
 

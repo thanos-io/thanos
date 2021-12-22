@@ -13,12 +13,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/go-kit/kit/log"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -117,12 +117,12 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 		dbs[j] = &mockedStartTimeDB{DBReadOnly: db, startTime: int64(j * samplesPerSeriesPerTSDB * seriesPerTSDB)}
 	}
 
-	tsdbs := map[string]storepb.StoreServer{}
+	tsdbs := map[string]InfoStoreServer{}
 	for i, db := range dbs {
 		tsdbs[fmt.Sprintf("%v", i)] = &TSDBStore{db: db, logger: logger}
 	}
 
-	store := NewMultiTSDBStore(logger, nil, component.Receive, func() map[string]storepb.StoreServer { return tsdbs })
+	store := NewMultiTSDBStore(logger, nil, component.Receive, func() map[string]InfoStoreServer { return tsdbs })
 
 	var expected []*storepb.Series
 	lastLabels := storepb.Series{}
@@ -170,6 +170,9 @@ func (m *mockedStoreServer) Series(_ *storepb.SeriesRequest, server storepb.Stor
 	}
 	return nil
 }
+
+func (m *mockedStoreServer) LabelSet() []labelpb.ZLabelSet { return nil }
+func (m *mockedStoreServer) TimeRange() (int64, int64)     { return 0, 0 }
 
 // Regression test against https://github.com/thanos-io/thanos/issues/2823.
 func TestTenantSeriesSetServert_NotLeakingIfNotExhausted(t *testing.T) {
@@ -242,8 +245,8 @@ func (s *mockedSeriesServer) Context() context.Context { return s.ctx }
 func TestMultiTSDBStore_NotLeakingOnPrematureFinish(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 
-	m := NewMultiTSDBStore(log.NewNopLogger(), nil, component.Receive, func() map[string]storepb.StoreServer {
-		return map[string]storepb.StoreServer{
+	m := NewMultiTSDBStore(log.NewNopLogger(), nil, component.Receive, func() map[string]InfoStoreServer {
+		return map[string]InfoStoreServer{
 			// Ensure more than 10 (internal respCh channel).
 			"a": &mockedStoreServer{responses: []*storepb.SeriesResponse{
 				storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),

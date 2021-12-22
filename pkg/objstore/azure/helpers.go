@@ -5,7 +5,6 @@ package azure
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,8 +16,9 @@ import (
 	blob "github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -104,6 +104,14 @@ func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.
 		retryOptions.TryTimeout = time.Until(deadline)
 	}
 
+	dt, err := DefaultTransport(conf)
+	if err != nil {
+		return blob.ContainerURL{}, err
+	}
+	client := http.Client{
+		Transport: dt,
+	}
+
 	p := blob.NewPipeline(credentials, blob.PipelineOptions{
 		Retry:     retryOptions,
 		Telemetry: blob.TelemetryOptions{Value: "Thanos"},
@@ -117,10 +125,6 @@ func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.
 		},
 		HTTPSender: pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 			return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-				client := http.Client{
-					Transport: DefaultTransport(conf),
-				}
-
 				resp, err := client.Do(request.WithContext(ctx))
 
 				return pipeline.NewHTTPResponse(resp), err
@@ -136,7 +140,15 @@ func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.
 	return service.NewContainerURL(conf.ContainerName), nil
 }
 
-func DefaultTransport(config Config) *http.Transport {
+func DefaultTransport(config Config) (*http.Transport, error) {
+	tlsConfig, err := objstore.NewTLSConfig(&config.HTTPConfig.TLSConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	if config.HTTPConfig.InsecureSkipVerify {
+		tlsConfig.InsecureSkipVerify = true
+	}
 	return &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -154,8 +166,8 @@ func DefaultTransport(config Config) *http.Transport {
 
 		ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
 		DisableCompression:    config.HTTPConfig.DisableCompression,
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
-	}
+		TLSClientConfig:       tlsConfig,
+	}, nil
 }
 
 func getContainer(ctx context.Context, logger log.Logger, conf Config) (blob.ContainerURL, error) {

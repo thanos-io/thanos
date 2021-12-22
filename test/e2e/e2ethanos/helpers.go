@@ -11,16 +11,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/efficientgo/e2e"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func CleanScenario(t testing.TB, s *e2e.Scenario) func() {
+func CleanScenario(t testing.TB, e *e2e.DockerEnvironment) func() {
 	return func() {
 		// Make sure Clean can properly delete everything.
-		testutil.Ok(t, exec.Command("chmod", "-R", "777", s.SharedDir()).Run())
-		s.Close()
+		testutil.Ok(t, exec.Command("chmod", "-R", "777", e.SharedDir()).Run())
+		e.Close()
 	}
 }
 

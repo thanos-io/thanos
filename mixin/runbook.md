@@ -15,7 +15,7 @@
 
 |Name|Summary|Description|Severity|Runbook|
 |---|---|---|---|---|
-|ThanosBucketReplicateErrorRate|Thanose Replicate is failing to run.|Thanos Replicate is failing to run, {{$value  humanize}}% of attempts failed.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicateerrorrate](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicateerrorrate)|
+|ThanosBucketReplicateErrorRate|Thanos Replicate is failing to run.|Thanos Replicate is failing to run, {{$value  humanize}}% of attempts failed.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicateerrorrate](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicateerrorrate)|
 |ThanosBucketReplicateRunLatency|Thanos Replicate has a high latency for replicate operations.|Thanos Replicate {{$labels.job}} has a 99th percentile latency of {{$value}} seconds for the replicate operations.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicaterunlatency](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicaterunlatency)|
 
 ## thanos-compact
@@ -32,7 +32,6 @@
 
 |Name|Summary|Description|Severity|Runbook|
 |---|---|---|---|---|
-|ThanosBucketReplicateIsDown|Thanos component has disappeared.|ThanosBucketReplicate has disappeared. Prometheus target for the component cannot be discovered.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicateisdown](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicateisdown)|
 |ThanosCompactIsDown|Thanos component has disappeared.|ThanosCompact has disappeared. Prometheus target for the component cannot be discovered.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanoscompactisdown](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanoscompactisdown)|
 |ThanosQueryIsDown|Thanos component has disappeared.|ThanosQuery has disappeared. Prometheus target for the component cannot be discovered.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosqueryisdown](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosqueryisdown)|
 |ThanosReceiveIsDown|Thanos component has disappeared.|ThanosReceive has disappeared. Prometheus target for the component cannot be discovered.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceiveisdown](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceiveisdown)|
@@ -85,9 +84,8 @@
 
 |Name|Summary|Description|Severity|Runbook|
 |---|---|---|---|---|
-|ThanosSidecarPrometheusDown|Thanos Sidecar cannot connect to Prometheus|Thanos Sidecar {{$labels.instance}} cannot connect to Prometheus.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarprometheusdown](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarprometheusdown)|
 |ThanosSidecarBucketOperationsFailed|Thanos Sidecar bucket operations are failing|Thanos Sidecar {{$labels.instance}} bucket operations are failing|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarbucketoperationsfailed](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarbucketoperationsfailed)|
-|ThanosSidecarUnhealthy|Thanos Sidecar is unhealthy.|Thanos Sidecar {{$labels.instance}} is unhealthy for more than {{$value}} seconds.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarunhealthy)|
+|ThanosSidecarNoConnectionToStartedPrometheus|Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.|Thanos Sidecar {{$labels.instance}} is unhealthy.|critical|[https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus](https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus)|
 
 ## thanos-store
 

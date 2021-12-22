@@ -6,21 +6,34 @@ DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 DOCKER_CI_TAG     ?= test
 
+GH_PARALLEL ?= 1
+GH_INDEX ?= 0
+
 BASE_DOCKER_SHA=''
 arch = $(shell uname -m)
 # Run `DOCKER_CLI_EXPERIMENTAL=enabled docker manifest inspect quay.io/prometheus/busybox:latest` to get SHA or
 # just visit https://quay.io/repository/prometheus/busybox?tag=latest&tab=tags.
-# TODO(bwplotka): Pinning is important but somehow quay kills the old images, so make sure to update regularly.
-# Update at 2021.6.07
+# TODO(bwplotka): https://github.com/thanos-io/thanos/issues/4949
+# Pinning is important but somehow quay kills the old images, so make sure to update regularly.
+# Update at 2021.12.15
+AMD64_SHA="768a51a5f71827471e6e58f0d6200c2fa24f2cb5cde1ecbd67fe28f93d4ef464"
+ARM64_SHA="042d6195e1793b226d1632117cccb4c4906c8ab393b8b68328ad43cf59c64f9d"
+
 ifeq ($(arch), x86_64)
     # amd64
-    BASE_DOCKER_SHA="de4af55df1f648a334e16437c550a2907e0aed4f0b0edf454b0b215a9349bdbb"
+    BASE_DOCKER_SHA=$(AMD64_SHA)
 else ifeq ($(arch), armv8)
     # arm64
-    BASE_DOCKER_SHA="5591971699f6cf8abf6776495385e9d62751111a8cba56bf4946cf1d0de425ed"
+    BASE_DOCKER_SHA=$(ARM64_SHA)
 else
     echo >&2 "only support amd64 or arm64 arch" && exit 1
 endif
+DOCKER_ARCHS       ?= amd64 arm64
+# Generate two target: docker-xxx-amd64, docker-xxx-arm64.
+# Run make docker-xxx -n to see the result with dry run.
+BUILD_DOCKER_ARCHS = $(addprefix docker-build-,$(DOCKER_ARCHS))
+TEST_DOCKER_ARCHS  = $(addprefix docker-test-,$(DOCKER_ARCHS))
+PUSH_DOCKER_ARCHS  = $(addprefix docker-push-,$(DOCKER_ARCHS))
 
 # Ensure everything works even if GOPATH is not set, which is often the case.
 # The `go env GOPATH` will work for all cases for Go 1.8+.
@@ -134,11 +147,20 @@ build: check-git deps $(PROMU)
 	@echo ">> building Thanos binary in $(PREFIX)"
 	@$(PROMU) build --prefix $(PREFIX)
 
+GIT_BRANCH=$(shell $(GIT) rev-parse --abbrev-ref HEAD)
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
+ifeq ($(GIT_BRANCH), main)
+crossbuild: | $(PROMU)
+	@echo ">> crossbuilding all binaries"
+	# we only care about below two for the main branch
+	$(PROMU) crossbuild -v -p linux/amd64 -p linux/arm64
+else
 crossbuild: | $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
+endif
+
 
 .PHONY: deps
 deps: ## Ensures fresh go.mod and go.sum.
@@ -164,12 +186,36 @@ docker-multi-stage:
 	@echo ">> building docker image 'thanos' with Dockerfile.multi-stage"
 	@docker build -f Dockerfile.multi-stage -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 
-.PHONY: docker-push
-docker-push: ## Pushes 'thanos' docker image build to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)".
-docker-push:
+GET_SHA = $(shell echo '$1'_SHA | tr '[:lower:]' '[:upper:]')
+# docker-build builds docker images with multiple architectures.
+.PHONY: docker-build $(BUILD_DOCKER_ARCHS)
+docker-build: $(BUILD_DOCKER_ARCHS)
+$(BUILD_DOCKER_ARCHS): docker-build-%:
+	@docker build -t "thanos-linux-$*" \
+  --build-arg BASE_DOCKER_SHA=$($(call GET_SHA,$*)) \
+  --build-arg ARCH="$*" \
+  -f Dockerfile.multi-arch .
+
+.PHONY: docker-test $(TEST_DOCKER_ARCHS)
+docker-test: $(TEST_DOCKER_ARCHS)
+$(TEST_DOCKER_ARCHS): docker-test-%:
+	@echo ">> testing image"
+	@docker run "thanos-linux-$*" --help
+
+# docker-manifest push docker manifest to support multiple architectures.
+.PHONY: docker-manifest
+docker-manifest:
+	@echo ">> creating and pushing manifest"
+	@DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create -a "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)" $(foreach ARCH,$(DOCKER_ARCHS),$(DOCKER_IMAGE_REPO)-linux-$(ARCH):$(DOCKER_IMAGE_TAG))
+	@DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
+
+.PHONY: docker-push $(PUSH_DOCKER_ARCHS)
+docker-push: ## Pushes Thanos docker image build to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)".
+docker-push: $(PUSH_DOCKER_ARCHS)
+$(PUSH_DOCKER_ARCHS): docker-push-%:
 	@echo ">> pushing image"
-	@docker tag "thanos" "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
-	@docker push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
+	@docker tag "thanos-linux-$*" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
+	@docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
 
 .PHONY: docs
 docs: ## Regenerates flags in docs for all thanos commands localise links, ensure GitHub format.
@@ -235,15 +281,15 @@ test-local:
 
 .PHONY: test-e2e
 test-e2e: ## Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
-test-e2e: docker
+test-e2e: docker $(GOTESPLIT)
 	@echo ">> cleaning docker environment."
 	@docker system prune -f --volumes
 	@echo ">> cleaning e2e test garbage."
-	@rm -rf ./test/e2e/e2e_integration_test*
+	@rm -rf ./test/e2e/e2e_*
 	@echo ">> running /test/e2e tests."
 	# NOTE(bwplotka):
-	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 to limit to single CPU to reproduce small 1CPU machine.
-	@go test $(GOTEST_OPTS) ./test/e2e/...
+	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 (Wiard note: to the GOTEST_OPTS arg) to limit to single CPU to reproduce small 1CPU machine.
+	@$(GOTESPLIT) -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e/... -- ${GOTEST_OPTS}
 
 .PHONY: test-e2e-local
 test-e2e-local: ## Runs all thanos e2e tests locally.
@@ -365,7 +411,7 @@ jsonnet-format: $(JSONNETFMT)
 		xargs -n 1 -- $(JSONNETFMT_CMD) -i
 
 .PHONY: jsonnet-lint
-jsonnet-lint: $(JSONNET_LINT) ${JSONNET_VENDOR_DIR}
+jsonnet-lint: $(JSONNET_LINT) jsonnet-vendor
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
 		xargs -n 1 -- $(JSONNET_LINT) -J ${JSONNET_VENDOR_DIR}
 
@@ -401,4 +447,3 @@ $(PROTOC):
 	@echo ">> installing protoc@${PROTOC_VERSION}"
 	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(GOBIN)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(GOBIN)/protoc-$(PROTOC_VERSION)"
-

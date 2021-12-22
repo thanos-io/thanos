@@ -46,19 +46,6 @@ const defaultProps = {
 describe('Panel', () => {
   const panel = shallow(<Panel {...defaultProps} />);
 
-  it('renders an ExpressionInput', () => {
-    const input = panel.find(ExpressionInput);
-    expect(input.prop('value')).toEqual('prometheus_engine');
-    expect(input.prop('autocompleteSections')).toEqual({
-      'Metric Names': [
-        'prometheus_engine_queries',
-        'prometheus_engine_queries_concurrent_max',
-        'prometheus_engine_query_duration_seconds',
-      ],
-      'Query History': [],
-    });
-  });
-
   it('renders NavLinks', () => {
     const results: PanelOptions[] = [];
     const onOptionsChanged = (opts: PanelOptions): void => {

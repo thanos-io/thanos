@@ -37,6 +37,7 @@ type Config struct {
 	Password               string        `yaml:"password"`
 	AgentHost              string        `yaml:"agent_host"`
 	AgentPort              int           `yaml:"agent_port"`
+	Gen128Bit              bool          `yaml:"traceid_128bit"`
 }
 
 // ParseConfigFromYaml uses config YAML to set the tracer's Configuration.
@@ -55,6 +56,10 @@ func ParseConfigFromYaml(cfg []byte) (*config.Configuration, error) {
 
 	if conf.RPCMetrics {
 		c.RPCMetrics = conf.RPCMetrics
+	}
+
+	if conf.Gen128Bit {
+		c.Gen128Bit = conf.Gen128Bit
 	}
 
 	if conf.Disabled {

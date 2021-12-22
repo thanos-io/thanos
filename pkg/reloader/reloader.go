@@ -71,11 +71,12 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -85,6 +86,7 @@ import (
 type Reloader struct {
 	logger        log.Logger
 	reloadURL     *url.URL
+	httpClient    http.Client
 	cfgFile       string
 	cfgOutputFile string
 	watchInterval time.Duration
@@ -413,7 +415,7 @@ func (r *Reloader) triggerReload(ctx context.Context) error {
 	}
 	req = req.WithContext(ctx)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := r.httpClient.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "reload request failed")
 	}
@@ -423,6 +425,11 @@ func (r *Reloader) triggerReload(ctx context.Context) error {
 		return errors.Errorf("received non-200 response: %s; have you set `--web.enable-lifecycle` Prometheus flag?", resp.Status)
 	}
 	return nil
+}
+
+// SetHttpClient sets Http client for reloader.
+func (r *Reloader) SetHttpClient(client http.Client) {
+	r.httpClient = client
 }
 
 // ReloadURLFromBase returns the standard Prometheus reload URL from its base URL.

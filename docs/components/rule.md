@@ -6,7 +6,9 @@
 
 The `thanos rule` command evaluates Prometheus recording and alerting rules against chosen query API via repeated `--query` (or FileSD via `--query.sd`). If more than one query is passed, round robin balancing is performed.
 
-Rule results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
+By default, rule evaluation results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
+
+Rule also has a stateless mode which sends rule evaluation results to some remote storages via remote write for better scalability. This way, rule nodes only work as a data producer and the remote receive nodes work as source store nodes. It means that Thanos Rule in this mode does *not* expose the StoreAPI.
 
 You can think of Rule as a simplified Prometheus that does not require a sidecar and does not scrape and do PromQL evaluation (no QueryAPI).
 
@@ -22,7 +24,7 @@ thanos rule \
     --query                "query.example.org" \
     --query                "query2.example.org" \
     --objstore.config-file "bucket.yml" \
-    --label                'monitor_cluster="cluster1"'
+    --label                'monitor_cluster="cluster1"' \
     --label                'replica="A"'
 ```
 
@@ -202,6 +204,55 @@ In case of Ruler in HA you need to make sure you have the following labelling se
 
 Advanced relabelling configuration is possible with the `--alert.relabel-config` and `--alert.relabel-config-file` flags. The configuration format is identical to the [`alert_relabel_configs`](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#alert_relabel_configs) field of Prometheus. Note that Thanos Ruler drops the labels listed in `--alert.label-drop` before alert relabelling.
 
+## Stateless Ruler via Remote Write
+
+Stateless ruler enables nearly indefinite horizontal scalability. Ruler doesn't have a fully functional TSDB for storing evaluation results, but uses a WAL only storage and sends data to some remote storage via remote write.
+
+The WAL only storage reuses the upstream [Prometheus agent](https://prometheus.io/blog/2021/11/16/agent/) and it is compatible with the old TSDB data. For more design purpose of this mode, please refer to the [proposal](https://thanos.io/tip/proposals-done/202005-scalable-rule-storage.md/).
+
+Stateless mode can be enabled by providing [Prometheus remote write config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write) in file via `--remote-write.config` or inlined `--remote-write.config-file` flag. For example:
+
+```bash
+thanos rule \
+    --data-dir                  "/path/to/data" \
+    --eval-interval             "30s" \
+    --rule-file                 "/path/to/rules/*.rules.yaml" \
+    --alert.query-url           "http://0.0.0.0:9090" \ # This tells what query URL to link to in UI.
+    --alertmanagers.url         "http://alert.thanos.io" \
+    --query                     "query.example.org" \
+    --query                     "query2.example.org" \
+    --objstore.config-file      "bucket.yml" \
+    --label                     'monitor_cluster="cluster1"' \
+    --label                     'replica="A"' \
+    --remote-write.config-file  'rw-config.yaml'
+```
+
+Where `rw-config.yaml` could look as follows:
+
+```yaml
+remote_write:
+- url: http://e2e_test_rule_remote_write-receive-1:8081/api/v1/receive
+  name: thanos-receiver
+  follow_redirects: false
+- url: https://e2e_test_rule_remote_write-receive-2:443/api/v1/receive
+  remote_timeout: 30s
+  follow_redirects: true
+  queue_config:
+    capacity: 120000
+    max_shards: 50
+    min_shards: 1
+    max_samples_per_send: 40000
+    batch_send_deadline: 5s
+    min_backoff: 5s
+    max_backoff: 5m
+```
+
+You can pass this in file using `--remote-write.config-file=` or inline it using `--remote-write.config=`.
+
+**NOTE:**
+1. `metadata_config` is not supported in this mode and will be ignored if provided in the remote write configuration.
+2. Ruler won't expose Store API for querying data if stateless mode is enabled. If the remote storage is thanos receiver then you can use that to query rule evaluation results.
+
 ## Flags
 
 ```$ mdox-exec="thanos rule --help"
@@ -211,22 +262,22 @@ Ruler evaluating Prometheus rules against given Query nodes, exposing Store API
 and storing old blocks in bucket.
 
 Flags:
-      --alert.label-drop=ALERT.LABEL-DROP ...
+      --alert.label-drop=ALERT.LABEL-DROP ...  
                                  Labels by name to drop before sending to
                                  alertmanager. This allows alert to be
                                  deduplicated on replica label (repeated).
                                  Similar Prometheus alert relabelling
-      --alert.query-url=ALERT.QUERY-URL
+      --alert.query-url=ALERT.QUERY-URL  
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
-      --alert.relabel-config=<content>
+      --alert.relabel-config=<content>  
                                  Alternative to 'alert.relabel-config-file' flag
                                  (mutually exclusive). Content of YAML file that
                                  contains alert relabelling configuration.
-      --alert.relabel-config-file=<file-path>
+      --alert.relabel-config-file=<file-path>  
                                  Path to YAML file that contains alert
                                  relabelling configuration.
-      --alertmanagers.config=<content>
+      --alertmanagers.config=<content>  
                                  Alternative to 'alertmanagers.config-file' flag
                                  (mutually exclusive). Content of YAML file that
                                  contains alerting configuration. See format
@@ -235,19 +286,19 @@ Flags:
                                  If defined, it takes precedence over the
                                  '--alertmanagers.url' and
                                  '--alertmanagers.send-timeout' flags.
-      --alertmanagers.config-file=<file-path>
+      --alertmanagers.config-file=<file-path>  
                                  Path to YAML file that contains alerting
                                  configuration. See format details:
                                  https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--alertmanagers.url' and
                                  '--alertmanagers.send-timeout' flags.
-      --alertmanagers.sd-dns-interval=30s
+      --alertmanagers.sd-dns-interval=30s  
                                  Interval between DNS resolutions of
                                  Alertmanager hosts.
-      --alertmanagers.send-timeout=10s
+      --alertmanagers.send-timeout=10s  
                                  Timeout for sending alerts to Alertmanager
-      --alertmanagers.url=ALERTMANAGERS.URL ...
+      --alertmanagers.url=ALERTMANAGERS.URL ...  
                                  Alertmanager replica URLs to push firing
                                  alerts. Ruler claims success if push to at
                                  least one alertmanager from discovered
@@ -260,7 +311,7 @@ Flags:
                                  prefix for the regular Alertmanager API path.
       --data-dir="data/"         data directory
       --eval-interval=30s        The default evaluation interval to use.
-      --grpc-address="0.0.0.0:10901"
+      --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
@@ -268,7 +319,7 @@ Flags:
                                  GRPC Server.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
-      --grpc-server-tls-client-ca=""
+      --grpc-server-tls-client-ca=""  
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
@@ -282,14 +333,14 @@ Flags:
                                  Possible values are: "", "SHA256".
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
-      --http-address="0.0.0.0:10902"
+      --http-address="0.0.0.0:10902"  
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
       --http.config=""           [EXPERIMENTAL] Path to the configuration file
                                  that can enable TLS or authentication for all
                                  HTTP endpoints.
-      --label=<name>="<value>" ...
+      --label=<name>="<value>" ...  
                                  Labels to be applied to all generated metrics
                                  (repeated). Similar to external labels for
                                  Prometheus, used to identify ruler and its
@@ -306,13 +357,13 @@ Flags:
                                  LogStartAndFinishCall: Logs the start and
                                  finish call of the requests. NoLogCall: Disable
                                  request logging.
-      --objstore.config=<content>
+      --objstore.config=<content>  
                                  Alternative to 'objstore.config-file' flag
                                  (mutually exclusive). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
@@ -328,7 +379,7 @@ Flags:
                                  https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
-      --query.config-file=<file-path>
+      --query.config-file=<file-path>  
                                  Path to YAML file that contains query API
                                  servers configuration. See format details:
                                  https://thanos.io/tip/components/rule.md/#configuration.
@@ -336,21 +387,43 @@ Flags:
                                  '--query' and '--query.sd-files' flags.
       --query.http-method=POST   HTTP method to use when sending queries.
                                  Possible options: [GET, POST]
-      --query.sd-dns-interval=30s
+      --query.sd-dns-interval=30s  
                                  Interval between DNS resolutions.
-      --query.sd-files=<path> ...
+      --query.sd-files=<path> ...  
                                  Path to file that contains addresses of query
                                  API servers. The path can be a glob pattern
                                  (repeatable).
       --query.sd-interval=5m     Refresh interval to re-read file SD files.
                                  (used as a fallback)
-      --request.logging-config=<content>
+      --remote-write.config=<content>  
+                                 Alternative to 'remote-write.config-file' flag
+                                 (mutually exclusive). Content of YAML config
+                                 for the remote-write configurations, that
+                                 specify servers where samples should be sent to
+                                 (see
+                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
+                                 This automatically enables stateless mode for
+                                 ruler and no series will be stored in the
+                                 ruler's TSDB. If an empty config (or file) is
+                                 provided, the flag is ignored and ruler is run
+                                 with its own TSDB.
+      --remote-write.config-file=<file-path>  
+                                 Path to YAML config for the remote-write
+                                 configurations, that specify servers where
+                                 samples should be sent to (see
+                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
+                                 This automatically enables stateless mode for
+                                 ruler and no series will be stored in the
+                                 ruler's TSDB. If an empty config (or file) is
+                                 provided, the flag is ignored and ruler is run
+                                 with its own TSDB.
+      --request.logging-config=<content>  
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content of YAML file
                                  with request logging configuration. See format
                                  details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging-config-file=<file-path>
+      --request.logging-config-file=<file-path>  
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
@@ -358,18 +431,18 @@ Flags:
                                  an alert to Alertmanager.
       --rule-file=rules/ ...     Rule files that should be used by rule manager.
                                  Can be in glob format (repeated).
-      --shipper.upload-compacted
+      --shipper.upload-compacted  
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.
                                  Works only if compaction is disabled on
                                  Prometheus. Do it once and then disable the
                                  flag when done.
-      --tracing.config=<content>
+      --tracing.config=<content>  
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                                  Path to YAML file with tracing configuration.
                                  See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration

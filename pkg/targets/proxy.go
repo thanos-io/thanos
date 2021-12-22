@@ -7,8 +7,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -119,8 +119,8 @@ func (stream *targetsStream) receive(ctx context.Context) error {
 			if err := stream.server.Send(targetspb.NewWarningTargetsResponse(err)); err != nil {
 				return errors.Wrapf(err, "sending targets error to server %v", stream.server)
 			}
-
-			continue
+			// Not an error if response strategy is warning.
+			return nil
 		}
 
 		if w := target.GetWarning(); w != "" {

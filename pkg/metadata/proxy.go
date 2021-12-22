@@ -7,8 +7,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -135,7 +135,8 @@ func (stream *metricMetadataStream) receive(ctx context.Context) error {
 				return errors.Wrapf(err, "sending metadata error to server %v", stream.server)
 			}
 
-			continue
+			// Not an error if response strategy is warning.
+			return nil
 		}
 
 		if w := resp.GetWarning(); w != "" {

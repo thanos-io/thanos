@@ -13,7 +13,7 @@ const EndpointLink: FC<EndpointLinkProps> = ({ endpoint, globalUrl }) => {
   } catch (e) {
     return (
       <UncontrolledAlert color="danger">
-        <strong>Error:</strong> {e.message}
+        <strong>Error:</strong> {(e as Error).message}
       </UncontrolledAlert>
     );
   }

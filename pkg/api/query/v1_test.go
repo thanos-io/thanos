@@ -31,19 +31,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
-	promgate "github.com/prometheus/prometheus/pkg/gate"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
+	promgate "github.com/prometheus/prometheus/util/gate"
 	"github.com/prometheus/prometheus/util/stats"
 
 	"github.com/thanos-io/thanos/pkg/compact"
@@ -1195,6 +1195,93 @@ func TestMetadataEndpoints(t *testing.T) {
 	}
 
 	for i, test := range tests {
+		if ok := testEndpoint(t, test, strings.TrimSpace(fmt.Sprintf("#%d %s", i, test.query.Encode())), reflect.DeepEqual); !ok {
+			return
+		}
+	}
+}
+
+func TestStoresEndpoint(t *testing.T) {
+	apiWithNotEndpoints := &QueryAPI{
+		endpointStatus: func() []query.EndpointStatus {
+			return []query.EndpointStatus{}
+		},
+	}
+	apiWithValidEndpoints := &QueryAPI{
+		endpointStatus: func() []query.EndpointStatus {
+			return []query.EndpointStatus{
+				{
+					Name:          "endpoint-1",
+					ComponentType: component.Store,
+				},
+				{
+					Name:          "endpoint-2",
+					ComponentType: component.Store,
+				},
+				{
+					Name:          "endpoint-3",
+					ComponentType: component.Sidecar,
+				},
+			}
+		},
+	}
+	apiWithInvalidEndpoint := &QueryAPI{
+		endpointStatus: func() []query.EndpointStatus {
+			return []query.EndpointStatus{
+				{
+					Name:          "endpoint-1",
+					ComponentType: component.Store,
+				},
+				{
+					Name: "endpoint-2",
+				},
+			}
+		},
+	}
+
+	testCases := []endpointTestCase{
+		{
+			endpoint: apiWithNotEndpoints.stores,
+			method:   http.MethodGet,
+			response: map[string][]query.EndpointStatus{},
+		},
+		{
+			endpoint: apiWithValidEndpoints.stores,
+			method:   http.MethodGet,
+			response: map[string][]query.EndpointStatus{
+				"store": {
+					{
+						Name:          "endpoint-1",
+						ComponentType: component.Store,
+					},
+					{
+						Name:          "endpoint-2",
+						ComponentType: component.Store,
+					},
+				},
+				"sidecar": {
+					{
+						Name:          "endpoint-3",
+						ComponentType: component.Sidecar,
+					},
+				},
+			},
+		},
+		{
+			endpoint: apiWithInvalidEndpoint.stores,
+			method:   http.MethodGet,
+			response: map[string][]query.EndpointStatus{
+				"store": {
+					{
+						Name:          "endpoint-1",
+						ComponentType: component.Store,
+					},
+				},
+			},
+		},
+	}
+
+	for i, test := range testCases {
 		if ok := testEndpoint(t, test, strings.TrimSpace(fmt.Sprintf("#%d %s", i, test.query.Encode())), reflect.DeepEqual); !ok {
 			return
 		}

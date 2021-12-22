@@ -13,7 +13,8 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
@@ -515,4 +516,28 @@ func (c *SeriesStatsCounter) Count(series *Series) {
 			c.Samples += chk.Sum.XORNumSamples()
 		}
 	}
+}
+
+func (m *SeriesRequest) ToPromQL() string {
+	return m.QueryHints.toPromQL(m.Matchers)
+}
+
+// IsSafeToExecute returns true if the function or aggregation from the query hint
+// can be safely executed by the underlying Prometheus instance without affecting the
+// result of the query.
+func (m *QueryHints) IsSafeToExecute() bool {
+	distributiveOperations := []string{
+		"max",
+		"max_over_time",
+		"min",
+		"min_over_time",
+		"group",
+	}
+	for _, op := range distributiveOperations {
+		if m.Func.Name == op {
+			return true
+		}
+	}
+
+	return false
 }

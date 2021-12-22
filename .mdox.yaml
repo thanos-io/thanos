@@ -1,7 +1,7 @@
 version: 1
 
-inputDir: "docs"
-outputDir: "website/docs-pre-processed/tip"
+inputDir: "$(INPUT_DIR)"
+outputDir: "$(OUTPUT_DIR)"
 extraInputGlobs:
   - "CHANGELOG.md"
   - "SECURITY.md"
@@ -14,9 +14,11 @@ localLinksStyle:
   hugo:
     indexFileName: "_index.md"
 
+linkPrefixForNonMarkdownResources: "https://github.com/thanos-io/thanos/blob/main"
+
 transformations:
 
-  - glob: "../CHANGELOG.md"
+  - glob: "$(EXTERNAL_GLOB_REL)CHANGELOG.md"
     path: /thanos/CHANGELOG.md
     frontMatter:
       template: |
@@ -29,7 +31,7 @@ transformations:
         Found a typo, inconsistency or missing information in our docs?
         Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/main/{{ .Origin.Path }}) :heart:
 
-  - glob: "../MAINTAINERS.md"
+  - glob: "$(EXTERNAL_GLOB_REL)MAINTAINERS.md"
     path: /thanos/MAINTAINERS.md
     frontMatter:
       template: |
@@ -39,7 +41,7 @@ transformations:
         lastmod: "{{ .Origin.LastMod }}"
     backMatter: *docBackMatter
 
-  - glob: "../SECURITY.md"
+  - glob: "$(EXTERNAL_GLOB_REL)SECURITY.md"
     path: /thanos/SECURITY.md
     frontMatter:
       template: |
@@ -49,7 +51,7 @@ transformations:
         lastmod: "{{ .Origin.LastMod }}"
     backMatter: *docBackMatter
 
-  - glob: "../CODE_OF_CONDUCT.md"
+  - glob: "$(EXTERNAL_GLOB_REL)CODE_OF_CONDUCT.md"
     path: /contributing/CODE_OF_CONDUCT.md
     frontMatter:
       template: |
@@ -59,7 +61,7 @@ transformations:
         lastmod: "{{ .Origin.LastMod }}"
     backMatter: *docBackMatter
 
-  - glob: "../CONTRIBUTING.md"
+  - glob: "$(EXTERNAL_GLOB_REL)CONTRIBUTING.md"
     path: /contributing/CONTRIBUTING.md
     frontMatter:
       template: |

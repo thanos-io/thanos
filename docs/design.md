@@ -2,7 +2,7 @@
 
 Thanos is a set of components that can be composed into a highly available Prometheus setup with long term storage capabilities. Its main goals are operation simplicity and retaining of Prometheus's reliability properties.
 
-The Prometheus metric data model and the 2.0 storage format ([spec](https://github.com/prometheus/prometheus/tree/master/tsdb/docs/format), [slides](https://www.slideshare.net/FabianReinartz/storing-16-bytes-at-scale-81282712)) are the foundational layers of all components in the system.
+The Prometheus metric data model and the 2.0 storage format ([spec](https://github.com/prometheus/prometheus/tree/main/tsdb/docs/format), [slides](https://www.slideshare.net/FabianReinartz/storing-16-bytes-at-scale-81282712)) are the foundational layers of all components in the system.
 
 ## Architecture
 

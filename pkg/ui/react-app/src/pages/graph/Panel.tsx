@@ -15,7 +15,6 @@ import QueryStatsView, { QueryStats } from './QueryStatsView';
 import { Store } from '../../thanos/pages/stores/store';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
-import CMExpressionInput from './CMExpressionInput';
 import { parseDuration } from '../../utils';
 
 interface PanelProps {
@@ -28,7 +27,6 @@ interface PanelProps {
   removePanel: () => void;
   onExecuteQuery: (query: string) => void;
   stores: Store[];
-  useExperimentalEditor: boolean;
   enableAutocomplete: boolean;
   enableHighlighting: boolean;
   enableLinter: boolean;
@@ -95,7 +93,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.handleStoreMatchChange = this.handleStoreMatchChange.bind(this);
   }
 
-  componentDidUpdate({ options: prevOpts }: PanelProps) {
+  componentDidUpdate({ options: prevOpts }: PanelProps): void {
     const {
       endTime,
       range,
@@ -120,7 +118,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     }
   }
 
-  componentDidMount() {
+  componentDidMount(): void {
     this.executeQuery();
   }
 
@@ -249,24 +247,24 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     return this.props.options.endTime;
   };
 
-  handleChangeEndTime = (endTime: number | null) => {
+  handleChangeEndTime = (endTime: number | null): void => {
     this.setOptions({ endTime: endTime });
   };
 
-  handleChangeResolution = (resolution: number | null) => {
+  handleChangeResolution = (resolution: number | null): void => {
     this.setOptions({ resolution: resolution });
   };
 
-  handleChangeMaxSourceResolution = (maxSourceResolution: string) => {
+  handleChangeMaxSourceResolution = (maxSourceResolution: string): void => {
     this.setOptions({ maxSourceResolution });
   };
 
-  handleChangeType = (type: PanelType) => {
+  handleChangeType = (type: PanelType): void => {
     this.setState({ data: null });
     this.setOptions({ type: type });
   };
 
-  handleChangeStacking = (stacked: boolean) => {
+  handleChangeStacking = (stacked: boolean): void => {
     this.setOptions({ stacked: stacked });
   };
 
@@ -286,38 +284,24 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.setState({ error: null });
   };
 
-  render() {
+  render(): JSX.Element {
     const { pastQueries, metricNames, options, id, stores } = this.props;
     return (
       <div className="panel">
         <Row>
           <Col>
-            {this.props.useExperimentalEditor ? (
-              <CMExpressionInput
-                pathPrefix={this.props.pathPrefix}
-                value={this.state.exprInputValue}
-                onExpressionChange={this.handleExpressionChange}
-                executeQuery={this.executeQuery}
-                loading={this.state.loading}
-                enableAutocomplete={this.props.enableAutocomplete}
-                enableHighlighting={this.props.enableHighlighting}
-                enableLinter={this.props.enableLinter}
-                queryHistory={pastQueries}
-                metricNames={metricNames}
-              />
-            ) : (
-              <ExpressionInput
-                value={this.state.exprInputValue}
-                onExpressionChange={this.handleExpressionChange}
-                executeQuery={this.executeQuery}
-                loading={this.state.loading}
-                enableAutocomplete={this.props.enableAutocomplete}
-                autocompleteSections={{
-                  'Query History': pastQueries,
-                  'Metric Names': metricNames,
-                }}
-              />
-            )}
+            <ExpressionInput
+              pathPrefix={this.props.pathPrefix}
+              value={this.state.exprInputValue}
+              onExpressionChange={this.handleExpressionChange}
+              executeQuery={this.executeQuery}
+              loading={this.state.loading}
+              enableAutocomplete={this.props.enableAutocomplete}
+              enableHighlighting={this.props.enableHighlighting}
+              enableLinter={this.props.enableLinter}
+              queryHistory={pastQueries}
+              metricNames={metricNames}
+            />
           </Col>
         </Row>
         <Row>
@@ -359,7 +343,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                   getOptionLabel={(option: Store) => option.name}
                   getOptionValue={(option: Store) => option.name}
                   closeMenuOnSelect={false}
-                  styles={{ container: (provided, state) => ({ ...provided, marginBottom: 20, zIndex: 3, width: '100%' }) }}
+                  styles={{
+                    container: (provided, state) => ({
+                      ...provided,
+                      marginBottom: 20,
+                      zIndex: 3,
+                      width: '100%',
+                      color: '#000',
+                    }),
+                  }}
                   onChange={this.handleStoreMatchChange}
                 />
               </div>

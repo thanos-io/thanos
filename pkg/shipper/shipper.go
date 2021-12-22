@@ -15,15 +15,16 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -289,14 +290,10 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 			continue
 		}
 
-		if m.Compaction.Level > 1 {
+		// Skip overlap check if out of order uploads is enabled.
+		if m.Compaction.Level > 1 && !s.allowOutOfOrderUploads {
 			if err := checker.IsOverlapping(ctx, m.BlockMeta); err != nil {
-				if !s.allowOutOfOrderUploads {
-					return 0, errors.Errorf("Found overlap or error during sync, cannot upload compacted block, details: %v", err)
-				}
-				level.Error(s.logger).Log("msg", "found overlap or error during sync, cannot upload compacted block", "err", err)
-				uploadErrs++
-				continue
+				return 0, errors.Errorf("Found overlap or error during sync, cannot upload compacted block, details: %v", err)
 			}
 		}
 

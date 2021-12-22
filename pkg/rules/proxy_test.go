@@ -10,11 +10,12 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"google.golang.org/grpc"
 )
 
 type testRulesClient struct {
@@ -250,4 +251,28 @@ func TestProxy(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestProxyDataRace find the concurrent data race bug ( go test -race -run TestProxyDataRace -v ).
+func TestProxyDataRace(t *testing.T) {
+	logger := log.NewLogfmtLogger(os.Stderr)
+	p := NewProxy(logger, func() []rulespb.RulesClient {
+		es := &testRulesClient{
+			recvErr: errors.New("err"),
+		}
+		size := 100
+		endpoints := make([]rulespb.RulesClient, 0, size)
+		for i := 0; i < size; i++ {
+			endpoints = append(endpoints, es)
+		}
+		return endpoints
+	})
+	req := &rulespb.RulesRequest{
+		Type:                    rulespb.RulesRequest_ALL,
+		PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+	}
+	s := &rulesServer{
+		ctx: context.Background(),
+	}
+	_ = p.Rules(req, s)
 }

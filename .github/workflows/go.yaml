@@ -18,7 +18,7 @@ jobs:
       - name: Install Go.
         uses: actions/setup-go@v1
         with:
-          go-version: 1.16.x
+          go-version: 1.17.x
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
@@ -42,7 +42,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.16.x
+          go-version: 1.17.x
 
       - uses: actions/cache@v1
         with:
@@ -55,6 +55,11 @@ jobs:
       - name: Linting & vetting.
         run: make go-lint
   e2e:
+    strategy:
+      fail-fast: true
+      matrix:
+        parallelism: [4]
+        index: [0,1,2,3]  
     runs-on: ubuntu-latest
     name: Thanos end-to-end tests
     env:
@@ -63,7 +68,7 @@ jobs:
       - name: Install Go.
         uses: actions/setup-go@v1
         with:
-          go-version: 1.16.x
+          go-version: 1.17.x
 
       - name: Check out code into the Go module directory.
         uses: actions/checkout@v2
@@ -74,4 +79,4 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
       - name: Run e2e docker-based tests.
-        run: make test-e2e
+        run: make test-e2e GH_PARALLEL=${{ matrix.parallelism }} GH_INDEX=${{ matrix.index }}
