@@ -86,6 +86,29 @@ With our new metric we:
 * Do not want to create separate histograms for each individual store query, so they will need to be aggregated at the `Series` request level so that our observations include all
 * Do not want to block series receive on a `seriesStats` merging mutex for each incoming response, so maintaining a central `seriesStats` reference and passing it into each of the proxied store requests is out of the question
 
+### Why can't we capture the query shape & latency spanning the entire query path? 
+
+PromQL engine accepts a `storage.Queryable` which denotes the source of series data in a particular query/query engine instance. The implementation of the thanos query store proxy implements this interface, providing an API for aggregating series across disparate store targets registered to the store instance. 
+
+As the 'shape' of the query is a consequence of our `storage.Queryable` implementation (backed by the proxy store API), there is no way to pass the `SeriesStats` through the PromQL engine query exec in the Thanos query path without changing the `Querier` prometheus interface.
+
+Example of how upstream `Querier` interface change would look like if we included the series stats (or some generic representation of SelectFnStats): 
+```go
+// Querier provides querying access over time series data of a fixed time range.
+type Querier interface {
+	LabelQuerier
+
+	// Select returns a set of series that matches the given label matchers.
+	// Caller can specify if it requires returned series to be sorted. Prefer not requiring sorting for better performance.
+	// It allows passing hints that can help in optimising select, but it's up to implementation how this is used if used at all.
+	Select(sortSeries bool, hints *SelectHints, matchers ...*labels.Matcher) (SeriesSet, SeriesStats)
+}
+```
+By amending the prometheus `storage.Querier` interface to include the  `SeriesStats` (or some form of it) alongside the `SeriesSet` when a `Select` is performed,  all `Queriers` must return stats alongside selects (which may be a good thing but a breaking API change). I want to explore doing this in upstream Prometheus, but the below implementation is an intermediate step to see if this approach is useful at all in capturing the select phase shape/latencies independently.
+
+**tl;dr:** We could capture the entire query path by amending the Prometheus Querier API to return some stats alongside the query, and creating this generic metric inside the Prometheus PromQL engine.
+
+### Measuring Thanos Proxy StoreAPI Select Latency
 First we would create a new `SeriesQueryPerformanceCalculator` for aggregating/tracking the `SeriesStatsCounters` for each fanned out query
 
 go pseudo:
@@ -102,7 +125,7 @@ type SeriesQueryPerformanceMetricsAggregator struct {
 func NewSeriesQueryPerformanceMetricsAggregator(reg prometheus.Registerer) *SeriesQueryPerformanceMetrics {
 	return &SeriesQueryPerformanceMetrics{
 		QueryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "thanos_store_query_duration_seconds",
+			Name:    "thanos_store_select_duration_seconds",
 			Help:    "duration of the thanos store select phase for a query",
 			Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 3, 5}, // These quantiles will be passed via commandline arg
 		}, []string{"series_le", "samples_le"}),
@@ -131,7 +154,6 @@ func (s *SeriesQueryPerformanceMetricsAggregator) findBucket(value int, quantile
 ```
 
 Current query fanout logic:
-
 ```go
 for _, st := range s.stores() {
 	// [Error handling etc.]
@@ -142,56 +164,37 @@ for _, st := range s.stores() {
 }
 ```
 
-[Propagating the `SeriesStats` via channel](https://github.com/thanos-io/thanos/blob/de0e3848ff6085acf89a5f77e053c555a2cce550/pkg/store/proxy.go#L362):
+[Propagating the `SeriesStats` via `storepb.SeriesServer`](https://github.com/thanos-io/thanos/blob/de0e3848ff6085acf89a5f77e053c555a2cce550/pkg/store/proxy.go#L362):
 
 ```go
-func startStreamSeriesSet(
-  ctx context.Context,
-  logger log.Logger,
-  span tracing.Span,
-  closeSeries context.CancelFunc,
-  wg *sync.WaitGroup,
-  stream storepb.Store_SeriesClient,
-  warnCh directSender,
-  name string,
-  partialResponse bool,
-  responseTimeout time.Duration,
-  emptyStreamResponses prometheus.Counter,
-  seriesStatsCh: chan<- *storepb.SeriesStatsCounter // Passed via arg
-) *streamSeriesSet {
-	s := &streamSeriesSet{
-		ctx:             ctx,
-		logger:          logger,
-		closeSeries:     closeSeries,
-		stream:          stream,
-		warnCh:          warnCh,
-		recvCh:          make(chan *storepb.Series, 10),
-		name:            name,
-		partialResponse: partialResponse,
-		responseTimeout: responseTimeout,
-		seriesStatsCh:   seriesStatsCh, // Reference maintained in the seriesSet
-	}
-  // Process stream
+type seriesServer struct {
+  // This field just exist to pseudo-implement the unused methods of the interface.
+  storepb.Store_SeriesServer
+  ctx context.Context
+  
+  seriesSet []storepb.Series
+  seriesSetStats storepb.SeriesStatsCounter
+  warnings  []string
+}
+
+func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
+  if r.GetWarning() != "" {
+  s.warnings = append(s.warnings, r.GetWarning())
+  return nil
+  }
+  
+  if r.GetSeries() != nil {
+  s.seriesSet = append(s.seriesSet, *r.GetSeries())
+  // For each appended series, increment the seriesStats
+  s.seriesSetStats.Count(r.GetSeries())
+  return nil
+  }
+  
+  // Unsupported field, skip.
+  return nil
 }
 ```
-
-The `seriesStats` sent to the channel on response [here](https://github.com/thanos-io/thanos/blob/de0e3848ff6085acf89a5f77e053c555a2cce550/pkg/store/proxy.go#L454-L463):
-
-```go
-if series := rr.r.GetSeries(); series != nil {
-	seriesStats.Count(series)
-	seriesStatsCh <- seriesStats // Propogate the stats for this response
-
-	select {
-	case s.recvCh <- series:
-	case <-ctx.Done():
-		s.handleErr(errors.Wrapf(ctx.Err(), "failed to receive any data from %s", s.name), done)
-		return false
-	}
-}
-```
-
-We would then process and aggregate the series stats up the call stack in the [`Series`](https://github.com/thanos-io/thanos/blob/de0e3848ff6085acf89a5f77e053c555a2cce550/pkg/store/proxy.go#L191) handler.
+Now that the `SeriesStats` are propagated into the `storepb.SeriesServer`, we can ammend the `selectFn` function to return a tuple of `(storage.SeriesSet, storage.SeriesSetCounter, error)` 
 
 ### What time shall we observe?
 
