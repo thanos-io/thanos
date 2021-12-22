@@ -481,7 +481,7 @@ type MetaFetcher struct {
 	wrapped *BaseFetcher
 	metrics *FetcherMetrics
 
-	filters   []MetadataFilter
+	filters []MetadataFilter
 
 	listener func([]metadata.Meta, error)
 
