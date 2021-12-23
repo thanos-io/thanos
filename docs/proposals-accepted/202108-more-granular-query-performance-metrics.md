@@ -108,13 +108,14 @@ type Querier interface {
 ```
 By amending the prometheus `storage.Querier` interface to include the  `SeriesStats` (or some form of it) alongside the `SeriesSet` when a `Select` is performed,  all `Queriers` must return stats alongside selects (which may be a good thing but a breaking API change). I want to explore doing this in upstream Prometheus, but the below implementation is an intermediate step to see if this approach is useful at all in capturing the select phase shape/latencies independently.
 
-**tl;dr:** We could capture the entire query path by amending the Prometheus Querier API to return some stats alongside the query, and creating this generic metric inside the Prometheus PromQL engine.
+Due to the limitations of the prom Querier API, we can instead use the reporter pattern and override the `QueryableCreator` constructor to take an extra function parameter that exfiltrates the series stats from the `Select` function and submits the query time observation in the API query handler. 
 
-### Measuring Thanos Proxy StoreAPI Select Latency
+**tl;dr:** Longer term to capture the entire query path by amending the Prometheus Querier API to return some stats alongside the query, and creating this generic metric inside the Prometheus PromQL engine. Short term, pass a func parameter to the Queryable constructor for the proxy StoreAPI querier that will exfiltrate the `SeriesStats`, circumventing PromQL engine.  
+
+### Measuring Thanos Query Latency with respect to query fanout 
 First we would create a new `SeriesQueryPerformanceCalculator` for aggregating/tracking the `SeriesStatsCounters` for each fanned out query
 
 go pseudo:
-
 ```go
 type SeriesQueryPerformanceMetricsAggregator struct {
 	QueryDuration *prometheus.HistogramVec
@@ -127,7 +128,7 @@ type SeriesQueryPerformanceMetricsAggregator struct {
 func NewSeriesQueryPerformanceMetricsAggregator(reg prometheus.Registerer) *SeriesQueryPerformanceMetrics {
 	return &SeriesQueryPerformanceMetrics{
 		QueryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "thanos_store_select_duration_seconds",
+			Name:    "thanos_query_duration_seconds",
 			Help:    "duration of the thanos store select phase for a query",
 			Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 3, 5}, // These quantiles will be passed via commandline arg
 		}, []string{"series_le", "samples_le"}),
@@ -196,18 +197,71 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
   return nil
 }
 ```
-Now that the `SeriesStats` are propagated into the `storepb.SeriesServer`, we can ammend the `selectFn` function to return a tuple of `(storage.SeriesSet, storage.SeriesSetCounter, error)` 
+Now that the `SeriesStats` are propagated into the `storepb.SeriesServer`, we can ammend the `selectFn` function to return a tuple of `(storage.SeriesSet, storage.SeriesSetCounter, error)`
 
-### What time shall we observe?
 
-We can either:
-* [Preferred] Measure Select Phase duration: start a timer within the `QueryPerformanceHistogramCalculator` when it is initialised in the `thanos/store/proxy.go` `Series` handler
-* Measure entire query latency including processing: Initialise the time further up the callstack inside
+Ammending the QueryableCreator to provide a func parameter: 
+```go
+type SeriesStatsReporter func(seriesStats storepb.SeriesStatsCounter)
 
-tl;dr: We add a `seriesStats` channel that receives `storepb.SeriesStatsCounter`'s form each response, aggregating it up the stack in the `thanos/store/proxy.go` `Series` handler. We add a new `SeriesQueryPerformanceMetricsAggregator` that is responsible for aggregating `seriesStats`. The timer will start when the `Series` function is first hit. After the response channel is exhausted, the calculator will take an observation according to the `--query.telemetry` quantile flags to the `thanos_store_query_duration_seconds` histogram.
+type QueryableCreator func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool, seriesStatsReporter SeriesStatsReporter) storage.Queryable
 
-**Caveat**
-* This doesn't capture the entire query performance, only the thanos/store select phase query performance. To measure the entire query path latency we will need to propagate the stats further and aggregate them in the HTTP handlers for the `query` and `query_range`
+// NewQueryableCreator creates QueryableCreator.
+func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy storepb.StoreServer, maxConcurrentSelects int, selectTimeout time.Duration, seriesStatsReporter SeriesStatsReporter) QueryableCreator {
+	duration := promauto.With(
+		extprom.WrapRegistererWithPrefix("concurrent_selects_", reg),
+	).NewHistogram(gate.DurationHistogramOpts)
+
+	return func(deduplicate bool, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable {
+		return &queryable{
+			logger:              logger,
+			replicaLabels:       replicaLabels,
+			storeDebugMatchers:  storeDebugMatchers,
+			proxy:               proxy,
+			deduplicate:         deduplicate,
+			maxResolutionMillis: maxResolutionMillis,
+			partialResponse:     partialResponse,
+			skipChunks:          skipChunks,
+			gateProviderFn: func() gate.Gate {
+				return gate.InstrumentGateDuration(duration, promgate.New(maxConcurrentSelects))
+			},
+			maxConcurrentSelects: maxConcurrentSelects,
+			selectTimeout:        selectTimeout,
+			seriesStatsReporter:  seriesStatsReporter,
+		}
+	}
+}
+```
+
+Injecting the reporter into the qapi Queryable static constructor: 
+```go
+	var (
+		ssmtx	sync.Mutex
+		seriesStats []storepb.SeriesStatsCounter
+	)
+	seriesStatsReporter := func(ss storepb.SeriesStatsCounter) {
+		ssmtx.Lock()
+		defer ssmtx.Unlock()
+
+		seriesStats = append(seriesStats, ss)
+	}
+	qry, err := qe.NewRangeQuery(
+		qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false, seriesStatsReporter),
+		r.FormValue("query"),
+		start,
+		end,
+		step,
+	)
+```
+
+In summary, we will: 
+* Amend the `seriesServer` to keep track of all `SeriesStats` for each series pushed to it
+* Amend the static `qapi.queryableCreate` to take a `SeriesStatsReporter` func parameter that will exfiltrate the seriesStats from the Thanos Proxy StoreAPI
+* Add new runtime flags that will allow us to specify a) Query time quantiles b) Series size quantiles c) Sample size quantiles for our partitioned histogram
+* Start a query duration timer as soon as the handler is hit
+* Create a new partitioned vector histogram called `thanos_query_duration_seconds` in the `queryRange` API handler 
+* Propagate all exfiltrated `SeriesStats` to aforementioned metric
+* Record observations against the `thanos_query_duration_seconds` histogram after bucketing samples_le/series_le buckets 
 
 # Alternatives
 
