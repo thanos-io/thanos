@@ -989,7 +989,7 @@ func genCerts(certPath, privkeyPath, caPath, serverName string) error {
 		Type:  "CERTIFICATE",
 		Bytes: certBytes,
 	})
-	ioutil.WriteFile(certPath, certPEM, 0644)
+	err = ioutil.WriteFile(certPath, certPEM, 0644)
 	if err != nil {
 		return err
 	}
@@ -998,7 +998,7 @@ func genCerts(certPath, privkeyPath, caPath, serverName string) error {
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
 	})
-	ioutil.WriteFile(privkeyPath, certPrivKeyPEM, 0644)
+	err = ioutil.WriteFile(privkeyPath, certPrivKeyPEM, 0644)
 	if err != nil {
 		return err
 	}
