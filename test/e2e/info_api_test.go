@@ -57,6 +57,7 @@ func TestInfo(t *testing.T) {
 			},
 		},
 		"",
+		nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(store))

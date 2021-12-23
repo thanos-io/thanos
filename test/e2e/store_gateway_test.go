@@ -72,6 +72,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			},
 		},
 		memcachedConfig,
+		nil,
 		relabel.Config{
 			Action:       relabel.Drop,
 			Regex:        relabel.MustNewRegexp("value2"),
@@ -319,6 +320,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			},
 		},
 		memcachedConfig,
+		nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))

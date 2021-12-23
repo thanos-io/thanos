@@ -653,7 +653,7 @@ receivers:
 	return s, nil
 }
 
-func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig string, relabelConfig ...relabel.Config) (*e2e.InstrumentedRunnable, error) {
+func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig string, extArgs []string, relabelConfig ...relabel.Config) (*e2e.InstrumentedRunnable, error) {
 	dir := filepath.Join(e.SharedDir(), "data", "store", name)
 	container := filepath.Join(ContainerSharedDir, "data", "store", name)
 	if err := os.MkdirAll(dir, 0750); err != nil {
@@ -670,7 +670,7 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		return nil, errors.Wrapf(err, "generate store relabel file: %v", relabelConfig)
 	}
 
-	args := e2e.BuildArgs(map[string]string{
+	args := append(e2e.BuildArgs(map[string]string{
 		"--debug.name":        fmt.Sprintf("store-gw-%v", name),
 		"--grpc-address":      ":9091",
 		"--grpc-grace-period": "0s",
@@ -684,7 +684,7 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		"--store.grpc.series-max-concurrency": "1",
 		"--selector.relabel-config":           string(relabelConfigBytes),
 		"--consistency-delay":                 "30m",
-	})
+	}), extArgs...)
 
 	if cacheConfig != "" {
 		args = append(args, "--store.caching-bucket.config", cacheConfig)

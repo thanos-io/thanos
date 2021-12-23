@@ -465,7 +465,9 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 			Insecure:  true,
 		},
 	}
-	str, err := e2ethanos.NewStoreGW(e, "1", svcConfig, "")
+
+	// Crank down the deletion mark delay since deduplication can miss blocks in the presence of replica labels it doesn't know about.
+	str, err := e2ethanos.NewStoreGW(e, "1", svcConfig, "", []string{"--ignore-deletion-marks-delay=2s"})
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(str))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8)), "thanos_blocks_meta_synced"))
