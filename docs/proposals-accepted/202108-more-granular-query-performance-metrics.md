@@ -88,7 +88,7 @@ With our new metric we:
 * Do not want to create separate histograms for each individual store query, so they will need to be aggregated at the `Series` request level so that our observations include all
 * Do not want to block series receive on a `seriesStats` merging mutex for each incoming response, so maintaining a central `seriesStats` reference and passing it into each of the proxied store requests is out of the question
 
-### Why can't we capture the query shape & latency spanning the entire query path? 
+### How can we capture the query shape & latency spanning the entire query path? 
 
 PromQL engine accepts a `storage.Queryable` which denotes the source of series data in a particular query/query engine instance. The implementation of the thanos query store proxy implements this interface, providing an API for aggregating series across disparate store targets registered to the store instance. 
 
