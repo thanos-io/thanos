@@ -822,7 +822,7 @@ http {
 // NewMinio returns minio server, used as a local replacement for S3.
 // TODO(@matej-g): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/11;
 // after this is addresses fixed all calls should be replaced with e2edb.NewMinio.
-func NewMinio(env e2e.Environment, name, bktName string) *e2e.InstrumentedRunnable {
+func NewMinio(env e2e.Environment, name, bktName string) (*e2e.InstrumentedRunnable, error) {
 	image := "minio/minio:RELEASE.2019-12-30T05-45-39Z"
 	minioKESGithubContent := "https://raw.githubusercontent.com/minio/kes/master"
 	commands := []string{
@@ -831,7 +831,7 @@ func NewMinio(env e2e.Environment, name, bktName string) *e2e.InstrumentedRunnab
 	}
 
 	if err := os.MkdirAll(filepath.Join(env.SharedDir(), "data", "certs", "CAs"), 0750); err != nil {
-		fmt.Println(errors.Wrap(err, "create certs dir"))
+		return nil, errors.Wrap(err, "create certs dir")
 	}
 
 	if err := genCerts(
@@ -839,7 +839,7 @@ func NewMinio(env e2e.Environment, name, bktName string) *e2e.InstrumentedRunnab
 		filepath.Join(env.SharedDir(), "data", "certs", "private.key"),
 		filepath.Join(env.SharedDir(), "data", "certs", "CAs", "ca.crt"),
 		env.Name()+"-"+name); err != nil {
-		fmt.Println(errors.Wrap(err, "fail to generate certs"))
+		return nil, errors.Wrap(err, "fail to generate certs")
 	}
 
 	return e2e.NewInstrumentedRunnable(
@@ -865,7 +865,7 @@ func NewMinio(env e2e.Environment, name, bktName string) *e2e.InstrumentedRunnab
 				"MINIO_KMS_KES_KEY_NAME":  "my-minio-key",
 			},
 		},
-	)
+	), nil
 }
 
 func NewMemcached(e e2e.Environment, name string) *e2e.InstrumentedRunnable {

@@ -43,7 +43,8 @@ func TestStoreGateway(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store_gateway_test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	memcached := e2ethanos.NewMemcached(e, "1")
@@ -282,7 +283,8 @@ func TestStoreGatewayMemcachedCache(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store_gateway_memcached_cache_test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	memcached := e2ethanos.NewMemcached(e, "1")

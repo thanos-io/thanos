@@ -345,7 +345,8 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 
 	const bucket = "compact_test"
-	m := e2ethanos.NewMinio(e, "minio", bucket)
+	m, err := e2ethanos.NewMinio(e, "minio", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger,

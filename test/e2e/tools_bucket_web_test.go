@@ -39,7 +39,8 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	externalPrefix := "testThanos"
 
 	const bucket = "compact_test"
-	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
@@ -72,7 +73,8 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 
 	externalPrefix := "testThanos"
 	const bucket = "toolsBucketWeb_test"
-	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
@@ -111,7 +113,8 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	externalPrefix := "testThanos"
 	routePrefix := "test"
 	const bucket = "toolsBucketWeb_test"
-	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
@@ -148,7 +151,8 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 	// Create Minio.
 	const bucket = "toolsBucketWeb_test"
-	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 	// Create bucket.
 	logger := log.NewLogfmtLogger(os.Stdout)

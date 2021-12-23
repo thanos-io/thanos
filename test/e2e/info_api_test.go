@@ -39,7 +39,8 @@ func TestInfo(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
 
 	const bucket = "info-api-test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 	store, err := e2ethanos.NewStoreGW(
 		e,
