@@ -957,12 +957,12 @@ func genCerts(certPath, privkeyPath, caPath, serverName string) error {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	caPrivKey, err := rsa.GenerateKey(rand.Reader, 1024)
+	caPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return err
 	}
 
-	certPrivKey, err := rsa.GenerateKey(rand.Reader, 1024)
+	certPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return err
 	}
