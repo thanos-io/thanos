@@ -166,3 +166,9 @@ input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
         width: 1em;
     }
 }
+
+@media (max-width: 580px){
+    .list-inline-item{
+        margin-bottom: 1rem;
+    }
+}
