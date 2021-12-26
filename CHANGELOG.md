@@ -37,6 +37,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4888](https://github.com/thanos-io/thanos/pull/4888) Cache: support redis cache backend.
 - [#4946](https://github.com/thanos-io/thanos/pull/4946) Store: Support tls_config configuration for the s3 minio client.
 - [#4974](https://github.com/thanos-io/thanos/pull/4974) Store: Support tls_config configuration for connecting with Azure storage.
+- [#4999](https://github.com/thanos-io/thanos/pull/4999) COS: Support `endpoint` configuration for vpc internal endpoint.
 
 ### Fixed
 
