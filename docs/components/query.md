@@ -142,7 +142,7 @@ For example: If 2 prom replicas are scraping the same metrics (prom A and prom B
 
 The total impact would be that there would be fewer samples in the query result. The deduplication is merging the datasets from the two instances into one. One Prometheus should be enough to provide you with what you need. I think of multiple instances as replication, but it's not the same kind of replication you'd get from any other standard replication setup, because your sample times are slightly off. However, it's still considered replicated data. So Thanos attaches to them and provides you with a query interface across your replicas. As long as one replica is alive then you should consider your query results are valid, even though you may have fewer samples than had you queried 3 replicas.
 Overall, the query results shouldn't be impacted very much, if at all. It's possible that one instance could scrape, say, 100% CPU in at 14m. Perhaps it would catch an instantaneous CPU spike. Your irate may show that spike when both replicas are alive, but if that replica goes down you wouldn't see that spike in the irate.
-It isn't important. And if it is, then you should decrease your sample rate to less than 15s. 
+It isn't important. And if it is, then you should decrease your sample rate to less than 15s.
 
 ### Deduplication replica labels.
 
