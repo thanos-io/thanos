@@ -1163,7 +1163,7 @@ func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
 			result: []*model.Sample{
 				{
 					Metric: map[model.LabelName]model.LabelValue{},
-					Value:  9, // Why? Very weird.
+					Value:  10,
 				},
 			},
 		},
@@ -1174,7 +1174,7 @@ func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
 			result: []*model.Sample{
 				{
 					Metric: map[model.LabelName]model.LabelValue{"instance": "i1"},
-					Value:  1, // Weird results.
+					Value:  3,
 				},
 				{
 					Metric: map[model.LabelName]model.LabelValue{"instance": "i2"},
@@ -1182,7 +1182,7 @@ func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
 				},
 				{
 					Metric: map[model.LabelName]model.LabelValue{"instance": "i3"},
-					Value:  9, // Weird again :/
+					Value:  10,
 				},
 			},
 		},
@@ -1212,7 +1212,7 @@ func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
 			result: []*model.Sample{
 				{
 					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p1"},
-					Value:  1, // I expect to have 3 here?
+					Value:  3,
 				},
 				{
 					Metric: map[model.LabelName]model.LabelValue{"instance": "i2", "prometheus": "p1"},

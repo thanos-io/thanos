@@ -271,6 +271,9 @@ func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *store
 		// Attach external labels for compatibility with remote read.
 		finalLbls := labelpb.ExtendSortedLabels(seriesLbls, externalLbls)
 
+		// HACK: break the invariant to specify that the query has been pushed down.
+		finalLbls = append(finalLbls, labels.Label{Name: "__thanos_pushed_down", Value: "true"})
+
 		series := &prompb.TimeSeries{
 			Labels:  labelpb.ZLabelsFromPromLabels(finalLbls),
 			Samples: prompb.SamplesFromSamplePairs(vector.Values),
