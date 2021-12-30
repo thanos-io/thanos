@@ -50,7 +50,7 @@ pre {
 }
 
 .img-adopter {
-    padding: 20px;
+    padding: 15px;
     background-color: #fff;
     box-shadow: 0 2px 4px rgba(0,0,0,.1);
     border: 1px solid #dee2e6;
@@ -170,5 +170,12 @@ input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
         height: 1em;
         vertical-align: middle;
         width: 1em;
+    }
+}
+
+@media (max-width: 768px){
+    .hero-logo-container {
+        flex-grow: 1;
+        max-width: 100%;
     }
 }
