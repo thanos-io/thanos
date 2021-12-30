@@ -28,7 +28,6 @@ import (
 	"strings"
 	"time"
 
-	cortexutil "github.com/cortexproject/cortex/pkg/util"
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -821,18 +820,18 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 			err      error
 		)
 
-		start, err := cortexutil.ParseTime(r.FormValue("start"))
+		start, err := parseTimeParam(r, "start", infMinTime)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}
-		end, err := cortexutil.ParseTime(r.FormValue("end"))
+		end, err := parseTimeParam(r, "end", infMaxTime)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}
 
 		req := &exemplarspb.ExemplarsRequest{
-			Start:                   start,
-			End:                     end,
+			Start:                   timestamp.FromTime(start),
+			End:                     timestamp.FromTime(end),
 			Query:                   r.FormValue("query"),
 			PartialResponseStrategy: ps,
 		}
