@@ -6,14 +6,13 @@ package main
 import (
 	"context"
 	"math"
-	"net/http"
 	"net/url"
 	"sync"
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
@@ -22,14 +21,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
-	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
-	thanoshttp "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/info"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
 	meta "github.com/thanos-io/thanos/pkg/metadata"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
@@ -43,9 +44,9 @@ import (
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 func registerSidecar(app *extkingpin.App) {
@@ -84,6 +85,22 @@ func runSidecar(
 	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 ) error {
+	httpConfContentYaml, err := conf.prometheus.httpClient.Content()
+	if err != nil {
+		return errors.Wrap(err, "getting http client config")
+	}
+	httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
+	if err != nil {
+		return errors.Wrap(err, "parsing http config YAML")
+	}
+
+	httpClient, err := httpconfig.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
+	if err != nil {
+		return errors.Wrap(err, "Improper http client config")
+	}
+
+	reloader.SetHttpClient(*httpClient)
+
 	var m = &promMetadata{
 		promURL: conf.prometheus.url,
 
@@ -93,7 +110,7 @@ func runSidecar(
 		maxt: math.MaxInt64,
 
 		limitMinTime: conf.limitMinTime,
-		client:       promclient.NewWithTracingClient(logger, "thanos-sidecar"),
+		client:       promclient.NewWithTracingClient(logger, httpClient, "thanos-sidecar"),
 	}
 
 	confContentYaml, err := conf.objStore.Content()
@@ -137,10 +154,6 @@ func runSidecar(
 		promUp := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Name: "thanos_sidecar_prometheus_up",
 			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
-		})
-		lastHeartbeat := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_sidecar_last_heartbeat_success_time_seconds",
-			Help: "Timestamp of the last successful heartbeat in seconds.",
 		})
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -191,7 +204,6 @@ func runSidecar(
 				)
 				promUp.Set(1)
 				statusProber.Ready()
-				lastHeartbeat.SetToCurrentTime()
 				return nil
 			})
 			if err != nil {
@@ -211,9 +223,10 @@ func runSidecar(
 				if err := m.UpdateLabels(iterCtx); err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
+					statusProber.NotReady(err)
 				} else {
 					promUp.Set(1)
-					lastHeartbeat.SetToCurrentTime()
+					statusProber.Ready()
 				}
 
 				return nil
@@ -231,10 +244,7 @@ func runSidecar(
 		})
 	}
 	{
-		t := exthttp.NewTransport()
-		t.MaxIdleConnsPerHost = conf.connection.maxIdleConnsPerHost
-		t.MaxIdleConns = conf.connection.maxIdleConns
-		c := promclient.NewClient(&http.Client{Transport: tracing.HTTPTripperware(logger, t)}, logger, thanoshttp.ThanosUserAgent)
+		c := promclient.NewWithTracingClient(logger, httpClient, httpconfig.ThanosUserAgent)
 
 		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {
@@ -247,12 +257,33 @@ func runSidecar(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
+		exemplarSrv := exemplars.NewPrometheus(conf.prometheus.url, c, m.Labels)
+
+		infoSrv := info.NewInfoServer(
+			component.Sidecar.String(),
+			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
+				return promStore.LabelSet()
+			}),
+			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
+				mint, maxt := promStore.Timestamps()
+				return &infopb.StoreInfo{
+					MinTime: mint,
+					MaxTime: maxt,
+				}
+			}),
+			info.WithExemplarsInfoFunc(),
+			info.WithRulesInfoFunc(),
+			info.WithTargetsInfoFunc(),
+			info.WithMetricMetadataInfoFunc(),
+		)
+
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(targets.RegisterTargetsServer(targets.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
-			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewPrometheus(conf.prometheus.url, c, m.Labels))),
+			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarSrv)),
+			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpc.bindAddress),
 			grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -441,7 +472,6 @@ type sidecarConfig struct {
 	http         httpConfig
 	grpc         grpcConfig
 	prometheus   prometheusConfig
-	connection   connConfig
 	tsdb         tsdbConfig
 	reloader     reloaderConfig
 	reqLogConfig *extflag.PathOrContent
@@ -454,7 +484,6 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.http.registerFlag(cmd)
 	sc.grpc.registerFlag(cmd)
 	sc.prometheus.registerFlag(cmd)
-	sc.connection.registerFlag(cmd)
 	sc.tsdb.registerFlag(cmd)
 	sc.reloader.registerFlag(cmd)
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)

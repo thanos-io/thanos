@@ -1,8 +1,8 @@
-import React, { FC } from 'react';
+import React, { FC, useState } from 'react';
 import { Block } from './block';
 import styles from './blocks.module.css';
 import moment from 'moment';
-import { Button } from 'reactstrap';
+import { Button, Modal, ModalBody, Form, Input, ModalHeader, ModalFooter } from 'reactstrap';
 import { download } from './helpers';
 
 export interface BlockDetailsProps {
@@ -11,6 +11,35 @@ export interface BlockDetailsProps {
 }
 
 export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
+  const [modalAction, setModalAction] = useState<string>('');
+  const [detailValue, setDetailValue] = useState<string | null>(null);
+
+  const submitMarkBlock = async (action: string, ulid: string, detail: string | null) => {
+    try {
+      const body = detail
+        ? new URLSearchParams({
+            id: ulid,
+            action,
+            detail,
+          })
+        : new URLSearchParams({
+            id: ulid,
+            action,
+          });
+
+      const response = await fetch('/api/v1/blocks/mark', {
+        method: 'POST',
+        body,
+      });
+
+      if (!response.ok) {
+        throw new Error(response.statusText);
+      }
+    } finally {
+      setModalAction('');
+    }
+  };
+
   return (
     <div className={`${styles.blockDetails} ${block && styles.open}`}>
       {block && (
@@ -71,6 +100,50 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
               <Button>Download meta.json</Button>
             </a>
           </div>
+          <div style={{ marginTop: '12px' }}>
+            <Button
+              onClick={() => {
+                setModalAction('DELETION');
+                setDetailValue('');
+              }}
+            >
+              Mark Deletion
+            </Button>
+          </div>
+          <div style={{ marginTop: '12px' }}>
+            <Button
+              onClick={() => {
+                setModalAction('NO_COMPACTION');
+                setDetailValue('');
+              }}
+            >
+              Mark No Compaction
+            </Button>
+          </div>
+          <Modal isOpen={!!modalAction}>
+            <ModalBody>
+              <ModalHeader toggle={() => setModalAction('')}>
+                Mark {modalAction === 'DELETION' ? 'Deletion' : 'No Compaction'} Detail (Optional)
+              </ModalHeader>
+              <Form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitMarkBlock(modalAction, block.ulid, detailValue);
+                }}
+              >
+                <Input
+                  placeholder="Reason for marking block..."
+                  style={{ marginBottom: '16px', marginTop: '16px' }}
+                  onChange={(e) => setDetailValue(e.target.value)}
+                />
+                <ModalFooter>
+                  <Button color="primary" type="submit">
+                    Submit
+                  </Button>
+                </ModalFooter>
+              </Form>
+            </ModalBody>
+          </Modal>
         </>
       )}
     </div>

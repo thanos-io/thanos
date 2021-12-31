@@ -7,16 +7,18 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/mozillazg/go-cos"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/tencentyun/cos-go-sdk-v5"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/exthttp"
@@ -53,6 +55,7 @@ type Config struct {
 	Bucket     string     `yaml:"bucket"`
 	Region     string     `yaml:"region"`
 	AppId      string     `yaml:"app_id"`
+	Endpoint   string     `yaml:"endpoint"`
 	SecretKey  string     `yaml:"secret_key"`
 	SecretId   string     `yaml:"secret_id"`
 	HTTPConfig HTTPConfig `yaml:"http_config"`
@@ -60,6 +63,16 @@ type Config struct {
 
 // Validate checks to see if mandatory cos config options are set.
 func (conf *Config) validate() error {
+	if conf.Endpoint != "" {
+		if _, err := url.Parse(conf.Endpoint); err != nil {
+			return errors.Wrap(err, "parse endpoint")
+		}
+		if conf.SecretId == "" ||
+			conf.SecretKey == "" {
+			return errors.New("secret_id or secret_key is empty")
+		}
+		return nil
+	}
 	if conf.Bucket == "" ||
 		conf.AppId == "" ||
 		conf.Region == "" ||
@@ -118,13 +131,16 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 		return nil, errors.Wrap(err, "validate cos configuration")
 	}
 
-	bucketUrl := cos.NewBucketURL(config.Bucket, config.AppId, config.Region, true)
-
-	b, err := cos.NewBaseURL(bucketUrl.String())
-	if err != nil {
-		return nil, errors.Wrap(err, "initialize cos base url")
+	var bucketURL *url.URL
+	if config.Endpoint != "" {
+		bucketURL, err = url.Parse(config.Endpoint)
+		if err != nil {
+			return nil, errors.Wrap(err, "parse endpoint")
+		}
+	} else {
+		bucketURL = cos.NewBucketURL(fmt.Sprintf("%s-%s", config.Bucket, config.AppId), config.Region, true)
 	}
-
+	b := &cos.BaseURL{BucketURL: bucketURL}
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
 			SecretID:  config.SecretId,
@@ -217,6 +233,10 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 	opts := &cos.ObjectGetOptions{}
 	if length != -1 {
 		if err := setRange(opts, off, off+length-1); err != nil {
+			return nil, err
+		}
+	} else if off > 0 {
+		if err := setRange(opts, off, 0); err != nil {
 			return nil, err
 		}
 	}
@@ -355,6 +375,7 @@ func configFromEnv() Config {
 		Bucket:    os.Getenv("COS_BUCKET"),
 		AppId:     os.Getenv("COS_APP_ID"),
 		Region:    os.Getenv("COS_REGION"),
+		Endpoint:  os.Getenv("COS_ENDPOINT"),
 		SecretId:  os.Getenv("COS_SECRET_ID"),
 		SecretKey: os.Getenv("COS_SECRET_KEY"),
 	}
@@ -398,7 +419,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 		t.Log("WARNING. Reusing", c.Bucket, "COS bucket for COS tests. Manual cleanup afterwards is required")
 		return b, func() {}, nil
 	}
-	c.Bucket = objstore.CreateTemporaryTestBucketName(t)
+	c.Bucket = createTemporaryTestBucketName(t)
 
 	bc, err := yaml.Marshal(c)
 	if err != nil {
@@ -424,6 +445,16 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 }
 
 func validateForTest(conf Config) error {
+	if conf.Endpoint != "" {
+		if _, err := url.Parse(conf.Endpoint); err != nil {
+			return errors.Wrap(err, "parse endpoint")
+		}
+		if conf.SecretId == "" ||
+			conf.SecretKey == "" {
+			return errors.New("secret_id or secret_key is empty")
+		}
+		return nil
+	}
 	if conf.AppId == "" ||
 		conf.Region == "" ||
 		conf.SecretId == "" ||
@@ -431,4 +462,17 @@ func validateForTest(conf Config) error {
 		return errors.New("insufficient cos configuration information")
 	}
 	return nil
+}
+
+// createTemporaryTestBucketName create a temp cos bucket for test.
+// Bucket Naming Conventions: https://intl.cloud.tencent.com/document/product/436/13312#overview
+func createTemporaryTestBucketName(t testing.TB) string {
+	src := rand.New(rand.NewSource(time.Now().UnixNano()))
+	name := fmt.Sprintf("test_%x_%s", src.Int31(), strings.ToLower(t.Name()))
+	name = strings.NewReplacer("_", "-", "/", "-").Replace(name)
+	const maxLength = 50
+	if len(name) >= maxLength {
+		name = name[:maxLength]
+	}
+	return strings.TrimSuffix(name, "-")
 }

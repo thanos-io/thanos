@@ -34,6 +34,7 @@ Flags:
       --block-sync-concurrency=20  
                                  Number of goroutines to use when constructing
                                  index-cache.json blocks from object storage.
+                                 Must be equal or greater than 1.
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
                                  reserved strictly to reuse for chunks in
                                  memory.
@@ -303,11 +304,56 @@ While the remaining settings are **optional**:
 - `dns_provider_update_interval`: the DNS discovery update interval.
 - `auto_discovery`: whether to use the auto-discovery mechanism for memcached.
 
+### Redis index cache
+
+The `redis` index cache allows to use [Redis](https://redis.io) as cache backend. This cache type is configured using `--index-cache.config-file` to reference the configuration file or `--index-cache.config` to put yaml config directly:
+
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=cacheutil.RedisClientConfig"
+type: REDIS
+config:
+  addr: ""
+  username: ""
+  password: ""
+  db: 0
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_size: 100
+  min_idle_conns: 10
+  idle_timeout: 5m0s
+  max_conn_age: 0s
+  max_get_multi_concurrency: 100
+  get_multi_batch_size: 100
+  max_set_multi_concurrency: 100
+  set_multi_batch_size: 100
+```
+
+The **required** settings are:
+
+- `addr`: redis server address.
+
+While the remaining settings are **optional**:
+
+- `username`: the username to connect redis, only redis 6.0 and grater need this field.
+- `password`: the password to connect redis.
+- `db`: the database to be selected after connecting to the server.
+- `dial_timeout`: the redis dial timeout.
+- `read_timeout`: the redis read timeout.
+- `write_timeout`: the redis write timeout.
+- `pool_size`: maximum number of socket connections.
+- `min_idle_conns`: specifies the minimum number of idle connections which is useful when establishing new connection is slow.
+- `idle_timeout`: amount of time after which client closes idle connections. Should be less than server's timeout.
+- `max_conn_age`: connection age at which client retires (closes) the connection.
+- `max_get_multi_concurrency`: specifies the maximum number of concurrent GetMulti() operations.
+- `get_multi_batch_size`: specifies the maximum size per batch for mget.
+- `max_set_multi_concurrency`: specifies the maximum number of concurrent SetMulti() operations.
+- `set_multi_batch_size`: specifies the maximum size per batch for pipeline set.
+
 ## Caching Bucket
 
 Thanos Store Gateway supports a "caching bucket" with [chunks](../design.md#chunk) and metadata caching to speed up loading of [chunks](../design.md#chunk) from TSDB blocks. To configure caching, one needs to use `--store.caching-bucket.config=<yaml content>` or `--store.caching-bucket.config-file=<file.yaml>`.
 
-Both memcached and in-memory cache "backend"s are supported:
+memcached/in-memory/redis cache "backend"s are supported:
 
 ```yaml
 type: MEMCACHED # Case-insensitive
@@ -332,7 +378,8 @@ metafile_content_ttl: 24h
 metafile_max_size: 1MiB
 ```
 
-`config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache). `addresses` in the config field is a **required** setting
+- `config` field for memcached supports all the same configuration as memcached for [index cache](#memcached-index-cache). `addresses` in the config field is a **required** setting
+- `config` field for redis supports all the same configuration as redis for [index cache](#redis-index-cache).
 
 Additional options to configure various aspects of [chunks](../design.md#chunk) cache are available:
 

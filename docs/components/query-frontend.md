@@ -95,6 +95,35 @@ config:
   expiration: 24h
 ```
 
+#### Redis
+
+The default redis config is:
+
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=queryfrontend.RedisResponseCacheConfig"
+type: REDIS
+config:
+  addr: ""
+  username: ""
+  password: ""
+  db: 0
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_size: 100
+  min_idle_conns: 10
+  idle_timeout: 5m0s
+  max_conn_age: 0s
+  max_get_multi_concurrency: 100
+  get_multi_batch_size: 100
+  max_set_multi_concurrency: 100
+  set_multi_batch_size: 100
+  expiration: 24h0m0s
+```
+
+`expiration` specifies redis cache valid time. If set to 0s, so using a default of 24 hours expiration time.
+
+Other cache configuration parameters, you can refer to [redis-index-cache](store.md#redis-index-cache).
+
 ### Slow Query Log
 
 Query Frontend supports `--query-frontend.log-queries-longer-than` flag to log queries running longer than some duration.
@@ -105,7 +134,7 @@ Naming is hard :) Please check [here](https://github.com/thanos-io/thanos/pull/2
 
 ## Recommended Downstream Tripper Configuration
 
-You can configure the parameters of the HTTP client that `query-frontend` uses for the downstream URL with parameters `--query-range.downstream-tripper-config` and `--query-range.downstream-tripper-config-file`. If it is pointing to a single host, most likely a load-balancer, then it is highly recommended to increase `max_idle_conns_per_host` via these parameters to at least 100 because otherwise `query-frontend` will not be able to leverage HTTP keep-alive connections, and the latency will be 10 - 20% higher. By default, the Go HTTP client will only keep two idle connections per each host.
+You can configure the parameters of the HTTP client that `query-frontend` uses for the downstream URL with parameters `--query-frontend.downstream-tripper-config` and `--query-frontend.downstream-tripper-config-file`. If it is pointing to a single host, most likely a load-balancer, then it is highly recommended to increase `max_idle_conns_per_host` via these parameters to at least 100 because otherwise `query-frontend` will not be able to leverage HTTP keep-alive connections, and the latency will be 10 - 20% higher. By default, the Go HTTP client will only keep two idle connections per each host.
 
 Keys which denote a duration are strings that can end with `s` or `m` to indicate seconds or minutes respectively. All of the other keys are integers. Supported keys are:
 

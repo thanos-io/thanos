@@ -13,13 +13,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/gogo/status"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/relabel"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/weaveworks/common/httpgrpc"
 	"google.golang.org/grpc/codes"
 
@@ -76,11 +78,11 @@ func (c *swappableCache) FetchMultiPostings(ctx context.Context, blockID ulid.UL
 	return c.ptr.FetchMultiPostings(ctx, blockID, keys)
 }
 
-func (c *swappableCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {
+func (c *swappableCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id storage.SeriesRef, v []byte) {
 	c.ptr.StoreSeries(ctx, blockID, id, v)
 }
 
-func (c *swappableCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
+func (c *swappableCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef) (map[storage.SeriesRef][]byte, []storage.SeriesRef) {
 	return c.ptr.FetchMultiSeries(ctx, blockID, ids)
 }
 
@@ -178,6 +180,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	}, nil)
 	testutil.Ok(t, err)
 
+	reg := prometheus.NewRegistry()
 	store, err := NewBucketStore(
 		objstore.WithNoopInstr(bkt),
 		metaFetcher,
@@ -194,6 +197,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		WithLogger(s.logger),
 		WithIndexCache(s.cache),
 		WithFilterConfig(filterConf),
+		WithRegistry(reg),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
@@ -207,8 +211,35 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Check if the blocks are being loaded.
+	start := time.Now()
+	time.Sleep(time.Second * 1)
 	testutil.Ok(t, store.SyncBlocks(ctx))
+
+	// Get the value of the metric 'thanos_bucket_store_blocks_last_loaded_timestamp_seconds' to capture the timestamp of the last loaded block.
+	m := gatherFamily(t, reg, "thanos_bucket_store_blocks_last_loaded_timestamp_seconds")
+	lastUploaded := time.Unix(int64(m.Metric[0].Gauge.GetValue()), 0)
+
+	if lastUploaded.Before(start) {
+		t.Fatalf("no blocks are loaded ")
+	}
+
 	return s
+}
+
+func gatherFamily(t testing.TB, reg prometheus.Gatherer, familyName string) *dto.MetricFamily {
+
+	families, err := reg.Gather()
+	testutil.Ok(t, err)
+
+	for _, f := range families {
+		if f.GetName() == familyName {
+			return f
+		}
+	}
+
+	t.Fatalf("could not find family %s", familyName)
+	return nil
 }
 
 // TODO(bwplotka): Benchmark Series.

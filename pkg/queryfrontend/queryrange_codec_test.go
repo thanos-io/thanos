@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/weaveworks/common/httpgrpc"
 
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
@@ -172,7 +172,7 @@ func TestQueryRangeCodec_DecodeRequest(t *testing.T) {
 			testutil.Ok(t, err)
 
 			codec := NewThanosQueryRangeCodec(tc.partialResponse)
-			req, err := codec.DecodeRequest(context.Background(), r)
+			req, err := codec.DecodeRequest(context.Background(), r, nil)
 			if tc.expectedError != nil {
 				testutil.Equals(t, err, tc.expectedError)
 			} else {
@@ -280,5 +280,28 @@ func TestQueryRangeCodec_EncodeRequest(t *testing.T) {
 				testutil.Equals(t, tc.checkFunc(r), true)
 			}
 		})
+	}
+}
+
+func BenchmarkQueryRangeCodecEncodeAndDecodeRequest(b *testing.B) {
+	codec := NewThanosQueryRangeCodec(true)
+	ctx := context.TODO()
+
+	req := &ThanosQueryRangeRequest{
+		Start:               123000,
+		End:                 456000,
+		Step:                1000,
+		MaxSourceResolution: int64(compact.ResolutionLevel1h),
+		Dedup:               true,
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		reqEnc, err := codec.EncodeRequest(ctx, req)
+		testutil.Ok(b, err)
+		_, err = codec.DecodeRequest(ctx, reqEnc, nil)
+		testutil.Ok(b, err)
 	}
 }

@@ -43,7 +43,7 @@ Current object storage client implementations:
 | [AWS/S3](#s3) (and all S3-compatible storages e.g disk-based [Minio](https://min.io/)) | Stable             | Production Usage      | yes               | @bwplotka               |
 | [Azure Storage Account](#azure)                                                        | Stable             | Production Usage      | no                | @vglafirov              |
 | [OpenStack Swift](#openstack-swift)                                                    | Beta (working PoC) | Production Usage      | yes               | @FUSAKLA                |
-| [Tencent COS](#tencent-cos)                                                            | Beta               | Production Usage      | no                | @jojohappy              |
+| [Tencent COS](#tencent-cos)                                                            | Beta               | Production Usage      | no                | @jojohappy,@hanjm       |
 | [AliYun OSS](#aliyun-oss)                                                              | Beta               | Production Usage      | no                | @shaulboozhiao,@wujinhu |
 | [Local Filesystem](#filesystem)                                                        | Stable             | Testing and Demo only | yes               | @bwplotka               |
 
@@ -79,6 +79,12 @@ config:
     max_idle_conns: 100
     max_idle_conns_per_host: 100
     max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
   trace:
     enable: false
   list_objects_version: ""
@@ -88,6 +94,7 @@ config:
     kms_key_id: ""
     kms_encryption_context: {}
     encryption_key: ""
+  sts_endpoint: ""
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
@@ -103,6 +110,8 @@ Please refer to the documentation of [the Transport type](https://golang.org/pkg
 `part_size` is specified in bytes and refers to the minimum file size used for multipart uploads, as some custom S3 implementations may have different requirements. A value of `0` means to use a default 128 MiB size.
 
 Set `list_objects_version: "v1"` for S3 compatible APIs that don't support ListObjectsV2 (e.g. some versions of Ceph). Default value (`""`) is equivalent to `"v2"`.
+
+`http_config.tls_config` allows configuring TLS connections. Please refer to the document of [tls_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#tls_config) for detailed information on what each option does.
 
 For debug and testing purposes you can set
 
@@ -226,6 +235,12 @@ With this policy you should be able to run set `THANOS_TEST_OBJSTORE_SKIP=GCS,AZ
 
 Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html
 
+##### STS Endpoint
+
+If you want to use IAM credential retrieved from an instance profile, Thanos needs to authenticate through AWS STS. For this purposes you can specify your own STS Endpoint.
+
+By default Thanos will use endpoint: https://sts.amazonaws.com and AWS region coresponding endpoints.
+
 #### GCS
 
 To configure Google Cloud Storage bucket as an object store you need to set `bucket` with GCS bucket name and configure Google Application credentials.
@@ -314,6 +329,7 @@ config:
   endpoint: ""
   max_retries: 0
   msi_resource: ""
+  user_assigned_id: ""
   pipeline_config:
     max_tries: 0
     try_timeout: 0s
@@ -331,9 +347,19 @@ config:
     max_idle_conns_per_host: 0
     max_conns_per_host: 0
     disable_compression: false
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
 ```
 
-If `msi_resource` is used, authentication is done via ServicePrincipalToken. The value for Azure should be `https://<storage-account-name>.blob.core.windows.net`. The generic `max_retries` will be used as value for the `pipeline_config`'s `max_tries` and `reader_config`'s `max_retry_requests`. For more control, `max_retries` could be ignored (0) and one could set specific retry values.
+If `msi_resource` is used, authentication is done via system-assigned managed identity. The value for Azure should be `https://<storage-account-name>.blob.core.windows.net`.
+
+If `user_assigned_id` is used, authentication is done via user-assigned managed identity. When using `user_assigned_id` the `msi_resource` defaults to `https://<storage_account>.<endpoint>`
+
+The generic `max_retries` will be used as value for the `pipeline_config`'s `max_tries` and `reader_config`'s `max_retry_requests`. For more control, `max_retries` could be ignored (0) and one could set specific retry values.
 
 #### OpenStack Swift
 
@@ -381,6 +407,7 @@ config:
   bucket: ""
   region: ""
   app_id: ""
+  endpoint: ""
   secret_key: ""
   secret_id: ""
   http_config:
@@ -392,6 +419,10 @@ config:
     max_idle_conns_per_host: 100
     max_conns_per_host: 0
 ```
+
+The `secret_key` and `secret_id` field is required. The `http_config` field is optional for optimize HTTP transport settings. There are two ways to configure the required bucket information:
+1. Provide the values of `bucket`, `region` and `app_id` keys.
+2. Provide the values of `endpoint` key with url format when you want to specify vpc internal endpoint. Please refer to the document of [endpoint](https://intl.cloud.tencent.com/document/product/436/6224) for more detail.
 
 Set the flags `--objstore.config-file` to reference to the configuration file.
 

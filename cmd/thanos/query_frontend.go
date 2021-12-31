@@ -12,8 +12,8 @@ import (
 	"github.com/cortexproject/cortex/pkg/frontend/transport"
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -22,6 +22,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
+
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exthttp"
@@ -284,9 +285,10 @@ func runQueryFrontend(
 					logger,
 					ins.NewHandler(
 						name,
-						logMiddleware.HTTPMiddleware(
-							name,
-							gziphandler.GzipHandler(middleware.RequestID(f)),
+						gziphandler.GzipHandler(
+							middleware.RequestID(
+								logMiddleware.HTTPMiddleware(name, f),
+							),
 						),
 					),
 					// Cortex frontend middlewares require orgID.

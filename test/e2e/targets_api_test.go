@@ -6,12 +6,14 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
 	"sort"
 	"testing"
 	"time"
 
-	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/efficientgo/e2e"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -23,48 +25,44 @@ import (
 )
 
 func TestTargetsAPI_Fanout(t *testing.T) {
-	t.Skip("TODO: Flaky test. See: https://github.com/thanos-io/thanos/issues/4069")
-
 	t.Parallel()
 
-	netName := "e2e_test_targets_fanout"
-
-	s, err := e2e.NewScenario(netName)
+	e, err := e2e.NewDockerEnvironment("e2e_test_targets_fanout")
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	// 2x Prometheus.
 	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
-		s.SharedDir(),
-		netName,
+		e,
 		"prom1",
 		defaultPromConfig("ha", 0, "", "", "localhost:9090", "localhost:80"),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
 	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
-		s.SharedDir(),
-		netName,
+		e,
 		"prom2",
 		defaultPromConfig("ha", 1, "", "", "localhost:9090", "localhost:80"),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
-	stores := []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint()}
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "query", stores).
-		WithTargetAddresses(stores).
+	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")}
+	q, err := e2ethanos.NewQuerierBuilder(e, "query", stores...).
+		WithTargetAddresses(stores...).
 		Build()
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(q))
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-	targetAndAssert(t, ctx, q.HTTPEndpoint(), "", &targetspb.TargetDiscovery{
+	targetAndAssert(t, ctx, q.Endpoint("http"), "", &targetspb.TargetDiscovery{
 		ActiveTargets: []*targetspb.ActiveTarget{
 			{
 				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
@@ -98,13 +96,13 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	})
 }
 
-//nolint:unused
 func targetAndAssert(t *testing.T, ctx context.Context, addr, state string, want *targetspb.TargetDiscovery) {
 	t.Helper()
 
 	fmt.Println("targetAndAssert: Waiting for results for targets state", state)
 
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+	logger := log.NewLogfmtLogger(os.Stdout)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
 		res, err := promclient.NewDefaultClient().TargetsInGRPC(ctx, mustURLParse(t, "http://"+addr), state)
 		if err != nil {
 			return err

@@ -79,6 +79,7 @@ It's key to get familiarized with the style guide and mechanics of Thanos, espec
 * Familiarizing yourself with the [Makefile](Makefile) commands, for example `format`, `build`, `proto`, `docker` and `test`. `make help` will print most of available commands with relevant details.
 * Spin up a prebuilt dev environment using Gitpod.io [![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos)
 * In case you want to develop the project locally, install **Golang** in your machine. Here is a nice [gist](https://gist.github.com/nikhita/432436d570b89cab172dcf2894465753) for this purpose.
+* You can run an interactive example, which populates some data as well, by following the steps mentioned [here](https://github.com/thanos-io/thanos/blob/main/tutorials/interactive-example/README.md).
 
 ### Installing Project locally in your machine
 

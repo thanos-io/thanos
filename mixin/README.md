@@ -88,6 +88,10 @@ This project is intended to be used as a library. You can extend and customize d
     selector: 'job=~".*thanos-query.*"',
     title: '%(prefix)sQuery' % $.dashboard.prefix,
   },
+  queryFrontend+:: {
+    selector: 'job=~".*thanos-query-frontend.*"',
+    title: '%(prefix)sQuery Frontend' % $.dashboard.prefix,
+  },
   store+:: {
     selector: 'job=~".*thanos-store.*"',
     title: '%(prefix)sStore' % $.dashboard.prefix,
@@ -106,10 +110,10 @@ This project is intended to be used as a library. You can extend and customize d
   },
   sidecar+:: {
     selector: 'job=~".*thanos-sidecar.*"',
+    thanosPrometheusCommonDimensions: 'namespace, pod',
     title: '%(prefix)sSidecar' % $.dashboard.prefix,
   },
-  // TODO(kakkoyun): Fix naming convention: bucketReplicate
-  bucket_replicate+:: {
+  bucketReplicate+:: {
     selector: 'job=~".*thanos-bucket-replicate.*"',
     title: '%(prefix)sBucketReplicate' % $.dashboard.prefix,
   },

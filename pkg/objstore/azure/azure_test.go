@@ -140,6 +140,25 @@ pipeline_config:
 		wantFailParse:    false,
 		wantFailValidate: false,
 	},
+	{
+		name: "Valid User Assigned Identity Config without Resource",
+		config: []byte(`storage_account: "myAccount"
+storage_account_key: ""
+user_assigned_id: "1234-56578678-655"
+container: "MyContainer"`),
+		wantFailParse:    false,
+		wantFailValidate: false,
+	},
+	{
+		name: "Valid User Assigned Identity Config with Resource",
+		config: []byte(`storage_account: "myAccount"
+storage_account_key: ""
+user_assigned_id: "1234-56578678-655"
+msi_resource: "https://example.blob.core.windows.net"
+container: "MyContainer"`),
+		wantFailParse:    false,
+		wantFailValidate: false,
+	},
 }
 
 func TestConfig_validate(t *testing.T) {
@@ -179,4 +198,44 @@ func TestParseConfig_DefaultHTTPConfig(t *testing.T) {
 	if cfg.HTTPConfig.InsecureSkipVerify {
 		t.Errorf("parsing of insecure_skip_verify failed: got %v, expected %v", cfg.HTTPConfig.InsecureSkipVerify, false)
 	}
+}
+
+func TestParseConfig_CustomHTTPConfigWithTLS(t *testing.T) {
+	input := []byte(`storage_account: "myStorageAccount"
+storage_account_key: "abc123"
+container: "MyContainer"
+endpoint: "blob.core.windows.net"
+http_config:
+  tls_config:
+    ca_file: /certs/ca.crt
+    cert_file: /certs/cert.crt
+    key_file: /certs/key.key
+    server_name: server
+    insecure_skip_verify: false
+  `)
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, "/certs/ca.crt", cfg.HTTPConfig.TLSConfig.CAFile)
+	testutil.Equals(t, "/certs/cert.crt", cfg.HTTPConfig.TLSConfig.CertFile)
+	testutil.Equals(t, "/certs/key.key", cfg.HTTPConfig.TLSConfig.KeyFile)
+	testutil.Equals(t, "server", cfg.HTTPConfig.TLSConfig.ServerName)
+	testutil.Equals(t, false, cfg.HTTPConfig.TLSConfig.InsecureSkipVerify)
+}
+
+func TestParseConfig_CustomLegacyInsecureSkipVerify(t *testing.T) {
+	input := []byte(`storage_account: "myStorageAccount"
+storage_account_key: "abc123"
+container: "MyContainer"
+endpoint: "blob.core.windows.net"
+http_config:
+  insecure_skip_verify: true
+  tls_config:
+    insecure_skip_verify: false
+  `)
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+	transport, err := DefaultTransport(cfg)
+	testutil.Ok(t, err)
+	testutil.Equals(t, true, transport.TLSClientConfig.InsecureSkipVerify)
 }

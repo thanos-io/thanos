@@ -13,12 +13,12 @@ import (
 	"os"
 	"sort"
 	"testing"
-	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -188,240 +188,18 @@ func TestTSDBStore_Series(t *testing.T) {
 	}
 }
 
-func TestTSDBStore_LabelNames(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+func TestTSDBStore_LabelAPIs(t *testing.T) {
+	t.Cleanup(func() { testutil.TolerantVerifyLeak(t) })
+	testLabelAPIs(t, func(extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+		db, err := e2eutil.NewTSDB()
+		testutil.Ok(t, err)
+		t.Cleanup(func() { testutil.Ok(t, db.Close()) })
 
-	var err error
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+		tsdbStore := NewTSDBStore(nil, db, component.Rule, extLset)
 
-	db, err := e2eutil.NewTSDB()
-	defer func() { testutil.Ok(t, db.Close()) }()
-	testutil.Ok(t, err)
-
-	appender := db.Appender(context.Background())
-	addLabels := func(lbs []string, timestamp int64) {
-		if len(lbs) > 0 {
-			_, err = appender.Append(0, labels.FromStrings(lbs...), timestamp, 1)
-			testutil.Ok(t, err)
-		}
-	}
-
-	tsdbStore := NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
-
-	now := time.Now()
-	head := db.Head()
-	for _, tc := range []struct {
-		title         string
-		labels        []string
-		expectedNames []string
-		timestamp     int64
-		start         func() int64
-		end           func() int64
-	}{
-		{
-			title:     "no label in tsdb",
-			labels:    []string{},
-			timestamp: now.Unix(),
-			start: func() int64 {
-				return timestamp.FromTime(minTime)
-			},
-			end: func() int64 {
-				return timestamp.FromTime(maxTime)
-			},
-		},
-		{
-			title:         "add one label",
-			labels:        []string{"foo", "foo"},
-			expectedNames: []string{"foo", "region"},
-			timestamp:     now.Unix(),
-			start: func() int64 {
-				return timestamp.FromTime(minTime)
-			},
-			end: func() int64 {
-				return timestamp.FromTime(maxTime)
-			},
-		},
-		{
-			title:  "add another label",
-			labels: []string{"bar", "bar"},
-			// We will get two labels here.
-			expectedNames: []string{"bar", "foo", "region"},
-			timestamp:     now.Unix(),
-			start: func() int64 {
-				return timestamp.FromTime(minTime)
-			},
-			end: func() int64 {
-				return timestamp.FromTime(maxTime)
-			},
-		},
-		{
-			title:     "query range outside tsdb head",
-			labels:    []string{},
-			timestamp: now.Unix(),
-			start: func() int64 {
-				return timestamp.FromTime(minTime)
-			},
-			end: func() int64 {
-				return head.MinTime() - 1
-			},
-		},
-		{
-			title:         "get all labels",
-			labels:        []string{"buz", "buz"},
-			expectedNames: []string{"bar", "buz", "foo", "region"},
-			timestamp:     now.Unix(),
-			start: func() int64 {
-				return timestamp.FromTime(minTime)
-			},
-			end: func() int64 {
-				return timestamp.FromTime(maxTime)
-			},
-		},
-	} {
-		if ok := t.Run(tc.title, func(t *testing.T) {
-			addLabels(tc.labels, tc.timestamp)
-			resp, err := tsdbStore.LabelNames(ctx, &storepb.LabelNamesRequest{
-				Start: tc.start(),
-				End:   tc.end(),
-			})
-			testutil.Ok(t, err)
-			testutil.Equals(t, tc.expectedNames, resp.Names)
-			testutil.Equals(t, 0, len(resp.Warnings))
-		}); !ok {
-			return
-		}
-	}
-}
-
-func TestTSDBStore_LabelValues(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
-
-	var err error
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	db, err := e2eutil.NewTSDB()
-	defer func() { testutil.Ok(t, db.Close()) }()
-	testutil.Ok(t, err)
-
-	appender := db.Appender(context.Background())
-	addLabels := func(lbs []string, timestamp int64) {
-		if len(lbs) > 0 {
-			_, err = appender.Append(0, labels.FromStrings(lbs...), timestamp, 1)
-			testutil.Ok(t, err)
-		}
-	}
-
-	tsdbStore := NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
-	now := time.Now()
-	head := db.Head()
-	for _, tc := range []struct {
-		title          string
-		addedLabels    []string
-		queryLabel     string
-		expectedValues []string
-		timestamp      int64
-		start          func() int64
-		end            func() int64
-		Matchers       []storepb.LabelMatcher
-	}{
-		{
-			title:       "no label in tsdb",
-			addedLabels: []string{},
-			queryLabel:  "foo",
-			timestamp:   now.Unix(),
-			start: func() int64 {
-				return timestamp.FromTime(minTime)
-			},
-			end: func() int64 {
-				return timestamp.FromTime(maxTime)
-			},
-		},
-		{
-			title:          "add one label value",
-			addedLabels:    []string{"foo", "test"},
-			queryLabel:     "foo",
-			expectedValues: []string{"test"},
-			timestamp:      now.Unix(),
-			start: func() int64 {
-				return timestamp.FromTime(minTime)
-			},
-			end: func() int64 {
-				return timestamp.FromTime(maxTime)
-			},
-		},
-		{
-			title:          "add another label value",
-			addedLabels:    []string{"foo", "test1"},
-			queryLabel:     "foo",
-			expectedValues: []string{"test", "test1"},
-			timestamp:      now.Unix(),
-			start: func() int64 {
-				return timestamp.FromTime(minTime)
-			},
-			end: func() int64 {
-				return timestamp.FromTime(maxTime)
-			},
-		},
-		{
-			title:          "check label value matcher",
-			queryLabel:     "foo",
-			expectedValues: []string{"test1"},
-			timestamp:      now.Unix(),
-			start: func() int64 {
-				return timestamp.FromTime(minTime)
-			},
-			end: func() int64 {
-				return timestamp.FromTime(maxTime)
-			},
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "test1"},
-			},
-		},
-		{
-			title:          "check another label value matcher",
-			queryLabel:     "foo",
-			expectedValues: []string{},
-			timestamp:      now.Unix(),
-			start: func() int64 {
-				return timestamp.FromTime(minTime)
-			},
-			end: func() int64 {
-				return timestamp.FromTime(maxTime)
-			},
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "test2"},
-			},
-		},
-		{
-			title:       "query time range outside head",
-			addedLabels: []string{},
-			queryLabel:  "foo",
-			timestamp:   now.Unix(),
-			start: func() int64 {
-				return timestamp.FromTime(minTime)
-			},
-			end: func() int64 {
-				return head.MinTime() - 1
-			},
-		},
-	} {
-		if ok := t.Run(tc.title, func(t *testing.T) {
-			addLabels(tc.addedLabels, tc.timestamp)
-			resp, err := tsdbStore.LabelValues(ctx, &storepb.LabelValuesRequest{
-				Label:    tc.queryLabel,
-				Start:    tc.start(),
-				End:      tc.end(),
-				Matchers: tc.Matchers,
-			})
-			testutil.Ok(t, err)
-			testutil.Equals(t, tc.expectedValues, resp.Values)
-			testutil.Equals(t, 0, len(resp.Warnings))
-		}); !ok {
-			return
-		}
-	}
+		appendFn(db.Appender(context.Background()))
+		return tsdbStore
+	})
 }
 
 // Regression test for https://github.com/thanos-io/thanos/issues/1038.

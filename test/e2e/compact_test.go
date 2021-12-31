@@ -16,15 +16,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cortexproject/cortex/integration/e2e"
-	e2edb "github.com/cortexproject/cortex/integration/e2e/db"
-	"github.com/go-kit/kit/log"
+	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
+	"github.com/efficientgo/e2e/matchers"
+	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/timestamp"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -33,6 +34,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -62,11 +64,11 @@ type blockDesc struct {
 	hashFunc           metadata.HashFunc
 }
 
-func (b *blockDesc) Create(ctx context.Context, dir string, delay time.Duration, hf metadata.HashFunc) (ulid.ULID, error) {
+func (b *blockDesc) Create(ctx context.Context, dir string, delay time.Duration, hf metadata.HashFunc, numSamples int) (ulid.ULID, error) {
 	if delay == 0*time.Second {
-		return e2eutil.CreateBlock(ctx, dir, b.series, 120, b.mint, b.maxt, b.extLset, 0, hf)
+		return e2eutil.CreateBlock(ctx, dir, b.series, numSamples, b.mint, b.maxt, b.extLset, 0, hf)
 	}
-	return e2eutil.CreateBlockWithBlockDelay(ctx, dir, b.series, 120, b.mint, b.maxt, delay, b.extLset, 0, hf)
+	return e2eutil.CreateBlockWithBlockDelay(ctx, dir, b.series, numSamples, b.mint, b.maxt, delay, b.extLset, 0, hf)
 }
 
 func TestCompactWithStoreGateway(t *testing.T) {
@@ -90,7 +92,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	var blocksWithHashes []ulid.ULID
 
 	// Simulate real scenario, including more complex cases like overlaps if needed.
-	// TODO(bwplotka): Add blocks to downsample and test delayed delete.
+	// TODO(bwplotka): Test delayed delete.
 	blocks := []blockDesc{
 		// Non overlapping blocks, not ready for compaction.
 		{
@@ -336,22 +338,22 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	if penaltyDedup {
 		name = "e2e_test_compact_penalty_dedup"
 	}
-	s, err := e2e.NewScenario(name)
+	e, err := e2e.NewDockerEnvironment(name)
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	dir := filepath.Join(s.SharedDir(), "tmp")
+	dir := filepath.Join(e.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 
 	const bucket = "compact_test"
-	m := e2edb.NewMinio(8080, bucket)
-	testutil.Ok(t, s.StartAndWaitReady(m))
+	m := e2ethanos.NewMinio(e, "minio", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger, s3.Config{
 		Bucket:    bucket,
 		AccessKey: e2edb.MinioAccessKey,
 		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  m.HTTPEndpoint(), // We need separate client config, when connecting to minio from outside.
+		Endpoint:  m.Endpoint("http"), // We need separate client config, when connecting to minio from outside.
 		Insecure:  true,
 	}, "test-feed")
 	testutil.Ok(t, err)
@@ -361,9 +363,12 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 
 	rawBlockIDs := map[ulid.ULID]struct{}{}
 	for _, b := range blocks {
-		id, err := b.Create(ctx, dir, justAfterConsistencyDelay, b.hashFunc)
+		id, err := b.Create(ctx, dir, justAfterConsistencyDelay, b.hashFunc, 120)
 		testutil.Ok(t, err)
-		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
+		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+			return objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String())
+		}))
+
 		rawBlockIDs[id] = struct{}{}
 		if b.markedForNoCompact {
 			testutil.Ok(t, block.MarkForNoCompact(ctx, logger, bkt, id, metadata.ManualNoCompactReason, "why not", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
@@ -373,6 +378,21 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 			blocksWithHashes = append(blocksWithHashes, id)
 		}
 	}
+	// Block that will be downsampled.
+	downsampledBase := blockDesc{
+		series: []labels.Labels{
+			labels.FromStrings("z", "1", "b", "2"),
+			labels.FromStrings("z", "1", "b", "5"),
+		},
+		extLset: labels.FromStrings("case", "block-about-to-be-downsampled"),
+		mint:    timestamp.FromTime(now),
+		maxt:    timestamp.FromTime(now.Add(10 * 24 * time.Hour)),
+	}
+	// New block that will be downsampled.
+	downsampledRawID, err := downsampledBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 1200)
+	testutil.Ok(t, err)
+	testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, downsampledRawID.String()), downsampledRawID.String()))
+
 	{
 		// On top of that, add couple of other tricky cases with different meta.
 		malformedBase := blockDesc{
@@ -383,33 +403,33 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		}
 
 		// New Partial block.
-		id, err := malformedBase.Create(ctx, dir, 0*time.Second, metadata.NoneFunc)
+		id, err := malformedBase.Create(ctx, dir, 0*time.Second, metadata.NoneFunc, 120)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// New Partial block + deletion mark.
-		id, err = malformedBase.Create(ctx, dir, 0*time.Second, metadata.NoneFunc)
+		id, err = malformedBase.Create(ctx, dir, 0*time.Second, metadata.NoneFunc, 120)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay.
-		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc)
+		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 120)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay + deletion mark.
-		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc)
+		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 120)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay + old deletion mark ready to be deleted.
-		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc)
+		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 120)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		deletionMark, err := json.Marshal(metadata.DeletionMark{
@@ -423,13 +443,13 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after delete threshold.
-		id, err = malformedBase.Create(ctx, dir, 50*time.Hour, metadata.NoneFunc)
+		id, err = malformedBase.Create(ctx, dir, 50*time.Hour, metadata.NoneFunc, 120)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after delete threshold + deletion mark.
-		id, err = malformedBase.Create(ctx, dir, 50*time.Hour, metadata.NoneFunc)
+		id, err = malformedBase.Create(ctx, dir, 50*time.Hour, metadata.NoneFunc, 120)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
@@ -442,27 +462,30 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 			Bucket:    bucket,
 			AccessKey: e2edb.MinioAccessKey,
 			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m.NetworkHTTPEndpoint(),
+			Endpoint:  m.InternalEndpoint("http"),
 			Insecure:  true,
 		},
 	}
-	str, err := e2ethanos.NewStoreGW(s.SharedDir(), "1", svcConfig)
+	str, err := e2ethanos.NewStoreGW(e, "1", svcConfig, "")
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(str))
-	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7)), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, e2e.StartAndWaitReady(str))
+	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8)), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{str.GRPCNetworkEndpoint()}).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", str.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(q))
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
 	t.Cleanup(cancel)
 
 	// Check if query detects current series, even if overlapped.
-	queryAndAssert(t, ctx, q.HTTPEndpoint(),
-		fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds())),
+	queryAndAssert(t, ctx, q.Endpoint("http"),
+		func() string {
+			return fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds()))
+		},
+		time.Now,
 		promclient.QueryOptions{
 			Deduplicate: false, // This should be false, so that we can be sure deduplication was offline.
 		},
@@ -505,7 +528,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		},
 	)
 	// Store view:
-	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7)), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8)), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 
@@ -599,7 +622,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		// Precreate a directory. It should be deleted.
 		// In a hypothetical scenario, the directory could be a left-over from
 		// a compaction that had crashed.
-		p := filepath.Join(s.SharedDir(), "data", "compact", "expect-to-halt", "compact")
+		p := filepath.Join(e.SharedDir(), "data", "compact", "expect-to-halt", "compact")
 
 		testutil.Assert(t, len(blocksWithHashes) > 0)
 
@@ -613,23 +636,23 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, f.Close())
 
-		c, err := e2ethanos.NewCompactor(s.SharedDir(), "expect-to-halt", svcConfig, nil)
+		c, err := e2ethanos.NewCompactor(e, "expect-to-halt", svcConfig, nil)
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(c))
+		testutil.Ok(t, e2e.StartAndWaitReady(c))
 
 		// Expect compactor halted and for one cleanup iteration to happen.
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_halted"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_block_cleanup_loops_total"))
 
-		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+5)), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+6)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 
 		// The compact directory is still there.
-		dataDir := filepath.Join(s.SharedDir(), "data", "compact", "expect-to-halt")
+		dataDir := filepath.Join(e.SharedDir(), "data", "compact", "expect-to-halt")
 		empty, err := isEmptyDir(dataDir)
 		testutil.Ok(t, err)
-		testutil.Equals(t, false, empty, "directory %s should not be empty", dataDir)
+		testutil.Equals(t, false, empty, "directory %e should not be empty", dataDir)
 
 		// We expect no ops.
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_iterations_total"))
@@ -638,18 +661,18 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_vertical_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_group_compactions_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(3), "thanos_compact_group_compaction_runs_started_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_group_compaction_runs_completed_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_group_compaction_runs_started_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_group_compaction_runs_completed_total"))
 
 		// However, the blocks have been cleaned because that happens concurrently.
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_blocks_cleaned_total"))
 
 		// Ensure bucket UI.
-		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.HTTPEndpoint(), "global"))
-		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.HTTPEndpoint(), "loaded"))
+		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.Endpoint("http"), "global"))
+		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.Endpoint("http"), "loaded"))
 
-		testutil.Ok(t, s.Stop(c))
+		testutil.Ok(t, c.Stop())
 
 		_, err = os.Stat(randBlockDir)
 		testutil.NotOk(t, err)
@@ -661,7 +684,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	// Dedup enabled; compactor should work as expected.
 	{
 		// Predownload block dirs with hashes. We should not try downloading them again.
-		p := filepath.Join(s.SharedDir(), "data", "compact", "working")
+		p := filepath.Join(e.SharedDir(), "data", "compact", "working")
 
 		for _, id := range blocksWithHashes {
 			m, err := block.DownloadMeta(ctx, logger, bkt, id)
@@ -677,9 +700,9 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		}
 
 		// We expect 2x 4-block compaction, 2-block vertical compaction, 2x 3-block compaction.
-		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, extArgs...)
+		c, err := e2ethanos.NewCompactor(e, "working", svcConfig, nil, extArgs...)
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(c))
+		testutil.Ok(t, e2e.StartAndWaitReady(c))
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
 		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
@@ -694,11 +717,12 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(14), "thanos_compact_group_compaction_runs_started_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(14), "thanos_compact_group_compaction_runs_completed_total"))
 
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(2), "thanos_compact_downsample_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_failures_total"))
 
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(
-			len(rawBlockIDs)+7+
+			len(rawBlockIDs)+8+
+				2+ // Downsampled one block into two new ones - 5m/1h.
 				6+ // 6 compactions, 6 newly added blocks.
 				-2, // Partial block removed.
 		)), "thanos_blocks_meta_synced"))
@@ -706,11 +730,11 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_halted"))
 
-		bucketMatcher, err := labels.NewMatcher(labels.MatchEqual, "bucket", bucket)
+		bucketMatcher, err := matchers.NewMatcher(matchers.MatchEqual, "bucket", bucket)
 		testutil.Ok(t, err)
-		operationMatcher, err := labels.NewMatcher(labels.MatchEqual, "operation", "get")
+		operationMatcher, err := matchers.NewMatcher(matchers.MatchEqual, "operation", "get")
 		testutil.Ok(t, err)
-		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(478),
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(573),
 			[]string{"thanos_objstore_bucket_operations_total"}, e2e.WithLabelMatchers(
 				bucketMatcher,
 				operationMatcher,
@@ -718,21 +742,24 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		)
 
 		// Make sure compactor does not modify anything else over time.
-		testutil.Ok(t, s.Stop(c))
+		testutil.Ok(t, c.Stop())
 
 		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
 		// Check if query detects new blocks.
-		queryAndAssert(t, ctx, q.HTTPEndpoint(),
-			fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds())),
+		queryAndAssert(t, ctx, q.Endpoint("http"),
+			func() string {
+				return fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds()))
+			},
+			time.Now,
 			promclient.QueryOptions{
 				Deduplicate: false, // This should be false, so that we can be sure deduplication was offline.
 			},
 			expectedEndVector,
 		)
 		// Store view:
-		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7+6-2)), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8+6-2+2)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 	}
@@ -742,9 +769,9 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		if penaltyDedup {
 			extArgs = append(extArgs, "--deduplication.func=penalty")
 		}
-		c, err := e2ethanos.NewCompactor(s.SharedDir(), "working", svcConfig, nil, extArgs...)
+		c, err := e2ethanos.NewCompactor(e, "working-dedup", svcConfig, nil, extArgs...)
 		testutil.Ok(t, err)
-		testutil.Ok(t, s.StartAndWaitReady(c))
+		testutil.Ok(t, e2e.StartAndWaitReady(c))
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
 		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
@@ -762,19 +789,22 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_failures_total"))
 
-		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7+6-18-2)), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8+6-18-2+2)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_halted"))
 		// Make sure compactor does not modify anything else over time.
-		testutil.Ok(t, s.Stop(c))
+		testutil.Ok(t, c.Stop())
 
 		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
 		// Check if query detects new blocks.
-		queryAndAssert(t, ctx, q.HTTPEndpoint(),
-			fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds())),
+		queryAndAssert(t, ctx, q.Endpoint("http"),
+			func() string {
+				return fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds()))
+			},
+			time.Now,
 			promclient.QueryOptions{
 				Deduplicate: false, // This should be false, so that we can be sure deduplication was offline.
 			},
@@ -782,10 +812,59 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		)
 
 		// Store view:
-		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+7-18+6-2)), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8-18+6-2+2)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 	})
+
+	// Ensure that querying downsampled blocks works. Then delete the raw block and try querying again.
+	{
+		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+
+		// Just to have a consistent result.
+		checkQuery := func() string {
+			return `last_over_time({z="1"}[2h]) - last_over_time({z="1"}[2h])`
+		}
+
+		queryAndAssert(t, ctx, q.Endpoint("http"),
+			checkQuery,
+			func() time.Time { return now.Add(10 * 24 * time.Hour) },
+			promclient.QueryOptions{
+				Deduplicate: true,
+			},
+			model.Vector{
+				{Value: 0, Metric: map[model.LabelName]model.LabelValue{"b": "2", "case": "block-about-to-be-downsampled", "z": "1"}},
+				{Value: 0, Metric: map[model.LabelName]model.LabelValue{"b": "5", "case": "block-about-to-be-downsampled", "z": "1"}},
+			},
+		)
+
+		// Find out whether querying still works after deleting the raw data. After this,
+		// pre-aggregated sum/count should be used.
+		testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, downsampledRawID))
+
+		testutil.Ok(t, str.Stop())
+		testutil.Ok(t, e2e.StartAndWaitReady(str))
+		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+			return str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8-18+6-2+2-1)), "thanos_blocks_meta_synced")
+		}))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics(), e2e.WithLabelMatchers(
+			matchers.MustNewMatcher(matchers.MatchEqual, "store_type", "store"),
+		)))
+
+		queryAndAssert(t, ctx, q.Endpoint("http"),
+			checkQuery,
+			func() time.Time { return now.Add(10 * 24 * time.Hour) },
+			promclient.QueryOptions{
+				Deduplicate:         true,
+				MaxSourceResolution: "1h",
+			},
+			model.Vector{
+				{Value: 0, Metric: map[model.LabelName]model.LabelValue{"b": "2", "case": "block-about-to-be-downsampled", "z": "1"}},
+				{Value: 0, Metric: map[model.LabelName]model.LabelValue{"b": "5", "case": "block-about-to-be-downsampled", "z": "1"}},
+			},
+		)
+	}
 }
 
 func ensureGETStatusCode(t testing.TB, code int, url string) {

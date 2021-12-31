@@ -6,10 +6,12 @@ package rules
 import (
 	"context"
 	"sort"
+	"sync"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
+
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -153,10 +155,13 @@ type rulesServer struct {
 
 	warnings []error
 	groups   []*rulespb.RuleGroup
+	mu       sync.Mutex
 }
 
 func (srv *rulesServer) Send(res *rulespb.RulesResponse) error {
 	if res.GetWarning() != "" {
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
 		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
 		return nil
 	}
@@ -165,6 +170,8 @@ func (srv *rulesServer) Send(res *rulespb.RulesResponse) error {
 		return errors.New("no group")
 	}
 
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
 	srv.groups = append(srv.groups, res.GetGroup())
 	return nil
 }

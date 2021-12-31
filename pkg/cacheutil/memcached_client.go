@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -29,6 +29,7 @@ import (
 
 const (
 	opSet                 = "set"
+	opSetMulti            = "setmulti"
 	opGetMulti            = "getmulti"
 	reasonMaxItemSize     = "max-item-size"
 	reasonAsyncBufferFull = "async-buffer-full"
@@ -58,9 +59,14 @@ var (
 	}
 )
 
-// MemcachedClient is a high level client to interact with memcached.
-type MemcachedClient interface {
-	// GetMulti fetches multiple keys at once from memcached. In case of error,
+var (
+	_ RemoteCacheClient = (*memcachedClient)(nil)
+	_ RemoteCacheClient = (*RedisClient)(nil)
+)
+
+// RemoteCacheClient is a high level client to interact with remote cache.
+type RemoteCacheClient interface {
+	// GetMulti fetches multiple keys at once from remoteCache. In case of error,
 	// an empty map is returned and the error tracked/logged.
 	GetMulti(ctx context.Context, keys []string) map[string][]byte
 
@@ -73,13 +79,16 @@ type MemcachedClient interface {
 	Stop()
 }
 
+// MemcachedClient for compatible.
+type MemcachedClient = RemoteCacheClient
+
 // memcachedClientBackend is an interface used to mock the underlying client in tests.
 type memcachedClientBackend interface {
 	GetMulti(keys []string) (map[string]*memcache.Item, error)
 	Set(item *memcache.Item) error
 }
 
-// MemcachedClientConfig is the config accepted by MemcachedClient.
+// MemcachedClientConfig is the config accepted by RemoteCacheClient.
 type MemcachedClientConfig struct {
 	// Addresses specifies the list of memcached addresses. The addresses get
 	// resolved with the DNS provider.
@@ -196,7 +205,7 @@ type memcachedGetMultiResult struct {
 	err   error
 }
 
-// NewMemcachedClient makes a new MemcachedClient.
+// NewMemcachedClient makes a new RemoteCacheClient.
 func NewMemcachedClient(logger log.Logger, name string, conf []byte, reg prometheus.Registerer) (*memcachedClient, error) {
 	config, err := parseMemcachedClientConfig(conf)
 	if err != nil {
@@ -206,7 +215,7 @@ func NewMemcachedClient(logger log.Logger, name string, conf []byte, reg prometh
 	return NewMemcachedClientWithConfig(logger, name, config, reg)
 }
 
-// NewMemcachedClientWithConfig makes a new MemcachedClient.
+// NewMemcachedClientWithConfig makes a new RemoteCacheClient.
 func NewMemcachedClientWithConfig(logger log.Logger, name string, config MemcachedClientConfig, reg prometheus.Registerer) (*memcachedClient, error) {
 	if err := config.validate(); err != nil {
 		return nil, err

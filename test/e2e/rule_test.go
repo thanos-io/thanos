@@ -15,15 +15,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/efficientgo/e2e"
+	common_cfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
-	http_util "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -97,6 +98,30 @@ groups:
     annotations:
       summary: "I always complain and I have been loaded via sighup signal."
 `
+	testAlertRuleWithLimit = `
+groups:
+- name: example_with_limit
+  interval: 1s
+  partial_response_strategy: "WARN"
+  limit: 1
+  rules:
+  - alert: TestAlert_WithLimit
+    expr: 'promhttp_metric_handler_requests_total' # It has more than one labels.
+    labels:
+      severity: page
+    annotations:
+      summary: "with limit"
+`
+
+	testRuleRecordAbsentMetric = `
+groups:
+- name: example_record_rules
+  interval: 1s
+  rules:
+  - record: test_absent_metric
+    expr: absent(nonexistent{job='thanos-receive'})
+`
+	amTimeout = model.Duration(10 * time.Second)
 )
 
 type rulesResp struct {
@@ -127,7 +152,7 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 	testutil.Equals(t, 200, resp.StatusCode)
 }
 
-func reloadRulesSignal(t *testing.T, r *e2ethanos.Service) {
+func reloadRulesSignal(t *testing.T, r *e2e.InstrumentedRunnable) {
 	c := e2e.NewCommand("kill", "-1", "1")
 	_, _, err := r.Exec(c)
 	testutil.Ok(t, err)
@@ -197,55 +222,55 @@ func writeTargets(t *testing.T, path string, addrs ...string) {
 func TestRule(t *testing.T) {
 	t.Parallel()
 
-	s, err := e2e.NewScenario("e2e_test_rule")
+	e, err := e2e.NewDockerEnvironment("e2e_test_rule")
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	t.Cleanup(cancel)
 
 	// Prepare work dirs.
 	rulesSubDir := filepath.Join("rules")
-	rulesPath := filepath.Join(s.SharedDir(), rulesSubDir)
+	rulesPath := filepath.Join(e.SharedDir(), rulesSubDir)
 	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
 	createRuleFiles(t, rulesPath)
 	amTargetsSubDir := filepath.Join("rules_am_targets")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), amTargetsSubDir), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), amTargetsSubDir), os.ModePerm))
 	queryTargetsSubDir := filepath.Join("rules_query_targets")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), queryTargetsSubDir), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), queryTargetsSubDir), os.ModePerm))
 
-	am1, err := e2ethanos.NewAlertmanager(s.SharedDir(), "1")
+	am1, err := e2ethanos.NewAlertmanager(e, "1")
 	testutil.Ok(t, err)
-	am2, err := e2ethanos.NewAlertmanager(s.SharedDir(), "2")
+	am2, err := e2ethanos.NewAlertmanager(e, "2")
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(am1, am2))
+	testutil.Ok(t, e2e.StartAndWaitReady(am1, am2))
 
-	r, err := e2ethanos.NewRuler(s.SharedDir(), "1", rulesSubDir, []alert.AlertmanagerConfig{
+	r, err := e2ethanos.NewTSDBRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
 		{
-			EndpointsConfig: http_util.EndpointsConfig{
-				FileSDConfigs: []http_util.FileSDConfig{
+			EndpointsConfig: httpconfig.EndpointsConfig{
+				FileSDConfigs: []httpconfig.FileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically am1.
-						Files:           []string{filepath.Join(e2e.ContainerSharedDir, amTargetsSubDir, "*.yaml")},
+						Files:           []string{filepath.Join(e2ethanos.ContainerSharedDir, amTargetsSubDir, "*.yaml")},
 						RefreshInterval: model.Duration(time.Second),
 					},
 				},
 				StaticAddresses: []string{
-					am2.NetworkHTTPEndpoint(),
+					am2.InternalEndpoint("http"),
 				},
 				Scheme: "http",
 			},
-			Timeout:    model.Duration(10 * time.Second),
+			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}, []query.Config{
+	}, []httpconfig.Config{
 		{
-			EndpointsConfig: http_util.EndpointsConfig{
+			EndpointsConfig: httpconfig.EndpointsConfig{
 				// We test Statically Addressed queries in other tests. Focus on FileSD here.
-				FileSDConfigs: []http_util.FileSDConfig{
+				FileSDConfigs: []httpconfig.FileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically q.
-						Files:           []string{filepath.Join(e2e.ContainerSharedDir, queryTargetsSubDir, "*.yaml")},
+						Files:           []string{filepath.Join(e2ethanos.ContainerSharedDir, queryTargetsSubDir, "*.yaml")},
 						RefreshInterval: model.Duration(time.Second),
 					},
 				},
@@ -254,11 +279,11 @@ func TestRule(t *testing.T) {
 		},
 	})
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(r))
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "1", []string{r.GRPCNetworkEndpoint()}).Build()
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", r.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(q))
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	t.Run("no query configured", func(t *testing.T) {
 		// Check for a few evaluations, check all of them failed.
@@ -272,9 +297,9 @@ func TestRule(t *testing.T) {
 	var currentFailures float64
 	t.Run("attach query", func(t *testing.T) {
 		// Attach querier to target files.
-		writeTargets(t, filepath.Join(s.SharedDir(), queryTargetsSubDir, "targets.yaml"), q.NetworkHTTPEndpoint())
+		writeTargets(t, filepath.Join(e.SharedDir(), queryTargetsSubDir, "targets.yaml"), q.InternalEndpoint("http"))
 
-		testutil.Ok(t, r.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_rule_query_apis_dns_provider_results"}, e2e.WaitMissingMetrics))
+		testutil.Ok(t, r.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_rule_query_apis_dns_provider_results"}, e2e.WaitMissingMetrics()))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
 
 		var currentVal float64
@@ -305,7 +330,7 @@ func TestRule(t *testing.T) {
 	})
 	t.Run("attach am1", func(t *testing.T) {
 		// Attach am1 to target files.
-		writeTargets(t, filepath.Join(s.SharedDir(), amTargetsSubDir, "targets.yaml"), am1.NetworkHTTPEndpoint())
+		writeTargets(t, filepath.Join(e.SharedDir(), amTargetsSubDir, "targets.yaml"), am1.InternalEndpoint("http"))
 
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(2), "thanos_rule_alertmanagers_dns_provider_results"))
@@ -329,7 +354,7 @@ func TestRule(t *testing.T) {
 	})
 
 	t.Run("am1 drops again", func(t *testing.T) {
-		testutil.Ok(t, os.RemoveAll(filepath.Join(s.SharedDir(), amTargetsSubDir, "targets.yaml")))
+		testutil.Ok(t, os.RemoveAll(filepath.Join(e.SharedDir(), amTargetsSubDir, "targets.yaml")))
 
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
@@ -356,83 +381,180 @@ func TestRule(t *testing.T) {
 		testutil.Ok(t, am1.WaitSumMetrics(e2e.Equals(currentValAm1), "alertmanager_alerts_received_total"))
 	})
 
-	t.Run("duplicate am ", func(t *testing.T) {
+	t.Run("duplicate am", func(t *testing.T) {
 		// am2 is already registered in static addresses.
-		writeTargets(t, filepath.Join(s.SharedDir(), amTargetsSubDir, "targets.yaml"), am2.NetworkHTTPEndpoint())
+		writeTargets(t, filepath.Join(e.SharedDir(), amTargetsSubDir, "targets.yaml"), am2.InternalEndpoint("http"))
 
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
 	})
 
 	t.Run("rule groups have last evaluation and evaluation duration set", func(t *testing.T) {
-		rulegroupCorrectData(t, ctx, r.HTTPEndpoint())
+		rulegroupCorrectData(t, ctx, r.Endpoint("http"))
 	})
 
 	t.Run("signal reload works", func(t *testing.T) {
 		// Add a new rule via sending sighup
 		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLaterSignal)
 		reloadRulesSignal(t, r)
-		checkReloadSuccessful(t, ctx, r.HTTPEndpoint(), 4)
+		checkReloadSuccessful(t, ctx, r.Endpoint("http"), 4)
 	})
 
 	t.Run("http reload works", func(t *testing.T) {
 		// Add a new rule via /-/reload.
 		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLaterWebHandler)
-		reloadRulesHTTP(t, ctx, r.HTTPEndpoint())
-		checkReloadSuccessful(t, ctx, r.HTTPEndpoint(), 3)
+		reloadRulesHTTP(t, ctx, r.Endpoint("http"))
+		checkReloadSuccessful(t, ctx, r.Endpoint("http"), 3)
 	})
 
-	queryAndAssertSeries(t, ctx, q.HTTPEndpoint(), "ALERTS", promclient.QueryOptions{
-		Deduplicate: false,
-	}, []model.Metric{
-		{
-			"__name__":   "ALERTS",
-			"severity":   "page",
-			"alertname":  "TestAlert_AbortOnPartialResponse",
-			"alertstate": "firing",
-			"replica":    "1",
-		},
-		{
-			"__name__":   "ALERTS",
-			"severity":   "page",
-			"alertname":  "TestAlert_HasBeenLoadedViaWebHandler",
-			"alertstate": "firing",
-			"replica":    "1",
-		},
-		{
-			"__name__":   "ALERTS",
-			"severity":   "page",
-			"alertname":  "TestAlert_WarnOnPartialResponse",
-			"alertstate": "firing",
-			"replica":    "1",
-		},
+	t.Run("query alerts", func(t *testing.T) {
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return "ALERTS" }, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"__name__":   "ALERTS",
+				"severity":   "page",
+				"alertname":  "TestAlert_AbortOnPartialResponse",
+				"alertstate": "firing",
+				"replica":    "1",
+			},
+			{
+				"__name__":   "ALERTS",
+				"severity":   "page",
+				"alertname":  "TestAlert_HasBeenLoadedViaWebHandler",
+				"alertstate": "firing",
+				"replica":    "1",
+			},
+			{
+				"__name__":   "ALERTS",
+				"severity":   "page",
+				"alertname":  "TestAlert_WarnOnPartialResponse",
+				"alertstate": "firing",
+				"replica":    "1",
+			},
+		})
+
+		expAlertLabels := []model.LabelSet{
+			{
+				"severity":  "page",
+				"alertname": "TestAlert_AbortOnPartialResponse",
+				"replica":   "1",
+			},
+			{
+				"severity":  "page",
+				"alertname": "TestAlert_HasBeenLoadedViaWebHandler",
+				"replica":   "1",
+			},
+			{
+				"severity":  "page",
+				"alertname": "TestAlert_WarnOnPartialResponse",
+				"replica":   "1",
+			},
+		}
+
+		alrts, err := promclient.NewDefaultClient().AlertmanagerAlerts(ctx, mustURLParse(t, "http://"+am2.Endpoint("http")))
+		testutil.Ok(t, err)
+
+		testutil.Equals(t, len(expAlertLabels), len(alrts))
+		for i, a := range alrts {
+			testutil.Assert(t, a.Labels.Equal(expAlertLabels[i]), "unexpected labels %s", a.Labels)
+		}
 	})
+}
 
-	expAlertLabels := []model.LabelSet{
-		{
-			"severity":  "page",
-			"alertname": "TestAlert_AbortOnPartialResponse",
-			"replica":   "1",
-		},
-		{
-			"severity":  "page",
-			"alertname": "TestAlert_HasBeenLoadedViaWebHandler",
-			"replica":   "1",
-		},
-		{
-			"severity":  "page",
-			"alertname": "TestAlert_WarnOnPartialResponse",
-			"replica":   "1",
-		},
-	}
+// TestRule_CanRemoteWriteData checks that Thanos Ruler can be run in stateless mode
+// where it remote_writes rule evaluations to a Prometheus remote-write endpoint (typically
+// a Thanos Receiver).
+func TestRule_CanRemoteWriteData(t *testing.T) {
+	t.Parallel()
 
-	alrts, err := promclient.NewDefaultClient().AlertmanagerAlerts(ctx, mustURLParse(t, "http://"+am2.HTTPEndpoint()))
+	e, err := e2e.NewDockerEnvironment("e2e_test_rule_remote_write")
 	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	testutil.Equals(t, len(expAlertLabels), len(alrts))
-	for i, a := range alrts {
-		testutil.Assert(t, a.Labels.Equal(expAlertLabels[i]), "unexpected labels %s", a.Labels)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	rulesSubDir := "rules"
+	rulesPath := filepath.Join(e.SharedDir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+
+	for i, rule := range []string{testRuleRecordAbsentMetric, testAlertRuleWarnOnPartialResponse} {
+		createRuleFile(t, filepath.Join(rulesPath, fmt.Sprintf("rules-%d.yaml", i)), rule)
 	}
+
+	am, err := e2ethanos.NewAlertmanager(e, "1")
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(am))
+
+	receiver, err := e2ethanos.NewIngestingReceiver(e, "1")
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+	rwURL := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")))
+
+	receiver2, err := e2ethanos.NewIngestingReceiver(e, "2")
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver2))
+	rwURL2 := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver2.InternalEndpoint("remote-write")))
+
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).Build()
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+	r, err := e2ethanos.NewStatelessRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
+		{
+			EndpointsConfig: httpconfig.EndpointsConfig{
+				StaticAddresses: []string{
+					am.InternalEndpoint("http"),
+				},
+				Scheme: "http",
+			},
+			Timeout:    amTimeout,
+			APIVersion: alert.APIv1,
+		},
+	}, []httpconfig.Config{
+		{
+			EndpointsConfig: httpconfig.EndpointsConfig{
+				StaticAddresses: []string{
+					q.InternalEndpoint("http"),
+				},
+				Scheme: "http",
+			},
+		},
+	}, []*config.RemoteWriteConfig{
+		{URL: &common_cfg.URL{URL: rwURL}, Name: "thanos-receiver"},
+		{URL: &common_cfg.URL{URL: rwURL2}, Name: "thanos-receiver2"},
+	})
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	// Wait until remote write samples are written to receivers successfully.
+	testutil.Ok(t, r.WaitSumMetricsWithOptions(e2e.GreaterOrEqual(1), []string{"prometheus_remote_storage_samples_total"}, e2e.WaitMissingMetrics()))
+
+	t.Run("can fetch remote-written samples from receiver", func(t *testing.T) {
+		testRecordedSamples := func() string { return "test_absent_metric" }
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), testRecordedSamples, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"__name__":  "test_absent_metric",
+				"job":       "thanos-receive",
+				"receive":   "1",
+				"tenant_id": "default-tenant",
+			},
+			{
+				"__name__":  "test_absent_metric",
+				"job":       "thanos-receive",
+				"receive":   "2",
+				"tenant_id": "default-tenant",
+			},
+		})
+	})
+}
+
+// TestRule_CanPersistWALData checks that in stateless mode, Thanos Ruler can persist rule evaluations
+// which couldn't be sent to the remote write endpoint (e.g because receiver isn't available).
+func TestRule_CanPersistWALData(t *testing.T) {
+	//TODO: Implement test with unavailable remote-write endpoint(receiver)
 }
 
 // Test Ruler behavior on different storepb.PartialResponseStrategy when having partial response from single `failingStoreAPI`.

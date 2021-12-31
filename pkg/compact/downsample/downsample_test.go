@@ -11,10 +11,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/value"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -470,7 +470,7 @@ func TestDownsample(t *testing.T) {
 			pall, err := indexr.Postings(index.AllPostingsKey())
 			testutil.Ok(t, err)
 
-			var series []uint64
+			var series []storage.SeriesRef
 			for pall.Next() {
 				series = append(series, pall.At())
 			}
@@ -839,7 +839,7 @@ type memBlock struct {
 	tsdb.IndexReader
 
 	symbols  map[string]struct{}
-	postings []uint64
+	postings []storage.SeriesRef
 	series   []*series
 	chunks   []chunkenc.Chunk
 
@@ -858,7 +858,7 @@ func newMemBlock() *memBlock {
 }
 
 func (b *memBlock) addSeries(s *series) {
-	sid := uint64(len(b.series))
+	sid := storage.SeriesRef(len(b.series))
 	b.postings = append(b.postings, sid)
 	b.series = append(b.series, s)
 
@@ -874,7 +874,7 @@ func (b *memBlock) addSeries(s *series) {
 		if b.maxTime == -1 || cm.MaxTime < b.maxTime {
 			b.maxTime = cm.MaxTime
 		}
-		s.chunks[i].Ref = b.numberOfChunks
+		s.chunks[i].Ref = chunks.ChunkRef(b.numberOfChunks)
 		b.chunks = append(b.chunks, cm.Chunk)
 		b.numberOfChunks++
 	}
@@ -912,8 +912,8 @@ func (b *memBlock) Postings(name string, val ...string) (index.Postings, error) 
 	return index.NewListPostings(b.postings), nil
 }
 
-func (b *memBlock) Series(id uint64, lset *labels.Labels, chks *[]chunks.Meta) error {
-	if id >= uint64(len(b.series)) {
+func (b *memBlock) Series(id storage.SeriesRef, lset *labels.Labels, chks *[]chunks.Meta) error {
+	if int(id) >= len(b.series) {
 		return errors.Wrapf(storage.ErrNotFound, "series with ID %d does not exist", id)
 	}
 	s := b.series[id]
@@ -924,8 +924,8 @@ func (b *memBlock) Series(id uint64, lset *labels.Labels, chks *[]chunks.Meta) e
 	return nil
 }
 
-func (b *memBlock) Chunk(id uint64) (chunkenc.Chunk, error) {
-	if id >= b.numberOfChunks {
+func (b *memBlock) Chunk(id chunks.ChunkRef) (chunkenc.Chunk, error) {
+	if uint64(id) >= b.numberOfChunks {
 		return nil, errors.Wrapf(storage.ErrNotFound, "chunk with ID %d does not exist", id)
 	}
 
@@ -967,7 +967,9 @@ func (b *memBlock) Size() int64 {
 
 type emptyTombstoneReader struct{}
 
-func (emptyTombstoneReader) Get(ref uint64) (tombstones.Intervals, error)        { return nil, nil }
-func (emptyTombstoneReader) Iter(func(uint64, tombstones.Intervals) error) error { return nil }
-func (emptyTombstoneReader) Total() uint64                                       { return 0 }
-func (emptyTombstoneReader) Close() error                                        { return nil }
+func (emptyTombstoneReader) Get(storage.SeriesRef) (tombstones.Intervals, error) { return nil, nil }
+func (emptyTombstoneReader) Iter(func(storage.SeriesRef, tombstones.Intervals) error) error {
+	return nil
+}
+func (emptyTombstoneReader) Total() uint64 { return 0 }
+func (emptyTombstoneReader) Close() error  { return nil }

@@ -150,3 +150,21 @@ adopters:
 - name: Stackhero
   url: https://www.stackhero.io/
   logo: stackhero.png
+- name: PagBank
+  url: https://pagseguro.com.br/
+  logo: pagbank.png
+- name: Itaú Unibanco
+  url: https://www.itau.com.br/
+  logo: itau-unibanco.png
+- name: LabyrinthLabs
+  url: https://lablabs.io
+  logo: lablabs.png
+- name: Darwinbox Digital Solutions
+  url: https://darwinbox.com
+  logo: darwinbox.png
+- name: Wehkamp
+  url: https://www.wehkamp.nl
+  logo: wehkamp.png
+- name: SoundCloud
+  url: https://www.soundcloud.com
+  logo: soundcloud.png

@@ -5,13 +5,14 @@ package labelpb
 
 import (
 	"fmt"
-	ioutil "io/ioutil"
+	"io/ioutil"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 

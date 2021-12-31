@@ -402,6 +402,7 @@ usage: thanos tools bucket ls [<flags>]
 List all blocks in the bucket.
 
 Flags:
+      --exclude-delete     Exclude blocks marked for deletion.
   -h, --help               Show context-sensitive help (also try --help-long and
                            --help-man).
       --log.format=logfmt  Log format to use. Possible options: logfmt or json.
@@ -462,6 +463,8 @@ Flags:
                              Path to YAML file that contains object store
                              configuration. See format details:
                              https://thanos.io/tip/thanos/storage.md/#configuration
+      --output=table         Output format for result. Currently supports table,
+                             cvs, tsv.
   -l, --selector=<name>=\"<value>\" ...  
                              Selects blocks based on label, e.g. '-l
                              key1=\"value1\" -l key2=\"value2\"'. All key value

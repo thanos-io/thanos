@@ -13,12 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cortexproject/cortex/integration/e2e"
+	"github.com/efficientgo/e2e"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/rules"
 
-	http_util "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
+
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -29,76 +31,70 @@ import (
 func TestRulesAPI_Fanout(t *testing.T) {
 	t.Parallel()
 
-	netName := "e2e_test_rules_fanout"
-
-	s, err := e2e.NewScenario(netName)
+	e, err := e2e.NewDockerEnvironment("e2e_test_rules_fanout")
 	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, s))
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	promRulesSubDir := filepath.Join("rules")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), promRulesSubDir), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), promRulesSubDir), os.ModePerm))
 	// Create the abort_on_partial_response alert for Prometheus.
 	// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.
-	createRuleFile(t, filepath.Join(s.SharedDir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
+	createRuleFile(t, filepath.Join(e.SharedDir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
 
 	thanosRulesSubDir := filepath.Join("thanos-rules")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(s.SharedDir(), thanosRulesSubDir), os.ModePerm))
-	createRuleFiles(t, filepath.Join(s.SharedDir(), thanosRulesSubDir))
-
+	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), thanosRulesSubDir), os.ModePerm))
+	createRuleFiles(t, filepath.Join(e.SharedDir(), thanosRulesSubDir))
+	// We create a rule group with limit.
+	createRuleFile(t, filepath.Join(e.SharedDir(), thanosRulesSubDir, "rules-with-limit.yaml"), testAlertRuleWithLimit)
 	// 2x Prometheus.
 	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
-		s.SharedDir(),
-		netName,
+		e,
 		"prom1",
-		defaultPromConfig("ha", 0, "", filepath.Join(e2e.ContainerSharedDir, promRulesSubDir, "*.yaml")),
+		defaultPromConfig("ha", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml")),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
 	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
-		s.SharedDir(),
-		netName,
+		e,
 		"prom2",
-		defaultPromConfig("ha", 1, "", filepath.Join(e2e.ContainerSharedDir, promRulesSubDir, "*.yaml")),
+		defaultPromConfig("ha", 1, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml")),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
-	// 2x Rulers.
-	r1, err := e2ethanos.NewRuler(s.SharedDir(), "rule1", thanosRulesSubDir, nil, nil)
-	testutil.Ok(t, err)
-	r2, err := e2ethanos.NewRuler(s.SharedDir(), "rule2", thanosRulesSubDir, nil, nil)
-	testutil.Ok(t, err)
+	qBuilder := e2ethanos.NewQuerierBuilder(e, "query")
+	qUninit := qBuilder.BuildUninitiated()
 
-	stores := []string{sidecar1.GRPCNetworkEndpoint(), sidecar2.GRPCNetworkEndpoint(), r1.NetworkEndpointFor(s.NetworkName(), 9091), r2.NetworkEndpointFor(s.NetworkName(), 9091)}
-	q, err := e2ethanos.NewQuerierBuilder(s.SharedDir(), "query", stores).
-		WithRuleAddresses(stores).
-		Build()
-	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(q))
-
-	queryCfg := []query.Config{
+	queryCfg := []httpconfig.Config{
 		{
-			EndpointsConfig: http_util.EndpointsConfig{
-				StaticAddresses: []string{q.NetworkHTTPEndpoint()},
+			EndpointsConfig: httpconfig.EndpointsConfig{
+				StaticAddresses: []string{qUninit.InternalEndpoint("http")},
 				Scheme:          "http",
 			},
 		},
 	}
 
 	// Recreate rulers with the corresponding query config.
-	r1, err = e2ethanos.NewRuler(s.SharedDir(), "rule1", thanosRulesSubDir, nil, queryCfg)
+	r1, err := e2ethanos.NewTSDBRuler(e, "rule1", thanosRulesSubDir, nil, queryCfg)
 	testutil.Ok(t, err)
-	r2, err = e2ethanos.NewRuler(s.SharedDir(), "rule2", thanosRulesSubDir, nil, queryCfg)
+	r2, err := e2ethanos.NewTSDBRuler(e, "rule2", thanosRulesSubDir, nil, queryCfg)
 	testutil.Ok(t, err)
-	testutil.Ok(t, s.StartAndWaitReady(r1, r2))
+	testutil.Ok(t, e2e.StartAndWaitReady(r1, r2))
+
+	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")}
+	q, err := qBuilder.WithRuleAddresses(stores...).Initiate(qUninit, stores...)
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(4), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(4), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-	ruleAndAssert(t, ctx, q.HTTPEndpoint(), "", []*rulespb.RuleGroup{
+	ruleAndAssert(t, ctx, q.Endpoint("http"), "", []*rulespb.RuleGroup{
 		{
 			Name: "example_abort",
 			File: "/shared/rules/rules.yaml",
@@ -111,6 +107,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
 					}},
+					Health: string(rules.HealthGood),
 				}),
 			},
 		},
@@ -125,6 +122,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
+					Health: string(rules.HealthGood),
 				}),
 			},
 		},
@@ -139,6 +137,23 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
+					Health: string(rules.HealthGood),
+				}),
+			},
+		},
+		{
+			Name:  "example_with_limit",
+			File:  "/shared/thanos-rules/rules-with-limit.yaml",
+			Limit: 1,
+			Rules: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:  "TestAlert_WithLimit",
+					State: rulespb.AlertState_INACTIVE,
+					Query: `promhttp_metric_handler_requests_total`,
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+						{Name: "severity", Value: "page"},
+					}},
+					Health: string(rules.HealthBad),
 				}),
 			},
 		},
@@ -150,14 +165,17 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 
 	fmt.Println("ruleAndAssert: Waiting for results for rules type", typ)
 	var result []*rulespb.RuleGroup
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
 		res, err := promclient.NewDefaultClient().RulesInGRPC(ctx, mustURLParse(t, "http://"+addr), typ)
 		if err != nil {
 			return err
 		}
 
 		if len(result) != len(res) {
-			fmt.Println("ruleAndAssert: New result:", res)
+			fmt.Println("ruleAndAssert: new result:", res)
+			result = res
 		}
 
 		if len(res) != len(want) {
@@ -179,12 +197,14 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 						State:  alert.State,
 						Query:  alert.Query,
 						Labels: alert.Labels,
+						Health: alert.Health,
 					})
 				} else if rec := r.GetRecording(); rec != nil {
 					res[ig].Rules[ir] = rulespb.NewAlertingRule(&rulespb.Alert{
 						Name:   rec.Name,
 						Query:  rec.Query,
 						Labels: rec.Labels,
+						Health: rec.Health,
 					})
 				}
 			}

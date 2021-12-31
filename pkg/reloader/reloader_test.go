@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"go.uber.org/atomic"
@@ -247,6 +247,84 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-001.yaml")))
 	testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4"), os.ModePerm))
 
+	stepFunc := func(rel int) {
+		t.Log("Performing step number", rel)
+		switch rel {
+		case 0:
+			// Create rule2.yaml.
+			//
+			// dir
+			// ├─ rule-dir -> dir2/rule-dir
+			// ├─ rule1.yaml
+			// └─ rule2.yaml (*)
+			// dir2
+			// ├─ rule-dir
+			// │  └─ rule4.yaml
+			// ├─ rule3-001.yaml -> rule3-source.yaml
+			// └─ rule3-source.yaml
+			testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule2.yaml"), []byte("rule2"), os.ModePerm))
+		case 1:
+			// Update rule1.yaml.
+			//
+			// dir
+			// ├─ rule-dir -> dir2/rule-dir
+			// ├─ rule1.yaml (*)
+			// └─ rule2.yaml
+			// dir2
+			// ├─ rule-dir
+			// │  └─ rule4.yaml
+			// ├─ rule3-001.yaml -> rule3-source.yaml
+			// └─ rule3-source.yaml
+			testutil.Ok(t, os.Rename(tempRule1File, path.Join(dir, "rule1.yaml")))
+		case 2:
+			// Create dir/rule3.yaml (symlink to rule3-001.yaml).
+			//
+			// dir
+			// ├─ rule-dir -> dir2/rule-dir
+			// ├─ rule1.yaml
+			// ├─ rule2.yaml
+			// └─ rule3.yaml -> dir2/rule3-001.yaml (*)
+			// dir2
+			// ├─ rule-dir
+			// │  └─ rule4.yaml
+			// ├─ rule3-001.yaml -> rule3-source.yaml
+			// └─ rule3-source.yaml
+			testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-001.yaml"), path.Join(dir2, "rule3.yaml")))
+			testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
+		case 3:
+			// Update the symlinked file and replace the symlink file to trigger fsnotify.
+			//
+			// dir
+			// ├─ rule-dir -> dir2/rule-dir
+			// ├─ rule1.yaml
+			// ├─ rule2.yaml
+			// └─ rule3.yaml -> dir2/rule3-002.yaml (*)
+			// dir2
+			// ├─ rule-dir
+			// │  └─ rule4.yaml
+			// ├─ rule3-002.yaml -> rule3-source.yaml (*)
+			// └─ rule3-source.yaml (*)
+			testutil.Ok(t, os.Rename(tempRule3File, path.Join(dir2, "rule3-source.yaml")))
+			testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-002.yaml")))
+			testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-002.yaml"), path.Join(dir2, "rule3.yaml")))
+			testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
+			testutil.Ok(t, os.Remove(path.Join(dir2, "rule3-001.yaml")))
+		case 4:
+			// Update rule4.yaml in the symlinked directory.
+			//
+			// dir
+			// ├─ rule-dir -> dir2/rule-dir
+			// ├─ rule1.yaml
+			// ├─ rule2.yaml
+			// └─ rule3.yaml -> rule3-source.yaml
+			// dir2
+			// ├─ rule-dir
+			// │  └─ rule4.yaml (*)
+			// └─ rule3-source.yaml
+			testutil.Ok(t, os.Rename(tempRule4File, path.Join(dir2, "rule-dir", "rule4.yaml")))
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	g := sync.WaitGroup{}
 	g.Add(1)
@@ -267,89 +345,20 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 
 			reloadsMtx.Lock()
 			rel := reloads
+			reloadsMtx.Unlock()
 			if init && rel <= reloadsSeen {
-				reloadsMtx.Unlock()
 				continue
 			}
-			reloadsMtx.Unlock()
+
+			// Catch up if reloader is step(s) ahead.
+			for skipped := rel - reloadsSeen - 1; skipped > 0; skipped-- {
+				stepFunc(rel - skipped)
+			}
+
+			stepFunc(rel)
+
 			init = true
 			reloadsSeen = rel
-
-			t.Log("Performing step number", rel)
-			switch rel {
-			case 0:
-				// Create rule2.yaml.
-				//
-				// dir
-				// ├─ rule-dir -> dir2/rule-dir
-				// ├─ rule1.yaml
-				// └─ rule2.yaml (*)
-				// dir2
-				// ├─ rule-dir
-				// │  └─ rule4.yaml
-				// ├─ rule3-001.yaml -> rule3-source.yaml
-				// └─ rule3-source.yaml
-				testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule2.yaml"), []byte("rule2"), os.ModePerm))
-			case 1:
-				// Update rule1.yaml.
-				//
-				// dir
-				// ├─ rule-dir -> dir2/rule-dir
-				// ├─ rule1.yaml (*)
-				// └─ rule2.yaml
-				// dir2
-				// ├─ rule-dir
-				// │  └─ rule4.yaml
-				// ├─ rule3-001.yaml -> rule3-source.yaml
-				// └─ rule3-source.yaml
-				testutil.Ok(t, os.Rename(tempRule1File, path.Join(dir, "rule1.yaml")))
-			case 2:
-				// Create dir/rule3.yaml (symlink to rule3-001.yaml).
-				//
-				// dir
-				// ├─ rule-dir -> dir2/rule-dir
-				// ├─ rule1.yaml
-				// ├─ rule2.yaml
-				// └─ rule3.yaml -> dir2/rule3-001.yaml (*)
-				// dir2
-				// ├─ rule-dir
-				// │  └─ rule4.yaml
-				// ├─ rule3-001.yaml -> rule3-source.yaml
-				// └─ rule3-source.yaml
-				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-001.yaml"), path.Join(dir2, "rule3.yaml")))
-				testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
-			case 3:
-				// Update the symlinked file and replace the symlink file to trigger fsnotify.
-				//
-				// dir
-				// ├─ rule-dir -> dir2/rule-dir
-				// ├─ rule1.yaml
-				// ├─ rule2.yaml
-				// └─ rule3.yaml -> dir2/rule3-002.yaml (*)
-				// dir2
-				// ├─ rule-dir
-				// │  └─ rule4.yaml
-				// ├─ rule3-002.yaml -> rule3-source.yaml (*)
-				// └─ rule3-source.yaml (*)
-				testutil.Ok(t, os.Rename(tempRule3File, path.Join(dir2, "rule3-source.yaml")))
-				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-002.yaml")))
-				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-002.yaml"), path.Join(dir2, "rule3.yaml")))
-				testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
-				testutil.Ok(t, os.Remove(path.Join(dir2, "rule3-001.yaml")))
-			case 4:
-				// Update rule4.yaml in the symlinked directory.
-				//
-				// dir
-				// ├─ rule-dir -> dir2/rule-dir
-				// ├─ rule1.yaml
-				// ├─ rule2.yaml
-				// └─ rule3.yaml -> rule3-source.yaml
-				// dir2
-				// ├─ rule-dir
-				// │  └─ rule4.yaml (*)
-				// └─ rule3-source.yaml
-				testutil.Ok(t, os.Rename(tempRule4File, path.Join(dir2, "rule-dir", "rule4.yaml")))
-			}
 
 			if rel > 4 {
 				// All good.
