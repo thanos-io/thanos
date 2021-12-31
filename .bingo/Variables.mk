@@ -23,17 +23,17 @@ $(ALERTMANAGER): $(BINGO_DIR)/alertmanager.mod
 	@echo "(re)installing $(GOBIN)/alertmanager-v0.20.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=alertmanager.mod -o=$(GOBIN)/alertmanager-v0.20.0 "github.com/prometheus/alertmanager/cmd/alertmanager"
 
-BINGO := $(GOBIN)/bingo-v0.4.3
+BINGO := $(GOBIN)/bingo-v0.5.2
 $(BINGO): $(BINGO_DIR)/bingo.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/bingo-v0.4.3"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=bingo.mod -o=$(GOBIN)/bingo-v0.4.3 "github.com/bwplotka/bingo"
+	@echo "(re)installing $(GOBIN)/bingo-v0.5.2"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=bingo.mod -o=$(GOBIN)/bingo-v0.5.2 "github.com/bwplotka/bingo"
 
-FAILLINT := $(GOBIN)/faillint-v1.5.0
+FAILLINT := $(GOBIN)/faillint-v1.8.0
 $(FAILLINT): $(BINGO_DIR)/faillint.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/faillint-v1.5.0"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=faillint.mod -o=$(GOBIN)/faillint-v1.5.0 "github.com/fatih/faillint"
+	@echo "(re)installing $(GOBIN)/faillint-v1.8.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=faillint.mod -o=$(GOBIN)/faillint-v1.8.0 "github.com/fatih/faillint"
 
 GO_BINDATA := $(GOBIN)/go-bindata-v3.1.1+incompatible
 $(GO_BINDATA): $(BINGO_DIR)/go-bindata.mod
@@ -58,6 +58,12 @@ $(GOLANGCI_LINT): $(BINGO_DIR)/golangci-lint.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
 	@echo "(re)installing $(GOBIN)/golangci-lint-v1.39.1-0.20210330125642-6844f6abf817"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.39.1-0.20210330125642-6844f6abf817 "github.com/golangci/golangci-lint/cmd/golangci-lint"
+
+GOTESPLIT := $(GOBIN)/gotesplit-v0.1.2
+$(GOTESPLIT): $(BINGO_DIR)/gotesplit.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/gotesplit-v0.1.2"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=gotesplit.mod -o=$(GOBIN)/gotesplit-v0.1.2 "github.com/Songmu/gotesplit/cmd/gotesplit"
 
 HUGO := $(GOBIN)/hugo-v0.80.0
 $(HUGO): $(BINGO_DIR)/hugo.mod

@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -54,6 +55,7 @@ type Config struct {
 	Bucket     string     `yaml:"bucket"`
 	Region     string     `yaml:"region"`
 	AppId      string     `yaml:"app_id"`
+	Endpoint   string     `yaml:"endpoint"`
 	SecretKey  string     `yaml:"secret_key"`
 	SecretId   string     `yaml:"secret_id"`
 	HTTPConfig HTTPConfig `yaml:"http_config"`
@@ -61,6 +63,16 @@ type Config struct {
 
 // Validate checks to see if mandatory cos config options are set.
 func (conf *Config) validate() error {
+	if conf.Endpoint != "" {
+		if _, err := url.Parse(conf.Endpoint); err != nil {
+			return errors.Wrap(err, "parse endpoint")
+		}
+		if conf.SecretId == "" ||
+			conf.SecretKey == "" {
+			return errors.New("secret_id or secret_key is empty")
+		}
+		return nil
+	}
 	if conf.Bucket == "" ||
 		conf.AppId == "" ||
 		conf.Region == "" ||
@@ -119,7 +131,15 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 		return nil, errors.Wrap(err, "validate cos configuration")
 	}
 
-	bucketURL := cos.NewBucketURL(fmt.Sprintf("%s-%s", config.Bucket, config.AppId), config.Region, true)
+	var bucketURL *url.URL
+	if config.Endpoint != "" {
+		bucketURL, err = url.Parse(config.Endpoint)
+		if err != nil {
+			return nil, errors.Wrap(err, "parse endpoint")
+		}
+	} else {
+		bucketURL = cos.NewBucketURL(fmt.Sprintf("%s-%s", config.Bucket, config.AppId), config.Region, true)
+	}
 	b := &cos.BaseURL{BucketURL: bucketURL}
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
@@ -355,6 +375,7 @@ func configFromEnv() Config {
 		Bucket:    os.Getenv("COS_BUCKET"),
 		AppId:     os.Getenv("COS_APP_ID"),
 		Region:    os.Getenv("COS_REGION"),
+		Endpoint:  os.Getenv("COS_ENDPOINT"),
 		SecretId:  os.Getenv("COS_SECRET_ID"),
 		SecretKey: os.Getenv("COS_SECRET_KEY"),
 	}
@@ -424,6 +445,16 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 }
 
 func validateForTest(conf Config) error {
+	if conf.Endpoint != "" {
+		if _, err := url.Parse(conf.Endpoint); err != nil {
+			return errors.Wrap(err, "parse endpoint")
+		}
+		if conf.SecretId == "" ||
+			conf.SecretKey == "" {
+			return errors.New("secret_id or secret_key is empty")
+		}
+		return nil
+	}
 	if conf.AppId == "" ||
 		conf.Region == "" ||
 		conf.SecretId == "" ||

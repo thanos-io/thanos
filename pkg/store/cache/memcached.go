@@ -22,21 +22,21 @@ const (
 	memcachedDefaultTTL = 24 * time.Hour
 )
 
-// MemcachedIndexCache is a memcached-based index cache.
-type MemcachedIndexCache struct {
+// RemoteIndexCache is a memcached-based index cache.
+type RemoteIndexCache struct {
 	logger    log.Logger
-	memcached cacheutil.MemcachedClient
+	memcached cacheutil.RemoteCacheClient
 
 	// Metrics.
 	requests *prometheus.CounterVec
 	hits     *prometheus.CounterVec
 }
 
-// NewMemcachedIndexCache makes a new MemcachedIndexCache.
-func NewMemcachedIndexCache(logger log.Logger, memcached cacheutil.MemcachedClient, reg prometheus.Registerer) (*MemcachedIndexCache, error) {
-	c := &MemcachedIndexCache{
+// NewRemoteIndexCache makes a new RemoteIndexCache.
+func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheClient, reg prometheus.Registerer) (*RemoteIndexCache, error) {
+	c := &RemoteIndexCache{
 		logger:    logger,
-		memcached: memcached,
+		memcached: cacheClient,
 	}
 
 	c.requests = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -53,7 +53,7 @@ func NewMemcachedIndexCache(logger log.Logger, memcached cacheutil.MemcachedClie
 	c.hits.WithLabelValues(cacheTypePostings)
 	c.hits.WithLabelValues(cacheTypeSeries)
 
-	level.Info(logger).Log("msg", "created memcached index cache")
+	level.Info(logger).Log("msg", "created index cache")
 
 	return c, nil
 }
@@ -61,7 +61,7 @@ func NewMemcachedIndexCache(logger log.Logger, memcached cacheutil.MemcachedClie
 // StorePostings sets the postings identified by the ulid and label to the value v.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
-func (c *MemcachedIndexCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {
+func (c *RemoteIndexCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {
 	key := cacheKey{blockID, cacheKeyPostings(l)}.string()
 
 	if err := c.memcached.SetAsync(ctx, key, v, memcachedDefaultTTL); err != nil {
@@ -72,7 +72,7 @@ func (c *MemcachedIndexCache) StorePostings(ctx context.Context, blockID ulid.UL
 // FetchMultiPostings fetches multiple postings - each identified by a label -
 // and returns a map containing cache hits, along with a list of missing keys.
 // In case of error, it logs and return an empty cache hits map.
-func (c *MemcachedIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, lbls []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
+func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, lbls []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
 	// Build the cache keys, while keeping a map between input label and the cache key
 	// so that we can easily reverse it back after the GetMulti().
 	keys := make([]string, 0, len(lbls))
@@ -121,7 +121,7 @@ func (c *MemcachedIndexCache) FetchMultiPostings(ctx context.Context, blockID ul
 // StoreSeries sets the series identified by the ulid and id to the value v.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
-func (c *MemcachedIndexCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id storage.SeriesRef, v []byte) {
+func (c *RemoteIndexCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id storage.SeriesRef, v []byte) {
 	key := cacheKey{blockID, cacheKeySeries(id)}.string()
 
 	if err := c.memcached.SetAsync(ctx, key, v, memcachedDefaultTTL); err != nil {
@@ -132,7 +132,7 @@ func (c *MemcachedIndexCache) StoreSeries(ctx context.Context, blockID ulid.ULID
 // FetchMultiSeries fetches multiple series - each identified by ID - from the cache
 // and returns a map containing cache hits, along with a list of missing IDs.
 // In case of error, it logs and return an empty cache hits map.
-func (c *MemcachedIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef) (hits map[storage.SeriesRef][]byte, misses []storage.SeriesRef) {
+func (c *RemoteIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef) (hits map[storage.SeriesRef][]byte, misses []storage.SeriesRef) {
 	// Build the cache keys, while keeping a map between input id and the cache key
 	// so that we can easily reverse it back after the GetMulti().
 	keys := make([]string, 0, len(ids))
@@ -176,4 +176,9 @@ func (c *MemcachedIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid
 
 	c.hits.WithLabelValues(cacheTypeSeries).Add(float64(len(hits)))
 	return hits, misses
+}
+
+// NewMemcachedIndexCache is alias NewRemoteIndexCache for compatible.
+func NewMemcachedIndexCache(logger log.Logger, memcached cacheutil.RemoteCacheClient, reg prometheus.Registerer) (*RemoteIndexCache, error) {
+	return NewRemoteIndexCache(logger, memcached, reg)
 }

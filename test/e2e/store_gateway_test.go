@@ -33,8 +33,9 @@ import (
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
+const testQuery = "{a=\"1\"}"
+
 // TODO(bwplotka): Extend this test to have multiple stores.
-// TODO(bwplotka): Extend this test for downsampling.
 func TestStoreGateway(t *testing.T) {
 	t.Parallel()
 
@@ -132,7 +133,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 	t.Run("query works", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"} @ end()",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return fmt.Sprintf("%s @ end()", testQuery) },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -157,7 +158,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(6), "thanos_bucket_store_series_data_fetched"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(2), "thanos_bucket_store_series_blocks_queried"))
 
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: true,
 			},
@@ -187,7 +188,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 		// TODO(bwplotka): Entries are still in LRU cache.
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -216,7 +217,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -249,7 +250,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1+1), "thanos_bucket_store_block_drops_total"))
 		testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -266,7 +267,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	})
 
 	t.Run("negative offset should work", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"} offset -4h",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return "{a=\"1\"} offset -4h" },
 			func() time.Time { return time.Now().Add(-4 * time.Hour) }, promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -361,7 +362,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(0), "thanos_bucket_store_block_load_failures_total"))
 
 	t.Run("query with cache miss", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},
@@ -379,7 +380,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	})
 
 	t.Run("query with cache hit", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), "{a=\"1\"}",
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
 				Deduplicate: false,
 			},

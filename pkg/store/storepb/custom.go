@@ -517,3 +517,27 @@ func (c *SeriesStatsCounter) Count(series *Series) {
 		}
 	}
 }
+
+func (m *SeriesRequest) ToPromQL() string {
+	return m.QueryHints.toPromQL(m.Matchers)
+}
+
+// IsSafeToExecute returns true if the function or aggregation from the query hint
+// can be safely executed by the underlying Prometheus instance without affecting the
+// result of the query.
+func (m *QueryHints) IsSafeToExecute() bool {
+	distributiveOperations := []string{
+		"max",
+		"max_over_time",
+		"min",
+		"min_over_time",
+		"group",
+	}
+	for _, op := range distributiveOperations {
+		if m.Func.Name == op {
+			return true
+		}
+	}
+
+	return false
+}

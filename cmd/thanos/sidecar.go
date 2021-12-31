@@ -223,8 +223,10 @@ func runSidecar(
 				if err := m.UpdateLabels(iterCtx); err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
+					statusProber.NotReady(err)
 				} else {
 					promUp.Set(1)
+					statusProber.Ready()
 				}
 
 				return nil
