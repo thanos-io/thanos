@@ -173,7 +173,13 @@ input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
     }
 }
 
-@media (max-width: 768px){
+@media (max-width: 580px) {
+    .list-inline-item {
+        margin-bottom: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
     .hero-logo-container {
         flex-grow: 1;
         max-width: 100%;
