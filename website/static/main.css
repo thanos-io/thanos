@@ -179,9 +179,17 @@ input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
     }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
     .hero-logo-container {
         flex-grow: 1;
         max-width: 100%;
+    }
+    .footer-container {
+        flex-direction: column;
+    }
+
+    .about-section {
+        padding-top: 20px;
+        padding-bottom: 15px;
     }
 }
