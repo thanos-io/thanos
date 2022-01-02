@@ -62,3 +62,76 @@ http_config:
 		})
 	}
 }
+
+func TestConfig_validate(t *testing.T) {
+	type fields struct {
+		Bucket     string
+		Region     string
+		AppId      string
+		Endpoint   string
+		SecretKey  string
+		SecretId   string
+		HTTPConfig HTTPConfig
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		wantErr bool
+	}{
+		{
+			name: "ok endpoint",
+			fields: fields{
+				Endpoint:  "http://bucket-123.cos.ap-beijing.myqcloud.com",
+				SecretId:  "sid",
+				SecretKey: "skey",
+			},
+			wantErr: false,
+		},
+		{
+			name: "ok bucket-appid-region",
+			fields: fields{
+				Bucket:    "bucket",
+				AppId:     "123",
+				Region:    "ap-beijing",
+				SecretId:  "sid",
+				SecretKey: "skey",
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing skey",
+			fields: fields{
+				Bucket: "bucket",
+				AppId:  "123",
+				Region: "ap-beijing",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing bucket",
+			fields: fields{
+				AppId:     "123",
+				Region:    "ap-beijing",
+				SecretId:  "sid",
+				SecretKey: "skey",
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conf := &Config{
+				Bucket:     tt.fields.Bucket,
+				Region:     tt.fields.Region,
+				AppId:      tt.fields.AppId,
+				Endpoint:   tt.fields.Endpoint,
+				SecretKey:  tt.fields.SecretKey,
+				SecretId:   tt.fields.SecretId,
+				HTTPConfig: tt.fields.HTTPConfig,
+			}
+			if err := conf.validate(); (err != nil) != tt.wantErr {
+				t.Errorf("validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
