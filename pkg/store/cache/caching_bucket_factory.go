@@ -107,6 +107,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 		groupcacheCfg := cache.NewCachingBucketConfig()
 
 		// Configure cache.
+		groupcacheCfg.CacheAttributes("chunks", c, isTSDBChunkFile, config.ChunkObjectAttrsTTL)
 		groupcacheCfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectAttrsTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
 		groupcacheCfg.CacheExists("meta.jsons", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
 		groupcacheCfg.CacheGet("meta.jsons", c, isMetaFile, int(config.MetafileMaxSize), config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)

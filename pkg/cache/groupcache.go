@@ -134,7 +134,6 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 			case cachekey.AttributesVerb:
 				_, attrCfg := cfg.FindAttributesConfig(parsedData.Name)
 				if attrCfg == nil {
-					// TODO: Debug this. Why? Attributes get called for Chunks.
 					panic("caching bucket layer must not call on unconfigured paths")
 				}
 
