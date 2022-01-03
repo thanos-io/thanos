@@ -402,6 +402,7 @@ usage: thanos tools bucket ls [<flags>]
 List all blocks in the bucket.
 
 Flags:
+      --exclude-delete     Exclude blocks marked for deletion.
   -h, --help               Show context-sensitive help (also try --help-long and
                            --help-man).
       --log.format=logfmt  Log format to use. Possible options: logfmt or json.

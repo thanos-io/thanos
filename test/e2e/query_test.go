@@ -16,6 +16,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/golang/snappy"
+	config_util "github.com/prometheus/common/config"
+	"github.com/prometheus/prometheus/prompb"
+	"github.com/prometheus/prometheus/storage/remote"
+
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/efficientgo/e2e"
@@ -609,6 +615,159 @@ config:
 	}
 }
 
+type fakeMetricSample struct {
+	label string
+	value int64
+}
+
+func newSample(s fakeMetricSample) model.Sample {
+	return model.Sample{
+		Metric: map[model.LabelName]model.LabelValue{
+			"__name__": "my_fake_metric",
+			"instance": model.LabelValue(s.label),
+		},
+		Value:     model.SampleValue(s.value),
+		Timestamp: model.Now(),
+	}
+}
+
+func TestSidecarQueryEvaluation(t *testing.T) {
+	t.Parallel()
+
+	ts := []struct {
+		prom1Samples []fakeMetricSample
+		prom2Samples []fakeMetricSample
+		query        string
+		result       model.Vector
+	}{
+		{
+			query:        "max (my_fake_metric)",
+			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
+			prom2Samples: []fakeMetricSample{{"i1", 3}, {"i2", 4}, {"i3", 10}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{},
+					Value:  10,
+				},
+			},
+		},
+		{
+			query:        "max by (instance) (my_fake_metric)",
+			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
+			prom2Samples: []fakeMetricSample{{"i1", 3}, {"i2", 4}, {"i3", 10}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1"},
+					Value:  3,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i2"},
+					Value:  5,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i3"},
+					Value:  10,
+				},
+			},
+		},
+		{
+			query:        "group by (instance) (my_fake_metric)",
+			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
+			prom2Samples: []fakeMetricSample{{"i1", 3}, {"i2", 4}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1"},
+					Value:  1,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i2"},
+					Value:  1,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i3"},
+					Value:  1,
+				},
+			},
+		},
+		{
+			query:        "max_over_time(my_fake_metric[10m])",
+			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}},
+			prom2Samples: []fakeMetricSample{{"i1", 3}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p1"},
+					Value:  1,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p2"},
+					Value:  3,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i2", "prometheus": "p1"},
+					Value:  5,
+				},
+			},
+		},
+		{
+			query:        "min_over_time(my_fake_metric[10m])",
+			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}},
+			prom2Samples: []fakeMetricSample{{"i1", 3}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p1"},
+					Value:  1,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p2"},
+					Value:  3,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i2", "prometheus": "p1"},
+					Value:  5,
+				},
+			},
+		},
+	}
+
+	for _, tc := range ts {
+		t.Run(tc.query, func(t *testing.T) {
+			e, err := e2e.NewDockerEnvironment("e2e_test_query_pushdown")
+			testutil.Ok(t, err)
+			t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+			prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "p1", defaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "remote-write-receiver")
+			testutil.Ok(t, err)
+			testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
+
+			prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "p2", defaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "remote-write-receiver")
+			testutil.Ok(t, err)
+			testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
+
+			endpoints := []string{
+				sidecar1.InternalEndpoint("grpc"),
+				sidecar2.InternalEndpoint("grpc"),
+			}
+			q, err := e2ethanos.
+				NewQuerierBuilder(e, "1", endpoints...).
+				WithEnabledFeatures([]string{"query-pushdown"}).
+				Build()
+			testutil.Ok(t, err)
+			testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+			t.Cleanup(cancel)
+
+			testutil.Ok(t, synthesizeSamples(ctx, prom1, tc.prom1Samples))
+			testutil.Ok(t, synthesizeSamples(ctx, prom2, tc.prom2Samples))
+
+			testQuery := func() string { return tc.query }
+			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{
+				Deduplicate: true,
+			}, tc.result)
+		})
+	}
+}
+
 func checkNetworkRequests(t *testing.T, addr string) {
 	ctx, cancel := chromedp.NewContext(context.Background())
 	t.Cleanup(cancel)
@@ -648,7 +807,7 @@ func mustURLParse(t testing.TB, addr string) *url.URL {
 	return u
 }
 
-func instantQuery(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
+func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
 	t.Helper()
 
 	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q())
@@ -793,4 +952,57 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 
 		return nil
 	}))
+}
+
+func synthesizeSamples(ctx context.Context, prometheus *e2e.InstrumentedRunnable, testSamples []fakeMetricSample) error {
+	samples := make([]model.Sample, len(testSamples))
+	for i, s := range testSamples {
+		samples[i] = newSample(s)
+	}
+
+	remoteWriteURL, err := url.Parse("http://" + prometheus.Endpoint("http") + "/api/v1/write")
+	if err != nil {
+		return err
+	}
+
+	client, err := remote.NewWriteClient("remote-write-client", &remote.ClientConfig{
+		URL:     &config_util.URL{URL: remoteWriteURL},
+		Timeout: model.Duration(30 * time.Second),
+	})
+	if err != nil {
+		return err
+	}
+
+	samplespb := make([]prompb.TimeSeries, 0, len(samples))
+	for _, sample := range samples {
+		labelspb := make([]prompb.Label, 0, len(sample.Metric))
+		for labelKey, labelValue := range sample.Metric {
+			labelspb = append(labelspb, prompb.Label{
+				Name:  string(labelKey),
+				Value: string(labelValue),
+			})
+		}
+		samplespb = append(samplespb, prompb.TimeSeries{
+			Labels: labelspb,
+			Samples: []prompb.Sample{
+				{
+					Value:     float64(sample.Value),
+					Timestamp: sample.Timestamp.Time().Unix() * 1000,
+				},
+			},
+		})
+	}
+
+	sample := &prompb.WriteRequest{
+		Timeseries: samplespb,
+	}
+
+	var buf []byte
+	pBuf := proto.NewBuffer(nil)
+	if err := pBuf.Marshal(sample); err != nil {
+		return err
+	}
+
+	compressed := snappy.Encode(buf, pBuf.Bytes())
+	return client.Store(ctx, compressed)
 }

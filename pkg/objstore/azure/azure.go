@@ -86,6 +86,8 @@ type HTTPConfig struct {
 	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
 	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
 	DisableCompression    bool           `yaml:"disable_compression"`
+
+	TLSConfig objstore.TLSConfig `yaml:"tls_config"`
 }
 
 // Bucket implements the store.Bucket interface against Azure APIs.
