@@ -279,11 +279,15 @@ func runStore(
 	}
 
 	// Ensure we close up everything properly.
-	defer func() {
-		if err != nil {
-			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-		}
-	}()
+	{
+		done := make(chan struct{})
+		g.Add(func() error {
+			<-done
+			return bkt.Close()
+		}, func(error) {
+			close(done)
+		})
+	}
 
 	// Create the index cache loading its config from config file, while keeping
 	// backward compatibility with the pre-config file era.
