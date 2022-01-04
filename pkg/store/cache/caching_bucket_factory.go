@@ -132,7 +132,6 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 
 	// Include interactions with cache in the traces.
 	c = cache.NewTracingCache(c)
-	cfg = cache.NewCachingBucketConfig()
 	cfg.SetCacheImplementation(c)
 	// Configure cache.
 	cfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectAttrsTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
