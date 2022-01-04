@@ -1030,7 +1030,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
-	matchingBlocks := []matchingBlock{}
+	matchingBlocks := []*matchingBlock{}
 
 	s.mtx.RLock()
 
@@ -1047,7 +1047,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, req.MaxResolutionWindow, bs.labels, blocks)
 		}
 
-		matchingBlocks = append(matchingBlocks, matchingBlock{
+		matchingBlocks = append(matchingBlocks, &matchingBlock{
 			matchers: blockMatchers,
 			blocks:   blocks,
 		})
@@ -1058,7 +1058,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	c.CorkAt(corkAt)
 
 	for _, matchingBlock := range matchingBlocks {
-		blockMatchers := matchingBlock.matchers
+		matchingBlock := matchingBlock
 
 		for _, b := range matchingBlock.blocks {
 			b := b
@@ -1094,7 +1094,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					b.extLset,
 					indexr,
 					chunkr,
-					blockMatchers,
+					matchingBlock.matchers,
 					chunksLimiter,
 					seriesLimiter,
 					req.SkipChunks,

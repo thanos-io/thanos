@@ -60,7 +60,7 @@ type corkedIndexCache struct {
 }
 
 // CorkedIndexCache is like a IndexCache but it is corked.
-// If the user is not calling FetchPostings() then it must call
+// If the user is not calling bucketIndexReader.fetchPostings() then it must call
 // DonePostings() at the end.
 type CorkedIndexCache interface {
 	IndexCache
@@ -83,6 +83,9 @@ type CorkedDoneTracker struct {
 	fetchedPostings bool
 }
 
+// NewCorkedTracker constructs a new helper for tracking whether
+// DonePostings() has been called before Close(). If not, it calls
+// DonePostings().
 func NewCorkedTracker(ic CorkedIndexCache) *CorkedDoneTracker {
 	return &CorkedDoneTracker{indexCache: ic}
 }
@@ -118,6 +121,17 @@ func (c *CorkedDoneTracker) CorkAt(n uint) {
 	c.indexCache.CorkAt(n)
 }
 
+// NewCorkedIndexCache makes a new index cache that batches postings requests
+// into a smaller number of operations to reduce load on the caching layer.
+func NewCorkedIndexCache(original IndexCache) CorkedIndexCache {
+	return &corkedIndexCache{originalIndexCache: original,
+		postingsGet:         new(valueOnce),
+		postingsToBeFetched: map[ulid.ULID][]labels.Label{},
+		postingsLock:        sync.Mutex{},
+		postingsWG:          &sync.WaitGroup{},
+	}
+}
+
 func (c *corkedIndexCache) reducePostingsCounter() {
 	c.postingsCounter--
 	if c.postingsCounter == 0 {
@@ -140,15 +154,6 @@ func (c *corkedIndexCache) DonePostings() {
 	c.postingsLock.Unlock()
 
 	currentWG.Done()
-}
-
-func NewCorkedIndexCache(original IndexCache) CorkedIndexCache {
-	return &corkedIndexCache{originalIndexCache: original,
-		postingsGet:         new(valueOnce),
-		postingsToBeFetched: map[ulid.ULID][]labels.Label{},
-		postingsLock:        sync.Mutex{},
-		postingsWG:          &sync.WaitGroup{},
-	}
 }
 
 func (c *corkedIndexCache) CorkAt(n uint) {
@@ -190,9 +195,7 @@ func (c *corkedIndexCache) FetchMultiPostings(ctx context.Context, toFetch map[u
 
 	// Do the work with the old data (pre-refresh).
 	hits, misses := currentValueOnce.Do(func() (interface{}, interface{}) {
-		hits, misses := c.originalIndexCache.FetchMultiPostings(ctx, currentToBeFetched)
-
-		return hits, misses
+		return c.originalIndexCache.FetchMultiPostings(ctx, currentToBeFetched)
 	})
 
 	return hits.(map[ulid.ULID]map[labels.Label][]byte), misses.(map[ulid.ULID][]labels.Label)
