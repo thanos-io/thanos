@@ -267,6 +267,7 @@ func runCompact(
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
 		cf := baseMetaFetcher.NewMetaFetcher(
 			extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
+				timePartitionMetaFilter,
 				labelShardedMetaFilter,
 				consistencyDelayMetaFilter,
 				ignoreDeletionMarkFilter,

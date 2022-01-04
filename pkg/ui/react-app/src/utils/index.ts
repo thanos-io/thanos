@@ -111,6 +111,9 @@ export const formatDuration = (d: number): string => {
   return r;
 };
 
+const MAX_TIME = 9223372036854775807;
+const MIN_TIME = 0;
+
 export function parseTime(timeText: string): number {
   return moment.utc(timeText).valueOf();
 }
@@ -118,6 +121,8 @@ export function parseTime(timeText: string): number {
 export function formatTime(time: number): string {
   return moment.utc(time).format('YYYY-MM-DD HH:mm:ss');
 }
+
+export const isValidTime = (t: number): boolean => t > MIN_TIME && t < MAX_TIME;
 
 export const now = (): number => moment().valueOf();
 
