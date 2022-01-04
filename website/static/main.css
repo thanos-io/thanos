@@ -184,6 +184,7 @@ input[type="search"]::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
         flex-grow: 1;
         max-width: 100%;
     }
+    
     .footer-container {
         flex-direction: column;
     }
