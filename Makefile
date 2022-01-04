@@ -182,13 +182,12 @@ docker-multi-stage:
 	@echo ">> building docker image 'thanos' with Dockerfile.multi-stage"
 	@docker build -f Dockerfile.multi-stage -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 
-GET_SHA = $(shell echo '$1'_SHA | tr '[:lower:]' '[:upper:]')
 # docker-build builds docker images with multiple architectures.
 .PHONY: docker-build $(BUILD_DOCKER_ARCHS)
 docker-build: $(BUILD_DOCKER_ARCHS)
 $(BUILD_DOCKER_ARCHS): docker-build-%:
 	@docker build -t "thanos-linux-$*" \
-  --build-arg BASE_DOCKER_SHA=$($(call GET_SHA,$*)) \
+  --build-arg BASE_DOCKER_SHA="$($*)" \
   --build-arg ARCH="$*" \
   -f Dockerfile.multi-arch .
 
