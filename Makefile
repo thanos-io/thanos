@@ -227,7 +227,7 @@ docs: build examples $(MDOX)
 check-docs: ## checks docs against discrepancy with flags, links, white noise.
 check-docs: build examples $(MDOX)
 	@echo ">> checking formatting and local/remote links"
-	PATH=${PATH}:$(GOBIN) $(MDOX) fmt $(MD_FILES_TO_FORMAT)
+	PATH=${PATH}:$(GOBIN) $(MDOX) fmt -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(MD_FILES_TO_FORMAT)
 	@echo ">> detecting white noise"
 	@find . -type f \( -name "*.md" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,'run make docs and commit changes')
