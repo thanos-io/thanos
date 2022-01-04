@@ -89,6 +89,15 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	var c cache.Cache
 	cfg := cache.NewCachingBucketConfig()
 
+	// Configure cache.
+	cfg.CacheAttributes("chunks", c, isTSDBChunkFile, config.ChunkObjectAttrsTTL)
+	cfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectAttrsTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
+	cfg.CacheExists("meta.jsons", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
+	cfg.CacheGet("meta.jsons", c, isMetaFile, int(config.MetafileMaxSize), config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
+
+	// Cache Iter requests for root.
+	cfg.CacheIter("blocks-iter", c, isBlocksRootDir, config.BlocksIterTTL, JSONIterCodec{})
+
 	switch strings.ToUpper(string(config.Type)) {
 	case string(MemcachedBucketCacheProvider):
 		var memcached cacheutil.RemoteCacheClient
@@ -106,14 +115,6 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 		const basePath = "/_galaxycache/"
 
 		cfg.SetCacheImplementation(c)
-		// Configure cache.
-		cfg.CacheAttributes("chunks", c, isTSDBChunkFile, config.ChunkObjectAttrsTTL)
-		cfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectAttrsTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
-		cfg.CacheExists("meta.jsons", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
-		cfg.CacheGet("meta.jsons", c, isMetaFile, int(config.MetafileMaxSize), config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
-
-		// Cache Iter requests for root.
-		cfg.CacheIter("blocks-iter", c, isBlocksRootDir, config.BlocksIterTTL, JSONIterCodec{})
 
 		c, err = cache.NewGroupcache(logger, reg, backendConfig, basePath, r, bucket, cfg)
 		if err != nil {
@@ -133,13 +134,6 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	// Include interactions with cache in the traces.
 	c = cache.NewTracingCache(c)
 	cfg.SetCacheImplementation(c)
-	// Configure cache.
-	cfg.CacheGetRange("chunks", c, isTSDBChunkFile, config.ChunkSubrangeSize, config.ChunkObjectAttrsTTL, config.ChunkSubrangeTTL, config.MaxChunksGetRangeRequests)
-	cfg.CacheExists("meta.jsons", c, isMetaFile, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
-	cfg.CacheGet("meta.jsons", c, isMetaFile, int(config.MetafileMaxSize), config.MetafileContentTTL, config.MetafileExistsTTL, config.MetafileDoesntExistTTL)
-
-	// Cache Iter requests for root.
-	cfg.CacheIter("blocks-iter", c, isBlocksRootDir, config.BlocksIterTTL, JSONIterCodec{})
 
 	cb, err := NewCachingBucket(bucket, cfg, logger, reg)
 	if err != nil {
