@@ -278,17 +278,6 @@ func runStore(
 		return errors.Wrap(err, "get content of index cache configuration")
 	}
 
-	// Ensure we close up everything properly.
-	{
-		done := make(chan struct{})
-		g.Add(func() error {
-			<-done
-			return bkt.Close()
-		}, func(error) {
-			close(done)
-		})
-	}
-
 	// Create the index cache loading its config from config file, while keeping
 	// backward compatibility with the pre-config file era.
 	var indexCache storecache.IndexCache
