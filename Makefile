@@ -187,7 +187,7 @@ docker-multi-stage:
 docker-build: $(BUILD_DOCKER_ARCHS)
 $(BUILD_DOCKER_ARCHS): docker-build-%:
 	@docker build -t "thanos-linux-$*" \
-  --build-arg BASE_DOCKER_SHA=$($(shell echo '$*')) \
+  --build-arg BASE_DOCKER_SHA="$($*)" \
   --build-arg ARCH="$*" \
   -f Dockerfile.multi-arch .
 
