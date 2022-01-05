@@ -381,7 +381,7 @@ examples: jsonnet-vendor jsonnet-format ${THANOS_MIXIN}/README.md examples/alert
 examples/tmp:
 	-rm -rf examples/tmp/
 	-mkdir -p examples/tmp/
-	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/tmp/ ${THANOS_MIXIN}/separated_alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
+	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/tmp/ ${THANOS_MIXIN}/separated-alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
 
 .PHONY: examples/dashboards # to keep examples/dashboards/dashboards.md.
 examples/dashboards: $(JSONNET) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/config.libsonnet ${THANOS_MIXIN}/dashboards/*
@@ -414,6 +414,9 @@ jsonnet-format: $(JSONNETFMT)
 jsonnet-lint: $(JSONNET_LINT) jsonnet-vendor
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
 		xargs -n 1 -- $(JSONNET_LINT) -J ${JSONNET_VENDOR_DIR}
+	find ./mixin -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | sed -E \
+		-e 's/.*\///' \
+		-e '/^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\.(lib|j)sonnet$$/!{s/(.*)/Non-RFC1123 filename: \1/;q1};{d}'
 
 .PHONY: example-rules-lint
 example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml
