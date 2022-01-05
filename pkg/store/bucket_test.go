@@ -2168,8 +2168,111 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 	}
 }
 
-func BenchmarkBlockSeries(b *testing.B) {
-	blk, blockMeta := prepareBucket(b, compact.ResolutionLevelRaw)
+type mockedReader struct {
+	b [][]byte
+}
+
+func (m *mockedReader) Read(p []byte) (n int, err error) {
+	return 0, nil
+}
+
+func (m *mockedReader) Close() error {
+	return nil
+}
+
+func (m *mockedReader) GetMemoryAtOffset(needOffset int64) ([]byte, error) {
+	offset := int64(0)
+	for i := 0; i < len(m.b); i++ {
+		offset += int64(len(m.b[i]))
+		if offset > needOffset {
+			return m.b[i], nil
+		}
+	}
+	return nil, fmt.Errorf("no slice found")
+}
+
+func (m *mockedReader) GetSubrangeSize() int64 {
+	return int64(len(m.b[0])) // Assume all slices are the same.
+}
+
+func TestReadAtleastBytes(t *testing.T) {
+	t.Run("subrangeSize=1", func(t *testing.T) {
+		mr := &mockedReader{
+			b: [][]byte{
+				{
+					byte(0),
+				},
+			},
+		}
+		b, err := readNumBytes(mr, 0, 1)
+		testutil.Ok(t, err)
+		testutil.Equals(t, mr.b[0], b)
+
+		mr.b = [][]byte{
+			{
+				byte(0),
+			},
+			{
+				byte(1),
+			},
+			{
+				byte(2),
+			},
+		}
+
+		b, err = readNumBytes(mr, 0, 3)
+		testutil.Ok(t, err)
+		testutil.Equals(t, []byte{byte(0), byte(1), byte(2)}, b)
+
+		b, err = readNumBytes(mr, 1, 2)
+		testutil.Ok(t, err)
+		testutil.Equals(t, []byte{byte(1), byte(2)}, b)
+
+		b, err = readNumBytes(mr, 2, 1)
+		testutil.Ok(t, err)
+		testutil.Equals(t, []byte{byte(2)}, b)
+
+		// Out of bound reads.
+		_, err = readNumBytes(mr, 3, 1)
+		testutil.NotOk(t, err)
+
+		_, err = readNumBytes(mr, 0, 5)
+		testutil.NotOk(t, err)
+	})
+
+	t.Run("subrangeSize=2", func(t *testing.T) {
+		mr := &mockedReader{
+			b: [][]byte{
+				{
+					byte(0), byte(1),
+				},
+				{
+					byte(2), byte(3),
+				},
+			},
+		}
+
+		b, err := readNumBytes(mr, 1, 2)
+		testutil.Ok(t, err)
+		testutil.Equals(t, []byte{1, 2}, b)
+
+		b, err = readNumBytes(mr, 2, 2)
+		testutil.Ok(t, err)
+		testutil.Equals(t, []byte{2, 3}, b)
+
+		b, err = readNumBytes(mr, 3, 1)
+		testutil.Ok(t, err)
+		testutil.Equals(t, []byte{3}, b)
+
+		b, err = readNumBytes(mr, 4, 0)
+		testutil.Ok(t, err)
+		testutil.Equals(t, []byte{}, b)
+	})
+
+}
+
+func BenchmarkBlockSeriesCachingBucket(b *testing.B) {
+	blk, blockMeta := prepareBucket(b, compact.ResolutionLevelRaw, true)
 
 	aggrs := []storepb.Aggr{storepb.Aggr_RAW}
 	for _, concurrency := range []int{1, 2, 4, 8, 16, 32} {
@@ -2179,7 +2282,18 @@ func BenchmarkBlockSeries(b *testing.B) {
 	}
 }
 
-func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*bucketBlock, *metadata.Meta) {
+func BenchmarkBlockSeries(b *testing.B) {
+	blk, blockMeta := prepareBucket(b, compact.ResolutionLevelRaw, false)
+
+	aggrs := []storepb.Aggr{storepb.Aggr_RAW}
+	for _, concurrency := range []int{1, 2, 4, 8, 16, 32} {
+		b.Run(fmt.Sprintf("concurrency: %d", concurrency), func(b *testing.B) {
+			benchmarkBlockSeriesWithConcurrency(b, concurrency, blockMeta, blk, aggrs)
+		})
+	}
+}
+
+func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel, cachingBucket bool) (*bucketBlock, *metadata.Meta) {
 	var (
 		ctx    = context.Background()
 		logger = log.NewNopLogger()
@@ -2191,11 +2305,14 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 		testutil.Ok(b, os.RemoveAll(tmpDir))
 	})
 
-	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	var bkt objstore.InstrumentedBucket
+
+	fsBkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
 	testutil.Ok(b, err)
 	b.Cleanup(func() {
 		testutil.Ok(b, bkt.Close())
 	})
+	bkt = objstore.WithNoopInstr(fsBkt)
 
 	// Create a block.
 	head, _ := storetestutil.CreateHeadWithSeries(b, 0, storetestutil.HeadGenOptions{
@@ -2237,6 +2354,13 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 	testutil.Ok(b, err)
 
 	partitioner := NewGapBasedPartitioner(PartitionerMaxGapSize)
+
+	if cachingBucket {
+		bkt, err = storecache.NewCachingBucketFromYaml([]byte(`---
+type: IN-MEMORY
+config:`), bkt, logger, nil, nil)
+		testutil.Ok(b, err)
+	}
 
 	// Create an index header reader.
 	indexHeaderReader, err := indexheader.NewBinaryReader(ctx, logger, bkt, tmpDir, blockMeta.ULID, DefaultPostingOffsetInMemorySampling)
@@ -2306,7 +2430,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 }
 
 func BenchmarkDownsampledBlockSeries(b *testing.B) {
-	blk, blockMeta := prepareBucket(b, compact.ResolutionLevel5m)
+	blk, blockMeta := prepareBucket(b, compact.ResolutionLevel5m, false)
 	aggrs := []storepb.Aggr{}
 	for i := 1; i < int(storepb.Aggr_COUNTER); i++ {
 		aggrs = append(aggrs, storepb.Aggr(i))

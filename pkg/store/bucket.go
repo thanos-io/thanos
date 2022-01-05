@@ -866,6 +866,11 @@ func blockSeries(
 }
 
 func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, save func([]byte) ([]byte, error)) error {
+	if save == nil {
+		save = func(b []byte) ([]byte, error) {
+			return b, nil
+		}
+	}
 	if in.Encoding() == chunkenc.EncXOR {
 		b, err := save(in.Bytes())
 		if err != nil {
@@ -2492,6 +2497,164 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 	return g.Wait()
 }
 
+// readNumBytes reads the given number of bytes n from the given reader, starting
+// at the given offset. The returned slice is already adjusted for the offset.
+func readNumBytes(reader storecache.CachingBucketReader, readOffset int64, n int) ([]byte, error) {
+	subrangeSize := reader.GetSubrangeSize()
+	originalOffset := readOffset
+
+	originalN := n
+
+	var slices [][]byte
+	for n > 0 {
+		m, err := reader.GetMemoryAtOffset(int64(readOffset))
+		if err != nil {
+			return nil, err
+		}
+
+		// Fast path.
+		if len(slices) == 0 {
+			relevantDataLen := len(m)
+			if originalOffset < subrangeSize {
+				relevantDataLen -= int(originalOffset)
+			}
+
+			if relevantDataLen >= n || len(m) < int(subrangeSize) {
+				adjustedOffset := originalOffset - ((originalOffset / subrangeSize) * subrangeSize)
+				return m[adjustedOffset:], nil
+			}
+		}
+		slices = append(slices, m)
+
+		diff := int64(len(m)) - readOffset
+		if diff > 0 {
+			readOffset += diff
+			n -= int(diff)
+		} else {
+			readOffset += int64(len(m))
+			n -= len(m)
+		}
+	}
+
+	// Adjust the offset according to the ideal subrange size and add the original one.
+	readOffset = originalOffset - ((originalOffset / subrangeSize) * subrangeSize)
+
+	totalLen := 0
+	for _, sl := range slices {
+		totalLen += len(sl)
+	}
+	if totalLen > originalN {
+		totalLen = originalN
+	}
+
+	ret := make([]byte, 0, totalLen)
+	for i, sl := range slices {
+		if len(ret)+len(sl) < originalN {
+			ret = append(ret, sl...)
+		} else {
+			if i == 0 {
+				takeUntil := int(readOffset) + originalN - len(ret)
+				if takeUntil > len(sl) {
+					takeUntil = len(sl)
+				}
+				ret = append(ret, sl[readOffset:takeUntil]...)
+			} else {
+				ret = append(ret, sl[:originalN-len(ret)]...)
+
+			}
+		}
+	}
+
+	return ret, nil
+}
+
+// loadChunksFromCache is like loadChunks but reads directly from the cache layer's results.
+func (r *bucketChunkReader) loadChunksFromCache(ctx context.Context, reader storecache.CachingBucketReader, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx) error {
+	fetchBegin := time.Now()
+	r.mtx.Lock()
+	r.stats.chunksFetchCount++
+	r.stats.chunksFetched += len(pIdxs)
+	r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
+	r.stats.ChunksFetchedSizeSum += units.Base2Bytes(int(part.End - part.Start))
+	r.mtx.Unlock()
+
+	var (
+		readOffset = int(pIdxs[0].offset)
+		chunkLen   int
+		diff       uint32
+	)
+
+	for i, pIdx := range pIdxs {
+		readOffset += int(pIdx.offset) - int(readOffset)
+
+		chunkLen = EstimatedMaxChunkSize
+		if i+1 < len(pIdxs) {
+			if diff = pIdxs[i+1].offset - pIdx.offset; int(diff) < chunkLen {
+				chunkLen = int(diff)
+			}
+		}
+
+		cb, err := readNumBytes(reader, int64(readOffset), chunkLen)
+		if err != nil && !(errors.Is(err, io.ErrUnexpectedEOF) && i == len(pIdxs)-1) {
+			return errors.Wrapf(err, "read %d offset %v for seq %d offset %x", i, readOffset, seq, pIdx.offset)
+		}
+		if chunkLen < cap(cb) {
+			cb = cb[:chunkLen]
+		}
+
+		chunkDataLen, n := binary.Uvarint(cb)
+		if n < 1 {
+			return errors.New("reading chunk length failed")
+		}
+
+		chunkLen = n + 1 + int(chunkDataLen)
+		if chunkLen <= len(cb) {
+			// These are chunks made by make() directly
+			// so no need to save them.
+			err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk(cb[n:chunkLen]), aggrs, nil)
+			if err != nil {
+				return errors.Wrap(err, "populate chunk")
+			}
+			r.mtx.Lock()
+			r.stats.chunksTouched++
+			r.stats.ChunksTouchedSizeSum += units.Base2Bytes(int(chunkDataLen))
+			r.mtx.Unlock()
+			continue
+		}
+
+		// If we didn't fetch enough data for the chunk, fetch more.
+		fetchBegin = time.Now()
+
+		// Read entire chunk into new buffer.
+		// TODO: readChunkRange call could be avoided for any chunk but last in this particular part.
+		nb, err := r.block.readChunkRange(ctx, seq, int64(pIdx.offset), int64(chunkLen), []byteRange{{offset: 0, length: chunkLen}})
+		if err != nil {
+			return errors.Wrapf(err, "preloaded chunk too small, expecting %d, and failed to fetch full chunk", chunkLen)
+		}
+		if len(*nb) != chunkLen {
+			return errors.Errorf("preloaded chunk too small, expecting %d", chunkLen)
+		}
+
+		r.mtx.Lock()
+		r.stats.chunksFetchCount++
+		r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
+		r.stats.ChunksFetchedSizeSum += units.Base2Bytes(len(*nb))
+		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk((*nb)[n:]), aggrs, r.save)
+		if err != nil {
+			r.block.chunkPool.Put(nb)
+			r.mtx.Unlock()
+			return errors.Wrap(err, "populate chunk")
+		}
+		r.stats.chunksTouched++
+		r.stats.ChunksTouchedSizeSum += units.Base2Bytes(int(chunkDataLen))
+
+		r.block.chunkPool.Put(nb)
+		r.mtx.Unlock()
+	}
+
+	return nil
+}
+
 // loadChunks will read range [start, end] from the segment file with sequence number seq.
 // This data range covers chunks starting at supplied offsets.
 func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx) error {
@@ -2503,6 +2666,12 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		return errors.Wrap(err, "get range reader")
 	}
 	defer runutil.CloseWithLogOnErr(r.block.logger, reader, "readChunkRange close range reader")
+
+	// Fast path for reading from the caching layer without "saving".
+	// TODO(GiedriusS): add memory pooling support.
+	if cachingBucketReader, ok := reader.(storecache.CachingBucketReader); ok {
+		return r.loadChunksFromCache(ctx, cachingBucketReader, res, aggrs, seq, part, pIdxs)
+	}
 	bufReader := bufio.NewReaderSize(reader, EstimatedMaxChunkSize)
 
 	locked := true

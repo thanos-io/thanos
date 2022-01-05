@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"strconv"
 	"sync"
 	"time"
@@ -389,7 +388,31 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 		}
 	}
 
-	return ioutil.NopCloser(newSubrangesReader(cfg.SubrangeSize, offsetKeys, hits, offset, length)), nil
+	return CachingBucketReader(newSubrangesReader(cfg.SubrangeSize, offsetKeys, hits, offset, length)), nil
+}
+
+// CachingBucketReader is a io.Reader with a no-op Close() method that lets
+// callers directly access the underlying memory.
+type CachingBucketReader interface {
+	io.Reader
+	io.Closer
+
+	// Gets memory for the given offset that is up to subrangeSize in size.
+	GetMemoryAtOffset(offset int64) ([]byte, error)
+	GetSubrangeSize() int64
+}
+
+func (c *subrangesReader) Close() error {
+	return nil
+}
+
+func (c *subrangesReader) GetMemoryAtOffset(offset int64) ([]byte, error) {
+	currentSubrangeOffset := (offset / c.subrangeSize) * c.subrangeSize
+	return c.subrangeAt(currentSubrangeOffset)
+}
+
+func (c *subrangesReader) GetSubrangeSize() int64 {
+	return c.subrangeSize
 }
 
 type rng struct {
