@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/rules"
+
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -42,12 +44,14 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	thanosRulesSubDir := filepath.Join("thanos-rules")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), thanosRulesSubDir), os.ModePerm))
 	createRuleFiles(t, filepath.Join(e.SharedDir(), thanosRulesSubDir))
-
+	// We create a rule group with limit.
+	createRuleFile(t, filepath.Join(e.SharedDir(), thanosRulesSubDir, "rules-with-limit.yaml"), testAlertRuleWithLimit)
 	// 2x Prometheus.
 	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
 		defaultPromConfig("ha", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml")),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
@@ -55,6 +59,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		e,
 		"prom2",
 		defaultPromConfig("ha", 1, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml")),
+		"",
 		e2ethanos.DefaultPrometheusImage(),
 	)
 	testutil.Ok(t, err)
@@ -73,9 +78,9 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	}
 
 	// Recreate rulers with the corresponding query config.
-	r1, err := e2ethanos.NewRuler(e, "rule1", thanosRulesSubDir, nil, queryCfg)
+	r1, err := e2ethanos.NewTSDBRuler(e, "rule1", thanosRulesSubDir, nil, queryCfg)
 	testutil.Ok(t, err)
-	r2, err := e2ethanos.NewRuler(e, "rule2", thanosRulesSubDir, nil, queryCfg)
+	r2, err := e2ethanos.NewTSDBRuler(e, "rule2", thanosRulesSubDir, nil, queryCfg)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(r1, r2))
 
@@ -102,6 +107,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
 					}},
+					Health: string(rules.HealthGood),
 				}),
 			},
 		},
@@ -116,6 +122,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
+					Health: string(rules.HealthGood),
 				}),
 			},
 		},
@@ -130,6 +137,23 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "severity", Value: "page"},
 					}},
+					Health: string(rules.HealthGood),
+				}),
+			},
+		},
+		{
+			Name:  "example_with_limit",
+			File:  "/shared/thanos-rules/rules-with-limit.yaml",
+			Limit: 1,
+			Rules: []*rulespb.Rule{
+				rulespb.NewAlertingRule(&rulespb.Alert{
+					Name:  "TestAlert_WithLimit",
+					State: rulespb.AlertState_INACTIVE,
+					Query: `promhttp_metric_handler_requests_total`,
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+						{Name: "severity", Value: "page"},
+					}},
+					Health: string(rules.HealthBad),
 				}),
 			},
 		},
@@ -173,12 +197,14 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 						State:  alert.State,
 						Query:  alert.Query,
 						Labels: alert.Labels,
+						Health: alert.Health,
 					})
 				} else if rec := r.GetRecording(); rec != nil {
 					res[ig].Rules[ir] = rulespb.NewAlertingRule(&rulespb.Alert{
 						Name:   rec.Name,
 						Query:  rec.Query,
 						Labels: rec.Labels,
+						Health: rec.Health,
 					})
 				}
 			}

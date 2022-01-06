@@ -1,13 +1,13 @@
 {
   local thanos = self,
-  bucket_replicate+:: {
+  bucketReplicate+:: {
     selector: error 'must provide selector for Thanos Bucket Replicate dashboard',
     errorThreshold: 10,
     p99LatencyThreshold: 20,
     dimensions: std.join(', ', std.objectFields(thanos.targetGroups) + ['job']),
   },
   prometheusAlerts+:: {
-    groups+: if thanos.bucket_replicate == null then [] else [
+    groups+: if thanos.bucketReplicate == null then [] else [
       local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
       {
         name: 'thanos-bucket-replicate',
@@ -16,7 +16,7 @@
             alert: 'ThanosBucketReplicateErrorRate',
             annotations: {
               description: 'Thanos Replicate is failing to run%s, {{$value | humanize}}%% of attempts failed.' % location,
-              summary: 'Thanose Replicate is failing to run%s.' % location,
+              summary: 'Thanos Replicate is failing to run%s.' % location,
             },
             expr: |||
               (
@@ -24,7 +24,7 @@
               / on (%(dimensions)s) group_left
                 sum by (%(dimensions)s) (rate(thanos_replicate_replication_runs_total{%(selector)s}[5m]))
               ) * 100 >= %(errorThreshold)s
-            ||| % thanos.bucket_replicate,
+            ||| % thanos.bucketReplicate,
             'for': '5m',
             labels: {
               severity: 'critical',
@@ -42,7 +42,7 @@
               and
                 sum by (%(dimensions)s) (rate(thanos_replicate_replication_run_duration_seconds_bucket{%(selector)s}[5m])) > 0
               )
-            ||| % thanos.bucket_replicate,
+            ||| % thanos.bucketReplicate,
             'for': '5m',
             labels: {
               severity: 'critical',

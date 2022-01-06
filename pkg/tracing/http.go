@@ -8,9 +8,10 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 )
@@ -35,7 +36,7 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 		ext.HTTPUrl.Set(span, r.URL.String())
 
 		// If client specified ForceTracingBaggageKey header, ensure span includes it to force tracing.
-		span.SetBaggageItem(ForceTracingBaggageKey, r.Header.Get(ForceTracingBaggageKey))
+		span.SetBaggageItem(strings.ToLower(ForceTracingBaggageKey), r.Header.Get(ForceTracingBaggageKey))
 
 		if t, ok := tracer.(Tracer); ok {
 			if traceID, ok := t.GetTraceIDFromSpanContext(span.Context()); ok {

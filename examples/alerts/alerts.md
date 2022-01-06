@@ -578,7 +578,7 @@ rules:
     description: Thanos Replicate is failing to run, {{$value | humanize}}% of attempts
       failed.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicateerrorrate
-    summary: Thanose Replicate is failing to run.
+    summary: Thanos Replicate is failing to run.
   expr: |
     (
       sum by (job) (rate(thanos_replicate_replication_runs_total{result="error", job=~".*thanos-bucket-replicate.*"}[5m]))
@@ -612,17 +612,6 @@ rules:
 ```yaml mdox-exec="cat examples/tmp/thanos-component-absent.yaml"
 name: thanos-component-absent
 rules:
-- alert: ThanosBucketReplicateIsDown
-  annotations:
-    description: ThanosBucketReplicate has disappeared. Prometheus target for the
-      component cannot be discovered.
-    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicateisdown
-    summary: Thanos component has disappeared.
-  expr: |
-    absent(up{job=~".*thanos-bucket-replicate.*"} == 1)
-  for: 5m
-  labels:
-    severity: critical
 - alert: ThanosCompactIsDown
   annotations:
     description: ThanosCompact has disappeared. Prometheus target for the component

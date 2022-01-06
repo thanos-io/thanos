@@ -10,7 +10,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -57,6 +58,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						Interval:                  2442,
 						LastEvaluation:            now,
 						EvaluationDurationSeconds: 2.1,
+						Limit:                     0,
 						PartialResponseStrategy:   storepb.PartialResponseStrategy_ABORT,
 						Rules:                     []*Rule{},
 					},
@@ -78,7 +80,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 				},
 			},
 			// Different than input due to default enum fields.
-			expectedJSONOutput: `{"groups":[{"name":"","file":"","rules":[],"interval":0,"evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","partialResponseStrategy":"ABORT"}]}`,
+			expectedJSONOutput: `{"groups":[{"name":"","file":"","rules":[],"interval":0,"evaluationTime":0,"lastEvaluation":"0001-01-01T00:00:00Z","limit":0,"partialResponseStrategy":"ABORT"}]}`,
 		},
 		{
 			name: "one valid group, with 1 with no rule type",
@@ -230,7 +232,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 				},
 			},
 			// Different than input due to the alerts slice being initialized to a zero-length slice instead of nil.
-			expectedJSONOutput: `{"groups":[{"name":"group1","file":"file1.yml","rules":[{"state":"pending","name":"alert1","query":"up == 0","duration":60,"labels":{"a2":"b2","c2":"d2"},"annotations":{"ann1":"ann44","ann2":"ann33"},"alerts":[],"health":"health2","lastError":"1","evaluationTime":1.1,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"}],"interval":2442,"evaluationTime":2.1,"lastEvaluation":"0001-01-01T00:00:00Z","partialResponseStrategy":"ABORT"}]}`,
+			expectedJSONOutput: `{"groups":[{"name":"group1","file":"file1.yml","rules":[{"state":"pending","name":"alert1","query":"up == 0","duration":60,"labels":{"a2":"b2","c2":"d2"},"annotations":{"ann1":"ann44","ann2":"ann33"},"alerts":[],"health":"health2","lastError":"1","evaluationTime":1.1,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"}],"interval":2442,"evaluationTime":2.1,"lastEvaluation":"0001-01-01T00:00:00Z","limit":0,"partialResponseStrategy":"ABORT"}]}`,
 		},
 		{
 			name: "one valid group, with 1 rule and alert each and second empty group.",

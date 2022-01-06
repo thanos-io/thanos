@@ -25,7 +25,7 @@ export const useFetch = <T extends any>(url: string, options?: RequestInit): Fet
         setResponse(json);
         setIsLoading(false);
       } catch (error) {
-        setError(error);
+        setError(error as Error);
         setIsLoading(false);
       }
     };

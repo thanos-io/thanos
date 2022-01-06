@@ -14,12 +14,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
@@ -725,7 +726,7 @@ func createBlockSeries(bDir string, inputSeries []seriesSamples) (err error) {
 			return err
 		}
 	}
-	var ref uint64
+	var ref storage.SeriesRef
 	for _, input := range inputSeries {
 		var chks []chunks.Meta
 		for _, chk := range input.chunks {

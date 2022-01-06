@@ -14,12 +14,13 @@ import (
 	"time"
 
 	blob "github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/objstore"
-	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -85,6 +86,8 @@ type HTTPConfig struct {
 	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
 	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
 	DisableCompression    bool           `yaml:"disable_compression"`
+
+	TLSConfig objstore.TLSConfig `yaml:"tls_config"`
 }
 
 // Bucket implements the store.Bucket interface against Azure APIs.

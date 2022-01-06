@@ -11,14 +11,14 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/thanos-io/thanos/pkg/testutil"
-	"go.uber.org/goleak"
+	"github.com/prometheus/prometheus/model/labels"
 	"golang.org/x/crypto/blake2b"
+
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	testutil.TolerantVerifyLeakMain(m)
 }
 
 func TestCacheKey_string(t *testing.T) {

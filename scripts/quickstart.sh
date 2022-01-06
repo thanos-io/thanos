@@ -46,7 +46,6 @@ if [ -n "${MINIO_ENABLED}" ]; then
   export S3_ENDPOINT=${MINIO_ENDPOINT}
   export S3_INSECURE="true"
   export S3_V2_SIGNATURE="true"
-  rm -rf data/minio
   mkdir -p data/minio
 
   ${MINIO_EXECUTABLE} server ./data/minio \
@@ -167,6 +166,19 @@ done
 sleep 0.5
 
 if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
+  cat >groupcache.yml <<-EOF
+		type: GROUPCACHE
+config:
+  self_url: http://localhost:10906/
+  peers:
+    - http://localhost:10906/
+  groupcache_group: groupcache_test_group
+blocks_iter_ttl: 0s
+metafile_exists_ttl: 0s
+metafile_doesnt_exist_ttl: 0s
+metafile_content_ttl: 0s
+	EOF
+
   ${THANOS_EXECUTABLE} store \
     --debug.name store \
     --log.level debug \
@@ -175,6 +187,7 @@ if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
     --http-address 0.0.0.0:10906 \
     --http-grace-period 1s \
     --data-dir data/store \
+    --store.caching-bucket.config-file=groupcache.yml \
     ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:10905"
@@ -245,6 +258,18 @@ QUERIER_JAEGER_CONFIG=$(
 	EOF
 )
 
+REMOTE_WRITE_FLAGS=""
+if [ -n "${STATELESS_RULER_ENABLED}" ]; then
+  cat >/data/rule-remote-write.yaml <<-EOF
+  name: "thanos-receivers"
+  remote_write:
+    url: "http://127.0.0.1:10908/api/v1/receive"
+    name: "receive-0"
+EOF
+
+  REMOTE_WRITE_FLAGS="--remote-write.config-file data/rule-remote-write.yaml"
+fi
+
 # Start Thanos Ruler.
 ${THANOS_EXECUTABLE} rule \
   --data-dir data/ \
@@ -256,6 +281,7 @@ ${THANOS_EXECUTABLE} rule \
   --http-address="0.0.0.0:19999" \
   --grpc-address="0.0.0.0:19998" \
   --label 'rule="true"' \
+  "${REMOTE_WRITE_FLAGS}" \
   ${OBJSTORECFG} &
 
 STORES="${STORES} --store 127.0.0.1:19998"

@@ -21,23 +21,23 @@ config:
   bucket: example-bucket
 ```
 
-By default `thanos compact` will run to completion which makes it possible to execute in a cronjob. Using the arguments `--wait` and `--wait-interval=5m` it's possible to keep it running.
+By default, `thanos compact` will run to completion which makes it possible to execute it as a cronjob. Using the arguments `--wait` and `--wait-interval=5m` it's possible to keep it running.
 
-**Compactor, Sidecar, Receive and Ruler are the only Thanos component which should have a write access to object storage, with only Compactor being able to delete data.**
+**Compactor, Sidecar, Receive and Ruler are the only Thanos components which should have a write access to object storage, with only Compactor being able to delete data.**
 
-> **NOTE:** High availability for Compactor is generally not required. See [Availability](#availability) section.
+> **NOTE:** High availability for Compactor is generally not required. See the [Availability](#availability) section.
 
 ## Compaction
 
 The Compactor, among other things, is responsible for compacting multiple blocks into one.
 
-Why even compacting? This is a process, also done in Prometheus, to reduce number of blocks and compact index indices. We can compact index quite well in most cases, because series usually live longer than the duration of the smallest block, so 2 hours.
+Why even compacting? This is a process, also done by Prometheus, to reduce the number of blocks and compact index indices. We can compact an index quite well in most cases, because series usually live longer than the duration of the smallest blocks (2 hours).
 
 ### Compaction Groups / Block Streams
 
-Usually those blocks come through the same source. We call blocks from a single source, a "stream" of blocks or compaction group. We distinguish streams by `external labels`. Blocks with the same labels are considered as produced by a single source.
+Usually those blocks come through the same source. We call blocks from a single source a "stream" of blocks or "compaction group". We distinguish streams by **external labels**. Blocks with the same labels are considered as produced by the same source.
 
-This is because `external_labels` are added by the Prometheus which produced the block.
+This is because `external_labels` are added by the Prometheus instance which produced the block.
 
 ⚠ This is why those labels on block must be both *unique* and *persistent* across different Prometheus instances. ⚠
 
@@ -46,57 +46,57 @@ This is because `external_labels` are added by the Prometheus which produced the
 
 Natively Prometheus does not store external labels anywhere. This is why external labels are added only on upload time to the `ThanosMeta` section of `meta.json` in each block.
 
-> **NOTE:** In default mode the state of two or more blocks having same external labels and overlapping in time is assumed as an unhealthy situation. Refer to [Overlap Issue Troubleshooting](../operating/troubleshooting.md#overlaps) for more info. This results in compactor [halting](#halting).
+> **NOTE:** In default mode the state of two or more blocks having the same external labels and overlapping in time is assumed as an unhealthy situation. Refer to [Overlap Issue Troubleshooting](../operating/troubleshooting.md#overlaps) for more info. This results in compactor [halting](#halting).
 
-#### Warning: Only one Instance has to run against single stream of blocks in single Object Storage.
+#### Warning: Only one instance of Compactor may run against a single stream of blocks in a single object storage.
 
 :warning: :warning: :warning:
 
-Because there is no safe locking mechanism for all object storage provides, currently, you need to ensure on your own that only single Compactor is running against single stream of blocks on single bucket. Running more can result with [Overlap Issues](../operating/troubleshooting.md#overlaps) that has to be resolved manually.
+Because not all object storage providers implement a safe locking mechanism, you need to ensure on your own that only a single Compactor is running against a single stream of blocks on a single bucket. Running more than one Compactor may result in [Overlap Issues](../operating/troubleshooting.md#overlaps) which have to be resolved manually.
 
-This rule, means also that there could be a problem when both compacted and non compacted blocks are being uploaded by sidecar. This is why "upload compacted" flag is still under a separate `--shipper.upload-compacted` flag that helps to ensure that compacted blocks are uploaded before anything else. The singleton rule is also why local Prometheus compaction has to be disabled in order to use sidecar with upload option. Use hidden `--shipper.ignore-unequal-block-size` to override this check (on your own risk).
+This rule also means that there could be a problem when both compacted and non-compacted blocks are being uploaded by a sidecar. This is why the "upload compacted" function still lives under a separate `--shipper.upload-compacted` flag that helps to ensure that compacted blocks are uploaded before anything else. The singleton rule is also why local Prometheus compaction has to be disabled in order to use Thanos Sidecar with the upload option. Use - at your own risk! - the hidden `--shipper.ignore-unequal-block-size` flag to disable this check.
 
-> **NOTE:** In further Thanos version it's possible that both restrictions will be removed with production status of [vertical compaction](#vertical-compactions) which is worked on.
+> **NOTE:** In future versions of Thanos it's possible that both restrictions will be removed once [vertical compaction](#vertical-compactions) reaches production status.
 
-You can though run multiple Compactors against single Bucket as long as for separate streams of blocks. You can do it in order to [scale compaction process](#scalability).
+You can though run multiple Compactors against a single Bucket as long as each instance compacts a separate streams of blocks. You can do this in order to [scale the compaction process](#scalability).
 
 ### Vertical Compactions
 
-Thanos and Prometheus supports vertical compaction, so process of compacting multiple streams of blocks into one.
+Thanos and Prometheus support vertical compaction, the process of compacting multiple streams of blocks into one.
 
-In Prometheus, this can be triggered by setting hidden flag in Prometheus and putting additional TSDB blocks within Prometheus local directory. Extra blocks can overlap with existing ones. When Prometheus detects that situation it performs `vertical compaction` which compacts overlapping blocks into single one. This is mainly used for **backfilling** purposes.
+In Prometheus, this can be triggered by setting a hidden flag in Prometheus and putting additional TSDB blocks in Prometheus' local data directory. Extra blocks can overlap with existing ones. When Prometheus detects this situation, it performs `vertical compaction` which compacts overlapping blocks into a single one. This is mainly used for **backfilling**.
 
-In Thanos, it works similarly, but on bigger scale and using external labels for grouping as explained in [Compaction section](#compaction).
+In Thanos, this works similarly, but on a bigger scale and using external labels for grouping as explained in the ["Compaction" section](#compaction).
 
-In both systems, series with the same labels are merged together. In prometheus, merging samples is **naive**. It works by deduplicating samples within exactly the same timestamps. Otherwise samples are added in sorted by time order. Thanos also support a new penalty based samples merger and it is explained in [Deduplication](#vertical-compaction-use-cases).
+In both systems, series with the same labels are merged together. In Prometheus, merging samples is **naive**. It works by deduplicating samples within exactly the same timestamps. Otherwise samples are merged and sorted by timestamp. Thanos also supports a new penalty based samples merging strategy, which is explained in [Deduplication](#vertical-compaction-use-cases).
 
-> **NOTE:** Both Prometheus and Thanos default behaviour is to fail compaction if any overlapping blocks are spotted. (For Thanos, within the same external labels).
+> **NOTE:** Both Prometheus' and Thanos' default behaviour is to fail compaction if any overlapping blocks are spotted. (For Thanos, with the same external labels).
 
 #### Vertical Compaction Use Cases
 
-There can be few valid use cases for vertical compaction:
+The following are valid use cases for vertical compaction:
 
-* Races between multiple compactions, for example multiple compactors or between compactor and Prometheus compactions. While this will have extra computation overhead for Compactor it's safe to enable vertical compaction for this case.
-* Backfilling. If you want to add blocks of data to any stream where there is existing data already there for the time range, you will need enabled vertical compaction.
-* Offline deduplication of series. It's very common to have the same data replicated into multiple streams. We can distinguish two common series deduplications, `one-to-one` and `penalty`:
-  * `one-to-one` deduplication is when same series (series with the same labels from different blocks) for the same range have **exactly** the same samples: Same values and timestamps. This is very common while using [Receivers](receive.md) with replication greater than 1 as receiver replication copies exactly the same timestamps and values to different receive instances.
-  * `penalty` deduplication is when same series data is **logically duplicated**. For example, it comes from the same application, but scraped by two different Prometheus-es. Ideally this requires more complex deduplication algorithms. For example one that is used to [deduplicate on the fly on the Querier](query.md#run-time-deduplication-of-ha-groups). This is common case when Prometheus HA replicas are used. You can enable this deduplication via `--deduplication.func=penalty` flag.
+* **Races** between multiple compactions, for example multiple Thanos compactors or between Thanos and Prometheus compactions. While this will cause extra computational overhead for Compactor it's safe to enable vertical compaction for this case.
+* **Backfilling**. If you want to add blocks of data to any stream where there already is existing data for some time range, you will need to enable vertical compaction.
+* **Offline deduplication** of series. It's very common to have the same data replicated into multiple streams. We can distinguish two common strategies for deduplications, `one-to-one` and `penalty`:
+  * `one-to-one` deduplication is when multiple series (with the same labels) from different blocks for the same time range have **exactly** the same samples: Same values and timestamps. This is very common when using [Receivers](receive.md) with replication greater than 1 as receiver replication copies samples exactly (same timestamps and values) to different receive instances.
+  * `penalty` deduplication is when the same data is **duplicated logically**, i.e. the same application is scraped from two different Prometheis. This usually requires more complex deduplication algorithms. For example, one that is used to [deduplicate on the fly on the Querier](query.md#run-time-deduplication-of-ha-groups). This is a common case when Prometheus HA replicas are used. You can enable this deduplication strategy via the `--deduplication.func=penalty` flag.
 
 #### Vertical Compaction Risks
 
 The main risk is the **irreversible** implications of potential configuration errors:
 
-* If you accidentally upload block with the same external labels but produced by totally different Prometheus for totally different applications, some metrics can overlap and potentially can merge together making such series useless.
+* If you accidentally upload blocks with the same external labels but produced by totally different Prometheis for totally different applications, some metrics can overlap and potentially merge together, making the series useless.
 * If you merge disjoint series in multiple of blocks together, there is currently no easy way to split them back.
-* The `penalty` offline deduplication algorithm has its own limitation. Even though it has been battle-tested for quite a long time but still very few issues come up from time to time such as https://github.com/thanos-io/thanos/issues/2890. If you'd like to enable this deduplication algorithm, please take the risk and make sure you back up your data.
+* The `penalty` offline deduplication algorithm has its own limitation. Even though it has been battle-tested for quite a long time, very few issues still come up from time to time (such as [breaking rate/irate](https://github.com/thanos-io/thanos/issues/2890)). If you'd like to enable this deduplication algorithm, do so at your own risk and back up your data first!
 
 #### Enabling Vertical Compaction
 
-NOTE: See [risks](#vertical-compaction-risks) section to understand the implications and experimental nature of this feature.
+**NOTE:** See the ["risks" section](#vertical-compaction-risks) to understand the implications and experimental nature of this feature.
 
-You can enable vertical compaction using a hidden flag `--compact.enable-vertical-compaction`
+You can enable vertical compaction using the hidden flag `--compact.enable-vertical-compaction`
 
-If you want to "virtually" group blocks differently for deduplication use case, use hidden flag `deduplication.replica-label` to set one or many flags to be ignored during block loading.
+If you want to "virtually" group blocks differently for deduplication use case, use `--deduplication.replica-label=LABEL` to set one or more labels to be ignored during block loading.
 
 For example if you have following set of block streams:
 
@@ -107,7 +107,7 @@ external_labels: {cluster="us1", replica="1", receive="true", environment="produ
 external_labels: {cluster="us1", replica="1", receive="true", environment="staging"}
 ```
 
-and set `--deduplication.replica-label="replica"`, compactor will assume those as:
+and set `--deduplication.replica-label="replica"`, Compactor will assume those as:
 
 ```
 external_labels: {cluster="eu1", receive="true", environment="production"} (2 streams, resulted in one)
@@ -115,15 +115,15 @@ external_labels: {cluster="us1", receive="true", environment="production"}
 external_labels: {cluster="us1", receive="true", environment="staging"}
 ```
 
-On next compaction multiple streams' blocks will be compacted into one.
+On the next compaction, multiple streams' blocks will be compacted into one.
 
-If you need a different deduplication algorithm, use `deduplication.func` flag. The default value is the original `one-to-one` deduplication.
+If you need a different deduplication algorithm, use `--deduplication.func=FUNC` flag. The default value is the original `one-to-one` deduplication.
 
 ## Enforcing Retention of Data
 
-By default, there is NO retention set for object storage data. This means that you store data for unlimited time, which is a valid and recommended way of running Thanos.
+By default, there is NO retention set for object storage data. This means that you store data forever, which is a valid and recommended way of running Thanos.
 
-You can set retention by different resolutions using `--retention.resolution-raw` `--retention.resolution-5m` and `--retention.resolution-1h` flag. Not setting them or setting to `0s` means no retention.
+You can configure retention by using `--retention.resolution-raw` `--retention.resolution-5m` and `--retention.resolution-1h` flag. Not setting them or setting to `0s` means no retention.
 
 **NOTE:** ⚠ ️Retention is applied right after Compaction and Downsampling loops. If those are failing, data will be never deleted.
 
@@ -299,6 +299,12 @@ Flags:
                                 happen at the end of an iteration.
       --compact.concurrency=1   Number of goroutines to use when compacting
                                 groups.
+      --compact.progress-interval=5m  
+                                Frequency of calculating the compaction progress
+                                in the background when --wait has been enabled.
+                                Setting it to "0s" disables it. Now compaction,
+                                downsampling and retention progress are
+                                supported.
       --consistency-delay=30m   Minimum age of fresh (non-compacted) blocks
                                 before they are being processed. Malformed
                                 blocks older than the maximum of
@@ -366,6 +372,21 @@ Flags:
       --log.format=logfmt       Log format to use. Possible options: logfmt or
                                 json.
       --log.level=info          Log filtering level.
+      --max-time=9999-12-31T23:59:59Z  
+                                End of time range limit to compact. Thanos
+                                Compactor will compact only blocks, which
+                                happened earlier than this value. Option can be
+                                a constant time in RFC3339 format or time
+                                duration relative to current time, such as -1d
+                                or 2h45m. Valid duration units are ms, s, m, h,
+                                d, w, y.
+      --min-time=0000-01-01T00:00:00Z  
+                                Start of time range limit to compact. Thanos
+                                Compactor will compact only blocks, which
+                                happened later than this value. Option can be a
+                                constant time in RFC3339 format or time duration
+                                relative to current time, such as -1d or 2h45m.
+                                Valid duration units are ms, s, m, h, d, w, y.
       --objstore.config=<content>  
                                 Alternative to 'objstore.config-file' flag
                                 (mutually exclusive). Content of YAML file that

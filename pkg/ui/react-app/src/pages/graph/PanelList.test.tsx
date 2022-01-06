@@ -12,7 +12,6 @@ describe('PanelList', () => {
       { id: 'query-history-checkbox', label: 'Enable query history', default: false },
       { id: 'debug-mode-checkbox', label: 'Enable Store Filtering', default: false },
       { id: 'autocomplete-checkbox', label: 'Enable autocomplete', default: true },
-      { id: 'use-experimental-editor-checkbox', label: 'Use experimental editor', default: true },
       { id: 'highlighting-checkbox', label: 'Enable highlighting', default: true },
       { id: 'linter-checkbox', label: 'Enable linter', default: true },
     ].forEach((cb, idx) => {

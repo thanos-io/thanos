@@ -97,7 +97,7 @@
             },
             expr: |||
               (
-                absent(thanos_bucket_store_blocks_last_loaded_timestamp_seconds != 1) and (time() - thanos_bucket_store_blocks_last_loaded_timestamp_seconds > 6 * 60 * 60)
+                absent(thanos_bucket_store_blocks_last_loaded_timestamp_seconds) != 1 and (time() - thanos_bucket_store_blocks_last_loaded_timestamp_seconds) > 6 * 60 * 60
               )
             ||| % thanos.store,
             'for': '6h',

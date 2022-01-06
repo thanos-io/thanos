@@ -6,6 +6,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -15,28 +16,35 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/golang/snappy"
+	config_util "github.com/prometheus/common/config"
+	"github.com/prometheus/prometheus/prompb"
+	"github.com/prometheus/prometheus/storage/remote"
+
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/efficientgo/e2e"
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
-	"github.com/thanos-io/thanos/pkg/rules/rulespb"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/targets/targetspb"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/prometheus/prometheus/rules"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
 // NOTE: by using aggregation all results are now unsorted.
-const queryUpWithoutInstance = "sum(up) without (instance)"
+var queryUpWithoutInstance = func() string { return "sum(up) without (instance)" }
 
 // defaultPromConfig returns Prometheus config that sets Prometheus to:
 // * expose 2 external labels, source and replica.
@@ -88,10 +96,52 @@ rule_files:
 	return config
 }
 
+func defaultWebConfig() string {
+	// username: test, secret: test(bcrypt hash)
+	return `
+basic_auth_users:
+  test: $2y$10$IsC9GG9U61sPCuDwwwcnPuMRyzx62cIcdNRs4SIdKwgWihfX4IC.C
+`
+}
+
 func sortResults(res model.Vector) {
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].String() < res[j].String()
 	})
+}
+
+func TestSidecarNotReady(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e_test_query")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), "", e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+	testutil.Ok(t, prom.Stop())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Sidecar should not be ready - it cannot accept traffic if Prometheus is down.
+	testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() (rerr error) {
+		req, err := http.NewRequestWithContext(ctx, "GET", "http://"+sidecar.Endpoint("http")+"/-/ready", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer runutil.CloseWithErrCapture(&rerr, resp.Body, "closing resp body")
+
+		if resp.StatusCode == 200 {
+			return fmt.Errorf("got status code %d", resp.StatusCode)
+		}
+		return nil
+	}))
 }
 
 func TestQuery(t *testing.T) {
@@ -106,13 +156,13 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(receiverRunnable))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), "", e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), "", e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(e, "ha1", defaultPromConfig("prom-ha", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage())
+	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(e, "ha1", defaultPromConfig("prom-ha", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, "", "*.yaml")), "", e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom4, sidecar4, err := e2ethanos.NewPrometheusWithSidecar(e, "ha2", defaultPromConfig("prom-ha", 1, "", filepath.Join(e2ethanos.ContainerSharedDir, "", "*.yaml")), e2ethanos.DefaultPrometheusImage())
+	prom4, sidecar4, err := e2ethanos.NewPrometheusWithSidecar(e, "ha2", defaultPromConfig("prom-ha", 1, "", filepath.Join(e2ethanos.ContainerSharedDir, "", "*.yaml")), "", e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
@@ -260,9 +310,9 @@ func TestQueryLabelNames(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(receiverRunnable))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), "", e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), "", e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
@@ -312,9 +362,9 @@ func TestQueryLabelValues(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(receiverRunnable))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), e2ethanos.DefaultPrometheusImage())
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), "", e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), e2ethanos.DefaultPrometheusImage())
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), "", e2ethanos.DefaultPrometheusImage())
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
@@ -346,6 +396,37 @@ func TestQueryLabelValues(t *testing.T) {
 			return len(res) == 0
 		},
 	)
+}
+
+func TestQueryWithAuthorizedSidecar(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e_test_query_authorized_sidecar")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "alone", defaultPromConfig("prom-alone", 0, "", ""), defaultWebConfig(), e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	q, err := e2ethanos.NewQuerierBuilder(e, "1", []string{sidecar.InternalEndpoint("grpc")}...).Build()
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, time.Now, promclient.QueryOptions{
+		Deduplicate: false,
+	}, []model.Metric{
+		{
+			"job":        "myself",
+			"prometheus": "prom-alone",
+			"replica":    "0",
+		},
+	})
 }
 
 func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
@@ -383,6 +464,7 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 				e,
 				"p1",
 				defaultPromConfig("p1", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml"), "localhost:9090", qUninit.InternalEndpoint("http")),
+				"",
 				e2ethanos.DefaultPrometheusImage(),
 				tcase.sidecarImage,
 				e2ethanos.FeatureExemplarStorage,
@@ -523,11 +605,165 @@ config:
 									{Name: "prometheus", Value: "p1"},
 									{Name: "severity", Value: "page"},
 								}},
+								Health: string(rules.HealthGood),
 							}),
 						},
 					},
 				})
 			}
+		})
+	}
+}
+
+type fakeMetricSample struct {
+	label string
+	value int64
+}
+
+func newSample(s fakeMetricSample) model.Sample {
+	return model.Sample{
+		Metric: map[model.LabelName]model.LabelValue{
+			"__name__": "my_fake_metric",
+			"instance": model.LabelValue(s.label),
+		},
+		Value:     model.SampleValue(s.value),
+		Timestamp: model.Now(),
+	}
+}
+
+func TestSidecarQueryEvaluation(t *testing.T) {
+	t.Parallel()
+
+	ts := []struct {
+		prom1Samples []fakeMetricSample
+		prom2Samples []fakeMetricSample
+		query        string
+		result       model.Vector
+	}{
+		{
+			query:        "max (my_fake_metric)",
+			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
+			prom2Samples: []fakeMetricSample{{"i1", 3}, {"i2", 4}, {"i3", 10}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{},
+					Value:  10,
+				},
+			},
+		},
+		{
+			query:        "max by (instance) (my_fake_metric)",
+			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
+			prom2Samples: []fakeMetricSample{{"i1", 3}, {"i2", 4}, {"i3", 10}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1"},
+					Value:  3,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i2"},
+					Value:  5,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i3"},
+					Value:  10,
+				},
+			},
+		},
+		{
+			query:        "group by (instance) (my_fake_metric)",
+			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}, {"i3", 9}},
+			prom2Samples: []fakeMetricSample{{"i1", 3}, {"i2", 4}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1"},
+					Value:  1,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i2"},
+					Value:  1,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i3"},
+					Value:  1,
+				},
+			},
+		},
+		{
+			query:        "max_over_time(my_fake_metric[10m])",
+			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}},
+			prom2Samples: []fakeMetricSample{{"i1", 3}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p1"},
+					Value:  1,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p2"},
+					Value:  3,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i2", "prometheus": "p1"},
+					Value:  5,
+				},
+			},
+		},
+		{
+			query:        "min_over_time(my_fake_metric[10m])",
+			prom1Samples: []fakeMetricSample{{"i1", 1}, {"i2", 5}},
+			prom2Samples: []fakeMetricSample{{"i1", 3}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p1"},
+					Value:  1,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i1", "prometheus": "p2"},
+					Value:  3,
+				},
+				{
+					Metric: map[model.LabelName]model.LabelValue{"instance": "i2", "prometheus": "p1"},
+					Value:  5,
+				},
+			},
+		},
+	}
+
+	for _, tc := range ts {
+		t.Run(tc.query, func(t *testing.T) {
+			e, err := e2e.NewDockerEnvironment("e2e_test_query_pushdown")
+			testutil.Ok(t, err)
+			t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+			prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "p1", defaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "remote-write-receiver")
+			testutil.Ok(t, err)
+			testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
+
+			prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "p2", defaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "remote-write-receiver")
+			testutil.Ok(t, err)
+			testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
+
+			endpoints := []string{
+				sidecar1.InternalEndpoint("grpc"),
+				sidecar2.InternalEndpoint("grpc"),
+			}
+			q, err := e2ethanos.
+				NewQuerierBuilder(e, "1", endpoints...).
+				WithEnabledFeatures([]string{"query-pushdown"}).
+				Build()
+			testutil.Ok(t, err)
+			testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+			t.Cleanup(cancel)
+
+			testutil.Ok(t, synthesizeSamples(ctx, prom1, tc.prom1Samples))
+			testutil.Ok(t, synthesizeSamples(ctx, prom2, tc.prom2Samples))
+
+			testQuery := func() string { return tc.query }
+			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{
+				Deduplicate: true,
+			}, tc.result)
 		})
 	}
 }
@@ -564,23 +800,23 @@ func checkNetworkRequests(t *testing.T, addr string) {
 	}))
 }
 
-func mustURLParse(t *testing.T, addr string) *url.URL {
+func mustURLParse(t testing.TB, addr string) *url.URL {
 	u, err := url.Parse(addr)
 	testutil.Ok(t, err)
 
 	return u
 }
 
-func instantQuery(t *testing.T, ctx context.Context, addr, q string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
+func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
 	t.Helper()
 
-	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q)
+	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q())
 	var result model.Vector
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, mustURLParse(t, "http://"+addr), q, ts(), opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, mustURLParse(t, "http://"+addr), q(), ts(), opts)
 		if err != nil {
 			return err
 		}
@@ -599,7 +835,7 @@ func instantQuery(t *testing.T, ctx context.Context, addr, q string, ts func() t
 	return result
 }
 
-func queryAndAssertSeries(t *testing.T, ctx context.Context, addr, q string, ts func() time.Time, opts promclient.QueryOptions, expected []model.Metric) {
+func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected []model.Metric) {
 	t.Helper()
 
 	result := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
@@ -608,11 +844,11 @@ func queryAndAssertSeries(t *testing.T, ctx context.Context, addr, q string, ts 
 	}
 }
 
-func queryAndAssert(t *testing.T, ctx context.Context, addr, q string, opts promclient.QueryOptions, expected model.Vector) {
+func queryAndAssert(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected model.Vector) {
 	t.Helper()
 
 	sortResults(expected)
-	result := instantQuery(t, ctx, addr, q, time.Now, opts, len(expected))
+	result := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
 	for _, r := range result {
 		r.Timestamp = 0 // Does not matter for us.
 	}
@@ -675,13 +911,13 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.M
 }
 
 //nolint:unparam
-func rangeQuery(t *testing.T, ctx context.Context, addr, q string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) error) {
+func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string, start, end, step int64, opts promclient.QueryOptions, check func(res model.Matrix) error) {
 	t.Helper()
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, mustURLParse(t, "http://"+addr), q, start, end, step, opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, mustURLParse(t, "http://"+addr), q(), start, end, step, opts)
 		if err != nil {
 			return err
 		}
@@ -716,4 +952,57 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 
 		return nil
 	}))
+}
+
+func synthesizeSamples(ctx context.Context, prometheus *e2e.InstrumentedRunnable, testSamples []fakeMetricSample) error {
+	samples := make([]model.Sample, len(testSamples))
+	for i, s := range testSamples {
+		samples[i] = newSample(s)
+	}
+
+	remoteWriteURL, err := url.Parse("http://" + prometheus.Endpoint("http") + "/api/v1/write")
+	if err != nil {
+		return err
+	}
+
+	client, err := remote.NewWriteClient("remote-write-client", &remote.ClientConfig{
+		URL:     &config_util.URL{URL: remoteWriteURL},
+		Timeout: model.Duration(30 * time.Second),
+	})
+	if err != nil {
+		return err
+	}
+
+	samplespb := make([]prompb.TimeSeries, 0, len(samples))
+	for _, sample := range samples {
+		labelspb := make([]prompb.Label, 0, len(sample.Metric))
+		for labelKey, labelValue := range sample.Metric {
+			labelspb = append(labelspb, prompb.Label{
+				Name:  string(labelKey),
+				Value: string(labelValue),
+			})
+		}
+		samplespb = append(samplespb, prompb.TimeSeries{
+			Labels: labelspb,
+			Samples: []prompb.Sample{
+				{
+					Value:     float64(sample.Value),
+					Timestamp: sample.Timestamp.Time().Unix() * 1000,
+				},
+			},
+		})
+	}
+
+	sample := &prompb.WriteRequest{
+		Timeseries: samplespb,
+	}
+
+	var buf []byte
+	pBuf := proto.NewBuffer(nil)
+	if err := pBuf.Marshal(sample); err != nil {
+		return err
+	}
+
+	compressed := snappy.Encode(buf, pBuf.Bytes())
+	return client.Store(ctx, compressed)
 }

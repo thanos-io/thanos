@@ -9,6 +9,7 @@ import (
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
+	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -18,6 +19,58 @@ func ModelDuration(flags *kingpin.FlagClause) *model.Duration {
 	flags.SetValue(value)
 
 	return value
+}
+
+// Custom parser for IP address flags.
+type addressSlice []string
+
+// addressSlice conforms to flag.Value interface.
+func (a *addressSlice) Set(value string) error {
+	*a = append(*a, value)
+	if err := validateAddrs(*a); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *addressSlice) String() string {
+	return strings.Join(*a, ",")
+}
+
+// Ensure flag is repeatable.
+func (a *addressSlice) IsCumulative() bool {
+	return true
+}
+
+func Addrs(flags *kingpin.FlagClause) (target *addressSlice) {
+	target = &addressSlice{}
+	flags.SetValue((*addressSlice)(target))
+	return
+}
+
+// validateAddrs checks an address slice for duplicates and empty or invalid elements.
+func validateAddrs(addrs addressSlice) error {
+	set := map[string]struct{}{}
+
+	for _, addr := range addrs {
+		if addr == "" {
+			return errors.New("Address is empty.")
+		}
+
+		qtypeAndName := strings.SplitN(addr, "+", 2)
+		hostAndPort := strings.SplitN(addr, ":", 2)
+		if len(qtypeAndName) != 2 && len(hostAndPort) != 2 {
+			return errors.Errorf("Address %s is not of <host>:<port> format or a valid DNS query.", addr)
+		}
+
+		if _, ok := set[addr]; ok {
+			return errors.Errorf("Address %s is duplicated.", addr)
+		}
+
+		set[addr] = struct{}{}
+	}
+
+	return nil
 }
 
 // RegisterGRPCFlags registers flags commonly used to configure gRPC servers with.

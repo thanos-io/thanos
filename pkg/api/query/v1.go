@@ -28,21 +28,21 @@ import (
 	"strings"
 	"time"
 
-	cortexutil "github.com/cortexproject/cortex/pkg/util"
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/prometheus/prometheus/util/stats"
+
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -91,6 +91,7 @@ type QueryAPI struct {
 	enableTargetPartialResponse         bool
 	enableMetricMetadataPartialResponse bool
 	enableExemplarPartialResponse       bool
+	enableQueryPushdown                 bool
 	disableCORS                         bool
 
 	replicaLabels  []string
@@ -119,6 +120,7 @@ func NewQueryAPI(
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
+	enableQueryPushdown bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultRangeQueryStep time.Duration,
@@ -145,6 +147,7 @@ func NewQueryAPI(
 		enableTargetPartialResponse:            enableTargetPartialResponse,
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		enableExemplarPartialResponse:          enableExemplarPartialResponse,
+		enableQueryPushdown:                    enableQueryPushdown,
 		replicaLabels:                          replicaLabels,
 		endpointStatus:                         endpointStatus,
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
@@ -341,7 +344,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	qry, err := qe.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false), r.FormValue("query"), ts)
+	qry, err := qe.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, qapi.enableQueryPushdown, false), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
@@ -458,7 +461,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	defer span.Finish()
 
 	qry, err := qe.NewRangeQuery(
-		qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, false),
+		qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, qapi.enableQueryPushdown, false),
 		r.FormValue("query"),
 		start,
 		end,
@@ -531,7 +534,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		matcherSets = append(matcherSets, matchers)
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, true).
+	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, qapi.enableQueryPushdown, true).
 		Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
@@ -618,7 +621,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, math.MaxInt64, enablePartialResponse, true).
+	q, err := qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, math.MaxInt64, enablePartialResponse, qapi.enableQueryPushdown, true).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
@@ -668,7 +671,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		matcherSets = append(matcherSets, matchers)
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, true).
+	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, qapi.enableQueryPushdown, true).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
@@ -817,18 +820,18 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 			err      error
 		)
 
-		start, err := cortexutil.ParseTime(r.FormValue("start"))
+		start, err := parseTimeParam(r, "start", infMinTime)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}
-		end, err := cortexutil.ParseTime(r.FormValue("end"))
+		end, err := parseTimeParam(r, "end", infMaxTime)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}
 
 		req := &exemplarspb.ExemplarsRequest{
-			Start:                   start,
-			End:                     end,
+			Start:                   timestamp.FromTime(start),
+			End:                     timestamp.FromTime(end),
 			Query:                   r.FormValue("query"),
 			PartialResponseStrategy: ps,
 		}

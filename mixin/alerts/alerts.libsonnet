@@ -4,6 +4,6 @@
 (import 'sidecar.libsonnet') +
 (import 'store.libsonnet') +
 (import 'rule.libsonnet') +
-(import 'bucket_replicate.libsonnet') +
+(import 'bucket-replicate.libsonnet') +
 (import 'absent.libsonnet') +
-(import 'add_runbook_links.libsonnet')
+(import 'add-runbook-links.libsonnet')
