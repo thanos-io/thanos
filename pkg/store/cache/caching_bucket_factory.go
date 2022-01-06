@@ -122,7 +122,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	case string(RedisBucketCacheProvider):
 		redisCache, err := cacheutil.NewRedisClient(logger, "caching-bucket", backendConfig, reg)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to create memcached client")
+			return nil, errors.Wrapf(err, "failed to create redis client")
 		}
 		c = cache.NewRedisCache("caching-bucket", logger, redisCache, reg)
 	default:

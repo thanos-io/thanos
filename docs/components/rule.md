@@ -210,7 +210,7 @@ Stateless ruler enables nearly indefinite horizontal scalability. Ruler doesn't 
 
 The WAL only storage reuses the upstream [Prometheus agent](https://prometheus.io/blog/2021/11/16/agent/) and it is compatible with the old TSDB data. For more design purpose of this mode, please refer to the [proposal](https://thanos.io/tip/proposals-done/202005-scalable-rule-storage.md/).
 
-Stateless mode can be enabled by providing `--remote-write.config` or `--remote-write.config-file` flag. For example:
+Stateless mode can be enabled by providing [Prometheus remote write config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write) in file via `--remote-write.config` or inlined `--remote-write.config-file` flag. For example:
 
 ```bash
 thanos rule \
@@ -227,7 +227,27 @@ thanos rule \
     --remote-write.config-file  'rw-config.yaml'
 ```
 
-The remote write config file is exactly the same as the [Prometheus remote write config format](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
+Where `rw-config.yaml` could look as follows:
+
+```yaml
+remote_write:
+- url: http://e2e_test_rule_remote_write-receive-1:8081/api/v1/receive
+  name: thanos-receiver
+  follow_redirects: false
+- url: https://e2e_test_rule_remote_write-receive-2:443/api/v1/receive
+  remote_timeout: 30s
+  follow_redirects: true
+  queue_config:
+    capacity: 120000
+    max_shards: 50
+    min_shards: 1
+    max_samples_per_send: 40000
+    batch_send_deadline: 5s
+    min_backoff: 5s
+    max_backoff: 5m
+```
+
+You can pass this in file using `--remote-write.config-file=` or inline it using `--remote-write.config=`.
 
 **NOTE:**
 1. `metadata_config` is not supported in this mode and will be ignored if provided in the remote write configuration.
@@ -378,8 +398,9 @@ Flags:
       --remote-write.config=<content>  
                                  Alternative to 'remote-write.config-file' flag
                                  (mutually exclusive). Content of YAML config
-                                 for the remote-write server where samples
-                                 should be sent to (see
+                                 for the remote-write configurations, that
+                                 specify servers where samples should be sent to
+                                 (see
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
                                  This automatically enables stateless mode for
                                  ruler and no series will be stored in the
@@ -387,8 +408,9 @@ Flags:
                                  provided, the flag is ignored and ruler is run
                                  with its own TSDB.
       --remote-write.config-file=<file-path>  
-                                 Path to YAML config for the remote-write server
-                                 where samples should be sent to (see
+                                 Path to YAML config for the remote-write
+                                 configurations, that specify servers where
+                                 samples should be sent to (see
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
                                  This automatically enables stateless mode for
                                  ruler and no series will be stored in the

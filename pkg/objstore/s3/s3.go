@@ -6,7 +6,6 @@ package s3
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -117,13 +116,24 @@ type HTTPConfig struct {
 
 	// Allow upstream callers to inject a round tripper
 	Transport http.RoundTripper `yaml:"-"`
+
+	TLSConfig objstore.TLSConfig `yaml:"tls_config"`
 }
 
 // DefaultTransport - this default transport is based on the Minio
 // DefaultTransport up until the following commit:
 // https://github.com/minio/minio-go/commit/008c7aa71fc17e11bf980c209a4f8c4d687fc884
 // The values have since diverged.
-func DefaultTransport(config Config) *http.Transport {
+func DefaultTransport(config Config) (*http.Transport, error) {
+	tlsConfig, err := objstore.NewTLSConfig(&config.HTTPConfig.TLSConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	if config.HTTPConfig.InsecureSkipVerify {
+		tlsConfig.InsecureSkipVerify = true
+	}
+
 	return &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -148,8 +158,8 @@ func DefaultTransport(config Config) *http.Transport {
 		//
 		// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
 		DisableCompression: true,
-		TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
-	}
+		TLSClientConfig:    tlsConfig,
+	}, nil
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
@@ -241,7 +251,11 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	if config.HTTPConfig.Transport != nil {
 		rt = config.HTTPConfig.Transport
 	} else {
-		rt = DefaultTransport(config)
+		var err error
+		rt, err = DefaultTransport(config)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	client, err := minio.New(config.Endpoint, &minio.Options{

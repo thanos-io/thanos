@@ -20,44 +20,4 @@ replace (
 	k8s.io/klog => github.com/simonpasquier/klog-gokit v0.1.0
 )
 
-require (
-	github.com/Azure/azure-sdk-for-go v0.0.0-00010101000000-000000000000 // indirect
-	github.com/Azure/go-autorest v0.0.0-00010101000000-000000000000 // indirect
-	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
-	github.com/alecthomas/units v0.0.0-20210927113745-59d0afb8317a // indirect
-	github.com/aws/aws-sdk-go v1.42.9 // indirect
-	github.com/cockroachdb/cmux v0.0.0-00010101000000-000000000000 // indirect
-	github.com/cockroachdb/cockroach v0.0.0-00010101000000-000000000000 // indirect
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
-	github.com/go-kit/kit v0.12.0 // indirect
-	github.com/golang/snappy v0.0.4 // indirect
-	github.com/googleapis/gnostic v0.0.0-00010101000000-000000000000 // indirect
-	github.com/gophercloud/gophercloud v0.0.0-00010101000000-000000000000 // indirect
-	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
-	github.com/hashicorp/consul/api v1.11.0 // indirect
-	github.com/jpillora/backoff v1.0.0 // indirect
-	github.com/julienschmidt/httprouter v1.3.0 // indirect
-	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
-	github.com/oklog/oklog v0.3.2 // indirect
-	github.com/oklog/run v1.1.0 // indirect
-	github.com/oklog/ulid v1.3.1 // indirect
-	github.com/opentracing-contrib/go-stdlib v1.0.0 // indirect
-	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
-	github.com/prometheus/prometheus v2.4.3+incompatible // cmd/prometheus
-	github.com/prometheus/tsdb v0.0.0-00010101000000-000000000000 // indirect
-	github.com/samuel/go-zookeeper v0.0.0-20201211165307-7117e9ea2414 // indirect
-	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749 // indirect
-	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
-	golang.org/x/net v0.0.0-20211118161319-6a13c67c3ce4 // indirect
-	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 // indirect
-	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11 // indirect
-	google.golang.org/api v0.60.0 // indirect
-	google.golang.org/genproto v0.0.0-20211118181313-81c1377c94b1 // indirect
-	google.golang.org/grpc v1.42.0 // indirect
-	gopkg.in/alecthomas/kingpin.v2 v2.2.6 // indirect
-	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
-	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/api v0.0.0-00010101000000-000000000000 // indirect
-	k8s.io/apimachinery v0.0.0-00010101000000-000000000000 // indirect
-	k8s.io/client-go v0.0.0-00010101000000-000000000000 // indirect
-)
+require github.com/prometheus/prometheus v2.4.3+incompatible // cmd/prometheus

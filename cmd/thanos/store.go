@@ -281,13 +281,6 @@ func runStore(
 		return errors.Wrap(err, "get content of index cache configuration")
 	}
 
-	// Ensure we close up everything properly.
-	defer func() {
-		if err != nil {
-			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-		}
-	}()
-
 	// Create the index cache loading its config from config file, while keeping
 	// backward compatibility with the pre-config file era.
 	var indexCache storecache.IndexCache

@@ -42,6 +42,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
 )
@@ -231,6 +232,7 @@ func runCompact(
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt, conf.blockMetaFetchConcurrency)
 	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig)
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
+	timePartitionMetaFilter := block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime)
 
 	baseMetaFetcher, err := block.NewBaseFetcher(logger, conf.blockMetaFetchConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
@@ -265,6 +267,7 @@ func runCompact(
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
 		cf := baseMetaFetcher.NewMetaFetcher(
 			extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
+				timePartitionMetaFilter,
 				labelShardedMetaFilter,
 				consistencyDelayMetaFilter,
 				ignoreDeletionMarkFilter,
@@ -646,6 +649,7 @@ type compactConfig struct {
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
 	progressCalculateInterval                      time.Duration
+	filterConf                                     *store.FilterConfig
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -738,6 +742,12 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&cc.hashFunc, "SHA256", "")
+
+	cc.filterConf = &store.FilterConfig{}
+	cmd.Flag("min-time", "Start of time range limit to compact. Thanos Compactor will compact only blocks, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("0000-01-01T00:00:00Z").SetValue(&cc.filterConf.MinTime)
+	cmd.Flag("max-time", "End of time range limit to compact. Thanos Compactor will compact only blocks, which happened earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("9999-12-31T23:59:59Z").SetValue(&cc.filterConf.MaxTime)
 
 	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
 

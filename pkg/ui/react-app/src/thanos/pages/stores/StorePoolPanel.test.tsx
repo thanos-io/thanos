@@ -1,10 +1,10 @@
 import React from 'react';
 import { mount } from 'enzyme';
 import { Button, Collapse, Table, Badge } from 'reactstrap';
-import StorePoolPanel, { StorePoolPanelProps, MAX_TIME } from './StorePoolPanel';
+import StorePoolPanel, { StorePoolPanelProps, storeTimeRangeMsg } from './StorePoolPanel';
 import StoreLabels from './StoreLabels';
 import { getColor } from '../../../pages/targets/target';
-import { formatTime, parseTime } from '../../../utils';
+import { formatTime, parseTime, isValidTime } from '../../../utils';
 import { sampleAPIResponse } from './__testdata__/testdata';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
@@ -57,11 +57,13 @@ describe('StorePoolPanel', () => {
     defaultProps.storePool.forEach((store, idx) => {
       const { name, minTime, maxTime, labelSets, lastCheck, lastError } = store;
       const row = table.find('tr').at(idx + 1);
+      const validMinTime = isValidTime(minTime);
+      const validMaxTime = isValidTime(maxTime);
 
       it('renders store endpoint', () => {
         const td = row.find({ 'data-testid': 'endpoint' });
         expect(td).toHaveLength(1);
-        expect(td.text()).toBe(name);
+        expect(td.prop('title')).toBe(storeTimeRangeMsg(validMinTime, validMaxTime));
       });
 
       it('renders a badge for health', () => {
@@ -87,10 +89,11 @@ describe('StorePoolPanel', () => {
       it('renders minTime', () => {
         const td = row.find({ 'data-testid': 'minTime' });
         expect(td).toHaveLength(1);
+        expect(td.prop('title')).toBe(storeTimeRangeMsg(validMinTime, validMaxTime));
 
-        if (minTime >= MAX_TIME) {
-          const infinityIcon = td.find(FontAwesomeIcon);
-          expect(infinityIcon).toHaveLength(1);
+        if (!validMinTime) {
+          const minusIcon = td.find(FontAwesomeIcon);
+          expect(minusIcon).toHaveLength(1);
         } else {
           expect(td.text()).toBe(formatTime(minTime));
         }
@@ -99,10 +102,11 @@ describe('StorePoolPanel', () => {
       it('renders maxTime', () => {
         const td = row.find({ 'data-testid': 'maxTime' });
         expect(td).toHaveLength(1);
+        expect(td.prop('title')).toBe(storeTimeRangeMsg(validMinTime, validMaxTime));
 
-        if (maxTime >= MAX_TIME) {
-          const infinityIcon = td.find(FontAwesomeIcon);
-          expect(infinityIcon).toHaveLength(1);
+        if (!validMaxTime) {
+          const minusIcon = td.find(FontAwesomeIcon);
+          expect(minusIcon).toHaveLength(1);
         } else {
           expect(td.text()).toBe(formatTime(maxTime));
         }
@@ -112,9 +116,9 @@ describe('StorePoolPanel', () => {
         const td = row.find({ 'data-testid': 'lastCheck' });
         expect(td).toHaveLength(1);
 
-        if (parseTime(lastCheck) >= MAX_TIME) {
-          const infinityIcon = td.find(FontAwesomeIcon);
-          expect(infinityIcon).toHaveLength(1);
+        if (!isValidTime(parseTime(lastCheck))) {
+          const minusIcon = td.find(FontAwesomeIcon);
+          expect(minusIcon).toHaveLength(1);
         }
       });
 
