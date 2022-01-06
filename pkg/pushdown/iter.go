@@ -145,7 +145,7 @@ type pushdownSeriesIterator struct {
 // * If both timestamps match up then the function is applied on them;
 // * If one of the series has a gap then the other one is used until the timestamps match up.
 // It is guaranteed that stepping through both of them that the timestamps will match eventually
-// because there samples have been processed by a PromQL engine.
+// because the samples have been processed by a PromQL engine.
 func newPushdownSeriesIterator(a, b chunkenc.Iterator, function string) *pushdownSeriesIterator {
 	var fn func(float64, float64) float64
 	switch function {
