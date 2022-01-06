@@ -166,7 +166,7 @@ done
 sleep 0.5
 
 if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
-cat >groupcache.yml <<-EOF
+  cat >groupcache.yml <<-EOF
 		type: GROUPCACHE
 config:
   self_url: http://localhost:10906/
