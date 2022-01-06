@@ -78,17 +78,18 @@ func parseGroupcacheConfig(conf []byte) (GroupcacheConfig, error) {
 }
 
 // NewGroupcache creates a new Groupcache instance.
-func NewGroupcache(logger log.Logger, reg prometheus.Registerer, conf []byte, basepath string, r *route.Router, bucket objstore.Bucket) (*Groupcache, error) {
+func NewGroupcache(logger log.Logger, reg prometheus.Registerer, conf []byte, basepath string, r *route.Router, bucket objstore.Bucket, cfg *CachingBucketConfig) (*Groupcache, error) {
 	config, err := parseGroupcacheConfig(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewGroupcacheWithConfig(logger, reg, config, basepath, r, bucket)
+	return NewGroupcacheWithConfig(logger, reg, config, basepath, r, bucket, cfg)
 }
 
 // NewGroupcacheWithConfig creates a new Groupcache instance with the given config.
-func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf GroupcacheConfig, basepath string, r *route.Router, bucket objstore.Bucket) (*Groupcache, error) {
+func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf GroupcacheConfig, basepath string, r *route.Router, bucket objstore.Bucket,
+	cfg *CachingBucketConfig) (*Groupcache, error) {
 	httpProto := galaxyhttp.NewHTTPFetchProtocol(&galaxyhttp.HTTPOptions{
 		BasePath: basepath,
 	})
@@ -131,6 +132,11 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 
 			switch parsedData.Verb {
 			case cachekey.AttributesVerb:
+				_, attrCfg := cfg.FindAttributesConfig(parsedData.Name)
+				if attrCfg == nil {
+					panic("caching bucket layer must not call on unconfigured paths")
+				}
+
 				attrs, err := bucket.Attributes(ctx, parsedData.Name)
 				if err != nil {
 					return err
@@ -140,8 +146,14 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 				if err != nil {
 					return err
 				}
-				return dest.UnmarshalBinary(finalAttrs)
+
+				return dest.UnmarshalBinary(finalAttrs, time.Now().Add(attrCfg.TTL))
 			case cachekey.IterVerb:
+				_, iterCfg := cfg.FindIterConfig(parsedData.Name)
+				if iterCfg == nil {
+					panic("caching bucket layer must not call on unconfigured paths")
+				}
+
 				var list []string
 				if err := bucket.Iter(ctx, parsedData.Name, func(s string) error {
 					list = append(list, s)
@@ -154,8 +166,13 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 				if err != nil {
 					return err
 				}
-				return dest.UnmarshalBinary(encodedList)
+
+				return dest.UnmarshalBinary(encodedList, time.Now().Add(iterCfg.TTL))
 			case cachekey.ContentVerb:
+				_, contentCfg := cfg.FindGetConfig(parsedData.Name)
+				if contentCfg == nil {
+					panic("caching bucket layer must not call on unconfigured paths")
+				}
 				rc, err := bucket.Get(ctx, parsedData.Name)
 				if err != nil {
 					return err
@@ -167,15 +184,28 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 					return err
 				}
 
-				return dest.UnmarshalBinary(b)
+				return dest.UnmarshalBinary(b, time.Now().Add(contentCfg.ContentTTL))
 			case cachekey.ExistsVerb:
+				_, existsCfg := cfg.FindExistConfig(parsedData.Name)
+				if existsCfg == nil {
+					panic("caching bucket layer must not call on unconfigured paths")
+				}
 				exists, err := bucket.Exists(ctx, parsedData.Name)
 				if err != nil {
 					return err
 				}
 
-				return dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)))
+				if exists {
+					return dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)), time.Now().Add(existsCfg.ExistsTTL))
+				} else {
+					return dest.UnmarshalBinary([]byte(strconv.FormatBool(exists)), time.Now().Add(existsCfg.DoesntExistTTL))
+				}
+
 			case cachekey.SubrangeVerb:
+				_, subrangeCfg := cfg.FindGetRangeConfig(parsedData.Name)
+				if subrangeCfg == nil {
+					panic("caching bucket layer must not call on unconfigured paths")
+				}
 				rc, err := bucket.GetRange(ctx, parsedData.Name, parsedData.Start, parsedData.End-parsedData.Start)
 				if err != nil {
 					return err
@@ -187,7 +217,8 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 					return err
 				}
 
-				return dest.UnmarshalBinary(b)
+				return dest.UnmarshalBinary(b, time.Now().Add(subrangeCfg.SubrangeTTL))
+
 			}
 
 			return nil
@@ -218,8 +249,14 @@ func (c *Groupcache) Fetch(ctx context.Context, keys []string) map[string][]byte
 			continue
 		}
 
-		if len(codec) > 0 {
-			data[k] = codec
+		retrievedData, _, err := codec.MarshalBinary()
+		if err != nil {
+			level.Error(c.logger).Log("msg", "failed retrieving data", "err", err, "key", k)
+			continue
+		}
+
+		if len(retrievedData) > 0 {
+			data[k] = retrievedData
 		}
 	}
 
