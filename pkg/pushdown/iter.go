@@ -140,6 +140,12 @@ type pushdownSeriesIterator struct {
 	function func(float64, float64) float64
 }
 
+// newPushdownSeriesIterator constructs a new iterator that steps through both
+// series and performs the following algorithm:
+// * If both timestamps match up then the function is applied on them;
+// * If one of the series has a gap then the other one is used until the timestamps match up.
+// It is guaranteed that stepping through both of them that the timestamps will match eventually
+// because there samples have been processed by a PromQL engine.
 func newPushdownSeriesIterator(a, b chunkenc.Iterator, function string) *pushdownSeriesIterator {
 	var fn func(float64, float64) float64
 	switch function {
@@ -158,23 +164,29 @@ func newPushdownSeriesIterator(a, b chunkenc.Iterator, function string) *pushdow
 func (it *pushdownSeriesIterator) Next() bool {
 	it.aok = it.a.Next()
 	it.bok = it.b.Next()
-
 	return it.aok || it.bok
 }
 
-// These should have identical timestamps. Just need to apply the function here.
 func (it *pushdownSeriesIterator) At() (int64, float64) {
 	ta, va := it.a.At()
 	tb, vb := it.b.At()
 
 	var timestamp int64
 	var val float64
+
 	if it.aok && it.bok {
-		val = it.function(va, vb)
-		if ta != tb {
-			panic("BUG: expected timestamps in pushed down queries to be aligned to the same step")
+		if ta == tb {
+			val = it.function(va, vb)
+			timestamp = ta
+		} else {
+			if ta < tb {
+				timestamp = ta
+				val = va
+			} else {
+				timestamp = tb
+				val = vb
+			}
 		}
-		timestamp = ta
 	} else if it.aok {
 		val = va
 		timestamp = ta
@@ -187,16 +199,9 @@ func (it *pushdownSeriesIterator) At() (int64, float64) {
 }
 
 func (it *pushdownSeriesIterator) Seek(t int64) bool {
-	// Don't use underlying Seek, but iterate over next to not miss gaps.
-	for {
-		ts, _ := it.At()
-		if ts >= t {
-			return true
-		}
-		if !it.Next() {
-			return false
-		}
-	}
+	seekA := it.a.Seek(t)
+	seekB := it.b.Seek(t)
+	return seekA || seekB
 }
 
 func (it *pushdownSeriesIterator) Err() error {
