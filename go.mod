@@ -28,7 +28,7 @@ require (
 	github.com/felixge/fgprof v0.9.1
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.5.1
-	github.com/go-kit/kit v0.12.0
+	github.com/go-kit/kit v0.12.0 // indirect
 	github.com/go-kit/log v0.2.0
 	github.com/go-openapi/strfmt v0.21.0
 	github.com/go-redis/redis/v8 v8.11.4
