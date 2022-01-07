@@ -34,17 +34,21 @@ See [release process docs](release-process.md) for details.
 
 ## Building from source:
 
-Thanos is built purely in [Golang](https://golang.org/), thus allowing to run Thanos on various x64 operating systems.
+Thanos is built purely in [Golang](https://go.dev/), thus allowing to run Thanos on various x64 operating systems.
 
-If you want to build Thanos from source you would need a working installation of the Go 1.16+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
+Thanos can **not** be downloaded nor installed via the `go get` or `go install` methods. Starting in Go 1.17, installing executables with `go get` is deprecated. `go install` may be used instead. However, in order to avoid ambiguity, when go install is used with a version suffix, all arguments must refer to main packages in the same module at the same version. If that module has a `go.mod` file, it must not contain directives like *replace* or *exclude* that would cause it to be interpreted differently if it were the main module.
 
-Thanos can be downloaded and built by running:
+Thanos uses the directive *replace*. The reason is to provide a way to unblock ourselves promptly while also being flexible in the packages that we (re)use. Support for `go install` is not likely at this point.
 
-```bash
-go get github.com/thanos-io/thanos/cmd/thanos
+If you want to build Thanos from source you would need a working installation of the Go 1.17+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`). Next one should make a clone of our repository:
+
+```
+git clone git@github.com:thanos-io/thanos.git
 ```
 
-The `thanos` binary should now be in your `$PATH` and is the only thing required to deploy any of its components.
+When you have access to the source code locally, we have prepared a `Makefile`. Invoke this by using `make` in your CLI. For example `make help` will list all options. For building Thanos one could use `make build`
+
+The `thanos` binary should now be in your project folder and is the only thing required to deploy any of its components.
 
 ## Contributing
 
