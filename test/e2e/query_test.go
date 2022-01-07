@@ -639,8 +639,9 @@ func newSample(s fakeMetricSample) model.Sample {
 }
 
 // Regression test for https://github.com/thanos-io/thanos/issues/5033.
-// Tests whether queries work with mixed sources w/ max_over_time and
-// min_over_time.
+// Tests whether queries work with mixed sources, and with functions
+// that we are pushing down: min, max, min_over_time, max_over_time,
+// group.
 func TestSidecarStorePushdown(t *testing.T) {
 	t.Parallel()
 
@@ -723,6 +724,51 @@ func TestSidecarStorePushdown(t *testing.T) {
 			"prometheus": "p1",
 		},
 	})
+
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
+		return "max(my_fake_metric) by (__name__, instance)"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, []model.Metric{
+		{
+			"instance": "foo",
+			"__name__": "my_fake_metric",
+		},
+	})
+
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
+		return "min_over_time(my_fake_metric[2h])"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, []model.Metric{
+		{
+			"instance":   "foo",
+			"prometheus": "p1",
+		},
+	})
+
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
+		return "min(my_fake_metric) by (instance, __name__)"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, []model.Metric{
+		{
+			"instance": "foo",
+			"__name__": "my_fake_metric",
+		},
+	})
+
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
+		return "group(my_fake_metric) by (__name__, instance)"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, []model.Metric{
+		{
+			"instance": "foo",
+			"__name__": "my_fake_metric",
+		},
+	})
+
 }
 
 func TestSidecarQueryEvaluation(t *testing.T) {
