@@ -24,6 +24,7 @@ type InstrumentationProbe struct {
 	logger    log.Logger
 
 	status *prometheus.GaugeVec
+	previousStatus string 
 }
 
 // NewInstrumentation returns InstrumentationProbe records readiness and healthiness for given component.
@@ -45,13 +46,23 @@ func NewInstrumentation(component component.Component, logger log.Logger, reg pr
 // Ready records the component status when Ready is called, if combined with other Probes.
 func (p *InstrumentationProbe) Ready() {
 	p.status.WithLabelValues(ready).Set(1)
-	level.Info(p.logger).Log("msg", "changing probe status", "status", "ready")
+	if (p.previousStatus == ""){
+		p.previousStatus = "ready"
+	}else if (p.previousStatus == "not-ready"){
+		p.previousStatus = "ready"
+		level.Info(p.logger).Log("msg", "changing probe status", "status", "ready")
+	}
 }
 
 // NotReady records the component status when NotReady is called, if combined with other Probes.
 func (p *InstrumentationProbe) NotReady(err error) {
 	p.status.WithLabelValues(ready).Set(0)
-	level.Warn(p.logger).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
+	if (p.previousStatus == ""){
+		p.previousStatus = "not-ready"
+	}else if (p.previousStatus == "ready"){
+		p.previousStatus = "not-ready"
+		level.Warn(p.logger).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
+	}
 }
 
 // Healthy records the component status when Healthy is called, if combined with other Probes.
