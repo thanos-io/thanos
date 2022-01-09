@@ -387,7 +387,8 @@ func TestStoreGatewayGroupCache(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store_gateway_groupcache_test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	groupcacheConfig := `type: GROUPCACHE
@@ -407,14 +408,8 @@ metafile_content_ttl: 0s`
 		e,
 		"1",
 		client.BucketConfig{
-			Type: client.S3,
-			Config: s3.Config{
-				Bucket:    bucket,
-				AccessKey: e2edb.MinioAccessKey,
-				SecretKey: e2edb.MinioSecretKey,
-				Endpoint:  m.InternalEndpoint("http"),
-				Insecure:  true,
-			},
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		fmt.Sprintf(groupcacheConfig, 1),
 	)
@@ -425,14 +420,8 @@ metafile_content_ttl: 0s`
 		e,
 		"2",
 		client.BucketConfig{
-			Type: client.S3,
-			Config: s3.Config{
-				Bucket:    bucket,
-				AccessKey: e2edb.MinioAccessKey,
-				SecretKey: e2edb.MinioSecretKey,
-				Endpoint:  m.InternalEndpoint("http"),
-				Insecure:  true,
-			},
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		fmt.Sprintf(groupcacheConfig, 2),
 	)
@@ -443,14 +432,8 @@ metafile_content_ttl: 0s`
 		e,
 		"3",
 		client.BucketConfig{
-			Type: client.S3,
-			Config: s3.Config{
-				Bucket:    bucket,
-				AccessKey: e2edb.MinioAccessKey,
-				SecretKey: e2edb.MinioSecretKey,
-				Endpoint:  m.InternalEndpoint("http"),
-				Insecure:  true,
-			},
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		fmt.Sprintf(groupcacheConfig, 3),
 	)
@@ -480,13 +463,7 @@ metafile_content_ttl: 0s`
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, s3.Config{
-		Bucket:    bucket,
-		AccessKey: e2edb.MinioAccessKey,
-		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  m.Endpoint("http"), // We need separate client config, when connecting to minio from outside.
-		Insecure:  true,
-	}, "test-feed")
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("https"), e.SharedDir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))

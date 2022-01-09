@@ -853,7 +853,7 @@ func NewMinio(env e2e.Environment, name, bktName string) (*e2e.InstrumentedRunna
 			Command: e2e.NewCommandWithoutEntrypoint("sh", "-c", fmt.Sprintf(strings.Join(commands, " && "), minioKESGithubContent, minioKESGithubContent, bktName, 8090)),
 			//TODO(@clyang82): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/9
 			//Readiness: e2e.NewHTTPReadinessProbe("http", "/minio/health/ready", 200, 200),
-			Readiness: e2e.NewCmdReadinessProbe(e2e.NewCommand("sh", "-c", "curl -k https://127.0.0.1:8090//minio/health/ready")),
+			Readiness: e2e.NewCmdReadinessProbe(e2e.NewCommand("sh", "-c", "curl -k https://127.0.0.1:8090/minio/health/ready")),
 			EnvVars: map[string]string{
 				"MINIO_ACCESS_KEY": e2edb.MinioAccessKey,
 				"MINIO_SECRET_KEY": e2edb.MinioSecretKey,
