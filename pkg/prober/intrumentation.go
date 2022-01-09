@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	ready   = "ready"
-	healthy = "healthy"
+	ready    = "ready"
+	notReady = "not-ready"
+	healthy  = "healthy"
 )
 
 // InstrumentationProbe stores instrumentation state of Probe.
@@ -23,7 +24,8 @@ type InstrumentationProbe struct {
 	component component.Component
 	logger    log.Logger
 
-	status *prometheus.GaugeVec
+	status       *prometheus.GaugeVec
+	formerStatus string
 }
 
 // NewInstrumentation returns InstrumentationProbe records readiness and healthiness for given component.
@@ -45,13 +47,19 @@ func NewInstrumentation(component component.Component, logger log.Logger, reg pr
 // Ready records the component status when Ready is called, if combined with other Probes.
 func (p *InstrumentationProbe) Ready() {
 	p.status.WithLabelValues(ready).Set(1)
-	level.Info(p.logger).Log("msg", "changing probe status", "status", "ready")
+	if p.formerStatus != ready {
+		level.Info(p.logger).Log("msg", "changing probe status", "status", "ready")
+		p.formerStatus = ready
+	}
 }
 
 // NotReady records the component status when NotReady is called, if combined with other Probes.
 func (p *InstrumentationProbe) NotReady(err error) {
 	p.status.WithLabelValues(ready).Set(0)
-	level.Warn(p.logger).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
+	if p.formerStatus != notReady {
+		level.Warn(p.logger).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
+		p.formerStatus = notReady
+	}
 }
 
 // Healthy records the component status when Healthy is called, if combined with other Probes.
