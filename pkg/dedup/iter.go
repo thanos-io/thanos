@@ -63,7 +63,9 @@ func (s *dedupSeriesSet) Next() bool {
 		return false
 	}
 	// Reset both because they might have some leftovers.
-	s.pushedDown = s.pushedDown[:0]
+	if s.pushdownEnabled {
+		s.pushedDown = s.pushedDown[:0]
+	}
 	s.replicas = s.replicas[:0]
 
 	// Set the label set we are currently gathering to the peek element
