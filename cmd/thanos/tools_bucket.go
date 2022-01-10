@@ -1298,7 +1298,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Rewrite.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Retention.String())
 		if err != nil {
 			return err
 		}
