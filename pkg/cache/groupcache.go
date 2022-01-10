@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -121,7 +122,7 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 	galaxyhttp.RegisterHTTPHandler(universe, &galaxyhttp.HTTPOptions{
 		BasePath: basepath,
 	}, mux)
-	r.Get(basepath, mux.ServeHTTP)
+	r.Get(filepath.Join(basepath, conf.GroupcacheGroup, ":key"), mux.ServeHTTP)
 
 	galaxy := universe.NewGalaxy(conf.GroupcacheGroup, int64(conf.MaxSize), galaxycache.GetterFunc(
 		func(ctx context.Context, id string, dest galaxycache.Codec) error {

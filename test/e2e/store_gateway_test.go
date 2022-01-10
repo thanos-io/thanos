@@ -413,12 +413,13 @@ func TestStoreGatewayGroupCache(t *testing.T) {
 
 	groupcacheConfig := `type: GROUPCACHE
 config:
-  self_url: http://store-gw-%d:42/
+  self_url: http://e2e_test_store_gateway_groupcache-store-gw-%d:8080
   peers:
-    - http://store-gw-1:42/
-    - http://store-gw-2:42/
-    - http://store-gw-3:42/
+    - http://e2e_test_store_gateway_groupcache-store-gw-1:8080
+    - http://e2e_test_store_gateway_groupcache-store-gw-2:8080
+    - http://e2e_test_store_gateway_groupcache-store-gw-3:8080
   groupcache_group: groupcache_test_group
+  dns_interval: 1s
 blocks_iter_ttl: 0s
 metafile_exists_ttl: 0s
 metafile_doesnt_exist_ttl: 0s
@@ -547,9 +548,9 @@ metafile_content_ttl: 0s`
 	})
 
 	t.Run("query with cache hit", func(t *testing.T) {
-		retrievedMetrics, err := store1.SumMetrics([]string{`thanos_cache_groupcache_hits_total`, `thanos_cache_groupcache_loads_total`})
+		retrievedMetrics, err := store1.SumMetrics([]string{`thanos_cache_groupcache_hits_total`, `thanos_cache_groupcache_loads_total`, `thanos_cache_groupcache_get_requests_total`})
 		testutil.Ok(t, err)
-		testutil.Assert(t, len(retrievedMetrics) == 2)
+		testutil.Assert(t, len(retrievedMetrics) == 3)
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
@@ -567,5 +568,7 @@ metafile_content_ttl: 0s`
 
 		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Greater(retrievedMetrics[0]), []string{`thanos_cache_groupcache_hits_total`}))
 		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Equals(retrievedMetrics[1]), []string{`thanos_cache_groupcache_loads_total`}))
+		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Greater(retrievedMetrics[2]), []string{`thanos_cache_groupcache_get_requests_total`}))
+		testutil.Ok(t, store2.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_cache_groupcache_peer_loads_total`}))
 	})
 }
