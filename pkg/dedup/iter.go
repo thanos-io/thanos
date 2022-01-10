@@ -46,24 +46,33 @@ func NewSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, f st
 	return s
 }
 
+// trimPushdownMarker trims the pushdown marker from the given labels.
+// Returns true if there was a pushdown marker.
+func trimPushdownMarker(lbls labels.Labels) bool {
+	for i, l := range lbls {
+		if l == PushdownMarker {
+			lbls = append(lbls[:i], lbls[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 func (s *dedupSeriesSet) Next() bool {
 	if !s.ok {
 		return false
 	}
+	// Reset both because they might have some leftovers.
+	s.pushedDown = s.pushedDown[:0]
+	s.replicas = s.replicas[:0]
+
 	// Set the label set we are currently gathering to the peek element
 	// without the replica label if it exists.
 	s.lset = s.peekLset()
+
 	pushedDown := false
-	if s.pushdownEnabled && s.lset.Len() > 0 {
-		// Need to iterate here because the replica labels are at the end.
-		// So, pushdown marker might not be at the end.
-		for i, l := range s.lset {
-			if l == PushdownMarker {
-				s.lset = append(s.lset[:i], s.lset[i+1:]...)
-				pushedDown = true
-				break
-			}
-		}
+	if s.pushdownEnabled {
+		pushedDown = trimPushdownMarker(s.lset)
 	}
 	if pushedDown {
 		s.pushedDown = append(s.pushedDown[:0], s.peek)
@@ -106,16 +115,8 @@ func (s *dedupSeriesSet) next() bool {
 	nextLset := s.peekLset()
 
 	var pushedDown bool
-	if s.pushdownEnabled && nextLset.Len() > 0 {
-		// Need to iterate here because the replica labels are at the end.
-		// So, pushdown marker might not be at the end.
-		for i, l := range nextLset {
-			if l == PushdownMarker {
-				pushedDown = true
-				nextLset = append(nextLset[:i], nextLset[i+1:]...)
-				break
-			}
-		}
+	if s.pushdownEnabled {
+		pushedDown = trimPushdownMarker(nextLset)
 	}
 
 	// If the label set modulo the replica label is equal to the current label set
@@ -232,6 +233,7 @@ func (s *dedupSeries) allSeriesIterator() chunkenc.Iterator {
 			replicasIterator = newDedupSeriesIterator(replicasIterator, replicaIter)
 		}
 	}
+
 	if len(s.pushedDown) != 0 {
 		if s.isCounter {
 			pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator()}
