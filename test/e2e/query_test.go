@@ -1239,7 +1239,7 @@ func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
 
 	for _, tc := range ts {
 		t.Run(tc.query, func(t *testing.T) {
-			e, err := e2e.NewDockerEnvironment("e2e_test_query_pushdown")
+			e, err := e2e.NewDockerEnvironment("e2e_test_query_pushdown_dedup")
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
