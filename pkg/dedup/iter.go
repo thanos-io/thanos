@@ -48,14 +48,8 @@ func NewSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, f st
 
 // trimPushdownMarker trims the pushdown marker from the given labels.
 // Returns true if there was a pushdown marker.
-func trimPushdownMarker(lbls labels.Labels) bool {
-	for i, l := range lbls {
-		if l == PushdownMarker {
-			lbls = append(lbls[:i], lbls[i+1:]...)
-			return true
-		}
-	}
-	return false
+func trimPushdownMarker(lbls labels.Labels) (labels.Labels, bool) {
+	return labels.NewBuilder(lbls).Del(PushdownMarker.Name).Labels(), lbls.Has(PushdownMarker.Name)
 }
 
 func (s *dedupSeriesSet) Next() bool {
@@ -74,7 +68,7 @@ func (s *dedupSeriesSet) Next() bool {
 
 	pushedDown := false
 	if s.pushdownEnabled {
-		pushedDown = trimPushdownMarker(s.lset)
+		s.lset, pushedDown = trimPushdownMarker(s.lset)
 	}
 	if pushedDown {
 		s.pushedDown = append(s.pushedDown[:0], s.peek)
@@ -118,7 +112,7 @@ func (s *dedupSeriesSet) next() bool {
 
 	var pushedDown bool
 	if s.pushdownEnabled {
-		pushedDown = trimPushdownMarker(nextLset)
+		nextLset, pushedDown = trimPushdownMarker(nextLset)
 	}
 
 	// If the label set modulo the replica label is equal to the current label set
@@ -143,7 +137,6 @@ func (s *dedupSeriesSet) At() storage.Series {
 	if len(s.replicas) == 0 && len(s.pushedDown) == 1 {
 		return seriesWithLabels{Series: s.pushedDown[0], lset: s.lset}
 	}
-
 	// Clients may store the series, so we must make a copy of the slice before advancing.
 	repl := make([]storage.Series, len(s.replicas))
 	copy(repl, s.replicas)
