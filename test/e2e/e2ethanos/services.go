@@ -735,7 +735,6 @@ func NewCompactor(e e2e.Environment, name string, bucketConfig client.BucketConf
 				"--selector.relabel-config": string(relabelConfigBytes),
 				"--wait":                    "",
 			}), extArgs...)...),
-			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 			User:             strconv.Itoa(os.Getuid()),
 			WaitReadyBackoff: &defaultBackoffConfig,
 		},
