@@ -22,7 +22,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
-	"github.com/thanos-io/thanos/pkg/pushdown"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -339,22 +338,6 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		}, nil
 	}
 
-	allPushedDown := true
-	for i, s := range resp.seriesSet {
-		if len(s.Labels) > 0 {
-			lastLbl := s.Labels[len(s.Labels)-1]
-			if lastLbl.Name != "__thanos_pushed_down" || lastLbl.Value != "true" {
-				allPushedDown = false
-				continue
-			}
-
-			resp.seriesSet[i].Labels = resp.seriesSet[i].Labels[:len(s.Labels)-1]
-			continue
-		}
-
-		allPushedDown = false
-	}
-
 	// TODO(fabxc): this could potentially pushed further down into the store API to make true streaming possible.
 	sortDedupLabels(resp.seriesSet, q.replicaLabels)
 	set := &promSeriesSet{
@@ -365,13 +348,9 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		warns: warns,
 	}
 
-	if allPushedDown && (strings.Contains(hints.Func, "max") || strings.Contains(hints.Func, "min")) {
-		return pushdown.NewSeriesSet(set, q.replicaLabels, hints.Func), nil
-	}
-
 	// The merged series set assembles all potentially-overlapping time ranges of the same series into a single one.
 	// TODO(bwplotka): We could potentially dedup on chunk level, use chunk iterator for that when available.
-	return dedup.NewSeriesSet(set, q.replicaLabels, len(aggrs) == 1 && aggrs[0] == storepb.Aggr_COUNTER), nil
+	return dedup.NewSeriesSet(set, q.replicaLabels, hints.Func, q.enableQueryPushdown), nil
 }
 
 // sortDedupLabels re-sorts the set so that the same series with different replica

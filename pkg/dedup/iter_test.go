@@ -422,7 +422,12 @@ func TestDedupSeriesSet(t *testing.T) {
 
 	for _, tcase := range tests {
 		t.Run("", func(t *testing.T) {
-			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, tcase.dedupLabels, tcase.isCounter)
+			// If it is a counter then pass a function which expects a counter.
+			f := ""
+			if tcase.isCounter {
+				f = "rate"
+			}
+			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, tcase.dedupLabels, f, false)
 			var ats []storage.Series
 			for dedupSet.Next() {
 				ats = append(ats, dedupSet.At())

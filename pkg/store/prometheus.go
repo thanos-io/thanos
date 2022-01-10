@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -270,9 +271,7 @@ func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *store
 		})
 		// Attach external labels for compatibility with remote read.
 		finalLbls := labelpb.ExtendSortedLabels(seriesLbls, externalLbls)
-
-		// HACK: break the invariant to specify that the query has been pushed down.
-		finalLbls = append(finalLbls, labels.Label{Name: "__thanos_pushed_down", Value: "true"})
+		finalLbls = append(finalLbls, dedup.PushdownMarker)
 
 		series := &prompb.TimeSeries{
 			Labels:  labelpb.ZLabelsFromPromLabels(finalLbls),
