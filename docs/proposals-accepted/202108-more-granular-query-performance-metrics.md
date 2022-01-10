@@ -52,10 +52,10 @@ Yes, in fact if we used the unique samples/series I suspect this metric would be
 e.g. Exponential Scale
 
 ```
-Samples: 
-s <= 1000 samples, m <=  10_000 samples, l <= 100_000 samples, xl > 1_000_000 samples 
+Samples:
+s <= 1000 samples, m <=  10_000 samples, l <= 100_000 samples, xl > 1_000_000 samples
 
-Series: 
+Series:
 s <= 10 series, m <= 100 series, m <= 1000 series, l <= 10_000 series, xl <= 100_000 series
 ```
 
@@ -88,13 +88,14 @@ With our new metric we:
 * Do not want to create separate histograms for each individual store query, so they will need to be aggregated at the `Series` request level so that our observations include all
 * Do not want to block series receive on a `seriesStats` merging mutex for each incoming response, so maintaining a central `seriesStats` reference and passing it into each of the proxied store requests is out of the question
 
-### How can we capture the query shape & latency spanning the entire query path? 
+### How can we capture the query shape & latency spanning the entire query path?
 
-PromQL engine accepts a `storage.Queryable` which denotes the source of series data in a particular query/query engine instance. The implementation of the thanos query store proxy implements this interface, providing an API for aggregating series across disparate store targets registered to the store instance. 
+PromQL engine accepts a `storage.Queryable` which denotes the source of series data in a particular query/query engine instance. The implementation of the thanos query store proxy implements this interface, providing an API for aggregating series across disparate store targets registered to the store instance.
 
 As the 'shape' of the query is a consequence of our `storage.Queryable` implementation (backed by the proxy store API), there is no way to pass the `SeriesStats` through the PromQL engine query exec in the Thanos query path without changing the `Querier` prometheus interface.
 
-Example of how upstream `Querier` interface change would look like if we included the series stats (or some generic representation of SelectFnStats): 
+Example of how upstream `Querier` interface change would look like if we included the series stats (or some generic representation of SelectFnStats):
+
 ```go
 // Querier provides querying access over time series data of a fixed time range.
 type Querier interface {
@@ -106,16 +107,19 @@ type Querier interface {
 	Select(sortSeries bool, hints *SelectHints, matchers ...*labels.Matcher) (SeriesSet, SeriesStats)
 }
 ```
-By amending the prometheus `storage.Querier` interface to include the  `SeriesStats` (or some form of it) alongside the `SeriesSet` when a `Select` is performed,  all `Queriers` must return stats alongside selects (which may be a good thing but a breaking API change). I want to explore doing this in upstream Prometheus, but the below implementation is an intermediate step to see if this approach is useful at all in capturing the select phase shape/latencies independently.
 
-Due to the limitations of the prom Querier API, we can instead use the reporter pattern and override the `QueryableCreator` constructor to take an extra function parameter that exfiltrates the series stats from the `Select` function and submits the query time observation in the API query handler. 
+By amending the prometheus `storage.Querier` interface to include the `SeriesStats` (or some form of it) alongside the `SeriesSet` when a `Select` is performed, all `Queriers` must return stats alongside selects (which may be a good thing but a breaking API change). I want to explore doing this in upstream Prometheus, but the below implementation is an intermediate step to see if this approach is useful at all in capturing the select phase shape/latencies independently.
 
-**tl;dr:** Longer term to capture the entire query path by amending the Prometheus Querier API to return some stats alongside the query, and creating this generic metric inside the Prometheus PromQL engine. Short term, pass a func parameter to the Queryable constructor for the proxy StoreAPI querier that will exfiltrate the `SeriesStats`, circumventing PromQL engine.  
+Due to the limitations of the prom Querier API, we can instead use the reporter pattern and override the `QueryableCreator` constructor to take an extra function parameter that exfiltrates the series stats from the `Select` function and submits the query time observation in the API query handler.
 
-### Measuring Thanos Query Latency with respect to query fanout 
+**tl;dr:** Longer term to capture the entire query path by amending the Prometheus Querier API to return some stats alongside the query, and creating this generic metric inside the Prometheus PromQL engine. Short term, pass a func parameter to the Queryable constructor for the proxy StoreAPI querier that will exfiltrate the `SeriesStats`, circumventing PromQL engine.
+
+### Measuring Thanos Query Latency with respect to query fanout
+
 First we would create a new `SeriesQueryPerformanceCalculator` for aggregating/tracking the `SeriesStatsCounters` for each fanned out query
 
 go pseudo:
+
 ```go
 type SeriesQueryPerformanceMetricsAggregator struct {
 	QueryDuration *prometheus.HistogramVec
@@ -153,10 +157,11 @@ func (s *SeriesQueryPerformanceMetricsAggregator) Observe(duration float64) {
 }
 
 // Determine the appropriate bucket for a given value relative to a set of quantiles
-func (s *SeriesQueryPerformanceMetricsAggregator) findBucket(value int, quantiles *[]float64) int 
+func (s *SeriesQueryPerformanceMetricsAggregator) findBucket(value int, quantiles *[]float64) int
 ```
 
 Current query fanout logic:
+
 ```go
 for _, st := range s.stores() {
 	// [Error handling etc.]
@@ -171,36 +176,37 @@ for _, st := range s.stores() {
 
 ```go
 type seriesServer struct {
-  // This field just exist to pseudo-implement the unused methods of the interface.
-  storepb.Store_SeriesServer
-  ctx context.Context
-  
-  seriesSet []storepb.Series
-  seriesSetStats storepb.SeriesStatsCounter
-  warnings  []string
+	// This field just exist to pseudo-implement the unused methods of the interface.
+	storepb.Store_SeriesServer
+	ctx context.Context
+
+	seriesSet      []storepb.Series
+	seriesSetStats storepb.SeriesStatsCounter
+	warnings       []string
 }
 
 func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
-  if r.GetWarning() != "" {
-  s.warnings = append(s.warnings, r.GetWarning())
-  return nil
-  }
-  
-  if r.GetSeries() != nil {
-  s.seriesSet = append(s.seriesSet, *r.GetSeries())
-  // For each appended series, increment the seriesStats
-  s.seriesSetStats.Count(r.GetSeries())
-  return nil
-  }
-  
-  // Unsupported field, skip.
-  return nil
+	if r.GetWarning() != "" {
+		s.warnings = append(s.warnings, r.GetWarning())
+		return nil
+	}
+
+	if r.GetSeries() != nil {
+		s.seriesSet = append(s.seriesSet, *r.GetSeries())
+		// For each appended series, increment the seriesStats
+		s.seriesSetStats.Count(r.GetSeries())
+		return nil
+	}
+
+	// Unsupported field, skip.
+	return nil
 }
 ```
+
 Now that the `SeriesStats` are propagated into the `storepb.SeriesServer`, we can ammend the `selectFn` function to return a tuple of `(storage.SeriesSet, storage.SeriesSetCounter, error)`
 
+Ammending the QueryableCreator to provide a func parameter:
 
-Ammending the QueryableCreator to provide a func parameter: 
 ```go
 type SeriesStatsReporter func(seriesStats storepb.SeriesStatsCounter)
 
@@ -233,10 +239,11 @@ func NewQueryableCreator(logger log.Logger, reg prometheus.Registerer, proxy sto
 }
 ```
 
-Injecting the reporter into the qapi Queryable static constructor: 
+Injecting the reporter into the qapi Queryable static constructor:
+
 ```go
 	var (
-		ssmtx	sync.Mutex
+		ssmtx       sync.Mutex
 		seriesStats []storepb.SeriesStatsCounter
 	)
 	seriesStatsReporter := func(ss storepb.SeriesStatsCounter) {
@@ -254,14 +261,14 @@ Injecting the reporter into the qapi Queryable static constructor:
 	)
 ```
 
-In summary, we will: 
+In summary, we will:
 * Amend the `seriesServer` to keep track of all `SeriesStats` for each series pushed to it
 * Amend the static `qapi.queryableCreate` to take a `SeriesStatsReporter` func parameter that will exfiltrate the seriesStats from the Thanos Proxy StoreAPI
 * Add new runtime flags that will allow us to specify a) Query time quantiles b) Series size quantiles c) Sample size quantiles for our partitioned histogram
 * Start a query duration timer as soon as the handler is hit
-* Create a new partitioned vector histogram called `thanos_query_duration_seconds` in the `queryRange` API handler 
+* Create a new partitioned vector histogram called `thanos_query_duration_seconds` in the `queryRange` API handler
 * Propagate all exfiltrated `SeriesStats` to aforementioned metric
-* Record observations against the `thanos_query_duration_seconds` histogram after bucketing samples_le/series_le buckets 
+* Record observations against the `thanos_query_duration_seconds` histogram after bucketing samples_le/series_le buckets
 
 # Alternatives
 
