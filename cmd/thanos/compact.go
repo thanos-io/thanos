@@ -389,15 +389,15 @@ func runCompact(
 
 	if retentionByResolution[compact.ResolutionLevelRaw].Seconds() != 0 {
 		// If downsampling is enabled, error if raw retention is not sufficient for downsampling to occur (upper bound 10 days for 1h resolution)
-		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevelRaw].Seconds() < downsample.ResLevel2DownsampleRange {
-			return errors.New("raw resolution must be higher than the minimum block size after which 1h resolution downsampling will occur (10 days)")
+		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevelRaw].Seconds() < downsample.ResLevel1DownsampleRange {
+			return errors.New("raw resolution must be higher than the minimum block size after which 1h resolution downsampling will occur (40 hours)")
 		}
 		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
 	}
 	if retentionByResolution[compact.ResolutionLevel5m].Seconds() != 0 {
 		// If retention is lower than minimum downsample range, then no downsampling at this resolution will be persisted
-		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevel5m].Seconds() < downsample.ResLevel1DownsampleRange {
-			return errors.New("5m resolution retention must be higher than the minimum block size after which 5m resolution downsampling will occur (40 hours)")
+		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevel5m].Seconds() < downsample.ResLevel2DownsampleRange {
+			return errors.New("5m resolution retention must be higher than the minimum block size after which 5m resolution downsampling will occur (10 days)")
 		}
 		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel5m])
 	}
