@@ -4,11 +4,12 @@
 package prober
 
 import (
+	"sync"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"sync"
 
 	"github.com/thanos-io/thanos/pkg/component"
 )
@@ -52,7 +53,7 @@ func (p *InstrumentationProbe) Ready() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.statusString != ready {
-		level.Info(p.logger).Log("msg", "changing probe status", "status", "ready")
+		level.Info(p.logger).Log("msg", "changing probe status", "status", ready)
 		p.statusString = ready
 	}
 }
