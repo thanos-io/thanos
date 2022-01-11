@@ -136,6 +136,14 @@ Querier also allows to configure different timeouts:
 
 If you prefer availability over accuracy you can set tighter timeout to underlying StoreAPI than overall query timeout. If partial response strategy is NOT `abort`, this will "ignore" slower StoreAPIs producing just warning with 200 status code response.
 
+### Timing differences for metric scraping
+
+For example: If 2 prometheus replicas are scraping the same metrics (prometheus A and prometheus B) and if A is consistently reading metrics traffic every 15s starting at the 5 mark (every minute at 5, 20, 35, 50) and B is consistently reading the same metrics every 15s at the 14 mark (every minute at 14, 29, 44, 59) what is the impact to the total metric over a minute if the A process stops? Or if B stops?
+
+The total impact would be that there would be fewer samples in the query result. The deduplication is merging the datasets from the two instances into one. One Prometheus should be enough to provide you with what you need. In this scenario, one can assume multiple instances as replication, but it's not the same kind of replication you'd get from any other standard replication setup, because your sample times are slightly off. However, it's still considered replicated data. So Thanos attaches to them and provides you with a query interface across your replicas. As long as one replica is alive then you should consider your query results are valid, even though you may have fewer samples than had you queried 3 replicas.
+Overall, the query results shouldn't be impacted very much, if at all. It's possible that one instance could scrape, say, 100% CPU in at 14m. Perhaps it would catch an instantaneous CPU spike. Your irate may show that spike when both replicas are alive, but if that replica goes down you wouldn't see that spike in the irate.
+It isn't important. And if it is, then you should decrease your sample rate to less than 15s.
+
 ### Deduplication replica labels.
 
 | HTTP URL/FORM parameter | Type       | Default                                      | Example                                         |
