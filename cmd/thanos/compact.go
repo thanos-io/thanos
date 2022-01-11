@@ -274,7 +274,6 @@ func runCompact(
 				block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels),
 				duplicateBlocksFilter,
 				noCompactMarkerFilter,
-				timePartitionMetaFilter,
 			},
 		)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
