@@ -363,7 +363,7 @@ spec:
   sessionAffinity: None
 ```
 
-### Client clusters: Sidecarc`ingress.yaml`
+### Client clusters: Sidecar `ingress.yaml`
 
 This is an example ingress for a remote sidecar using NGINX ingress. You must use TLS (port 443 - limitation from NGINX) as HTTP2 is only supported on a separate listener (see [here](https://github.com/kubernetes/ingress-nginx/issues/3938))
 
