@@ -365,6 +365,13 @@ func sortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
 			if _, ok := replicaLabels[s.Labels[j].Name]; ok {
 				return true
 			}
+			// Ensure that dedup marker goes just right before the replica labels.
+			if s.Labels[i].Name == dedup.PushdownMarker.Name {
+				return false
+			}
+			if s.Labels[j].Name == dedup.PushdownMarker.Name {
+				return true
+			}
 			return s.Labels[i].Name < s.Labels[j].Name
 		})
 	}
