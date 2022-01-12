@@ -81,9 +81,15 @@ func (it *pushdownSeriesIterator) At() (int64, float64) {
 }
 
 func (it *pushdownSeriesIterator) Seek(t int64) bool {
-	seekA := it.a.Seek(t)
-	seekB := it.b.Seek(t)
-	return seekA || seekB
+	for {
+		ts, _ := it.At()
+		if ts >= t {
+			return true
+		}
+		if !it.Next() {
+			return false
+		}
+	}
 }
 
 func (it *pushdownSeriesIterator) Err() error {
