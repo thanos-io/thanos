@@ -697,6 +697,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 			},
 		},
 		"",
+		nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))

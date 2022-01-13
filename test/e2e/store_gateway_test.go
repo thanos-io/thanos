@@ -440,6 +440,7 @@ metafile_content_ttl: 0s`
 			},
 		},
 		fmt.Sprintf(groupcacheConfig, 1),
+		nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(store1))
@@ -458,6 +459,7 @@ metafile_content_ttl: 0s`
 			},
 		},
 		fmt.Sprintf(groupcacheConfig, 2),
+		nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(store2))
@@ -476,6 +478,7 @@ metafile_content_ttl: 0s`
 			},
 		},
 		fmt.Sprintf(groupcacheConfig, 3),
+		nil,
 	)
 
 	testutil.Ok(t, err)
