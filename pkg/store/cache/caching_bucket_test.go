@@ -19,8 +19,10 @@ import (
 	"github.com/pkg/errors"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 
+	thanoscache "github.com/thanos-io/thanos/pkg/cache"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/cache/cachekey"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -125,11 +127,11 @@ func TestChunksCaching(t *testing.T) {
 			expectedCachedBytes:  7 * subrangeSize,
 			init: func() {
 				// Delete first 3 subranges.
-				objectSubrange := BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: 0 * subrangeSize, End: 1 * subrangeSize}
+				objectSubrange := cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: 0 * subrangeSize, End: 1 * subrangeSize}
 				delete(cache.cache, objectSubrange.String())
-				objectSubrange = BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: 1 * subrangeSize, End: 2 * subrangeSize}
+				objectSubrange = cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: 1 * subrangeSize, End: 2 * subrangeSize}
 				delete(cache.cache, objectSubrange.String())
-				objectSubrange = BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: 2 * subrangeSize, End: 3 * subrangeSize}
+				objectSubrange = cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: 2 * subrangeSize, End: 3 * subrangeSize}
 				delete(cache.cache, objectSubrange.String())
 			},
 		},
@@ -143,11 +145,11 @@ func TestChunksCaching(t *testing.T) {
 			expectedCachedBytes:  7 * subrangeSize,
 			init: func() {
 				// Delete last 3 subranges.
-				objectSubrange := BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: 7 * subrangeSize, End: 8 * subrangeSize}
+				objectSubrange := cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: 7 * subrangeSize, End: 8 * subrangeSize}
 				delete(cache.cache, objectSubrange.String())
-				objectSubrange = BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: 8 * subrangeSize, End: 9 * subrangeSize}
+				objectSubrange = cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: 8 * subrangeSize, End: 9 * subrangeSize}
 				delete(cache.cache, objectSubrange.String())
-				objectSubrange = BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: 9 * subrangeSize, End: 10 * subrangeSize}
+				objectSubrange = cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: 9 * subrangeSize, End: 10 * subrangeSize}
 				delete(cache.cache, objectSubrange.String())
 			},
 		},
@@ -161,11 +163,11 @@ func TestChunksCaching(t *testing.T) {
 			expectedCachedBytes:  7 * subrangeSize,
 			init: func() {
 				// Delete 3 subranges in the middle.
-				objectSubrange := BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: 3 * subrangeSize, End: 4 * subrangeSize}
+				objectSubrange := cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: 3 * subrangeSize, End: 4 * subrangeSize}
 				delete(cache.cache, objectSubrange.String())
-				objectSubrange = BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: 4 * subrangeSize, End: 5 * subrangeSize}
+				objectSubrange = cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: 4 * subrangeSize, End: 5 * subrangeSize}
 				delete(cache.cache, objectSubrange.String())
-				objectSubrange = BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: 5 * subrangeSize, End: 6 * subrangeSize}
+				objectSubrange = cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: 5 * subrangeSize, End: 6 * subrangeSize}
 				delete(cache.cache, objectSubrange.String())
 			},
 		},
@@ -183,7 +185,7 @@ func TestChunksCaching(t *testing.T) {
 					if i > 0 && i%3 == 0 {
 						continue
 					}
-					objectSubrange := BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
+					objectSubrange := cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
 					delete(cache.cache, objectSubrange.String())
 				}
 			},
@@ -204,7 +206,7 @@ func TestChunksCaching(t *testing.T) {
 					if i == 3 || i == 5 || i == 7 {
 						continue
 					}
-					objectSubrange := BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
+					objectSubrange := cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
 					delete(cache.cache, objectSubrange.String())
 				}
 			},
@@ -224,7 +226,7 @@ func TestChunksCaching(t *testing.T) {
 					if i == 5 || i == 6 || i == 7 {
 						continue
 					}
-					objectSubrange := BucketCacheKey{Verb: SubrangeVerb, Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
+					objectSubrange := cachekey.BucketCacheKey{Verb: cachekey.SubrangeVerb, Name: name, Start: i * subrangeSize, End: (i + 1) * subrangeSize}
 					delete(cache.cache, objectSubrange.String())
 				}
 			},
@@ -235,7 +237,7 @@ func TestChunksCaching(t *testing.T) {
 				tc.init()
 			}
 
-			cfg := NewCachingBucketConfig()
+			cfg := thanoscache.NewCachingBucketConfig()
 			cfg.CacheGetRange("chunks", cache, isTSDBChunkFile, subrangeSize, time.Hour, time.Hour, tc.maxGetRangeRequests)
 
 			cachingBucket, err := NewCachingBucket(inmem, cfg, nil, nil)
@@ -353,7 +355,7 @@ func TestMergeRanges(t *testing.T) {
 func TestInvalidOffsetAndLength(t *testing.T) {
 	b := &testBucket{objstore.NewInMemBucket()}
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	cfg.CacheGetRange("chunks", newMockCache(), func(string) bool { return true }, 10000, time.Hour, time.Hour, 3)
 
 	c, err := NewCachingBucket(b, cfg, nil, nil)
@@ -397,7 +399,7 @@ func TestCachedIter(t *testing.T) {
 	cache := newMockCache()
 
 	const cfgName = "dirs"
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	cfg.CacheIter(cfgName, cache, func(string) bool { return true }, 5*time.Minute, JSONIterCodec{})
 
 	cb, err := NewCachingBucket(inmem, cfg, nil, nil)
@@ -459,7 +461,7 @@ func TestExists(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "test"
 	cfg.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
 
@@ -485,7 +487,7 @@ func TestExistsCachingDisabled(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "test"
 	cfg.CacheExists(cfgName, cache, func(string) bool { return false }, 10*time.Minute, 2*time.Minute)
 
@@ -522,7 +524,7 @@ func TestGet(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "metafile"
 	cfg.CacheGet(cfgName, cache, matchAll, 1024, 10*time.Minute, 10*time.Minute, 2*time.Minute)
 	cfg.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
@@ -553,7 +555,7 @@ func TestGetTooBigObject(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "metafile"
 	// Only allow 5 bytes to be cached.
 	cfg.CacheGet(cfgName, cache, matchAll, 5, 10*time.Minute, 10*time.Minute, 2*time.Minute)
@@ -576,7 +578,7 @@ func TestGetPartialRead(t *testing.T) {
 
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "metafile"
 	cfg.CacheGet(cfgName, cache, matchAll, 1024, 10*time.Minute, 10*time.Minute, 2*time.Minute)
 	cfg.CacheExists(cfgName, cache, matchAll, 10*time.Minute, 2*time.Minute)
@@ -635,7 +637,7 @@ func TestAttributes(t *testing.T) {
 	// We reuse cache between tests (!)
 	cache := newMockCache()
 
-	cfg := NewCachingBucketConfig()
+	cfg := thanoscache.NewCachingBucketConfig()
 	const cfgName = "test"
 	cfg.CacheAttributes(cfgName, cache, matchAll, time.Minute)
 
@@ -673,116 +675,3 @@ func verifyObjectAttrs(t *testing.T, cb *CachingBucket, file string, expectedLen
 }
 
 func matchAll(string) bool { return true }
-
-func TestParseBucketCacheKey(t *testing.T) {
-	testcases := []struct {
-		key         string
-		expected    BucketCacheKey
-		expectedErr error
-	}{
-		{
-			key: "exists:name",
-			expected: BucketCacheKey{
-				Verb:  ExistsVerb,
-				Name:  "name",
-				Start: 0,
-				End:   0,
-			},
-			expectedErr: nil,
-		},
-		{
-			key: "content:name",
-			expected: BucketCacheKey{
-				Verb:  ContentVerb,
-				Name:  "name",
-				Start: 0,
-				End:   0,
-			},
-			expectedErr: nil,
-		},
-		{
-			key: "iter:name",
-			expected: BucketCacheKey{
-				Verb:  IterVerb,
-				Name:  "name",
-				Start: 0,
-				End:   0,
-			},
-			expectedErr: nil,
-		},
-		{
-			key: "attrs:name",
-			expected: BucketCacheKey{
-				Verb:  AttributesVerb,
-				Name:  "name",
-				Start: 0,
-				End:   0,
-			},
-			expectedErr: nil,
-		},
-		{
-			key: "subrange:name:10:20",
-			expected: BucketCacheKey{
-				Verb:  SubrangeVerb,
-				Name:  "name",
-				Start: 10,
-				End:   20,
-			},
-			expectedErr: nil,
-		},
-		// Any VerbType other than SubrangeVerb should not have a "start" and "end".
-		{
-			key:         "iter:name:10:20",
-			expected:    BucketCacheKey{},
-			expectedErr: ErrInvalidBucketCacheKeyFormat,
-		},
-		// Key must always have a name.
-		{
-			key:         "iter",
-			expected:    BucketCacheKey{},
-			expectedErr: ErrInvalidBucketCacheKeyFormat,
-		},
-		// Invalid VerbType should return an error.
-		{
-			key:         "random:name",
-			expected:    BucketCacheKey{},
-			expectedErr: ErrInvalidBucketCacheKeyVerb,
-		},
-		// Start must be an integer.
-		{
-			key:         "subrange:name:random:10",
-			expected:    BucketCacheKey{},
-			expectedErr: ErrParseKeyInt,
-		},
-		// End must be an integer.
-		{
-			key:         "subrange:name:10:random",
-			expected:    BucketCacheKey{},
-			expectedErr: ErrParseKeyInt,
-		},
-		// SubrangeVerb must have start and end.
-		{
-			key:         "subrange:name",
-			expected:    BucketCacheKey{},
-			expectedErr: ErrInvalidBucketCacheKeyFormat,
-		},
-		// SubrangeVerb must have start and end both.
-		{
-			key:         "subrange:name:10",
-			expected:    BucketCacheKey{},
-			expectedErr: ErrInvalidBucketCacheKeyFormat,
-		},
-		// Key must not be an empty string.
-		{
-			key:         "",
-			expected:    BucketCacheKey{},
-			expectedErr: ErrInvalidBucketCacheKeyFormat,
-		},
-	}
-
-	for _, tc := range testcases {
-		res, err := ParseBucketCacheKey(tc.key)
-		testutil.Equals(t, tc.expectedErr, err)
-		testutil.Equals(t, tc.expected, res)
-	}
-}

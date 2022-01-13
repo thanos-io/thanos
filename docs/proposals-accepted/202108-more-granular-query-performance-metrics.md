@@ -52,10 +52,10 @@ Yes, in fact if we used the unique samples/series I suspect this metric would be
 e.g. Exponential Scale
 
 ```
-Samples: 
-s <= 1000 samples, m <=  10_000 samples, l <= 100_000 samples, xl > 1_000_000 samples 
+Samples:
+s <= 1000 samples, m <=  10_000 samples, l <= 100_000 samples, xl > 1_000_000 samples
 
-Series: 
+Series:
 s <= 10 series, m <= 100 series, m <= 1000 series, l <= 10_000 series, xl <= 100_000 series
 ```
 
@@ -157,7 +157,7 @@ func (s *SeriesQueryPerformanceMetricsAggregator) Observe(duration float64) {
 }
 
 // Determine the appropriate bucket for a given value relative to a set of quantiles
-func (s *SeriesQueryPerformanceMetricsAggregator) findBucket(value int, quantiles *[]float64) int 
+func (s *SeriesQueryPerformanceMetricsAggregator) findBucket(value int, quantiles *[]float64) int
 ```
 
 Current query fanout logic:
