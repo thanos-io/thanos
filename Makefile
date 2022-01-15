@@ -143,6 +143,13 @@ build: check-git deps $(PROMU)
 	@echo ">> building Thanos binary in $(PREFIX)"
 	@$(PROMU) build --prefix $(PREFIX)
 
+.PHONY: build-e2e
+build-e2e: ## Build Thanos binary for e2e tests using `promu` with cgo enabled
+build-e2e: check-git deps $(PROMU)
+	@echo ">> building Thanos binary in $(PREFIX)"
+	@$(PROMU) --config=".promue2e.yml" build --prefix $(PREFIX)
+
+
 GIT_BRANCH=$(shell $(GIT) rev-parse --abbrev-ref HEAD)
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
@@ -175,6 +182,12 @@ docker: build
 else
 docker: docker-multi-stage
 endif
+
+.PHONY: docker-e2e
+docker-e2e: ## Builds 'thanos' docker for e2e tests
+docker-e2e: build-e2e 
+	@echo ">> building docker image 'thanos' with Dockerfile.e2e-tests"
+	@docker build -f Dockerfile.e2e-tests -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 
 .PHONY: docker-multi-stage
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
@@ -275,7 +288,7 @@ test-local:
 
 .PHONY: test-e2e
 test-e2e: ## Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
-test-e2e: docker $(GOTESPLIT)
+test-e2e: docker-e2e $(GOTESPLIT)
 	@echo ">> cleaning docker environment."
 	@docker system prune -f --volumes
 	@echo ">> cleaning e2e test garbage."
