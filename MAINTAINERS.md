@@ -27,15 +27,15 @@ We also have some nice souls that help triaging issues and PRs. See [here](https
 
 Full list of triage persons is displayed below:
 
-| Name          | Slack            | GitHub                                         | Company  |
-|---------------|------------------|------------------------------------------------|----------|
-| Adrien Fillon | `@Adrien F`      | [@adrien-f](https://github.com/adrien-f)       |          |
-| Ian Billett   | `@billett`       | [@ianbillett](https://github.com/ianbillett)   | Red Hat  |
-| Martin Chodur | `@FUSAKLA`       | [@fusakla](https://github.com/fusakla)         |          |
-| Michael Dai   | `@jojohappy`     | [@jojohappy](https://github.com/jojohappy)     |          |
-| Xiang Dai     | `@daixiang0`     | [@daixiang0](https://github.com/daixiang0)     |          |
-| Wiard van Rij | `@wiard van Rij` | [@wiardvanrij](https://github.com/wiardvanrij) | Roku     |
-| Jimmie Han    | `@hanjm`         | [@hanjm](https://github.com/hanjm)             | Tencent  |
+| Name          | Slack            | GitHub                                         | Company |
+|---------------|------------------|------------------------------------------------|---------|
+| Adrien Fillon | `@Adrien F`      | [@adrien-f](https://github.com/adrien-f)       |         |
+| Ian Billett   | `@billett`       | [@ianbillett](https://github.com/ianbillett)   | Red Hat |
+| Martin Chodur | `@FUSAKLA`       | [@fusakla](https://github.com/fusakla)         |         |
+| Michael Dai   | `@jojohappy`     | [@jojohappy](https://github.com/jojohappy)     |         |
+| Xiang Dai     | `@daixiang0`     | [@daixiang0](https://github.com/daixiang0)     |         |
+| Wiard van Rij | `@wiard van Rij` | [@wiardvanrij](https://github.com/wiardvanrij) | Roku    |
+| Jimmie Han    | `@hanjm`         | [@hanjm](https://github.com/hanjm)             | Tencent |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 
