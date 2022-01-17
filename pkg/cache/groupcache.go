@@ -5,8 +5,10 @@ package cache
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -24,6 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/cache/cachekey"
 	"github.com/vimeo/galaxycache"
 	galaxyhttp "github.com/vimeo/galaxycache/http"
+	"golang.org/x/net/http2"
 	"gopkg.in/yaml.v2"
 )
 
@@ -93,6 +96,12 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 	cfg *CachingBucketConfig) (*Groupcache, error) {
 	httpProto := galaxyhttp.NewHTTPFetchProtocol(&galaxyhttp.HTTPOptions{
 		BasePath: basepath,
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+				return net.Dial(network, addr)
+			},
+		},
 	})
 	universe := galaxycache.NewUniverse(httpProto, conf.SelfURL)
 

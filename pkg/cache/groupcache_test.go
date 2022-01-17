@@ -5,6 +5,7 @@ package cache
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -16,32 +17,43 @@ import (
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
+	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/prober"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store/cache/cachekey"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	galaxyhttp "github.com/vimeo/galaxycache/http"
+	"golang.org/x/net/http2"
 )
 
-// Benchmark retrieval of one key from one groupcache node.
-func BenchmarkGroupcacheRetrieval(b *testing.B) {
+const basePath = `/_groupcache/`
+const groupName = `groupName`
+const selfURLH1 = "http://localhost:12345"
+const selfURLH2C = "http://localhost:12346"
+
+func TestMain(m *testing.M) {
 	reg := prometheus.NewRegistry()
 	router := route.New()
 
 	bkt := objstore.NewInMemBucket()
-	b.Cleanup(func() { bkt.Close() })
+	defer bkt.Close()
 
 	payload := strings.Repeat("foobar", 16*1024/6)
 
-	testutil.Ok(b, bkt.Upload(context.Background(), "test", strings.NewReader(payload)))
+	if err := bkt.Upload(context.Background(), "test", strings.NewReader(payload)); err != nil {
+		fmt.Printf("failed to upload: %s\n", err.Error())
+		os.Exit(1)
+	}
 
-	listener, err := net.Listen("tcp4", "0.0.0.0:0")
-	testutil.Ok(b, err)
-
-	listenerAddr := listener.Addr().String()
-	port := strings.Split(listenerAddr, ":")[1]
-
-	selfURL := fmt.Sprintf("http://localhost:%v", port)
+	httpServer := httpserver.New(log.NewNopLogger(), nil, component.Bucket, &prober.HTTPProbe{},
+		httpserver.WithListen("0.0.0.0:12345"))
+	httpServer.Handle("/", router)
+	httpServerH2C := httpserver.New(log.NewNopLogger(), nil, component.Bucket, &prober.HTTPProbe{},
+		httpserver.WithListen("0.0.0.0:12346"), httpserver.WithEnableH2C(true))
+	httpServerH2C.Handle("/", router)
 
 	cachingBucketConfig := NewCachingBucketConfig()
 	cachingBucketConfig.CacheGet("test", nil, func(s string) bool {
@@ -52,30 +64,170 @@ func BenchmarkGroupcacheRetrieval(b *testing.B) {
 		log.NewJSONLogger(os.Stderr),
 		reg,
 		GroupcacheConfig{
-			Peers:           []string{selfURL},
-			SelfURL:         selfURL,
-			GroupcacheGroup: "groupName",
+			Peers:           []string{selfURLH1},
+			SelfURL:         selfURLH1,
+			GroupcacheGroup: groupName,
 			DNSSDResolver:   dns.MiekgdnsResolverType,
 			DNSInterval:     30 * time.Second,
 			MaxSize:         model.Bytes(16 * 1024),
 		},
-		"/_groupcache/",
+		basePath,
 		router,
 		bkt,
 		cachingBucketConfig,
 	)
-	testutil.Ok(b, err)
+	if err != nil {
+		fmt.Printf("failed creating group cache: %s\n", err.Error())
+		os.Exit(1)
+	}
 
-	go func() { _ = http.Serve(listener, router) }()
-	b.Cleanup(func() { listener.Close() })
+	go func() {
+		if err = httpServer.ListenAndServe(); err != nil {
+			fmt.Printf("failed to listen: %s\n", err.Error())
+		}
+	}()
+	go func() {
+		if err = httpServerH2C.ListenAndServe(); err != nil {
+			fmt.Printf("failed to listen: %s\n", err.Error())
+		}
+	}()
+
 	cachingBucketConfig.SetCacheImplementation(groupCache)
 
-	b.ResetTimer()
-	b.ReportAllocs()
+	exitVal := m.Run()
 
-	for i := 0; i < b.N; i++ {
-		resp, err := http.Get(selfURL + fmt.Sprintf("/_groupcache/groupName/%v", cachekey.BucketCacheKey{Verb: "content", Name: "test"}))
+	httpServer.Shutdown(nil)
+	os.Exit(exitVal)
+}
+
+// Benchmark retrieval of one key from one groupcache node.
+func BenchmarkGroupcacheRetrieval(b *testing.B) {
+	b.Run("h2c", func(b *testing.B) {
+		fetcher := galaxyhttp.NewHTTPFetchProtocol(&galaxyhttp.HTTPOptions{
+			Transport: &http2.Transport{
+				AllowHTTP: true,
+				DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+					return net.Dial(network, addr)
+				},
+			},
+			BasePath: basePath,
+		})
+
+		f, err := fetcher.NewFetcher(selfURLH2C)
 		testutil.Ok(b, err)
-		testutil.Ok(b, resp.Body.Close())
-	}
+
+		b.Run("seq", func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
+				testutil.Ok(b, err)
+			}
+		})
+		b.Run("parallel=500", func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			ch := make(chan struct{})
+
+			for i := 0; i < 500; i++ {
+				go func() {
+					for range ch {
+						_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
+						testutil.Ok(b, err)
+					}
+				}()
+			}
+
+			for i := 0; i < b.N; i++ {
+				ch <- struct{}{}
+			}
+			close(ch)
+		})
+	})
+	b.Run("h1, max one TCP connection", func(b *testing.B) {
+		fetcher := galaxyhttp.NewHTTPFetchProtocol(&galaxyhttp.HTTPOptions{
+			BasePath: basePath,
+			Transport: &http.Transport{
+				MaxConnsPerHost:     1,
+				MaxIdleConnsPerHost: 1,
+			},
+		})
+
+		f, err := fetcher.NewFetcher(selfURLH1)
+		testutil.Ok(b, err)
+
+		b.Run("seq", func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
+				testutil.Ok(b, err)
+			}
+		})
+
+		b.Run("parallel=500", func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			ch := make(chan struct{})
+
+			for i := 0; i < 500; i++ {
+				go func() {
+					for range ch {
+						_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
+						testutil.Ok(b, err)
+					}
+				}()
+			}
+
+			for i := 0; i < b.N; i++ {
+				ch <- struct{}{}
+			}
+			close(ch)
+		})
+	})
+	b.Run("h1, unlimited TCP connections", func(b *testing.B) {
+		fetcher := galaxyhttp.NewHTTPFetchProtocol(&galaxyhttp.HTTPOptions{
+			BasePath:  basePath,
+			Transport: &http.Transport{},
+		})
+
+		f, err := fetcher.NewFetcher(selfURLH1)
+		testutil.Ok(b, err)
+
+		b.Run("seq", func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
+				testutil.Ok(b, err)
+			}
+		})
+
+		b.Run("parallel=500", func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			ch := make(chan struct{})
+
+			for i := 0; i < 500; i++ {
+				go func() {
+					for range ch {
+						_, _, err = f.Fetch(context.Background(), groupName, cachekey.BucketCacheKey{Verb: "content", Name: "test"}.String())
+						testutil.Ok(b, err)
+					}
+				}()
+			}
+
+			for i := 0; i < b.N; i++ {
+				ch <- struct{}{}
+			}
+			close(ch)
+		})
+	})
+
 }

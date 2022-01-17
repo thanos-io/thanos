@@ -229,6 +229,7 @@ func runStore(
 		httpserver.WithListen(conf.httpConfig.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.httpConfig.gracePeriod)),
 		httpserver.WithTLSConfig(conf.httpConfig.tlsConfig),
+		httpserver.WithEnableH2C(true), // For groupcache.
 	)
 
 	g.Add(func() error {

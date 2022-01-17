@@ -15,6 +15,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	toolkit_web "github.com/prometheus/exporter-toolkit/web"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -48,12 +50,20 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 	registerProbes(mux, prober, logger)
 	registerProfiler(mux)
 
+	var h http.Handler
+	if options.enableH2C {
+		h2s := &http2.Server{}
+		h = h2c.NewHandler(mux, h2s)
+	} else {
+		h = mux
+	}
+
 	return &Server{
 		logger: log.With(logger, "service", "http/server", "component", comp.String()),
 		comp:   comp,
 		prober: prober,
 		mux:    mux,
-		srv:    &http.Server{Addr: options.listen, Handler: mux},
+		srv:    &http.Server{Addr: options.listen, Handler: h},
 		opts:   options,
 	}
 }
