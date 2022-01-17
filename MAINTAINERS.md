@@ -34,7 +34,7 @@ Full list of triage persons is displayed below:
 | Martin Chodur | `@FUSAKLA`       | [@fusakla](https://github.com/fusakla)         |          |
 | Michael Dai   | `@jojohappy`     | [@jojohappy](https://github.com/jojohappy)     |          |
 | Xiang Dai     | `@daixiang0`     | [@daixiang0](https://github.com/daixiang0)     |          |
-| Wiard van Rij | `@wiard van Rij` | [@wiardvanrij](https://github.com/wiardvanrij) | Fullstaq |
+| Wiard van Rij | `@wiard van Rij` | [@wiardvanrij](https://github.com/wiardvanrij) | Roku     |
 | Jimmie Han    | `@hanjm`         | [@hanjm](https://github.com/hanjm)             | Tencent  |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
