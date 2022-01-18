@@ -92,11 +92,13 @@ func TestMain(m *testing.M) {
 		}
 	}()
 
+	defer httpServer.Shutdown(nil)
+	defer httpServerH2C.Shutdown(nil)
+
 	cachingBucketConfig.SetCacheImplementation(groupCache)
 
 	exitVal := m.Run()
 
-	httpServer.Shutdown(nil)
 	os.Exit(exitVal)
 }
 
