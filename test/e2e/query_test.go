@@ -26,7 +26,6 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
@@ -655,7 +654,8 @@ func TestSidecarStorePushdown(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
 
 	const bucket = "store_gateway_test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	dir := filepath.Join(e.SharedDir(), "tmp")
@@ -672,13 +672,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, s3.Config{
-		Bucket:    bucket,
-		AccessKey: e2edb.MinioAccessKey,
-		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  m.Endpoint("http"),
-		Insecure:  true,
-	}, "test")
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("https"), e.SharedDir()), "test")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
@@ -687,14 +681,8 @@ func TestSidecarStorePushdown(t *testing.T) {
 		e,
 		"1",
 		client.BucketConfig{
-			Type: client.S3,
-			Config: s3.Config{
-				Bucket:    bucket,
-				AccessKey: e2edb.MinioAccessKey,
-				SecretKey: e2edb.MinioSecretKey,
-				Endpoint:  m.InternalEndpoint("http"),
-				Insecure:  true,
-			},
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		"",
 		nil,

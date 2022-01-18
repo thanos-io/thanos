@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/efficientgo/e2e/matchers"
 	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
@@ -44,7 +43,8 @@ func TestStoreGateway(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store_gateway_test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	memcached := e2ethanos.NewMemcached(e, "1")
@@ -62,14 +62,8 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		e,
 		"1",
 		client.BucketConfig{
-			Type: client.S3,
-			Config: s3.Config{
-				Bucket:    bucket,
-				AccessKey: e2edb.MinioAccessKey,
-				SecretKey: e2edb.MinioSecretKey,
-				Endpoint:  m.InternalEndpoint("http"),
-				Insecure:  true,
-			},
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		memcachedConfig,
 		nil,
@@ -110,13 +104,8 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	id4, err := e2eutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0, metadata.NoneFunc)
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, s3.Config{
-		Bucket:    bucket,
-		AccessKey: e2edb.MinioAccessKey,
-		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  m.Endpoint("http"), // We need separate client config, when connecting to minio from outside.
-		Insecure:  true,
-	}, "test-feed")
+	bkt, err := s3.NewBucketWithConfig(l,
+		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), e.SharedDir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
@@ -295,7 +284,8 @@ func TestStoreGatewayMemcachedCache(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store_gateway_memcached_cache_test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	memcached := e2ethanos.NewMemcached(e, "1")
@@ -310,14 +300,8 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		e,
 		"1",
 		client.BucketConfig{
-			Type: client.S3,
-			Config: s3.Config{
-				Bucket:    bucket,
-				AccessKey: e2edb.MinioAccessKey,
-				SecretKey: e2edb.MinioSecretKey,
-				Endpoint:  m.InternalEndpoint("http"),
-				Insecure:  true,
-			},
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		memcachedConfig,
 		nil,
@@ -343,13 +327,8 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, s3.Config{
-		Bucket:    bucket,
-		AccessKey: e2edb.MinioAccessKey,
-		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  m.Endpoint("http"), // We need separate client config, when connecting to minio from outside.
-		Insecure:  true,
-	}, "test-feed")
+	bkt, err := s3.NewBucketWithConfig(l,
+		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), e.SharedDir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
@@ -410,17 +389,19 @@ func TestStoreGatewayGroupCache(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store_gateway_groupcache_test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	groupcacheConfig := `type: GROUPCACHE
 config:
-  self_url: http://store-gw-%d:42/
+  self_url: http://e2e_test_store_gateway_groupcache-store-gw-%d:8080
   peers:
-    - http://store-gw-1:42/
-    - http://store-gw-2:42/
-    - http://store-gw-3:42/
+    - http://e2e_test_store_gateway_groupcache-store-gw-1:8080
+    - http://e2e_test_store_gateway_groupcache-store-gw-2:8080
+    - http://e2e_test_store_gateway_groupcache-store-gw-3:8080
   groupcache_group: groupcache_test_group
+  dns_interval: 1s
 blocks_iter_ttl: 0s
 metafile_exists_ttl: 0s
 metafile_doesnt_exist_ttl: 0s
@@ -430,14 +411,8 @@ metafile_content_ttl: 0s`
 		e,
 		"1",
 		client.BucketConfig{
-			Type: client.S3,
-			Config: s3.Config{
-				Bucket:    bucket,
-				AccessKey: e2edb.MinioAccessKey,
-				SecretKey: e2edb.MinioSecretKey,
-				Endpoint:  m.InternalEndpoint("http"),
-				Insecure:  true,
-			},
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		fmt.Sprintf(groupcacheConfig, 1),
 		nil,
@@ -449,14 +424,8 @@ metafile_content_ttl: 0s`
 		e,
 		"2",
 		client.BucketConfig{
-			Type: client.S3,
-			Config: s3.Config{
-				Bucket:    bucket,
-				AccessKey: e2edb.MinioAccessKey,
-				SecretKey: e2edb.MinioSecretKey,
-				Endpoint:  m.InternalEndpoint("http"),
-				Insecure:  true,
-			},
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		fmt.Sprintf(groupcacheConfig, 2),
 		nil,
@@ -468,14 +437,8 @@ metafile_content_ttl: 0s`
 		e,
 		"3",
 		client.BucketConfig{
-			Type: client.S3,
-			Config: s3.Config{
-				Bucket:    bucket,
-				AccessKey: e2edb.MinioAccessKey,
-				SecretKey: e2edb.MinioSecretKey,
-				Endpoint:  m.InternalEndpoint("http"),
-				Insecure:  true,
-			},
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		fmt.Sprintf(groupcacheConfig, 3),
 		nil,
@@ -506,13 +469,7 @@ metafile_content_ttl: 0s`
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, s3.Config{
-		Bucket:    bucket,
-		AccessKey: e2edb.MinioAccessKey,
-		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  m.Endpoint("http"), // We need separate client config, when connecting to minio from outside.
-		Insecure:  true,
-	}, "test-feed")
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("https"), e.SharedDir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
@@ -552,9 +509,9 @@ metafile_content_ttl: 0s`
 	})
 
 	t.Run("query with cache hit", func(t *testing.T) {
-		retrievedMetrics, err := store1.SumMetrics([]string{`thanos_cache_groupcache_hits_total`, `thanos_cache_groupcache_loads_total`})
+		retrievedMetrics, err := store1.SumMetrics([]string{`thanos_cache_groupcache_hits_total`, `thanos_cache_groupcache_loads_total`, `thanos_cache_groupcache_get_requests_total`})
 		testutil.Ok(t, err)
-		testutil.Assert(t, len(retrievedMetrics) == 2)
+		testutil.Assert(t, len(retrievedMetrics) == 3)
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
 			time.Now, promclient.QueryOptions{
@@ -572,5 +529,7 @@ metafile_content_ttl: 0s`
 
 		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Greater(retrievedMetrics[0]), []string{`thanos_cache_groupcache_hits_total`}))
 		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Equals(retrievedMetrics[1]), []string{`thanos_cache_groupcache_loads_total`}))
+		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Greater(retrievedMetrics[2]), []string{`thanos_cache_groupcache_get_requests_total`}))
+		testutil.Ok(t, store2.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_cache_groupcache_peer_loads_total`}))
 	})
 }

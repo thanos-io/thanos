@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/go-kit/log"
 
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
@@ -29,16 +28,12 @@ func BenchmarkUpload(b *testing.B) {
 	b.Cleanup(e2ethanos.CleanScenario(b, e))
 
 	const bucket = "benchmark"
-	m := e2ethanos.NewMinio(e, "benchmark", bucket)
+	m, err := e2ethanos.NewMinio(e, "benchmark", bucket)
+	testutil.Ok(b, err)
 	testutil.Ok(b, e2e.StartAndWaitReady(m))
 
-	bkt, err := s3.NewBucketWithConfig(log.NewNopLogger(), s3.Config{
-		Bucket:    bucket,
-		AccessKey: e2edb.MinioAccessKey,
-		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  m.Endpoint("http"),
-		Insecure:  true,
-	}, "test-feed")
+	bkt, err := s3.NewBucketWithConfig(log.NewNopLogger(),
+		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), e.SharedDir()), "test-feed")
 	testutil.Ok(b, err)
 
 	buf := bytes.Buffer{}

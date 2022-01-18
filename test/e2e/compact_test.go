@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/efficientgo/e2e/matchers"
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
@@ -345,16 +344,12 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 
 	const bucket = "compact_test"
-	m := e2ethanos.NewMinio(e, "minio", bucket)
+	m, err := e2ethanos.NewMinio(e, "minio", bucket)
+	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
-	bkt, err := s3.NewBucketWithConfig(logger, s3.Config{
-		Bucket:    bucket,
-		AccessKey: e2edb.MinioAccessKey,
-		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  m.Endpoint("http"), // We need separate client config, when connecting to minio from outside.
-		Insecure:  true,
-	}, "test-feed")
+	bkt, err := s3.NewBucketWithConfig(logger,
+		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), e.SharedDir()), "test-feed")
 	testutil.Ok(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -456,14 +451,8 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	}
 
 	svcConfig := client.BucketConfig{
-		Type: client.S3,
-		Config: s3.Config{
-			Bucket:    bucket,
-			AccessKey: e2edb.MinioAccessKey,
-			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m.InternalEndpoint("http"),
-			Insecure:  true,
-		},
+		Type:   client.S3,
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 	}
 
 	// Crank down the deletion mark delay since deduplication can miss blocks in the presence of replica labels it doesn't know about.
