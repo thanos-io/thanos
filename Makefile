@@ -147,7 +147,7 @@ build: check-git deps $(PROMU)
 build-e2e: ## Build Thanos binary for e2e tests using `promu` with cgo enabled
 build-e2e: check-git deps $(PROMU)
 	@echo ">> building Thanos binary in $(PREFIX)"
-	@$(PROMU) --config=".promue2e.yml" build --prefix $(PREFIX)
+	@$(PROMU) --config=".promu.e2e.yml" build --prefix $(PREFIX)
 
 
 GIT_BRANCH=$(shell $(GIT) rev-parse --abbrev-ref HEAD)
@@ -185,7 +185,7 @@ endif
 
 .PHONY: docker-e2e
 docker-e2e: ## Builds 'thanos' docker for e2e tests
-docker-e2e: build-e2e 
+docker-e2e: 
 	@echo ">> building docker image 'thanos' with Dockerfile.e2e-tests"
 	@docker build -f Dockerfile.e2e-tests -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 
