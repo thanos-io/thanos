@@ -591,7 +591,7 @@ func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metad
 	var wg sync.WaitGroup
 	var groupChan = make(chan []*metadata.Meta)
 
-	//Start up workers to deduplicate work groups when they're ready
+	// Start up workers to deduplicate workgroups when they're ready.
 	for i := 0; i < f.concurrency; i++ {
 		wg.Add(1)
 		go func() {
@@ -644,7 +644,7 @@ childLoop:
 			}
 		}
 
-		// Child's sources not covered by any member of coveringSet, add it to coveringSet
+		// Child's sources not covered by any member of coveringSet, add it to coveringSet.
 		coveringSet = append(coveringSet, child)
 	}
 
