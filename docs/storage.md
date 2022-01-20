@@ -127,7 +127,7 @@ SSE can be configued using the `sse_config`. [SSE-S3](https://docs.aws.amazon.co
 
 * If type is set to `SSE-S3` you do not need to configure other options.
 
-* If type is set to `SSE-KMS` you must set `kms_key_id`. The `kms_encryption_context` is optional, as [AWS provides a default encryption context](https://docs.aws.amazon.com/kms/latest/developerguide/services-s3.html#s3-encryption-context).
+* If type is set to `SSE-KMS` you must set `kms_key_id`. Although the `kms_encryption_context` is optional, as [AWS provides a default encryption context](https://docs.aws.amazon.com/kms/latest/developerguide/services-s3.html#s3-encryption-context), the `kms_encryption_context` key must be set to `{}` if it is not being used pending the fix of [4245](https://github.com/thanos-io/thanos/issues/4245).
 
 * If type is set to `SSE-C` you must provide a path to the encryption key using `encryption_key`.
 
