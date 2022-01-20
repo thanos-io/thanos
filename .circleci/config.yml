@@ -22,7 +22,7 @@ jobs:
       - checkout
       - go/mod-download-cached
       - setup_remote_docker:
-          version: 18.06.0-ce
+          version: 20.10.11
       - run:
           name: Create Secret if PR is not forked
           # GCS integration tests are run only for author's PR that have write access, because these tests
@@ -74,7 +74,7 @@ jobs:
       - checkout
       - go/mod-download-cached
       - setup_remote_docker:
-          version: 18.06.0-ce
+          version: 20.10.11
       - attach_workspace:
           at: .
       # Register qemu to support multi-arch.
@@ -96,7 +96,7 @@ jobs:
       - checkout
       - go/mod-download-cached
       - setup_remote_docker:
-          version: 18.06.0-ce
+          version: 20.10.11
       - attach_workspace:
           at: .
       - run: make tarballs-release
