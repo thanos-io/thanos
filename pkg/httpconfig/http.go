@@ -62,6 +62,14 @@ type TLSConfig struct {
 	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
 }
 
+func (c *TLSConfig) GetClientCertificate(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+	cert, err := tls.LoadX509KeyPair(c.CertFile, c.KeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("unable to use specified client cert (%s) & key (%s): %s", c.CertFile, c.KeyFile, err)
+	}
+	return &cert, nil
+}
+
 // BasicAuth configures basic authentication for HTTP clients.
 type BasicAuth struct {
 	Username     string `yaml:"username"`
@@ -86,7 +94,7 @@ type TransportConfig struct {
 	TLSHandshakeTimeout   int64 `yaml:"tls_handshake_timeout"`
 }
 
-var defaultTransportConfig TransportConfig = TransportConfig{
+var DefaultTransportConfig TransportConfig = TransportConfig{
 	MaxIdleConns:          100,
 	MaxIdleConnsPerHost:   2,
 	ResponseHeaderTimeout: 0,
@@ -98,7 +106,7 @@ var defaultTransportConfig TransportConfig = TransportConfig{
 }
 
 func NewClientConfigFromYAML(cfg []byte) (*ClientConfig, error) {
-	conf := &ClientConfig{TransportConfig: defaultTransportConfig}
+	conf := &ClientConfig{TransportConfig: DefaultTransportConfig}
 	if err := yaml.Unmarshal(cfg, conf); err != nil {
 		return nil, err
 	}

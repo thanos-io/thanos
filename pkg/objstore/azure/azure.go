@@ -11,7 +11,8 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
+
+	yaml2 "gopkg.in/yaml.v3"
 
 	blob "github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/go-kit/log"
@@ -20,6 +21,7 @@ import (
 	"github.com/prometheus/common/model"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
@@ -39,14 +41,8 @@ var DefaultConfig = Config{
 		MaxRetryRequests: 0,
 	},
 	HTTPConfig: HTTPConfig{
-		IdleConnTimeout:       model.Duration(90 * time.Second),
-		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
-		TLSHandshakeTimeout:   model.Duration(10 * time.Second),
-		ExpectContinueTimeout: model.Duration(1 * time.Second),
-		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   100,
-		MaxConnsPerHost:       0,
-		DisableCompression:    false,
+		TransportConfig: httpconfig.DefaultTransportConfig,
+		TLSConfig:       httpconfig.TLSConfig{},
 	},
 }
 
@@ -76,18 +72,26 @@ type PipelineConfig struct {
 }
 
 type HTTPConfig struct {
-	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
-	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
-	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
+	TransportConfig httpconfig.TransportConfig
+	TLSConfig       httpconfig.TLSConfig `yaml:"tls_config"`
+}
 
-	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
-	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
-	MaxIdleConns          int            `yaml:"max_idle_conns"`
-	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
-	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
-	DisableCompression    bool           `yaml:"disable_compression"`
+func (httpConf *HTTPConfig) UnmarshalYAML(value *yaml2.Node) error {
+	type conf HTTPConfig
+	type transport httpconfig.TransportConfig
+	type tls httpconfig.TLSConfig
 
-	TLSConfig objstore.TLSConfig `yaml:"tls_config"`
+	if err := value.Decode((*conf)(httpConf)); err != nil {
+		return err
+	}
+	if err := value.Decode((*transport)(&httpConf.TransportConfig)); err != nil {
+		return err
+	}
+	if err := value.Decode((*tls)(&httpConf.TLSConfig)); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Bucket implements the store.Bucket interface against Azure APIs.
@@ -155,7 +159,7 @@ func (conf *Config) validate() error {
 // parseConfig unmarshals a buffer into a Config with default values.
 func parseConfig(conf []byte) (Config, error) {
 	config := DefaultConfig
-	if err := yaml.UnmarshalStrict(conf, &config); err != nil {
+	if err := yaml2.Unmarshal(conf, &config); err != nil {
 		return Config{}, err
 	}
 

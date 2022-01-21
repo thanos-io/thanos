@@ -5,9 +5,8 @@ package cos
 
 import (
 	"testing"
-	"time"
 
-	"github.com/prometheus/common/model"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -39,13 +38,7 @@ http_config:
 			},
 			want: Config{
 				HTTPConfig: HTTPConfig{
-					IdleConnTimeout:       model.Duration(90 * time.Second),
-					ResponseHeaderTimeout: model.Duration(2 * time.Minute),
-					TLSHandshakeTimeout:   model.Duration(10 * time.Second),
-					ExpectContinueTimeout: model.Duration(1 * time.Second),
-					MaxIdleConns:          200,
-					MaxIdleConnsPerHost:   100,
-					MaxConnsPerHost:       0,
+					TransportConfig: httpconfig.DefaultTransportConfig,
 				},
 			},
 			wantErr: false,

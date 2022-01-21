@@ -31,7 +31,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
@@ -1015,7 +1014,7 @@ func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 		Endpoint:  endpoint,
 		Insecure:  false,
 		HTTPConfig: s3.HTTPConfig{
-			TLSConfig: objstore.TLSConfig{
+			TLSConfig: httpconfig.TLSConfig{
 				CAFile:   filepath.Join(basePath, "data", "certs", "CAs", "ca.crt"),
 				CertFile: filepath.Join(basePath, "data", "certs", "public.crt"),
 				KeyFile:  filepath.Join(basePath, "data", "certs", "private.key"),

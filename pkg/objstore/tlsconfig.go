@@ -8,10 +8,12 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
+
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 )
 
 // NewTLSConfig creates a new tls.Config from the given TLSConfig.
-func NewTLSConfig(cfg *TLSConfig) (*tls.Config, error) {
+func NewTLSConfig(cfg *httpconfig.TLSConfig) (*tls.Config, error) {
 	tlsConfig := &tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify}
 
 	// If a CA cert is provided then let's read it in.
@@ -35,10 +37,10 @@ func NewTLSConfig(cfg *TLSConfig) (*tls.Config, error) {
 		return nil, fmt.Errorf("client key file %q specified without client cert file", cfg.KeyFile)
 	} else if len(cfg.CertFile) > 0 && len(cfg.KeyFile) > 0 {
 		// Verify that client cert and key are valid.
-		if _, err := cfg.getClientCertificate(nil); err != nil {
+		if _, err := cfg.GetClientCertificate(nil); err != nil {
 			return nil, err
 		}
-		tlsConfig.GetClientCertificate = cfg.getClientCertificate
+		tlsConfig.GetClientCertificate = cfg.GetClientCertificate
 	}
 
 	return tlsConfig, nil
@@ -61,27 +63,4 @@ func updateRootCA(cfg *tls.Config, b []byte) bool {
 	}
 	cfg.RootCAs = caCertPool
 	return true
-}
-
-// getClientCertificate reads the pair of client cert and key from disk and returns a tls.Certificate.
-func (c *TLSConfig) getClientCertificate(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-	cert, err := tls.LoadX509KeyPair(c.CertFile, c.KeyFile)
-	if err != nil {
-		return nil, fmt.Errorf("unable to use specified client cert (%s) & key (%s): %s", c.CertFile, c.KeyFile, err)
-	}
-	return &cert, nil
-}
-
-// TLSConfig configures the options for TLS connections.
-type TLSConfig struct {
-	// The CA cert to use for the targets.
-	CAFile string `yaml:"ca_file"`
-	// The client cert file for the targets.
-	CertFile string `yaml:"cert_file"`
-	// The client key file for the targets.
-	KeyFile string `yaml:"key_file"`
-	// Used to verify the hostname for the targets.
-	ServerName string `yaml:"server_name"`
-	// Disable target certificate validation.
-	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
 }

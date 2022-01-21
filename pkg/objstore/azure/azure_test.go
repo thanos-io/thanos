@@ -185,18 +185,18 @@ func TestParseConfig_DefaultHTTPConfig(t *testing.T) {
 	cfg, err := parseConfig(validConfig)
 	testutil.Ok(t, err)
 
-	if time.Duration(cfg.HTTPConfig.IdleConnTimeout) != time.Duration(90*time.Second) {
+	if time.Duration(cfg.HTTPConfig.TransportConfig.IdleConnTimeout) != time.Duration(90*time.Second) {
 		t.Errorf("parsing of idle_conn_timeout failed: got %v, expected %v",
-			time.Duration(cfg.HTTPConfig.IdleConnTimeout), time.Duration(90*time.Second))
+			time.Duration(cfg.HTTPConfig.TransportConfig.IdleConnTimeout), time.Duration(90*time.Second))
 	}
 
-	if time.Duration(cfg.HTTPConfig.ResponseHeaderTimeout) != time.Duration(2*time.Minute) {
+	if time.Duration(cfg.HTTPConfig.TransportConfig.ResponseHeaderTimeout) != time.Duration(2*time.Minute) {
 		t.Errorf("parsing of response_header_timeout failed: got %v, expected %v",
-			time.Duration(cfg.HTTPConfig.IdleConnTimeout), time.Duration(2*time.Minute))
+			time.Duration(cfg.HTTPConfig.TransportConfig.IdleConnTimeout), time.Duration(2*time.Minute))
 	}
 
-	if cfg.HTTPConfig.InsecureSkipVerify {
-		t.Errorf("parsing of insecure_skip_verify failed: got %v, expected %v", cfg.HTTPConfig.InsecureSkipVerify, false)
+	if cfg.HTTPConfig.TLSConfig.InsecureSkipVerify {
+		t.Errorf("parsing of insecure_skip_verify failed: got %v, expected %v", cfg.HTTPConfig.TLSConfig.InsecureSkipVerify, false)
 	}
 }
 
@@ -206,6 +206,7 @@ storage_account_key: "abc123"
 container: "MyContainer"
 endpoint: "blob.core.windows.net"
 http_config:
+  max_idle_conns: 1
   tls_config:
     ca_file: /certs/ca.crt
     cert_file: /certs/cert.crt
@@ -235,7 +236,5 @@ http_config:
   `)
 	cfg, err := parseConfig(input)
 	testutil.Ok(t, err)
-	transport, err := DefaultTransport(cfg)
-	testutil.Ok(t, err)
-	testutil.Equals(t, true, transport.TLSClientConfig.InsecureSkipVerify)
+	testutil.Equals(t, true, cfg.HTTPConfig.TLSConfig.InsecureSkipVerify)
 }

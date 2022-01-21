@@ -17,11 +17,12 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
-	"github.com/prometheus/common/model"
 	"github.com/tencentyun/cos-go-sdk-v5"
 	"gopkg.in/yaml.v2"
+	yaml2 "gopkg.in/yaml.v3"
 
-	"github.com/thanos-io/thanos/pkg/exthttp"
+	promConfig "github.com/prometheus/common/config"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/clientutil"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -40,13 +41,7 @@ type Bucket struct {
 // DefaultConfig is the default config for an cos client. default tune the `MaxIdleConnsPerHost`.
 var DefaultConfig = Config{
 	HTTPConfig: HTTPConfig{
-		IdleConnTimeout:       model.Duration(90 * time.Second),
-		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
-		TLSHandshakeTimeout:   model.Duration(10 * time.Second),
-		ExpectContinueTimeout: model.Duration(1 * time.Second),
-		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   100,
-		MaxConnsPerHost:       0,
+		TransportConfig: httpconfig.DefaultTransportConfig,
 	},
 }
 
@@ -93,28 +88,20 @@ func parseConfig(conf []byte) (Config, error) {
 	return config, nil
 }
 
-// HTTPConfig stores the http.Transport configuration for the cos client.
 type HTTPConfig struct {
-	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
-	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
-	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
-	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
-	MaxIdleConns          int            `yaml:"max_idle_conns"`
-	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
-	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
+	TransportConfig httpconfig.TransportConfig
 }
 
-// DefaultTransport build http.Transport from config.
-func DefaultTransport(c HTTPConfig) *http.Transport {
-	transport := exthttp.NewTransport()
-	transport.IdleConnTimeout = time.Duration(c.IdleConnTimeout)
-	transport.ResponseHeaderTimeout = time.Duration(c.ResponseHeaderTimeout)
-	transport.TLSHandshakeTimeout = time.Duration(c.TLSHandshakeTimeout)
-	transport.ExpectContinueTimeout = time.Duration(c.ExpectContinueTimeout)
-	transport.MaxIdleConns = c.MaxIdleConns
-	transport.MaxIdleConnsPerHost = c.MaxIdleConnsPerHost
-	transport.MaxConnsPerHost = c.MaxConnsPerHost
-	return transport
+func (httpConf *HTTPConfig) UnmarshalYAML(value *yaml2.Node) error {
+	type conf HTTPConfig
+	type transport httpconfig.TransportConfig
+	type tls httpconfig.TLSConfig
+
+	if err := value.Decode((*transport)(&httpConf.TransportConfig)); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // NewBucket returns a new Bucket using the provided cos configuration.
@@ -148,11 +135,15 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		bucketURL = cos.NewBucketURL(fmt.Sprintf("%s-%s", config.Bucket, config.AppId), config.Region, true)
 	}
 	b := &cos.BaseURL{BucketURL: bucketURL}
+	rt, err := httpconfig.NewRoundTripperFromConfig(promConfig.DefaultHTTPClientConfig, config.HTTPConfig.TransportConfig, "cos")
+	if err != nil {
+		return nil, errors.Wrap(err, "fetch default transport")
+	}
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
 			SecretID:  config.SecretId,
 			SecretKey: config.SecretKey,
-			Transport: DefaultTransport(config.HTTPConfig),
+			Transport: rt,
 		},
 	})
 
