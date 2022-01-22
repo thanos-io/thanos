@@ -169,7 +169,7 @@ func (s *tenantSeriesSetServer) Context() context.Context { return s.ctx }
 
 func (s *tenantSeriesSetServer) Series(store storepb.StoreServer, r *storepb.SeriesRequest) {
 	var err error
-	tracing.DoInSpan(s.ctx, "multitsdb_tenant_series", func(ctx context.Context) {
+	tracing.DoInSpan(s.ctx, "multitsdb_tenant_series", func(_ context.Context) {
 		err = store.Series(r, s)
 	}, opentracing.Tags{"tenant.id": s.tenant})
 	if err != nil {
