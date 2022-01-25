@@ -1,4 +1,5 @@
 on:
+  workflow_dispatch:
   schedule:
     - cron: '37 13 * * *'
 name: busybox-update workflow
