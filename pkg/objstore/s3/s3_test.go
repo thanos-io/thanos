@@ -20,6 +20,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
+const endpoint string = "localhost:80"
+
 func TestParseConfig(t *testing.T) {
 	input := []byte(`bucket: abcd
 insecure: false`)
@@ -306,7 +308,7 @@ list_objects_version: "abcd"`)
 func TestBucket_getServerSideEncryption(t *testing.T) {
 	// Default config should return no SSE config.
 	cfg := DefaultConfig
-	cfg.Endpoint = "localhost:80"
+	cfg.Endpoint = endpoint
 	bkt, err := NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
 	testutil.Ok(t, err)
 
@@ -316,7 +318,7 @@ func TestBucket_getServerSideEncryption(t *testing.T) {
 
 	// If SSE is configured in the client config it should be used.
 	cfg = DefaultConfig
-	cfg.Endpoint = "localhost:80"
+	cfg.Endpoint = endpoint
 	cfg.SSEConfig = SSEConfig{Type: SSES3}
 	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
 	testutil.Ok(t, err)
@@ -329,7 +331,7 @@ func TestBucket_getServerSideEncryption(t *testing.T) {
 	// KMSEncryptionContext - In this case the encryptionContextHeader should be
 	// a base64 encoded string which represents a string-string map "{}"
 	cfg = DefaultConfig
-	cfg.Endpoint = "localhost:80"
+	cfg.Endpoint = endpoint
 	cfg.SSEConfig = SSEConfig{
 		Type:     SSEKMS,
 		KMSKeyID: "key",
@@ -352,7 +354,7 @@ func TestBucket_getServerSideEncryption(t *testing.T) {
 	// If the KMSEncryptionContext is set then the header should reflect it's
 	// value.
 	cfg = DefaultConfig
-	cfg.Endpoint = "localhost:80"
+	cfg.Endpoint = endpoint
 	cfg.SSEConfig = SSEConfig{
 		Type:                 SSEKMS,
 		KMSKeyID:             "key",
@@ -374,7 +376,7 @@ func TestBucket_getServerSideEncryption(t *testing.T) {
 
 	// If SSE is configured in the context it should win.
 	cfg = DefaultConfig
-	cfg.Endpoint = "localhost:80"
+	cfg.Endpoint = endpoint
 	cfg.SSEConfig = SSEConfig{Type: SSES3}
 	override, err := encrypt.NewSSEKMS("test", nil)
 	testutil.Ok(t, err)
