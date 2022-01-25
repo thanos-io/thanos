@@ -2,7 +2,7 @@
 
 The `thanos compact` command applies the compaction procedure of the Prometheus 2.0 storage engine to block data stored in object storage. It is generally not semantically concurrency safe and must be deployed as a singleton against a bucket.
 
-Compactor is also responsible for downsampling of data. There is a time delay before downsampling at a given resolution is possible. This is necessary because downsampled chunks will have fewer samples in them, and as chunks are fixed size, data spanning more time will be required to fill them. 
+Compactor is also responsible for downsampling of data. There is a time delay before downsampling at a given resolution is possible. This is necessary because downsampled chunks will have fewer samples in them, and as chunks are fixed size, data spanning more time will be required to fill them.
 * Creating 5m downsampling for blocks older than **40 hours** (2d)
 * Creating 1h downsampling for blocks older than **10 days** (2w)
 
