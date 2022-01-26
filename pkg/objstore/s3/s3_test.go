@@ -5,6 +5,8 @@ package s3
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -17,6 +19,8 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
+
+const endpoint string = "localhost:80"
 
 func TestParseConfig(t *testing.T) {
 	input := []byte(`bucket: abcd
@@ -304,7 +308,7 @@ list_objects_version: "abcd"`)
 func TestBucket_getServerSideEncryption(t *testing.T) {
 	// Default config should return no SSE config.
 	cfg := DefaultConfig
-	cfg.Endpoint = "localhost:80"
+	cfg.Endpoint = endpoint
 	bkt, err := NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
 	testutil.Ok(t, err)
 
@@ -314,7 +318,7 @@ func TestBucket_getServerSideEncryption(t *testing.T) {
 
 	// If SSE is configured in the client config it should be used.
 	cfg = DefaultConfig
-	cfg.Endpoint = "localhost:80"
+	cfg.Endpoint = endpoint
 	cfg.SSEConfig = SSEConfig{Type: SSES3}
 	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
 	testutil.Ok(t, err)
@@ -323,9 +327,56 @@ func TestBucket_getServerSideEncryption(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, encrypt.S3, sse.Type())
 
+	// SSE-KMS can be configured in the client config with an optional
+	// KMSEncryptionContext - In this case the encryptionContextHeader should be
+	// a base64 encoded string which represents a string-string map "{}"
+	cfg = DefaultConfig
+	cfg.Endpoint = endpoint
+	cfg.SSEConfig = SSEConfig{
+		Type:     SSEKMS,
+		KMSKeyID: "key",
+	}
+	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
+	testutil.Ok(t, err)
+
+	sse, err = bkt.getServerSideEncryption(context.Background())
+	testutil.Ok(t, err)
+	testutil.Equals(t, encrypt.KMS, sse.Type())
+
+	encryptionContextHeader := "X-Amz-Server-Side-Encryption-Context"
+	headers := make(http.Header)
+	sse.Marshal(headers)
+	wantJson, err := json.Marshal(make(map[string]string))
+	testutil.Ok(t, err)
+	want := base64.StdEncoding.EncodeToString(wantJson)
+	testutil.Equals(t, want, headers.Get(encryptionContextHeader))
+
+	// If the KMSEncryptionContext is set then the header should reflect it's
+	// value.
+	cfg = DefaultConfig
+	cfg.Endpoint = endpoint
+	cfg.SSEConfig = SSEConfig{
+		Type:                 SSEKMS,
+		KMSKeyID:             "key",
+		KMSEncryptionContext: map[string]string{"foo": "bar"},
+	}
+	bkt, err = NewBucketWithConfig(log.NewNopLogger(), cfg, "test")
+	testutil.Ok(t, err)
+
+	sse, err = bkt.getServerSideEncryption(context.Background())
+	testutil.Ok(t, err)
+	testutil.Equals(t, encrypt.KMS, sse.Type())
+
+	headers = make(http.Header)
+	sse.Marshal(headers)
+	wantJson, err = json.Marshal(cfg.SSEConfig.KMSEncryptionContext)
+	testutil.Ok(t, err)
+	want = base64.StdEncoding.EncodeToString(wantJson)
+	testutil.Equals(t, want, headers.Get(encryptionContextHeader))
+
 	// If SSE is configured in the context it should win.
 	cfg = DefaultConfig
-	cfg.Endpoint = "localhost:80"
+	cfg.Endpoint = endpoint
 	cfg.SSEConfig = SSEConfig{Type: SSES3}
 	override, err := encrypt.NewSSEKMS("test", nil)
 	testutil.Ok(t, err)

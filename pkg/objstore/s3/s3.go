@@ -273,6 +273,12 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	if config.SSEConfig.Type != "" {
 		switch config.SSEConfig.Type {
 		case SSEKMS:
+			// If the KMSEncryptionContext is a nil map the header that is
+			// constructed by the encrypt.ServerSide object will be base64
+			// encoded "nil" which is not accepted by AWS.
+			if config.SSEConfig.KMSEncryptionContext == nil {
+				config.SSEConfig.KMSEncryptionContext = make(map[string]string)
+			}
 			sse, err = encrypt.NewSSEKMS(config.SSEConfig.KMSKeyID, config.SSEConfig.KMSEncryptionContext)
 			if err != nil {
 				return nil, errors.Wrap(err, "initialize s3 client SSE-KMS")
