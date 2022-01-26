@@ -12,6 +12,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#5089](https://github.com/thanos-io/thanos/pull/5089) S3: Create an empty map in the case SSE-KMS is used and no KMSEncryptionContext is passed.
 - [#4970](https://github.com/thanos-io/thanos/pull/4970) Added a new flag `exclude-delete` to `tools bucket ls`, which excludes blocks marked for deletion.
 - [#4903](https://github.com/thanos-io/thanos/pull/4903) Compactor: Added tracing support for compaction.
 - [#4909](https://github.com/thanos-io/thanos/pull/4909) Compactor: Add flag --max-time / --min-time to filter blocks that are ready to be compacted.
