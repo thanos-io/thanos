@@ -123,9 +123,9 @@ func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
 	case downsample.ResLevel2:
 		return time.Duration(0), errors.New("no downsampling")
 	case downsample.ResLevel1:
-		return time.Duration(downsample.DownsampleRange1*time.Millisecond) - timeRange, nil
+		return time.Duration(downsample.ResLevel2DownsampleRange*time.Millisecond) - timeRange, nil
 	case downsample.ResLevel0:
-		return time.Duration(downsample.DownsampleRange0*time.Millisecond) - timeRange, nil
+		return time.Duration(downsample.ResLevel1DownsampleRange*time.Millisecond) - timeRange, nil
 	default:
 		panic(errors.Errorf("invalid resolution %v", m.Thanos.Downsample.Resolution))
 	}
@@ -627,7 +627,7 @@ func (ds *DownsampleProgressCalculator) ProgressCalculate(ctx context.Context, g
 					continue
 				}
 
-				if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
+				if m.MaxTime-m.MinTime < downsample.ResLevel1DownsampleRange {
 					continue
 				}
 				groupBlocks[group.key]++
@@ -643,7 +643,7 @@ func (ds *DownsampleProgressCalculator) ProgressCalculate(ctx context.Context, g
 					continue
 				}
 
-				if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
+				if m.MaxTime-m.MinTime < downsample.ResLevel2DownsampleRange {
 					continue
 				}
 				groupBlocks[group.key]++

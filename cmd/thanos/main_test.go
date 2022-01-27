@@ -120,7 +120,7 @@ func TestRegression4960_Deadlock(t *testing.T) {
 			ctx,
 			dir,
 			[]labels.Labels{{{Name: "a", Value: "1"}}},
-			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
+			1, 0, downsample.ResLevel1DownsampleRange+1, // Pass the minimum ResLevel1DownsampleRange check.
 			labels.Labels{{Name: "e1", Value: "1"}},
 			downsample.ResLevel0, metadata.NoneFunc)
 		testutil.Ok(t, err)
@@ -131,7 +131,7 @@ func TestRegression4960_Deadlock(t *testing.T) {
 			ctx,
 			dir,
 			[]labels.Labels{{{Name: "a", Value: "2"}}},
-			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
+			1, 0, downsample.ResLevel1DownsampleRange+1, // Pass the minimum ResLevel1DownsampleRange check.
 			labels.Labels{{Name: "e1", Value: "2"}},
 			downsample.ResLevel0, metadata.NoneFunc)
 		testutil.Ok(t, err)
@@ -142,7 +142,7 @@ func TestRegression4960_Deadlock(t *testing.T) {
 			ctx,
 			dir,
 			[]labels.Labels{{{Name: "a", Value: "2"}}},
-			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
+			1, 0, downsample.ResLevel1DownsampleRange+1, // Pass the minimum ResLevel1DownsampleRange check.
 			labels.Labels{{Name: "e1", Value: "2"}},
 			downsample.ResLevel0, metadata.NoneFunc)
 		testutil.Ok(t, err)
@@ -182,7 +182,7 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 			ctx,
 			dir,
 			[]labels.Labels{{{Name: "a", Value: "1"}}},
-			1, 0, downsample.DownsampleRange0+1, // Pass the minimum DownsampleRange0 check.
+			1, 0, downsample.ResLevel1DownsampleRange+1, // Pass the minimum ResLevel1DownsampleRange check.
 			labels.Labels{{Name: "e1", Value: "1"}},
 			downsample.ResLevel0, metadata.NoneFunc)
 		testutil.Ok(t, err)

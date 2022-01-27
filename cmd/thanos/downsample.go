@@ -283,7 +283,7 @@ metaSendLoop:
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
 			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
+			if m.MaxTime-m.MinTime < downsample.ResLevel1DownsampleRange {
 				continue
 			}
 
@@ -301,7 +301,7 @@ metaSendLoop:
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
 			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
+			if m.MaxTime-m.MinTime < downsample.ResLevel2DownsampleRange {
 				continue
 			}
 		}

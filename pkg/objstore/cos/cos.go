@@ -127,11 +127,18 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 	if err != nil {
 		return nil, errors.Wrap(err, "parsing cos configuration")
 	}
+
+	return NewBucketWithConfig(logger, config, component)
+}
+
+// NewBucketWithConfig returns a new Bucket using the provided cos config values.
+func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
 	if err := config.validate(); err != nil {
 		return nil, errors.Wrap(err, "validate cos configuration")
 	}
 
 	var bucketURL *url.URL
+	var err error
 	if config.Endpoint != "" {
 		bucketURL, err = url.Parse(config.Endpoint)
 		if err != nil {

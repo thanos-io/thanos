@@ -509,10 +509,10 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			// This test case has blocks from multiple groups and resolution levels. Only the blocks in the second group should be downsampled since the others either have time differences not in the range for their resolution, or a resolution which should not be downsampled.
 			testName: "multi_group_test",
 			input: []*metadata.Meta{
-				createBlockMeta(6, 1, downsample.DownsampleRange0, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{7, 8}),
-				createBlockMeta(7, 0, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{8, 9}),
-				createBlockMeta(9, 0, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{8, 11}),
-				createBlockMeta(8, 0, downsample.DownsampleRange1, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{9, 10}),
+				createBlockMeta(6, 1, downsample.ResLevel1DownsampleRange, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{7, 8}),
+				createBlockMeta(7, 0, downsample.ResLevel2DownsampleRange, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{8, 9}),
+				createBlockMeta(9, 0, downsample.ResLevel2DownsampleRange, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{8, 11}),
+				createBlockMeta(8, 0, downsample.ResLevel2DownsampleRange, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{9, 10}),
 			},
 			expected: map[string]float64{
 				keys[0]: 0.0,
@@ -524,7 +524,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			// This block should be downsampled.
 			testName: "res_level0_test",
 			input: []*metadata.Meta{
-				createBlockMeta(9, 0, downsample.DownsampleRange0, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{10, 11}),
+				createBlockMeta(9, 0, downsample.ResLevel1DownsampleRange, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{10, 11}),
 			},
 			expected: map[string]float64{
 				keys[0]: 1.0,
@@ -534,7 +534,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			// This block should be downsampled.
 			testName: "res_level1_test",
 			input: []*metadata.Meta{
-				createBlockMeta(9, 0, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{10, 11}),
+				createBlockMeta(9, 0, downsample.ResLevel2DownsampleRange, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{10, 11}),
 			},
 			expected: map[string]float64{
 				keys[1]: 1.0,
@@ -545,7 +545,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			// Blocks with this resolution should not be downsampled.
 			testName: "res_level2_test",
 			input: []*metadata.Meta{
-				createBlockMeta(10, 0, downsample.DownsampleRange1, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{11, 12}),
+				createBlockMeta(10, 0, downsample.ResLevel2DownsampleRange, map[string]string{"a": "1", "b": "2"}, downsample.ResLevel2, []uint64{11, 12}),
 			},
 			expected: map[string]float64{
 				keys[2]: 0.0,
@@ -555,7 +555,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			// This block should be downsampled.
 			testName: "res_level0_test_incorrect",
 			input: []*metadata.Meta{
-				createBlockMeta(9, 1, downsample.DownsampleRange0, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{10, 11}),
+				createBlockMeta(9, 1, downsample.ResLevel1DownsampleRange, map[string]string{"a": "1"}, downsample.ResLevel0, []uint64{10, 11}),
 			},
 			expected: map[string]float64{
 				keys[0]: 0.0,
@@ -566,7 +566,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 			// This block should be downsampled.
 			testName: "res_level1_test",
 			input: []*metadata.Meta{
-				createBlockMeta(9, 1, downsample.DownsampleRange1, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{10, 11}),
+				createBlockMeta(9, 1, downsample.ResLevel2DownsampleRange, map[string]string{"b": "2"}, downsample.ResLevel1, []uint64{10, 11}),
 			},
 			expected: map[string]float64{
 				keys[1]: 0.0,

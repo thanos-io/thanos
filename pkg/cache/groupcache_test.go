@@ -84,11 +84,13 @@ func TestMain(m *testing.M) {
 	go func() {
 		if err = httpServer.ListenAndServe(); err != nil {
 			fmt.Printf("failed to listen: %s\n", err.Error())
+			os.Exit(1)
 		}
 	}()
 	go func() {
 		if err = httpServerH2C.ListenAndServe(); err != nil {
 			fmt.Printf("failed to listen: %s\n", err.Error())
+			os.Exit(1)
 		}
 	}()
 
