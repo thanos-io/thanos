@@ -196,8 +196,8 @@ rules:
     severity: warning
 - alert: ThanosRuleNoEvaluationFor10Intervals
   annotations:
-    description: Thanos Rule {{$labels.job}} has {{$value | humanize}}% rule groups
-      that did not evaluate for at least 10x of their expected interval.
+    description: Thanos Rule {{$labels.job}} has rule groups that did not evaluate
+      for at least 10x of their expected interval.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosrulenoevaluationfor10intervals
     summary: Thanos Rule has rule groups that did not evaluate for 10 intervals.
   expr: |
