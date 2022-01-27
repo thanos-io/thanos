@@ -71,10 +71,10 @@ On the last meeting of the mentorship we want to finish with some *actionable le
 
 The example retrospective process looks as follows:
 
-* Week before last meeting Mentors are reminding Mentees about the last session and how retrospective will look like. This allows everyone to think through the week about things that worked and not.
-* On the last meeting, start first with retrospective. This is the most important part of meeting, don't let other things (e.g project status) to get in the path.
+  * Week before last meeting Mentors are reminding Mentees about the last session and how retrospective will look like. This allows everyone to think through the week about         things that worked and not.
+  * On the last meeting, start first with retrospective. This is the most important part of meeting, don't let other things (e.g project status) to get in the path.
   * Write in the Working doc 2 sections: `What we did well`, `What we could do better`.
-  * Give everyone 5m to write down (e.g live) items in those two sections. Be specific, blameless and honest. It's not about offending anyone, but looking for improvements for both Mentor and Mentees work. Be critical to yourself, but also try to balance the good and to improve parts. There is always something we could do better or worse.
+  * Give everyone 5m to write down (e.g live) items in those two sections. Be specific, blameless and honest. It's not about offending anyone, but looking for improvements for       both Mentor and Mentees work. Be critical to yourself, but also try to balance the good and to improve parts. There is always something we could do better or worse.
   * When everyone has finished, create new section: `Learnings`.
   * Go through all elements on the list. Discuss the details. Try to find ideas how to mitigate problem or what to continue doing. Write down those things in `Learning` section.
   * At the end share the learnings to the team on mailing list.
