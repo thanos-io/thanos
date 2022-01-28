@@ -121,7 +121,7 @@ func TestGroupKey(t *testing.T) {
 		},
 	} {
 		if ok := t.Run("", func(t *testing.T) {
-			testutil.Equals(t, tcase.expected, DefaultGroupKey(tcase.input))
+			testutil.Equals(t, tcase.expected, tcase.input.GroupKey())
 		}); !ok {
 			return
 		}
@@ -170,7 +170,7 @@ func BenchmarkGatherNoCompactionMarkFilter_Filter(b *testing.B) {
 				for n := 0; n <= b.N; n++ {
 					slowBucket := objstore.WithNoopInstr(objstore.WithDelay(bkt, time.Millisecond*2))
 					f := NewGatherNoCompactionMarkFilter(logger, slowBucket, i)
-					testutil.Ok(b, f.Filter(ctx, metas, m))
+					testutil.Ok(b, f.Filter(ctx, metas, m, nil))
 				}
 			})
 		}
@@ -228,7 +228,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 	m[2].Thanos.Labels = map[string]string{"a": "1", "b": "2"}
 	m[2].Thanos.Downsample.Resolution = downsample.ResLevel2
 	for ind, meta := range m {
-		keys[ind] = DefaultGroupKey(meta.Thanos)
+		keys[ind] = meta.Thanos.GroupKey()
 	}
 
 	ps := NewRetentionProgressCalculator(reg, nil)
@@ -369,7 +369,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 	m[2].Thanos.Labels = map[string]string{"a": "1", "b": "2"}
 	m[2].Thanos.Downsample.Resolution = 1
 	for ind, meta := range m {
-		keys[ind] = DefaultGroupKey(meta.Thanos)
+		keys[ind] = meta.Thanos.GroupKey()
 	}
 
 	ps := NewCompactionProgressCalculator(reg, planner)
@@ -491,7 +491,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 	m[2].Thanos.Labels = map[string]string{"a": "1", "b": "2"}
 	m[2].Thanos.Downsample.Resolution = downsample.ResLevel2
 	for ind, meta := range m {
-		keys[ind] = DefaultGroupKey(meta.Thanos)
+		keys[ind] = meta.Thanos.GroupKey()
 	}
 
 	ds := NewDownsampleProgressCalculator(reg)

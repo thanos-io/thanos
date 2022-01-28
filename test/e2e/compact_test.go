@@ -28,7 +28,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
@@ -455,7 +454,9 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		Type:   client.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 	}
-	str, err := e2ethanos.NewStoreGW(e, "1", svcConfig, "")
+
+	// Crank down the deletion mark delay since deduplication can miss blocks in the presence of replica labels it doesn't know about.
+	str, err := e2ethanos.NewStoreGW(e, "1", svcConfig, "", []string{"--ignore-deletion-marks-delay=2s"})
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(str))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8)), "thanos_blocks_meta_synced"))
@@ -618,7 +619,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		m, err := block.DownloadMeta(ctx, logger, bkt, blocksWithHashes[0])
 		testutil.Ok(t, err)
 
-		randBlockDir := filepath.Join(p, compact.DefaultGroupKey(m.Thanos), "ITISAVERYRANDULIDFORTESTS0")
+		randBlockDir := filepath.Join(p, m.Thanos.GroupKey(), "ITISAVERYRANDULIDFORTESTS0")
 		testutil.Ok(t, os.MkdirAll(randBlockDir, os.ModePerm))
 
 		f, err := os.Create(filepath.Join(randBlockDir, "index"))
@@ -680,7 +681,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 			testutil.Ok(t, err)
 
 			delete(m.Thanos.Labels, "replica")
-			testutil.Ok(t, block.Download(ctx, logger, bkt, id, filepath.Join(p, "compact", compact.DefaultGroupKey(m.Thanos), id.String())))
+			testutil.Ok(t, block.Download(ctx, logger, bkt, id, filepath.Join(p, "compact", m.Thanos.GroupKey(), id.String())))
 		}
 
 		extArgs := []string{"--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica"}
