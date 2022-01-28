@@ -29,7 +29,6 @@ require (
 	github.com/felixge/fgprof v0.9.1
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.5.1
-	github.com/go-kit/kit v0.12.0
 	github.com/go-kit/log v0.2.0
 	github.com/go-openapi/strfmt v0.21.0
 	github.com/go-redis/redis/v8 v8.11.4
@@ -72,6 +71,7 @@ require (
 	github.com/weaveworks/common v0.0.0-20210913144402-035033b78a78
 	go.elastic.co/apm v1.11.0
 	go.elastic.co/apm/module/apmot v1.11.0
+	go.opentelemetry.io/contrib/propagators/ot v1.3.0
 	go.opentelemetry.io/otel v1.3.0
 	go.opentelemetry.io/otel/bridge/opentracing v1.3.0
 	go.opentelemetry.io/otel/sdk v1.3.0
@@ -126,6 +126,7 @@ require (
 	github.com/envoyproxy/go-control-plane v0.10.1 // indirect
 	github.com/envoyproxy/protoc-gen-validate v0.6.2 // indirect
 	github.com/felixge/httpsnoop v1.0.2 // indirect
+	github.com/go-kit/kit v0.12.0 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/go-logr/logr v1.2.1 // indirect
 	github.com/go-logr/stdr v1.2.0 // indirect
@@ -206,6 +207,8 @@ replace (
 	github.com/efficientgo/tools/core => github.com/efficientgo/tools/core v0.0.0-20210731122119-5d4a0645ce9a
 	// Update to v1.1.1 to make sure windows CI pass.
 	github.com/elastic/go-sysinfo => github.com/elastic/go-sysinfo v1.1.1
+
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 => ../../grpc-ecosystem/go-grpc-middleware
 
 	// TODO: Remove this: https://github.com/thanos-io/thanos/issues/3967.
 	github.com/minio/minio-go/v7 => github.com/bwplotka/minio-go/v7 v7.0.11-0.20210324165441-f9927e5255a6
