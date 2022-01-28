@@ -330,7 +330,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
 			return err
 		}
@@ -386,7 +386,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, block.FetcherConcurrency)
 			filters = append(filters, ignoreDeletionMarkFilter)
 		}
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters, nil)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
 			return err
 		}
@@ -486,7 +486,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
 			return err
 		}
@@ -632,8 +632,8 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			[]block.MetadataFilter{
 				block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
 				block.NewLabelShardedMetaFilter(relabelConfig),
-				block.NewDeduplicateFilter(),
-			}, nil)
+				block.NewDeduplicateFilter(block.FetcherConcurrency),
+			})
 		if err != nil {
 			return err
 		}
@@ -786,7 +786,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, tbc.deleteDelay/2, block.FetcherConcurrency)
-		duplicateBlocksFilter := block.NewDeduplicateFilter()
+		duplicateBlocksFilter := block.NewDeduplicateFilter(block.FetcherConcurrency)
 		blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, tbc.deleteDelay, stubCounter, stubCounter)
 
 		ctx := context.Background()
@@ -803,7 +803,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 					block.NewConsistencyDelayMetaFilter(logger, tbc.consistencyDelay, extprom.WrapRegistererWithPrefix(extpromPrefix, reg)),
 					ignoreDeletionMarkFilter,
 					duplicateBlocksFilter,
-				}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, make([]string, 0))},
+				},
 			)
 			sy, err = compact.NewMetaSyncer(
 				logger,
@@ -1312,7 +1312,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, tbc.deleteDelay/2, block.FetcherConcurrency)
-		duplicateBlocksFilter := block.NewDeduplicateFilter()
+		duplicateBlocksFilter := block.NewDeduplicateFilter(block.FetcherConcurrency)
 		stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 
 		var sy *compact.Syncer
@@ -1327,7 +1327,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 					block.NewConsistencyDelayMetaFilter(logger, tbc.consistencyDelay, extprom.WrapRegistererWithPrefix(extpromPrefix, reg)),
 					duplicateBlocksFilter,
 					ignoreDeletionMarkFilter,
-				}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, make([]string, 0))},
+				},
 			)
 			sy, err = compact.NewMetaSyncer(
 				logger,

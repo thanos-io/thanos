@@ -66,6 +66,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		memcachedConfig,
+		nil,
 		relabel.Config{
 			Action:       relabel.Drop,
 			Regex:        relabel.MustNewRegexp("value2"),
@@ -303,6 +304,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		memcachedConfig,
+		nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
@@ -413,6 +415,7 @@ metafile_content_ttl: 0s`
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		fmt.Sprintf(groupcacheConfig, 1),
+		nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(store1))
@@ -425,6 +428,7 @@ metafile_content_ttl: 0s`
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		fmt.Sprintf(groupcacheConfig, 2),
+		nil,
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(store2))
@@ -437,6 +441,7 @@ metafile_content_ttl: 0s`
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		fmt.Sprintf(groupcacheConfig, 3),
+		nil,
 	)
 
 	testutil.Ok(t, err)
