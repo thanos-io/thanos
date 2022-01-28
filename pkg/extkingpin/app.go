@@ -104,8 +104,8 @@ func NewApp(app *kingpin.Application) *App {
 func (a *App) Parse() (cmd string, setup SetupFunc) {
 	cmd, err := a.app.Parse(os.Args[1:])
 	if err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "error parsing commandline arguments: %v", os.Args))
 		a.app.Usage(os.Args[1:])
+		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "error parsing commandline arguments: %v", os.Args))
 		os.Exit(2)
 	}
 	return cmd, a.setups[cmd]

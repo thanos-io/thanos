@@ -168,3 +168,9 @@ adopters:
 - name: SoundCloud
   url: https://www.soundcloud.com
   logo: soundcloud.png
+- name: Hyperia
+  url: https://www.hyperia.sk/
+  logo: hyperia.png
+- name: Epidemic Sound
+  url: https://www.epidemicsound.com/
+  logo: epidemicsound.png

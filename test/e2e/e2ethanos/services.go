@@ -4,9 +4,15 @@
 package e2ethanos
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io/ioutil"
+	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -25,7 +31,9 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
 )
@@ -653,7 +661,7 @@ receivers:
 	return s, nil
 }
 
-func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig string, relabelConfig ...relabel.Config) (*e2e.InstrumentedRunnable, error) {
+func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig string, extArgs []string, relabelConfig ...relabel.Config) (*e2e.InstrumentedRunnable, error) {
 	dir := filepath.Join(e.SharedDir(), "data", "store", name)
 	container := filepath.Join(ContainerSharedDir, "data", "store", name)
 	if err := os.MkdirAll(dir, 0750); err != nil {
@@ -670,7 +678,7 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		return nil, errors.Wrapf(err, "generate store relabel file: %v", relabelConfig)
 	}
 
-	args := e2e.BuildArgs(map[string]string{
+	args := append(e2e.BuildArgs(map[string]string{
 		"--debug.name":        fmt.Sprintf("store-gw-%v", name),
 		"--grpc-address":      ":9091",
 		"--grpc-grace-period": "0s",
@@ -684,7 +692,7 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		"--store.grpc.series-max-concurrency": "1",
 		"--selector.relabel-config":           string(relabelConfigBytes),
 		"--consistency-delay":                 "30m",
-	})
+	}), extArgs...)
 
 	if cacheConfig != "" {
 		args = append(args, "--store.caching-bucket.config", cacheConfig)
@@ -814,29 +822,43 @@ http {
 // NewMinio returns minio server, used as a local replacement for S3.
 // TODO(@matej-g): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/11;
 // after this is addresses fixed all calls should be replaced with e2edb.NewMinio.
-func NewMinio(env e2e.Environment, name, bktName string) *e2e.InstrumentedRunnable {
+func NewMinio(env e2e.Environment, name, bktName string) (*e2e.InstrumentedRunnable, error) {
 	image := "minio/minio:RELEASE.2019-12-30T05-45-39Z"
 	minioKESGithubContent := "https://raw.githubusercontent.com/minio/kes/master"
 	commands := []string{
 		"curl -sSL --tlsv1.2 -O '%s/root.key'	-O '%s/root.cert'",
-		"mkdir -p /data/%s && minio server --address :%v --quiet /data",
+		"mkdir -p /data/%s && minio server --certs-dir /shared/data/certs --address :%v --quiet /data",
+	}
+
+	if err := os.MkdirAll(filepath.Join(env.SharedDir(), "data", "certs", "CAs"), 0750); err != nil {
+		return nil, errors.Wrap(err, "create certs dir")
+	}
+
+	if err := genCerts(
+		filepath.Join(env.SharedDir(), "data", "certs", "public.crt"),
+		filepath.Join(env.SharedDir(), "data", "certs", "private.key"),
+		filepath.Join(env.SharedDir(), "data", "certs", "CAs", "ca.crt"),
+		env.Name()+"-"+name); err != nil {
+		return nil, errors.Wrap(err, "fail to generate certs")
 	}
 
 	return e2e.NewInstrumentedRunnable(
 		env,
 		name,
-		map[string]int{"http": 8090},
-		"http").Init(
+		map[string]int{"https": 8090},
+		"https").Init(
 		e2e.StartOptions{
 			Image: image,
 			// Create the required bucket before starting minio.
-			Command:   e2e.NewCommandWithoutEntrypoint("sh", "-c", fmt.Sprintf(strings.Join(commands, " && "), minioKESGithubContent, minioKESGithubContent, bktName, 8090)),
-			Readiness: e2e.NewHTTPReadinessProbe("http", "/minio/health/ready", 200, 200),
+			Command: e2e.NewCommandWithoutEntrypoint("sh", "-c", fmt.Sprintf(strings.Join(commands, " && "), minioKESGithubContent, minioKESGithubContent, bktName, 8090)),
+			//TODO(@clyang82): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/9
+			//Readiness: e2e.NewHTTPReadinessProbe("http", "/minio/health/ready", 200, 200),
+			Readiness: e2e.NewCmdReadinessProbe(e2e.NewCommand("sh", "-c", "sleep 1 && curl -k https://127.0.0.1:8090/minio/health/ready")),
 			EnvVars: map[string]string{
 				"MINIO_ACCESS_KEY": e2edb.MinioAccessKey,
 				"MINIO_SECRET_KEY": e2edb.MinioSecretKey,
 				"MINIO_BROWSER":    "off",
-				"ENABLE_HTTPS":     "0",
+				"ENABLE_HTTPS":     "1",
 				// https://docs.min.io/docs/minio-kms-quickstart-guide.html
 				"MINIO_KMS_KES_ENDPOINT":  "https://play.min.io:7373",
 				"MINIO_KMS_KES_KEY_FILE":  "root.key",
@@ -844,7 +866,7 @@ func NewMinio(env e2e.Environment, name, bktName string) *e2e.InstrumentedRunnab
 				"MINIO_KMS_KES_KEY_NAME":  "my-minio-key",
 			},
 		},
-	)
+	), nil
 }
 
 func NewMemcached(e e2e.Environment, name string) *e2e.InstrumentedRunnable {
@@ -913,4 +935,91 @@ func NewToolsBucketWeb(
 	)
 
 	return toolsBucketWeb, nil
+}
+
+// genCerts generates certificates and writes those to the provided paths.
+func genCerts(certPath, privkeyPath, caPath, serverName string) error {
+	var caRoot = &x509.Certificate{
+		SerialNumber:          big.NewInt(2019),
+		NotAfter:              time.Now().AddDate(10, 0, 0),
+		IsCA:                  true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+
+	var cert = &x509.Certificate{
+		SerialNumber: big.NewInt(1658),
+		DNSNames:     []string{serverName},
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")},
+		NotAfter:     time.Now().AddDate(10, 0, 0),
+		SubjectKeyId: []byte{1, 2, 3},
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+
+	caPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+
+	certPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+	// Generate CA cert.
+	caBytes, err := x509.CreateCertificate(rand.Reader, caRoot, caRoot, &caPrivKey.PublicKey, caPrivKey)
+	if err != nil {
+		return err
+	}
+	caPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: caBytes,
+	})
+	err = ioutil.WriteFile(caPath, caPEM, 0644)
+	if err != nil {
+		return err
+	}
+
+	// Sign the cert with the CA private key.
+	certBytes, err := x509.CreateCertificate(rand.Reader, cert, caRoot, &certPrivKey.PublicKey, caPrivKey)
+	if err != nil {
+		return err
+	}
+	certPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certBytes,
+	})
+	err = ioutil.WriteFile(certPath, certPEM, 0644)
+	if err != nil {
+		return err
+	}
+
+	certPrivKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
+	})
+	err = ioutil.WriteFile(privkeyPath, certPrivKeyPEM, 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func NewS3Config(bucket, endpoint, basePath string) s3.Config {
+	return s3.Config{
+		Bucket:    bucket,
+		AccessKey: e2edb.MinioAccessKey,
+		SecretKey: e2edb.MinioSecretKey,
+		Endpoint:  endpoint,
+		Insecure:  false,
+		HTTPConfig: s3.HTTPConfig{
+			TLSConfig: objstore.TLSConfig{
+				CAFile:   filepath.Join(basePath, "data", "certs", "CAs", "ca.crt"),
+				CertFile: filepath.Join(basePath, "data", "certs", "public.crt"),
+				KeyFile:  filepath.Join(basePath, "data", "certs", "private.key"),
+			},
+		},
+	}
 }

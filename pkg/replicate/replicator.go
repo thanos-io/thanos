@@ -174,7 +174,6 @@ func RunReplicate(
 		"",
 		reg,
 		[]thanosblock.MetadataFilter{thanosblock.NewTimePartitionMetaFilter(*minTime, *maxTime)},
-		nil,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "create meta fetcher with bucket %v", fromBkt)

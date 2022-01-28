@@ -9,17 +9,45 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
-- [#4970](https://github.com/thanos-io/thanos/pull/4970) Added a new flag `exclude-delete` to `tools bucket ls`, which excludes blocks marked for deletion.
 
 ### Added
 
+- [#4963](https://github.com/thanos-io/thanos/pull/4963) Compactor, Store, Tools: Loading block metadata now only filters out duplicates within a source (or compaction group if replica labels are configured), and does so in parallel over sources.
+- [#5089](https://github.com/thanos-io/thanos/pull/5089) S3: Create an empty map in the case SSE-KMS is used and no KMSEncryptionContext is passed.
+- [#4970](https://github.com/thanos-io/thanos/pull/4970) Added a new flag `exclude-delete` to `tools bucket ls`, which excludes blocks marked for deletion.
+- [#4903](https://github.com/thanos-io/thanos/pull/4903) Compactor: Added tracing support for compaction.
+- [#4909](https://github.com/thanos-io/thanos/pull/4909) Compactor: Add flag --max-time / --min-time to filter blocks that are ready to be compacted.
+- [#4942](https://github.com/thanos-io/thanos/pull/4942) Tracing: add `traceid_128bit` support for jaeger.
+- [#4917](https://github.com/thanos-io/thanos/pull/4917) Query: add initial query pushdown for a subset of aggregations. Can be enabled with `--enable-feature=query-pushdown` on Thanos Query.
+- [#4888](https://github.com/thanos-io/thanos/pull/4888) Cache: support redis cache backend.
+- [#4946](https://github.com/thanos-io/thanos/pull/4946) Store: Support tls_config configuration for the s3 minio client.
+- [#4974](https://github.com/thanos-io/thanos/pull/4974) Store: Support tls_config configuration for connecting with Azure storage.
+- [#4999](https://github.com/thanos-io/thanos/pull/4999) COS: Support `endpoint` configuration for vpc internal endpoint.
+- [#5059](https://github.com/thanos-io/thanos/pull/5059) Compactor: Adding minimum retention flag validation for downsampling retention.
+
+### Fixed
+
+- [#5051](https://github.com/thanos-io/thanos/pull/5051) Prober: Remove spam of changing probe status.
+- [#4918](https://github.com/thanos-io/thanos/pull/4918) Tracing: Fixing force tracing with Jaeger.
+- [#4879](https://github.com/thanos-io/thanos/pull/4879) Bucket verify: Fixed bug causing wrong number of blocks to be checked.
+- [#4908](https://github.com/thanos-io/thanos/pull/4908) UI: Show 'minus' icon and add tooltip when store min / max time is not available.
+- [#4883](https://github.com/thanos-io/thanos/pull/4883) Mixin: adhere to RFC 1123 compatible component naming.
+
+## [v0.24.0](https://github.com/thanos-io/thanos/tree/release-0.24) - 2021.12.22
+
+### Added
+
+- [#4977](https://github.com/thanos-io/thanos/pull/4977) Build: Upgrade to `bingo v0.5.2` and implements `gotesplit` to allow for parallelism in our GitHub e2e tests.
 - [#4228](https://github.com/thanos-io/thanos/pull/4228) Tools `thanos bucket inspect`: Add flag `--output` to provide output method (table,csv,tsv).
-- [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: add `exemplar.partial-response` flag to control partial response.
-- [#4679](https://github.com/thanos-io/thanos/pull/4679) Added `enable-feature` flag to enable negative offsets and @ modifier, similar to Prometheus.
-- [#4696](https://github.com/thanos-io/thanos/pull/4696) Query: add cache name to tracing spans.
-- [#4710](https://github.com/thanos-io/thanos/pull/4710) Store: add metric to capture timestamp of the last loaded block.
+- [#4282](https://github.com/thanos-io/thanos/pull/4282) Query: *breaking :warning:* Add `--endpoint` flag to the querier. The `--store` flag will eventually be replaced.
+- [#4636](https://github.com/thanos-io/thanos/pull/4636) Azure: Support authentication using user-assigned managed identity
+- [#4680](https://github.com/thanos-io/thanos/pull/4680) Query: Add `exemplar.partial-response` flag to control partial response.
+- [#4679](https://github.com/thanos-io/thanos/pull/4679) Query: Add `enable-feature` flag to enable negative offsets and `@` modifier, similar to Prometheus.
+- [#4696](https://github.com/thanos-io/thanos/pull/4696) Query: Add cache name to tracing spans.
+- [#4710](https://github.com/thanos-io/thanos/pull/4710) Store: Add metric to capture timestamp of the last loaded block.
 - [#4736](https://github.com/thanos-io/thanos/pull/4736) S3: Add capability to use custom AWS STS Endpoint.
 - [#4764](https://github.com/thanos-io/thanos/pull/4764) Compactor: add `block-viewer.global.sync-block-timeout` flag to set the timeout of synchronization block metas.
+- [#4818](https://github.com/thanos-io/thanos/pull/4818) *EXPERIMENTAL* store: Add Groupcache as a cache backend. [Original issue](https://github.com/thanos-io/thanos/issues/2962).
 - [#4801](https://github.com/thanos-io/thanos/pull/4801) Compactor: added Prometheus metrics for tracking the progress of compaction and downsampling.
 - [#4444](https://github.com/thanos-io/thanos/pull/4444) UI: add mark deletion and no compaction to the Block UI.
 - [#4576](https://github.com/thanos-io/thanos/pull/4576) UI: add filter compaction level to the Block UI.
@@ -27,38 +55,57 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4612](https://github.com/thanos-io/thanos/pull/4612) Sidecar: add `--prometheus.http-client` and `--prometheus.http-client-file` flag for sidecar to connect Prometheus with basic auth or TLS.
 - [#4847](https://github.com/thanos-io/thanos/pull/4847) Query: add `--alert.query-url` which is used in the user interface for rules/alerts pages. By default the HTTP listen address is used for this URL.
 - [#4856](https://github.com/thanos-io/thanos/pull/4856) Mixin: Add Query Frontend Grafana dashboard.
+- [#4848](https://github.com/thanos-io/thanos/pull/4848) Compactor: added Prometheus metric for tracking the progress of retention.
 - [#4874](https://github.com/thanos-io/thanos/pull/4874) Query: Add `--endpoint-strict` flag to statically configure Thanos API server endpoints. It is similar to `--store-strict` but supports passing any Thanos gRPC APIs: StoreAPI, MetadataAPI, RulesAPI, TargetsAPI and ExemplarsAPI.
 - [#4868](https://github.com/thanos-io/thanos/pull/4868) Rule: Support ruleGroup limit introduced by Prometheus v2.31.0.
-- [#4897](https://github.com/thanos-io/thanos/pull/4897) Querier: Add validation for querier address flags.
-- [#4903](https://github.com/thanos-io/thanos/pull/4903) Compactor: Added tracing support for compaction.
-- [#4909](https://github.com/thanos-io/thanos/pull/4909) Compactor: Add flag --max-time / --min-time to filter blocks that are ready to be compacted.
-- [#4942](https://github.com/thanos-io/thanos/pull/4942) Tracing: add `traceid_128bit` support for jaeger.
-- [#4917](https://github.com/thanos-io/thanos/pull/4917) Query: add initial query pushdown for a subset of aggregations. Can be enabled with `--enable-feature=query-pushdown` on Thanos Query.
-- [#4888](https://github.com/thanos-io/thanos/pull/4888) Cache: support redis cache backend.
-- [#4946](https://github.com/thanos-io/thanos/pull/4946) Store: Support tls_config configuration for the s3 minio client.
+- [#4897](https://github.com/thanos-io/thanos/pull/4897) Query: Add validation for querier address flags.
 
 ### Fixed
 
-- [#4508](https://github.com/thanos-io/thanos/pull/4508) Adjust and rename `ThanosSidecarUnhealthy` to `ThanosSidecarNoConnectionToStartedPrometheus`; Remove `ThanosSidecarPrometheusDown` alert; Remove unused `thanos_sidecar_last_heartbeat_success_time_seconds` metrics.
+- [#4508](https://github.com/thanos-io/thanos/pull/4508) Sidecar, Mixin: Rename `ThanosSidecarUnhealthy` to `ThanosSidecarNoConnectionToStartedPrometheus`; Remove `ThanosSidecarPrometheusDown` alert; Remove unused `thanos_sidecar_last_heartbeat_success_time_seconds` metrics.
 - [#4663](https://github.com/thanos-io/thanos/pull/4663) Fetcher: Fix discovered data races.
 - [#4754](https://github.com/thanos-io/thanos/pull/4754) Query: Fix possible panic on stores endpoint.
-- [#4753](https://github.com/thanos-io/thanos/pull/4753) Store: validate block sync concurrency parameter
+- [#4753](https://github.com/thanos-io/thanos/pull/4753) Store: validate block sync concurrency parameter.
 - [#4779](https://github.com/thanos-io/thanos/pull/4779) Examples: Fix the interactive test for MacOS users.
 - [#4792](https://github.com/thanos-io/thanos/pull/4792) Store: Fix data race in BucketedBytes pool.
-- [#4769](https://github.com/thanos-io/thanos/pull/4769) Query-frontend+api: add "X-Request-ID" field and other fields to start call log.
-- [#4918](https://github.com/thanos-io/thanos/pull/4918) Tracing: Fixing force tracing with Jaeger.
+- [#4769](https://github.com/thanos-io/thanos/pull/4769) Query Frontend: Add "X-Request-ID" field and other fields to start call log.
+- [#4709](https://github.com/thanos-io/thanos/pull/4709) Store: Fix panic when the application is stopped.
+- [#4777](https://github.com/thanos-io/thanos/pull/4777) Query: Fix data race in exemplars server.
+- [#4811](https://github.com/thanos-io/thanos/pull/4811) Query: Fix data race in metadata, rules, and targets servers.
+- [#4795](https://github.com/thanos-io/thanos/pull/4795) Query: Fix deadlock in endpointset.
 - [#4928](https://github.com/thanos-io/thanos/pull/4928) Azure: Only create an http client once, to conserve memory.
-- [#4879](https://github.com/thanos-io/thanos/pull/4879) Bucket verify: Fixed bug causing wrong number of blocks to be checked.
 - [#4962](https://github.com/thanos-io/thanos/pull/4962) Compact/downsample: fix deadlock if error occurs with some backlog of blocks; fixes [this pull request](https://github.com/thanos-io/thanos/pull/4430). Affected versions are 0.22.0 - 0.23.1.
 
 ### Changed
 
+- [#4864](https://github.com/thanos-io/thanos/pull/4864) UI: Remove the old PromQL editor.
+- [#4708](https://github.com/thanos-io/thanos/pull/4708) Receive: Remove gRPC message size limit, which fixes errors commonly seen when receivers forward messages within a hashring.
+
+## [v0.23.2](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.12.22
+
+### Fixed
+
+- [#4795](https://github.com/thanos-io/thanos/pull/4795) Query: Fix deadlock in endpointset.
+- [#4962](https://github.com/thanos-io/thanos/pull/4962) Compact/downsample: fix deadlock if error occurs with some backlog of blocks; fixes [this pull request](https://github.com/thanos-io/thanos/pull/4430). Affected versions are 0.22.0 - 0.23.1.
 - [#4939](https://github.com/thanos-io/thanos/pull/4939) Sidecar: set Sidecar to NOT READY when it cannot establish a connection with Prometheus
 - [#4864](https://github.com/thanos-io/thanos/pull/4864) UI: Remove the old PromQL editor
 
 ## [v0.23.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.10.1
 
 - [#4714](https://github.com/thanos-io/thanos/pull/4714) EndpointSet: Do not use unimplemented yet new InfoAPI to obtain metadata (avoids unnecessary HTTP roundtrip, instrumentation/alerts spam and logs).
+
+## [v0.23.2](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.12.22
+
+### Fixed
+
+- [#4795](https://github.com/thanos-io/thanos/pull/4795) Query: Fix deadlock in endpointset.
+- [#4962](https://github.com/thanos-io/thanos/pull/4962) Compact/downsample: fix deadlock if error occurs with some backlog of blocks; fixes [this pull request](https://github.com/thanos-io/thanos/pull/4430). Affected versions are 0.22.0 - 0.23.1.
+
+## [v0.23.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.10.1
+
+### Fixed
+
+- [#4714](https://github.com/thanos-io/thanos/pull/4714) Endpointset: Do not use info client to obtain metadata.
 
 ## [v0.23.0](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.09.23
 
@@ -160,10 +207,12 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4123](https://github.com/thanos-io/thanos/pull/4123) Query: match external labels for exemplars API.
 
 ### Changed
-- 
+
+-
 
 ### Removed
-- 
+
+-
 
 ## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.04.28
 
@@ -183,7 +232,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#3204](https://github.com/thanos-io/thanos/pull/3204) Mixin: Use sidecar's metric timestamp for healthcheck.
-- [#3922](https://github.com/thanos-io/thanos/pull/3922) *: Fix panic in http logging middleware.
+- [#3922](https://github.com/thanos-io/thanos/pull/3922) \*: Fix panic in http logging middleware.
 - [#3960](https://github.com/thanos-io/thanos/pull/3960) Ruler: Fix deduplication of equal alerts with different labels.
 - [#3937](https://github.com/thanos-io/thanos/pull/3937) Store: Fix race condition in chunk pool.
 - [#4017](https://github.com/thanos-io/thanos/pull/4017) Query Frontend: fix downsampling iterator returning duplicate samples.
@@ -200,12 +249,12 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4062](https://github.com/thanos-io/thanos/pull/4062) Flags: Sort flags alphabetically.
 - [#4081](https://github.com/thanos-io/thanos/pull/4081) UI: Make the ReactUI the default one.
 - [#4085](https://github.com/thanos-io/thanos/pull/4085) Receive: Improved Performance for err path.
-- [#4094](https://github.com/thanos-io/thanos/pull/4094) *: Upgrade Prometheus & Alertmanager.
+- [#4094](https://github.com/thanos-io/thanos/pull/4094) \*: Upgrade Prometheus & Alertmanager.
 
 ## [v0.19.0](https://github.com/thanos-io/thanos/releases/tag/v0.19.0) - 2021.03.31
 
 - [#3700](https://github.com/thanos-io/thanos/pull/3700) Compact/Web: Make old bucket viewer UI work with vanilla Prometheus blocks.
-- [#3657](https://github.com/thanos-io/thanos/pull/3657) *: It's now possible to configure HTTP transport options for S3 client.
+- [#3657](https://github.com/thanos-io/thanos/pull/3657) \*: It's now possible to configure HTTP transport options for S3 client.
 - [#3752](https://github.com/thanos-io/thanos/pull/3752) Compact/Store: Added `--block-meta-fetch-concurrency` allowing to configure number of go routines for block metadata synchronization.
 - [#3723](https://github.com/thanos-io/thanos/pull/3723) Query Frontend: Added `--query-range.request-downsampled` flag enabling additional queries for downsampled data in case of empty or incomplete response to range request.
 - [#3579](https://github.com/thanos-io/thanos/pull/3579) Cache: Added inmemory cache for caching bucket.
@@ -302,7 +351,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#3431](https://github.com/thanos-io/thanos/pull/3431) Store: Added experimental support to lazy load index-headers at query time. When enabled via `--store.enable-index-header-lazy-reader` flag, the store-gateway will load into memory an index-header only once it's required at query time. Index-header will be automatically released after `--store.index-header-lazy-reader-idle-timeout` of inactivity.
   - This, generally, reduces baseline memory usage of store when inactive, as well as a total number of mapped files (which is limited to 64k in some systems.
 - [#3437](https://github.com/thanos-io/thanos/pull/3437) StoreAPI: Added `hints` field to `LabelNamesResponse` and `LabelValuesResponse`. Hints in an opaque data structure that can be used to carry additional information from the store and its content is implementation specific.
-  * This, generally, reduces baseline memory usage of store when inactive, as well as a total number of mapped files (which is limited to 64k in some systems.
+  - This, generally, reduces baseline memory usage of store when inactive, as well as a total number of mapped files (which is limited to 64k in some systems.
 - [#3415](https://github.com/thanos-io/thanos/pull/3415) Tools: Added `thanos tools bucket mark` command that allows to mark given block for deletion or for no-compact
 
 ### Fixed
@@ -811,8 +860,8 @@ To migrate over the old `--gcloudtrace.*` configuration, your tracing configurat
 ---
 type: STACKDRIVER
 config:
-  - service_name: 'foo'
-    project_id: '123'
+  - service_name: "foo"
+    project_id: "123"
     sample_factor: 123
 ```
 

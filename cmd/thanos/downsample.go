@@ -24,7 +24,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -86,8 +85,8 @@ func RunDownsample(
 	}
 
 	metaFetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
-		block.NewDeduplicateFilter(),
-	}, nil)
+		block.NewDeduplicateFilter(block.FetcherConcurrency),
+	})
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
@@ -121,7 +120,7 @@ func RunDownsample(
 			}
 
 			for _, meta := range metas {
-				groupKey := compact.DefaultGroupKey(meta.Thanos)
+				groupKey := meta.Thanos.GroupKey()
 				metrics.downsamples.WithLabelValues(groupKey)
 				metrics.downsampleFailures.WithLabelValues(groupKey)
 			}
@@ -252,10 +251,11 @@ func downsampleBucket(
 					errMsg = "downsampling to 60 min"
 				}
 				if err := processDownsampling(workerCtx, logger, bkt, m, dir, resolution, hashFunc, metrics); err != nil {
-					metrics.downsampleFailures.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
+					metrics.downsampleFailures.WithLabelValues(m.Thanos.GroupKey()).Inc()
 					errCh <- errors.Wrap(err, errMsg)
+
 				}
-				metrics.downsamples.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Inc()
+				metrics.downsamples.WithLabelValues(m.Thanos.GroupKey()).Inc()
 			}
 		}()
 	}
@@ -283,7 +283,7 @@ metaSendLoop:
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
 			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
+			if m.MaxTime-m.MinTime < downsample.ResLevel1DownsampleRange {
 				continue
 			}
 
@@ -301,7 +301,7 @@ metaSendLoop:
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
 			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
+			if m.MaxTime-m.MinTime < downsample.ResLevel2DownsampleRange {
 				continue
 			}
 		}
@@ -377,7 +377,7 @@ func processDownsampling(
 	downsampleDuration := time.Since(begin)
 	level.Info(logger).Log("msg", "downsampled block",
 		"from", m.ULID, "to", id, "duration", downsampleDuration, "duration_ms", downsampleDuration.Milliseconds())
-	metrics.downsampleDuration.WithLabelValues(compact.DefaultGroupKey(m.Thanos)).Observe(downsampleDuration.Seconds())
+	metrics.downsampleDuration.WithLabelValues(m.Thanos.GroupKey()).Observe(downsampleDuration.Seconds())
 
 	if err := block.VerifyIndex(logger, filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
 		return errors.Wrap(err, "output block index not valid")

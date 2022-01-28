@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	promgate "github.com/prometheus/prometheus/util/gate"
@@ -308,6 +309,22 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	var warns storage.Warnings
 	for _, w := range resp.warnings {
 		warns = append(warns, errors.New(w))
+	}
+
+	// Delete the metric's name from the result because that's what the
+	// PromQL does either way and we want our iterator to work with data
+	// that was either pushed down or not.
+	if q.enableQueryPushdown && (hints.Func == "max_over_time" || hints.Func == "min_over_time") {
+		for i := range resp.seriesSet {
+			lbls := resp.seriesSet[i].Labels
+			for j, lbl := range lbls {
+				if lbl.Name != model.MetricNameLabel {
+					continue
+				}
+				resp.seriesSet[i].Labels = append(resp.seriesSet[i].Labels[:j], resp.seriesSet[i].Labels[j+1:]...)
+				break
+			}
+		}
 	}
 
 	if !q.isDedupEnabled() {

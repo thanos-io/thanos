@@ -347,6 +347,12 @@ config:
     max_idle_conns_per_host: 0
     max_conns_per_host: 0
     disable_compression: false
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
 ```
 
 If `msi_resource` is used, authentication is done via system-assigned managed identity. The value for Azure should be `https://<storage-account-name>.blob.core.windows.net`.
@@ -401,6 +407,7 @@ config:
   bucket: ""
   region: ""
   app_id: ""
+  endpoint: ""
   secret_key: ""
   secret_id: ""
   http_config:
@@ -412,6 +419,10 @@ config:
     max_idle_conns_per_host: 100
     max_conns_per_host: 0
 ```
+
+The `secret_key` and `secret_id` field is required. The `http_config` field is optional for optimize HTTP transport settings. There are two ways to configure the required bucket information:
+1. Provide the values of `bucket`, `region` and `app_id` keys.
+2. Provide the values of `endpoint` key with url format when you want to specify vpc internal endpoint. Please refer to the document of [endpoint](https://intl.cloud.tencent.com/document/product/436/6224) for more detail.
 
 Set the flags `--objstore.config-file` to reference to the configuration file.
 

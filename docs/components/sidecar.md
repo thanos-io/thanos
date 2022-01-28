@@ -22,7 +22,7 @@ If you choose to use the sidecar to also upload data to object storage:
 
 * Must specify object storage (`--objstore.*` flags)
 * It only uploads uncompacted Prometheus blocks. For compacted blocks, see [Upload compacted blocks](#upload-compacted-blocks).
-* The `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration` must be set to equal values to disable local compaction on order to use Thanos sidecar upload, otherwise leave local compaction on if sidecar just exposes StoreAPI and your retention is normal. The default of `2h` is recommended. Mentioned parameters set to equal values disable the internal Prometheus compaction, which is needed to avoid the uploaded data corruption when Thanos compactor does its job, this is critical for data consistency and should not be ignored if you plan to use Thanos compactor. Even though you set mentioned parameters equal, you might observe Prometheus internal metric `prometheus_tsdb_compactions_total` being incremented, don't be confused by that: Prometheus writes initial head block to filesystem via its internal compaction mechanism, but if you have followed recommendations - data won't be modified by Prometheus before the sidecar uploads it. Thanos sidecar will also check sanity of the flags set to Prometheus on the startup and log errors or warning if they have been configured improperly (#838).
+* The `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration` must be set to equal values to disable local compaction in order to use Thanos sidecar upload, otherwise leave local compaction on if sidecar just exposes StoreAPI and your retention is normal. The default of `2h` is recommended. Mentioned parameters set to equal values disable the internal Prometheus compaction, which is needed to avoid the corruption of uploaded data when Thanos compactor does its job, this is critical for data consistency and should not be ignored if you plan to use Thanos compactor. Even though you set mentioned parameters equal, you might observe Prometheus internal metric `prometheus_tsdb_compactions_total` being incremented, don't be confused by that: Prometheus writes initial head block to filesystem via its internal compaction mechanism, but if you have followed recommendations - data won't be modified by Prometheus before the sidecar uploads it. Thanos sidecar will also check sanity of the flags set to Prometheus on the startup and log errors or warning if they have been configured improperly (#838).
 * The retention of Prometheus is recommended to not be lower than three times of the min block duration, so 6 hours. This achieves resilience in the face of connectivity issues to the object storage since all local data will remain available within the Thanos cluster. If connectivity gets restored the backlog of blocks gets uploaded to the object storage.
 
 ## Reloader Configuration
@@ -75,7 +75,7 @@ usage: thanos sidecar [<flags>]
 Sidecar for Prometheus server.
 
 Flags:
-      --grpc-address="0.0.0.0:10901"  
+      --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
@@ -83,7 +83,7 @@ Flags:
                                  GRPC Server.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
-      --grpc-server-tls-client-ca=""  
+      --grpc-server-tls-client-ca=""
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
@@ -97,7 +97,7 @@ Flags:
                                  Possible values are: "", "SHA256".
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
-      --http-address="0.0.0.0:10902"  
+      --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
@@ -107,72 +107,72 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
-      --min-time=0000-01-01T00:00:00Z  
+      --min-time=0000-01-01T00:00:00Z
                                  Start of time range limit to serve. Thanos
                                  sidecar will serve only metrics, which happened
                                  later than this value. Option can be a constant
                                  time in RFC3339 format or time duration
                                  relative to current time, such as -1d or 2h45m.
                                  Valid duration units are ms, s, m, h, d, w, y.
-      --objstore.config=<content>  
+      --objstore.config=<content>
                                  Alternative to 'objstore.config-file' flag
                                  (mutually exclusive). Content of YAML file that
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config-file=<file-path>  
+      --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --prometheus.http-client=<content>  
+      --prometheus.http-client=<content>
                                  Alternative to 'prometheus.http-client-file'
                                  flag (mutually exclusive). Content of YAML file
                                  or string with http client configs. see Format
                                  details : ...
-      --prometheus.http-client-file=<file-path>  
+      --prometheus.http-client-file=<file-path>
                                  Path to YAML file or string with http client
                                  configs. see Format details : ...
-      --prometheus.ready_timeout=10m  
+      --prometheus.ready_timeout=10m
                                  Maximum time to wait for the Prometheus
                                  instance to start up
-      --prometheus.url=http://localhost:9090  
+      --prometheus.url=http://localhost:9090
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.
-      --reloader.config-envsubst-file=""  
+      --reloader.config-envsubst-file=""
                                  Output file for environment variable
                                  substituted config file.
       --reloader.config-file=""  Config file watched by the reloader.
-      --reloader.retry-interval=5s  
+      --reloader.retry-interval=5s
                                  Controls how often reloader retries config
                                  reload in case of error.
-      --reloader.rule-dir=RELOADER.RULE-DIR ...  
+      --reloader.rule-dir=RELOADER.RULE-DIR ...
                                  Rule directories for the reloader to refresh
                                  (repeated field).
-      --reloader.watch-interval=3m  
+      --reloader.watch-interval=3m
                                  Controls how often reloader re-reads config and
                                  rules.
-      --request.logging-config=<content>  
+      --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content of YAML file
                                  with request logging configuration. See format
                                  details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --request.logging-config-file=<file-path>  
+      --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
-      --shipper.upload-compacted  
+      --shipper.upload-compacted
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.
                                  Works only if compaction is disabled on
                                  Prometheus. Do it once and then disable the
                                  flag when done.
-      --tracing.config=<content>  
+      --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file with
                                  tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config-file=<file-path>  
+      --tracing.config-file=<file-path>
                                  Path to YAML file with tracing configuration.
                                  See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
