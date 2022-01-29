@@ -81,6 +81,11 @@ func (httpConf *HTTPConfig) UnmarshalYAML(value *yaml2.Node) error {
 	type transport httpconfig.TransportConfig
 	type tls httpconfig.TLSConfig
 
+	// Decoding at individual level to support old notation for HTTPConfig across object store. ie;
+	// http_config:
+	//     insecure_skip_verify: true  <- to support this old notation
+	//     tls_config:
+	//	       insecure_skip_verify: false <- and this new notation
 	if err := value.Decode((*conf)(httpConf)); err != nil {
 		return err
 	}
