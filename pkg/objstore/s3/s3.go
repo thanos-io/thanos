@@ -59,7 +59,6 @@ var DefaultConfig = Config{
 	PutUserMetadata: map[string]string{},
 	HTTPConfig: HTTPConfig{
 		TransportConfig: httpconfig.DefaultTransportConfig,
-		TLSConfig:       httpconfig.TLSConfig{},
 	},
 	PartSize: 1024 * 1024 * 64, // 64MB.
 }
