@@ -185,14 +185,14 @@ func TestParseConfig_DefaultHTTPConfig(t *testing.T) {
 	cfg, err := parseConfig(validConfig)
 	testutil.Ok(t, err)
 
-	if time.Duration(cfg.HTTPConfig.TransportConfig.IdleConnTimeout) != time.Duration(90*time.Second) {
+	if time.Duration(cfg.HTTPConfig.TransportConfig.IdleConnTimeout) != 90*time.Second {
 		t.Errorf("parsing of idle_conn_timeout failed: got %v, expected %v",
 			time.Duration(cfg.HTTPConfig.TransportConfig.IdleConnTimeout), time.Duration(90*time.Second))
 	}
 
-	if time.Duration(cfg.HTTPConfig.TransportConfig.ResponseHeaderTimeout) != time.Duration(2*time.Minute) {
+	if time.Duration(cfg.HTTPConfig.TransportConfig.ResponseHeaderTimeout) != time.Duration(0*time.Second) {
 		t.Errorf("parsing of response_header_timeout failed: got %v, expected %v",
-			time.Duration(cfg.HTTPConfig.TransportConfig.IdleConnTimeout), time.Duration(2*time.Minute))
+			time.Duration(cfg.HTTPConfig.TransportConfig.ResponseHeaderTimeout), 0*time.Second)
 	}
 
 	if cfg.HTTPConfig.TLSConfig.InsecureSkipVerify {
