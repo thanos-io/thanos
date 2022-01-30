@@ -127,48 +127,6 @@ func (httpConf *HTTPConfig) UnmarshalYAML(value *yaml2.Node) error {
 	return nil
 }
 
-// DefaultTransport - this default transport is based on the Minio
-// DefaultTransport up until the following commit:
-// https://github.com/minio/minio-go/commit/008c7aa71fc17e11bf980c209a4f8c4d687fc884
-// The values have since diverged.
-// func DefaultTransport(config Config) (*http.Transport, error) {
-// 	tlsConfig, err := objstore.NewTLSConfig(&config.HTTPConfig.TLSConfig)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	if config.HTTPConfig.TLSConfig.InsecureSkipVerify {
-// 		tlsConfig.InsecureSkipVerify = true
-// 	}
-
-// 	return &http.Transport{
-// 		Proxy: http.ProxyFromEnvironment,
-// 		DialContext: (&net.Dialer{
-// 			Timeout:   30 * time.Second,
-// 			KeepAlive: 30 * time.Second,
-// 			DualStack: true,
-// 		}).DialContext,
-
-// 		MaxIdleConns:          config.HTTPConfig.MaxIdleConns,
-// 		MaxIdleConnsPerHost:   config.HTTPConfig.MaxIdleConnsPerHost,
-// 		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
-// 		MaxConnsPerHost:       config.HTTPConfig.MaxConnsPerHost,
-// 		TLSHandshakeTimeout:   time.Duration(config.HTTPConfig.TLSHandshakeTimeout),
-// 		ExpectContinueTimeout: time.Duration(config.HTTPConfig.ExpectContinueTimeout),
-// 		// A custom ResponseHeaderTimeout was introduced
-// 		// to cover cases where the tcp connection works but
-// 		// the server never answers. Defaults to 2 minutes.
-// 		ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
-// 		// Set this value so that the underlying transport round-tripper
-// 		// doesn't try to auto decode the body of objects with
-// 		// content-encoding set to `gzip`.
-// 		//
-// 		// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
-// 		DisableCompression: true,
-// 		TLSClientConfig:    tlsConfig,
-// 	}, nil
-// }
-
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
 	logger          log.Logger
@@ -256,15 +214,9 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	// otherwise build the default transport.
 	// var rt http.RoundTripper
 	rt, err := httpconfig.NewRoundTripperFromConfig(promConfig.DefaultHTTPClientConfig, config.HTTPConfig.TransportConfig, "azure")
-
-	// if config.HTTPConfig.TransportConfig != nil {
-	// } else {
-	// 	var err error
-	// 	rt, err = DefaultTransport(config)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// }
+	if err != nil {
+		return nil, err
+	}
 
 	client, err := minio.New(config.Endpoint, &minio.Options{
 		Creds:     credentials.NewChainCredentials(chain),
