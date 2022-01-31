@@ -61,13 +61,13 @@ func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*ru
 		return nil, nil, errors.Wrap(err, "proxy Rules")
 	}
 
-	var matcherSets [][]*labels.Matcher
-	for _, s := range req.MatcherString {
-		matchers, err := parser.ParseMetricSelector(s)
+	var err error
+	matcherSets := make([][]*labels.Matcher, len(req.MatcherString))
+	for i, s := range req.MatcherString {
+		matcherSets[i], err = parser.ParseMetricSelector(s)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "proxy Rules")
+			return nil, nil, errors.Wrap(err, "parser ParseMetricSelector")
 		}
-		matcherSets = append(matcherSets, matchers)
 	}
 
 	resp.groups = filterRules(resp.groups, matcherSets)
