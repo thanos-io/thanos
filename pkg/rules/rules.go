@@ -87,7 +87,7 @@ func filterRules(ruleGroups []*rulespb.RuleGroup, matcherSets [][]*labels.Matche
 	}
 
 	for _, g := range ruleGroups {
-		filteredRules := []*rulespb.Rule{}
+		filteredRules := g.Rules[:0]
 		for _, r := range g.Rules {
 			rl := r.GetLabels()
 			if matches(matcherSets, rl) {
