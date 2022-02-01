@@ -199,7 +199,8 @@ func isDirEmpty(name string) (ok bool, err error) {
 	if os.IsNotExist(err) {
 		// The directory doesn't exist. We don't consider it an error and we treat it like empty.
 		return true, nil
-	} else if err != nil {
+	}
+	if err != nil {
 		return false, err
 	}
 	defer runutil.CloseWithErrCapture(&err, f, "dir open")
