@@ -33,6 +33,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4879](https://github.com/thanos-io/thanos/pull/4879) Bucket verify: Fixed bug causing wrong number of blocks to be checked.
 - [#4908](https://github.com/thanos-io/thanos/pull/4908) UI: Show 'minus' icon and add tooltip when store min / max time is not available.
 - [#4883](https://github.com/thanos-io/thanos/pull/4883) Mixin: adhere to RFC 1123 compatible component naming.
+- [#5114](https://github.com/thanos-io/thanos/pull/5114) Tools `thanos bucket inspect` fix time formatting.
 
 ## [v0.24.0](https://github.com/thanos-io/thanos/tree/release-0.24) - 2021.12.22
 
