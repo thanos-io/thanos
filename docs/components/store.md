@@ -246,10 +246,11 @@ Check more [here](../sharding.md).
 
 ## Index cache
 
-Thanos Store Gateway supports an index cache to speed up postings and series lookups from TSDB blocks indexes. Two types of caches are supported:
+Thanos Store Gateway supports an index cache to speed up postings and series lookups from TSDB blocks indexes. Three types of caches are supported:
 
 - `in-memory` (*default*)
 - `memcached`
+- `redis`
 
 ### In-memory index cache
 

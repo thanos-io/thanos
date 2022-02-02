@@ -228,7 +228,7 @@ func runCompact(
 	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 	// This is to make sure compactor will not accidentally perform compactions with gap instead.
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
-	duplicateBlocksFilter := block.NewDeduplicateFilter()
+	duplicateBlocksFilter := block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency)
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt, conf.blockMetaFetchConcurrency)
 	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig)
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
@@ -271,9 +271,10 @@ func runCompact(
 				labelShardedMetaFilter,
 				consistencyDelayMetaFilter,
 				ignoreDeletionMarkFilter,
+				block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels),
 				duplicateBlocksFilter,
 				noCompactMarkerFilter,
-			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels)},
+			},
 		)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			compactorView.Set(blocks, err)
@@ -387,13 +388,21 @@ func runCompact(
 		compact.ResolutionLevel1h:  time.Duration(conf.retentionOneHr),
 	}
 
-	if retentionByResolution[compact.ResolutionLevelRaw].Seconds() != 0 {
+	if retentionByResolution[compact.ResolutionLevelRaw].Milliseconds() != 0 {
+		// If downsampling is enabled, error if raw retention is not sufficient for downsampling to occur (upper bound 10 days for 1h resolution)
+		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevelRaw].Milliseconds() < downsample.ResLevel1DownsampleRange {
+			return errors.New("raw resolution must be higher than the minimum block size after which 5m resolution downsampling will occur (40 hours)")
+		}
 		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
 	}
-	if retentionByResolution[compact.ResolutionLevel5m].Seconds() != 0 {
+	if retentionByResolution[compact.ResolutionLevel5m].Milliseconds() != 0 {
+		// If retention is lower than minimum downsample range, then no downsampling at this resolution will be persisted
+		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevel5m].Milliseconds() < downsample.ResLevel2DownsampleRange {
+			return errors.New("5m resolution retention must be higher than the minimum block size after which 1h resolution downsampling will occur (10 days)")
+		}
 		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel5m])
 	}
-	if retentionByResolution[compact.ResolutionLevel1h].Seconds() != 0 {
+	if retentionByResolution[compact.ResolutionLevel1h].Milliseconds() != 0 {
 		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
 	}
 
@@ -432,7 +441,7 @@ func runCompact(
 			}
 
 			for _, meta := range sy.Metas() {
-				groupKey := compact.DefaultGroupKey(meta.Thanos)
+				groupKey := meta.Thanos.GroupKey()
 				downsampleMetrics.downsamples.WithLabelValues(groupKey)
 				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
 			}
@@ -524,7 +533,7 @@ func runCompact(
 
 		// Separate fetcher for global view.
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of the block as well.
-		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, nil, "component", "globalBucketUI")
+		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, "component", "globalBucketUI")
 		f.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			global.Set(blocks, err)
 			api.SetGlobal(blocks, err)

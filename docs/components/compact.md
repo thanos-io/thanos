@@ -2,10 +2,9 @@
 
 The `thanos compact` command applies the compaction procedure of the Prometheus 2.0 storage engine to block data stored in object storage. It is generally not semantically concurrency safe and must be deployed as a singleton against a bucket.
 
-Compactor is also responsible for downsampling of data:
-
-* Creating 5m downsampling for blocks larger than **40 hours** (2d, 2w)
-* Creating 1h downsampling for blocks larger than **10 days** (2w)
+Compactor is also responsible for downsampling of data. There is a time delay before downsampling at a given resolution is possible. This is necessary because downsampled chunks will have fewer samples in them, and as chunks are fixed size, data spanning more time will be required to fill them.
+* Creating 5m downsampling for blocks older than **40 hours** (2d)
+* Creating 1h downsampling for blocks older than **10 days** (2w)
 
 Example:
 
@@ -160,6 +159,12 @@ Resolution is a distance between data points on your graphs. E.g.
 * `raw` - the same as scrape interval at the moment of data ingestion
 * `5 minutes` - data point is every 5 minutes
 * `1 hour` - data point is every 1h
+
+Compactor downsampling is done in two passes:
+1) All raw resolution metrics that are older than **40 hours** are downsampled at a 5m resolution
+2) All 5m resolution metrics older than **10 days** are downsampled at a 1h resolution
+
+> **NOTE:** If retention at each resolution is lower than minimum age for the successive downsampling pass, data will be deleted before downsampling can be completed. As a rule of thumb retention for each downsampling level should be the same, and should be greater than the maximum date range (10 days for 5m to 1h downsampling).
 
 Keep in mind, that the initial goal of downsampling is not saving disk or object storage space. In fact, downsampling doesn't save you **any** space but instead, it adds 2 more blocks for each raw block which are only slightly smaller or relatively similar size to raw block. This is done by internal downsampling implementation which to be mathematically correct holds various aggregations. This means that downsampling can increase the size of your storage a bit (~3x), if you choose to store all resolutions (recommended and by default).
 

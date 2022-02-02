@@ -229,6 +229,7 @@ func runStore(
 		httpserver.WithListen(conf.httpConfig.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.httpConfig.gracePeriod)),
 		httpserver.WithTLSConfig(conf.httpConfig.tlsConfig),
+		httpserver.WithEnableH2C(true), // For groupcache.
 	)
 
 	g.Add(func() error {
@@ -303,8 +304,8 @@ func runStore(
 			block.NewLabelShardedMetaFilter(relabelConfig),
 			block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
 			ignoreDeletionMarkFilter,
-			block.NewDeduplicateFilter(),
-		}, nil)
+			block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
+		})
 	if err != nil {
 		return errors.Wrap(err, "meta fetcher")
 	}
