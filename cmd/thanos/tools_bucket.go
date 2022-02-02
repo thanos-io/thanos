@@ -417,7 +417,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 				maxTime := time.Unix(m.MaxTime/1000, 0)
 
 				if _, err = fmt.Fprintf(os.Stdout, "%s -- %s - %s Diff: %s, Compaction: %d, Downsample: %d, Source: %s\n",
-					m.ULID, minTime.Format("2006-01-02 15:04"), maxTime.Format("2006-01-02 15:04"), maxTime.Sub(minTime),
+					m.ULID, minTime.Format(time.RFC3339), maxTime.Format(time.RFC3339), maxTime.Sub(minTime),
 					m.Compaction.Level, m.Thanos.Downsample.Resolution, m.Thanos.Source); err != nil {
 					return err
 				}
@@ -911,8 +911,8 @@ func printBlockData(blockMetas []*metadata.Meta, selectorLabels labels.Labels, s
 		var line []string
 		line = append(line,
 			blockMeta.ULID.String(),
-			time.Unix(blockMeta.MinTime/1000, 0).Format("02-01-2006 15:04:05"),
-			time.Unix(blockMeta.MaxTime/1000, 0).Format("02-01-2006 15:04:05"),
+			time.Unix(blockMeta.MinTime/1000, 0).Format(time.RFC3339),
+			time.Unix(blockMeta.MaxTime/1000, 0).Format(time.RFC3339),
 			timeRange.String(),
 			untilDown,
 			p.Sprintf("%d", blockMeta.Stats.NumSeries),
@@ -997,8 +997,8 @@ func (t Table) Less(i, j int) bool {
 
 func compare(s1, s2 string) bool {
 	// Values can be either Time, Duration, comma-delimited integers or strings.
-	s1Time, s1Err := time.Parse("02-01-2006 15:04:05", s1)
-	s2Time, s2Err := time.Parse("02-01-2006 15:04:05", s2)
+	s1Time, s1Err := time.Parse(time.RFC3339, s1)
+	s2Time, s2Err := time.Parse(time.RFC3339, s2)
 	if s1Err != nil || s2Err != nil {
 		s1Duration, s1Err := time.ParseDuration(s1)
 		s2Duration, s2Err := time.ParseDuration(s2)
