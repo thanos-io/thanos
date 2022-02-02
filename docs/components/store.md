@@ -403,7 +403,7 @@ In addition to the same cache backends memcached/in-memory/redis, caching bucket
 
 ### *EXPERIMENTAL* Groupcache Caching Bucket Provider
 
-Groupcache is an experimental cache backend for the caching bucket introduced from version `v0.25` of Thanos. 
+Groupcache is an experimental cache backend for the caching bucket introduced from version `v0.25` of Thanos.
 
 With groupcache, you do not need any external components for the caching layer because the caching layer becomes shared between all of the processes of Thanos Store. Another benefit that it provides is that it is a cache filling library meaning that given enough space in memory, the values will only be loaded once. For example, if the same metric is used in multiple concurrent queries then with groupcache Thanos Store would only load the metric's data from remote object storage once.
 
@@ -415,7 +415,7 @@ Here is how it looks like:
 
 Note that with groupcache enabled, new routes are registed on the HTTP server with the prefix `/_groupcache`. Using those routes, anyone can access any kind of data in the configured remote object storage. So, if you are exposing your Thanos Store to the Internet then it is highly recommended to use a reverse proxy in front and disable access to `/_groupcache/...`.
 
-Currently TLS _is_ supported but on the client's side no verification is done of the received certificate. This will be added in the future. HTTP2 over cleartext is also enabled to improve the performance for users that don't use TLS.
+Currently TLS *is* supported but on the client's side no verification is done of the received certificate. This will be added in the future. HTTP2 over cleartext is also enabled to improve the performance for users that don't use TLS.
 
 Example configuration that you could provide to the caching bucket configuration flags with the explanation of each configuration key:
 
@@ -433,9 +433,9 @@ config:
 
 In this case, three Thanos Store nodes are running in the same group meaning that they all point to the same remote object storage.
 
-* `self_url` - our own URL. On each node this will be different. This should be the external IP through which other nodes could access us;
-* `groupcache_group` - the groupcache group's name. All nodes using the same remote object storage configuration should use the same name. It is used in the HTTP requests. If it is different then nodes will not be able to load data from each other.
-* `dns_internal` - how often DNS lookups should be made.
+- `self_url` - our own URL. On each node this will be different. This should be the external IP through which other nodes could access us;
+- `groupcache_group` - the groupcache group's name. All nodes using the same remote object storage configuration should use the same name. It is used in the HTTP requests. If it is different then nodes will not be able to load data from each other.
+- `dns_internal` - how often DNS lookups should be made.
 
 In the `peers` section it is possible to use the prefix form to automatically look up the peers using DNS. For example, you could use `dns+http://store.thanos.consul.svc:8080` to automatically look up healthy nodes from Consul using its DNS interface.
 
