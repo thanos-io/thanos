@@ -7,11 +7,13 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-kit/log"
@@ -76,6 +78,15 @@ func parseGroupcacheConfig(conf []byte) (GroupcacheConfig, error) {
 
 	if len(config.Peers) == 0 {
 		config.Peers = append(config.Peers, config.SelfURL)
+	}
+
+	for i, peer := range config.Peers {
+		// Workaround for https://github.com/thanos-community/galaxycache/blob/master/http/http.go#L205-L210.
+		// If the peer has a slash at the end then the router redirects
+		// and then the request fails.
+		if strings.HasSuffix(peer, "/") {
+			return GroupcacheConfig{}, fmt.Errorf("peer %d must not have a trailing slash (%s)", i, peer)
+		}
 	}
 
 	return config, nil
