@@ -16,8 +16,9 @@ import (
 var PushdownMarker = labels.Label{Name: "__thanos_pushed_down", Value: "true"}
 
 type pushdownSeriesIterator struct {
-	a, b     chunkenc.Iterator
-	aok, bok bool
+	a, b         chunkenc.Iterator
+	aok, bok     bool
+	aused, bused bool
 
 	function func(float64, float64) float64
 }
@@ -39,42 +40,64 @@ func newPushdownSeriesIterator(a, b chunkenc.Iterator, function string) *pushdow
 		panic(fmt.Errorf("unsupported function %s passed", function))
 	}
 	return &pushdownSeriesIterator{
-		a: a, b: b, function: fn,
+		a: a, b: b, function: fn, aused: true, bused: true,
 	}
 }
 
 func (it *pushdownSeriesIterator) Next() bool {
-	it.aok = it.a.Next()
-	it.bok = it.b.Next()
+	// Push A if we've used A before. Push B if we've used B before.
+	// Push both if we've used both before.
+	switch {
+	case !it.aused && !it.bused:
+		return false
+	case it.aused && !it.bused:
+		it.aok = it.a.Next()
+	case !it.aused && it.bused:
+		it.bok = it.b.Next()
+	case it.aused && it.bused:
+		it.aok = it.a.Next()
+		it.bok = it.b.Next()
+	}
+	it.aused = false
+	it.bused = false
+
 	return it.aok || it.bok
 }
 
 func (it *pushdownSeriesIterator) At() (int64, float64) {
-	ta, va := it.a.At()
-	tb, vb := it.b.At()
 
 	var timestamp int64
 	var val float64
 
 	if it.aok && it.bok {
+		ta, va := it.a.At()
+		tb, vb := it.b.At()
 		if ta == tb {
 			val = it.function(va, vb)
 			timestamp = ta
+			it.aused = true
+			it.bused = true
 		} else {
 			if ta < tb {
 				timestamp = ta
 				val = va
+				it.aused = true
 			} else {
 				timestamp = tb
 				val = vb
+				it.bused = true
 			}
 		}
 	} else if it.aok {
+		ta, va := it.a.At()
 		val = va
 		timestamp = ta
+		it.aused = true
 	} else {
+		tb, vb := it.b.At()
 		val = vb
 		timestamp = tb
+		it.bused = true
 	}
 
 	return timestamp, val
