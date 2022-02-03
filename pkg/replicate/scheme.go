@@ -199,6 +199,9 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 
 	for id, meta := range metas {
 		_, err := rs.fromBkt.ReaderWithExpectedErrs(rs.fromBkt.IsObjNotFoundErr).Get(ctx, path.Join(meta.ULID.String(), metadata.DeletionMarkFilename))
+		if err != nil && !rs.fromBkt.IsObjNotFoundErr(err) {
+			level.Debug(rs.logger).Log("msg", "failed to read deletion mark from origin bucket", "error", err)
+		}
 		if rs.blockFilter(meta, !rs.fromBkt.IsObjNotFoundErr(err)) {
 			level.Info(rs.logger).Log("msg", "adding block to be replicated", "block_uuid", id.String())
 			availableBlocks = append(availableBlocks, meta)
