@@ -42,7 +42,7 @@ describe('ScrapePoolList', () => {
       expect(mock).toHaveBeenCalledWith('../api/v1/targets?state=active', { cache: 'no-store', credentials: 'same-origin' });
       const panels = scrapePoolList.find(ScrapePoolPanel);
       expect(panels).toHaveLength(3);
-      const activeTargets: Target[] = sampleApiResponse.data.activeTargets as Target[];
+      const activeTargets: Target[] = sampleApiResponse.data.activeTargets as unknown as Target[];
       activeTargets.forEach(({ scrapePool }: Target) => {
         const panel = scrapePoolList.find(ScrapePoolPanel).filterWhere((panel) => panel.prop('scrapePool') === scrapePool);
         expect(panel).toHaveLength(1);
