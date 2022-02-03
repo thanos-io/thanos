@@ -74,11 +74,12 @@ func testDeletionMark(ulid ulid.ULID) *metadata.DeletionMark {
 func TestReplicationSchemeAll(t *testing.T) {
 	testBlockID := testULID(0)
 	var cases = []struct {
-		name     string
-		selector labels.Selector
-		blockIDs []ulid.ULID
-		prepare  func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
-		assert   func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
+		name                    string
+		selector                labels.Selector
+		blockIDs                []ulid.ULID
+		ignoreMarkedForDeletion bool
+		prepare                 func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
+		assert                  func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
 	}{
 		{
 			name:    "EmptyOrigin",
@@ -126,7 +127,8 @@ func TestReplicationSchemeAll(t *testing.T) {
 			},
 		},
 		{
-			name: "MarkedForDeletion",
+			name:                    "MarkedForDeletion",
+			ignoreMarkedForDeletion: true,
 			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				ulid := testULID(0)
 				meta := testMeta(ulid)
@@ -142,9 +144,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
 			},
 			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
-				if len(targetBucket.Objects()) != 0 {
-					t.Fatal("TargetBucket should have been empty but is not.")
-				}
+				testutil.Equals(t, map[string][]byte{}, targetBucket.Objects())
 			},
 		},
 		{
@@ -374,7 +374,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 			selector = c.selector
 		}
 
-		filter := NewBlockFilter(logger, selector, []compact.ResolutionLevel{compact.ResolutionLevelRaw}, []int{1}, c.blockIDs, true).Filter
+		filter := NewBlockFilter(logger, selector, []compact.ResolutionLevel{compact.ResolutionLevelRaw}, []int{1}, c.blockIDs, c.ignoreMarkedForDeletion).Filter
 		fetcher, err := block.NewMetaFetcher(logger, 32, objstore.WithNoopInstr(originBucket), "", nil, nil)
 		testutil.Ok(t, err)
 
