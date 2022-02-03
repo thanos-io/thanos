@@ -148,6 +148,32 @@ func TestReplicationSchemeAll(t *testing.T) {
 			},
 		},
 		{
+			name: "MissingDeletionMark",
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
+				ulid := testULID(0)
+				meta := testMeta(ulid)
+				deletionMark := testDeletionMark(ulid)
+
+				b, err := json.Marshal(meta)
+				testutil.Ok(t, err)
+				d, err := json.Marshal(deletionMark)
+				testutil.Ok(t, err)
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "meta.json"), bytes.NewReader(b))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "deletion-mark.json"), bytes.NewReader(d))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
+
+				_ = targetBucket.Upload(ctx, path.Join(ulid.String(), "meta.json"), bytes.NewReader(b))
+				_ = targetBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
+				_ = targetBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
+			},
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
+				if len(targetBucket.Objects()) != 4 {
+					t.Fatal("TargetBucket should have one block made up of four objects replicated.")
+				}
+			},
+		},
+		{
 			name: "PreviousPartialUpload",
 			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				ulid := testULID(0)

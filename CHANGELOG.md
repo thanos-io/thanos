@@ -28,6 +28,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4667](https://github.com/thanos-io/thanos/pull/4667) Add a pure aws-sdk auth for s3 storage.
 - [#5111](https://github.com/thanos-io/thanos/pull/5111) Add matcher support to Query Rules endpoint.
 - [#5117](https://github.com/thanos-io/thanos/pull/5117) Bucket replicate: Added flag `--ignore-marked-for-deletion` to avoid replication of blocks with the deletion mark.
+- [#5118](https://github.com/thanos-io/thanos/pull/5118) Bucket replicate: replicates also deletion marks.
 
 ### Fixed
 

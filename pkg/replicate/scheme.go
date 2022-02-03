@@ -230,6 +230,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	chunksDir := path.Join(blockID, thanosblock.ChunksDirname)
 	indexFile := path.Join(blockID, thanosblock.IndexFilename)
 	metaFile := path.Join(blockID, thanosblock.MetaFilename)
+	deletionMarkFile := path.Join(blockID, metadata.DeletionMarkFilename)
 
 	level.Debug(rs.logger).Log("msg", "ensuring block is replicated", "block_uuid", blockID)
 
@@ -254,6 +255,17 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	originMetaFileContent, err := ioutil.ReadAll(originMetaFile)
 	if err != nil {
 		return errors.Wrap(err, "read origin meta file")
+	}
+
+	// Make sure to replicate the deletion mark event if the block has already been replicated, it can appear later
+	originMarkedForDeletion, err := rs.fromBkt.Exists(ctx, deletionMarkFile)
+	if err != nil {
+		return errors.Wrap(err, "read deletion mark file")
+	}
+	if originMarkedForDeletion {
+		if err := rs.ensureObjectReplicated(ctx, deletionMarkFile); err != nil {
+			return errors.Wrap(err, "replicate deletion mark file")
+		}
 	}
 
 	if targetMetaFile != nil && !rs.toBkt.IsObjNotFoundErr(err) {
