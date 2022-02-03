@@ -82,7 +82,7 @@ func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*ru
 
 // filterRules filters rules in a group according to given matcherSets.
 func filterRules(ruleGroups []*rulespb.RuleGroup, matcherSets [][]*labels.Matcher) []*rulespb.RuleGroup {
-	if len(matcherSets) == 0 || len(ruleGroups) == 0 {
+	if len(matcherSets) == 0 {
 		return ruleGroups
 	}
 

@@ -1307,6 +1307,115 @@ func TestFilterRules(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:        "multiple group with templated labels and non templated matcher",
+			matcherSets: [][]*labels.Matcher{{&labels.Matcher{Name: "templatedlabel", Value: "foo", Type: labels.MatchEqual}}},
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1a",
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "templatedlabel", Value: "{{ $externalURL }}"},
+							}},
+						}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1b",
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "templated", Value: "{{ $externalURL }}"},
+							}},
+						}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name:  "a",
+					Rules: []*rulespb.Rule{},
+				},
+				{
+					Name:  "b",
+					Rules: []*rulespb.Rule{},
+				},
+			},
+		},
+		{
+			name:        "multiple group with regex matcher",
+			matcherSets: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchRegexp, "label", "f.*")}},
+			groups: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1a",
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1a", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1b", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "otherlabel", Value: "bar"},
+							}},
+						}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1b",
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "some", Value: "label"},
+							}},
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1b", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+					},
+				},
+			},
+			want: []*rulespb.RuleGroup{
+				{
+					Name: "a",
+					Rules: []*rulespb.Rule{
+						rulespb.NewAlertingRule(&rulespb.Alert{
+							Name: "a1a",
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1a", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+					},
+				},
+				{
+					Name: "b",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{
+							Name: "r1b", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "label", Value: "foo"},
+							}},
+						}),
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			testutil.Equals(t, tc.want, filterRules(tc.groups, tc.matcherSets))

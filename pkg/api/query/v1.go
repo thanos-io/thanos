@@ -788,7 +788,7 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 		}
 
 		if err := r.ParseForm(); err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error parsing request form='%v'", typeParam)}
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error parsing request form='%v'", MatcherParam)}
 		}
 
 		// TODO(bwplotka): Allow exactly the same functionality as query API: passing replica, dedup and partial response as HTTP params as well.
