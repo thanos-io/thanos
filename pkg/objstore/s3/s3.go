@@ -74,6 +74,7 @@ type Config struct {
 	Bucket             string            `yaml:"bucket"`
 	Endpoint           string            `yaml:"endpoint"`
 	Region             string            `yaml:"region"`
+	AWSSDKAuth         bool              `yaml:"aws_sdk_auth"`
 	AccessKey          string            `yaml:"access_key"`
 	Insecure           bool              `yaml:"insecure"`
 	SignatureV2        bool              `yaml:"signature_version2"`
@@ -224,7 +225,16 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	if err := validate(config); err != nil {
 		return nil, err
 	}
-	if config.AccessKey != "" {
+
+	if config.AWSSDKAuth && config.AccessKey != "" {
+		return nil, errors.New("aws_sdk_auth and access_key are mutually exclusive configurations")
+	}
+
+	if config.AWSSDKAuth {
+		chain = []credentials.Provider{
+			wrapCredentialsProvider(&AWSSDKAuth{Region: config.Region}),
+		}
+	} else if config.AccessKey != "" {
 		chain = []credentials.Provider{wrapCredentialsProvider(&credentials.Static{
 			Value: credentials.Value{
 				AccessKeyID:     config.AccessKey,
