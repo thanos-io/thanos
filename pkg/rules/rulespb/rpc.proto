@@ -40,6 +40,7 @@ message RulesRequest {
     }
     Type type = 1;
     PartialResponseStrategy partial_response_strategy = 2;
+    repeated string matcher_string = 3;
 }
 
 message RulesResponse {
