@@ -226,10 +226,6 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		return nil, err
 	}
 
-	if config.AWSSDKAuth && config.AccessKey != "" {
-		return nil, errors.New("aws_sdk_auth and access_key are mutually exclusive configurations")
-	}
-
 	if config.AWSSDKAuth {
 		chain = []credentials.Provider{
 			wrapCredentialsProvider(&AWSSDKAuth{Region: config.Region}),
@@ -344,6 +340,10 @@ func (b *Bucket) Name() string {
 func validate(conf Config) error {
 	if conf.Endpoint == "" {
 		return errors.New("no s3 endpoint in config file")
+	}
+
+	if conf.AWSSDKAuth && conf.AccessKey != "" {
+		return errors.New("aws_sdk_auth and access_key are mutually exclusive configurations")
 	}
 
 	if conf.AccessKey == "" && conf.SecretKey != "" {
