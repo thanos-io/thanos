@@ -20,7 +20,7 @@ describe('Filter', () => {
     setFilter = sinon.spy();
     setExpaned = sinon.spy();
     filterWrapper = shallow(
-        <Filter filter={initialState} setFilter={setFilter} expanded={initialExpanded} setExpanded={setExpaned} />
+      <Filter filter={initialState} setFilter={setFilter} expanded={initialExpanded} setExpanded={setExpaned} />
     );
   });
 
@@ -89,7 +89,7 @@ describe('Filter', () => {
         const filterCallback = sinon.spy();
         const expandedCallback = sinon.spy();
         const filterW = shallow(
-            <Filter filter={filter} setFilter={filterCallback} expanded={initial} setExpanded={expandedCallback} />
+          <Filter filter={filter} setFilter={filterCallback} expanded={initial} setExpanded={expandedCallback} />
         );
         const btn = filterW.find(Button).filterWhere((btn): boolean => btn.hasClass('expansion'));
         expect(btn.children().text()).toEqual(text);
