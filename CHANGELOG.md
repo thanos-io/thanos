@@ -10,8 +10,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-- [#4667](https://github.com/thanos-io/thanos/pull/4667) Add a pure aws-sdk auth for s3 storage.
-
 ### Added
 
 - [#5110](https://github.com/thanos-io/thanos/pull/5110) Block: Do not upload DebugMeta files to obj store.
@@ -27,6 +25,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4974](https://github.com/thanos-io/thanos/pull/4974) Store: Support tls_config configuration for connecting with Azure storage.
 - [#4999](https://github.com/thanos-io/thanos/pull/4999) COS: Support `endpoint` configuration for vpc internal endpoint.
 - [#5059](https://github.com/thanos-io/thanos/pull/5059) Compactor: Adding minimum retention flag validation for downsampling retention.
+- [#4667](https://github.com/thanos-io/thanos/pull/4667) Add a pure aws-sdk auth for s3 storage.
 
 ### Fixed
 
