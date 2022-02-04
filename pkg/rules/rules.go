@@ -7,9 +7,12 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"text/template"
+	"text/template/parse"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
@@ -58,6 +61,16 @@ func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*ru
 		return nil, nil, errors.Wrap(err, "proxy Rules")
 	}
 
+	var err error
+	matcherSets := make([][]*labels.Matcher, len(req.MatcherString))
+	for i, s := range req.MatcherString {
+		matcherSets[i], err = parser.ParseMetricSelector(s)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "parser ParseMetricSelector")
+		}
+	}
+
+	resp.groups = filterRules(resp.groups, matcherSets)
 	// TODO(bwplotka): Move to SortInterface with equal method and heap.
 	resp.groups = dedupGroups(resp.groups)
 	for _, g := range resp.groups {
@@ -65,6 +78,52 @@ func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*ru
 	}
 
 	return &rulespb.RuleGroups{Groups: resp.groups}, resp.warnings, nil
+}
+
+// filterRules filters rules in a group according to given matcherSets.
+func filterRules(ruleGroups []*rulespb.RuleGroup, matcherSets [][]*labels.Matcher) []*rulespb.RuleGroup {
+	if len(matcherSets) == 0 {
+		return ruleGroups
+	}
+
+	for _, g := range ruleGroups {
+		filteredRules := g.Rules[:0]
+		for _, r := range g.Rules {
+			rl := r.GetLabels()
+			if matches(matcherSets, rl) {
+				filteredRules = append(filteredRules, r)
+			}
+		}
+		g.Rules = filteredRules
+	}
+
+	return ruleGroups
+}
+
+// matches returns whether the non-templated labels satisfy all the matchers in matcherSets.
+func matches(matcherSets [][]*labels.Matcher, l labels.Labels) bool {
+	if len(matcherSets) == 0 {
+		return true
+	}
+
+	var nonTemplatedLabels labels.Labels
+	labelTemplate := template.New("label")
+	for _, label := range l {
+		t, err := labelTemplate.Parse(label.Value)
+		// Label value is non-templated if it is one node of type NodeText.
+		if err == nil && len(t.Root.Nodes) == 1 && t.Root.Nodes[0].Type() == parse.NodeText {
+			nonTemplatedLabels = append(nonTemplatedLabels, label)
+		}
+	}
+
+	for _, matchers := range matcherSets {
+		for _, m := range matchers {
+			if v := nonTemplatedLabels.Get(m.Name); !m.Matches(v) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // dedupRules re-sorts the set so that the same series with different replica
