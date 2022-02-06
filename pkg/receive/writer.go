@@ -85,10 +85,10 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			switch err {
 			case storage.ErrOutOfOrderSample:
 				numOutOfOrder++
-				level.Debug(r.logger).Log("msg", "Out of order sample", "sample value", s.Value, "sample timestamp", s.Timestamp)
+				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset, "sample value", s.Value, "sample timestamp", s.Timestamp)
 			case storage.ErrDuplicateSampleForTimestamp:
 				numDuplicates++
-				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "sample value", s.Value, "sample timestamp", s.Timestamp)
+				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "sample value", s.Value, "sample timestamp", s.Timestamp)
 			case storage.ErrOutOfBounds:
 				numOutOfBounds++
 				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset, "sample value", s.Value, "sample timestamp", s.Timestamp)
