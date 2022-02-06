@@ -331,7 +331,8 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 
 func TestReceiveQuorum(t *testing.T) {
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
-	conflictErrFn := func() error { return storage.ErrOutOfBounds }
+	conflictErrFn := func() error { return storage.ErrOutOfOrderSample }
+	outOfBoundsErrFn := func() error { return storage.ErrOutOfBounds }
 	commitErrFn := func() error { return errors.New("failed to commit") }
 	wreq1 := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
@@ -396,6 +397,17 @@ func TestReceiveQuorum(t *testing.T) {
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 1 outofbound",
+			status:            http.StatusBadRequest,
+			replicationFactor: 1,
+			wreq:              wreq1,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(outOfBoundsErrFn, nil, nil),
 				},
 			},
 		},
@@ -667,7 +679,8 @@ func TestReceiveQuorum(t *testing.T) {
 
 func TestReceiveWithConsistencyDelay(t *testing.T) {
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
-	conflictErrFn := func() error { return storage.ErrOutOfBounds }
+	conflictErrFn := func() error { return storage.ErrOutOfOrderSample }
+	outOfBoundsErrFn := func() error { return storage.ErrOutOfBounds }
 	commitErrFn := func() error { return errors.New("failed to commit") }
 	wreq1 := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
@@ -732,6 +745,17 @@ func TestReceiveWithConsistencyDelay(t *testing.T) {
 			appendables: []*fakeAppendable{
 				{
 					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+			},
+		},
+		{
+			name:              "size 1 outofbound",
+			status:            http.StatusBadRequest,
+			replicationFactor: 1,
+			wreq:              wreq1,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(outOfBoundsErrFn, nil, nil),
 				},
 			},
 		},

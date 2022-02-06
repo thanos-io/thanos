@@ -59,8 +59,8 @@ const (
 
 var (
 	// errConflict is returned whenever an operation fails due to any conflict-type error.
-	errConflict = errors.New("conflict")
-
+	errConflict    = errors.New("conflict")
+	errOutOfBounds = storage.ErrOutOfBounds
 	errBadReplica  = errors.New("request replica exceeds receiver replication factor")
 	errNotReady    = errors.New("target not ready")
 	errUnavailable = errors.New("target not available")
@@ -360,6 +360,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	case errConflict:
 		http.Error(w, err.Error(), http.StatusConflict)
+	case storage.ErrOutOfBounds:
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	case errBadReplica:
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	default:
@@ -679,7 +681,6 @@ func isConflict(err error) bool {
 	return err == errConflict ||
 		err == storage.ErrDuplicateSampleForTimestamp ||
 		err == storage.ErrOutOfOrderSample ||
-		err == storage.ErrOutOfBounds ||
 		status.Code(err) == codes.AlreadyExists
 }
 
@@ -694,6 +695,11 @@ func isNotReady(err error) bool {
 func isUnavailable(err error) bool {
 	return err == errUnavailable ||
 		status.Code(err) == codes.Unavailable
+}
+
+func isOutOfBounds(err error) bool {
+	return err == storage.ErrOutOfBounds ||
+		status.Code(err) == codes.OutOfRange
 }
 
 // retryState encapsulates the number of request attempt made against a peer and,
@@ -738,6 +744,7 @@ func determineWriteErrorCause(err error, threshold int) error {
 		{err: errConflict, cause: isConflict},
 		{err: errNotReady, cause: isNotReady},
 		{err: errUnavailable, cause: isUnavailable},
+		{err: errOutOfBounds, cause: isOutOfBounds},
 	}
 	for _, exp := range expErrs {
 		exp.count = 0
