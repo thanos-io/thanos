@@ -360,7 +360,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	case errConflict:
 		http.Error(w, err.Error(), http.StatusConflict)
-	case storage.ErrOutOfBounds:
+	case errOutOfBounds:
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	case errBadReplica:
 		http.Error(w, err.Error(), http.StatusBadRequest)
