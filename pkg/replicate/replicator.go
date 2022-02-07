@@ -85,6 +85,7 @@ func RunReplicate(
 	singleRun bool,
 	minTime, maxTime *thanosmodel.TimeOrDurationValue,
 	blockIDs []ulid.ULID,
+	ignoreMarkedForDeletion bool,
 ) error {
 	logger = log.With(logger, "component", "replicate")
 
@@ -185,6 +186,7 @@ func RunReplicate(
 		resolutions,
 		compactions,
 		blockIDs,
+		ignoreMarkedForDeletion,
 	).Filter
 	metrics := newReplicationMetrics(reg)
 	ctx, cancel := context.WithCancel(context.Background())
