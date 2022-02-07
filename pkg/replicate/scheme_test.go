@@ -62,14 +62,24 @@ func testMeta(ulid ulid.ULID) *metadata.Meta {
 	}
 }
 
+func testDeletionMark(ulid ulid.ULID) *metadata.DeletionMark {
+	return &metadata.DeletionMark{
+		ID:           ulid,
+		Version:      metadata.DeletionMarkVersion1,
+		Details:      "tests deletion mark",
+		DeletionTime: time.Time{}.Unix(),
+	}
+}
+
 func TestReplicationSchemeAll(t *testing.T) {
 	testBlockID := testULID(0)
 	var cases = []struct {
-		name     string
-		selector labels.Selector
-		blockIDs []ulid.ULID
-		prepare  func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
-		assert   func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
+		name                    string
+		selector                labels.Selector
+		blockIDs                []ulid.ULID
+		ignoreMarkedForDeletion bool
+		prepare                 func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
+		assert                  func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
 	}{
 		{
 			name:    "EmptyOrigin",
@@ -114,6 +124,27 @@ func TestReplicationSchemeAll(t *testing.T) {
 				if len(targetBucket.Objects()) != 3 {
 					t.Fatal("TargetBucket should have one block made up of three objects replicated.")
 				}
+			},
+		},
+		{
+			name:                    "MarkedForDeletion",
+			ignoreMarkedForDeletion: true,
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
+				ulid := testULID(0)
+				meta := testMeta(ulid)
+				deletionMark := testDeletionMark(ulid)
+
+				b, err := json.Marshal(meta)
+				testutil.Ok(t, err)
+				d, err := json.Marshal(deletionMark)
+				testutil.Ok(t, err)
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "meta.json"), bytes.NewReader(b))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "deletion-mark.json"), bytes.NewReader(d))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
+			},
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
+				testutil.Equals(t, map[string][]byte{}, targetBucket.Objects())
 			},
 		},
 		{
@@ -343,7 +374,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 			selector = c.selector
 		}
 
-		filter := NewBlockFilter(logger, selector, []compact.ResolutionLevel{compact.ResolutionLevelRaw}, []int{1}, c.blockIDs).Filter
+		filter := NewBlockFilter(logger, selector, []compact.ResolutionLevel{compact.ResolutionLevelRaw}, []int{1}, c.blockIDs, c.ignoreMarkedForDeletion).Filter
 		fetcher, err := block.NewMetaFetcher(logger, 32, objstore.WithNoopInstr(originBucket), "", nil, nil)
 		testutil.Ok(t, err)
 
