@@ -26,6 +26,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#5102](https://github.com/thanos-io/thanos/pull/5102) Fix: Filter block rows in bucket UI according to searched block ID
 - [#5051](https://github.com/thanos-io/thanos/pull/5051) Prober: Remove spam of changing probe status.
 - [#4918](https://github.com/thanos-io/thanos/pull/4918) Tracing: Fixing force tracing with Jaeger.
 - [#4879](https://github.com/thanos-io/thanos/pull/4879) Bucket verify: Fixed bug causing wrong number of blocks to be checked.
