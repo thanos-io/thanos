@@ -27,7 +27,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5059](https://github.com/thanos-io/thanos/pull/5059) Compactor: Adding minimum retention flag validation for downsampling retention.
 
 ## Changed
-- [#5119](https://github.com/thanos-io/thanos/pull/5119) UI: Optimize Target, Alert and Service Discovery page and on each of them a search bar.
+- [#5119](https://github.com/thanos-io/thanos/pull/5119) UI: Optimize Target, Alert and Service Discovery page and on each of them add a search bar.
 
 ### Fixed
 
