@@ -88,6 +88,9 @@ func parseGroupcacheConfig(conf []byte) (GroupcacheConfig, error) {
 			return GroupcacheConfig{}, fmt.Errorf("peer %d must not have a trailing slash (%s)", i, peer)
 		}
 	}
+	if strings.HasSuffix(config.SelfURL, "/") {
+		return GroupcacheConfig{}, fmt.Errorf("self URL %s must not have a trailing slash", config.SelfURL)
+	}
 
 	return config, nil
 }
