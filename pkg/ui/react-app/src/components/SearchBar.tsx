@@ -13,6 +13,9 @@ const SearchBar: FC<SearchBarProps> = ({ handleChange, placeholder }) => {
 
   const handleSearchChange = (e: ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     clearTimeout(filterTimeout);
+    // TODO e.persist() should be removed once the upgrade to react v17 is done.
+    // https://reactjs.org/docs/legacy-event-pooling.html
+    e.persist();
     filterTimeout = setTimeout(() => {
       handleChange(e);
     }, 300);
