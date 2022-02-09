@@ -136,8 +136,7 @@ func RegisterRequestLoggingFlags(app FlagClause) *extflag.PathOrContent {
 	return extflag.RegisterPathOrContent(
 		app,
 		"request.logging-config",
-		// TODO @yashrsharma44: Change the link with the documented link for yaml configuration.
-		"YAML file with request logging configuration. See format details: https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825",
+		"YAML file with request logging configuration. See format details: https://thanos.io/tip/thanos/logging.md/#configuration",
 		extflag.WithEnvSubstitution(),
 	)
 }
