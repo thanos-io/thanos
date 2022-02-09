@@ -2499,7 +2499,8 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 
 // readNumBytes reads the given number of bytes n from the given reader, starting
 // at the given offset. The returned slice is already adjusted for the offset.
-func readNumBytes(reader storecache.CachingBucketReader, readOffset int64, n int) ([]byte, error) {
+// Returns true if the response slice has been pooled.
+func readNumBytes(reader storecache.CachingBucketReader, readOffset int64, n int, p pool.Bytes) ([]byte, bool, error) {
 	subrangeSize := reader.GetSubrangeSize()
 	originalOffset := readOffset
 
@@ -2509,31 +2510,25 @@ func readNumBytes(reader storecache.CachingBucketReader, readOffset int64, n int
 	for n > 0 {
 		m, err := reader.GetMemoryAtOffset(int64(readOffset))
 		if err != nil {
-			return nil, err
+			return nil, false, err
+		}
+
+		var relevantDataLen int64
+		if len(slices) == 0 {
+			relevantDataLen = ((originalOffset / subrangeSize) * subrangeSize) + subrangeSize - originalOffset
+		} else {
+			relevantDataLen = subrangeSize
 		}
 
 		// Fast path.
-		if len(slices) == 0 {
-			relevantDataLen := len(m)
-			if originalOffset < subrangeSize {
-				relevantDataLen -= int(originalOffset)
-			}
-
-			if relevantDataLen >= n || len(m) < int(subrangeSize) {
-				adjustedOffset := originalOffset - ((originalOffset / subrangeSize) * subrangeSize)
-				return m[adjustedOffset:], nil
-			}
+		if len(slices) == 0 && (int(relevantDataLen) >= n || len(m) < int(subrangeSize)) {
+			adjustedOffset := originalOffset - ((originalOffset / subrangeSize) * subrangeSize)
+			return m[adjustedOffset:], false, nil
 		}
 		slices = append(slices, m)
 
-		diff := int64(len(m)) - readOffset
-		if diff > 0 {
-			readOffset += diff
-			n -= int(diff)
-		} else {
-			readOffset += int64(len(m))
-			n -= len(m)
-		}
+		readOffset += relevantDataLen
+		n -= int(relevantDataLen)
 	}
 
 	// Adjust the offset according to the ideal subrange size and add the original one.
@@ -2547,25 +2542,29 @@ func readNumBytes(reader storecache.CachingBucketReader, readOffset int64, n int
 		totalLen = originalN
 	}
 
-	ret := make([]byte, 0, totalLen)
+	ret, err := p.Get(totalLen)
+	if err != nil {
+		return nil, false, err
+	}
+
 	for i, sl := range slices {
-		if len(ret)+len(sl) < originalN {
-			ret = append(ret, sl...)
+		if len(*ret)+len(sl) < originalN {
+			*ret = append(*ret, sl...)
 		} else {
 			if i == 0 {
-				takeUntil := int(readOffset) + originalN - len(ret)
+				takeUntil := int(readOffset) + originalN - len(*ret)
 				if takeUntil > len(sl) {
 					takeUntil = len(sl)
 				}
-				ret = append(ret, sl[readOffset:takeUntil]...)
+				*ret = append(*ret, sl[readOffset:takeUntil]...)
 			} else {
-				ret = append(ret, sl[:originalN-len(ret)]...)
+				*ret = append(*ret, sl[:originalN-len(*ret)]...)
 
 			}
 		}
 	}
 
-	return ret, nil
+	return *ret, true, nil
 }
 
 // loadChunksFromCache is like loadChunks but reads directly from the cache layer's results.
@@ -2594,12 +2593,14 @@ func (r *bucketChunkReader) loadChunksFromCache(ctx context.Context, reader stor
 			}
 		}
 
-		cb, err := readNumBytes(reader, int64(readOffset), chunkLen)
+		cb, pooled, err := readNumBytes(reader, int64(readOffset), chunkLen, r.block.chunkPool)
+		if pooled && err == nil {
+			r.mtx.Lock()
+			r.chunkBytes = append(r.chunkBytes, &cb)
+			r.mtx.Unlock()
+		}
 		if err != nil && !(errors.Is(err, io.ErrUnexpectedEOF) && i == len(pIdxs)-1) {
 			return errors.Wrapf(err, "read %d offset %v for seq %d offset %x", i, readOffset, seq, pIdx.offset)
-		}
-		if chunkLen < cap(cb) {
-			cb = cb[:chunkLen]
 		}
 
 		chunkDataLen, n := binary.Uvarint(cb)
