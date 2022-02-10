@@ -242,7 +242,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 			ContentLength: partSize,
 		})
 		if err != nil {
-			if _, err := b.client.Object.AbortMultipartUpload(ctx, name, result.UploadID); err != nil {
+			if _, err := b.client.Object.AbortMultipartUpload(ctx, name, uploadID); err != nil {
 				return "", err
 			}
 			return "", err
