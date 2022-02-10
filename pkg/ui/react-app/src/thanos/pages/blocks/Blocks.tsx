@@ -89,7 +89,7 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
   const onChangeCompactionCheckbox = (target: EventTarget & HTMLInputElement) => {
     setFilterCompaction(target.checked);
     if (target.checked) {
-      let compactionLevel: number = parseInt(compactionLevelInput);
+      const compactionLevel: number = parseInt(compactionLevelInput);
       setQuery({
         'filter-compaction': target.checked,
         'compaction-level': compactionLevel,

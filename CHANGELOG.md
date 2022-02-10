@@ -29,6 +29,9 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5111](https://github.com/thanos-io/thanos/pull/5111) Add matcher support to Query Rules endpoint.
 - [#5117](https://github.com/thanos-io/thanos/pull/5117) Bucket replicate: Added flag `--ignore-marked-for-deletion` to avoid replication of blocks with the deletion mark.
 
+## Changed
+- [#5119](https://github.com/thanos-io/thanos/pull/5119) UI: Optimize Target, Alert and Service Discovery page and on each of them add a search bar.
+
 ### Fixed
 
 - [#5051](https://github.com/thanos-io/thanos/pull/5051) Prober: Remove spam of changing probe status.
