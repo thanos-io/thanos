@@ -103,7 +103,7 @@ describe('Graph', () => {
         {
           chartData: [
             {
-              color: 'rgb(237,194,64)',
+              color: '#008000',
               data: [[1572128592000, null]],
               index: 0,
               labels: {},
@@ -119,7 +119,7 @@ describe('Graph', () => {
         {
           chartData: [
             {
-              color: 'rgb(237,194,64)',
+              color: '#008000',
               data: [[1572128592000, null]],
               index: 0,
               labels: {},
