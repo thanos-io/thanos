@@ -1,6 +1,3 @@
-# By default we pin to amd64 sha. Use make docker to automatically adjust for arm64 versions.
-ARG BASE_DOCKER_SHA="14d68ca3d69fceaa6224250c83d81d935c053fb13594c811038c461194599973"
-
 # Taking a non-alpine image for e2e tests so that cgo can be enabled
 FROM golang:1.17 as builder
 
@@ -8,13 +5,12 @@ WORKDIR $GOPATH/src/github.com/thanos-io/thanos
 
 COPY . $GOPATH/src/github.com/thanos-io/thanos
 
-RUN git update-index --refresh; make build-e2e
-
+RUN CGO_ENABLED=1 go build -o $GOBIN/thanos -race ./cmd/thanos
 # -----------------------------------------------------------------------------
 
-FROM quay.io/prometheus/busybox@sha256:${BASE_DOCKER_SHA}
+FROM golang:1.17 
 LABEL maintainer="The Thanos Authors"
 
-COPY --from=builder /go/bin/thanos /bin/thanos
+COPY --from=builder $GOBIN/thanos /bin/thanos
 
 ENTRYPOINT [ "/bin/thanos" ]

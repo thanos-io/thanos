@@ -143,13 +143,6 @@ build: check-git deps $(PROMU)
 	@echo ">> building Thanos binary in $(PREFIX)"
 	@$(PROMU) build --prefix $(PREFIX)
 
-.PHONY: build-e2e
-build-e2e: ## Build Thanos binary for e2e tests using `promu` with cgo enabled
-build-e2e: check-git deps $(PROMU)
-	@echo ">> building Thanos binary in $(PREFIX)"
-	@$(PROMU) --config=".promu.e2e.yml" build --prefix $(PREFIX)
-
-
 GIT_BRANCH=$(shell $(GIT) rev-parse --abbrev-ref HEAD)
 .PHONY: crossbuild
 crossbuild: ## Builds all binaries for all platforms.
