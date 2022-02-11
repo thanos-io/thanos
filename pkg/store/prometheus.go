@@ -160,6 +160,8 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	if r.MinTime < availableMinTime {
 		// If pushdown is enabled then align min time with the step to avoid missing data
 		// when it gets retrieved by the upper layer's PromQL engine.
+		// This also is necessary when Sidecar uploads a block and then availableMinTime
+		// becomes a fixed timestamp.
 		if r.QueryHints != nil {
 			diff := availableMinTime - r.MinTime
 			r.MinTime += (diff / r.QueryHints.StepMillis) * r.QueryHints.StepMillis
