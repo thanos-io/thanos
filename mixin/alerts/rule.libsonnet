@@ -168,7 +168,7 @@
             // NOTE: This alert will give false positive if no rules are configured.
             alert: 'ThanosRuleNoEvaluationFor10Intervals',
             annotations: {
-              description: 'Thanos Rule {{$labels.job}}%s has {{$value | humanize}}%% rule groups that did not evaluate for at least 10x of their expected interval.' % location,
+              description: 'Thanos Rule {{$labels.job}}%s has rule groups that did not evaluate for at least 10x of their expected interval.' % location,
               summary: 'Thanos Rule has rule groups that did not evaluate for 10 intervals.',
             },
             expr: |||
