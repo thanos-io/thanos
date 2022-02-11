@@ -1350,7 +1350,7 @@ func TestSidecarAlignmentPushdown(t *testing.T) {
 			Deduplicate: true,
 		}, func(res model.Matrix) error {
 			if !reflect.DeepEqual(res, expectedRes) {
-				return fmt.Errorf("unexpected results (%v but expected %v)", res, expectedRes)
+				return fmt.Errorf("unexpected results (got %v but expected %v)", res, expectedRes)
 			}
 			return nil
 		})
