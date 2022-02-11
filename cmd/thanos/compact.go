@@ -252,14 +252,6 @@ func runCompact(
 		)
 	}
 	var (
-		compactorView = ui.NewBucketUI(
-			logger,
-			conf.label,
-			conf.webConf.externalPrefix,
-			conf.webConf.prefixHeaderName,
-			"/loaded",
-			component,
-		)
 		api = blocksAPI.NewBlocksAPI(logger, conf.webConf.disableCORS, conf.label, flagsMap, bkt)
 		sy  *compact.Syncer
 	)
@@ -277,7 +269,6 @@ func runCompact(
 			},
 		)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
-			compactorView.Set(blocks, err)
 			api.SetLoaded(blocks, err)
 		})
 		sy, err = compact.NewMetaSyncer(
@@ -519,10 +510,9 @@ func runCompact(
 		r := route.New()
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
-		compactorView.Register(r, true, ins)
 
-		global := ui.NewBucketUI(logger, conf.label, conf.webConf.externalPrefix, conf.webConf.prefixHeaderName, "/global", component)
-		global.Register(r, false, ins)
+		global := ui.NewBucketUI(logger, conf.webConf.externalPrefix, conf.webConf.prefixHeaderName, component)
+		global.Register(r, ins)
 
 		// Configure Request Logging for HTTP calls.
 		opts := []logging.Option{logging.WithDecider(func(_ string, _ error) logging.Decision {
@@ -535,7 +525,6 @@ func runCompact(
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of the block as well.
 		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, "component", "globalBucketUI")
 		f.UpdateOnChange(func(blocks []metadata.Meta, err error) {
-			global.Set(blocks, err)
 			api.SetGlobal(blocks, err)
 		})
 
