@@ -72,21 +72,6 @@ describe('GraphHelpers', () => {
       }
     });
   });
-  describe('getColors', () => {
-    it('should generate proper colors', () => {
-      const data: any = {
-        resultType: 'matrix',
-        result: [{}, {}, {}, {}, {}, {}, {}],
-      };
-      expect(
-        getColors(data)
-          .map((c) => c.toString())
-          .join(',')
-      ).toEqual(
-        'rgb(237,194,64),rgb(175,216,248),rgb(203,75,75),rgb(77,167,77),rgb(148,64,237),rgb(189,155,51),rgb(140,172,198)'
-      );
-    });
-  });
   describe('parseValue', () => {
     it('should parse number properly', () => {
       expect(parseValue('12.3e')).toEqual(12.3);
