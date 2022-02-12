@@ -226,6 +226,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#3840](https://github.com/thanos-io/thanos/pull/3840) Tools: Added a flag to support rewrite Prometheus TSDB blocks.
 - [#3920](https://github.com/thanos-io/thanos/pull/3920) Query Frontend: Support `max_item_size` in Query frontend Memcached cache.
 - [#4078](https://github.com/thanos-io/thanos/pull/4078) receive: Improved efficiency of multitsdb appends, upgraded Prometheus deps.
+- [#5091](https://github.com/thanos-io/thanos/pull/5091) Receive: Added tracing tag for tenant when using tenant's local TSDB.   
 
 ### Fixed
 
