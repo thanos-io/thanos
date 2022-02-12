@@ -171,7 +171,7 @@ func (s *tenantSeriesSetServer) Series(store storepb.StoreServer, r *storepb.Ser
 	var err error
 	tracing.DoInSpan(s.ctx, "multitsdb_tenant_series", func(_ context.Context) {
 		err = store.Series(r, s)
-	})
+	}, opentracing.Tags{"tenant.id": s.tenant})
 	if err != nil {
 		if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 			s.err = errors.Wrapf(err, "get series for tenant %s", s.tenant)
