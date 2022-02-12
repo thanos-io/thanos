@@ -17,11 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
+	"github.com/golang/snappy"
 	"github.com/jpillora/backoff"
-	"github.com/klauspost/compress/s2"
 	"github.com/mwitkow/go-conntrack"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -61,7 +61,7 @@ var (
 	// errConflict is returned whenever an operation fails due to any conflict-type error.
 	errConflict = errors.New("conflict")
 
-	errBadReplica  = errors.New("request replica exceeds receiver replication factor")
+	errBadReplica  = errors.New("replica count exceeds replication factor")
 	errNotReady    = errors.New("target not ready")
 	errUnavailable = errors.New("target not available")
 )
@@ -76,7 +76,6 @@ type Options struct {
 	ReplicaHeader     string
 	Endpoint          string
 	ReplicationFactor uint64
-	ReceiverMode      ReceiverMode
 	Tracer            opentracing.Tracer
 	TLSConfig         *tls.Config
 	DialOpts          []grpc.DialOption
@@ -91,12 +90,11 @@ type Handler struct {
 	options  *Options
 	listener net.Listener
 
-	mtx          sync.RWMutex
-	hashring     Hashring
-	peers        *peerGroup
-	expBackoff   backoff.Backoff
-	peerStates   map[string]*retryState
-	receiverMode ReceiverMode
+	mtx        sync.RWMutex
+	hashring   Hashring
+	peers      *peerGroup
+	expBackoff backoff.Backoff
+	peerStates map[string]*retryState
 
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
@@ -109,12 +107,11 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h := &Handler{
-		logger:       logger,
-		writer:       o.Writer,
-		router:       route.New(),
-		options:      o,
-		peers:        newPeerGroup(o.DialOpts...),
-		receiverMode: o.ReceiverMode,
+		logger:  logger,
+		writer:  o.Writer,
+		router:  route.New(),
+		options: o,
+		peers:   newPeerGroup(o.DialOpts...),
 		expBackoff: backoff.Backoff{
 			Factor: 2,
 			Min:    100 * time.Millisecond,
@@ -259,19 +256,8 @@ type replica struct {
 }
 
 func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
-	// This replica value is used to detect cycles in cyclic topologies.
-	// A non-zero value indicates that the request has already been replicated by a previous receive instance.
-	// For almost all users, this is only used in fully connected topologies of IngestorRouter instances.
-	// For acyclic topologies that use RouterOnly and IngestorOnly instances, this causes issues when replicating data.
-	// See discussion in: https://github.com/thanos-io/thanos/issues/4359
-	if h.receiverMode == RouterOnly || h.receiverMode == IngestorOnly {
-		rep = 0
-	}
-
 	// The replica value in the header is one-indexed, thus we need >.
 	if rep > h.options.ReplicationFactor {
-		level.Error(h.logger).Log("err", errBadReplica, "msg", "write request rejected",
-			"request_replica", rep, "replication_factor", h.options.ReplicationFactor)
 		return errBadReplica
 	}
 
@@ -309,7 +295,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqBuf, err := s2.Decode(nil, compressed.Bytes())
+	reqBuf, err := snappy.Decode(nil, compressed.Bytes())
 	if err != nil {
 		level.Error(h.logger).Log("msg", "snappy decode error", "err", err)
 		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
@@ -335,14 +321,13 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tenant := r.Header.Get(h.options.TenantHeader)
-	if tenant == "" {
+	if len(tenant) == 0 {
 		tenant = h.options.DefaultTenantID
 	}
 
-	// TODO(yeya24): handle remote write metadata.
-	// exit early if the request contained no data
+	// Exit early if the request contained no data.
 	if len(wreq.Timeseries) == 0 {
-		level.Debug(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)
+		level.Info(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)
 		return
 	}
 
