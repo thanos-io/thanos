@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"fmt"
-	"sort"
 	"sync"
 
 	"github.com/pkg/errors"
