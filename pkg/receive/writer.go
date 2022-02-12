@@ -64,7 +64,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	getRef := app.(storage.GetRef)
 
 	var (
-		ref  storage.SeriesRef
+		ref  uint64
 		errs errutil.MultiError
 	)
 	for _, t := range wreq.Timeseries {
