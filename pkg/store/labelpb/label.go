@@ -318,20 +318,12 @@ func DeepCopy(lbls []ZLabel) []ZLabel {
 	return ret
 }
 
-<<<<<<< HEAD
-=======
-var sep = []byte{'\xff'}
-
->>>>>>> a09ac4fc... Moved hashring to optimized hash function.
 // HashWithPrefix returns a hash for the given prefix and labels.
 func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
 	// Use xxhash.Sum64(b) for fast path as it's faster.
 	b := make([]byte, 0, 1024)
 	b = append(b, prefix...)
-<<<<<<< HEAD
 	b = append(b, sep[0])
-=======
->>>>>>> a09ac4fc... Moved hashring to optimized hash function.
 
 	for i, v := range lbls {
 		if len(b)+len(v.Name)+len(v.Value)+2 >= cap(b) {

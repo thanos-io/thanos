@@ -1293,7 +1293,11 @@ func Heap(dir string) (err error) {
 		return err
 	}
 
+<<<<<<< HEAD
 	f, err := os.Create(filepath.Join(dir, "errimpr1-go1.16.3.pprof"))
+=======
+	f, err := os.Create(filepath.Join(dir, "impr5-go1.16.3.pprof"))
+>>>>>>> e90e7530... Fixes.
 	if err != nil {
 		return err
 	}
