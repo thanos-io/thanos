@@ -85,6 +85,7 @@ func RunReplicate(
 	singleRun bool,
 	minTime, maxTime *thanosmodel.TimeOrDurationValue,
 	blockIDs []ulid.ULID,
+	ignoreMarkedForDeletion bool,
 ) error {
 	logger = log.With(logger, "component", "replicate")
 
@@ -174,7 +175,6 @@ func RunReplicate(
 		"",
 		reg,
 		[]thanosblock.MetadataFilter{thanosblock.NewTimePartitionMetaFilter(*minTime, *maxTime)},
-		nil,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "create meta fetcher with bucket %v", fromBkt)
@@ -186,6 +186,7 @@ func RunReplicate(
 		resolutions,
 		compactions,
 		blockIDs,
+		ignoreMarkedForDeletion,
 	).Filter
 	metrics := newReplicationMetrics(reg)
 	ctx, cancel := context.WithCancel(context.Background())

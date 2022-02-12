@@ -376,11 +376,11 @@ Flags:
                                  flag (mutually exclusive). Content of YAML file
                                  with request logging configuration. See format
                                  details:
-                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
+                                 https://thanos.io/tip/thanos/logging.md/#configuration
       --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
                                  configuration. See format details:
-                                 https://gist.github.com/yashrsharma44/02f5765c5710dd09ce5d14e854f22825
+                                 https://thanos.io/tip/thanos/logging.md/#configuration
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).

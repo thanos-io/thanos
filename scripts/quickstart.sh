@@ -169,9 +169,9 @@ if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
   cat >groupcache.yml <<-EOF
 		type: GROUPCACHE
 config:
-  self_url: http://localhost:10906/
+  self_url: http://localhost:10906
   peers:
-    - http://localhost:10906/
+    - http://localhost:10906
   groupcache_group: groupcache_test_group
 blocks_iter_ttl: 0s
 metafile_exists_ttl: 0s

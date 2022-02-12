@@ -228,7 +228,7 @@ func runCompact(
 	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 	// This is to make sure compactor will not accidentally perform compactions with gap instead.
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
-	duplicateBlocksFilter := block.NewDeduplicateFilter()
+	duplicateBlocksFilter := block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency)
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt, conf.blockMetaFetchConcurrency)
 	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig)
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
@@ -271,9 +271,10 @@ func runCompact(
 				labelShardedMetaFilter,
 				consistencyDelayMetaFilter,
 				ignoreDeletionMarkFilter,
+				block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels),
 				duplicateBlocksFilter,
 				noCompactMarkerFilter,
-			}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels)},
+			},
 		)
 		cf.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			compactorView.Set(blocks, err)
@@ -440,7 +441,7 @@ func runCompact(
 			}
 
 			for _, meta := range sy.Metas() {
-				groupKey := compact.DefaultGroupKey(meta.Thanos)
+				groupKey := meta.Thanos.GroupKey()
 				downsampleMetrics.downsamples.WithLabelValues(groupKey)
 				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
 			}
@@ -532,7 +533,7 @@ func runCompact(
 
 		// Separate fetcher for global view.
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of the block as well.
-		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, nil, "component", "globalBucketUI")
+		f := baseMetaFetcher.NewMetaFetcher(extprom.WrapRegistererWithPrefix("thanos_bucket_ui", reg), nil, "component", "globalBucketUI")
 		f.UpdateOnChange(func(blocks []metadata.Meta, err error) {
 			global.Set(blocks, err)
 			api.SetGlobal(blocks, err)

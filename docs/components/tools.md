@@ -522,6 +522,9 @@ Flags:
                                  other matchers will be ignored. When specified,
                                  this command will be run only once after
                                  successful replication. Repeated field
+      --ignore-marked-for-deletion
+                                 Do not replicate blocks that have deletion
+                                 mark.
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.

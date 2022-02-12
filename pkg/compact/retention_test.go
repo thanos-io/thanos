@@ -245,7 +245,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 				uploadMockBlock(t, bkt, b.id, b.minTime, b.maxTime, int64(b.resolution))
 			}
 
-			metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", nil, nil, nil)
+			metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", nil, nil)
 			testutil.Ok(t, err)
 
 			blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})

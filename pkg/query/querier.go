@@ -350,7 +350,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 
 	// The merged series set assembles all potentially-overlapping time ranges of the same series into a single one.
 	// TODO(bwplotka): We could potentially dedup on chunk level, use chunk iterator for that when available.
-	return dedup.NewSeriesSet(set, q.replicaLabels, len(aggrs) == 1 && aggrs[0] == storepb.Aggr_COUNTER), nil
+	return dedup.NewSeriesSet(set, q.replicaLabels, hints.Func, q.enableQueryPushdown), nil
 }
 
 // sortDedupLabels re-sorts the set so that the same series with different replica
@@ -363,6 +363,13 @@ func sortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
 				return false
 			}
 			if _, ok := replicaLabels[s.Labels[j].Name]; ok {
+				return true
+			}
+			// Ensure that dedup marker goes just right before the replica labels.
+			if s.Labels[i].Name == dedup.PushdownMarker.Name {
+				return false
+			}
+			if s.Labels[j].Name == dedup.PushdownMarker.Name {
 				return true
 			}
 			return s.Labels[i].Name < s.Labels[j].Name

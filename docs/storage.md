@@ -65,6 +65,7 @@ config:
   bucket: ""
   endpoint: ""
   region: ""
+  aws_sdk_auth: false
   access_key: ""
   insecure: false
   signature_version2: false
@@ -98,6 +99,8 @@ config:
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
+
+However if you set `aws_sdk_auth: true` Thanos will use the default authentication methods of the AWS SDK for go based on [known environment variables](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html) (`AWS_PROFILE`, `AWS_WEB_IDENTITY_TOKEN_FILE` ... etc) and known AWS config files (~/.aws/config). If you turn this on, then the `bucket` and `endpoint` are the required config keys.
 
 The AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/s3.html).
 

@@ -40,7 +40,7 @@ Enter the credentials as mentioned below:
 **Access Key** = `minio`
 **Secret Key** = `melovethanos`
 
-## Sidear block backup
+## Sidecar block backup
 
 All Thanos components that use object storage uses the same `objstore.config` flag with the same "little" bucket config format.
 

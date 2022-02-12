@@ -20,10 +20,10 @@ You can read more about Thanos Querier [here](https://thanos.io/tip/components/q
 
 ## Deploying Thanos Querier
 
-Let' now start the Query component. As you remember [Thanos sidecar](https://thanos.io/tip/components/query.md/) exposes `StoreAPI`
+Let's now start the Query component. As you remember [Thanos sidecar](https://thanos.io/tip/components/query.md/) exposes `StoreAPI`
 so we will make sure we point the Querier to the gRPC endpoints of all our three sidecars:
 
-Click below snippet to start the Querier.
+Click the snippet below to start the Querier.
 
 ```
 docker run -d --net=host --rm \

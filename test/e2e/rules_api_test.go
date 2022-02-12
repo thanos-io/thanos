@@ -52,7 +52,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		"prom1",
 		defaultPromConfig("ha", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml")),
 		"",
-		e2ethanos.DefaultPrometheusImage(),
+		e2ethanos.DefaultPrometheusImage(), "",
 	)
 	testutil.Ok(t, err)
 	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
@@ -60,7 +60,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		"prom2",
 		defaultPromConfig("ha", 1, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml")),
 		"",
-		e2ethanos.DefaultPrometheusImage(),
+		e2ethanos.DefaultPrometheusImage(), "",
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))

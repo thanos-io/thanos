@@ -3,14 +3,12 @@ import { mount, ReactWrapper } from 'enzyme';
 import { act } from 'react-dom/test-utils';
 import { UncontrolledAlert } from 'reactstrap';
 import { sampleApiResponse } from './__testdata__/testdata';
-import ScrapePoolList from './ScrapePoolList';
-import ScrapePoolPanel from './ScrapePoolPanel';
+import ScrapePoolList, { ScrapePoolPanel } from './ScrapePoolList';
 import { Target } from './target';
 import { FetchMock } from 'jest-fetch-mock/types';
 
 describe('ScrapePoolList', () => {
   const defaultProps = {
-    filter: { showHealthy: true, showUnhealthy: true },
     pathPrefix: '..',
   };
 
@@ -42,25 +40,11 @@ describe('ScrapePoolList', () => {
       expect(mock).toHaveBeenCalledWith('../api/v1/targets?state=active', { cache: 'no-store', credentials: 'same-origin' });
       const panels = scrapePoolList.find(ScrapePoolPanel);
       expect(panels).toHaveLength(3);
-      const activeTargets: Target[] = sampleApiResponse.data.activeTargets as Target[];
+      const activeTargets: Target[] = sampleApiResponse.data.activeTargets as unknown as Target[];
       activeTargets.forEach(({ scrapePool }: Target) => {
         const panel = scrapePoolList.find(ScrapePoolPanel).filterWhere((panel) => panel.prop('scrapePool') === scrapePool);
         expect(panel).toHaveLength(1);
       });
-    });
-
-    it('filters by health', async () => {
-      const props = {
-        ...defaultProps,
-        filter: { showHealthy: false, showUnhealthy: true },
-      };
-      await act(async () => {
-        scrapePoolList = mount(<ScrapePoolList {...props} />);
-      });
-      scrapePoolList.update();
-      expect(mock).toHaveBeenCalledWith('../api/v1/targets?state=active', { cache: 'no-store', credentials: 'same-origin' });
-      const panels = scrapePoolList.find(ScrapePoolPanel);
-      expect(panels).toHaveLength(0);
     });
   });
 

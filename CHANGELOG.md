@@ -12,6 +12,9 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#5110](https://github.com/thanos-io/thanos/pull/5110) Block: Do not upload DebugMeta files to obj store.
+- [#4963](https://github.com/thanos-io/thanos/pull/4963) Compactor, Store, Tools: Loading block metadata now only filters out duplicates within a source (or compaction group if replica labels are configured), and does so in parallel over sources.
+- [#5089](https://github.com/thanos-io/thanos/pull/5089) S3: Create an empty map in the case SSE-KMS is used and no KMSEncryptionContext is passed.
 - [#4970](https://github.com/thanos-io/thanos/pull/4970) Added a new flag `exclude-delete` to `tools bucket ls`, which excludes blocks marked for deletion.
 - [#4903](https://github.com/thanos-io/thanos/pull/4903) Compactor: Added tracing support for compaction.
 - [#4909](https://github.com/thanos-io/thanos/pull/4909) Compactor: Add flag --max-time / --min-time to filter blocks that are ready to be compacted.
@@ -22,6 +25,13 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4974](https://github.com/thanos-io/thanos/pull/4974) Store: Support tls_config configuration for connecting with Azure storage.
 - [#4999](https://github.com/thanos-io/thanos/pull/4999) COS: Support `endpoint` configuration for vpc internal endpoint.
 - [#5059](https://github.com/thanos-io/thanos/pull/5059) Compactor: Adding minimum retention flag validation for downsampling retention.
+- [#4667](https://github.com/thanos-io/thanos/pull/4667) Add a pure aws-sdk auth for s3 storage.
+- [#5111](https://github.com/thanos-io/thanos/pull/5111) Add matcher support to Query Rules endpoint.
+- [#5117](https://github.com/thanos-io/thanos/pull/5117) Bucket replicate: Added flag `--ignore-marked-for-deletion` to avoid replication of blocks with the deletion mark.
+
+## Changed
+- [#5144](https://github.com/thanos-io/thanos/pull/5144) UI: Improve graph color
+- [#5119](https://github.com/thanos-io/thanos/pull/5119) UI: Optimize Target, Alert and Service Discovery page and on each of them add a search bar.
 
 ### Fixed
 
@@ -30,6 +40,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4879](https://github.com/thanos-io/thanos/pull/4879) Bucket verify: Fixed bug causing wrong number of blocks to be checked.
 - [#4908](https://github.com/thanos-io/thanos/pull/4908) UI: Show 'minus' icon and add tooltip when store min / max time is not available.
 - [#4883](https://github.com/thanos-io/thanos/pull/4883) Mixin: adhere to RFC 1123 compatible component naming.
+- [#5114](https://github.com/thanos-io/thanos/pull/5114) Tools `thanos bucket inspect` fix time formatting.
+- [#5139](https://github.com/thanos-io/thanos/pull/5139) COS: Support multi-part upload, fix upload issue when index size more than 5GB.
 
 ## [v0.24.0](https://github.com/thanos-io/thanos/tree/release-0.24) - 2021.12.22
 

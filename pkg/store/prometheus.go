@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -157,7 +158,20 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	// Don't ask for more than available time. This includes potential `minTime` flag limit.
 	availableMinTime, _ := p.timestamps()
 	if r.MinTime < availableMinTime {
-		r.MinTime = availableMinTime
+		// If pushdown is enabled then align min time with the step to avoid missing data
+		// when it gets retrieved by the upper layer's PromQL engine.
+		// This also is necessary when Sidecar uploads a block and then availableMinTime
+		// becomes a fixed timestamp.
+		if r.QueryHints != nil {
+			diff := availableMinTime - r.MinTime
+			r.MinTime += (diff / r.QueryHints.StepMillis) * r.QueryHints.StepMillis
+			// Add one more to strictly fit within --min-time -> infinity.
+			if r.MinTime != availableMinTime {
+				r.MinTime += r.QueryHints.StepMillis
+			}
+		} else {
+			r.MinTime = availableMinTime
+		}
 	}
 
 	if r.SkipChunks {
@@ -270,6 +284,7 @@ func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *store
 		})
 		// Attach external labels for compatibility with remote read.
 		finalLbls := labelpb.ExtendSortedLabels(seriesLbls, externalLbls)
+		finalLbls = append(finalLbls, dedup.PushdownMarker)
 
 		series := &prompb.TimeSeries{
 			Labels:  labelpb.ZLabelsFromPromLabels(finalLbls),

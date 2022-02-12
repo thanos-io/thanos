@@ -330,7 +330,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
 			return err
 		}
@@ -386,7 +386,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, block.FetcherConcurrency)
 			filters = append(filters, ignoreDeletionMarkFilter)
 		}
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters, nil)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
 			return err
 		}
@@ -417,7 +417,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 				maxTime := time.Unix(m.MaxTime/1000, 0)
 
 				if _, err = fmt.Fprintf(os.Stdout, "%s -- %s - %s Diff: %s, Compaction: %d, Downsample: %d, Source: %s\n",
-					m.ULID, minTime.Format("2006-01-02 15:04"), maxTime.Format("2006-01-02 15:04"), maxTime.Sub(minTime),
+					m.ULID, minTime.Format(time.RFC3339), maxTime.Format(time.RFC3339), maxTime.Sub(minTime),
 					m.Compaction.Level, m.Thanos.Downsample.Resolution, m.Thanos.Source); err != nil {
 					return err
 				}
@@ -486,7 +486,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil, nil)
+		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), nil)
 		if err != nil {
 			return err
 		}
@@ -632,8 +632,8 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			[]block.MetadataFilter{
 				block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime),
 				block.NewLabelShardedMetaFilter(relabelConfig),
-				block.NewDeduplicateFilter(),
-			}, nil)
+				block.NewDeduplicateFilter(block.FetcherConcurrency),
+			})
 		if err != nil {
 			return err
 		}
@@ -695,6 +695,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to replicate. Thanos Replicate will replicate only metrics, which happened earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z"))
 	ids := cmd.Flag("id", "Block to be replicated to the destination bucket. IDs will be used to match blocks and other matchers will be ignored. When specified, this command will be run only once after successful replication. Repeated field").Strings()
+	ignoreMarkedForDeletion := cmd.Flag("ignore-marked-for-deletion", "Do not replicate blocks that have deletion mark.").Bool()
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		matchers, err := replicate.ParseFlagMatchers(tbc.matcherStrs)
@@ -733,6 +734,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			minTime,
 			maxTime,
 			blockIDs,
+			*ignoreMarkedForDeletion,
 		)
 	})
 }
@@ -786,7 +788,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, tbc.deleteDelay/2, block.FetcherConcurrency)
-		duplicateBlocksFilter := block.NewDeduplicateFilter()
+		duplicateBlocksFilter := block.NewDeduplicateFilter(block.FetcherConcurrency)
 		blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, tbc.deleteDelay, stubCounter, stubCounter)
 
 		ctx := context.Background()
@@ -803,7 +805,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 					block.NewConsistencyDelayMetaFilter(logger, tbc.consistencyDelay, extprom.WrapRegistererWithPrefix(extpromPrefix, reg)),
 					ignoreDeletionMarkFilter,
 					duplicateBlocksFilter,
-				}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, make([]string, 0))},
+				},
 			)
 			sy, err = compact.NewMetaSyncer(
 				logger,
@@ -911,8 +913,8 @@ func printBlockData(blockMetas []*metadata.Meta, selectorLabels labels.Labels, s
 		var line []string
 		line = append(line,
 			blockMeta.ULID.String(),
-			time.Unix(blockMeta.MinTime/1000, 0).Format("02-01-2006 15:04:05"),
-			time.Unix(blockMeta.MaxTime/1000, 0).Format("02-01-2006 15:04:05"),
+			time.Unix(blockMeta.MinTime/1000, 0).Format(time.RFC3339),
+			time.Unix(blockMeta.MaxTime/1000, 0).Format(time.RFC3339),
 			timeRange.String(),
 			untilDown,
 			p.Sprintf("%d", blockMeta.Stats.NumSeries),
@@ -997,8 +999,8 @@ func (t Table) Less(i, j int) bool {
 
 func compare(s1, s2 string) bool {
 	// Values can be either Time, Duration, comma-delimited integers or strings.
-	s1Time, s1Err := time.Parse("02-01-2006 15:04:05", s1)
-	s2Time, s2Err := time.Parse("02-01-2006 15:04:05", s2)
+	s1Time, s1Err := time.Parse(time.RFC3339, s1)
+	s2Time, s2Err := time.Parse(time.RFC3339, s2)
 	if s1Err != nil || s2Err != nil {
 		s1Duration, s1Err := time.ParseDuration(s1)
 		s2Duration, s2Err := time.ParseDuration(s2)
@@ -1312,7 +1314,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, tbc.deleteDelay/2, block.FetcherConcurrency)
-		duplicateBlocksFilter := block.NewDeduplicateFilter()
+		duplicateBlocksFilter := block.NewDeduplicateFilter(block.FetcherConcurrency)
 		stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 
 		var sy *compact.Syncer
@@ -1327,7 +1329,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 					block.NewConsistencyDelayMetaFilter(logger, tbc.consistencyDelay, extprom.WrapRegistererWithPrefix(extpromPrefix, reg)),
 					duplicateBlocksFilter,
 					ignoreDeletionMarkFilter,
-				}, []block.MetadataModifier{block.NewReplicaLabelRemover(logger, make([]string, 0))},
+				},
 			)
 			sy, err = compact.NewMetaSyncer(
 				logger,

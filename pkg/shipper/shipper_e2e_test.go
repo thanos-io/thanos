@@ -134,7 +134,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 				thanos_objstore_bucket_operations_total{bucket="test",operation="get"} 0
 				thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
 				thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 0
-				thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 25
+				thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 20
 				`), `thanos_objstore_bucket_operations_total`))
 				testutil.Equals(t, 0, b)
 			}

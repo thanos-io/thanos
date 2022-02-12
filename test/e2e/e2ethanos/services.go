@@ -133,11 +133,11 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 	return prom, container, nil
 }
 
-func NewPrometheusWithSidecar(e e2e.Environment, name, promConfig, webConfig, promImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
-	return NewPrometheusWithSidecarCustomImage(e, name, promConfig, webConfig, promImage, DefaultImage(), enableFeatures...)
+func NewPrometheusWithSidecar(e e2e.Environment, name, promConfig, webConfig, promImage, minTime string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
+	return NewPrometheusWithSidecarCustomImage(e, name, promConfig, webConfig, promImage, minTime, DefaultImage(), enableFeatures...)
 }
 
-func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, webConfig, promImage string, sidecarImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
+func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, webConfig, promImage, minTime string, sidecarImage string, enableFeatures ...string) (*e2e.InstrumentedRunnable, *e2e.InstrumentedRunnable, error) {
 	prom, dataDir, err := NewPrometheus(e, name, promConfig, webConfig, promImage, enableFeatures...)
 	if err != nil {
 		return nil, nil, err
@@ -154,6 +154,9 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, we
 	}
 	if len(webConfig) > 0 {
 		args["--prometheus.http-client"] = defaultPromHttpConfig()
+	}
+	if minTime != "" {
+		args["--min-time"] = minTime
 	}
 	sidecar := NewService(
 		e,
@@ -661,7 +664,7 @@ receivers:
 	return s, nil
 }
 
-func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig string, relabelConfig ...relabel.Config) (*e2e.InstrumentedRunnable, error) {
+func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig string, extArgs []string, relabelConfig ...relabel.Config) (*e2e.InstrumentedRunnable, error) {
 	dir := filepath.Join(e.SharedDir(), "data", "store", name)
 	container := filepath.Join(ContainerSharedDir, "data", "store", name)
 	if err := os.MkdirAll(dir, 0750); err != nil {
@@ -678,7 +681,7 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		return nil, errors.Wrapf(err, "generate store relabel file: %v", relabelConfig)
 	}
 
-	args := e2e.BuildArgs(map[string]string{
+	args := append(e2e.BuildArgs(map[string]string{
 		"--debug.name":        fmt.Sprintf("store-gw-%v", name),
 		"--grpc-address":      ":9091",
 		"--grpc-grace-period": "0s",
@@ -692,7 +695,7 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		"--store.grpc.series-max-concurrency": "1",
 		"--selector.relabel-config":           string(relabelConfigBytes),
 		"--consistency-delay":                 "30m",
-	})
+	}), extArgs...)
 
 	if cacheConfig != "" {
 		args = append(args, "--store.caching-bucket.config", cacheConfig)
