@@ -146,3 +146,21 @@ export const getBlocksByCompactionLevel = (blocks: Block[], compactionLevel: num
   const blockResult = blocks.filter((block) => block.compaction.level === compactionLevel);
   return blockResult;
 };
+
+export const getFilteredBlockPools = (
+  blockPools: { [source: string]: BlocksPool },
+  filteredBlocks: Block[]
+): { [source: string]: BlocksPool } => {
+  const newblockPools: { [source: string]: BlocksPool } = {};
+  Object.keys(blockPools).map((key: string) => {
+    const poolArrayIndex = blockPools[key];
+    const poolArray = poolArrayIndex[Object.keys(poolArrayIndex)[0]];
+    for (let i = 0; i < filteredBlocks.length; i++) {
+      if (JSON.stringify(filteredBlocks[i].thanos.labels) === JSON.stringify(poolArray[0][0].thanos.labels)) {
+        Object.assign(newblockPools, { [key]: blockPools[key] });
+        break;
+      }
+    }
+  });
+  return newblockPools;
+};
