@@ -1,12 +1,12 @@
 # Troubleshoot Compactor Backlog
 
-Compactor is one of the most important components in Thanos. It is responsible for doing compaction, downsampling and retention for the data in the object storage.
+The compactor is one of the most important components in Thanos. It is responsible for doing compaction, downsampling, and retention of the data in the object storage.
 
-When your system contains a lot of block producers (Sidecar, Rule, Receiver, etc) or the scale is large, compactor might not be able to keep up with the data producing rate and it falls behind, which causes a lot of backlogged work. This document will help you to troubleshoot the backlog compaction issue and how to scale the compactor.
+When your system contains a lot of block producers (Sidecar, Rule, Receiver, etc) or the scale is large, the compactor might not be able to keep up with the data producing rate and it falls behind, which causes a lot of backlogged work. This document will help you to troubleshoot the backlog compaction issue and how to scale the compactor.
 
 ## Detect the backlog
 
-Self monitoring for the monitoring system is important. We highly recommend you to set up the Thanos Grafana dashboards and alerts to monitor the thanos components. Without self monitoring, it is hard to detect the issue and fix the problems.
+Self-monitoring for the monitoring system is important. We highly recommend you set up the Thanos Grafana dashboards and alerts to monitor the Thanos components. Without self-monitoring, it is hard to detect the issue and fix the problems.
 
 If you find these issues in your own Thanos deployment, then your compactor might be backlogged and needs to scale more:
 1. The long-term query in your Grafana dashboard is much slower than usual.
@@ -14,21 +14,24 @@ If you find these issues in your own Thanos deployment, then your compactor migh
 3. The compactor stops retention. If the retention period is set to 1 month but you can still see older blocks from the bucket UI then that's the case.
 4. `thanos_compact_iterations_total` metric doesn't increase or the rate is very low.
 
-Current implementation, compactor will perform compaction, downsampling and retention phases in order, which means that if the compaction work is not finished, downsampling and retention phase won't start. So that's why you will find the symptom 2 and 3 mentioned above.
+In the current implementation, the compactor will perform compaction, downsampling, and retention phases in order, which means that if the compaction work is not finished, the downsampling and retention phase won't start. So that's why you will find symptom 2 and 3 mentioned above.
 
-For symptom 4, `thanos_compact_iterations_total` metric doesn't increase means that the Thanos compactor is currently working on the current compaction iteration and cannot finish it in a long time. It is very similar to the case of a message queue. The producers are the components who upload blocks to your object storage. And the compactor is the consumer to deal with the jobs from producers. If the data produce rate is higher than the processing rate of the consumer, then the compactor will fall behind.
+For symptom 4, `thanos_compact_iterations_total` metric doesn't increase means that the Thanos compactor is currently working on the current compaction iteration and cannot finish it in a long time. It is very similar to the case of a message queue. The producers are the components who upload blocks to your object storage. And the compactor is the consumer to deal with the jobs from producers. If the data production rate is higher than the processing rate of the consumer, then the compactor will fall behind.
 
 ### Compactor progress metrics
 
-Since Thanos v0.24 release, four new metrics `thanos_compact_todo_compactions`, `thanos_compact_todo_compaction_blocks`, `thanos_compact_todo_downsample_blocks` and `thanos_compact_todo_deletion_blocks` are added to show the compaction, downsampling and retention progress and backlog.
+Since the Thanos v0.24 release, four new metrics `thanos_compact_todo_compactions`, `thanos_compact_todo_compaction_blocks`, `thanos_compact_todo_downsample_blocks` and `thanos_compact_todo_deletion_blocks` are added to show the compaction, downsampling and retention progress and backlog.
 
-thanos_compact_todo_compactions: The number of compactions that are planned to be processed. thanos_compact_todo_compaction_blocks: The number of blocks that are planned to be compacted. thanos_compact_todo_downsample_blocks: The number of downamples that are queued to be processed. thanos_compact_todo_deletion_blocks: The number of blocks that are queued for retention.
+thanos_compact_todo_compactions: The number of compactions that are planned to be processed.
+thanos_compact_todo_compaction_blocks: The number of blocks that are planned to be compacted.
+thanos_compact_todo_downsample_blocks: The number of downsamples that are queued to be processed.
+thanos_compact_todo_deletion_blocks: The number of blocks that are queued for retention.
 
 To use these metrics, for example you can use `sum(thanos_compact_todo_compaction)` to get the overall compaction backlog or use `sum(thanos_compact_todo_compaction) by (group)` to get which compaction group is the slowest one.
 
 ![compaction-progress](../img/compaction_progress_metrics.png)
 
-This feature works by syncing block metadata from the object storage every 5 minutes by default and then simulate the compaction planning process to calculate how much work needs to be done. You can change the default 5m interval by setting `compact.progress-interval` flag or disable it by setting `compact.progress-interval=0`.
+This feature works by syncing block metadata from the object storage every 5 minutes by default and then simulating the compaction planning process to calculate how much work needs to be done. You can change the default 5m interval by setting `compact.progress-interval` flag or disable it by setting `compact.progress-interval=0`.
 
 ## Solutions
 
@@ -48,7 +51,7 @@ There are some bucket tools that can help you to troubleshoot and solve this iss
 
 You can use `bucket ls`, `bucket inspect` and `bucket web` UI to view your current blocks.
 
-If a lot of blocks are older than the retention period and compactor is not performing retention, then to clean them up, you can do the following:
+If a lot of blocks are older than the retention period and the compactor is not performing retention, then to clean them up, you can do the following:
 1. Stop the current running compactor instances to avoid data race
 2. Run `thanos tools bucket retention` command to perform retention on your blocks directly. This step won't delete your blocks right away. It just adds deletion markers to the blocks for retention.
 3. You can restart the compactor instances now and they will clean up the blocks with deletion markers after some period (by default 2d).
