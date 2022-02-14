@@ -72,6 +72,7 @@ type Options struct {
 	ListenAddress     string
 	Registry          prometheus.Registerer
 	TenantHeader      string
+	TenantAttribute   string
 	DefaultTenantID   string
 	ReplicaHeader     string
 	Endpoint          string
@@ -336,6 +337,56 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	if replicaRaw := r.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
 		if rep, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
 			http.Error(w, "could not parse replica header", http.StatusBadRequest)
+			return
+		}
+	}
+
+	tenant := r.Header.Get(h.options.TenantHeader)
+	if tenant == "" {
+		tenant = h.options.DefaultTenantID
+	}
+
+	// Checking certs for possible value.
+	if h.options.TenantAttribute != "" {
+		if len(r.TLS.PeerCertificates) > 0 {
+			// First cert is the leaf authenticated against.
+			cert := r.TLS.PeerCertificates[0]
+
+			switch h.options.TenantAttribute {
+
+			case "organization":
+				if len(cert.Subject.Organization) > 0 {
+					tenant = cert.Subject.Organization[0]
+				} else {
+					http.Error(w, "could not get organization attribute from client cert", http.StatusBadRequest)
+					return
+				}
+
+			case "organizationalUnit":
+				if len(cert.Subject.OrganizationalUnit) > 0 {
+					tenant = cert.Subject.OrganizationalUnit[0]
+				} else {
+					http.Error(w, "could not get organizationalUnit attribute from client cert", http.StatusBadRequest)
+					return
+				}
+
+			case "commonName":
+				if cert.Subject.CommonName != "" {
+					tenant = cert.Subject.CommonName
+				} else {
+					http.Error(w, "could not get commonName attribute from client cert", http.StatusBadRequest)
+					return
+				}
+
+			default:
+				// Unknown/unsupported attribute requested, can't continue.
+				level.Error(h.logger).Log("err", err, "msg", "tls client cert attribute requested is not supported")
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+		} else {
+			http.Error(w, "could not get required certificate attribute from client cert", http.StatusBadRequest)
 			return
 		}
 	}

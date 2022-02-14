@@ -191,6 +191,7 @@ func runReceive(
 		Registry:          reg,
 		Endpoint:          conf.endpoint,
 		TenantHeader:      conf.tenantHeader,
+		TenantAttribute:   conf.tenantAttribute,
 		DefaultTenantID:   conf.defaultTenantID,
 		ReplicaHeader:     conf.replicaHeader,
 		ReplicationFactor: conf.replicationFactor,
@@ -708,6 +709,7 @@ type receiveConfig struct {
 	refreshInterval   *model.Duration
 	endpoint          string
 	tenantHeader      string
+	tenantAttribute   string
 	tenantLabelName   string
 	defaultTenantID   string
 	replicaHeader     string
@@ -770,6 +772,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration.").StringVar(&rc.endpoint)
 
 	cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(receive.DefaultTenantHeader).StringVar(&rc.tenantHeader)
+
+	cmd.Flag("receive.tenant-certificate-attribute", "Use TLS client certificate's attribute to determine tenant for write requests. Must be one of organization, organizationalUnit or commonName.").Default("").StringVar(&rc.tenantAttribute)
 
 	cmd.Flag("receive.default-tenant-id", "Default tenant ID to use when none is provided via a header.").Default(receive.DefaultTenant).StringVar(&rc.defaultTenantID)
 
