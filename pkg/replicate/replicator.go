@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/objstore"
-
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -29,6 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -237,7 +236,15 @@ func RunReplicate(
 	return nil
 }
 
-func newMetaFetcher(logger log.Logger, fromBkt objstore.InstrumentedBucket, reg prometheus.Registerer, minTime, maxTime thanosmodel.TimeOrDurationValue, concurrency int, ignoreMarkedForDeletion bool) (*thanosblock.MetaFetcher, error) {
+func newMetaFetcher(
+	logger log.Logger,
+	fromBkt objstore.InstrumentedBucket,
+	reg prometheus.Registerer,
+	minTime,
+	maxTime thanosmodel.TimeOrDurationValue,
+	concurrency int,
+	ignoreMarkedForDeletion bool,
+) (*thanosblock.MetaFetcher, error) {
 	filters := []thanosblock.MetadataFilter{
 		thanosblock.NewTimePartitionMetaFilter(minTime, maxTime),
 	}
