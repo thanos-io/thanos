@@ -180,7 +180,7 @@ endif
 docker-e2e: ## Builds 'thanos' docker for e2e tests
 docker-e2e: 
 	@echo ">> building docker image 'thanos' with Dockerfile.e2e-tests"
-	@docker build -f Dockerfile.e2e-tests -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
+	@docker build -f Dockerfile.e2e-tests -t "thanos" .
 
 .PHONY: docker-multi-stage
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
