@@ -14,17 +14,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/model"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
 
-	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
+)
+
+var (
+	minTime         = time.Unix(0, 0)
+	maxTime, _      = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
+	minTimeDuration = model.TimeOrDurationValue{Time: &minTime}
+	maxTimeDuration = model.TimeOrDurationValue{Time: &maxTime}
 )
 
 func testLogger(testName string) log.Logger {
@@ -374,8 +382,15 @@ func TestReplicationSchemeAll(t *testing.T) {
 			selector = c.selector
 		}
 
-		filter := NewBlockFilter(logger, selector, []compact.ResolutionLevel{compact.ResolutionLevelRaw}, []int{1}, c.blockIDs, c.ignoreMarkedForDeletion).Filter
-		fetcher, err := block.NewMetaFetcher(logger, 32, objstore.WithNoopInstr(originBucket), "", nil, nil)
+		filter := NewBlockFilter(logger, selector, []compact.ResolutionLevel{compact.ResolutionLevelRaw}, []int{1}, c.blockIDs).Filter
+		fetcher, err := newMetaFetcher(
+			logger, objstore.WithNoopInstr(originBucket),
+			nil,
+			minTimeDuration,
+			maxTimeDuration,
+			32,
+			c.ignoreMarkedForDeletion,
+		)
 		testutil.Ok(t, err)
 
 		r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), targetBucket, nil)
