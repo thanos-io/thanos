@@ -251,7 +251,7 @@ func newMetaFetcher(
 	if ignoreMarkedForDeletion {
 		filters = append(filters, thanosblock.NewIgnoreDeletionMarkFilter(logger, fromBkt, 0, concurrency))
 	}
-	fetcher, err := thanosblock.NewMetaFetcher(
+	return thanosblock.NewMetaFetcher(
 		logger,
 		concurrency,
 		fromBkt,
@@ -259,8 +259,4 @@ func newMetaFetcher(
 		reg,
 		filters,
 	)
-	if err != nil {
-		return nil, err
-	}
-	return fetcher, nil
 }
