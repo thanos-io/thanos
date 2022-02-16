@@ -24,7 +24,7 @@ Since the Thanos v0.24 release, four new metrics `thanos_compact_todo_compaction
 
 thanos_compact_todo_compactions: The number of compactions that are planned to be processed. thanos_compact_todo_compaction_blocks: The number of blocks that are planned to be compacted. thanos_compact_todo_downsample_blocks: The number of downsamples that are queued to be processed. thanos_compact_todo_deletion_blocks: The number of blocks that are queued for retention.
 
-To use these metrics, for example you can use `sum(thanos_compact_todo_compaction)` to get the overall compaction backlog or use `sum(thanos_compact_todo_compaction) by (group)` to get which compaction group is the slowest one.
+To use these metrics, for example you can use `sum(thanos_compact_todo_compactions)` to get the overall compaction backlog or use `sum(thanos_compact_todo_compactions) by (group)` to get which compaction group is the slowest one.
 
 ![compaction-progress](../img/compaction_progress_metrics.png)
 
