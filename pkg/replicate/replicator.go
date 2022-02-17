@@ -27,6 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -167,15 +168,7 @@ func RunReplicate(
 	}, []string{"result"})
 	replicationRunDuration.WithLabelValues(labelSuccess)
 	replicationRunDuration.WithLabelValues(labelError)
-
-	fetcher, err := thanosblock.NewMetaFetcher(
-		logger,
-		32,
-		fromBkt,
-		"",
-		reg,
-		[]thanosblock.MetadataFilter{thanosblock.NewTimePartitionMetaFilter(*minTime, *maxTime)},
-	)
+	fetcher, err := newMetaFetcher(logger, fromBkt, reg, *minTime, *maxTime, 32, ignoreMarkedForDeletion)
 	if err != nil {
 		return errors.Wrapf(err, "create meta fetcher with bucket %v", fromBkt)
 	}
@@ -186,7 +179,6 @@ func RunReplicate(
 		resolutions,
 		compactions,
 		blockIDs,
-		ignoreMarkedForDeletion,
 	).Filter
 	metrics := newReplicationMetrics(reg)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -242,4 +234,29 @@ func RunReplicate(
 	level.Info(logger).Log("msg", "starting replication")
 
 	return nil
+}
+
+func newMetaFetcher(
+	logger log.Logger,
+	fromBkt objstore.InstrumentedBucket,
+	reg prometheus.Registerer,
+	minTime,
+	maxTime thanosmodel.TimeOrDurationValue,
+	concurrency int,
+	ignoreMarkedForDeletion bool,
+) (*thanosblock.MetaFetcher, error) {
+	filters := []thanosblock.MetadataFilter{
+		thanosblock.NewTimePartitionMetaFilter(minTime, maxTime),
+	}
+	if ignoreMarkedForDeletion {
+		filters = append(filters, thanosblock.NewIgnoreDeletionMarkFilter(logger, fromBkt, 0, concurrency))
+	}
+	return thanosblock.NewMetaFetcher(
+		logger,
+		concurrency,
+		fromBkt,
+		"",
+		reg,
+		filters,
+	)
 }

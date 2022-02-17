@@ -29,12 +29,11 @@ import (
 
 // BlockFilter is block filter that filters out compacted and unselected blocks.
 type BlockFilter struct {
-	logger                  log.Logger
-	labelSelector           labels.Selector
-	resolutionLevels        map[compact.ResolutionLevel]struct{}
-	compactionLevels        map[int]struct{}
-	blockIDs                []ulid.ULID
-	ignoreMarkedForDeletion bool
+	logger           log.Logger
+	labelSelector    labels.Selector
+	resolutionLevels map[compact.ResolutionLevel]struct{}
+	compactionLevels map[int]struct{}
+	blockIDs         []ulid.ULID
 }
 
 // NewBlockFilter returns block filter.
@@ -44,7 +43,6 @@ func NewBlockFilter(
 	resolutionLevels []compact.ResolutionLevel,
 	compactionLevels []int,
 	blockIDs []ulid.ULID,
-	ignoreMarkedForDeletion bool,
 ) *BlockFilter {
 	allowedResolutions := make(map[compact.ResolutionLevel]struct{})
 	for _, resolutionLevel := range resolutionLevels {
@@ -56,20 +54,16 @@ func NewBlockFilter(
 	}
 
 	return &BlockFilter{
-		labelSelector:           labelSelector,
-		logger:                  logger,
-		resolutionLevels:        allowedResolutions,
-		compactionLevels:        allowedCompactions,
-		blockIDs:                blockIDs,
-		ignoreMarkedForDeletion: ignoreMarkedForDeletion,
+		labelSelector:    labelSelector,
+		logger:           logger,
+		resolutionLevels: allowedResolutions,
+		compactionLevels: allowedCompactions,
+		blockIDs:         blockIDs,
 	}
 }
 
 // Filter return true if block is non-compacted and matches selector.
-func (bf *BlockFilter) Filter(b *metadata.Meta, markedForDeletion bool) bool {
-	if bf.ignoreMarkedForDeletion && markedForDeletion {
-		return false
-	}
+func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 	if len(b.Thanos.Labels) == 0 {
 		level.Error(bf.logger).Log("msg", "filtering block", "reason", "labels should not be empty")
 		return false
@@ -121,7 +115,7 @@ func (bf *BlockFilter) Filter(b *metadata.Meta, markedForDeletion bool) bool {
 	return true
 }
 
-type blockFilterFunc func(b *metadata.Meta, markedForDeletion bool) bool
+type blockFilterFunc func(b *metadata.Meta) bool
 
 // TODO: Add filters field.
 type replicationScheme struct {
@@ -198,11 +192,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 	}
 
 	for id, meta := range metas {
-		_, err := rs.fromBkt.ReaderWithExpectedErrs(rs.fromBkt.IsObjNotFoundErr).Get(ctx, path.Join(meta.ULID.String(), metadata.DeletionMarkFilename))
-		if err != nil && !rs.fromBkt.IsObjNotFoundErr(err) {
-			return errors.Wrapf(err, "failed to read deletion mark from origin bucket block %s", meta.ULID.String())
-		}
-		if rs.blockFilter(meta, !rs.fromBkt.IsObjNotFoundErr(err)) {
+		if rs.blockFilter(meta) {
 			level.Info(rs.logger).Log("msg", "adding block to be replicated", "block_uuid", id.String())
 			availableBlocks = append(availableBlocks, meta)
 		}
