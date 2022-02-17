@@ -28,6 +28,6 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
       - name: Check docs
-        run: make check-docs
+        run: make docs
       - name: Check examples
         run: make check-examples

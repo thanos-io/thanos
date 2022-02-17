@@ -105,7 +105,7 @@ It's key to get familiarized with the style guide and mechanics of Thanos, espec
 ### Building/Running/Developing
 
 * Run `make help` for getting a list of helper commands that will make your development life much more easy. Especially consider using `make lint` often. It provides auto **linting** and **formatter** for making sure the code quality meets the standards of contribution.
-* Usually, while sending in a PR `make build`, `make format`, `make lint`, `make test`, `make docs`, `make check-docs`, `make quickstart` are the most used commands while developing Thanos.
+* Usually, while sending in a PR `make build`, `make format`, `make lint`, `make test`, `make docs`, `make quickstart` are the most used commands while developing Thanos.
 * When you run `make build` from Thanos repo root, code is compiled and a binary named `thanos` is created and built into your `$GOBIN` or `$GOPATH/bin`.
 * In case you are working on a component of Thanos, you would love it if you don’t have to set up the yaml configuration for Prometheus and other components, before you start running the component. This is a repetitive task, and the Thanos Community has provided commands/script for automating the running of components -
   * Run `make quickstart` for spinning up all components of Thanos quickly.

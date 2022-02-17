@@ -213,9 +213,9 @@ $(PUSH_DOCKER_ARCHS): docker-push-%:
 	@docker tag "thanos-linux-$*" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
 	@docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
 
-.PHONY: docs
-docs: ## Regenerates flags in docs for all thanos commands localise links, ensure GitHub format.
-docs: build examples $(MDOX)
+.PHONY: generate-docs
+generate-docs: ## Generates docs for all thanos commands, localise links, ensure GitHub format.
+generate-docs: build examples $(MDOX)
 	@echo ">> generating docs"
 	PATH="${PATH}:$(GOBIN)" $(MDOX) fmt -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(MD_FILES_TO_FORMAT)
 
@@ -224,12 +224,15 @@ changed-docs: ## Only do the docs check for files that have been changed (git st
 changed-docs: build examples $(MDOX)
 	@echo ">> generating docs on changed files"
 	PATH="${PATH}:$(GOBIN)" $(MDOX) fmt -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(FAST_MD_FILES_TO_FORMAT)
+	$(MAKE) white-noise-cleanup
 
-.PHONY: check-docs
-check-docs: ## checks docs against discrepancy with flags, links, white noise.
-check-docs: build examples $(MDOX)
-	@echo ">> checking formatting and local/remote links"
-	PATH=${PATH}:$(GOBIN) $(MDOX) fmt -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(MD_FILES_TO_FORMAT)
+.PHONY: docs
+docs: ## checks and formats docs against discrepancy with flags, links, white noise.
+docs: generate-docs
+	$(MAKE) white-noise-cleanup
+
+.PHONY: white-noise-cleanup
+white-noise-cleanup:
 	@echo ">> detecting white noise"
 	@find . -type f \( -name "*.md" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,'run make docs and commit changes')
