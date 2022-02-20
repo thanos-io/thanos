@@ -16,13 +16,13 @@ If you find these issues in your own Thanos deployment, then your compactor migh
 
 In the current implementation, the compactor will perform compaction, downsampling, and retention phases in order, which means that if the compaction work is not finished, the downsampling and retention phase won't start. So that's why you will find symptom 2 and 3 mentioned above.
 
-For symptom 4, `thanos_compact_iterations_total` metric doesn't increase means that the Thanos compactor is currently working on the current compaction iteration and cannot finish it in a long time. It is very similar to the case of a message queue. The producers are the components who upload blocks to your object storage. And the compactor is the consumer to deal with the jobs from producers. If the data production rate is higher than the processing rate of the consumer, then the compactor will fall behind.
+For symptom 4, `thanos_compact_iterations_total` metric doesn't increase means that the Thanos compactor is currently working on the current compaction iteration and cannot finish it in a long time. It is very similar to the case of a message queue. The producers are the components that upload blocks to your object storage. And the compactor is the consumer to deal with the jobs from producers. If the data production rate is higher than the processing rate of the consumer, then the compactor will fall behind.
 
 ### Compactor progress metrics
 
 Since the Thanos v0.24 release, four new metrics `thanos_compact_todo_compactions`, `thanos_compact_todo_compaction_blocks`, `thanos_compact_todo_downsample_blocks` and `thanos_compact_todo_deletion_blocks` are added to show the compaction, downsampling and retention progress and backlog.
 
-`thanos_compact_todo_compactions`: The number of compactions that are planned to be processed. `thanos_compact_todo_compaction_blocks`: The number of blocks that are planned to be compacted. `thanos_compact_todo_downsample_blocks`: The number of blocks that are queued to be downsampled. `thanos_compact_todo_deletion_blocks`: The number of blocks that are queued for retention.
+`thanos_compact_todo_compactions`: The number of planned compactions. `thanos_compact_todo_compaction_blocks`: The number of blocks that are planned to be compacted. `thanos_compact_todo_downsample_blocks`: The number of blocks that are queued to be downsampled. `thanos_compact_todo_deletion_blocks`: The number of blocks that are queued for retention.
 
 To use these metrics, for example you can use `sum(thanos_compact_todo_compactions)` to get the overall compaction backlog or use `sum(thanos_compact_todo_compactions) by (group)` to get which compaction group is the slowest one.
 
@@ -32,11 +32,11 @@ This feature works by syncing block metadata from the object storage every 5 min
 
 ## Solutions
 
-### Scale the compactor more
+### Scale the compactor
 
-To prevent the compactor from falling behind, you can scale the compactor more.
+To prevent the compactor from falling behind, you can scale the compactor.
 
-To first scale the compactor vertically, you can give it more CPU and memory resources. It also has two flags `compact.concurrency` and `downsample.concurrency` to control the number of workers to do compaction and downsampling.
+To scale the compactor vertically, you can give it more CPU and memory resources. It also has two flags `compact.concurrency` and `downsample.concurrency` to control the number of workers to do compaction and downsampling.
 
 To scale the compactor horizontally, you can run multiple compactor instances with different `min-time` and `max-time` flags so that each compactor will only work on the blocks that are within the time range.
 
