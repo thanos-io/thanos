@@ -5,7 +5,7 @@ package shipper
 
 import (
 	"context"
-	"io/ioutil"
+	"fmt"
 	"math"
 	"math/rand"
 	"os"
@@ -26,16 +26,12 @@ import (
 )
 
 func TestShipperTimestamps(t *testing.T) {
-	dir, err := ioutil.TempDir("", "shipper-test")
-	testutil.Ok(t, err)
-	defer func() {
-		testutil.Ok(t, os.RemoveAll(dir))
-	}()
+	dir := t.TempDir()
 
 	s := New(nil, nil, dir, nil, nil, metadata.TestSource, false, false, metadata.NoneFunc)
 
 	// Missing thanos meta file.
-	_, _, err = s.Timestamps()
+	_, _, err := s.Timestamps()
 	testutil.NotOk(t, err)
 
 	meta := &Meta{Version: MetaVersion1}
@@ -90,11 +86,7 @@ func TestShipperTimestamps(t *testing.T) {
 }
 
 func TestIterBlockMetas(t *testing.T) {
-	dir, err := ioutil.TempDir("", "shipper-test")
-	testutil.Ok(t, err)
-	defer func() {
-		testutil.Ok(t, os.RemoveAll(dir))
-	}()
+	dir := t.TempDir()
 
 	id1 := ulid.MustNew(1, nil)
 	testutil.Ok(t, os.Mkdir(path.Join(dir, id1.String()), os.ModePerm))
@@ -139,11 +131,7 @@ func TestIterBlockMetas(t *testing.T) {
 
 func BenchmarkIterBlockMetas(b *testing.B) {
 	var metas []*metadata.Meta
-	dir, err := ioutil.TempDir("", "shipper-test")
-	testutil.Ok(b, err)
-	defer func() {
-		testutil.Ok(b, os.RemoveAll(dir))
-	}()
+	dir := b.TempDir()
 
 	for i := 0; i < 100; i++ {
 		id := ulid.MustNew(uint64(i), nil)
@@ -166,16 +154,12 @@ func BenchmarkIterBlockMetas(b *testing.B) {
 
 	shipper := New(nil, nil, dir, nil, nil, metadata.TestSource, false, false, metadata.NoneFunc)
 
-	_, err = shipper.blockMetasFromOldest()
+	_, err := shipper.blockMetasFromOldest()
 	testutil.Ok(b, err)
 }
 
 func TestShipperAddsSegmentFiles(t *testing.T) {
-	dir, err := ioutil.TempDir("", "shipper-test")
-	testutil.Ok(t, err)
-	defer func() {
-		testutil.Ok(t, os.RemoveAll(dir))
-	}()
+	dir := t.TempDir()
 
 	inmemory := objstore.NewInMemBucket()
 
@@ -199,9 +183,9 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 			},
 		},
 	}.WriteToDir(log.NewNopLogger(), path.Join(dir, id.String())))
-	testutil.Ok(t, ioutil.WriteFile(filepath.Join(blockDir, "index"), []byte("index file"), 0666))
+	testutil.Ok(t, os.WriteFile(filepath.Join(blockDir, "index"), []byte("index file"), 0666))
 	segmentFile := "00001"
-	testutil.Ok(t, ioutil.WriteFile(filepath.Join(chunksDir, segmentFile), []byte("hello world"), 0666))
+	testutil.Ok(t, os.WriteFile(filepath.Join(chunksDir, segmentFile), []byte("hello world"), 0666))
 
 	uploaded, err := s.Sync(context.Background())
 	testutil.Ok(t, err)
@@ -211,4 +195,34 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, []string{segmentFile}, meta.Thanos.SegmentFiles)
+}
+
+func TestReadMetaFile(t *testing.T) {
+	t.Run("Missing meta file", func(t *testing.T) {
+		// Create TSDB directory without meta file
+		dpath := t.TempDir()
+
+		_, err := ReadMetaFile(dpath)
+		fpath := filepath.Join(dpath, MetaFilename)
+		testutil.Equals(t, fmt.Sprintf(`failed to read %s: open %s: no such file or directory`, fpath, fpath), err.Error())
+	})
+
+	t.Run("Non-JSON meta file", func(t *testing.T) {
+		dpath := t.TempDir()
+		fpath := filepath.Join(dpath, MetaFilename)
+		// Make an invalid JSON file
+		testutil.Ok(t, os.WriteFile(fpath, []byte("{"), 0600))
+
+		_, err := ReadMetaFile(dpath)
+		testutil.Equals(t, fmt.Sprintf(`failed to parse %s as JSON: "{": unexpected end of JSON input`, fpath), err.Error())
+	})
+
+	t.Run("Wrongly versioned meta file", func(t *testing.T) {
+		dpath := t.TempDir()
+		fpath := filepath.Join(dpath, MetaFilename)
+		testutil.Ok(t, os.WriteFile(fpath, []byte(`{"version": 2}`), 0600))
+
+		_, err := ReadMetaFile(dpath)
+		testutil.Equals(t, "unexpected meta file version 2", err.Error())
+	})
 }
