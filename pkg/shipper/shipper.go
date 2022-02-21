@@ -470,14 +470,15 @@ func WriteMetaFile(logger log.Logger, dir string, meta *Meta) error {
 
 // ReadMetaFile reads the given meta from <dir>/thanos.shipper.json.
 func ReadMetaFile(dir string) (*Meta, error) {
-	b, err := ioutil.ReadFile(filepath.Join(dir, filepath.Clean(MetaFilename)))
+	fpath := filepath.Join(dir, filepath.Clean(MetaFilename))
+	b, err := os.ReadFile(fpath)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to read %s", fpath)
 	}
-	var m Meta
 
+	var m Meta
 	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to parse %s as JSON: %q", fpath, string(b))
 	}
 	if m.Version != MetaVersion1 {
 		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
