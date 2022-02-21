@@ -16,7 +16,7 @@ interface ScrapePoolListProps {
   activeTargets: Target[];
 }
 
-const kvSearch = new KVSearch({
+const kvSearch = new KVSearch<Target>({
   shouldSort: true,
   indexedKeys: ['labels', 'scrapePool', ['labels', /.*/]],
 });
@@ -68,11 +68,7 @@ export const ScrapePoolListContent: FC<ScrapePoolListProps> = ({ activeTargets }
   const handleSearchChange = (e: ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     if (e.target.value !== '') {
       const result = kvSearch.filter(e.target.value.trim(), activeTargets);
-      setTargetList(
-        result.map((value) => {
-          return value.original as unknown as Target;
-        })
-      );
+      setTargetList(result.map((value) => value.original));
     } else {
       setTargetList(activeTargets);
     }
