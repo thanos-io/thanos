@@ -213,29 +213,33 @@ $(PUSH_DOCKER_ARCHS): docker-push-%:
 	@docker tag "thanos-linux-$*" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
 	@docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
 
-.PHONY: generate-docs
-generate-docs: ## Generates docs for all thanos commands, localise links, ensure GitHub format.
-generate-docs: build examples $(MDOX)
+.PHONY: docs
+docs: ## Generates docs for all thanos commands, localise links, ensure GitHub format.
+docs: build examples $(MDOX)
 	@echo ">> generating docs"
-	PATH="${PATH}:$(GOBIN)" $(MDOX) fmt -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(MD_FILES_TO_FORMAT)
+	PATH="${PATH}:$(GOBIN)" $(MDOX) fmt --links.localize.address-regex="https://thanos.io/.*" $(MD_FILES_TO_FORMAT)
+	$(MAKE) white-noise-cleanup
 
 .PHONY: changed-docs
 changed-docs: ## Only do the docs check for files that have been changed (git status)
 changed-docs: build examples $(MDOX)
 	@echo ">> generating docs on changed files"
-	PATH="${PATH}:$(GOBIN)" $(MDOX) fmt -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(FAST_MD_FILES_TO_FORMAT)
+	PATH="${PATH}:$(GOBIN)" $(MDOX) fmt --links.localize.address-regex="https://thanos.io/.*" $(FAST_MD_FILES_TO_FORMAT)
 	$(MAKE) white-noise-cleanup
 
-.PHONY: docs
-docs: ## checks and formats docs against discrepancy with flags, links, white noise.
-docs: generate-docs
+.PHONY: check-docs
+check-docs: ## Checks docs against discrepancy with flags, links, white noise.
+check-docs: build examples $(MDOX)
+	@echo ">> checking docs"
+	PATH="${PATH}:$(GOBIN)" $(MDOX) fmt -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(MD_FILES_TO_FORMAT)
 	$(MAKE) white-noise-cleanup
+	$(call require_clean_work_tree,'run make docs and commit changes')
 
 .PHONY: white-noise-cleanup
+white-noise-cleanup: ## Cleans up white noise in docs.
 white-noise-cleanup:
-	@echo ">> detecting white noise"
+	@echo ">> cleaning up white noise"
 	@find . -type f \( -name "*.md" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
-	$(call require_clean_work_tree,'run make docs and commit changes')
 
 .PHONY: shell-format
 shell-format: $(SHFMT)
