@@ -110,7 +110,7 @@ export const RulesContent: FC<RouteComponentProps & RulesContentProps> = ({ resp
                           </div>
                         </td>
                       ) : (
-                        <td style={{ backgroundColor: '#F5F5F5' }}>
+                        <td>
                           <GraphExpressionLink title="record" expr={r.name} />
                           <GraphExpressionLink title="expr" expr={r.query} />
                         </td>

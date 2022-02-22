@@ -36,7 +36,7 @@ interface RuleGroup {
   interval: number;
 }
 
-const kvSearchRule = new KVSearch({
+const kvSearchRule = new KVSearch<Rule>({
   shouldSort: true,
   indexedKeys: ['name', 'labels', ['labels', /.*/]],
 });
@@ -88,7 +88,7 @@ const AlertsContent: FC<AlertsProps> = ({ groups = [], statsCount }) => {
             file: group.file,
             name: group.name,
             interval: group.interval,
-            rules: ruleFilterList.map((value) => value.original as unknown as Rule),
+            rules: ruleFilterList.map((value) => value.original),
           });
         }
       }
