@@ -91,6 +91,13 @@ func (n *NoCompactMark) markerFilename() string { return NoCompactMarkFilename }
 // ReadMarker reads the given mark file from <dir>/<marker filename>.json in bucket.
 func ReadMarker(ctx context.Context, logger log.Logger, bkt objstore.InstrumentedBucketReader, dir string, marker Marker) error {
 	markerFile := path.Join(dir, marker.markerFilename())
+	ok, err := bkt.Exists(ctx, markerFile)
+	if err != nil {
+		return errors.Wrapf(err, "file exists: %s", metaFile)
+	}
+	if (!ok) {
+		return ErrorMarkerNotFound
+	}
 	r, err := bkt.ReaderWithExpectedErrs(bkt.IsObjNotFoundErr).Get(ctx, markerFile)
 	if err != nil {
 		if bkt.IsObjNotFoundErr(err) {
