@@ -10,6 +10,14 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+### Fixed
+
+### Changed
+
+### Removed
+
+## [v0.25.0 - <in progress>](https://github.com/thanos-io/thanos/tree/release-0.25)
+
 ### Added
 
 - [#5110](https://github.com/thanos-io/thanos/pull/5110) Block: Do not upload DebugMeta files to obj store.
