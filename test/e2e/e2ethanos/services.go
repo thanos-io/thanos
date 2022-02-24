@@ -1026,3 +1026,66 @@ func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 		},
 	}
 }
+
+// NOTE: by using aggregation all results are now unsorted.
+var QueryUpWithoutInstance = func() string { return "sum(up) without (instance)" }
+
+// e2ethanos.DefaultPromConfig returns Prometheus config that sets Prometheus to:
+// * expose 2 external labels, source and replica.
+// * optionallly scrape self. This will produce up == 0 metric which we can assert on.
+// * optionally remote write endpoint to write into.
+func DefaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string, scrapeSelf bool, scrapeTargets ...string) string {
+	var targets string
+	if scrapeSelf {
+		targets = "localhost:9090"
+	}
+	if len(scrapeTargets) > 0 {
+		targets = strings.Join(scrapeTargets, ",")
+	}
+
+	config := fmt.Sprintf(`
+global:
+  external_labels:
+    prometheus: %v
+    replica: %v
+`, name, replica)
+
+	if targets != "" {
+		config = fmt.Sprintf(`
+%s
+scrape_configs:
+- job_name: 'myself'
+  # Quick scrapes for test purposes.
+  scrape_interval: 1s
+  scrape_timeout: 1s
+  static_configs:
+  - targets: [%s]
+  relabel_configs:
+  - source_labels: ['__address__']
+    regex: '^.+:80$'
+    action: drop
+`, config, targets)
+	}
+
+	if remoteWriteEndpoint != "" {
+		config = fmt.Sprintf(`
+%s
+remote_write:
+- url: "%s"
+  # Don't spam receiver on mistake.
+  queue_config:
+    min_backoff: 2s
+    max_backoff: 10s
+`, config, remoteWriteEndpoint)
+	}
+
+	if ruleFile != "" {
+		config = fmt.Sprintf(`
+%s
+rule_files:
+-  "%s"
+`, config, ruleFile)
+	}
+
+	return config
+}

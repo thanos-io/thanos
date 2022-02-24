@@ -32,7 +32,7 @@ func TestQueryFrontend(t *testing.T) {
 
 	now := time.Now()
 
-	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", defaultPromConfig("test", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", true), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
@@ -59,7 +59,7 @@ func TestQueryFrontend(t *testing.T) {
 
 	// Ensure we can get the result from Querier first so that it
 	// doesn't need to retry when we send queries to the frontend later.
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, time.Now, promclient.QueryOptions{
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{
@@ -77,7 +77,7 @@ func TestQueryFrontend(t *testing.T) {
 	queryTimes := vals[0]
 
 	t.Run("query frontend works for instant query", func(t *testing.T) {
-		queryAndAssertSeries(t, ctx, queryFrontend.Endpoint("http"), queryUpWithoutInstance, time.Now, promclient.QueryOptions{
+		queryAndAssertSeries(t, ctx, queryFrontend.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
 			{
@@ -105,7 +105,7 @@ func TestQueryFrontend(t *testing.T) {
 			t,
 			ctx,
 			queryFrontend.Endpoint("http"),
-			queryUpWithoutInstance,
+			e2ethanos.QueryUpWithoutInstance,
 			timestamp.FromTime(now.Add(-time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			14,
@@ -147,7 +147,7 @@ func TestQueryFrontend(t *testing.T) {
 			t,
 			ctx,
 			queryFrontend.Endpoint("http"),
-			queryUpWithoutInstance,
+			e2ethanos.QueryUpWithoutInstance,
 			timestamp.FromTime(now.Add(-time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			14,
@@ -192,7 +192,7 @@ func TestQueryFrontend(t *testing.T) {
 			t,
 			ctx,
 			queryFrontend.Endpoint("http"),
-			queryUpWithoutInstance,
+			e2ethanos.QueryUpWithoutInstance,
 			timestamp.FromTime(now.Add(-time.Hour)),
 			timestamp.FromTime(now.Add(24*time.Hour)),
 			14,
@@ -396,7 +396,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 
 	now := time.Now()
 
-	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", defaultPromConfig("test", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", true), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
@@ -436,7 +436,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 
 	// Ensure we can get the result from Querier first so that it
 	// doesn't need to retry when we send queries to the frontend later.
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), queryUpWithoutInstance, time.Now, promclient.QueryOptions{
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{
@@ -455,7 +455,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		t,
 		ctx,
 		queryFrontend.Endpoint("http"),
-		queryUpWithoutInstance,
+		e2ethanos.QueryUpWithoutInstance,
 		timestamp.FromTime(now.Add(-time.Hour)),
 		timestamp.FromTime(now.Add(time.Hour)),
 		14,
@@ -485,7 +485,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		t,
 		ctx,
 		queryFrontend.Endpoint("http"),
-		queryUpWithoutInstance,
+		e2ethanos.QueryUpWithoutInstance,
 		timestamp.FromTime(now.Add(-time.Hour)),
 		timestamp.FromTime(now.Add(time.Hour)),
 		14,
