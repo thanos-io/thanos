@@ -690,7 +690,15 @@ func runQuery(
 			grpcserver.WithMaxConnAge(grpcMaxConnAge),
 		)
 
+		firstServiceDiscovery := true
+
 		g.Add(func() error {
+			if firstServiceDiscovery {
+				ctx, cancel := context.WithCancel(context.Background())
+				endpoints.Update(ctx)
+				cancel()
+				firstServiceDiscovery = false
+			}
 			statusProber.Ready()
 			return s.ListenAndServe()
 		}, func(error) {
