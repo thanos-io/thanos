@@ -155,11 +155,15 @@ export const getFilteredBlockPools = (
   Object.keys(blockPools).map((key: string) => {
     const poolArrayIndex = blockPools[key];
     const poolArray = poolArrayIndex[Object.keys(poolArrayIndex)[0]];
-    for (let i = 0; i < filteredBlocks.length; i++) {
-      if (JSON.stringify(filteredBlocks[i].thanos.labels) === JSON.stringify(poolArray[0][0].thanos.labels)) {
-        Object.assign(newblockPools, { [key]: blockPools[key] });
-        break;
+    if (poolArray[0].length > 0) {
+      for (let i = 0; i < filteredBlocks.length; i++) {
+        if (JSON.stringify(filteredBlocks[i].thanos.labels) === JSON.stringify(poolArray[0][0].thanos.labels)) {
+          Object.assign(newblockPools, { [key]: blockPools[key] });
+          break;
+        }
       }
+    } else {
+      return newblockPools;
     }
   });
   return newblockPools;

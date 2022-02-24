@@ -73,6 +73,13 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
   const blockPools = useMemo(() => sortBlocks(blocks, label, findOverlappingBlocks), [blocks, label, findOverlappingBlocks]);
   const filteredBlocks = useMemo(() => getBlockByUlid(blocks, blockSearch), [blocks, blockSearch]);
   const filteredBlockPools = useMemo(() => getFilteredBlockPools(blockPools, filteredBlocks), [filteredBlocks, blockPools]);
+  const emptyBlockPools = useMemo(() => {
+    for (const property in blockPools) {
+      const firstObject = blockPools[property];
+      if (firstObject[Object.keys(firstObject)[0]][0].length !== 0) return false;
+    }
+    return true;
+  }, [blockPools]);
 
   const setViewTime = (times: number[]): void => {
     setQuery({
@@ -153,7 +160,9 @@ export const BlocksContent: FC<{ data: BlockListProps }> = ({ data }) => {
           <div className={styles.container}>
             <div className={styles.grid}>
               <div className={styles.sources}>
-                {Object.keys(filteredBlockPools).length > 0 ? (
+                {emptyBlockPools ? (
+                  <h3 style={{ marginLeft: '3rem' }}>No Overlapping blocks found!</h3>
+                ) : Object.keys(filteredBlockPools).length > 0 ? (
                   Object.keys(filteredBlockPools).map((pk) => (
                     <SourceView
                       key={pk}
