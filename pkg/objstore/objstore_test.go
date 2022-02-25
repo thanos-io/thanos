@@ -86,3 +86,30 @@ func TestTracingReader(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, int64(11), size)
 }
+
+func TestTimingTracingReader(t *testing.T) {
+	m := BucketWithMetrics("", NewInMemBucket(), nil)
+	r := bytes.NewReader([]byte("hello world"))
+
+	tr := NopCloserWithSize(r)
+	tr = newTimingReadCloser(tr, "", m.opsDuration, m.opsFailures, func(err error) bool {
+		return false
+	})
+	tr = newTracingReadCloser(tr, nil)
+
+	size, err := TryToGetSize(tr)
+
+	testutil.Ok(t, err)
+	testutil.Equals(t, int64(11), size)
+
+	smallBuf := make([]byte, 4)
+	n, err := io.ReadFull(tr, smallBuf)
+	testutil.Ok(t, err)
+	testutil.Equals(t, 4, n)
+
+	// Verify that size is still the same, after reading 4 bytes.
+	size, err = TryToGetSize(tr)
+
+	testutil.Ok(t, err)
+	testutil.Equals(t, int64(11), size)
+}

@@ -492,6 +492,8 @@ func (b *metricBucket) Name() string {
 
 type timingReadCloser struct {
 	io.ReadCloser
+	objSize    int64
+	objSizeErr error
 
 	alreadyGotErr bool
 
@@ -506,14 +508,21 @@ func newTimingReadCloser(rc io.ReadCloser, op string, dur *prometheus.HistogramV
 	// Initialize the metrics with 0.
 	dur.WithLabelValues(op)
 	failed.WithLabelValues(op)
+	objSize, objSizeErr := TryToGetSize(rc)
 	return &timingReadCloser{
 		ReadCloser:        rc,
+		objSize:           objSize,
+		objSizeErr:        objSizeErr,
 		start:             time.Now(),
 		op:                op,
 		duration:          dur,
 		failed:            failed,
 		isFailureExpected: isFailureExpected,
 	}
+}
+
+func (t *timingReadCloser) ObjectSize() (int64, error) {
+	return t.objSize, t.objSizeErr
 }
 
 func (rc *timingReadCloser) Close() error {
