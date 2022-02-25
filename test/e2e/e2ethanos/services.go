@@ -856,7 +856,7 @@ func NewMinio(env e2e.Environment, name, bktName string) (*e2e.InstrumentedRunna
 			Command: e2e.NewCommandWithoutEntrypoint("sh", "-c", fmt.Sprintf(strings.Join(commands, " && "), minioKESGithubContent, minioKESGithubContent, bktName, 8090)),
 			//TODO(@clyang82): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/9
 			//Readiness: e2e.NewHTTPReadinessProbe("http", "/minio/health/ready", 200, 200),
-			Readiness: e2e.NewCmdReadinessProbe(e2e.NewCommand("sh", "-c", "sleep 2 && curl -k https://127.0.0.1:8090/minio/health/ready")),
+			Readiness: e2e.NewCmdReadinessProbe(e2e.NewCommand("sh", "-c", "curl --retry 5 --retry-delay 1 -k https://127.0.0.1:8090/minio/health/ready")),
 			EnvVars: map[string]string{
 				"MINIO_ACCESS_KEY": e2edb.MinioAccessKey,
 				"MINIO_SECRET_KEY": e2edb.MinioSecretKey,
@@ -1030,7 +1030,7 @@ func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 // NOTE: by using aggregation all results are now unsorted.
 var QueryUpWithoutInstance = func() string { return "sum(up) without (instance)" }
 
-// e2ethanos.DefaultPromConfig returns Prometheus config that sets Prometheus to:
+// DefaultPromConfig returns Prometheus config that sets Prometheus to:
 // * expose 2 external labels, source and replica.
 // * optionallly scrape self. This will produce up == 0 metric which we can assert on.
 // * optionally remote write endpoint to write into.
