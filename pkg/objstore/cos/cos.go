@@ -333,7 +333,7 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 		runutil.ExhaustCloseWithLogOnErr(b.logger, resp.Body, "cos get range obj close")
 		return nil, err
 	}
-	// Add size info into reader for pass it to Upload function.
+	// Add size info into reader to pass it to Upload function.
 	r := objectSizerReadCloser{ReadCloser: resp.Body, size: resp.ContentLength}
 	return r, nil
 }
