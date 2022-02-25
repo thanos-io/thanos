@@ -476,7 +476,7 @@ metafile_content_ttl: 0s`
 
 	// Wait for store to sync blocks.
 	// thanos_blocks_meta_synced: 1x loadedMeta 0x labelExcludedMeta 0x TooFreshMeta.
-	for _, st := range []*e2e.InstrumentedRunnable{store1, store2, store3} {
+	for _, st := range []e2e.InstrumentedRunnable{store1, store2, store3} {
 		t.Run(st.Name(), func(t *testing.T) {
 			testutil.Ok(t, st.WaitSumMetrics(e2e.Equals(1), "thanos_blocks_meta_synced"))
 			testutil.Ok(t, st.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
@@ -502,7 +502,7 @@ metafile_content_ttl: 0s`
 			},
 		)
 
-		for _, st := range []*e2e.InstrumentedRunnable{store1, store2, store3} {
+		for _, st := range []e2e.InstrumentedRunnable{store1, store2, store3} {
 			testutil.Ok(t, st.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_cache_groupcache_loads_total`}))
 			testutil.Ok(t, st.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_store_bucket_cache_operation_hits_total`}, e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "config", "chunks"))))
 		}
