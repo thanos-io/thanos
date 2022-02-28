@@ -10,48 +10,49 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-### Fixed
+## v0.25.0 - In Progress
 
-### Changed
-
-### Removed
-
-## [v0.25.0 - <in progress>](https://github.com/thanos-io/thanos/tree/release-0.25)
+## [v0.25.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.02.23
 
 ### Added
 
 - [#5110](https://github.com/thanos-io/thanos/pull/5110) Block: Do not upload DebugMeta files to obj store.
 - [#4963](https://github.com/thanos-io/thanos/pull/4963) Compactor, Store, Tools: Loading block metadata now only filters out duplicates within a source (or compaction group if replica labels are configured), and does so in parallel over sources.
 - [#5089](https://github.com/thanos-io/thanos/pull/5089) S3: Create an empty map in the case SSE-KMS is used and no KMSEncryptionContext is passed.
-- [#4970](https://github.com/thanos-io/thanos/pull/4970) Added a new flag `exclude-delete` to `tools bucket ls`, which excludes blocks marked for deletion.
+- [#4970](https://github.com/thanos-io/thanos/pull/4970) Tools `tools bucket ls`: Added a new flag `exclude-delete` to exclude blocks marked for deletion.
 - [#4903](https://github.com/thanos-io/thanos/pull/4903) Compactor: Added tracing support for compaction.
-- [#4909](https://github.com/thanos-io/thanos/pull/4909) Compactor: Add flag --max-time / --min-time to filter blocks that are ready to be compacted.
+- [#4909](https://github.com/thanos-io/thanos/pull/4909) Compactor: Add flag --max-time / --min-time to filter blocks that are ready to be compacted.
 - [#4942](https://github.com/thanos-io/thanos/pull/4942) Tracing: add `traceid_128bit` support for jaeger.
 - [#4917](https://github.com/thanos-io/thanos/pull/4917) Query: add initial query pushdown for a subset of aggregations. Can be enabled with `--enable-feature=query-pushdown` on Thanos Query.
-- [#4888](https://github.com/thanos-io/thanos/pull/4888) Cache: support redis cache backend.
+- [#4888](https://github.com/thanos-io/thanos/pull/4888) Cache: Support redis cache backend.
 - [#4946](https://github.com/thanos-io/thanos/pull/4946) Store: Support tls_config configuration for the s3 minio client.
 - [#4974](https://github.com/thanos-io/thanos/pull/4974) Store: Support tls_config configuration for connecting with Azure storage.
 - [#4999](https://github.com/thanos-io/thanos/pull/4999) COS: Support `endpoint` configuration for vpc internal endpoint.
 - [#5059](https://github.com/thanos-io/thanos/pull/5059) Compactor: Adding minimum retention flag validation for downsampling retention.
-- [#4667](https://github.com/thanos-io/thanos/pull/4667) Add a pure aws-sdk auth for s3 storage.
-- [#5111](https://github.com/thanos-io/thanos/pull/5111) Add matcher support to Query Rules endpoint.
+- [#4667](https://github.com/thanos-io/thanos/pull/4667) S3: Add a pure AWS-SDK auth for S3 storage.
+- [#5111](https://github.com/thanos-io/thanos/pull/5111) Query: Add matcher support to Rules endpoint.
 - [#5117](https://github.com/thanos-io/thanos/pull/5117) Bucket replicate: Added flag `--ignore-marked-for-deletion` to avoid replication of blocks with the deletion mark.
 - [#5148](https://github.com/thanos-io/thanos/pull/5148) Receive: Add tenant tag for tracing spans.
+- [#4927](https://github.com/thanos-io/thanos/pull/4927) Rule: Added ability to specify multiple remote write targets.
+- [#4818](https://github.com/thanos-io/thanos/pull/4818) Store: Add Groupcache as a cache backend.
 
 ## Changed
-- [#5144](https://github.com/thanos-io/thanos/pull/5144) UI: Improve graph color
+- [#5144](https://github.com/thanos-io/thanos/pull/5144) UI: Improve graph color.
 - [#5119](https://github.com/thanos-io/thanos/pull/5119) UI: Optimize Target, Alert and Service Discovery page and on each of them add a search bar.
+- [#4885](https://github.com/thanos-io/thanos/pull/4885) Store: Make `queryStats` log with human-readable format.
 
 ### Fixed
 
-- [#5102](https://github.com/thanos-io/thanos/pull/5102) Fix: Filter block rows in bucket UI according to searched block ID
-- [#5051](https://github.com/thanos-io/thanos/pull/5051) Prober: Remove spam of changing probe status.
+- [#5102](https://github.com/thanos-io/thanos/pull/5102) UI: Filter block rows in bucket UI according to searched block ID.
+- [#5051](https://github.com/thanos-io/thanos/pull/5051) Prober: Decrease 'changing probe status' log spamming.
 - [#4918](https://github.com/thanos-io/thanos/pull/4918) Tracing: Fixing force tracing with Jaeger.
 - [#4879](https://github.com/thanos-io/thanos/pull/4879) Bucket verify: Fixed bug causing wrong number of blocks to be checked.
 - [#4908](https://github.com/thanos-io/thanos/pull/4908) UI: Show 'minus' icon and add tooltip when store min / max time is not available.
 - [#4883](https://github.com/thanos-io/thanos/pull/4883) Mixin: adhere to RFC 1123 compatible component naming.
-- [#5114](https://github.com/thanos-io/thanos/pull/5114) Tools `thanos bucket inspect` fix time formatting.
-- [#5139](https://github.com/thanos-io/thanos/pull/5139) COS: Support multi-part upload, fix upload issue when index size more than 5GB.
+- [#5114](https://github.com/thanos-io/thanos/pull/5114) Tools `thanos bucket inspect`: Fix time formatting.
+- [#5139](https://github.com/thanos-io/thanos/pull/5139) COS: Support multi-part upload, fix upload issue when index size is larger than 5GB.
+- [#5014](https://github.com/thanos-io/thanos/pull/5014) Query: Set default times for `query_exemplars` API.
+- [#5103](https://github.com/thanos-io/thanos/pull/5013) Store: Fix race condition in filesystem client's `Delete()`.
 
 ## [v0.24.0](https://github.com/thanos-io/thanos/tree/release-0.24) - 2021.12.22
 
@@ -67,7 +68,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4710](https://github.com/thanos-io/thanos/pull/4710) Store: Add metric to capture timestamp of the last loaded block.
 - [#4736](https://github.com/thanos-io/thanos/pull/4736) S3: Add capability to use custom AWS STS Endpoint.
 - [#4764](https://github.com/thanos-io/thanos/pull/4764) Compactor: add `block-viewer.global.sync-block-timeout` flag to set the timeout of synchronization block metas.
-- [#4818](https://github.com/thanos-io/thanos/pull/4818) *EXPERIMENTAL* store: Add Groupcache as a cache backend. [Original issue](https://github.com/thanos-io/thanos/issues/2962).
 - [#4801](https://github.com/thanos-io/thanos/pull/4801) Compactor: added Prometheus metrics for tracking the progress of compaction and downsampling.
 - [#4444](https://github.com/thanos-io/thanos/pull/4444) UI: add mark deletion and no compaction to the Block UI.
 - [#4576](https://github.com/thanos-io/thanos/pull/4576) UI: add filter compaction level to the Block UI.
