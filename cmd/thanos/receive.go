@@ -191,7 +191,7 @@ func runReceive(
 		Registry:          reg,
 		Endpoint:          conf.endpoint,
 		TenantHeader:      conf.tenantHeader,
-		TenantAttribute:   conf.tenantAttribute,
+		TenantField:       conf.tenantField,
 		DefaultTenantID:   conf.defaultTenantID,
 		ReplicaHeader:     conf.replicaHeader,
 		ReplicationFactor: conf.replicationFactor,
@@ -709,7 +709,7 @@ type receiveConfig struct {
 	refreshInterval   *model.Duration
 	endpoint          string
 	tenantHeader      string
-	tenantAttribute   string
+	tenantField       string
 	tenantLabelName   string
 	defaultTenantID   string
 	replicaHeader     string
@@ -773,7 +773,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(receive.DefaultTenantHeader).StringVar(&rc.tenantHeader)
 
-	cmd.Flag("receive.tenant-certificate-attribute", "Use TLS client certificate's attribute to determine tenant for write requests. Must be one of organization, organizationalUnit or commonName.").Default("").StringVar(&rc.tenantAttribute)
+	cmd.Flag("receive.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+receive.CertificateFieldOrganization+", "+receive.CertificateFieldOrganizationalUnit+" or "+receive.CertificateFieldCommonName+". This setting will cause the receive.tenant-header flag value to be ignored.").Default("").EnumVar(&rc.tenantField, "", receive.CertificateFieldOrganization, receive.CertificateFieldOrganizationalUnit, receive.CertificateFieldCommonName)
 
 	cmd.Flag("receive.default-tenant-id", "Default tenant ID to use when none is provided via a header.").Default(receive.DefaultTenant).StringVar(&rc.defaultTenantID)
 

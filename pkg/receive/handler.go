@@ -57,6 +57,13 @@ const (
 	labelError   = "error"
 )
 
+// Allowed fields in client certificates.
+const (
+	CertificateFieldOrganization       = "organization"
+	CertificateFieldOrganizationalUnit = "organizationalUnit"
+	CertificateFieldCommonName         = "commonName"
+)
+
 var (
 	// errConflict is returned whenever an operation fails due to any conflict-type error.
 	errConflict = errors.New("conflict")
@@ -72,7 +79,7 @@ type Options struct {
 	ListenAddress     string
 	Registry          prometheus.Registerer
 	TenantHeader      string
-	TenantAttribute   string
+	TenantField       string
 	DefaultTenantID   string
 	ReplicaHeader     string
 	Endpoint          string
@@ -346,47 +353,11 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
-	// Checking certs for possible value.
-	if h.options.TenantAttribute != "" {
-		if len(r.TLS.PeerCertificates) > 0 {
-			// First cert is the leaf authenticated against.
-			cert := r.TLS.PeerCertificates[0]
-
-			switch h.options.TenantAttribute {
-
-			case "organization":
-				if len(cert.Subject.Organization) > 0 {
-					tenant = cert.Subject.Organization[0]
-				} else {
-					http.Error(w, "could not get organization attribute from client cert", http.StatusBadRequest)
-					return
-				}
-
-			case "organizationalUnit":
-				if len(cert.Subject.OrganizationalUnit) > 0 {
-					tenant = cert.Subject.OrganizationalUnit[0]
-				} else {
-					http.Error(w, "could not get organizationalUnit attribute from client cert", http.StatusBadRequest)
-					return
-				}
-
-			case "commonName":
-				if cert.Subject.CommonName != "" {
-					tenant = cert.Subject.CommonName
-				} else {
-					http.Error(w, "could not get commonName attribute from client cert", http.StatusBadRequest)
-					return
-				}
-
-			default:
-				// Unknown/unsupported attribute requested, can't continue.
-				level.Error(h.logger).Log("err", err, "msg", "tls client cert attribute requested is not supported")
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-
-		} else {
-			http.Error(w, "could not get required certificate attribute from client cert", http.StatusBadRequest)
+	if h.options.TenantField != "" {
+		tenant, err = h.getTenantFromCertificate(r)
+		if err != nil {
+			// This must hard fail to ensure hard tenancy when feature is enabled.
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 	}
@@ -860,4 +831,46 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	client := storepb.NewWriteableStoreClient(conn)
 	p.cache[addr] = client
 	return client, nil
+}
+
+// GetTenantFromCertificate extracts the tenant value from a client's presented certificate. The x509 field to use as
+// value can be configured with Options.TenantField. An error is returned when the extraction has not succeeded.
+func (h *Handler) getTenantFromCertificate(r *http.Request) (string, error) {
+	var tenant string
+
+	if len(r.TLS.PeerCertificates) == 0 {
+		return "", errors.New("could not get required certificate field from client cert")
+	}
+
+	// First cert is the leaf authenticated against.
+	cert := r.TLS.PeerCertificates[0]
+
+	switch h.options.TenantField {
+
+	case CertificateFieldOrganization:
+		if len(cert.Subject.Organization) > 0 {
+			tenant = cert.Subject.Organization[0]
+		} else {
+			return "", errors.New("could not get organization field from client cert")
+		}
+
+	case CertificateFieldOrganizationalUnit:
+		if len(cert.Subject.OrganizationalUnit) > 0 {
+			tenant = cert.Subject.OrganizationalUnit[0]
+		} else {
+			return "", errors.New("could not get organizationalUnit field from client cert")
+		}
+
+	case CertificateFieldCommonName:
+		if cert.Subject.CommonName != "" {
+			tenant = cert.Subject.CommonName
+		} else {
+			return "", errors.New("could not get commonName field from client cert")
+		}
+
+	default:
+		return "", errors.New("tls client cert field requested is not supported")
+	}
+
+	return tenant, nil
 }
