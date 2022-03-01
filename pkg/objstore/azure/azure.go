@@ -182,6 +182,11 @@ func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket
 		return nil, err
 	}
 
+	return NewBucketWithConfig(logger, conf, component)
+}
+
+// NewBucketWithConfig returns a new Bucket using the provided Azure config struct.
+func NewBucketWithConfig(logger log.Logger, conf Config, component string) (*Bucket, error) {
 	if err := conf.validate(); err != nil {
 		return nil, err
 	}
