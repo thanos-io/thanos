@@ -120,7 +120,7 @@ func sortResults(res model.Vector) {
 func TestSidecarNotReady(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query")
+	e, err := e2e.NewDockerEnvironment("e2e_test_query_sidecar_not_ready")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
