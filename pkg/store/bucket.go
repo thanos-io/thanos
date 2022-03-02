@@ -705,7 +705,6 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 		LabelSets: s.LabelSet(),
 	}
 
-
 	return res, nil
 }
 
