@@ -684,7 +684,9 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 }
 
 func (s *BucketStore) LabelSet() []labelpb.ZLabelSet {
+	s.mtx.RLock()
 	labelSets := s.advLabelSets
+	s.mtx.RUnlock()
 
 	if s.enableCompatibilityLabel && len(labelSets) > 0 {
 		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: CompatibilityTypeLabelName, Value: "store"}}})
@@ -700,11 +702,9 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 		StoreType: component.Store.ToProto(),
 		MinTime:   mint,
 		MaxTime:   maxt,
+		LabelSets: s.LabelSet(),
 	}
 
-	s.mtx.RLock()
-	res.LabelSets = s.LabelSet()
-	s.mtx.RUnlock()
 	return res, nil
 }
 
