@@ -152,7 +152,7 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 	testutil.Equals(t, 200, resp.StatusCode)
 }
 
-func reloadRulesSignal(t *testing.T, r *e2e.InstrumentedRunnable) {
+func reloadRulesSignal(t *testing.T, r e2e.InstrumentedRunnable) {
 	c := e2e.NewCommand("kill", "-1", "1")
 	_, _, err := r.Exec(c)
 	testutil.Ok(t, err)

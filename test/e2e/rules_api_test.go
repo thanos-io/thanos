@@ -71,7 +71,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	queryCfg := []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
-				StaticAddresses: []string{qUninit.InternalEndpoint("http")},
+				StaticAddresses: []string{qUninit.Future().InternalEndpoint("http")},
 				Scheme:          "http",
 			},
 		},
