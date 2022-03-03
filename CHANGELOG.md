@@ -8,11 +8,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## Unreleased
-
-## v0.25.0 - In Progress
-
-## [v0.25.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.02.23
+## [v0.25.0](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.02.23
 
 ### Added
 
@@ -36,7 +32,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#4927](https://github.com/thanos-io/thanos/pull/4927) Rule: Added ability to specify multiple remote write targets.
 - [#4818](https://github.com/thanos-io/thanos/pull/4818) Store: Add Groupcache as a cache backend.
 
-## Changed
+### Changed
+
 - [#5144](https://github.com/thanos-io/thanos/pull/5144) UI: Improve graph color.
 - [#5119](https://github.com/thanos-io/thanos/pull/5119) UI: Optimize Target, Alert and Service Discovery page and on each of them add a search bar.
 - [#4885](https://github.com/thanos-io/thanos/pull/4885) Store: Make `queryStats` log with human-readable format.
