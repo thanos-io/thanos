@@ -32,7 +32,7 @@ func TestQueryFrontend(t *testing.T) {
 
 	now := time.Now()
 
-	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", true), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
@@ -396,7 +396,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 
 	now := time.Now()
 
-	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", true), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
