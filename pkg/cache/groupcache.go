@@ -62,7 +62,7 @@ type GroupcacheConfig struct {
 	DNSInterval time.Duration `yaml:"dns_interval"`
 
 	// Timeout specifies the read/write timeout.
-	Timeout time.Duration
+	Timeout time.Duration `yaml:"timeout"`
 }
 
 var (
