@@ -539,12 +539,14 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 				"__name__":  "test_absent_metric",
 				"job":       "thanos-receive",
 				"receive":   "1",
+				"replica":   "1",
 				"tenant_id": "default-tenant",
 			},
 			{
 				"__name__":  "test_absent_metric",
 				"job":       "thanos-receive",
 				"receive":   "2",
+				"replica":   "1",
 				"tenant_id": "default-tenant",
 			},
 		})

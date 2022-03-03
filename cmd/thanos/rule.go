@@ -363,7 +363,9 @@ func runRule(
 			return 0, nil
 		}, walDir, 1*time.Minute, nil)
 		if err := remoteStore.ApplyConfig(&config.Config{
-			GlobalConfig:       config.DefaultGlobalConfig,
+			GlobalConfig: config.GlobalConfig{
+				ExternalLabels: labelsTSDBToProm(conf.lset),
+			},
 			RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
 		}); err != nil {
 			return errors.Wrap(err, "applying config to remote storage")
