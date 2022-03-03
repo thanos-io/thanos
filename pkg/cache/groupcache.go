@@ -70,7 +70,7 @@ var (
 		MaxSize:       250 * 1024 * 1024,
 		DNSSDResolver: dns.GolangResolverType,
 		DNSInterval:   1 * time.Minute,
-		Timeout:       500 * time.Millisecond,
+		Timeout:       2 * time.Second,
 	}
 )
 
