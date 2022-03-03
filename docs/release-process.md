@@ -23,7 +23,9 @@ Release shepherd responsibilities:
 
 | Release | Time of first RC     | Shepherd (GitHub handle)    |
 |---------|----------------------|-----------------------------|
-| v0.25.0 | (planned) 2022.02.22 | No one ATM                  |
+| v0.27.0 | (planned) 2022.05.16 | No one ATM                  |
+| v0.26.0 | (planned) 2022.04.11 | No one ATM                  |
+| v0.25.0 | 2022.03.01           | `@bwplotka` and `@matej-g`  |
 | v0.24.0 | 2021.12.22           | `@squat`                    |
 | v0.23.0 | 2021.09.02           | `@bwplotka`                 |
 | v0.22.0 | 2021.07.06           | `@GiedriusS`                |
