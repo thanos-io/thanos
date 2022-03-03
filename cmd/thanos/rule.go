@@ -363,7 +363,12 @@ func runRule(
 			return 0, nil
 		}, walDir, 1*time.Minute, nil)
 		if err := remoteStore.ApplyConfig(&config.Config{
-			GlobalConfig:       config.DefaultGlobalConfig,
+			GlobalConfig: config.GlobalConfig{
+				ScrapeInterval:     model.Duration(1 * time.Minute),
+				ScrapeTimeout:      model.Duration(10 * time.Second),
+				EvaluationInterval: model.Duration(1 * time.Minute),
+				ExternalLabels:     labelsTSDBToProm(conf.lset),
+			},
 			RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
 		}); err != nil {
 			return errors.Wrap(err, "applying config to remote storage")
