@@ -442,7 +442,7 @@ In the `peers` section it is possible to use the prefix form to automatically lo
 
 Note that there must be no trailing slash in the `peers` configuration i.e. one of the strings must be identical to `self_url` and others should have the same form. Without this, loading data from peers may fail.
 
-If timeout is set to zero then there is no timeout for fetching and fetching's lifetime is equal to the lifetime to the original request's lifetime. It is recommended to keep it more than zero. It is generally preferred to keep this value higher because the fetching operation potentially includes loading that data from remote object storage.
+If timeout is set to zero then there is no timeout for fetching and fetching's lifetime is equal to the lifetime to the original request's lifetime. It is recommended to keep it higher than zero. It is generally preferred to keep this value higher because the fetching operation potentially includes loading of data from remote object storage.
 
 ## Index Header
 
