@@ -197,7 +197,7 @@ func validate(config Config) error {
 	if config.Endpoint == "" || config.Bucket == "" {
 		return errors.New("aliyun oss endpoint or bucket is not present in config file")
 	}
-	if  config.AccessKeyID == "" || config.AccessKeySecret == "" {
+	if config.AccessKeyID == "" || config.AccessKeySecret == "" {
 		return errors.New("aliyun oss access_key_id or access_key_secret is not present in config file")
 	}
 
