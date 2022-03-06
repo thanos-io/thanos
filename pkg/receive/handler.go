@@ -651,7 +651,11 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
 
-	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
+	var err error
+	tracing.DoInSpan(ctx, "receive_handle_request", func(_ context.Context) {
+		err = h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
+	})
+
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
