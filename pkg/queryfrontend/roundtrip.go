@@ -51,13 +51,13 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 	labelsCodec := NewThanosLabelsCodec(config.LabelsConfig.PartialResponseStrategy, config.DefaultTimeRange)
 
 	queryRangeTripperware, err := newQueryRangeTripperware(config.QueryRangeConfig, queryRangeLimits, queryRangeCodec,
-		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger)
+		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger, config.ForwardHeaders)
 	if err != nil {
 		return nil, err
 	}
 
 	labelsTripperware, err := newLabelsTripperware(config.LabelsConfig, labelsLimits, labelsCodec,
-		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "labels"}, reg), logger)
+		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "labels"}, reg), logger, config.ForwardHeaders)
 	if err != nil {
 		return nil, err
 	}
@@ -138,6 +138,7 @@ func newQueryRangeTripperware(
 	codec *queryRangeCodec,
 	reg prometheus.Registerer,
 	logger log.Logger,
+	forwardHeaders []string,
 ) (queryrange.Tripperware, error) {
 	queryRangeMiddleware := []queryrange.Middleware{queryrange.NewLimitsMiddleware(limits)}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
@@ -203,7 +204,7 @@ func newQueryRangeTripperware(
 	}
 
 	return func(next http.RoundTripper) http.RoundTripper {
-		rt := queryrange.NewRoundTripper(next, codec, nil, queryRangeMiddleware...)
+		rt := queryrange.NewRoundTripper(next, codec, forwardHeaders, queryRangeMiddleware...)
 		return queryrange.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			return rt.RoundTrip(r)
 		})
@@ -218,6 +219,7 @@ func newLabelsTripperware(
 	codec *labelsCodec,
 	reg prometheus.Registerer,
 	logger log.Logger,
+	forwardHeaders []string,
 ) (queryrange.Tripperware, error) {
 	labelsMiddleware := []queryrange.Middleware{}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
@@ -265,7 +267,7 @@ func newLabelsTripperware(
 		)
 	}
 	return func(next http.RoundTripper) http.RoundTripper {
-		rt := queryrange.NewRoundTripper(next, codec, nil, labelsMiddleware...)
+		rt := queryrange.NewRoundTripper(next, codec, forwardHeaders, labelsMiddleware...)
 		return queryrange.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			return rt.RoundTrip(r)
 		})
