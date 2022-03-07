@@ -129,6 +129,7 @@ type bucketReplicateConfig struct {
 }
 
 type bucketDownsampleConfig struct {
+	waitInterval          time.Duration
 	downsampleConcurrency int
 	dataDir               string
 	hashFunc              string
@@ -224,6 +225,8 @@ func (tbc *bucketRewriteConfig) registerBucketRewriteFlag(cmd extkingpin.FlagCla
 }
 
 func (tbc *bucketDownsampleConfig) registerBucketDownsampleFlag(cmd extkingpin.FlagClause) *bucketDownsampleConfig {
+	cmd.Flag("wait-interval", "Wait interval between downsample runs.").
+		Default("5m").DurationVar(&tbc.waitInterval)
 	cmd.Flag("downsample.concurrency", "Number of goroutines to use when downsampling blocks.").
 		Default("1").IntVar(&tbc.downsampleConcurrency)
 	cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
@@ -747,7 +750,8 @@ func registerBucketDownsample(app extkingpin.AppClause, objStoreConfig *extflag.
 	tbc.registerBucketDownsampleFlag(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
-		return RunDownsample(g, logger, reg, *httpAddr, *httpTLSConfig, time.Duration(*httpGracePeriod), tbc.dataDir, tbc.downsampleConcurrency, objStoreConfig, component.Downsample, metadata.HashFunc(tbc.hashFunc))
+		return RunDownsample(g, logger, reg, *httpAddr, *httpTLSConfig, time.Duration(*httpGracePeriod), tbc.dataDir,
+			tbc.waitInterval, tbc.downsampleConcurrency, objStoreConfig, component.Downsample, metadata.HashFunc(tbc.hashFunc))
 	})
 }
 
