@@ -652,6 +652,7 @@ Flags:
                               format details:
                               https://thanos.io/tip/thanos/tracing.md/#configuration
       --version               Show application version.
+      --wait-interval=5m      Wait interval between downsample runs.
 
 ```
 
