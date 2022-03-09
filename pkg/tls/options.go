@@ -35,7 +35,7 @@ func NewServerConfig(logger log.Logger, cert, key, clientCA string) (*tls.Config
 	}
 
 	tlsCfg := &tls.Config{
-		MinVersion: tls.VersionTLS12,
+		MinVersion: tls.VersionTLS13,
 	}
 
 	mngr := &serverTLSManager{
