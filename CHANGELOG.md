@@ -8,6 +8,14 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## [v0.25.1](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.03.09
+
+The binaries published with this release are built with Go1.17.8 to avoid [CVE-2022-24921](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-24921).
+
+### Fixed
+
+- [#5226](https://github.com/thanos-io/thanos/pull/5226) Rebuild Thanos for v0.25.1 with Go 1.17.8
+
 ## [v0.25.0](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.02.23
 
 ### Added
