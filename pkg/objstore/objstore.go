@@ -255,8 +255,13 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 
 	var downloadedFiles []string
 	if err := bkt.Iter(ctx, src, func(name string) error {
+		dst := filepath.Join(dst, filepath.Base(name))
 		if strings.HasSuffix(name, DirDelim) {
-			return DownloadDir(ctx, logger, bkt, originalSrc, name, filepath.Join(dst, filepath.Base(name)), ignoredPaths...)
+			if err := DownloadDir(ctx, logger, bkt, originalSrc, name, dst, ignoredPaths...); err != nil {
+				return err
+			}
+			downloadedFiles = append(downloadedFiles, dst)
+			return nil
 		}
 		for _, ignoredPath := range ignoredPaths {
 			if ignoredPath == strings.TrimPrefix(name, string(originalSrc)+DirDelim) {
