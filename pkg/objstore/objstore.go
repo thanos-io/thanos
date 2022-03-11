@@ -276,6 +276,7 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 		downloadedFiles = append(downloadedFiles, dst)
 		return nil
 	}); err != nil {
+		downloadedFiles = append(downloadedFiles, dst) // Last, clean up the root dst directory.
 		// Best-effort cleanup if the download failed.
 		for _, f := range downloadedFiles {
 			if rerr := os.Remove(f); rerr != nil {
