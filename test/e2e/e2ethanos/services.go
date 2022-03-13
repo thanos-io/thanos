@@ -601,11 +601,13 @@ type RulerBuilder struct {
 
 	f e2e.FutureRunnable
 
-	amCfg        []alert.AlertmanagerConfig
-	replicaLabel string
-	image        string
-	resendDelay  string
-	evalInterval string
+	amCfg                []alert.AlertmanagerConfig
+	replicaLabel         string
+	image                string
+	resendDelay          string
+	evalInterval         string
+	forGracePeriod       string
+	restoreIgnoredLabels []string
 }
 
 // NewRulerBuilder is a Ruler future that allows extra configuration before initialization.
@@ -643,6 +645,16 @@ func (r *RulerBuilder) WithResendDelay(resendDelay string) *RulerBuilder {
 
 func (r *RulerBuilder) WithEvalInterval(evalInterval string) *RulerBuilder {
 	r.evalInterval = evalInterval
+	return r
+}
+
+func (r *RulerBuilder) WithForGracePeriod(forGracePeriod string) *RulerBuilder {
+	r.forGracePeriod = forGracePeriod
+	return r
+}
+
+func (r *RulerBuilder) WithRestoreIgnoredLabels(labels ...string) *RulerBuilder {
+	r.restoreIgnoredLabels = labels
 	return r
 }
 
@@ -685,6 +697,7 @@ func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Co
 		"--query.config":                  string(queryCfgBytes),
 		"--query.sd-dns-interval":         "1s",
 		"--resend-delay":                  "5s",
+		"--for-grace-period":              "1s",
 	}
 	if r.replicaLabel != "" {
 		ruleArgs["--label"] = fmt.Sprintf(`%s="%s"`, replicaLabel, r.replicaLabel)
@@ -698,6 +711,10 @@ func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Co
 		ruleArgs["--eval-interval"] = r.evalInterval
 	}
 
+	if r.forGracePeriod != "" {
+		ruleArgs["--for-grace-period"] = r.forGracePeriod
+	}
+
 	if remoteWriteCfg != nil {
 		rwCfgBytes, err := yaml.Marshal(struct {
 			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
@@ -708,9 +725,15 @@ func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Co
 		ruleArgs["--remote-write.config"] = string(rwCfgBytes)
 	}
 
+	args := e2e.BuildArgs(ruleArgs)
+
+	for _, label := range r.restoreIgnoredLabels {
+		args = append(args, "--restore-ignored-label="+label)
+	}
+
 	return e2emon.AsInstrumented(r.f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image:     r.image,
-		Command:   e2e.NewCommand("rule", e2e.BuildArgs(ruleArgs)...),
+		Command:   e2e.NewCommand("rule", args...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	})), "http")
 }
