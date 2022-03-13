@@ -12,6 +12,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+### Added
+
+- [#5220](https://github.com/thanos-io/thanos/pull/5220) Query Frontend: Add `--query-frontend.forward-header` flag, forward headers to downstream querier.
+
 ### Changed
 
 - [#5205](https://github.com/thanos-io/thanos/pull/5205) Rule: Add ruler labels as external labels in stateless ruler mode.

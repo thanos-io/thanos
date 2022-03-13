@@ -203,6 +203,7 @@ type Config struct {
 	CacheCompression       string
 	RequestLoggingDecision string
 	DownstreamURL          string
+	ForwardHeaders         []string
 }
 
 // QueryRangeConfig holds the config for query range tripperware.
