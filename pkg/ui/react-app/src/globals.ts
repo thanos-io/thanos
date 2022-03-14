@@ -1,6 +1,5 @@
 import jquery from 'jquery';
 
-(window as any).jQuery = jquery;
-(window as any).moment = require('moment');
-
-(window as any).THANOS_QUERY_URL = '';
+window.jQuery = jquery;
+window.moment = require('moment');
+window.THANOS_QUERY_URL = '';
