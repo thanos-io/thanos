@@ -22,6 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5206](https://github.com/thanos-io/thanos/pull/5206) Cache: add timeout for groupcache's fetch operation.
 - [#5218](https://github.com/thanos-io/thanos/pull/5218) Tools: Run bucket downsample tools continuously.
 - [#5224](https://github.com/thanos-io/thanos/pull/5224) Receive: Remove sort on label hashing
+- [#5231](https://github.com/thanos-io/thanos/pull/5231) Tools: Bucket verify tool ignores blocks with deletion markers.
 
 ### Removed
 
