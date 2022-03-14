@@ -334,7 +334,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		}
 
 		// We ignore any block that has the deletion marker file.
-		filters := []block.MetadataFilter{block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, 32)}
+		filters := []block.MetadataFilter{block.NewIgnoreDeletionMarkFilter(logger, bkt, 0, block.FetcherConcurrency)}
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
 			return err
