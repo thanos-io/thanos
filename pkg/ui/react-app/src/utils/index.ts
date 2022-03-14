@@ -111,7 +111,7 @@ export const formatDuration = (d: number): string => {
   return r;
 };
 
-const MAX_TIME = 9223372036854775807;
+const MAX_TIME = BigInt('9223372036854775807');
 const MIN_TIME = 0;
 
 export function parseTime(timeText: string): number {
