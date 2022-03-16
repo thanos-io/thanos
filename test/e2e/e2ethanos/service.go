@@ -24,7 +24,7 @@ func NewService(
 	readiness *e2e.HTTPReadinessProbe,
 	http, grpc int,
 	otherPorts ...Port,
-) *e2e.InstrumentedRunnable {
+) e2e.InstrumentedRunnable {
 	return newUninitiatedService(e, name, http, grpc, otherPorts...).Init(
 		e2e.StartOptions{
 			Image:            image,
@@ -41,7 +41,7 @@ func newUninitiatedService(
 	name string,
 	http, grpc int,
 	otherPorts ...Port,
-) *e2e.FutureInstrumentedRunnable {
+) e2e.InstrumentedRunnableBuilder {
 	metricsPorts := "http"
 	ports := map[string]int{
 		"http": http,
@@ -56,15 +56,15 @@ func newUninitiatedService(
 		}
 	}
 
-	return e2e.NewInstrumentedRunnable(e, name, ports, metricsPorts)
+	return e2e.NewInstrumentedRunnable(e, name).WithPorts(ports, metricsPorts)
 }
 
 func initiateService(
-	service *e2e.FutureInstrumentedRunnable,
+	service e2e.InstrumentedRunnableBuilder,
 	image string,
 	command e2e.Command,
 	readiness *e2e.HTTPReadinessProbe,
-) *e2e.InstrumentedRunnable {
+) e2e.InstrumentedRunnable {
 	return service.Init(
 		e2e.StartOptions{
 			Image:            image,

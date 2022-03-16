@@ -107,7 +107,7 @@ func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange
 	}
 }
 
-func (c labelsCodec) DecodeRequest(_ context.Context, r *http.Request, _ []string) (queryrange.Request, error) {
+func (c labelsCodec) DecodeRequest(_ context.Context, r *http.Request, forwardHeaders []string) (queryrange.Request, error) {
 	if err := r.ParseForm(); err != nil {
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
 	}
@@ -118,9 +118,9 @@ func (c labelsCodec) DecodeRequest(_ context.Context, r *http.Request, _ []strin
 	)
 	switch op := getOperation(r); op {
 	case labelNamesOp, labelValuesOp:
-		req, err = c.parseLabelsRequest(r, op)
+		req, err = c.parseLabelsRequest(r, op, forwardHeaders)
 	case seriesOp:
-		req, err = c.parseSeriesRequest(r)
+		req, err = c.parseSeriesRequest(r, forwardHeaders)
 	}
 	if err != nil {
 		return nil, err
@@ -167,6 +167,12 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		}
 
+		for _, hv := range thanosReq.Headers {
+			for _, v := range hv.Values {
+				req.Header.Add(hv.Name, v)
+			}
+		}
+
 	case *ThanosSeriesRequest:
 		var params = url.Values{
 			"start":                      []string{encodeTime(thanosReq.Start)},
@@ -187,6 +193,11 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 			return nil, httpgrpc.Errorf(http.StatusBadRequest, "error creating request: %s", err.Error())
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		for _, hv := range thanosReq.Headers {
+			for _, v := range hv.Values {
+				req.Header.Add(hv.Name, v)
+			}
+		}
 
 	default:
 		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "invalid request format")
@@ -271,7 +282,7 @@ func (c labelsCodec) EncodeResponse(ctx context.Context, res queryrange.Response
 	return &resp, nil
 }
 
-func (c labelsCodec) parseLabelsRequest(r *http.Request, op string) (queryrange.Request, error) {
+func (c labelsCodec) parseLabelsRequest(r *http.Request, op string, forwardHeaders []string) (queryrange.Request, error) {
 	var (
 		result ThanosLabelsRequest
 		err    error
@@ -312,10 +323,20 @@ func (c labelsCodec) parseLabelsRequest(r *http.Request, op string) (queryrange.
 		}
 	}
 
+	// Include the specified headers from http request in prometheusRequest.
+	for _, header := range forwardHeaders {
+		for h, hv := range r.Header {
+			if strings.EqualFold(h, header) {
+				result.Headers = append(result.Headers, &RequestHeader{Name: h, Values: hv})
+				break
+			}
+		}
+	}
+
 	return &result, nil
 }
 
-func (c labelsCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, error) {
+func (c labelsCodec) parseSeriesRequest(r *http.Request, forwardHeaders []string) (queryrange.Request, error) {
 	var (
 		result ThanosSeriesRequest
 		err    error
@@ -355,6 +376,16 @@ func (c labelsCodec) parseSeriesRequest(r *http.Request) (queryrange.Request, er
 		if strings.Contains(value, noStoreValue) {
 			result.CachingOptions.Disabled = true
 			break
+		}
+	}
+
+	// Include the specified headers from http request in prometheusRequest.
+	for _, header := range forwardHeaders {
+		for h, hv := range r.Header {
+			if strings.EqualFold(h, header) {
+				result.Headers = append(result.Headers, &RequestHeader{Name: h, Values: hv})
+				break
+			}
 		}
 	}
 

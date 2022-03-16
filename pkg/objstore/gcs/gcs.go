@@ -52,6 +52,7 @@ func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component st
 	return NewBucketWithConfig(ctx, logger, gc, component)
 }
 
+// NewBucketWithConfig returns a new Bucket with gcs Config struct.
 func NewBucketWithConfig(ctx context.Context, logger log.Logger, gc Config, component string) (*Bucket, error) {
 	if gc.Bucket == "" {
 		return nil, errors.New("missing Google Cloud Storage bucket name for stored blocks")

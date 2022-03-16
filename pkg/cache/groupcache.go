@@ -36,6 +36,7 @@ type Groupcache struct {
 	galaxy   *galaxycache.Galaxy
 	universe *galaxycache.Universe
 	logger   log.Logger
+	timeout  time.Duration
 }
 
 // GroupcacheConfig holds the in-memory cache config.
@@ -59,6 +60,9 @@ type GroupcacheConfig struct {
 
 	// How often we should resolve the addresses.
 	DNSInterval time.Duration `yaml:"dns_interval"`
+
+	// Timeout specifies the read/write timeout.
+	Timeout time.Duration `yaml:"timeout"`
 }
 
 var (
@@ -66,6 +70,7 @@ var (
 		MaxSize:       250 * 1024 * 1024,
 		DNSSDResolver: dns.GolangResolverType,
 		DNSInterval:   1 * time.Minute,
+		Timeout:       2 * time.Second,
 	}
 )
 
@@ -255,6 +260,7 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 		logger:   logger,
 		galaxy:   galaxy,
 		universe: universe,
+		timeout:  conf.Timeout,
 	}, nil
 }
 
@@ -264,6 +270,12 @@ func (c *Groupcache) Store(ctx context.Context, data map[string][]byte, ttl time
 
 func (c *Groupcache) Fetch(ctx context.Context, keys []string) map[string][]byte {
 	data := map[string][]byte{}
+
+	if c.timeout != 0 {
+		timeoutCtx, cancel := context.WithTimeout(ctx, c.timeout)
+		ctx = timeoutCtx
+		defer cancel()
+	}
 
 	for _, k := range keys {
 		codec := galaxycache.ByteCodec{}

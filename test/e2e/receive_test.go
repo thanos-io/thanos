@@ -346,9 +346,9 @@ func TestReceive(t *testing.T) {
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
-				r2.InternalEndpoint("grpc"),
-				r3.InternalEndpoint("grpc"),
+				r1.Future().InternalEndpoint("grpc"),
+				r2.Future().InternalEndpoint("grpc"),
+				r3.Future().InternalEndpoint("grpc"),
 			},
 		}
 
@@ -361,15 +361,15 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r3Runnable))
 
-		prom1, _, err := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.Future().InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom2, _, err := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom2, _, err := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.Future().InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom3, _, err := e2ethanos.NewPrometheus(e, "3", e2ethanos.DefaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom3, _, err := e2ethanos.NewPrometheus(e, "3", e2ethanos.DefaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.Future().InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.Future().InternalEndpoint("grpc"), r2.Future().InternalEndpoint("grpc"), r3.Future().InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -418,9 +418,9 @@ func TestReceive(t *testing.T) {
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
-				r2.InternalEndpoint("grpc"),
-				r3.InternalEndpoint("grpc"),
+				r1.Future().InternalEndpoint("grpc"),
+				r2.Future().InternalEndpoint("grpc"),
+				r3.Future().InternalEndpoint("grpc"),
 			},
 		}
 
@@ -434,15 +434,15 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r3Runnable))
 
-		prom1, _, err := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.Future().InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom2, _, err := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom2, _, err := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.Future().InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
-		prom3, _, err := e2ethanos.NewPrometheus(e, "3", e2ethanos.DefaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom3, _, err := e2ethanos.NewPrometheus(e, "3", e2ethanos.DefaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.Future().InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, prom3))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.Future().InternalEndpoint("grpc"), r2.Future().InternalEndpoint("grpc"), r3.Future().InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -496,9 +496,9 @@ func TestReceive(t *testing.T) {
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
-				r2.InternalEndpoint("grpc"),
-				r3.InternalEndpoint("grpc"),
+				r1.Future().InternalEndpoint("grpc"),
+				r2.Future().InternalEndpoint("grpc"),
+				r3.Future().InternalEndpoint("grpc"),
 			},
 		}
 
@@ -511,11 +511,11 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r3Runnable))
 
-		prom1, _, err := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.Future().InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.Future().InternalEndpoint("grpc"), r2.Future().InternalEndpoint("grpc"), r3.Future().InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -568,9 +568,9 @@ func TestReceive(t *testing.T) {
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
-				r2.InternalEndpoint("grpc"),
-				r3.InternalEndpoint("grpc"),
+				r1.Future().InternalEndpoint("grpc"),
+				r2.Future().InternalEndpoint("grpc"),
+				r3.Future().InternalEndpoint("grpc"),
 			},
 		}
 
@@ -581,11 +581,11 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable))
 
-		prom1, _, err := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom1, _, err := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.Future().InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.Future().InternalEndpoint("grpc"), r2.Future().InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 
@@ -625,7 +625,7 @@ func TestReceive(t *testing.T) {
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
+				r1.Future().InternalEndpoint("grpc"),
 			},
 		}
 
@@ -634,9 +634,9 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable))
 
-		rp1, err := e2ethanos.NewReverseProxy(e, "1", "tenant-1", "http://"+r1.InternalEndpoint("remote-write"))
+		rp1, err := e2ethanos.NewReverseProxy(e, "1", "tenant-1", "http://"+r1.Future().InternalEndpoint("remote-write"))
 		testutil.Ok(t, err)
-		rp2, err := e2ethanos.NewReverseProxy(e, "2", "tenant-2", "http://"+r1.InternalEndpoint("remote-write"))
+		rp2, err := e2ethanos.NewReverseProxy(e, "2", "tenant-2", "http://"+r1.Future().InternalEndpoint("remote-write"))
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(rp1, rp2))
 
@@ -646,7 +646,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2))
 
-		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc")).Build()
+		q, err := e2ethanos.NewQuerierBuilder(e, "1", r1.Future().InternalEndpoint("grpc")).Build()
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(q))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

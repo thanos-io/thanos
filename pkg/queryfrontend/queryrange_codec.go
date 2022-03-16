@@ -53,7 +53,7 @@ func NewThanosQueryRangeCodec(partialResponse bool) *queryRangeCodec {
 	}
 }
 
-func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request, _ []string) (queryrange.Request, error) {
+func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request, forwardHeaders []string) (queryrange.Request, error) {
 	var (
 		result ThanosQueryRangeRequest
 		err    error
@@ -126,6 +126,14 @@ func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request, _ []s
 		}
 	}
 
+	for _, header := range forwardHeaders {
+		for h, hv := range r.Header {
+			if strings.EqualFold(h, header) {
+				result.Headers = append(result.Headers, &RequestHeader{Name: h, Values: hv})
+				break
+			}
+		}
+	}
 	return &result, nil
 }
 
@@ -161,7 +169,11 @@ func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, "error creating request: %s", err.Error())
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
+	for _, hv := range thanosReq.Headers {
+		for _, v := range hv.Values {
+			req.Header.Add(hv.Name, v)
+		}
+	}
 	return req.WithContext(ctx), nil
 }
 
