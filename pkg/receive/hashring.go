@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -168,12 +168,12 @@ func HashringFromConfigWatcher(ctx context.Context, updates chan<- Hashring, cw 
 func HashringFromConfig(content string) (Hashring, error) {
 	config, err := parseConfig([]byte(content))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse configuration")
+		return nil, errors.Wrap(err, "failed to parse configuration")
 	}
 
 	// If hashring is empty, return an error.
 	if len(config) == 0 {
-		return nil, errors.Wrapf(err, "failed to load configuration")
+		return nil, errors.Wrap(err, "failed to load configuration")
 	}
 
 	return newMultiHashring(config), err
