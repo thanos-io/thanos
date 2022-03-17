@@ -45,8 +45,6 @@ func (b *base) Format(s fmt.State, verb rune) {
 	s.Write([]byte(b.Error()))
 }
 
-// Public functions that can be directly used through the package
-
 // New creates a new error with the given message and a stacktrace in details.
 // An alternative to errors.New function.
 func New(msg string) error {

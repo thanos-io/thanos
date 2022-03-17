@@ -9,11 +9,12 @@ import (
 	"strings"
 )
 
-// stack holds the address of
+// stacktrace holds a snapshot of program counters.
 type stacktrace []uintptr
 
-// New captures a stack trace. skip specifies the number of frames to skip from
-// a stack trace. skip=0 records stack.New call as the innermost frame.
+// newStackTrace captures a stack trace. It skips first 3 frames to record the
+// snapshot of the stack trace at the origin of a particular error. It tries to
+// record maximum 16 frames (if available).
 func newStackTrace() stacktrace {
 	const stackDepth = 16 // record maximum 16 frames (if available)
 
@@ -36,7 +37,8 @@ func (s stacktrace) String() string {
 	for {
 		// more indicates if the next call will be successful or not.
 		frame, more := cf.Next()
-		// used formatting scheme <`>`space><function name><newline><tab><filepath><:><line><newline>
+		// used formatting scheme <`>`space><function name><tab><filepath><:><line><newline> for example:
+		// > testing.tRunner	/home/go/go1.17.8/src/testing/testing.go:1259
 		buf.WriteString(fmt.Sprintf("> %s\t%s:%d\n", frame.Func.Name(), frame.File, frame.Line))
 		if !more {
 			break
