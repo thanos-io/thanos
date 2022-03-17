@@ -27,7 +27,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 
-	v1 "github.com/thanos-io/thanos/pkg/api/query"
+	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
@@ -574,6 +574,7 @@ func runQuery(
 		grpcProbe,
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
+	engineCreator := engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta)
 
 	// Start query API + UI HTTP server.
 	{
@@ -600,10 +601,10 @@ func runQuery(
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewQueryUI(logger, endpoints, webExternalPrefix, webPrefixHeaderName, alertQueryURL).Register(router, ins)
 
-		api := v1.NewQueryAPI(
+		api := apiv1.NewQueryAPI(
 			logger,
 			endpoints.GetEndpointStatus,
-			engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta),
+			engineCreator,
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
 			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
@@ -676,7 +677,9 @@ func runQuery(
 			info.WithTargetsInfoFunc(),
 		)
 
+		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryableCreator, engineCreator, instantDefaultMaxSourceResolution)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
+			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithServer(targets.RegisterTargetsServer(targetsProxy)),

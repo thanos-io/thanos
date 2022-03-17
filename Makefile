@@ -25,6 +25,9 @@ else ifeq ($(arch), armv8)
 else ifeq ($(arch), arm64)
 	# arm64
 	BASE_DOCKER_SHA=${arm64}
+else ifeq ($(arch), aarch64)
+	# arm64
+	BASE_DOCKER_SHA=${arm64}
 else
 	echo >&2 "only support amd64 or arm64 arch" && exit 1
 endif
