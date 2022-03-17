@@ -1,5 +1,0 @@
-type: STACKDRIVER
-config:
-            service_name: "test"
-            project_id: "quickstart-1577619055334"
-            sample_factor: 1

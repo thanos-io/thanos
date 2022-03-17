@@ -143,7 +143,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(j))
 
 	jaegerConfig, err := yaml.Marshal(tracingclient.TracingConfig{
-		Type: tracingclient.JAEGER,
+		Type: tracingclient.Jaeger,
 		Config: jaeger.Config{
 			ServiceName:  "thanos",
 			SamplerType:  "const",

@@ -57,10 +57,10 @@ var (
 	}
 
 	tracingConfigs = map[trclient.TracingProvider]interface{}{
-		trclient.JAEGER:       jaeger.Config{},
-		trclient.GOOGLE_CLOUD: google_cloud.Config{},
-		trclient.ELASTIC_APM:  elasticapm.Config{},
-		trclient.LIGHTSTEP:    lightstep.Config{},
+		trclient.Jaeger:      jaeger.Config{},
+		trclient.GoogleCloud: google_cloud.Config{},
+		trclient.ElasticAPM:  elasticapm.Config{},
+		trclient.Lightstep:   lightstep.Config{},
 	}
 	indexCacheConfigs = map[storecache.IndexCacheProvider]interface{}{
 		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},

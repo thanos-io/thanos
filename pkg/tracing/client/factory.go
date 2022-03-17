@@ -25,11 +25,11 @@ import (
 type TracingProvider string
 
 const (
-	STACKDRIVER  TracingProvider = "STACKDRIVER"
-	GOOGLE_CLOUD TracingProvider = "GOOGLE_CLOUD"
-	JAEGER       TracingProvider = "JAEGER"
-	ELASTIC_APM  TracingProvider = "ELASTIC_APM"
-	LIGHTSTEP    TracingProvider = "LIGHTSTEP"
+	Stackdriver TracingProvider = "STACKDRIVER"
+	GoogleCloud TracingProvider = "GOOGLE_CLOUD"
+	Jaeger      TracingProvider = "JAEGER"
+	ElasticAPM  TracingProvider = "ELASTIC_APM"
+	Lightstep   TracingProvider = "LIGHTSTEP"
 )
 
 type TracingConfig struct {
@@ -55,18 +55,18 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 	}
 
 	switch strings.ToUpper(string(tracingConf.Type)) {
-	case string(STACKDRIVER), string(GOOGLE_CLOUD):
+	case string(Stackdriver), string(GoogleCloud):
 		tracerProvider, err := google_cloud.NewTracerProvider(ctx, logger, config)
 		if err != nil {
 			return nil, nil, err
 		}
 		tracer, closerFunc := migration.Bridge(tracerProvider, logger)
 		return tracer, closerFunc, nil
-	case string(JAEGER):
+	case string(Jaeger):
 		return jaeger.NewTracer(ctx, logger, metrics, config)
-	case string(ELASTIC_APM):
+	case string(ElasticAPM):
 		return elasticapm.NewTracer(config)
-	case string(LIGHTSTEP):
+	case string(Lightstep):
 		return lightstep.NewTracer(ctx, config)
 	default:
 		return nil, nil, errors.Errorf("tracing with type %s is not supported", tracingConf.Type)
