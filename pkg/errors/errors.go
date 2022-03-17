@@ -92,6 +92,27 @@ func Unwrap(err error) error {
 	return errors.Unwrap(err)
 }
 
+// UnwrapTillCause returns the result of calling the Unwrap method on err, if err's
+// type contains an Unwrap method returning error. Otherwise, UnwrapTillCause returns
+// the last encountered error. The difference between Unwrap and UnwrapTillCause is the
+// first one returns nil if the error does not implement interface with Unwrap method but
+// UnwrapTillCause returns the last err (whether it's nil or not) where it failed to assert
+// the interface.
+// This is a replacement of errors.Cause without the causer interface from pkg/errors which
+// actually can be sufficed through the errors.Is function. But considering some use cases
+// where we need to peel off all the external layers applied through errors.Wrap family,
+// it is useful ( where external SDK doesn't use errors.Is internally).
+func UnwrapTillCause(err error) error {
+	u, ok := err.(interface {
+		Unwrap() error
+	})
+	if !ok {
+		// here is the difference, Unwrap returns nil here
+		return err
+	}
+	return u.Unwrap()
+}
+
 // Is is a wrapper of built-in errors.Is. It reports whether any error in err's
 // chain matches target. The chain consists of err itself followed by the sequence
 // of errors obtained by repeatedly calling Unwrap.
