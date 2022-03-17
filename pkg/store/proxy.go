@@ -48,6 +48,9 @@ type Client interface {
 	// TimeRange returns minimum and maximum time range of data in the store.
 	TimeRange() (mint int64, maxt int64)
 
+	// SupportsSharding returns true if sharding is supported by the underlying store.
+	SupportsSharding() bool
+
 	String() string
 	// Addr returns address of a Client.
 	Addr() string
@@ -276,6 +279,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 				MaxResolutionWindow:     r.MaxResolutionWindow,
 				SkipChunks:              r.SkipChunks,
 				QueryHints:              r.QueryHints,
+				ShardInfo:               r.ShardInfo,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			}
 			wg = &sync.WaitGroup{}
@@ -326,8 +330,22 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 			// Schedule streamSeriesSet that translates gRPC streamed response
 			// into seriesSet (if series) or respCh if warnings.
-			seriesSet = append(seriesSet, startStreamSeriesSet(seriesCtx, reqLogger, span, closeSeries,
-				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout, s.metrics.emptyStreamResponses))
+			seriesSet = append(seriesSet,
+				startStreamSeriesSet(
+					seriesCtx,
+					reqLogger,
+					span,
+					closeSeries,
+					wg,
+					sc,
+					respSender,
+					st.String(),
+					!r.PartialResponseDisabled,
+					s.responseTimeout,
+					s.metrics.emptyStreamResponses,
+					st.SupportsSharding(),
+					r.ShardInfo,
+				))
 		}
 
 		level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
@@ -422,6 +440,8 @@ func startStreamSeriesSet(
 	partialResponse bool,
 	responseTimeout time.Duration,
 	emptyStreamResponses prometheus.Counter,
+	storeSupportsSharding bool,
+	shardInfo *storepb.ShardInfo,
 ) *streamSeriesSet {
 	s := &streamSeriesSet{
 		ctx:             ctx,
@@ -470,6 +490,14 @@ func startStreamSeriesSet(
 				}
 			}
 		}()
+
+		shardMatcher := shardInfo.Matcher()
+		applySharding := shardInfo != nil && !storeSupportsSharding
+		if applySharding {
+			msg := "Applying series sharding in the proxy since there is not support in the underlying store"
+			level.Debug(logger).Log("msg", msg, "store", name)
+		}
+
 		// The `defer` only executed when function return, we do `defer cancel` in for loop,
 		// so make the loop body as a function, release timers created by context as early.
 		handleRecvResponse := func() (next bool) {
@@ -503,6 +531,10 @@ func startStreamSeriesSet(
 			}
 
 			if series := rr.r.GetSeries(); series != nil {
+				if applySharding && !shardMatcher.MatchesZLabels(series.Labels) {
+					return true
+				}
+
 				seriesStats.Count(series)
 
 				select {

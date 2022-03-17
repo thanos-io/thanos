@@ -723,6 +723,17 @@ func (er *endpointRef) TimeRange() (mint, maxt int64) {
 	return er.metadata.Store.MinTime, er.metadata.Store.MaxTime
 }
 
+func (er *endpointRef) SupportsSharding() bool {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	if er.metadata == nil || er.metadata.Store == nil {
+		return false
+	}
+
+	return er.metadata.Store.SupportsSharding
+}
+
 func (er *endpointRef) String() string {
 	mint, maxt := er.TimeRange()
 	return fmt.Sprintf("Addr: %s LabelSets: %v Mint: %d Maxt: %d", er.addr, labelpb.PromLabelSetsToString(er.LabelSets()), mint, maxt)

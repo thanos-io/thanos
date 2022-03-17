@@ -719,26 +719,34 @@ func (c *CompactorBuilder) Init(bucketConfig client.BucketConfig, relabelConfig 
 	}))
 }
 
-func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, cacheConfig queryfrontend.CacheProviderConfig) e2e.InstrumentedRunnable {
+func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config queryfrontend.Config, cacheConfig queryfrontend.CacheProviderConfig) e2e.InstrumentedRunnable {
 	cacheConfigBytes, err := yaml.Marshal(cacheConfig)
 	if err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "marshal response cache config file: %v", cacheConfig))
 	}
 
-	args := e2e.BuildArgs(map[string]string{
+	flags := map[string]string{
 		"--debug.name":                        fmt.Sprintf("query-frontend-%s", name),
 		"--http-address":                      ":8080",
 		"--query-frontend.downstream-url":     downstreamURL,
 		"--log.level":                         infoLogLevel,
 		"--query-range.response-cache-config": string(cacheConfigBytes),
-	})
+	}
+
+	if !config.QueryRangeConfig.AlignRangeWithStep {
+		flags["--no-query-range.align-range-with-step"] = ""
+	}
+
+	if config.NumShards > 0 {
+		flags["--query-frontend.num-shards"] = strconv.Itoa(config.NumShards)
+	}
 
 	return e2e.NewInstrumentedRunnable(
 		e, fmt.Sprintf("query-frontend-%s", name),
 	).WithPorts(map[string]int{"http": 8080}, "http").Init(
 		e2e.StartOptions{
 			Image:            DefaultImage(),
-			Command:          e2e.NewCommand("query-frontend", args...),
+			Command:          e2e.NewCommand("query-frontend", e2e.BuildArgs(flags)...),
 			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 			User:             strconv.Itoa(os.Getuid()),
 			WaitReadyBackoff: &defaultBackoffConfig,

@@ -8,6 +8,7 @@ option go_package = "querypb";
 
 import "gogoproto/gogo.proto";
 import "store/storepb/types.proto";
+import "store/storepb/rpc.proto";
 import "store/storepb/prompb/types.proto";
 
 option (gogoproto.sizer_all) = true;
@@ -36,6 +37,8 @@ message QueryRequest {
   bool enablePartialResponse = 8;
   bool enableQueryPushdown = 9;
   bool skipChunks = 10;
+
+  ShardInfo shard_info = 11;
 }
 
 message StoreMatchers {
@@ -70,6 +73,8 @@ message QueryRangeRequest {
   bool enablePartialResponse = 10;
   bool enableQueryPushdown = 11;
   bool skipChunks = 12;
+
+  ShardInfo shard_info = 13;
 }
 
 message QueryRangeResponse {

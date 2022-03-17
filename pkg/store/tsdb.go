@@ -152,9 +152,14 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 
 	set := q.Select(false, nil, matchers...)
 
+	shardMatcher := r.ShardInfo.Matcher()
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
+		if !shardMatcher.MatchesLabels(series.Labels()) {
+			continue
+		}
+
 		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendSortedLabels(series.Labels(), s.extLset))}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {

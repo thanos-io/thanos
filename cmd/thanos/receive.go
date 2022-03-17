@@ -364,8 +364,9 @@ func setupAndRunGRPCServer(g *run.Group,
 					if isReady() {
 						minTime, maxTime := mts.TimeRange()
 						return &infopb.StoreInfo{
-							MinTime: minTime,
-							MaxTime: maxTime,
+							MinTime:          minTime,
+							MaxTime:          maxTime,
+							SupportsSharding: true,
 						}
 					}
 					return nil

@@ -261,6 +261,9 @@ Flags:
                                  Log queries that are slower than the specified
                                  duration. Set to 0 to disable. Set to < 0 to
                                  enable on all queries.
+      --query-frontend.num-shards=QUERY-FRONTEND.NUM-SHARDS
+                                 Number of queriers to use when sharding PromQL
+                                 queries
       --query-frontend.org-id-header=<http-header-name> ...
                                  Request header names used to identify the
                                  source of slow queries (repeated flag). The

@@ -78,6 +78,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		request.EnablePartialResponse,
 		request.EnableQueryPushdown,
 		false,
+		request.ShardInfo,
 	)
 	qry, err := qe.NewInstantQuery(queryable, &promql.QueryOpts{}, request.Query, ts)
 	if err != nil {
@@ -146,6 +147,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		request.EnablePartialResponse,
 		request.EnableQueryPushdown,
 		false,
+		request.ShardInfo,
 	)
 
 	startTime := time.Unix(request.StartTimeSeconds, 0)

@@ -624,7 +624,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1), "thanos_blocks_meta_synced"))
 
-	testutil.Ok(t, synthesizeSamples(ctx, prom1, []fakeMetricSample{
+	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, []fakeMetricSample{
 		{
 			label:             "foo",
 			value:             123,
@@ -814,8 +814,8 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 			t.Cleanup(cancel)
 
-			testutil.Ok(t, synthesizeSamples(ctx, prom1, tc.prom1Samples))
-			testutil.Ok(t, synthesizeSamples(ctx, prom2, tc.prom2Samples))
+			testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, tc.prom1Samples))
+			testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom2, tc.prom2Samples))
 
 			testQuery := func() string { return tc.query }
 			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{
@@ -1011,12 +1011,16 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 	}))
 }
 
-func synthesizeSamples(ctx context.Context, prometheus e2e.InstrumentedRunnable, testSamples []fakeMetricSample) error {
+func synthesizeFakeMetricSamples(ctx context.Context, prometheus e2e.InstrumentedRunnable, testSamples []fakeMetricSample) error {
 	samples := make([]model.Sample, len(testSamples))
 	for i, s := range testSamples {
 		samples[i] = newSample(s)
 	}
 
+	return synthesizeSamples(ctx, prometheus, samples)
+}
+
+func synthesizeSamples(ctx context.Context, prometheus e2e.InstrumentedRunnable, samples []model.Sample) error {
 	remoteWriteURL, err := url.Parse("http://" + prometheus.Endpoint("http") + "/api/v1/write")
 	if err != nil {
 		return err
@@ -1182,8 +1186,8 @@ func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 			t.Cleanup(cancel)
 
-			testutil.Ok(t, synthesizeSamples(ctx, prom1, tc.prom1Samples))
-			testutil.Ok(t, synthesizeSamples(ctx, prom2, tc.prom2Samples))
+			testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, tc.prom1Samples))
+			testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom2, tc.prom2Samples))
 
 			testQuery := func() string { return tc.query }
 			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{
@@ -1234,7 +1238,7 @@ func TestSidecarAlignmentPushdown(t *testing.T) {
 		})
 	}
 
-	testutil.Ok(t, synthesizeSamples(ctx, prom1, samples))
+	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, samples))
 
 	// This query should have identical requests.
 	testQuery := func() string { return `max_over_time({instance="test"}[5m])` }
@@ -1309,7 +1313,7 @@ func TestGrpcInstantQuery(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
-	testutil.Ok(t, synthesizeSamples(ctx, prom, samples))
+	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom, samples))
 
 	grpcConn, err := grpc.Dial(querier.Endpoint("grpc"), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.Ok(t, err)
@@ -1431,7 +1435,7 @@ func TestGrpcQueryRange(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
-	testutil.Ok(t, synthesizeSamples(ctx, prom, samples))
+	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom, samples))
 
 	grpcConn, err := grpc.Dial(querier.Endpoint("grpc"), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.Ok(t, err)
