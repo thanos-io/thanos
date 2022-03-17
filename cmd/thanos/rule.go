@@ -357,11 +357,10 @@ func runRule(
 			return errors.Wrapf(err, "failed to parse remote write config %v", string(rwCfgYAML))
 		}
 
-		walDir := filepath.Join(conf.dataDir, "wal")
 		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
 		remoteStore := remote.NewStorage(logger, reg, func() (int64, error) {
 			return 0, nil
-		}, walDir, 1*time.Minute, nil)
+		}, conf.dataDir, 1*time.Minute, nil)
 		if err := remoteStore.ApplyConfig(&config.Config{
 			GlobalConfig: config.GlobalConfig{
 				ExternalLabels: labelsTSDBToProm(conf.lset),
@@ -371,7 +370,7 @@ func runRule(
 			return errors.Wrap(err, "applying config to remote storage")
 		}
 
-		agentDB, err = agent.Open(logger, reg, remoteStore, walDir, agentOpts)
+		agentDB, err = agent.Open(logger, reg, remoteStore, conf.dataDir, agentOpts)
 		if err != nil {
 			return errors.Wrap(err, "start remote write agent db")
 		}
