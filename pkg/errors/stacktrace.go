@@ -18,7 +18,7 @@ type stacktrace []uintptr
 func newStackTrace() stacktrace {
 	const stackDepth = 16 // record maximum 16 frames (if available)
 
-	pc := make([]uintptr, stackDepth+1)
+	pc := make([]uintptr, stackDepth)
 	// using skip=3 for not to count the program counter address of
 	// 1. the respective function from errors package (eg. errors.New)
 	// 2. newStacktrace itself
