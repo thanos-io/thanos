@@ -17,13 +17,16 @@ arch = $(shell uname -m)
 
 # The include .busybox-versions includes the SHA's of all the platforms, which can be used as var.
 ifeq ($(arch), x86_64)
-    # amd64
-    BASE_DOCKER_SHA=${amd64}
+	# amd64
+	BASE_DOCKER_SHA=${amd64}
 else ifeq ($(arch), armv8)
-    # arm64
-    BASE_DOCKER_SHA=${arm64}
+	# arm64
+	BASE_DOCKER_SHA=${arm64}
+else ifeq ($(arch), arm64)
+	# arm64
+	BASE_DOCKER_SHA=${arm64}
 else
-    echo >&2 "only support amd64 or arm64 arch" && exit 1
+	echo >&2 "only support amd64 or arm64 arch" && exit 1
 endif
 DOCKER_ARCHS       ?= amd64 arm64
 # Generate two target: docker-xxx-amd64, docker-xxx-arm64.
