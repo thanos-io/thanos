@@ -8,6 +8,13 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## [v0.25.2-rc.0](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.03.18
+
+### Fixed
+
+- [#5202](https://github.com/thanos-io/thanos/pull/5202) Exemplars: Return empty data instead of `nil` if no data available.
+- [#5242](https://github.com/thanos-io/thanos/pull/5242) Ruler: Make ruler use the correct WAL directory.
+
 ## [v0.25.1](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.03.09
 
 The binaries published with this release are built with Go1.17.8 to avoid [CVE-2022-24921](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-24921).
