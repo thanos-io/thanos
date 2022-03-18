@@ -6,7 +6,6 @@ package tracing
 import (
 	"context"
 
-	"github.com/davecgh/go-spew/spew"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -38,7 +37,6 @@ func StreamServerInterceptor(tracer opentracing.Tracer) grpc.StreamServerInterce
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		// Add our own tracer.
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
-		spew.Println("wrapped ctx", stream.Context())
 		wrappedStream.WrappedContext = ContextWithTracer(stream.Context(), tracer)
 
 		return interceptor(srv, wrappedStream, info, handler)
