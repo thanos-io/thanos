@@ -161,7 +161,7 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
-	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+promqlNegativeOffset+", "+promqlAtModifier+" and "+queryPushdown+".").Default("").Strings()
+	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+queryPushdown+".").Default("").Strings()
 
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
 		Hidden().Default("true").Bool()
@@ -182,16 +182,16 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Wrap(err, "parse federation labels")
 		}
 
-		var enableNegativeOffset, enableAtModifier, enableQueryPushdown bool
+		var enableQueryPushdown bool
 		for _, feature := range *featureList {
-			if feature == promqlNegativeOffset {
-				enableNegativeOffset = true
-			}
-			if feature == promqlAtModifier {
-				enableAtModifier = true
-			}
 			if feature == queryPushdown {
 				enableQueryPushdown = true
+			}
+			if feature == promqlAtModifier {
+				level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently enabled and therefore a no-op.", "option", promqlAtModifier)
+			}
+			if feature == promqlNegativeOffset {
+				level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently enabled and therefore a no-op.", "option", promqlNegativeOffset)
 			}
 		}
 
@@ -280,8 +280,6 @@ func registerQuery(app *extkingpin.App) {
 			*strictStores,
 			*strictEndpoints,
 			*webDisableCORS,
-			enableAtModifier,
-			enableNegativeOffset,
 			enableQueryPushdown,
 			*alertQueryURL,
 			component.Query,
@@ -349,8 +347,6 @@ func runQuery(
 	strictStores []string,
 	strictEndpoints []string,
 	disableCORS bool,
-	enableAtModifier bool,
-	enableNegativeOffset bool,
 	enableQueryPushdown bool,
 	alertQueryURL string,
 	comp component.Component,
@@ -480,8 +476,8 @@ func runQuery(
 			NoStepSubqueryIntervalFn: func(int64) int64 {
 				return defaultEvaluationInterval.Milliseconds()
 			},
-			EnableNegativeOffset: enableNegativeOffset,
-			EnableAtModifier:     enableAtModifier,
+			EnableNegativeOffset: true,
+			EnableAtModifier:     true,
 		}
 	)
 

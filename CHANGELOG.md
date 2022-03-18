@@ -25,6 +25,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5218](https://github.com/thanos-io/thanos/pull/5218) Tools: Run bucket downsample tools continuously.
 - [#5224](https://github.com/thanos-io/thanos/pull/5224) Receive: Remove sort on label hashing
 - [#5231](https://github.com/thanos-io/thanos/pull/5231) Tools: Bucket verify tool ignores blocks with deletion markers.
+- [#5244](https://github.com/thanos-io/thanos/pull/5244) Query: Promote negative offset and `@` modifier to stable features as per Prometheus [#10121](https://github.com/prometheus/prometheus/pull/10121).
 
 ### Removed
 
