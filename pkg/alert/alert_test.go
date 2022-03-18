@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/notifier"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -28,7 +29,7 @@ func TestQueue_Pop_all_Pushed(t *testing.T) {
 
 	q := NewQueue(nil, nil, qcapacity, batchsize, nil, nil, nil)
 	for i := 0; i < pushes; i++ {
-		q.Push([]*Alert{
+		q.Push([]*notifier.Alert{
 			{},
 			{},
 		})
@@ -47,7 +48,7 @@ func TestQueue_Pop_all_Pushed(t *testing.T) {
 func TestQueue_Push_Relabelled(t *testing.T) {
 	q := NewQueue(nil, nil, 10, 10, labels.FromStrings("a", "1", "replica", "A"), []string{"b", "replica"}, nil)
 
-	q.Push([]*Alert{
+	q.Push([]*notifier.Alert{
 		{Labels: labels.FromStrings("b", "2", "c", "3")},
 		{Labels: labels.FromStrings("c", "3")},
 		{Labels: labels.FromStrings("a", "2")},
@@ -74,7 +75,7 @@ func TestQueue_Push_Relabelled_Alerts(t *testing.T) {
 		},
 	)
 
-	q.Push([]*Alert{
+	q.Push([]*notifier.Alert{
 		{Labels: labels.FromMap(map[string]string{
 			"a": "abc",
 		})},
@@ -134,7 +135,7 @@ func TestSenderSendsOk(t *testing.T) {
 	}
 	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute, APIv1)})
 
-	s.Send(context.Background(), []*Alert{{}, {}})
+	s.Send(context.Background(), []*notifier.Alert{{}, {}})
 
 	assertSameHosts(t, poster.urls, poster.seen)
 
@@ -161,7 +162,7 @@ func TestSenderSendsOneFails(t *testing.T) {
 	}
 	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute, APIv1)})
 
-	s.Send(context.Background(), []*Alert{{}, {}})
+	s.Send(context.Background(), []*notifier.Alert{{}, {}})
 
 	assertSameHosts(t, poster.urls, poster.seen)
 
@@ -182,7 +183,7 @@ func TestSenderSendsAllFail(t *testing.T) {
 	}
 	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute, APIv1)})
 
-	s.Send(context.Background(), []*Alert{{}, {}})
+	s.Send(context.Background(), []*notifier.Alert{{}, {}})
 
 	assertSameHosts(t, poster.urls, poster.seen)
 
