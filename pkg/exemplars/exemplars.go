@@ -89,6 +89,10 @@ func (rr *GRPCClient) Exemplars(ctx context.Context, req *exemplarspb.ExemplarsR
 		return nil, nil, errors.Wrap(err, "proxy Exemplars")
 	}
 
+	if resp.data == nil {
+		return make([]*exemplarspb.ExemplarData, 0), resp.warnings, nil
+	}
+
 	resp.data = dedupExemplarsResponse(resp.data, rr.replicaLabels)
 	return resp.data, resp.warnings, nil
 }
