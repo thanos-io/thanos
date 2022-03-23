@@ -848,25 +848,22 @@ func (h *Handler) getTenantFromCertificate(r *http.Request) (string, error) {
 	switch h.options.TenantField {
 
 	case CertificateFieldOrganization:
-		if len(cert.Subject.Organization) > 0 {
-			tenant = cert.Subject.Organization[0]
-		} else {
+		if len(cert.Subject.Organization) == 0 {
 			return "", errors.New("could not get organization field from client cert")
 		}
+		tenant = cert.Subject.Organization[0]
 
 	case CertificateFieldOrganizationalUnit:
-		if len(cert.Subject.OrganizationalUnit) > 0 {
-			tenant = cert.Subject.OrganizationalUnit[0]
-		} else {
+		if len(cert.Subject.OrganizationalUnit) == 0 {
 			return "", errors.New("could not get organizationalUnit field from client cert")
 		}
+		tenant = cert.Subject.OrganizationalUnit[0]
 
 	case CertificateFieldCommonName:
-		if cert.Subject.CommonName != "" {
-			tenant = cert.Subject.CommonName
-		} else {
+		if cert.Subject.CommonName == "" {
 			return "", errors.New("could not get commonName field from client cert")
 		}
+		tenant = cert.Subject.CommonName
 
 	default:
 		return "", errors.New("tls client cert field requested is not supported")
