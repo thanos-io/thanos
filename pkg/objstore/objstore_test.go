@@ -137,7 +137,7 @@ func TestDownloadDir_CleanUp(t *testing.T) {
 	testutil.Assert(t, os.IsNotExist(err))
 }
 
-// unreliableBucket implements Bucket and returns an error on every n-th Get
+// unreliableBucket implements Bucket and returns an error on every n-th Get.
 type unreliableBucket struct {
 	Bucket
 
