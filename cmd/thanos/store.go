@@ -36,7 +36,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/objstoreutil"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -248,7 +248,7 @@ func runStore(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, conf.component.String())
+	bkt, err := objstoreutil.NewBucket(logger, confContentYaml, reg, conf.component.String())
 	if err != nil {
 		return errors.Wrap(err, "create bucket client")
 	}

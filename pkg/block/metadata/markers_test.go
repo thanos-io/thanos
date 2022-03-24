@@ -18,7 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/goleak"
 
-	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 

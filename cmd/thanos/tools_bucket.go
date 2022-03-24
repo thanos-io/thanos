@@ -41,6 +41,7 @@ import (
 	"golang.org/x/text/message"
 	"gopkg.in/yaml.v3"
 
+	"github.com/thanos-io/objstore"
 	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -53,8 +54,7 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/objstoreutil"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/replicate"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -299,7 +299,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
+		bkt, err := objstoreutil.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
 		if err != nil {
 			return err
 		}
@@ -317,7 +317,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			}
 		} else {
 			// nil Prometheus registerer: don't create conflicting metrics.
-			backupBkt, err = client.NewBucket(logger, backupconfContentYaml, nil, component.Bucket.String())
+			backupBkt, err = objstoreutil.NewBucket(logger, backupconfContentYaml, nil, component.Bucket.String())
 			if err != nil {
 				return err
 			}
@@ -380,7 +380,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
+		bkt, err := objstoreutil.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
 		if err != nil {
 			return err
 		}
@@ -486,7 +486,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
+		bkt, err := objstoreutil.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
 		if err != nil {
 			return err
 		}
@@ -594,7 +594,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
+		bkt, err := objstoreutil.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
 		if err != nil {
 			return errors.Wrap(err, "bucket client")
 		}
@@ -780,7 +780,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Cleanup.String())
+		bkt, err := objstoreutil.NewBucket(logger, confContentYaml, reg, component.Cleanup.String())
 		if err != nil {
 			return err
 		}
@@ -1035,7 +1035,7 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Mark.String())
+		bkt, err := objstoreutil.NewBucket(logger, confContentYaml, reg, component.Mark.String())
 		if err != nil {
 			return err
 		}
@@ -1099,7 +1099,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Rewrite.String())
+		bkt, err := objstoreutil.NewBucket(logger, confContentYaml, reg, component.Rewrite.String())
 		if err != nil {
 			return err
 		}
@@ -1306,7 +1306,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Retention.String())
+		bkt, err := objstoreutil.NewBucket(logger, confContentYaml, reg, component.Retention.String())
 		if err != nil {
 			return err
 		}

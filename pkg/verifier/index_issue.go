@@ -17,7 +17,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/block"
-	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/objstore"
 )
 
 // IndexKnownIssues verifies any known index issue.

@@ -20,7 +20,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
-	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/objstore"
 )
 
 // BlocksAPI is a very simple API used by Thanos Block Viewer.

@@ -16,7 +16,7 @@ import (
 	"github.com/efficientgo/e2e"
 	"github.com/prometheus/prometheus/model/labels"
 
-	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"

@@ -21,9 +21,9 @@ import (
 	"github.com/prometheus/prometheus/model/timestamp"
 
 	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
-	"github.com/thanos-io/thanos/pkg/objstore/s3"
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
+	"github.com/thanos-io/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"

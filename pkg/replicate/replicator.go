@@ -22,13 +22,13 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 
+	"github.com/thanos-io/objstore"
 	thanosblock "github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/objstoreutil"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http"
@@ -126,7 +126,7 @@ func RunReplicate(
 		return errors.New("No supported bucket was configured to replicate from")
 	}
 
-	fromBkt, err := client.NewBucket(
+	fromBkt, err := objstoreutil.NewBucket(
 		logger,
 		fromConfContentYaml,
 		prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "from"}, reg),
@@ -145,7 +145,7 @@ func RunReplicate(
 		return errors.New("No supported bucket was configured to replicate to")
 	}
 
-	toBkt, err := client.NewBucket(
+	toBkt, err := objstoreutil.NewBucket(
 		logger,
 		toConfContentYaml,
 		prometheus.WrapRegistererWith(prometheus.Labels{"replicate": "to"}, reg),
