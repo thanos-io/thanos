@@ -754,7 +754,8 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 	}
 
-	t.Run("dedup enabled; no delete delay; compactor should work and remove things as expected", func(t *testing.T) {
+	// dedup enabled; no delete delay; compactor should work and remove things as expected.
+	{
 		extArgs := []string{"--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica", "--delete-delay=0s"}
 		if penaltyDedup {
 			extArgs = append(extArgs, "--deduplication.func=penalty")
@@ -805,7 +806,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8-18+6-2+2)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
-	})
+	}
 
 	// Ensure that querying downsampled blocks works. Then delete the raw block and try querying again.
 	{

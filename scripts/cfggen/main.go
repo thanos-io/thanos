@@ -36,9 +36,9 @@ import (
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
+	"github.com/thanos-io/thanos/pkg/tracing/google_cloud"
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/pkg/tracing/lightstep"
-	"github.com/thanos-io/thanos/pkg/tracing/stackdriver"
 )
 
 var (
@@ -57,10 +57,10 @@ var (
 	}
 
 	tracingConfigs = map[trclient.TracingProvider]interface{}{
-		trclient.JAEGER:      jaeger.Config{},
-		trclient.STACKDRIVER: stackdriver.Config{},
-		trclient.ELASTIC_APM: elasticapm.Config{},
-		trclient.LIGHTSTEP:   lightstep.Config{},
+		trclient.Jaeger:      jaeger.Config{},
+		trclient.GoogleCloud: google_cloud.Config{},
+		trclient.ElasticAPM:  elasticapm.Config{},
+		trclient.Lightstep:   lightstep.Config{},
 	}
 	indexCacheConfigs = map[storecache.IndexCacheProvider]interface{}{
 		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},

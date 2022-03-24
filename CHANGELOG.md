@@ -8,6 +8,25 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## Unreleased
+
+### Fixed
+
+### Added
+
+- [#5220](https://github.com/thanos-io/thanos/pull/5220) Query Frontend: Add `--query-frontend.forward-header` flag, forward headers to downstream querier.
+
+### Changed
+
+- [#5205](https://github.com/thanos-io/thanos/pull/5205) Rule: Add ruler labels as external labels in stateless ruler mode.
+- [#5206](https://github.com/thanos-io/thanos/pull/5206) Cache: add timeout for groupcache's fetch operation.
+- [#5218](https://github.com/thanos-io/thanos/pull/5218) Tools: Run bucket downsample tools continuously.
+- [#5224](https://github.com/thanos-io/thanos/pull/5224) Receive: Remove sort on label hashing
+- [#5231](https://github.com/thanos-io/thanos/pull/5231) Tools: Bucket verify tool ignores blocks with deletion markers.
+- [#5244](https://github.com/thanos-io/thanos/pull/5244) Query: Promote negative offset and `@` modifier to stable features as per Prometheus [#10121](https://github.com/prometheus/prometheus/pull/10121).
+
+### Removed
+
 ## [v0.25.2](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.03.24
 
 ### Fixed

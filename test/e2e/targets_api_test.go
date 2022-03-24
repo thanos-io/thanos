@@ -35,7 +35,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
-		defaultPromConfig("ha", 0, "", "", "localhost:9090", "localhost:80"),
+		e2ethanos.DefaultPromConfig("ha", 0, "", "", e2ethanos.LocalPrometheusTarget, "localhost:80"),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
@@ -43,7 +43,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
-		defaultPromConfig("ha", 1, "", "", "localhost:9090", "localhost:80"),
+		e2ethanos.DefaultPromConfig("ha", 1, "", "", e2ethanos.LocalPrometheusTarget, "localhost:80"),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)

@@ -19,6 +19,11 @@ type ThanosRequest interface {
 	GetStoreMatchers() [][]*labels.Matcher
 }
 
+type RequestHeader struct {
+	Name   string
+	Values []string
+}
+
 type ThanosQueryRangeRequest struct {
 	Path                string
 	Start               int64
@@ -33,6 +38,7 @@ type ThanosQueryRangeRequest struct {
 	ReplicaLabels       []string
 	StoreMatchers       [][]*labels.Matcher
 	CachingOptions      queryrange.CachingOptions
+	Headers             []*RequestHeader
 }
 
 // GetStart returns the start timestamp of the request in milliseconds.
@@ -107,6 +113,7 @@ type ThanosLabelsRequest struct {
 	StoreMatchers   [][]*labels.Matcher
 	PartialResponse bool
 	CachingOptions  queryrange.CachingOptions
+	Headers         []*RequestHeader
 }
 
 // GetStart returns the start timestamp of the request in milliseconds.
@@ -178,6 +185,7 @@ type ThanosSeriesRequest struct {
 	Matchers        [][]*labels.Matcher
 	StoreMatchers   [][]*labels.Matcher
 	CachingOptions  queryrange.CachingOptions
+	Headers         []*RequestHeader
 }
 
 // GetStart returns the start timestamp of the request in milliseconds.

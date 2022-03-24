@@ -30,11 +30,11 @@ func TestInfo(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone1", defaultPromConfig("prom-alone1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone1", e2ethanos.DefaultPromConfig("prom-alone1", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "alone2", defaultPromConfig("prom-alone2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "alone2", e2ethanos.DefaultPromConfig("prom-alone2", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, err)
-	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(e, "alone3", defaultPromConfig("prom-alone3", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(e, "alone3", e2ethanos.DefaultPromConfig("prom-alone3", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
 

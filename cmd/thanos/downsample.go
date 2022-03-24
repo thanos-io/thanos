@@ -69,6 +69,7 @@ func RunDownsample(
 	httpTLSConfig string,
 	httpGracePeriod time.Duration,
 	dataDir string,
+	waitInterval time.Duration,
 	downsampleConcurrency int,
 	objStoreConfig *extflag.PathOrContent,
 	comp component.Component,
@@ -113,31 +114,32 @@ func RunDownsample(
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 			statusProber.Ready()
 
-			level.Info(logger).Log("msg", "start first pass of downsampling")
-			metas, _, err := metaFetcher.Fetch(ctx)
-			if err != nil {
-				return errors.Wrap(err, "sync before first pass of downsampling")
-			}
+			return runutil.Repeat(waitInterval, ctx.Done(), func() error {
+				level.Info(logger).Log("msg", "start first pass of downsampling")
+				metas, _, err := metaFetcher.Fetch(ctx)
+				if err != nil {
+					return errors.Wrap(err, "sync before first pass of downsampling")
+				}
 
-			for _, meta := range metas {
-				groupKey := meta.Thanos.GroupKey()
-				metrics.downsamples.WithLabelValues(groupKey)
-				metrics.downsampleFailures.WithLabelValues(groupKey)
-			}
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downsampleConcurrency, hashFunc); err != nil {
-				return errors.Wrap(err, "downsampling failed")
-			}
+				for _, meta := range metas {
+					groupKey := meta.Thanos.GroupKey()
+					metrics.downsamples.WithLabelValues(groupKey)
+					metrics.downsampleFailures.WithLabelValues(groupKey)
+				}
+				if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downsampleConcurrency, hashFunc); err != nil {
+					return errors.Wrap(err, "downsampling failed")
+				}
 
-			level.Info(logger).Log("msg", "start second pass of downsampling")
-			metas, _, err = metaFetcher.Fetch(ctx)
-			if err != nil {
-				return errors.Wrap(err, "sync before second pass of downsampling")
-			}
-			if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downsampleConcurrency, hashFunc); err != nil {
-				return errors.Wrap(err, "downsampling failed")
-			}
-
-			return nil
+				level.Info(logger).Log("msg", "start second pass of downsampling")
+				metas, _, err = metaFetcher.Fetch(ctx)
+				if err != nil {
+					return errors.Wrap(err, "sync before second pass of downsampling")
+				}
+				if err := downsampleBucket(ctx, logger, metrics, bkt, metas, dataDir, downsampleConcurrency, hashFunc); err != nil {
+					return errors.Wrap(err, "downsampling failed")
+				}
+				return nil
+			})
 		}, func(error) {
 			cancel()
 		})

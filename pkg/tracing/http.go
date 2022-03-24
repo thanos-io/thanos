@@ -14,6 +14,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
+	"github.com/thanos-io/thanos/pkg/tracing/migration"
 )
 
 // HTTPMiddleware returns an HTTP handler that injects the given tracer and starts a new server span.
@@ -22,7 +23,6 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 	operationName := fmt.Sprintf("/%s HTTP[server]", name)
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		var span opentracing.Span
 		wireContext, err := tracer.Extract(
 			opentracing.HTTPHeaders,
 			opentracing.HTTPHeadersCarrier(r.Header),
@@ -31,7 +31,17 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 			level.Error(logger).Log("msg", "failed to extract tracer from request", "operationName", operationName, "err", err)
 		}
 
-		span = tracer.StartSpan(operationName, ext.RPCServerOption(wireContext))
+		opts := []opentracing.StartSpanOption{ext.RPCServerOption(wireContext)}
+		// Check for force tracing header and add it as a tag at the start of span.
+		// This is required for the OpenTelemetry sampler to force tracing.
+		if r.Header.Get(ForceTracingBaggageKey) != "" {
+			opts = append(opts, opentracing.Tag{Key: migration.ForceTracingAttributeKey, Value: "true"})
+		}
+
+		span := tracer.StartSpan(
+			operationName,
+			opts...,
+		)
 		ext.HTTPMethod.Set(span, r.Method)
 		ext.HTTPUrl.Set(span, r.URL.String())
 
@@ -40,6 +50,11 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 
 		if t, ok := tracer.(Tracer); ok {
 			if traceID, ok := t.GetTraceIDFromSpanContext(span.Context()); ok {
+				w.Header().Set(traceIDResponseHeader, traceID)
+			}
+		} else {
+			// Alternative to set trace ID header, if bridge tracer is being used.
+			if traceID, ok := migration.GetTraceIDFromBridgeSpan(span); ok {
 				w.Header().Set(traceIDResponseHeader, traceID)
 			}
 		}

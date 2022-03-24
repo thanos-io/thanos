@@ -148,6 +148,19 @@ Keys which denote a duration are strings that can end with `s` or `m` to indicat
 
 You can find the default values [here](https://github.com/thanos-io/thanos/blob/55cb8ca38b3539381dc6a781e637df15c694e50a/pkg/exthttp/transport.go#L12-L27).
 
+## Forward Headers to Downstream Queriers
+
+`--query-frontend.forward-header` flag provides list of request headers forwarded by query frontend to downstream queriers.
+
+If downstream queriers need basic authentication to access, we can run query-frontend:
+
+```bash
+thanos query-frontend \
+    --http-address     "0.0.0.0:9090" \
+    --query-frontend.forward-header "Authorization"
+    --query-frontend.downstream-url="<thanos-querier>:<querier-http-port>"
+```
+
 ## Flags
 
 ```$ mdox-exec="thanos query-frontend --help"
@@ -233,6 +246,9 @@ Flags:
       --query-frontend.downstream-url="http://localhost:9090"
                                  URL of downstream Prometheus Query compatible
                                  API.
+      --query-frontend.forward-header=<http-header-name> ...
+                                 List of headers forwarded by the query-frontend
+                                 to downstream queriers, default is empty
       --query-frontend.log-queries-longer-than=0
                                  Log queries that are slower than the specified
                                  duration. Set to 0 to disable. Set to < 0 to

@@ -60,48 +60,56 @@ Process of releasing a *minor* Thanos version:
 
 Release is happening on separate `release-<major>.<minor>` branch.
 
-1. Prepare PR to branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release.
+### Prepare the release branch
 
-   Push the created branch to origin (Thanos repository) to be able to make your PR with the CHANGELOG.md changes against this branch later.
+Prepare branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release.
 
-   ```bash
-   $ git push origin release-<major>.<minor>
-   ```
+Push the created branch to origin (Thanos repository) to be able to make your PR with the CHANGELOG.md changes against this branch later.
 
-For release candidate just reuse same branch and rebase it on every candidate until the actual release happens.
+```bash
+$ git push origin release-<major>.<minor>
+```
 
-1. Create small PR to `main` (!) to cut CHANGELOG. This helps to maintain new changelog on main.
+For release candidate, reuse the same branch and rebase it on every candidate until the actual release happens.
 
-   1. Add entry to CHANGELOG indicating release in progress. This reduces risk for the new PRs to add changelog entries to already released release.
-   2. Update `VERSION` file to version one minor version higher than the released one and `dev` suffix. This allows CI to build thanos binary with the version indicating potential next minor release, showing that someone uses non-released binary (which is fine, just better to know this!).
+### Indicate that a release is in progress
+
+1. Create small PR to `main` (!) to cut CHANGELOG. This helps to maintain new changelog on main. Add entry to CHANGELOG indicating release in progress. This reduces risk for the new PRs to add changelog entries to already released release.
+
+2. Update `VERSION` file to version one minor version higher than the released one and `dev` suffix. This allows CI to build Thanos binary with the version indicating potential next minor release, showing that someone uses non-released binary (which is fine, just better to know this!).
 
 Feel free to mimic following PR: https://github.com/thanos-io/thanos/pull/3861
 
-1. Update [CHANGELOG file](../CHANGELOG.md)
+### Prepare the release
 
-Note that `CHANGELOG.md` should only document changes relevant to users of Thanos, including external API changes, performance improvements, and new features. Do not document changes of internal interfaces, code refactorings and clean-ups, changes to the build process, etc. People interested in these are asked to refer to the git history. Format is described in `CHANGELOG.md`.
+1. Create a branch based on the release branch. You will use this branch to include any changes that need to happen as a part of 'cutting' the release. Follow the steps below and commit and resulting changes to this branch.
 
-The whole release from release candidate `rc.0` to actual release should have exactly the same section. We don't separate what have changed between release candidates.
+2. Double check and update [CHANGELOG file](../CHANGELOG.md). Note that `CHANGELOG.md` should only document changes relevant to users of Thanos, including external API changes, bug fixes, performance improvements, and new features. Do not document changes of internal interfaces, code refactorings and clean-ups, changes to the build process, etc. People interested in these are asked to refer to the git history. Format is described in `CHANGELOG.md`.
+   - The whole release from release candidate `rc.0` to actual release should have exactly the same section. We don't separate what have changed between release candidates.
 
-1. Double check backward compatibility:
+3. Double check backward compatibility:
 
    1. *In case of version after `v1+.y.z`*, double check if none of the changes break API compatibility. This should be done in PR review process, but double check is good to have.
    2. In case of `v0.y.z`, document all incompatibilities in changelog.
 
-2. Double check metric changes:
+4. Double check metric changes:
 
    1. Note any changes in the changelog
    2. If there were any changes then update the relevant alerting rules and/or dashboards since `thanos-mixin` is part of the repository now
 
-3. Update website's [hugo.yaml](https://github.com/thanos-io/thanos/blob/main/website/hugo.yaml) to have correct links for new release ( add `0.y.z: "/:sections/:filename.md"`).
+5. *(Applies only to minor, non-`rc` release)* Update website's [hugo.yaml](https://github.com/thanos-io/thanos/blob/main/website/hugo.yaml) to have correct links for new release ( add `0.y.z: "/:sections/:filename.md"`).
 
-4. Update tutorials:
+6. *(Applies only to minor, non-`rc` release)* Update tutorials:
 
    1. Update the Thanos version used in the [tutorials](../tutorials) manifests.
    2. In case of any breaking changes or necessary updates adjust the manifests so the tutorial stays up to date.
    3. Update the [scripts/quickstart.sh](https://github.com/thanos-io/thanos/blob/main/scripts/quickstart.sh) script if needed.
 
-5. After review, merge the PR and immediately after this tag a version:
+7. Open a PR with any changes resulting from the previous steps against the release branch and ask the maintainers to review it.
+
+### Tag and publish the release
+
+1. After review and obtaining (an) approval(s), merge the PR and after this tag a version:
 
    ```bash
    tag=$(cat VERSION)
@@ -113,28 +121,28 @@ The whole release from release candidate `rc.0` to actual release should have ex
 
    Please make sure that you are tagging the merge commit because otherwise GitHub's UI will show that there were more commits after your release.
 
-6. Once a tag is created, the release process through CircleCI will be triggered for this tag.
+2. Once a tag is created and pushed, **immediately** create a Github Release using the UI for this tag, as otherwise CircleCI will not be able to upload tarballs for this tag. Go to the releases page of the project, click on the `Draft a new release` button and select the tag you just pushed. Describe release and post relevant entry from changelog. Click `Save draft` **rather** than `Publish release` at this time. (This will prevent the release being visible before it has got the binaries attached to it.) *In case you did not manage to create the draft release before CircleCI run is finished (it will fail on the artifacts upload step in this case), you can re-trigger the run manually from the CircleCI dashboard *after* you created the draft release.*
 
-7. You must create a Github Release using the UI for this tag, as otherwise CircleCI will not be able to upload tarballs for this tag. Also, you must create the Github Release using a Github user that has granted access rights to CircleCI. List of maintainers is available [here](../MAINTAINERS.md)
+3. You are also encouraged to include a list of (first time) contributors to the release. You can do this by clicking on `Auto-generate release notes`, which will generate this section for you (edit the notes as required to remove unnecessary parts).
 
-8. Go to the releases page of the project, click on the `Draft a new release` button and select the tag you just pushed. Describe release and post relevant entry from changelog. Click `Save draft` rather than `Publish release` at this time. (This will prevent the release being visible before it has got the binaries attached to it.)
+4. Once tarballs are published on release page, you can click `Publish` and release is complete.
 
-9. Once tarballs are published on release page, you can click `Publish` and release is complete.
+### Completing the release
 
-10. Announce `#thanos` slack channel.
+1. Announce the release on the `#thanos` Slack channel. You are also encouraged to announce the new release on any Thanos social media accounts, such as Twitter (the credentials are available via Thanos' [Keybase](https://keybase.io/) team which includes all maintainers).
 
-11. Pull commits from release branch to main branch for non `rc` releases. Make sure to not modify `VERSION`, it should be still pointing to `version+1-dev` ([TODO to automate this](https://github.com/thanos-io/thanos/issues/4741))
+2. Pull commits from release branch to main branch for non `rc` releases. Make sure to not modify `VERSION`, it should be still pointing to `version+1-dev` ([TODO to automate this](https://github.com/thanos-io/thanos/issues/4741))
 
-12. After releasing a major version, please cut a release for `kube-thanos` as well. https://github.com/thanos-io/kube-thanos/releases Make sure all the flag changes are reflected in the manifests. Otherwise, the process is the same, except we don't have `rc` for the `kube-thanos`. We do this to make sure we have compatible manifests for each major versions.
+3. After releasing a major version, please cut a release for `kube-thanos` as well. https://github.com/thanos-io/kube-thanos/releases Make sure all the flag changes are reflected in the manifests. Otherwise, the process is the same, except we don't have `rc` for the `kube-thanos`. We do this to make sure we have compatible manifests for each major versions.
 
-13. Merge `release-<major>.<minor>` branch back to main. This is important for Go modules tooling to make release tags reachable from main branch.
+4. Merge `release-<major>.<minor>` branch back to main. This is important for Go modules tooling to make release tags reachable from main branch.
 
-    - Create `merge-release-<major>.<minor>-to-main` branch **from `release-<major>.<minor>` branch** locally
-    - Merge upstream `main` branch into your `merge-release-<major>.<minor>-to-main` and resolve conflicts
-    - Send PR for merging your `merge-release-<major>.<minor>-to-main` branch into `main`
-    - Once approved, merge the PR by using "Merge" commit.
-      - This can either be done by temporarily enabling "Allow merge commits" option in "Settings > Options".
-      - Alternatively, this can be done locally by merging `merge-release-<major>.<minor>-to-main` branch into `main`, and pushing resulting `main` to upstream repository. This doesn't break `main` branch protection, since PR has been approved already, and it also doesn't require removing the protection.
+   - Create `merge-release-<major>.<minor>-to-main` branch **from `release-<major>.<minor>` branch** locally
+   - Merge upstream `main` branch into your `merge-release-<major>.<minor>-to-main` and resolve conflicts
+   - Open a PR for merging your `merge-release-<major>.<minor>-to-main` branch against `main`
+   - Once approved, merge the PR **by using "Merge" commit**.
+     - This can either be done by temporarily enabling "Allow merge commits" option in "Settings > Options".
+     - Alternatively, this can be done locally by merging `merge-release-<major>.<minor>-to-main` branch into `main`, and pushing resulting `main` to upstream repository. This doesn't break `main` branch protection, since PR has been approved already, and it also doesn't require removing the protection.
 
 ## Pre-releases (release candidates)
 

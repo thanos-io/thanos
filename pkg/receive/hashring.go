@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"fmt"
-	"sort"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -66,8 +65,6 @@ func (s simpleHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 	if n >= uint64(len(s)) {
 		return "", &insufficientNodesError{have: uint64(len(s)), want: n + 1}
 	}
-
-	sort.Slice(ts.Labels, func(i, j int) bool { return ts.Labels[i].Name < ts.Labels[j].Name })
 
 	return s[(labelpb.HashWithPrefix(tenant, ts.Labels)+n)%uint64(len(s))], nil
 }

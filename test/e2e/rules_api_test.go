@@ -50,7 +50,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
-		defaultPromConfig("ha", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml")),
+		e2ethanos.DefaultPromConfig("ha", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
@@ -58,7 +58,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
-		defaultPromConfig("ha", 1, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml")),
+		e2ethanos.DefaultPromConfig("ha", 1, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
@@ -71,7 +71,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	queryCfg := []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
-				StaticAddresses: []string{qUninit.InternalEndpoint("http")},
+				StaticAddresses: []string{qUninit.Future().InternalEndpoint("http")},
 				Scheme:          "http",
 			},
 		},
