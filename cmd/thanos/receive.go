@@ -259,7 +259,8 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{
-		if err := setupAndRunGRPCServer(g, logger, reg, tracer, conf, reloadGRPCServer, comp, dbs, webHandler, grpcLogOpts, tagOpts, grpcProbe); err != nil {
+		if err := setupAndRunGRPCServer(g, logger, reg, tracer, conf, reloadGRPCServer, comp, dbs, webHandler, grpcLogOpts,
+			tagOpts, grpcProbe, httpProbe.IsReady); err != nil {
 			return err
 		}
 	}
@@ -294,7 +295,7 @@ func setupAndRunGRPCServer(g *run.Group,
 	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
 	grpcProbe *prober.GRPCProbe,
-
+	isReady func() bool,
 ) error {
 
 	var s *grpcserver.Server
@@ -329,11 +330,14 @@ func setupAndRunGRPCServer(g *run.Group,
 				component.Receive.String(),
 				info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return mts.LabelSet() }),
 				info.WithStoreInfoFunc(func() *infopb.StoreInfo {
-					minTime, maxTime := mts.TimeRange()
-					return &infopb.StoreInfo{
-						MinTime: minTime,
-						MaxTime: maxTime,
+					if isReady() {
+						minTime, maxTime := mts.TimeRange()
+						return &infopb.StoreInfo{
+							MinTime: minTime,
+							MaxTime: maxTime,
+						}
 					}
+					return nil
 				}),
 				info.WithExemplarsInfoFunc(),
 			)

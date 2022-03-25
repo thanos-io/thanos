@@ -661,11 +661,14 @@ func runQuery(
 			component.Query.String(),
 			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return proxy.LabelSet() }),
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
-				minTime, maxTime := proxy.TimeRange()
-				return &infopb.StoreInfo{
-					MinTime: minTime,
-					MaxTime: maxTime,
+				if httpProbe.IsReady() {
+					mint, maxt := proxy.TimeRange()
+					return &infopb.StoreInfo{
+						MinTime: mint,
+						MaxTime: maxt,
+					}
 				}
+				return nil
 			}),
 			info.WithExemplarsInfoFunc(),
 			info.WithRulesInfoFunc(),

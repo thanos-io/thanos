@@ -390,11 +390,14 @@ func runStore(
 			return bs.LabelSet()
 		}),
 		info.WithStoreInfoFunc(func() *infopb.StoreInfo {
-			mint, maxt := bs.TimeRange()
-			return &infopb.StoreInfo{
-				MinTime: mint,
-				MaxTime: maxt,
+			if httpProbe.IsReady() {
+				mint, maxt := bs.TimeRange()
+				return &infopb.StoreInfo{
+					MinTime: mint,
+					MaxTime: maxt,
+				}
 			}
+			return nil
 		}),
 	)
 
