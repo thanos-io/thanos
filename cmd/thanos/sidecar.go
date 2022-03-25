@@ -265,11 +265,14 @@ func runSidecar(
 				return promStore.LabelSet()
 			}),
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
-				mint, maxt := promStore.Timestamps()
-				return &infopb.StoreInfo{
-					MinTime: mint,
-					MaxTime: maxt,
+				if httpProbe.IsReady() {
+					mint, maxt := promStore.Timestamps()
+					return &infopb.StoreInfo{
+						MinTime: mint,
+						MaxTime: maxt,
+					}
 				}
+				return nil
 			}),
 			info.WithExemplarsInfoFunc(),
 			info.WithRulesInfoFunc(),

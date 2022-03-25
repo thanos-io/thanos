@@ -604,11 +604,14 @@ func runRule(
 				return tsdbStore.LabelSet()
 			}),
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
-				mint, maxt := tsdbStore.TimeRange()
-				return &infopb.StoreInfo{
-					MinTime: mint,
-					MaxTime: maxt,
+				if httpProbe.IsReady() {
+					mint, maxt := tsdbStore.TimeRange()
+					return &infopb.StoreInfo{
+						MinTime: mint,
+						MaxTime: maxt,
+					}
 				}
+				return nil
 			}),
 		)
 		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)))

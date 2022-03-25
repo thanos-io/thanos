@@ -27,7 +27,7 @@ func TestHTTPProberHealthInitialState(t *testing.T) {
 func TestHTTPProberReadinessInitialState(t *testing.T) {
 	p := NewHTTP()
 
-	testutil.Assert(t, !p.isReady(), "initially should not be ready")
+	testutil.Assert(t, !p.IsReady(), "initially should not be ready")
 }
 
 func TestHTTPProberHealthyStatusSetting(t *testing.T) {
@@ -49,11 +49,11 @@ func TestHTTPProberReadyStatusSetting(t *testing.T) {
 
 	p.Ready()
 
-	testutil.Assert(t, p.isReady(), "should be ready")
+	testutil.Assert(t, p.IsReady(), "should be ready")
 
 	p.NotReady(testError)
 
-	testutil.Assert(t, !p.isReady(), "should not be ready")
+	testutil.Assert(t, !p.IsReady(), "should not be ready")
 }
 
 func TestHTTPProberMuxRegistering(t *testing.T) {

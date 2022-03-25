@@ -32,7 +32,7 @@ func (p *HTTPProbe) HealthyHandler(logger log.Logger) http.HandlerFunc {
 
 // ReadyHandler returns a HTTP Handler which responds readiness checks.
 func (p *HTTPProbe) ReadyHandler(logger log.Logger) http.HandlerFunc {
-	return p.handler(logger, p.isReady)
+	return p.handler(logger, p.IsReady)
 }
 
 func (p *HTTPProbe) handler(logger log.Logger, c check) http.HandlerFunc {
@@ -47,8 +47,8 @@ func (p *HTTPProbe) handler(logger log.Logger, c check) http.HandlerFunc {
 	}
 }
 
-// isReady returns true if component is ready.
-func (p *HTTPProbe) isReady() bool {
+// IsReady returns true if component is ready.
+func (p *HTTPProbe) IsReady() bool {
 	ready := p.ready.Load()
 	return ready > 0
 }
