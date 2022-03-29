@@ -6,6 +6,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -23,6 +24,9 @@ import (
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
+	"github.com/thanos-io/thanos/pkg/api/query/querypb"
+	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"google.golang.org/grpc"
 
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
@@ -1302,4 +1306,216 @@ func TestSidecarAlignmentPushdown(t *testing.T) {
 			}
 			return nil
 		})
+}
+
+func TestGrpcInstantQuery(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e_test_query_grpc_api")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "")
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	endpoints := []string{
+		sidecar.InternalEndpoint("grpc"),
+	}
+	querier, err := e2ethanos.
+		NewQuerierBuilder(e, "1", endpoints...).
+		Build()
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(querier))
+
+	now := time.Now()
+	samples := []fakeMetricSample{
+		{
+			label:             "test",
+			value:             1,
+			timestampUnixNano: now.UnixNano(),
+		},
+		{
+			label:             "test",
+			value:             2,
+			timestampUnixNano: now.Add(time.Hour).UnixNano(),
+		},
+	}
+	ctx := context.Background()
+	testutil.Ok(t, synthesizeSamples(ctx, prom, samples))
+
+	grpcConn, err := grpc.Dial(querier.Endpoint("grpc"), grpc.WithInsecure())
+	testutil.Ok(t, err)
+	queryClient := querypb.NewQueryClient(grpcConn)
+
+	queries := []struct {
+		time           time.Time
+		expectedResult float64
+	}{
+		{
+			time:           now,
+			expectedResult: 1,
+		},
+		{
+			time:           now.Add(time.Hour),
+			expectedResult: 2,
+		},
+	}
+
+	for _, query := range queries {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+		err = runutil.Retry(5*time.Second, ctx.Done(), func() error {
+			result, err := queryClient.Query(ctx, &querypb.QueryRequest{
+				Query:       "my_fake_metric",
+				TimeSeconds: query.time.Unix(),
+			})
+
+			if err != nil {
+				return err
+			}
+
+			var warnings string
+			var series []*prompb_copy.TimeSeries
+			for {
+				msg, err := result.Recv()
+				if err == io.EOF {
+					break
+				}
+
+				s := msg.GetTimeseries()
+				if s != nil {
+					series = append(series, s)
+				}
+				w := msg.GetWarnings()
+				if w != "" {
+					warnings = w
+				}
+			}
+
+			if warnings != "" {
+				return fmt.Errorf("got warnings, expected none")
+			}
+
+			if len(series) != 1 {
+				return fmt.Errorf("got empty result from querier")
+			}
+
+			if len(series[0].Samples) != 1 {
+				return fmt.Errorf("got empty timeseries from querier")
+			}
+
+			if series[0].Samples[0].Value != query.expectedResult {
+				return fmt.Errorf("got invalid result from querier")
+			}
+
+			return nil
+		})
+		testutil.Ok(t, err)
+		cancel()
+	}
+}
+
+func TestGrpcQueryRange(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e_test_query_grpc_api")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "")
+	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	endpoints := []string{
+		sidecar.InternalEndpoint("grpc"),
+	}
+	querier, err := e2ethanos.
+		NewQuerierBuilder(e, "1", endpoints...).
+		Build()
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(querier))
+
+	now := time.Now()
+	samples := []fakeMetricSample{
+		{
+			label:             "test",
+			value:             1,
+			timestampUnixNano: now.UnixNano(),
+		},
+		{
+			label:             "test",
+			value:             2,
+			timestampUnixNano: now.Add(time.Second * 15).UnixNano(),
+		},
+		{
+			label:             "test",
+			value:             3,
+			timestampUnixNano: now.Add(time.Second * 30).UnixNano(),
+		},
+		{
+			label:             "test",
+			value:             4,
+			timestampUnixNano: now.Add(time.Second * 45).UnixNano(),
+		},
+		{
+			label:             "test",
+			value:             5,
+			timestampUnixNano: now.Add(time.Minute).UnixNano(),
+		},
+	}
+	ctx := context.Background()
+	testutil.Ok(t, synthesizeSamples(ctx, prom, samples))
+
+	grpcConn, err := grpc.Dial(querier.Endpoint("grpc"), grpc.WithInsecure())
+	testutil.Ok(t, err)
+	queryClient := querypb.NewQueryClient(grpcConn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+	err = runutil.Retry(5*time.Second, ctx.Done(), func() error {
+		result, err := queryClient.QueryRange(ctx, &querypb.QueryRangeRequest{
+			Query:            "my_fake_metric",
+			StartTimeSeconds: now.Unix(),
+			EndTimeSeconds:   now.Add(time.Minute).Unix(),
+			IntervalSeconds:  15,
+		})
+
+		if err != nil {
+			return err
+		}
+
+		var warnings string
+		var series []*prompb_copy.TimeSeries
+		for {
+			msg, err := result.Recv()
+			if err == io.EOF {
+				break
+			}
+
+			s := msg.GetTimeseries()
+			if s != nil {
+				series = append(series, s)
+			}
+			w := msg.GetWarnings()
+			if w != "" {
+				warnings = w
+			}
+		}
+		if warnings != "" {
+			return fmt.Errorf("got warnings, expected none")
+		}
+
+		if len(series) != 1 {
+			return fmt.Errorf("got empty result from querier")
+		}
+
+		if len(series[0].Samples) != 5 {
+			return fmt.Errorf("got empty timeseries from querier")
+		}
+
+		return nil
+	})
+	testutil.Ok(t, err)
 }
