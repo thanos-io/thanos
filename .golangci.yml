@@ -16,9 +16,6 @@ run:
   #     vendor$, third_party$, testdata$, examples$, Godeps$, builtin$
   skip-dirs: vendor
 
-  skip-files:
-    - pkg/errors/errors.go # due to the errors import
-
 # output configuration options
 output:
   # colored-line-number|line-number|json|tab|checkstyle, default is "colored-line-number"
