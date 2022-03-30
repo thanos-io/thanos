@@ -133,7 +133,7 @@ func TestCause(t *testing.T) {
 				testutil.Equals(t, cause, nil)
 				return
 			}
-			testutil.Equals(t, cause.Error(), tc.expected, "Unwrap must match expected output")
+			testutil.Equals(t, cause.Error(), tc.expected, "Cause must match expected output")
 		})
 	}
 }
