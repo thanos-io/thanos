@@ -1,6 +1,7 @@
 package errors
 
 import (
+	//lint:ignore faillint Custom errors package tests need to import standard library errors.
 	stderrors "errors"
 	"fmt"
 	"regexp"

@@ -10,6 +10,7 @@
 package errors
 
 import (
+	//lint:ignore faillint Custom errors package needs to import standard library errors.
 	"errors"
 	"fmt"
 	"strings"
