@@ -257,6 +257,7 @@ config:
   service_account: ""
 ```
 
+
 ##### Using GOOGLE_APPLICATION_CREDENTIALS
 
 Application credentials are configured via JSON file and only the bucket needs to be specified, the client looks for:
@@ -290,6 +291,38 @@ config:
       "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/thanos%40gitpods.iam.gserviceaccount.com"
     }
 ```
+
+Encrypt the objstore.yml file with base64
+```sh
+cat objstore-plaintext.yml | base64 > objstore.yml
+```
+
+Create a kubernetes secret with the encrypted credentials file:
+```sh
+kubectl create secret generic thanos-objstore-config --from-file=objstore.yml
+```
+
+Check the thanos-objstore-secret.yaml
+```sh
+kubectl get secret thanos-objstore-config -o yaml
+```
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: thanos-objectstorage
+  namespace: monitoring
+  labels:
+    app: thanos
+type: Opaque
+data:
+  objstore.yml: dHlwZTogRklMRVNZU1RFTQpjb25maWc6CiAgZGlyZWN0b3J5OiAiL3RtcC90aGFub3MiCg==
+```
+
+Adding it will upload the file inside the containers in /conf/objstore.yml path
+
+
+
 
 ##### GCS Policies
 
