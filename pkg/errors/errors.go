@@ -1,6 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
+//nolint
 // The idea of writing errors package in thanos is highly motivated from the Tast project of Chromium OS Authors. However, instead of
 // copying the package, we end up writing our own simplified logic borrowing some ideas from the errors and github.com/pkg/errors.
 // A big thanks to all of them.
