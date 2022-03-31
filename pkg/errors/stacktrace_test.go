@@ -11,7 +11,7 @@ func caller() stacktrace {
 
 func TestStacktraceOutput(t *testing.T) {
 	st := caller()
-	expectedPhrase := "thanos/pkg/errors/stacktrace_test.go:13"
+	expectedPhrase := "/pkg/errors/stacktrace_test.go:13"
 	if !strings.Contains(st.String(), expectedPhrase) {
 		t.Fatalf("expected %v phrase into the stacktrace, received stacktrace: \n%v", expectedPhrase, st.String())
 	}
