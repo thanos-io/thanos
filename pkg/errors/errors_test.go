@@ -21,7 +21,7 @@ func TestNew(t *testing.T) {
 	err := New(msg)
 	testutil.Equals(t, err.Error(), msg, "the root error message must match")
 
-	reg := regexp.MustCompile(msg + `[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestNew	.*\/pkg\/errors\/errors_test\.go:17`)
+	reg := regexp.MustCompile(msg + `[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestNew	.*\/pkg\/errors\/errors_test\.go:\d+`)
 	testutil.Equals(t, reg.MatchString(fmt.Sprintf("%+v", err)), true, "matching stacktrace in errors.New")
 }
 
@@ -31,8 +31,8 @@ func TestNewFormatted(t *testing.T) {
 
 	err := New(fmtMsg, "value")
 	testutil.Equals(t, err.Error(), expectedMsg, "the root error message must match")
-	reg := regexp.MustCompile(expectedMsg + `[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestNewFormatted	.*\/pkg\/errors\/errors_test\.go:28`)
-	testutil.Equals(t, reg.MatchString(fmt.Sprintf("%+v", err)), true, "the stack trace must match")
+	reg := regexp.MustCompile(expectedMsg + `[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestNewFormatted	.*\/pkg\/errors\/errors_test\.go:\d+`)
+	testutil.Equals(t, reg.MatchString(fmt.Sprintf("%+v", err)), true, "matching stacktrace in errors.New with format string")
 }
 
 func TestWrap(t *testing.T) {
@@ -42,8 +42,8 @@ func TestWrap(t *testing.T) {
 	expectedMsg := wrapper + ": " + msg
 	testutil.Equals(t, err.Error(), expectedMsg, "the root error message must match")
 
-	reg := regexp.MustCompile(`test_wrapper[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestWrap	.*\/pkg\/errors\/errors_test\.go:36
-[[:ascii:]]+test_error_message[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestWrap	.*\/pkg\/errors\/errors_test\.go:35`)
+	reg := regexp.MustCompile(`test_wrapper[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestWrap	.*\/pkg\/errors\/errors_test\.go:\d+
+[[:ascii:]]+test_error_message[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestWrap	.*\/pkg\/errors\/errors_test\.go:\d+`)
 
 	t.Logf("%+v", err)
 	testutil.Equals(t, reg.MatchString(fmt.Sprintf("%+v", err)), true, "matching stacktrace in errors.Wrap")
