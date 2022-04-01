@@ -16,7 +16,7 @@ type stacktrace []uintptr
 // snapshot of the stack trace at the origin of a particular error. It tries to
 // record maximum 16 frames (if available).
 func newStackTrace() stacktrace {
-	const stackDepth = 16 // record maximum 16 frames (if available)
+	const stackDepth = 16 // record maximum 16 frames (if available).
 
 	pc := make([]uintptr, stackDepth)
 	// using skip=3 for not to count the program counter address of
@@ -24,7 +24,12 @@ func newStackTrace() stacktrace {
 	// 2. newStacktrace itself
 	// 3. the function used in runtime.Callers
 	n := runtime.Callers(3, pc)
-	return stacktrace(pc[:n])
+
+	// this approach is taken to reduce long term memory footprint (obtained through escape analysis).
+	// We are returning a new slice by re-slicing the pc with the required length and capacity (when the
+	// no of returned callFrames is less that stackDepth). This uses less memory compared to pc[:n] as
+	// the capacity of new slice is inherited from the parent slice if not specified.
+	return stacktrace(pc[:n:n])
 }
 
 // String implements the fmt.Stringer interface to provide formatted text output.
