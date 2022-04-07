@@ -40,6 +40,8 @@ func NewWriter(logger log.Logger, multiTSDB TenantStorage) *Writer {
 }
 
 func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteRequest) error {
+	tLogger := log.With(r.logger, "tenant", tenantID)
+
 	var (
 		numOutOfOrder           = 0
 		numDuplicates           = 0
@@ -85,13 +87,13 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			switch err {
 			case storage.ErrOutOfOrderSample:
 				numOutOfOrder++
-				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset, "sample", s)
+				level.Debug(tLogger).Log("msg", "Out of order sample", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
 			case storage.ErrDuplicateSampleForTimestamp:
 				numDuplicates++
-				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "sample", s)
+				level.Debug(tLogger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
 			case storage.ErrOutOfBounds:
 				numOutOfBounds++
-				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset, "sample", s)
+				level.Debug(tLogger).Log("msg", "Out of bounds metric", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
 			}
 		}
 
@@ -100,7 +102,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		if ref != 0 && len(t.Exemplars) > 0 {
 			for _, ex := range t.Exemplars {
 				exLset := labelpb.ZLabelsToPromLabels(ex.Labels)
-				logger := log.With(r.logger, "exemplarLset", exLset, "exemplar", ex.String())
+				logger := log.With(tLogger, "exemplarLset", exLset, "exemplar", ex.String())
 
 				_, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
 					Labels: exLset,
@@ -128,27 +130,27 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	}
 
 	if numOutOfOrder > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting out-of-order samples", "numDropped", numOutOfOrder)
+		level.Warn(tLogger).Log("msg", "Error on ingesting out-of-order samples", "numDropped", numOutOfOrder)
 		errs.Add(errors.Wrapf(storage.ErrOutOfOrderSample, "add %d samples", numOutOfOrder))
 	}
 	if numDuplicates > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting samples with different value but same timestamp", "numDropped", numDuplicates)
+		level.Warn(tLogger).Log("msg", "Error on ingesting samples with different value but same timestamp", "numDropped", numDuplicates)
 		errs.Add(errors.Wrapf(storage.ErrDuplicateSampleForTimestamp, "add %d samples", numDuplicates))
 	}
 	if numOutOfBounds > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "numDropped", numOutOfBounds)
+		level.Warn(tLogger).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "numDropped", numOutOfBounds)
 		errs.Add(errors.Wrapf(storage.ErrOutOfBounds, "add %d samples", numOutOfBounds))
 	}
 	if numExemplarsOutOfOrder > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting out-of-order exemplars", "numDropped", numExemplarsOutOfOrder)
+		level.Warn(tLogger).Log("msg", "Error on ingesting out-of-order exemplars", "numDropped", numExemplarsOutOfOrder)
 		errs.Add(errors.Wrapf(storage.ErrOutOfOrderExemplar, "add %d exemplars", numExemplarsOutOfOrder))
 	}
 	if numExemplarsDuplicate > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting duplicate exemplars", "numDropped", numExemplarsDuplicate)
+		level.Warn(tLogger).Log("msg", "Error on ingesting duplicate exemplars", "numDropped", numExemplarsDuplicate)
 		errs.Add(errors.Wrapf(storage.ErrDuplicateExemplar, "add %d exemplars", numExemplarsDuplicate))
 	}
 	if numExemplarsLabelLength > 0 {
-		level.Warn(r.logger).Log("msg", "Error on ingesting exemplars with label length exceeding maximum limit", "numDropped", numExemplarsLabelLength)
+		level.Warn(tLogger).Log("msg", "Error on ingesting exemplars with label length exceeding maximum limit", "numDropped", numExemplarsLabelLength)
 		errs.Add(errors.Wrapf(storage.ErrExemplarLabelLength, "add %d exemplars", numExemplarsLabelLength))
 	}
 
