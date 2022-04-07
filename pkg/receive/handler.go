@@ -259,28 +259,27 @@ type replica struct {
 }
 
 func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
+	tLogger := log.With(h.logger, "tenant", tenant)
+
 	// This replica value is used to detect cycles in cyclic topologies.
 	// A non-zero value indicates that the request has already been replicated by a previous receive instance.
 	// For almost all users, this is only used in fully connected topologies of IngestorRouter instances.
 	// For acyclic topologies that use RouterOnly and IngestorOnly instances, this causes issues when replicating data.
-	// See discussion in: https://github.com/thanos-io/thanos/issues/4359
+	// See discussion in: https://github.com/thanos-io/thanos/issues/4359.
 	if h.receiverMode == RouterOnly || h.receiverMode == IngestorOnly {
 		rep = 0
 	}
 
 	// The replica value in the header is one-indexed, thus we need >.
 	if rep > h.options.ReplicationFactor {
-		level.Error(h.logger).Log("err", errBadReplica, "msg", "write request rejected",
+		level.Error(tLogger).Log("err", errBadReplica, "msg", "write request rejected",
 			"request_replica", rep, "replication_factor", h.options.ReplicationFactor)
 		return errBadReplica
 	}
 
-	r := replica{
-		n:          rep,
-		replicated: rep != 0,
-	}
+	r := replica{n: rep, replicated: rep != 0}
 
-	// On the wire, format is 1-indexed and in-code is 0-indexed so we decrement the value if it was already replicated.
+	// On the wire, format is 1-indexed and in-code is 0-indexed, so we decrement the value if it was already replicated.
 	if r.replicated {
 		r.n--
 	}
@@ -294,6 +293,13 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
+
+	tenant := r.Header.Get(h.options.TenantHeader)
+	if tenant == "" {
+		tenant = h.options.DefaultTenantID
+	}
+
+	tLogger := log.With(h.logger, "tenant", tenant)
 
 	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
@@ -311,7 +317,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	reqBuf, err := s2.Decode(nil, compressed.Bytes())
 	if err != nil {
-		level.Error(h.logger).Log("msg", "snappy decode error", "err", err)
+		level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
 		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
 		return
 	}
@@ -334,21 +340,22 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tenant := r.Header.Get(h.options.TenantHeader)
-	if tenant == "" {
-		tenant = h.options.DefaultTenantID
-	}
-
-	// TODO(yeya24): handle remote write metadata.
-	// exit early if the request contained no data
+	// Exit early if the request contained no data. We don't support metadata yet. We also cannot fail here, because
+	// this would mean lack of forward compatibility for remote write proto.
 	if len(wreq.Timeseries) == 0 {
-		level.Debug(h.logger).Log("msg", "empty timeseries from client", "tenant", tenant)
+		// TODO(yeya24): Handle remote write metadata.
+		if len(wreq.Metadata) > 0 {
+			// TODO(bwplotka): Do we need this error message?
+			level.Debug(tLogger).Log("msg", "only metadata from client; metadata ingestion not supported; skipping")
+			return
+		}
+		level.Debug(tLogger).Log("msg", "empty remote write request; client bug or newer remote write protocol used?; skipping")
 		return
 	}
 
 	err = h.handleRequest(ctx, rep, tenant, &wreq)
 	if err != nil {
-		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
+		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
 	}
 
 	switch determineWriteErrorCause(err, 1) {
@@ -363,7 +370,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	case errBadReplica:
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	default:
-		level.Error(h.logger).Log("err", err, "msg", "internal server error")
+		level.Error(tLogger).Log("err", err, "msg", "internal server error")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -436,9 +443,13 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 		}
 	}()
 
-	logTags := []interface{}{"tenant", tenant}
-	if id, ok := middleware.RequestIDFromContext(pctx); ok {
-		logTags = append(logTags, "request-id", id)
+	var tLogger log.Logger
+	{
+		logTags := []interface{}{"tenant", tenant}
+		if id, ok := middleware.RequestIDFromContext(pctx); ok {
+			logTags = append(logTags, "request-id", id)
+		}
+		tLogger = log.With(h.logger, logTags)
 	}
 
 	ec := make(chan error)
@@ -488,7 +499,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 				if err != nil {
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
 					// To avoid breaking the counting logic, we need to flatten the error.
-					level.Debug(h.logger).Log(append(logTags, "msg", "local tsdb write failed", "err", err.Error()))
+					level.Debug(tLogger).Log("msg", "local tsdb write failed", "err", err.Error())
 					ec <- errors.Wrapf(determineWriteErrorCause(err, 1), "store locally for endpoint %v", endpoint)
 					return
 				}
@@ -551,7 +562,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 							b.attempt++
 							dur := h.expBackoff.ForAttempt(b.attempt)
 							b.nextAllowed = time.Now().Add(dur)
-							level.Debug(h.logger).Log(append(logTags, "msg", "target unavailable backing off", "for", dur))
+							level.Debug(tLogger).Log("msg", "target unavailable backing off", "for", dur)
 						} else {
 							h.peerStates[endpoint] = &retryState{nextAllowed: time.Now().Add(h.expBackoff.ForAttempt(0))}
 						}
@@ -580,7 +591,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 		go func() {
 			for err := range ec {
 				if err != nil {
-					level.Debug(h.logger).Log(append(logTags, "msg", "request failed, but not needed to achieve quorum", "err", err))
+					level.Debug(tLogger).Log("msg", "request failed, but not needed to achieve quorum", "err", err)
 				}
 			}
 		}()
