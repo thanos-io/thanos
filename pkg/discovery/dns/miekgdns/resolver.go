@@ -79,7 +79,7 @@ func (r *Resolver) lookupIPAddr(host string, currIteration, maxIterations int) (
 			// Recursively resolve it.
 			addrs, err := r.lookupIPAddr(addr.Target, currIteration+1, maxIterations)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to recursively resolve %s", addr.Target)
+				return nil, errors.Wrapf(err, "recursively resolve %s", addr.Target)
 			}
 			resp = append(resp, addrs...)
 		default:
