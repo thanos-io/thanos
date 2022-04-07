@@ -50,6 +50,15 @@ func (r *Resolver) LookupSRV(ctx context.Context, service, proto, name string) (
 }
 
 func (r *Resolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
+	return r.lookupIPAddr(ctx, host, 1, 8)
+}
+
+func (r *Resolver) lookupIPAddr(ctx context.Context, host string, currIteration, maxIterations int) ([]net.IPAddr, error) {
+	// We want to protect from infinite loops when resolving DNS records recursively.
+	if currIteration > maxIterations {
+		return nil, errors.Errorf("maximum number of recursive iterations reached (%d)", maxIterations)
+	}
+
 	response, err := r.lookupWithSearchPath(host, dns.Type(dns.TypeAAAA))
 	if err != nil || len(response.Answer) == 0 {
 		// Ugly fallback to A lookup.
@@ -66,8 +75,15 @@ func (r *Resolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr,
 			resp = append(resp, net.IPAddr{IP: addr.A})
 		case *dns.AAAA:
 			resp = append(resp, net.IPAddr{IP: addr.AAAA})
+		case *dns.CNAME:
+			// Recursively resolve it.
+			addrs, err := r.lookupIPAddr(ctx, addr.Target, currIteration+1, maxIterations)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to recursively resolve %s", addr.Target)
+			}
+			resp = append(resp, addrs...)
 		default:
-			return nil, errors.Errorf("invalid A or AAAA response record %s", record)
+			return nil, errors.Errorf("invalid A, AAAA or CNAME response record %s", record)
 		}
 	}
 	return resp, nil
