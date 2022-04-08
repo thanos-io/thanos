@@ -25,13 +25,13 @@ func TestNew(t *testing.T) {
 	testutil.Equals(t, reg.MatchString(fmt.Sprintf("%+v", err)), true, "matching stacktrace in errors.New")
 }
 
-func TestNewFormatted(t *testing.T) {
+func TestErrorf(t *testing.T) {
 	fmtMsg := msg + " key=%v"
 	expectedMsg := msg + " key=value"
 
-	err := New(fmtMsg, "value")
+	err := Errorf(fmtMsg, "value")
 	testutil.Equals(t, err.Error(), expectedMsg, "the root error message must match")
-	reg := regexp.MustCompile(expectedMsg + `[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestNewFormatted	.*\/pkg\/errors\/errors_test\.go:\d+`)
+	reg := regexp.MustCompile(expectedMsg + `[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestErrorf	.*\/pkg\/errors\/errors_test\.go:\d+`)
 	testutil.Equals(t, reg.MatchString(fmt.Sprintf("%+v", err)), true, "matching stacktrace in errors.New with format string")
 }
 

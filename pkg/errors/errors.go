@@ -51,11 +51,20 @@ func (b *base) Format(s fmt.State, verb rune) {
 	s.Write([]byte(b.Error()))
 }
 
-// New creates a new error with the given message and a stacktrace in details.
-// An alternative to errors.New function. It provides error message formatting
-// functionality i.e. a format string with different format verbs as input
-// arguments it acts similar to the fmt.Errorf (with a stacktrace).
-func New(format string, args ...interface{}) error {
+// New returns an error that formats as the given text and a stacktrace with recent
+// call frames. Each call to New returns a distinct error value even if the text is
+// identical. An alternative to errors.New function.
+func New(msg string) error {
+	return &base{
+		info:  msg,
+		stack: newStackTrace(),
+		err:   nil,
+	}
+}
+
+// Errorf formats according to a format specifier and returns a new error with
+// a stacktrace containing recent call frames. An alternative to fmt.Errorf function.
+func Errorf(format string, args ...interface{}) error {
 	return &base{
 		info:  fmt.Sprintf(format, args...),
 		stack: newStackTrace(),
@@ -63,11 +72,23 @@ func New(format string, args ...interface{}) error {
 	}
 }
 
-// Wrap creates a new error with the given message, wrapping another error and a stacktrace in details.
-// If cause is nil, this is the same as New. This Wrap method combines both Wrap and Wrapf functionality.
-// If wrapped is used with a format string with format verbs and the args, it will be same as Wrapf (a
-// convention used in error packages).
-func Wrap(cause error, format string, args ...interface{}) error {
+// Wrap returns a new error with the supplied message as an argument and wrapping another error
+// with a stacktrace containing recent call frames.
+//
+// If cause is nil, this is the same as New.
+func Wrap(cause error, msg string) error {
+	return &base{
+		info:  msg,
+		stack: newStackTrace(),
+		err:   cause,
+	}
+}
+
+// Wrapf returns a new error by formatting the error message with the supplied format specifier
+// and wrapping another error with a stacktrace containing recent call frames.
+//
+// If cause is nil, this is the same as Errorf.
+func Wrapf(cause error, format string, args ...interface{}) error {
 	return &base{
 		info:  fmt.Sprintf(format, args...),
 		stack: newStackTrace(),
@@ -115,14 +136,20 @@ func formatErrorChain(err error) string {
 // Is is a wrapper of built-in errors.Is. It reports whether any error in err's
 // chain matches target. The chain consists of err itself followed by the sequence
 // of errors obtained by repeatedly calling Unwrap.
-var Is = errors.Is
+func Is(err, target error) bool {
+	return errors.Is(err, target)
+}
 
 // As is a wrapper of built-in errors.As. It finds the first error in err's
 // chain that matches target, and if one is found, sets target to that error
 // value and returns true. Otherwise, it returns false.
-var As = errors.As
+func As(err error, target interface{}) bool {
+	return errors.As(err, target)
+}
 
 // Unwrap is a wrapper of built-in errors.Unwrap. Unwrap returns the result of
 // calling the Unwrap method on err, if err's type contains an Unwrap method
 // returning error. Otherwise, Unwrap returns nil.
-var Unwrap = errors.Unwrap
+func Unwrap(err error) error {
+	return errors.Unwrap(err)
+}
