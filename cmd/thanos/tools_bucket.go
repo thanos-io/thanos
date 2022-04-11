@@ -25,7 +25,7 @@ import (
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/olekukonko/tablewriter"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -584,8 +584,8 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
-		bucketUI := ui.NewBucketUI(logger, tbc.label, tbc.webExternalPrefix, tbc.webPrefixHeaderName, "", component.Bucket)
-		bucketUI.Register(router, true, ins)
+		bucketUI := ui.NewBucketUI(logger, tbc.webExternalPrefix, tbc.webPrefixHeaderName, component.Bucket)
+		bucketUI.Register(router, ins)
 
 		flagsMap := getFlagsMap(cmd.Flags())
 
@@ -643,7 +643,6 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			return err
 		}
 		fetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
-			bucketUI.Set(blocks, err)
 			api.SetGlobal(blocks, err)
 		})
 
