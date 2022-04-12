@@ -299,6 +299,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
+	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
@@ -326,7 +327,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		compressed.Grow(512)
 	}
-	_, err := io.Copy(&compressed, r.Body)
+	_, err = io.Copy(&compressed, r.Body)
 	if err != nil {
 		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
