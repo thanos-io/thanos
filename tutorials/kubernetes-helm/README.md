@@ -1,7 +1,7 @@
 To deploy thanos sidecar along with Prometheus using official helm chart - just run the next command, putting the values to a file `values.yaml` and changing `--namespace` value beforehand:
 
 ```
-helm upgrade --version="8.6.0" --install --namespace="my-lovely-namespace" --values values.yaml  prometheus-thanos-sidecar stable/prometheus
+helm upgrade --version="15.8.1" --install --namespace="my-lovely-namespace" --values values.yaml  prometheus-thanos-sidecar prometheus-community/prometheus
 ```
 
 Take a note that you need to replace two placeholders in the values: `BUCKET_REPLACE_ME` and `CLUSTER_NAME`. Also adjust all the other values according to your infrastructure requirements.
@@ -22,15 +22,6 @@ nodeExporter:
 
 kubeStateMetrics:
   enabled: false
-
-initChownData:
-  resources:
-    limits:
-      memory: 16Mi
-      cpu: 50m
-    requests:
-      memory: 16Mi
-      cpu: 50m
 
 server:
   extraArgs:
@@ -65,7 +56,7 @@ server:
   - name: thanos-sidecar
     # Always use explicit image tags (release or main-<date>-sha) instead of ambigous `latest` or `main`.
     # Check https://quay.io/repository/thanos/thanos?tab=tags to get latest tag.
-    image: quay.io/thanos/thanos:main-2021-03-01-1bbad3b5
+    image: quay.io/thanos/thanos:main-2022-04-11-c4fe2194
     resources:
       requests:
         memory: "4Gi"
@@ -135,20 +126,8 @@ server:
     secretName: thanos-storage-secret
 
 configmapReload:
-  image:
-    repository: gcr.io/google-containers/pause-amd64 # This image changed to just pause since there's no option to disable configmapReload container in chart, but thanos-sidecar overtakes this functionality. So basically we don't need another reloader
-    tag: 3.1
-  resources:
-    limits:
-      cpu: 20m
-      memory: 20Mi
-    requests:
-      cpu: 20m
-      memory: 20Mi
-
-
-serverFiles:
-  alerts: {}
-  rules: {}
-
+  prometheus:
+    enabled: false
+  alertmanager:
+    enabled: false
 ```
