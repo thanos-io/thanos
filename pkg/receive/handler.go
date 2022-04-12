@@ -307,6 +307,15 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
+	if h.options.TenantField != "" {
+		tenant, err = h.getTenantFromCertificate(r)
+		if err != nil {
+			// This must hard fail to ensure hard tenancy when feature is enabled.
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
 	tLogger := log.With(h.logger, "tenant", tenant)
 
 	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
@@ -344,20 +353,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	if replicaRaw := r.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
 		if rep, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
 			http.Error(w, "could not parse replica header", http.StatusBadRequest)
-			return
-		}
-	}
-
-	tenant := r.Header.Get(h.options.TenantHeader)
-	if tenant == "" {
-		tenant = h.options.DefaultTenantID
-	}
-
-	if h.options.TenantField != "" {
-		tenant, err = h.getTenantFromCertificate(r)
-		if err != nil {
-			// This must hard fail to ensure hard tenancy when feature is enabled.
-			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 	}
