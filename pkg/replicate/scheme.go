@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/hashicorp/go-multierror"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -179,7 +180,7 @@ func newReplicationScheme(
 	}
 }
 
-func (rs *replicationScheme) execute(ctx context.Context) error {
+func (rs *replicationScheme) execute(ctx context.Context, concurrencyLvl int) error {
 	availableBlocks := []*metadata.Meta{}
 
 	metas, partials, err := rs.fetcher.Fetch(ctx)
@@ -204,13 +205,23 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 		return availableBlocks[i].BlockMeta.MinTime < availableBlocks[j].BlockMeta.MinTime
 	})
 
+	meg := multierror.Group{}
+	sem := make(chan *metadata.Meta, concurrencyLvl)
+	defer close(sem)
 	for _, b := range availableBlocks {
-		if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
-			return errors.Wrapf(err, "ensure block %v is replicated", b.BlockMeta.ULID.String())
-		}
+		sem <- b
+		// instead of using a pipeline with a set number of long-lived workers
+		// a goroutine is started per upload in order to simplify error handling
+		meg.Go(func() error {
+			bl := <-sem
+			if err := rs.ensureBlockIsReplicated(ctx, bl.BlockMeta.ULID); err != nil {
+				return errors.Wrapf(err, "ensure block %v is replicated", bl.BlockMeta.ULID.String())
+			}
+			return nil
+		})
 	}
 
-	return nil
+	return meg.Wait()
 }
 
 // ensureBlockIsReplicated ensures that a block present in the origin bucket is

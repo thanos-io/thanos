@@ -122,10 +122,11 @@ type bucketWebConfig struct {
 }
 
 type bucketReplicateConfig struct {
-	resolutions []time.Duration
-	compactions []int
-	matcherStrs []string
-	singleRun   bool
+	resolutions    []time.Duration
+	compactions    []int
+	matcherStrs    []string
+	singleRun      bool
+	concurrencyLvl int
 }
 
 type bucketDownsampleConfig struct {
@@ -210,6 +211,7 @@ func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.Fla
 	cmd.Flag("matcher", "Only blocks whose external labels exactly match this matcher will be replicated.").PlaceHolder("key=\"value\"").StringsVar(&tbc.matcherStrs)
 
 	cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").BoolVar(&tbc.singleRun)
+	cmd.Flag("concurrency-level", "Max number of go-routines to use for replication.").Default("4").IntVar(&tbc.concurrencyLvl)
 
 	return tbc
 }
@@ -735,6 +737,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			objStoreConfig,
 			toObjStoreConfig,
 			tbc.singleRun,
+			tbc.concurrencyLvl,
 			minTime,
 			maxTime,
 			blockIDs,
