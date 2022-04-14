@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"path"
 	"sort"
+	"sync"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -205,23 +206,45 @@ func (rs *replicationScheme) execute(ctx context.Context, concurrencyLvl int) er
 		return availableBlocks[i].BlockMeta.MinTime < availableBlocks[j].BlockMeta.MinTime
 	})
 
-	meg := multierror.Group{}
-	sem := make(chan *metadata.Meta, concurrencyLvl)
-	defer close(sem)
-	for _, b := range availableBlocks {
-		sem <- b
-		// instead of using a pipeline with a set number of long-lived workers
-		// a goroutine is started per upload in order to simplify error handling
-		meg.Go(func() error {
-			bl := <-sem
-			if err := rs.ensureBlockIsReplicated(ctx, bl.BlockMeta.ULID); err != nil {
-				return errors.Wrapf(err, "ensure block %v is replicated", bl.BlockMeta.ULID.String())
+	// iterate over blocks and send them to a channel sequentially
+	iterBlocks := func() <-chan *metadata.Meta {
+		out := make(chan *metadata.Meta)
+		go func() {
+			for _, b := range availableBlocks {
+				out <- b
 			}
-			return nil
-		})
+			close(out)
+		}()
+		return out
+	}
+	bc := iterBlocks()
+
+	// fan-out for concurrent replication
+	wg := sync.WaitGroup{}
+	wg.Add(concurrencyLvl)
+	errs := make(chan error)
+	for i := 0; i < concurrencyLvl; i++ {
+		go func(bc <-chan *metadata.Meta, errs chan<- error) {
+			for b := range bc {
+				if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil { //TODO tbd if this is thread safe
+					errs <- err
+				}
+			}
+			wg.Done()
+		}(bc, errs)
+	}
+	go func() {
+		wg.Wait()
+		close(errs)
+	}()
+
+	// fan-in for errors
+	var me error
+	for e := range errs {
+		me = multierror.Append(me, e)
 	}
 
-	return meg.Wait()
+	return me
 }
 
 // ensureBlockIsReplicated ensures that a block present in the origin bucket is
