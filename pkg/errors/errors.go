@@ -51,20 +51,13 @@ func (b *base) Format(s fmt.State, verb rune) {
 	s.Write([]byte(b.Error()))
 }
 
-// New returns an error that formats as the given text and a stacktrace with recent
-// call frames. Each call to New returns a distinct error value even if the text is
-// identical. An alternative to errors.New function.
-func New(msg string) error {
-	return &base{
-		info:  msg,
-		stack: newStackTrace(),
-		err:   nil,
-	}
-}
-
-// Errorf formats according to a format specifier and returns a new error with
-// a stacktrace containing recent call frames. An alternative to fmt.Errorf function.
-func Errorf(format string, args ...interface{}) error {
+// Newf formats according to a format specifier and returns a new error with a stacktrace
+// with recent call frames. Each call to New returns a distinct error value even if the text is
+// identical. An alternative of the errors.New function.
+//
+// If no args have been passed, it is same as `New` function without formatting. Character like
+// '%' still has to be escaped in that scenario.
+func Newf(format string, args ...interface{}) error {
 	return &base{
 		info:  fmt.Sprintf(format, args...),
 		stack: newStackTrace(),
@@ -72,22 +65,11 @@ func Errorf(format string, args ...interface{}) error {
 	}
 }
 
-// Wrap returns a new error with the supplied message as an argument and wrapping another error
-// with a stacktrace containing recent call frames.
-//
-// If cause is nil, this is the same as New.
-func Wrap(cause error, msg string) error {
-	return &base{
-		info:  msg,
-		stack: newStackTrace(),
-		err:   cause,
-	}
-}
-
 // Wrapf returns a new error by formatting the error message with the supplied format specifier
 // and wrapping another error with a stacktrace containing recent call frames.
 //
-// If cause is nil, this is the same as Errorf.
+// If cause is nil, this is the same as fmt.Errorf. If no args have been passed, it is same as `Wrap`
+// function without formatting. Character like '%' still has to be escaped in that scenario.
 func Wrapf(cause error, format string, args ...interface{}) error {
 	return &base{
 		info:  fmt.Sprintf(format, args...),
@@ -132,6 +114,11 @@ func formatErrorChain(err error) string {
 	}
 	return buf.String()
 }
+
+// The functions `Is`, `As` & `Unwrap` provides a thin wrapper around the builtin errors
+// package in go. Just for sake of completeness and correct autocompletion behaviors from
+// IDEs they have been wrapped using functions instead of using variable to reference them
+// as first class functions (eg: var Is = errros.Is ).
 
 // Is is a wrapper of built-in errors.Is. It reports whether any error in err's
 // chain matches target. The chain consists of err itself followed by the sequence
