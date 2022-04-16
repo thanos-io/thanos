@@ -117,11 +117,11 @@ Feel free to mimic following PR: https://github.com/thanos-io/thanos/pull/3861
    git push origin "v${tag}"
    ```
 
-   Signing a tag with a GPG key is appreciated, but in case you can't add a GPG key to your Github account using the following [procedure](https://help.github.com/articles/generating-a-gpg-key/), you can replace the `-s` flag by `-a` flag of the `git tag` command to only annotate the tag without signing.
+   Signing a tag with a GPG key is appreciated, but in case you can't add a GPG key to your GitHub account using the following [procedure](https://docs.github.com/en/authentication/managing-commit-signature-verification/generating-a-new-gpg-key), you can replace the `-s` flag by `-a` flag of the `git tag` command to only annotate the tag without signing.
 
    Please make sure that you are tagging the merge commit because otherwise GitHub's UI will show that there were more commits after your release.
 
-2. Once a tag is created and pushed, **immediately** create a Github Release using the UI for this tag, as otherwise CircleCI will not be able to upload tarballs for this tag. Go to the releases page of the project, click on the `Draft a new release` button and select the tag you just pushed. Describe release and post relevant entry from changelog. Click `Save draft` **rather** than `Publish release` at this time. (This will prevent the release being visible before it has got the binaries attached to it.) *In case you did not manage to create the draft release before CircleCI run is finished (it will fail on the artifacts upload step in this case), you can re-trigger the run manually from the CircleCI dashboard *after* you created the draft release.*
+2. Once a tag is created and pushed, **immediately** create a GitHub Release using the UI for this tag, as otherwise CircleCI will not be able to upload tarballs for this tag. Go to the releases page of the project, click on the `Draft a new release` button and select the tag you just pushed. Describe release and post relevant entry from changelog. Click `Save draft` **rather** than `Publish release` at this time. (This will prevent the release being visible before it has got the binaries attached to it.) *In case you did not manage to create the draft release before CircleCI run is finished (it will fail on the artifacts upload step in this case), you can re-trigger the run manually from the CircleCI dashboard *after* you created the draft release.*
 
 3. You are also encouraged to include a list of (first time) contributors to the release. You can do this by clicking on `Auto-generate release notes`, which will generate this section for you (edit the notes as required to remove unnecessary parts).
 
@@ -149,5 +149,5 @@ Feel free to mimic following PR: https://github.com/thanos-io/thanos/pull/3861
 The following changes to the above procedures apply:
 
 * In line with [Semantic Versioning](http://semver.org/), append something like `-rc.0` to the version (with the corresponding changes to the tag name, the release name etc.).
-* Tick the `This is a pre-release` box when drafting the release in the Github UI.
+* Tick the `This is a pre-release` box when drafting the release in the GitHub UI.
 * Still update `CHANGELOG.md`, but when you cut the final release later, merge all the changes from the pre-releases into the one final update.

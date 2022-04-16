@@ -24,7 +24,7 @@ You can reach us under `thanos-io@googlegroups.com` email.
 
 ## Triage
 
-We also have some nice souls that help triaging issues and PRs. See [here](https://help.github.com/en/articles/repository-permission-levels-for-an-organization#permission-levels-for-repositories-owned-by-an-organization) for details about the role's permission.
+We also have some nice souls that help triaging issues and PRs. See [here](https://docs.github.com/en/organizations/managing-access-to-your-organizations-repositories/repository-roles-for-an-organization#repository-roles-for-organizations) for details about the role's permission.
 
 Full list of triage persons is displayed below:
 
