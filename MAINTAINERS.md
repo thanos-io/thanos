@@ -31,7 +31,7 @@ Full list of triage persons is displayed below:
 | Name          | Slack         | GitHub                                       | Company |
 |---------------|---------------|----------------------------------------------|---------|
 | Adrien Fillon | `@Adrien F`   | [@adrien-f](https://github.com/adrien-f)     |         |
-| Ian Billett   | `@billett`    | [@ianbillett](https://github.com/ianbillett) | Red Hat |
+| Ian Billett   | `@billett`    | [@bill3tt](https://github.com/bill3tt)       | Red Hat |
 | Martin Chodur | `@FUSAKLA`    | [@fusakla](https://github.com/fusakla)       |         |
 | Michael Dai   | `@jojohappy`  | [@jojohappy](https://github.com/jojohappy)   |         |
 | Xiang Dai     | `@daixiang0`  | [@daixiang0](https://github.com/daixiang0)   |         |
