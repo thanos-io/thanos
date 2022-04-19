@@ -1,14 +1,13 @@
 import * as React from 'react';
 import { mount, shallow } from 'enzyme';
-import Panel, { PanelOptions, PanelType } from './Panel';
-import ExpressionInput from './ExpressionInput';
+import Panel, { PanelOptions, PanelProps, PanelType } from './Panel';
 import GraphControls from './GraphControls';
 import { NavLink, TabPane } from 'reactstrap';
 import TimeInput from './TimeInput';
 import DataTable from './DataTable';
 import { GraphTabContent } from './GraphTabContent';
 
-const defaultProps = {
+const defaultProps: PanelProps = {
   id: 'abc123',
   useLocalTime: false,
   options: {
@@ -22,7 +21,6 @@ const defaultProps = {
     useDeduplication: true,
     usePartialResponse: false,
     storeMatches: [],
-    defaultStep: '1s',
   },
   onOptionsChanged: (): void => {
     // Do nothing.
@@ -41,6 +39,9 @@ const defaultProps = {
   },
   stores: [],
   enableAutocomplete: true,
+  defaultStep: '1s',
+  enableHighlighting: true,
+  enableLinter: true,
 };
 
 describe('Panel', () => {

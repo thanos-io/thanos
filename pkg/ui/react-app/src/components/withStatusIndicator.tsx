@@ -11,7 +11,7 @@ interface StatusIndicatorProps {
 }
 
 export const withStatusIndicator =
-  <T extends any>(Component: ComponentType<T>): FC<StatusIndicatorProps & T> =>
+  <T,>(Component: ComponentType<T>): FC<StatusIndicatorProps & T> =>
   ({ error, isLoading, customErrorMsg, componentTitle, ...rest }: StatusIndicatorProps) => {
     if (error) {
       return (

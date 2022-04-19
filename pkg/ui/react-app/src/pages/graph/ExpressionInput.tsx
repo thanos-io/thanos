@@ -15,7 +15,7 @@ import { autocompletion, completionKeymap, CompletionContext, CompletionResult }
 import { baseTheme, lightTheme, darkTheme, promqlHighlighter } from './CMTheme';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSearch, faSpinner } from '@fortawesome/free-solid-svg-icons';
-import { newCompleteStrategy } from 'codemirror-promql/dist/cjs/complete';
+import { newCompleteStrategy } from 'codemirror-promql/dist/esm/complete';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { useTheme } from '../../contexts/ThemeContext';
 
