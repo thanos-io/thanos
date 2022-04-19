@@ -24,19 +24,19 @@ You can reach us under `thanos-io@googlegroups.com` email.
 
 ## Triage
 
-We also have some nice souls that help triaging issues and PRs. See [here](https://help.github.com/en/articles/repository-permission-levels-for-an-organization#permission-levels-for-repositories-owned-by-an-organization) for details about the role's permission.
+We also have some nice souls that help triaging issues and PRs. See [here](https://docs.github.com/en/organizations/managing-access-to-your-organizations-repositories/repository-roles-for-an-organization#repository-roles-for-organizations) for details about the role's permission.
 
 Full list of triage persons is displayed below:
 
-| Name          | Slack         | GitHub                                       | Company |
-|---------------|---------------|----------------------------------------------|---------|
-| Adrien Fillon | `@Adrien F`   | [@adrien-f](https://github.com/adrien-f)     |         |
-| Ian Billett   | `@billett`    | [@ianbillett](https://github.com/ianbillett) | Red Hat |
-| Martin Chodur | `@FUSAKLA`    | [@fusakla](https://github.com/fusakla)       |         |
-| Michael Dai   | `@jojohappy`  | [@jojohappy](https://github.com/jojohappy)   |         |
-| Xiang Dai     | `@daixiang0`  | [@daixiang0](https://github.com/daixiang0)   |         |
-| Jimmie Han    | `@hanjm`      | [@hanjm](https://github.com/hanjm)           | Tencent |
-| Matej Gera    | `@Matej Gera` | [@matej-g](https://github.com/matej-g)       | Red Hat |
+| Name          | Slack         | GitHub                                     | Company |
+|---------------|---------------|--------------------------------------------|---------|
+| Adrien Fillon | `@Adrien F`   | [@adrien-f](https://github.com/adrien-f)   |         |
+| Ian Billett   | `@billett`    | [@bill3tt](https://github.com/bill3tt)     | Red Hat |
+| Martin Chodur | `@FUSAKLA`    | [@fusakla](https://github.com/fusakla)     |         |
+| Michael Dai   | `@jojohappy`  | [@jojohappy](https://github.com/jojohappy) |         |
+| Xiang Dai     | `@daixiang0`  | [@daixiang0](https://github.com/daixiang0) |         |
+| Jimmie Han    | `@hanjm`      | [@hanjm](https://github.com/hanjm)         | Tencent |
+| Matej Gera    | `@Matej Gera` | [@matej-g](https://github.com/matej-g)     | Red Hat |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 

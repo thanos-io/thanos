@@ -23,4 +23,4 @@ Let us know on https://github.com/thanos-io/thanos or #thanos slack channel link
 
 ### Contributed by:
 
-* Ian Billett [@ianbillett](http://github.com/ianbillett)
+* Ian Billett [@bill3tt](http://github.com/bill3tt)
