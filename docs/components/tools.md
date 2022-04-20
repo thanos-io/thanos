@@ -508,6 +508,8 @@ with Thanos blocks (meta.json has to have Thanos metadata).
 Flags:
       --compaction=1... ...      Only blocks with these compaction levels will
                                  be replicated. Repeated flag.
+      --concurrency-level=4      Max number of go-routines to use for
+                                 replication.
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --http-address="0.0.0.0:10902"
