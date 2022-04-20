@@ -225,7 +225,7 @@ func (rs *replicationScheme) execute(ctx context.Context, concurrencyLvl int) er
 	for i := 0; i < concurrencyLvl; i++ {
 		go func(bc <-chan *metadata.Meta, errs chan<- error) {
 			for b := range bc {
-				if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil { //TODO tbd if this is thread safe
+				if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
 					errs <- err
 				}
 			}
