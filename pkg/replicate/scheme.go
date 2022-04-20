@@ -207,7 +207,7 @@ func (rs *replicationScheme) execute(ctx context.Context, concurrencyLvl int) er
 	})
 
 	// iterate over blocks and send them to a channel sequentially
-	iterBlocks := func() <-chan *metadata.Meta {
+	blocksChan := func() <-chan *metadata.Meta {
 		out := make(chan *metadata.Meta)
 		go func() {
 			for _, b := range availableBlocks {
@@ -216,8 +216,7 @@ func (rs *replicationScheme) execute(ctx context.Context, concurrencyLvl int) er
 			close(out)
 		}()
 		return out
-	}
-	bc := iterBlocks()
+	}()
 
 	// fan-out for concurrent replication
 	wg := sync.WaitGroup{}
@@ -231,7 +230,7 @@ func (rs *replicationScheme) execute(ctx context.Context, concurrencyLvl int) er
 				}
 			}
 			wg.Done()
-		}(bc, errs)
+		}(blocksChan, errs)
 	}
 	go func() {
 		wg.Wait()
