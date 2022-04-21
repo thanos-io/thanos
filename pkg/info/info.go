@@ -25,6 +25,7 @@ type InfoServer struct {
 	getRulesInfo          func() *infopb.RulesInfo
 	getTargetsInfo        func() *infopb.TargetsInfo
 	getMetricMetadataInfo func() *infopb.MetricMetadataInfo
+	getQueryAPIInfo       func() *infopb.QueryAPIInfo
 }
 
 // NewInfoServer creates a new server instance for given component
@@ -42,6 +43,7 @@ func NewInfoServer(
 		getRulesInfo:          func() *infopb.RulesInfo { return nil },
 		getTargetsInfo:        func() *infopb.TargetsInfo { return nil },
 		getMetricMetadataInfo: func() *infopb.MetricMetadataInfo { return nil },
+		getQueryAPIInfo:       func() *infopb.QueryAPIInfo { return nil },
 	}
 
 	for _, o := range options {
@@ -144,6 +146,21 @@ func WithMetricMetadataInfoFunc(getMetricMetadataInfo ...func() *infopb.MetricMe
 	}
 }
 
+// WithQueryAPIInfoFunc determines the function that should be executed to obtain
+// the query information. If no function is provided, the default empty
+// query info is returned. Only the first function from the list is considered.
+func WithQueryAPIInfoFunc(queryInfo ...func() *infopb.QueryAPIInfo) ServerOptionFunc {
+	if len(queryInfo) == 0 {
+		return func(s *InfoServer) {
+			s.getQueryAPIInfo = func() *infopb.QueryAPIInfo { return &infopb.QueryAPIInfo{} }
+		}
+	}
+
+	return func(s *InfoServer) {
+		s.getQueryAPIInfo = queryInfo[0]
+	}
+}
+
 // RegisterInfoServer registers the info server.
 func RegisterInfoServer(infoSrv infopb.InfoServer) func(*grpc.Server) {
 	return func(s *grpc.Server) {
@@ -161,5 +178,6 @@ func (srv *InfoServer) Info(ctx context.Context, req *infopb.InfoRequest) (*info
 		Rules:          srv.getRulesInfo(),
 		Targets:        srv.getTargetsInfo(),
 		MetricMetadata: srv.getMetricMetadataInfo(),
+		Query:          srv.getQueryAPIInfo(),
 	}, nil
 }

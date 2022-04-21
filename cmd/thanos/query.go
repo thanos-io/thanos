@@ -675,6 +675,7 @@ func runQuery(
 			info.WithRulesInfoFunc(),
 			info.WithMetricMetadataInfoFunc(),
 			info.WithTargetsInfoFunc(),
+			info.WithQueryAPIInfoFunc(),
 		)
 
 		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryableCreator, engineCreator, instantDefaultMaxSourceResolution)
