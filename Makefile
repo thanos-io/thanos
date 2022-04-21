@@ -35,7 +35,7 @@ else
 	echo >&2 "only support amd64, arm64 or ppc64le arch" && exit 1
 endif
 DOCKER_ARCHS       ?= amd64 arm64 ppc64le
-# Generate two target: docker-xxx-amd64, docker-xxx-arm64, docker-xxx-ppc64le.
+# Generate three targets: docker-xxx-amd64, docker-xxx-arm64, docker-xxx-ppc64le.
 # Run make docker-xxx -n to see the result with dry run.
 BUILD_DOCKER_ARCHS = $(addprefix docker-build-,$(DOCKER_ARCHS))
 TEST_DOCKER_ARCHS  = $(addprefix docker-test-,$(DOCKER_ARCHS))
