@@ -31,21 +31,24 @@ message InfoRequest {}
 message InfoResponse {
     repeated ZLabelSet label_sets      = 1 [(gogoproto.nullable) = false];
     string ComponentType               = 2;
-    
+
     // StoreInfo holds the metadata related to Store API if exposed by the component otherwise it will be null.
-    StoreInfo store                    = 3;    
+    StoreInfo store                    = 3;
 
     // RulesInfo holds the metadata related to Rules API if exposed by the component otherwise it will be null.
     RulesInfo rules                    = 4;
-    
+
     // MetricMetadataInfo holds the metadata related to Metadata API if exposed by the component otherwise it will be null.
     MetricMetadataInfo metric_metadata = 5;
-    
+
     // TargetsInfo holds the metadata related to Targets API if exposed by the component otherwise it will be null.
     TargetsInfo targets                = 6;
-    
+
     // ExemplarsInfo holds the metadata related to Exemplars API if exposed by the component otherwise it will be null.
     ExemplarsInfo exemplars            = 7;
+
+    // QueryAPIInfo holds the metadata related to Query API if exposed by the component, otherwise it will be null.
+    QueryAPIInfo query                 = 8;
 }
 
 // StoreInfo holds the metadata related to Store API exposed by the component.
@@ -70,4 +73,8 @@ message TargetsInfo {
 message ExemplarsInfo {
     int64 min_time = 1;
     int64 max_time = 2;
+}
+
+// QueryInfo holds the metadata related to Query API exposed by the component.
+message QueryAPIInfo {
 }
