@@ -20,3 +20,4 @@ crossbuild:
     - linux/arm64
     - windows/amd64
     - freebsd/amd64
+    - linux/ppc64le

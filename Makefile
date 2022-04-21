@@ -26,13 +26,16 @@ else ifeq ($(arch), arm64)
 	# arm64
 	BASE_DOCKER_SHA=${arm64}
 else ifeq ($(arch), aarch64)
-	# arm64
-	BASE_DOCKER_SHA=${arm64}
+        # arm64
+        BASE_DOCKER_SHA=${arm64}
+else ifeq ($(arch), ppc64le)
+	# ppc64le
+	BASE_DOCKER_SHA=${ppc64le}
 else
-	echo >&2 "only support amd64 or arm64 arch" && exit 1
+	echo >&2 "only support amd64, arm64 or ppc64le arch" && exit 1
 endif
-DOCKER_ARCHS       ?= amd64 arm64
-# Generate two target: docker-xxx-amd64, docker-xxx-arm64.
+DOCKER_ARCHS       ?= amd64 arm64 ppc64le
+# Generate three targets: docker-xxx-amd64, docker-xxx-arm64, docker-xxx-ppc64le.
 # Run make docker-xxx -n to see the result with dry run.
 BUILD_DOCKER_ARCHS = $(addprefix docker-build-,$(DOCKER_ARCHS))
 TEST_DOCKER_ARCHS  = $(addprefix docker-test-,$(DOCKER_ARCHS))
@@ -157,7 +160,7 @@ ifeq ($(GIT_BRANCH), main)
 crossbuild: | $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	# we only care about below two for the main branch
-	$(PROMU) crossbuild -v -p linux/amd64 -p linux/arm64
+	$(PROMU) crossbuild -v -p linux/amd64 -p linux/arm64 -p linux/ppc64le
 else
 crossbuild: | $(PROMU)
 	@echo ">> crossbuilding all binaries"
