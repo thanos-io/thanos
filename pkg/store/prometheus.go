@@ -246,7 +246,7 @@ func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *store
 	opts := promclient.QueryOptions{}
 	step := r.QueryHints.StepMillis / 1000
 	if step != 0 {
-		result, _, err := p.client.QueryRange(s.Context(), p.base, r.ToPromQL(), r.MinTime, r.MaxTime, step, opts)
+		result, _, err := p.client.QueryRange(s.Context(), p.base, r.ToPromQL(), timestamp.Time(r.MinTime), timestamp.Time(r.MaxTime), step, opts)
 		if err != nil {
 			return err
 		}

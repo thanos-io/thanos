@@ -895,7 +895,7 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 			testutil.Ok(t, synthesizeSamples(ctx, prom2, tc.prom2Samples))
 
 			testQuery := func() string { return tc.query }
-			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{
+			instantQueryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{
 				Deduplicate: true,
 			}, tc.result)
 		})
@@ -944,7 +944,7 @@ func mustURLParse(t testing.TB, addr string) *url.URL {
 func instantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) model.Vector {
 	t.Helper()
 
-	fmt.Println("queryAndAssert: Waiting for", expectedSeriesLen, "results for query", q())
+	fmt.Println("instantQueryAndAssert: Waiting for", expectedSeriesLen, "results for query", q())
 	var result model.Vector
 
 	logger := log.NewLogfmtLogger(os.Stdout)
@@ -969,16 +969,57 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 	return result
 }
 
+func queryRangeSeries(t testing.TB, ctx context.Context, addr string, q func() string, startTime, endTime func() time.Time, step int64, opts promclient.QueryOptions, expectedSeriesLen int) []model.Metric {
+	t.Helper()
+
+	fmt.Println("queryRangeSeries: Waiting for", expectedSeriesLen, "results for query", q())
+	var result model.Matrix
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
+		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, mustURLParse(t, "http://"+addr), q(), startTime(), endTime(), step, opts)
+		if err != nil {
+			return err
+		}
+
+		if len(warnings) > 0 {
+			return errors.Errorf("unexpected warnings %s", warnings)
+		}
+
+		if len(res) != expectedSeriesLen {
+			return errors.Errorf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
+		}
+		result = res
+		return nil
+	}))
+
+	ret := make([]model.Metric, len(result))
+	for i, s := range result {
+		ret[i] = s.Metric
+	}
+
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i].String() < ret[j].String()
+	})
+	return ret
+}
+
 func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected []model.Metric) {
 	t.Helper()
 
 	result := instantQuery(t, ctx, addr, q, ts, opts, len(expected))
 	for i, exp := range expected {
-		testutil.Equals(t, exp, result[i].Metric)
+		testutil.Equals(t, exp, result[i].Metric, "instant query")
+	}
+
+	result2 := queryRangeSeries(t, ctx, addr, q, func() time.Time { return ts().Add(-5 * time.Minute) }, ts, 100, opts, len(expected))
+	for i, exp := range expected {
+		testutil.Equals(t, exp, result2[i], "query range")
 	}
 }
 
-func queryAndAssert(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected model.Vector) {
+func instantQueryAndAssert(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected model.Vector) {
 	t.Helper()
 
 	sortResults(expected)
@@ -1051,7 +1092,7 @@ func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string,
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, mustURLParse(t, "http://"+addr), q(), start, end, step, opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, mustURLParse(t, "http://"+addr), q(), timestamp.Time(start), timestamp.Time(end), step, opts)
 		if err != nil {
 			return err
 		}
@@ -1265,7 +1306,7 @@ func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
 			testutil.Ok(t, synthesizeSamples(ctx, prom2, tc.prom2Samples))
 
 			testQuery := func() string { return tc.query }
-			queryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{
+			instantQueryAndAssert(t, ctx, q.Endpoint("http"), testQuery, time.Now, promclient.QueryOptions{
 				Deduplicate: true,
 			}, tc.result)
 		})
@@ -1325,8 +1366,8 @@ func TestSidecarAlignmentPushdown(t *testing.T) {
 	var expectedRes model.Matrix
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
 		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, mustURLParse(t, "http://"+q1.Endpoint("http")), testQuery(),
-			timestamp.FromTime(now.Add(time.Duration(-7*24)*time.Hour)),
-			timestamp.FromTime(now),
+			now.Add(time.Duration(-7*24)*time.Hour),
+			now,
 			2419, // Taken from UI.
 			promclient.QueryOptions{
 				Deduplicate: true,

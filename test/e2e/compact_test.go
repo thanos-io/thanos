@@ -471,7 +471,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	t.Cleanup(cancel)
 
 	// Check if query detects current series, even if overlapped.
-	queryAndAssert(t, ctx, q.Endpoint("http"),
+	instantQueryAndAssert(t, ctx, q.Endpoint("http"),
 		func() string {
 			return fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds()))
 		},
@@ -738,7 +738,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		t.Cleanup(cancel)
 
 		// Check if query detects new blocks.
-		queryAndAssert(t, ctx, q.Endpoint("http"),
+		instantQueryAndAssert(t, ctx, q.Endpoint("http"),
 			func() string {
 				return fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds()))
 			},
@@ -790,7 +790,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		t.Cleanup(cancel)
 
 		// Check if query detects new blocks.
-		queryAndAssert(t, ctx, q.Endpoint("http"),
+		instantQueryAndAssert(t, ctx, q.Endpoint("http"),
 			func() string {
 				return fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds()))
 			},
@@ -817,7 +817,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 			return `last_over_time({z="1"}[2h]) - last_over_time({z="1"}[2h])`
 		}
 
-		queryAndAssert(t, ctx, q.Endpoint("http"),
+		instantQueryAndAssert(t, ctx, q.Endpoint("http"),
 			checkQuery,
 			func() time.Time { return now.Add(10 * 24 * time.Hour) },
 			promclient.QueryOptions{
@@ -842,7 +842,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 			matchers.MustNewMatcher(matchers.MatchEqual, "store_type", "store"),
 		)))
 
-		queryAndAssert(t, ctx, q.Endpoint("http"),
+		instantQueryAndAssert(t, ctx, q.Endpoint("http"),
 			checkQuery,
 			func() time.Time { return now.Add(10 * 24 * time.Hour) },
 			promclient.QueryOptions{

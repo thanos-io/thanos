@@ -491,14 +491,14 @@ func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query st
 }
 
 // QueryRange performs a range query using a default HTTP client and returns results in model.Matrix type.
-func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, startTime, endTime, step int64, opts QueryOptions) (model.Matrix, []string, error) {
+func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, startTime, endTime time.Time, step int64, opts QueryOptions) (model.Matrix, []string, error) {
 	params, err := url.ParseQuery(base.RawQuery)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
 	}
 	params.Add("query", query)
-	params.Add("start", formatTime(timestamp.Time(startTime)))
-	params.Add("end", formatTime(timestamp.Time(endTime)))
+	params.Add("start", formatTime(startTime))
+	params.Add("end", formatTime(endTime))
 	params.Add("step", strconv.FormatInt(step, 10))
 	if err := opts.AddTo(params); err != nil {
 		return nil, nil, errors.Wrap(err, "add thanos opts query params")
