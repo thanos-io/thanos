@@ -180,7 +180,7 @@ func parseDurationMillis(s string) (int64, error) {
 }
 
 func parseEnableDedupParam(s string) (bool, error) {
-	enableDeduplication := true
+	enableDeduplication := true // Deduplication is enabled by default.
 	if s != "" {
 		var err error
 		enableDeduplication, err = strconv.ParseBool(s)

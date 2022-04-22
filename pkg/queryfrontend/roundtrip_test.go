@@ -381,15 +381,16 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 		End:                 2 * hour,
 		Step:                10 * seconds,
 		MaxSourceResolution: 1 * seconds,
+		Dedup:               true, // Deduplication is enabled by default.
 	}
 
-	testRequestWithDedup := &ThanosQueryRangeRequest{
+	testRequestWithoutDedup := &ThanosQueryRangeRequest{
 		Path:                "/api/v1/query_range",
 		Start:               0,
 		End:                 2 * hour,
 		Step:                10 * seconds,
 		MaxSourceResolution: 1 * seconds,
-		Dedup:               true,
+		Dedup:               false,
 	}
 
 	// Non query range request, won't be cached.
@@ -398,6 +399,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 		Start: 0,
 		End:   2 * hour,
 		Step:  10 * seconds,
+		Dedup: true,
 	}
 
 	// Same query params as testRequest, different maxSourceResolution
@@ -408,6 +410,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 		End:                 2 * hour,
 		Step:                10 * seconds,
 		MaxSourceResolution: 10 * seconds,
+		Dedup:               true,
 	}
 
 	// Same query params as testRequest, different maxSourceResolution
@@ -418,6 +421,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 		End:                 2 * hour,
 		Step:                10 * seconds,
 		MaxSourceResolution: 1 * hour,
+		Dedup:               true,
 	}
 
 	// Same query params as testRequest, but with storeMatchers
@@ -428,6 +432,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 		Step:                10 * seconds,
 		MaxSourceResolution: 1 * seconds,
 		StoreMatchers:       [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+		Dedup:               true,
 	}
 
 	cacheConf := &queryrange.ResultsCacheConfig{
@@ -466,7 +471,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 	}{
 		{name: "first request", req: testRequest, expected: 1},
 		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
-		{name: "same request as the first one but with dedup enabled, should not use cache", req: testRequestWithDedup, expected: 2},
+		{name: "same request as the first one but with dedup disabled, should not use cache", req: testRequestWithoutDedup, expected: 2},
 		{name: "non query range request won't be cached", req: testRequestInstant, expected: 3},
 		{name: "do it again", req: testRequestInstant, expected: 4},
 		{name: "different max source resolution but still same level", req: testRequestSameLevelDownsampling, expected: 4},
@@ -479,8 +484,9 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 				Start: 0,
 				End:   25 * hour,
 				Step:  10 * seconds,
+				Dedup: true,
 			},
-			expected: 7,
+			expected: 8,
 		},
 		{
 			name: "same query as the previous one",
@@ -489,8 +495,9 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 				Start: 0,
 				End:   25 * hour,
 				Step:  10 * seconds,
+				Dedup: true,
 			},
-			expected: 7,
+			expected: 8,
 		},
 	} {
 		if !t.Run(tc.name, func(t *testing.T) {
@@ -618,9 +625,7 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 			expected: 8,
 		},
 	} {
-
-		t.Run(tc.name, func(t *testing.T) {
-
+		if !t.Run(tc.name, func(t *testing.T) {
 			ctx := user.InjectOrgID(context.Background(), "1")
 			httpReq, err := NewThanosLabelsCodec(true, 24*time.Hour).EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
@@ -629,8 +634,9 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 			testutil.Ok(t, err)
 
 			testutil.Equals(t, tc.expected, *res)
-		})
-
+		}) {
+			break
+		}
 	}
 }
 
@@ -641,6 +647,15 @@ func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
 		Start:    0,
 		End:      2 * hour,
 		Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+		Dedup:    true,
+	}
+
+	testRequestWithoutDedup := &ThanosSeriesRequest{
+		Path:     "/api/v1/series",
+		Start:    0,
+		End:      2 * hour,
+		Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+		Dedup:    false,
 	}
 
 	// Different matchers set with the first request.
@@ -649,10 +664,11 @@ func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
 		Start:    0,
 		End:      2 * hour,
 		Matchers: [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "baz")}},
+		Dedup:    true,
 	}
 
 	// Same query params as testRequest, but with storeMatchers
-	testRequestWithStoreMatchers := &ThanosLabelsRequest{
+	testRequestWithStoreMatchers := &ThanosSeriesRequest{
 		Path:          "/api/v1/series",
 		Start:         0,
 		End:           2 * hour,
@@ -695,12 +711,12 @@ func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
 	}{
 		{name: "first request", req: testRequest, expected: 1},
 		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
-		{name: "different series request, not use cache", req: testRequest2, expected: 2},
-		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 3},
+		{name: "same request as the first one but with dedup disabled, should not use cache", req: testRequestWithoutDedup, expected: 2},
+		{name: "different series request, not use cache", req: testRequest2, expected: 3},
+		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 4},
 	} {
 
-		t.Run(tc.name, func(t *testing.T) {
-
+		if !t.Run(tc.name, func(t *testing.T) {
 			ctx := user.InjectOrgID(context.Background(), "1")
 			httpReq, err := NewThanosLabelsCodec(true, 24*time.Hour).EncodeRequest(ctx, tc.req)
 			testutil.Ok(t, err)
@@ -709,8 +725,9 @@ func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
 			testutil.Ok(t, err)
 
 			testutil.Equals(t, tc.expected, *res)
-		})
-
+		}) {
+			break
+		}
 	}
 }
 

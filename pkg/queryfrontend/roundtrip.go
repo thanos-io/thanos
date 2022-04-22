@@ -272,10 +272,20 @@ func newLabelsTripperware(
 	}, nil
 }
 
-// Don't go to response cache if StoreMatchers are set.
+// shouldCache controls what kind of Thanos request should be cached.
+// Don't cache:
+// * if StoreMatchers are set (since it is debug option).
+// * if Dedup is disabled (this is done only for debugging).
+// * Caching option disables cache.
 func shouldCache(r queryrange.Request) bool {
-	if thanosReq, ok := r.(ThanosRequestStoreMatcherGetter); ok {
-		if len(thanosReq.GetStoreMatchers()) > 0 {
+	if thanosReqStoreMatcherGettable, ok := r.(ThanosRequestStoreMatcherGetter); ok {
+		if len(thanosReqStoreMatcherGettable.GetStoreMatchers()) > 0 {
+			return false
+		}
+	}
+
+	if thanosReqDedup, ok := r.(ThanosRequestDedup); ok {
+		if !thanosReqDedup.IsDedupEnabled() {
 			return false
 		}
 	}
