@@ -383,6 +383,15 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 		MaxSourceResolution: 1 * seconds,
 	}
 
+	testRequestWithDedup := &ThanosQueryRangeRequest{
+		Path:                "/api/v1/query_range",
+		Start:               0,
+		End:                 2 * hour,
+		Step:                10 * seconds,
+		MaxSourceResolution: 1 * seconds,
+		Dedup:               true,
+	}
+
 	// Non query range request, won't be cached.
 	testRequestInstant := &ThanosQueryRangeRequest{
 		Path:  "/api/v1/query",
@@ -457,11 +466,12 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 	}{
 		{name: "first request", req: testRequest, expected: 1},
 		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
-		{name: "non query range request won't be cached", req: testRequestInstant, expected: 2},
-		{name: "do it again", req: testRequestInstant, expected: 3},
-		{name: "different max source resolution but still same level", req: testRequestSameLevelDownsampling, expected: 3},
-		{name: "different max source resolution and different level", req: testRequestHigherLevelDownsampling, expected: 4},
-		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 5},
+		{name: "same request as the first one but with dedup enabled, should not use cache", req: testRequestWithDedup, expected: 2},
+		{name: "non query range request won't be cached", req: testRequestInstant, expected: 3},
+		{name: "do it again", req: testRequestInstant, expected: 4},
+		{name: "different max source resolution but still same level", req: testRequestSameLevelDownsampling, expected: 4},
+		{name: "different max source resolution and different level", req: testRequestHigherLevelDownsampling, expected: 5},
+		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 6},
 		{
 			name: "request but will be partitioned",
 			req: &ThanosQueryRangeRequest{
@@ -483,8 +493,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 			expected: 7,
 		},
 	} {
-
-		t.Run(tc.name, func(t *testing.T) {
+		if !t.Run(tc.name, func(t *testing.T) {
 
 			ctx := user.InjectOrgID(context.Background(), "1")
 			httpReq, err := NewThanosQueryRangeCodec(true).EncodeRequest(ctx, tc.req)
@@ -494,8 +503,9 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 			testutil.Ok(t, err)
 
 			testutil.Equals(t, tc.expected, *res)
-		})
-
+		}) {
+			break
+		}
 	}
 }
 

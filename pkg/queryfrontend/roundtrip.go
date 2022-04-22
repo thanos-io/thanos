@@ -274,7 +274,7 @@ func newLabelsTripperware(
 
 // Don't go to response cache if StoreMatchers are set.
 func shouldCache(r queryrange.Request) bool {
-	if thanosReq, ok := r.(ThanosRequest); ok {
+	if thanosReq, ok := r.(ThanosRequestStoreMatcherGetter); ok {
 		if len(thanosReq.GetStoreMatchers()) > 0 {
 			return false
 		}
