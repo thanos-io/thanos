@@ -572,7 +572,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 			},
-			expectedErr: errors.New("test: receive series from test: test"),
+			expectedErr: errors.New("receive series from test: test"),
 		},
 		{
 			title: "partial response disabled; 1st store is slow, 2nd store is fast;",
@@ -607,7 +607,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 			},
-			expectedErr: errors.New("test: failed to receive any data in 4s from test: context deadline exceeded"),
+			expectedErr: errors.New("failed to receive any data in 4s from test: context deadline exceeded"),
 		},
 		{
 			title: "partial response disabled; 1st store is fast, 2nd store is slow;",
@@ -642,7 +642,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 			},
-			expectedErr: errors.New("test: failed to receive any data in 4s from test: context deadline exceeded"),
+			expectedErr: errors.New("failed to receive any data in 4s from test: context deadline exceeded"),
 		},
 		{
 			title: "partial response disabled; 1st store is slow on 2nd series, 2nd store is fast;",
@@ -680,7 +680,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 			},
-			expectedErr: errors.New("test: failed to receive any data in 4s from test: context deadline exceeded"),
+			expectedErr: errors.New("failed to receive any data in 4s from test: context deadline exceeded"),
 		},
 		{
 			title: "partial response disabled; 1st store is fast to respond, 2nd store is slow on 2nd series;",
@@ -718,7 +718,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 			},
-			expectedErr: errors.New("test: failed to receive any data in 4s from test: context deadline exceeded"),
+			expectedErr: errors.New("failed to receive any data in 4s from test: context deadline exceeded"),
 		},
 		{
 			title: "partial response enabled; 1st store is slow to respond, 2nd store is fast;",
@@ -943,7 +943,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
 				},
 			},
-			expectedErr: errors.New("test: failed to receive any data from test: context deadline exceeded"),
+			expectedErr: errors.New("failed to receive any data from test: context deadline exceeded"),
 		},
 		{
 			title: "partial response enabled; all stores respond 3s",
@@ -1025,6 +1025,10 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			return
 		}
 	}
+
+	// Wait until the last goroutine exits which is stuck on time.Sleep().
+	// Otherwise, goleak complains.
+	time.Sleep(5 * time.Second)
 }
 
 func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
@@ -1063,7 +1067,8 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 			storepb.Aggr_COUNTER,
 			storepb.Aggr_COUNT,
 		},
-		MaxResolutionWindow: 1234,
+		PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+		MaxResolutionWindow:     1234,
 	}
 	testutil.Ok(t, q.Series(req, s))
 
@@ -1770,7 +1775,12 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 	}
 
 	chunkLen := len(allResps[len(allResps)-1].GetSeries().Chunks)
-	maxTime := allResps[len(allResps)-1].GetSeries().Chunks[chunkLen-1].MaxTime
+	var maxTime int64
+	if len(allResps[len(allResps)-1].GetSeries().Chunks) == 0 {
+		maxTime = math.MaxInt64
+	} else {
+		maxTime = allResps[len(allResps)-1].GetSeries().Chunks[chunkLen-1].MaxTime
+	}
 	storetestutil.TestServerSeries(t, store,
 		&storetestutil.SeriesCase{
 			Name: fmt.Sprintf("%d client with %d samples, %d series each", numOfClients, samplesPerSeriesPerClient, seriesPerClient),

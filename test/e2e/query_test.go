@@ -1311,7 +1311,7 @@ func TestSidecarAlignmentPushdown(t *testing.T) {
 func TestGrpcInstantQuery(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_grpc_api")
+	e, err := e2e.NewDockerEnvironment("e2e_test_instant_query_grpc_api")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1419,7 +1419,7 @@ func TestGrpcInstantQuery(t *testing.T) {
 func TestGrpcQueryRange(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_grpc_api")
+	e, err := e2e.NewDockerEnvironment("e2e_test_query_range_grpc_api")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 

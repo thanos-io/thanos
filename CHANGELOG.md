@@ -28,6 +28,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5231](https://github.com/thanos-io/thanos/pull/5231) Tools: Bucket verify tool ignores blocks with deletion markers.
 - [#5244](https://github.com/thanos-io/thanos/pull/5244) Query: Promote negative offset and `@` modifier to stable features as per Prometheus [#10121](https://github.com/prometheus/prometheus/pull/10121).
 - [#5255](https://github.com/thanos-io/thanos/pull/5255) InfoAPI: Set store API unavailable when stores are not ready.
+- [#5255](https://github.com/thanos-io/thanos/pull/5296) Query: Use k-way merging for the proxying logic. This ensures that network is used as efficiently as possible. Also, the proxying sub-system now uses much less resources (~30-50% less CPU usage, ~30-40% less RAM usage according to our benchmarks). We intend to add a series limiter on Thanos Query in the near future as now Query buffers series responses as fast as possible.
 
 ### Removed
 
