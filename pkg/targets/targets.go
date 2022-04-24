@@ -47,10 +47,7 @@ func NewGRPCClientWithDedup(ts targetspb.TargetsServer, replicaLabels []string) 
 }
 
 func (rr *GRPCClient) Targets(ctx context.Context, req *targetspb.TargetsRequest) (*targetspb.TargetDiscovery, storage.Warnings, error) {
-	resp := &targetsServer{ctx: ctx, targets: &targetspb.TargetDiscovery{
-		ActiveTargets:  make([]*targetspb.ActiveTarget, 0),
-		DroppedTargets: make([]*targetspb.DroppedTarget, 0),
-	}}
+	resp := &targetsServer{ctx: ctx, targets: &targetspb.TargetDiscovery{}}
 
 	if err := rr.proxy.Targets(req, resp); err != nil {
 		return nil, nil, errors.Wrap(err, "proxy Targets")
