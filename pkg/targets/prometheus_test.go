@@ -118,9 +118,15 @@ scrape_configs:
 		requestedState targetspb.TargetsRequest_State
 		expectedErr    error
 	}{
-		{requestedState: targetspb.TargetsRequest_ANY},
-		{requestedState: targetspb.TargetsRequest_ACTIVE},
-		{requestedState: targetspb.TargetsRequest_DROPPED},
+		{
+			requestedState: targetspb.TargetsRequest_ANY,
+		},
+		{
+			requestedState: targetspb.TargetsRequest_ACTIVE,
+		},
+		{
+			requestedState: targetspb.TargetsRequest_DROPPED,
+		},
 	} {
 		t.Run(tcase.requestedState.String(), func(t *testing.T) {
 			targets, w, err := grpcClient.Targets(context.Background(), &targetspb.TargetsRequest{
@@ -138,9 +144,9 @@ scrape_configs:
 
 			switch tcase.requestedState {
 			case targetspb.TargetsRequest_ACTIVE:
-				expectedTargets.DroppedTargets = nil
+				expectedTargets.DroppedTargets = expectedTargets.DroppedTargets[:0]
 			case targetspb.TargetsRequest_DROPPED:
-				expectedTargets.ActiveTargets = nil
+				expectedTargets.ActiveTargets = expectedTargets.ActiveTargets[:0]
 			}
 
 			for i := range targets.ActiveTargets {
