@@ -36,6 +36,12 @@ Query Frontend supports a retry mechanism to retry query when HTTP requests are 
 
 Query Frontend supports caching query results and reuses them on subsequent queries. If the cached results are incomplete, Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers. Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results. Currently, in-memory cache (fifo cache) and memcached are supported.
 
+### Excluded from caching
+
+* Requests that support deduplication and having it disabled with `dedup=false`. Read more about deduplication in [Dedup documentation](./query.md#deduplication-enabled).
+* Requests that specify store matchers.
+* Requests were the caching is explicitely disabled.
+
 #### In-memory
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=queryfrontend.InMemoryResponseCacheConfig"
