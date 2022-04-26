@@ -109,7 +109,9 @@ func TestQueryFrontend(t *testing.T) {
 			timestamp.FromTime(now.Add(-time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			14,
-			promclient.QueryOptions{},
+			promclient.QueryOptions{
+				Deduplicate: true,
+			},
 			func(res model.Matrix) error {
 				if len(res) == 0 {
 					return errors.Errorf("expected some results, got nothing")
@@ -151,7 +153,9 @@ func TestQueryFrontend(t *testing.T) {
 			timestamp.FromTime(now.Add(-time.Hour)),
 			timestamp.FromTime(now.Add(time.Hour)),
 			14,
-			promclient.QueryOptions{},
+			promclient.QueryOptions{
+				Deduplicate: true,
+			},
 			func(res model.Matrix) error {
 				if len(res) == 0 {
 					return errors.Errorf("expected some results, got nothing")
@@ -196,7 +200,9 @@ func TestQueryFrontend(t *testing.T) {
 			timestamp.FromTime(now.Add(-time.Hour)),
 			timestamp.FromTime(now.Add(24*time.Hour)),
 			14,
-			promclient.QueryOptions{},
+			promclient.QueryOptions{
+				Deduplicate: true,
+			},
 			func(res model.Matrix) error {
 				if len(res) == 0 {
 					return errors.Errorf("expected some results, got nothing")
@@ -459,7 +465,9 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		timestamp.FromTime(now.Add(-time.Hour)),
 		timestamp.FromTime(now.Add(time.Hour)),
 		14,
-		promclient.QueryOptions{},
+		promclient.QueryOptions{
+			Deduplicate: true,
+		},
 		func(res model.Matrix) error {
 			if len(res) == 0 {
 				return errors.Errorf("expected some results, got nothing")
@@ -489,7 +497,9 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		timestamp.FromTime(now.Add(-time.Hour)),
 		timestamp.FromTime(now.Add(time.Hour)),
 		14,
-		promclient.QueryOptions{},
+		promclient.QueryOptions{
+			Deduplicate: true,
+		},
 		func(res model.Matrix) error {
 			if len(res) == 0 {
 				return errors.Errorf("expected some results, got nothing")
