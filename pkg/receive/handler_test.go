@@ -217,6 +217,10 @@ func (f *fakeAppendable) Appender(_ context.Context) (storage.Appender, error) {
 	return f.appender, errf()
 }
 
+func (f *fakeAppendable) NumSeries() uint64 {
+	return 0
+}
+
 type fakeAppender struct {
 	sync.Mutex
 	samples     map[storage.SeriesRef][]prompb.Sample

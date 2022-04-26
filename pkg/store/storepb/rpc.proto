@@ -60,6 +60,7 @@ message WriteRequest {
   repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
   string tenant = 2;
   int64 replica = 3;
+  int64 seriesLimit = 4;
 }
 
 message InfoRequest {}

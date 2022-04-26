@@ -21,6 +21,7 @@ import (
 // Appendable returns an Appender.
 type Appendable interface {
 	Appender(ctx context.Context) (storage.Appender, error)
+	NumSeries() uint64
 }
 
 type TenantStorage interface {
@@ -39,7 +40,7 @@ func NewWriter(logger log.Logger, multiTSDB TenantStorage) *Writer {
 	}
 }
 
-func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteRequest) error {
+func (r *Writer) Write(ctx context.Context, seriesLimit uint64, tenantID string, wreq *prompb.WriteRequest) error {
 	tLogger := log.With(r.logger, "tenant", tenantID)
 
 	var (
@@ -79,6 +80,14 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
 			labelpb.ReAllocZLabelsStrings(&t.Labels)
 			lset = labelpb.ZLabelsToPromLabels(t.Labels)
+		}
+
+		// If the ref is 0, it indicates that inserting the samples will create a new time series.
+		// We do the seriesLimit check before actually creating the series in head because even after
+		// a rollback, the series will stay in head, defeating the whole purpose of series limit.
+		if ref == 0 && seriesLimit > 0 && s.NumSeries() >= seriesLimit {
+			_ = app.Rollback()
+			return errSeriesLimitReached
 		}
 
 		// Append as many valid samples as possible, but keep track of the errors.

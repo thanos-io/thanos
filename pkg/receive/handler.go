@@ -52,6 +52,8 @@ const (
 	DefaultTenantLabel = "tenant_id"
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
+	// DefaultSeriesLimitHeader is the default header used to designate the limit of maximum number of active series for the tenant.
+	DefaultSeriesLimitHeader = "THANOS-SERIES-LIMIT"
 	// Labels for metrics.
 	labelSuccess = "success"
 	labelError   = "error"
@@ -61,9 +63,10 @@ var (
 	// errConflict is returned whenever an operation fails due to any conflict-type error.
 	errConflict = errors.New("conflict")
 
-	errBadReplica  = errors.New("request replica exceeds receiver replication factor")
-	errNotReady    = errors.New("target not ready")
-	errUnavailable = errors.New("target not available")
+	errBadReplica         = errors.New("request replica exceeds receiver replication factor")
+	errNotReady           = errors.New("target not ready")
+	errUnavailable        = errors.New("target not available")
+	errSeriesLimitReached = errors.New("series limit reached")
 )
 
 // Options for the web Handler.
@@ -74,6 +77,7 @@ type Options struct {
 	TenantHeader      string
 	DefaultTenantID   string
 	ReplicaHeader     string
+	SeriesLimitHeader string
 	Endpoint          string
 	ReplicationFactor uint64
 	ReceiverMode      ReceiverMode
@@ -258,7 +262,7 @@ type replica struct {
 	replicated bool
 }
 
-func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
+func (h *Handler) handleRequest(ctx context.Context, rep, seriesLimit uint64, tenant string, wreq *prompb.WriteRequest) error {
 	tLogger := log.With(h.logger, "tenant", tenant)
 
 	// This replica value is used to detect cycles in cyclic topologies.
@@ -287,7 +291,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 	// Forward any time series as necessary. All time series
 	// destined for the local node will be written to the receiver.
 	// Time series will be replicated as necessary.
-	return h.forward(ctx, tenant, r, wreq)
+	return h.forward(ctx, tenant, r, wreq, seriesLimit)
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -340,6 +344,15 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	seriesLimit := uint64(0)
+	// If the header is empty, head series limit stays at zero, which means no limit.
+	if limitRaw := r.Header.Get(h.options.SeriesLimitHeader); limitRaw != "" {
+		if seriesLimit, err = strconv.ParseUint(limitRaw, 10, 64); err != nil {
+			http.Error(w, "could not parse series limit header", http.StatusBadRequest)
+			return
+		}
+	}
+
 	// Exit early if the request contained no data. We don't support metadata yet. We also cannot fail here, because
 	// this would mean lack of forward compatibility for remote write proto.
 	if len(wreq.Timeseries) == 0 {
@@ -353,7 +366,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.handleRequest(ctx, rep, tenant, &wreq)
+	err = h.handleRequest(ctx, rep, seriesLimit, tenant, &wreq)
 	if err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
 	}
@@ -369,6 +382,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errBadReplica:
 		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errSeriesLimitReached:
+		http.Error(w, err.Error(), http.StatusTooManyRequests)
 	default:
 		level.Error(tLogger).Log("err", err, "msg", "internal server error")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -383,7 +398,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 // unless the request needs to be replicated.
 // The function only returns when all requests have finished
 // or the context is canceled.
-func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *prompb.WriteRequest) error {
+func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *prompb.WriteRequest, seriesLimit uint64) error {
 	span, ctx := tracing.StartSpan(ctx, "receive_fanout_forward")
 	defer span.Finish()
 
@@ -420,7 +435,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 	}
 	h.mtx.RUnlock()
 
-	return h.fanoutForward(ctx, tenant, replicas, wreqs, len(wreqs))
+	return h.fanoutForward(ctx, tenant, replicas, wreqs, len(wreqs), seriesLimit)
 }
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
@@ -430,7 +445,7 @@ func (h *Handler) writeQuorum() int {
 
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
 // requests succeeds or fails or if context is canceled.
-func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
+func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int, seriesLimit uint64) error {
 	var errs errutil.MultiError
 
 	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
@@ -467,7 +482,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 
 				var err error
 				tracing.DoInSpan(fctx, "receive_replicate", func(ctx context.Context) {
-					err = h.replicate(ctx, tenant, wreqs[endpoint])
+					err = h.replicate(ctx, tenant, wreqs[endpoint], seriesLimit)
 				})
 				if err != nil {
 					h.replications.WithLabelValues(labelError).Inc()
@@ -494,7 +509,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 
 				var err error
 				tracing.DoInSpan(fctx, "receive_tsdb_write", func(_ context.Context) {
-					err = h.writer.Write(fctx, tenant, wreqs[endpoint])
+					err = h.writer.Write(fctx, seriesLimit, tenant, wreqs[endpoint])
 				})
 				if err != nil {
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
@@ -550,7 +565,8 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 					Timeseries: wreqs[endpoint].Timeseries,
 					Tenant:     tenant,
 					// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
-					Replica: int64(replicas[endpoint].n + 1),
+					Replica:     int64(replicas[endpoint].n + 1),
+					SeriesLimit: int64(seriesLimit),
 				})
 			})
 			if err != nil {
@@ -625,7 +641,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 // selected by the tenant and time series.
 // The function only returns when all replication requests have finished
 // or the context is canceled.
-func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.WriteRequest) error {
+func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.WriteRequest, seriesLimit uint64) error {
 	wreqs := make(map[string]*prompb.WriteRequest)
 	replicas := make(map[string]replica)
 	var i uint64
@@ -651,7 +667,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 
 	quorum := h.writeQuorum()
 	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
-	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum); err != nil {
+	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum, seriesLimit); err != nil {
 		return errors.Wrap(determineWriteErrorCause(err, quorum), "quorum not reached")
 	}
 	return nil
@@ -662,7 +678,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
 
-	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
+	err := h.handleRequest(ctx, uint64(r.Replica), uint64(r.SeriesLimit), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
@@ -707,6 +723,12 @@ func isUnavailable(err error) bool {
 		status.Code(err) == codes.Unavailable
 }
 
+// isLimitReached returns whether or not the given error represents an limit reached error.
+func isLimitReached(err error) bool {
+	return err == errSeriesLimitReached ||
+		status.Code(err) == codes.ResourceExhausted
+}
+
 // retryState encapsulates the number of request attempt made against a peer and,
 // next allowed time for the next attempt.
 type retryState struct {
@@ -749,6 +771,7 @@ func determineWriteErrorCause(err error, threshold int) error {
 		{err: errConflict, cause: isConflict},
 		{err: errNotReady, cause: isNotReady},
 		{err: errUnavailable, cause: isUnavailable},
+		{err: errSeriesLimitReached, cause: isLimitReached},
 	}
 	for _, exp := range expErrs {
 		exp.count = 0

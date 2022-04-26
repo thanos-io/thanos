@@ -160,7 +160,7 @@ func TestWriter(t *testing.T) {
 			w := NewWriter(logger, m)
 
 			for idx, req := range testData.reqs {
-				err = w.Write(context.Background(), DefaultTenant, req)
+				err = w.Write(context.Background(), 0, DefaultTenant, req)
 
 				// We expect no error on any request except the last one
 				// which may error (and in that case we assert on it).

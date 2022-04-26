@@ -194,6 +194,7 @@ func runReceive(
 		DefaultTenantID:   conf.defaultTenantID,
 		ReplicaHeader:     conf.replicaHeader,
 		ReplicationFactor: conf.replicationFactor,
+		SeriesLimitHeader: receive.DefaultSeriesLimitHeader,
 		ReceiverMode:      receiveMode,
 		Tracer:            tracer,
 		TLSConfig:         rwTLSConfig,

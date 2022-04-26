@@ -446,6 +446,13 @@ func (s *ReadyStorage) Close() error {
 	return nil
 }
 
+func (s *ReadyStorage) NumSeries() uint64 {
+	if x := s.Get(); x != nil {
+		return x.Head().NumSeries()
+	}
+	return 0
+}
+
 // adapter implements a storage.Storage around TSDB.
 type adapter struct {
 	db *tsdb.DB
