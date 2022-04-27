@@ -1,0 +1,77 @@
+package objstore
+
+import (
+	"context"
+	"io"
+)
+
+type PrefixedBucket struct {
+	bkt    Bucket
+	prefix string
+}
+
+func NewPrefixedBucket(bkt Bucket, prefix string) Bucket {
+	pbkt := &PrefixedBucket{bkt: bkt, prefix: prefix}
+	return pbkt
+}
+
+func withPrefix(prefix, name string) string {
+	return prefix + "/" + name
+}
+
+func (p *PrefixedBucket) Close() error {
+	return p.bkt.Close()
+}
+
+// Iter calls f for each entry in the given directory (not recursive.). The argument to f is the full
+// object name including the prefix of the inspected directory.
+// Entries are passed to function in sorted order.
+func (p *PrefixedBucket) Iter(ctx context.Context, dir string, f func(string) error, options ...IterOption) error {
+	return p.bkt.Iter(ctx, withPrefix(p.prefix, dir), f, options...)
+}
+
+// Get returns a reader for the given object name.
+func (p *PrefixedBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
+	return p.bkt.Get(ctx, withPrefix(p.prefix, name))
+}
+
+// GetRange returns a new range reader for the given object name and range.
+func (p *PrefixedBucket) GetRange(ctx context.Context, name string, off int64, length int64) (io.ReadCloser, error) {
+	return p.bkt.GetRange(ctx, withPrefix(p.prefix, name), off, length)
+}
+
+// Exists checks if the given object exists in the bucket.
+func (p *PrefixedBucket) Exists(ctx context.Context, name string) (bool, error) {
+	return p.bkt.Exists(ctx, withPrefix(p.prefix, name))
+}
+
+// IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
+func (p *PrefixedBucket) IsObjNotFoundErr(err error) bool {
+	return p.bkt.IsObjNotFoundErr(err)
+}
+
+// Attributes returns information about the specified object.
+func (p PrefixedBucket) Attributes(ctx context.Context, name string) (ObjectAttributes, error) {
+	return p.bkt.Attributes(ctx, withPrefix(p.prefix, name))
+}
+
+// func (p *PrefixedBucket) Attributes(ctx context.Context, name string) (ObjectAttributes, error) {
+// 	return p.bkt.Attributes(ctx, withPrefix(p.prefix, name))
+// }
+
+// Upload the contents of the reader as an object into the bucket.
+// Upload should be idempotent.
+func (p *PrefixedBucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	return p.bkt.Upload(ctx, withPrefix(p.prefix, name), r)
+}
+
+// Delete removes the object with the given name.
+// If object does not exists in the moment of deletion, Delete should throw error.
+func (p *PrefixedBucket) Delete(ctx context.Context, name string) error {
+	return p.bkt.Delete(ctx, withPrefix(p.prefix, name))
+}
+
+// Name returns the bucket name for the provider.
+func (p *PrefixedBucket) Name() string {
+	return p.bkt.Name()
+}

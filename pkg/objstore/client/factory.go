@@ -40,7 +40,11 @@ const (
 
 type BucketConfig struct {
 	Type   ObjProvider `yaml:"type"`
-	Config interface{} `yaml:"config"`
+	Config Config      `yaml:"config"`
+}
+
+type Config struct {
+	Prefix string `yaml:"prefix" default:""`
 }
 
 // NewBucket initializes and returns new object storage clients.
@@ -81,5 +85,7 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
 	}
-	return objstore.NewTracingBucket(objstore.BucketWithMetrics(bucket.Name(), bucket, reg)), nil
+
+	prefixedBucket := objstore.NewPrefixedBucket(bucket, bucketConf.Config.Prefix)
+	return objstore.NewTracingBucket(objstore.BucketWithMetrics(bucket.Name(), prefixedBucket, reg)), nil
 }
