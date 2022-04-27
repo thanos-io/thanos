@@ -14,6 +14,8 @@ There are currently several ways to configure SD, described below in more detail
 * File SD
 * DNS SD
 
+> NOTE: There is a plan to switch to more generic "endpoint" configuration in near future. See [Proposal](https://thanos.io/tip/proposals-accepted/202101-endpoint-discovery.md/) and initial [PR](https://github.com/thanos-io/thanos/pull/4785).
+
 ## Static Flags
 
 The simplest way to tell a component about a peer is to use a static flag.

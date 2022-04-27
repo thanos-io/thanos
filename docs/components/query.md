@@ -1,10 +1,18 @@
 # Querier/Query
 
-The `thanos query` command (also known as "Querier") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
+The `thanos query` command (also known as "Querier") primarily implements the server that exposes the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) using Prometheus PromQL engine to query data in a Thanos cluster via PromQL.
 
-In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](https://github.com/thanos-io/thanos/blob/main/pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
+In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](https://github.com/thanos-io/thanos/blob/main/pkg/store/storepb/rpc.proto), merges and deduplicate series, evaluates the query and returns the result. This allows "federated" global view of your metrics.
 
-Querier is fully stateless and horizontally scalable.
+Apart from federating PromQL based Query APIs, Querier is capable of federating other metric specific endpoints:
+
+* Labels
+* Exemplars
+* Scrape Targets
+* Alerts and Rules
+* Metadata
+
+> Querier is fully stateless and horizontally scalable. Querier is designed to work well no matter if you use sidecar, receiver or mixed Thanos deployment.
 
 Example command to run Querier:
 
@@ -12,38 +20,54 @@ Example command to run Querier:
 thanos query \
     --http-address     "0.0.0.0:9090" \
     --store            "<store-api>:<grpc-port>" \
-    --store            "<store-api2>:<grpc-port>"
+    --store            "<store-api2>:<grpc-port>" \
+    --rule             "<rule-api>:<grpc-port>" \
+    --exemplar         "<exemplar-api>:<grpc-port>"
 ```
 
-## Querier use cases, why do I need this component?
+## Querier Use Cases
 
-Thanos Querier essentially allows to aggregate and optionally deduplicate multiple metrics backends under single Prometheus Query endpoint.
+> Why do I need this component?
 
-### Global View
+Thanos Querier allows to aggregate and optionally deduplicate multiple data backends under single endpoint.
 
-Since for Querier "a backend" is anything that implements gRPC StoreAPI we can aggregate data from any number of the different storages like:
+Concretely, many different gRPC backends can be available under a single HTTP endpoint that exposes semantically correct standard APIs for each functionality. With the Querier you can:
+
+* Expose multiple [StoreAPI](https://github.com/thanos-io/thanos/blob/79e70da702228ac0282fc7639f9f160d922b6dcb/pkg/store/storepb/rpc.proto#L27) gRPC backends as standard [Querying APIs](https://prometheus.io/docs/prometheus/latest/querying/api/#expression-queries), [Series, Labels and LabelValue APIs](https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metadata),
+* Expose multiple [ExemplarAPI](https://github.com/thanos-io/thanos/blob/8fdd90c34318f453e0fda9b16ab2b201ed2ee4aa/pkg/exemplars/exemplarspb/rpc.proto#L25) gRPC backends as standard [Query Exemplars API](https://prometheus.io/docs/prometheus/latest/querying/api/#querying-exemplars)
+* Expose multiple [TargetAPI](https://github.com/thanos-io/thanos/blob/f5174e098b30413501a6c930769e57228c13aa68/pkg/targets/targetspb/rpc.proto#L26) gRPC backends as standard [Targets API](https://prometheus.io/docs/prometheus/latest/querying/api/#targets)
+* Expose multiple [RulesAPI](https://github.com/thanos-io/thanos/blob/435700296491133dda9a2978bab46d0ba2e4e4f3/pkg/rules/rulespb/rpc.proto#L26) gRPC backends as standard [Rules API](https://prometheus.io/docs/prometheus/latest/querying/api/#rules)
+* Expose multiple [MetadataAPI](https://github.com/thanos-io/thanos/blob/af4ee3a09f6b00d280f5b6913b18864a595dc96f/pkg/metadata/metadatapb/rpc.proto#L23) gRPC backends as standard [Metric Metadata API](https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metric-metadata)
+
+> Are you missing an API that you might find useful to use? Let us know on GitHub Issues!
+
+In this section we will focus on the main API Querier exposes: Prometheus metric Querying, Series and Labels APIs.
+
+### Use Case 1: Global View
+
+gRPC StoreAPI service is an interface that Thanos uses to communicate with different kind of metric "stores". For Querier "a backend" is anything that implements gRPC StoreAPI, thus can aggregate data from any number of the different storages like:
 
 * Prometheus (see [Sidecar](sidecar.md))
 * Object Storage (see [Store Gateway](store.md))
-* Global alerting/recording rules evaluations (see [Ruler](rule.md))
+* Global alerting/recording rules evaluations (see [Stateful Ruler](rule.md))
 * Metrics received from Prometheus remote write streams (see [Receiver](receive.md))
-* Another Querier (you can stack Queriers on top of each other)
-* Non-Prometheus systems!
-  * e.g [OpenTSDB](../integrations.md#opentsdb-as-storeapi)
+* Another Querier (you can stack Queriers on top of each other!)
+* Non-Prometheus systems:
+  * e.g [OpenTSDB](../integrations.md#opentsdb-as-storeapi) or [RemoteRead](https://github.com/G-Research/thanos-remote-read)
 
-Thanks to that, you can run queries (manually, from Grafana or via Alerting rule) that aggregate metrics from mix of those sources.
+Thanks to that, you can run queries through API, Thanos UI, Grafana UI or via alerting or recording rule that aggregate metrics from mix of those sources.
 
 Some examples:
 
-* `sum(cpu_used{cluster=~"cluster-(eu1|eu2|eu3|us1|us2|us3)", job="service1"})` that will give you sum of CPU used inside all listed clusters for service `service1`. This will work even if those clusters runs multiple Prometheus servers each. Querier will know which data sources to query.
+* `sum(cpu_used{cluster=~"cluster-(eu1|eu2|eu3|us1|us2|us3)", job="service1"})` might give you sum of CPU used inside all listed clusters for service `service1`. This will work even if those clusters runs multiple Prometheus servers each. Querier will know which data sources to query.
 
-* In single cluster you shard Prometheus functionally or have different Prometheus instances for different tenants. You can spin up Querier to have access to both within single Query evaluation.
+* In single cluster you shard Prometheus functionally or have different Prometheus instances for different tenants. You can spin up Querier to have access to all of the instances within single Query evaluation.
 
-### Run-time deduplication of HA groups
+### Use Case 2: Run-time deduplication of HA groups
 
-Prometheus is stateful and does not allow replicating its database. This means that increasing high availability by running multiple Prometheus replicas is not very easy to use. Simple load balancing will not work as for example after some crash, replica might be up but querying such replica will result in small gap during the period it was down. You have a second replica that maybe was up, but it could be down in other moment (e.g rolling restart), so load balancing on top of those is not working well.
+Prometheus is stateful and by design does not allow replicating its database. This means that increasing high availability by running multiple Prometheus replicas is not very easy to use. Simple load balancing will not work as for example after some crash, replica might be up but querying such replica will result in small gap during the period it was down. You have a second replica that maybe was up, but it could be down in other moment (e.g. rolling restart), so requests based load-balancing on top of those two or more instances won't be accurate.
 
-Thanos Querier instead pulls the data from both replicas, and deduplicate those signals, filling the gaps if any, transparently to the Querier consumer.
+To solve this Thanos Querier pulls the data from both replicas, and deduplicate those signals, filling the gaps if any, transparently to the Querier consumer. Read more about deduplication process in [Deduplication](#deduplication) section.
 
 ## Metric Query Flow Overview
 
@@ -51,15 +75,19 @@ Thanos Querier instead pulls the data from both replicas, and deduplicate those 
 
 Overall QueryAPI exposed by Thanos is guaranteed to be compatible with [Prometheus 2.x. API](https://prometheus.io/docs/prometheus/latest/querying/api/). The above diagram shows what Querier does for each Prometheus query request.
 
-See [here](../service-discovery.md) on how to connect Querier with desired StoreAPIs.
+See [here](../service-discovery.md) on how to connect Querier with desired StoreAPIs (or other APIs in fact).
 
 ### Deduplication
 
-The query layer can deduplicate series that were collected from high-availability pairs of data sources such as Prometheus. A fixed single or multiple replica labels must be chosen for the entire cluster and can then be passed to query nodes on startup.
+The query layer can deduplicate series that were collected from high-availability pairs of data sources such as Prometheus or Receivers. A fixed single or multiple replica labels has to be configured at the start of Querier. Those special labels will be removed from each merged series. If, after label removal the series are duplicated, the deduplicate process occurs. Two or more series that are only distinguished by the given replica label, will be merged into a single time series.
 
-Two or more series that are only distinguished by the given replica label, will be merged into a single time series. This also hides gaps in collection of a single data source.
+In practice the deduplication algorithm assumes that the same data was collected in the same or different times. The goal of this algorithm is to provide roughly the most consistent sample interval and only use the duplicated series as a fallback when main series is not following it's normal interval. This allows hiding gaps in collection of a single data source (e.g Prometheus) if another instance have data for it. It also works well to hide storage 1:1 replication done by Receivers. More on that later.
 
-### An example with a single replica labels:
+> The same logic can be enabled on Compactor, called "offline deduplication" which is done as part of [Vertical Compaction](compact.md#vertical-compactions).
+
+#### Single Replica Labels Example
+
+Imagine the following setup:
 
 * Prometheus + sidecar "A": `cluster=1,env=2,replica=A`
 * Prometheus + sidecar "B": `cluster=1,env=2,replica=B`
@@ -86,22 +114,71 @@ WITHOUT this replica flag (deduplication turned off), we will get 3 results:
 * `up{job="prometheus",env="2",cluster="1",replica="B"} 1`
 * `up{job="prometheus",env="2",cluster="2",replica="A"} 1`
 
-### The same output will be present for this example with multiple replica labels:
+#### Multiple Replica Labels Example
 
-* Prometheus + sidecar "A": `cluster=1,env=2,replica=A,replicaX=A`
-* Prometheus + sidecar "B": `cluster=1,env=2,replica=B,replicaX=B`
-* Prometheus + sidecar "A" in different cluster: `cluster=2,env=2,replica=A,replicaX=A`
+Imagine more complex setup (yet very common) where three times replicated [Receive](receive.md) contains few Prometheus replicas:
 
-```
+* Prometheus + sidecar "A": `cluster=1,env=2,replica=A`
+* Prometheus + sidecar "B": `cluster=1,env=2,replica=B`
+* Prometheus + sidecar "A" in different cluster: `cluster=2,env=2,replica=A`
+
+Imagine they are all pushing to Thanos that then replicates data to three ingesting Receivers:
+
+* Receiver "A": `receive_replica=A`
+* Receiver "B": `receive_replica=B`
+* Receiver "C": `receive_replica=C`
+
+> NOTE: It's crucial for replica label names to be unique for each dimension of replication!
+
+Now if we run Querier as follows:
+
+```bash
 thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
-    --query.replica-label "replicaX" \
+    --query.replica-label "receive_replica" \
     --store               "<store-api>:<grpc-port>" \
-    --store               "<store-api2>:<grpc-port>" \
+    --store               "<store-api2>:<grpc-port>"
 ```
 
-This logic can also be controlled via parameter on QueryAPI. More details below.
+And we query for metric `up{job="prometheus",env="2"}` with this option we will get 2 results:
+
+* `up{job="prometheus",env="2",cluster="1"} 1`
+* `up{job="prometheus",env="2",cluster="2"} 1`
+
+WITHOUT the both replica flags (OR deduplication explicitly turned off), we will get 9 results:
+
+* `up{job="prometheus",env="2",cluster="1",receive_replica="A",replica="A"} 1`
+* `up{job="prometheus",env="2",cluster="1",receive_replica="B",replica="A"} 1`
+* `up{job="prometheus",env="2",cluster="1",receive_replica="C",replica="A"} 1`
+* `up{job="prometheus",env="2",cluster="1",receive_replica="A",replica="B"} 1`
+* `up{job="prometheus",env="2",cluster="1",receive_replica="B",replica="B"} 1`
+* `up{job="prometheus",env="2",cluster="1",receive_replica="C",replica="B"} 1`
+* `up{job="prometheus",env="2",cluster="2",receive_replica="A",replica="A"} 1`
+* `up{job="prometheus",env="2",cluster="2",receive_replica="B",replica="A"} 1`
+* `up{job="prometheus",env="2",cluster="2",receive_replica="C",replica="A"} 1`
+
+This logic can also be controlled via parameter on QueryAPI. More details in [API section](#deduplication-replica-labels).
+
+#### Penalty Algorithm
+
+Current algorithm Querier (and Compactor) uses for deduplication process can be called `penalty based`. The implementation is available [here](https://github.com/thanos-io/thanos/blob/d218e605c2dddab041551278bc1a5f632640f791/pkg/dedup/iter.go#L39). Generally it uses "the most stable" iterator (so source of series, e.g. Prometheus replica). The stability is detected by taking the first sample from both iterators and assigning penalty of 5s to the slower. Now if stable replica suddenly gives no sample, or sample with older timestamps plus penalty we switch to second one and give penalty for first one. This allows smoothly switching to stable replicas and still assuring the most consistent sample frequency possible.
+
+In details:
+
+Before deduplication does anything we remove exactly the same TSDB chunks from StoreAPI results [here](https://github.com/thanos-io/thanos/blob/de0e3848ff6085acf89a5f77e053c555a2cce550/pkg/query/iter.go#L76).
+
+Then if deduplication and replica labels were configured `dedup.NewSeriesSet` is invoked. It's algorithm can be outlined as follows:
+
+1. It removes replica labels from sorted series streams to find duplicates.
+2. If next sorted series has only no duplicates it yields that.
+3. Once it gathers all duplicate series the list of series, when consumer does `At()` it returns series iterator which will deduplicate series as they are iterated (or peek) sample by sample. The deduplication of X series with Y number of samples goes as [follows](https://github.com/thanos-io/thanos/blob/d218e605c2dddab041551278bc1a5f632640f791/pkg/dedup/iter.go#L400):
+   1. Algorithm always deduplicate series in pairs.
+   2. It picks the nearest sample first from two iterators (potentially Prometheus replicas).
+   3. It adds 5000 milliseconds penalty to the iterator that was not chosen, and we repeat the process. This allows us to stick to single series as long as it does not have gaps.
+   4. If the duplicate series was a counter we have to [adjust the counter value](https://github.com/thanos-io/thanos/blob/d218e605c2dddab041551278bc1a5f632640f791/pkg/dedup/iter.go#L356) to make sure rate will work correctly. If we switch series in unlucky moment when observations on new replica gives smaller number, the `rate` will yield wrong results.
+
+By iterating over all samples and all series the resulted data is deduplicated.
 
 ## Query API Overview
 
