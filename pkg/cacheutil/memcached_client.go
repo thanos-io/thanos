@@ -88,6 +88,14 @@ type memcachedClientBackend interface {
 	Set(item *memcache.Item) error
 }
 
+// updatableServerSelector extends the interface used for picking a memcached server
+// for a key to allow servers to be updated at runtime.
+type updatableServerSelector interface {
+	memcache.ServerSelector
+
+	SetServers(servers ...string) error
+}
+
 // MemcachedClientConfig is the config accepted by RemoteCacheClient.
 type MemcachedClientConfig struct {
 	// Addresses specifies the list of memcached addresses. The addresses get
@@ -162,7 +170,7 @@ type memcachedClient struct {
 	logger   log.Logger
 	config   MemcachedClientConfig
 	client   memcachedClientBackend
-	selector *MemcachedJumpHashSelector
+	selector updatableServerSelector
 
 	// Name provides an identifier for the instantiated Client
 	name string
@@ -238,7 +246,7 @@ func NewMemcachedClientWithConfig(logger log.Logger, name string, config Memcach
 func newMemcachedClient(
 	logger log.Logger,
 	client memcachedClientBackend,
-	selector *MemcachedJumpHashSelector,
+	selector updatableServerSelector,
 	config MemcachedClientConfig,
 	reg prometheus.Registerer,
 	name string,
@@ -464,6 +472,11 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 		getMultiGate = c.getMultiGate
 	}
 
+	// Group keys based on which memcached server they will be sharded to. Grouping keys that
+	// are on the same server together before splitting into batches reduces the number of
+	// connections required and increases the number of "gets" per connection.
+	groupedKeys := c.groupKeysByServer(keys)
+
 	// Allocate a channel to store results for each batch request. The max concurrency will be
 	// enforced by doWithBatch.
 	results := make(chan *memcachedGetMultiResult, numResults)
@@ -476,7 +489,7 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	// from `results` below. The wrapped `getMultiSingle` method will still check our context
 	// and short-circuit if it has been canceled.
 	_ = doWithBatch(context.Background(), len(keys), c.config.MaxGetMultiBatchSize, getMultiGate, func(startIndex, endIndex int) error {
-		batchKeys := keys[startIndex:endIndex]
+		batchKeys := groupedKeys[startIndex:endIndex]
 
 		res := &memcachedGetMultiResult{}
 		res.items, res.err = c.getMultiSingle(ctx, batchKeys)
@@ -529,6 +542,35 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	}
 
 	return items, err
+}
+
+// groupKeysByServer groups cache keys within a slice based on which server they are
+// sharded to using a memcache.ServerSelector instance. The keys are ordered so keys
+// on the same server are next to each other. Any errors encountered determining which
+// server a key should be on will result in returning keys ungrouped, in the same order
+// they were supplied in. Note that output is not guaranteed to be any particular order
+// *except* that keys will be grouped by server. The order of keys returned may change
+// from call to call.
+func (c *memcachedClient) groupKeysByServer(keys []string) []string {
+	bucketed := make(map[string][]string)
+
+	for _, key := range keys {
+		addr, err := c.selector.PickServer(key)
+		// If we couldn't determine the correct server, return keys in existing order
+		if err != nil {
+			return keys
+		}
+
+		addrString := addr.String()
+		bucketed[addrString] = append(bucketed[addrString], key)
+	}
+
+	var out []string
+	for srv := range bucketed {
+		out = append(out, bucketed[srv]...)
+	}
+
+	return out
 }
 
 func (c *memcachedClient) trackError(op string, err error) {
