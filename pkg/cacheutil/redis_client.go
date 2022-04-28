@@ -5,6 +5,7 @@ package cacheutil
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"sync"
 	"time"
@@ -94,6 +95,23 @@ type RedisClientConfig struct {
 
 	// SetMultiBatchSize specifies the maximum size per batch for pipeline set.
 	SetMultiBatchSize int `yaml:"set_multi_batch_size"`
+
+	// TLSEnabled enable tls for redis connection
+	TLSEnabled bool `yaml:"tls_enabled"`
+
+	// TLSInsecureSkipVerify controls whether a client verifies the server's
+	// certificate chain and host name. If InsecureSkipVerify is true, crypto/tls
+	// accepts any certificate presented by the server and any host name in that
+	// certificate. In this mode, TLS is susceptible to machine-in-the-middle
+	// attacks unless custom verification is used. This should be used only for
+	// testing or in combination with VerifyConnection or VerifyPeerCertificate.
+	TLSInsecureSkipVerify bool `yaml:"tls_insecure_skip_verify"`
+
+	// TLSServerName is used to verify the hostname on the returned
+	// certificates unless InsecureSkipVerify is given. It is also included
+	// in the client's handshake to support virtual hosting unless it is
+	// an IP address.
+	TLSServerName string `yaml:"tls_server_name"`
 }
 
 func (c *RedisClientConfig) validate() error {
@@ -136,7 +154,8 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
-	redisClient := redis.NewClient(&redis.Options{
+
+	opts := &redis.Options{
 		Addr:         config.Addr,
 		Username:     config.Username,
 		Password:     config.Password,
@@ -147,8 +166,16 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		MinIdleConns: config.MinIdleConns,
 		MaxConnAge:   config.MaxConnAge,
 		IdleTimeout:  config.IdleTimeout,
-	})
+	}
 
+	if config.TLSEnabled {
+		opts.TLSConfig = &tls.Config{
+			InsecureSkipVerify: config.TLSInsecureSkipVerify,
+			ServerName:         config.TLSServerName,
+		}
+	}
+
+	redisClient := redis.NewClient(opts)
 	if reg != nil {
 		reg = prometheus.WrapRegistererWith(prometheus.Labels{"name": name}, reg)
 	}
