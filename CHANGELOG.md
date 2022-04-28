@@ -11,6 +11,16 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Fixed
+
+### Added
+
+### Changed
+
+### Removed
+
+## [v0.26.0-rc0](https://github.com/thanos-io/thanos/tree/release-0.26) - Release in progress
+
+### Fixed
 - [#5281](https://github.com/thanos-io/thanos/pull/5281) Blocks: Use correct separators for filesystem paths and object storage paths respectively.
 - [#5300](https://github.com/thanos-io/thanos/pull/5300) Query: Ignore cache on queries with deduplication off.
 
