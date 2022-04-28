@@ -21,7 +21,7 @@ rules:
   annotations:
     description: Thanos Compact {{$labels.job}} has failed to run and now is halted.
     runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanoscompacthalted
-    summary: Thanos Compact has failed to run ans is now halted.
+    summary: Thanos Compact has failed to run and is now halted.
   expr: thanos_compact_halted{job=~".*thanos-compact.*"} == 1
   for: 5m
   labels:
