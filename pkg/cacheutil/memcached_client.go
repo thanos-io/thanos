@@ -470,7 +470,7 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	// NOTE: we are not closing the results channel here on purpose. doWithBatch will start
 	// goroutines to fetch data and write the results back to the `results` channel. If we
 	// close the channel when this method exits before all goroutines have finished writing
-	// (such as when our context is cancelled) they will panic trying to write to a closed
+	// (such as when our context is canceled) they will panic trying to write to a closed
 	// channel. Instead, we let the GC take care of cleaning the channel up when it is no
 	// longer referenced by this method or the workers in doWithBatch.
 
@@ -494,7 +494,7 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	for i := 0; i < numResults; i++ {
 		select {
 		case <-ctx.Done():
-			// If the context is cancelled, it's possible not all batches will be run by doWithBatch,
+			// If the context is canceled, it's possible not all batches will be run by doWithBatch,
 			// so we should avoid waiting on the results channel here. This ensures that we don't block
 			// indefinitely waiting results that will never come.
 			return nil, ctx.Err()
@@ -517,7 +517,7 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 
 	select {
 	case <-ctx.Done():
-		// Make sure our context hasn't been cancelled before fetching cache items using
+		// Make sure our context hasn't been canceled before fetching cache items using
 		// cache client backend.
 		return nil, ctx.Err()
 	default:

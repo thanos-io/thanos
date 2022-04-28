@@ -507,10 +507,8 @@ func newMemcachedClientBlockingMock(ctx context.Context) *memcachedClientBlockin
 func (c *memcachedClientBlockingMock) GetMulti([]string) (map[string]*memcache.Item, error) {
 	// Block until this backend client is explicitly stopped so that we can ensure the memcached
 	// client won't be blocked waiting for results that will never be returned.
-	select {
-	case <-c.ctx.Done():
-		return nil, nil
-	}
+	<-c.ctx.Done()
+	return nil, nil
 }
 
 func (c *memcachedClientBlockingMock) Set(*memcache.Item) error {
