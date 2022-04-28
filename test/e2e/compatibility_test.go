@@ -127,7 +127,7 @@ func (p alwaysReadyProbe) Ready(e2e.Runnable) error { return nil }
 // TestAlertCompliance tests Alert compatibility against https://github.com/prometheus/compliance/blob/main/alert_generator.
 // NOTE: This requires dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
 func TestAlertCompliance_StatelessRuler(t *testing.T) {
-	t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator testing is not optimized for CI runs")
+	//t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator testing is not optimized for CI runs")
 
 	e, err := e2e.NewDockerEnvironment("alert_compatibility")
 	testutil.Ok(t, err)
