@@ -442,7 +442,7 @@ func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[strin
 func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([]map[string]*memcache.Item, error) {
 	// Do not batch if the input keys are less than the max batch size.
 	if (c.config.MaxGetMultiBatchSize <= 0) || (len(keys) <= c.config.MaxGetMultiBatchSize) {
-		items, err := c.getMultiSingle(keys)
+		items, err := c.getMultiSingle(ctx, keys)
 		if err != nil {
 			return nil, err
 		}
@@ -467,7 +467,12 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	// Allocate a channel to store results for each batch request. The max concurrency will be
 	// enforced by doWithBatch.
 	results := make(chan *memcachedGetMultiResult, numResults)
-	defer close(results)
+	// NOTE: we are not closing the results channel here on purpose. doWithBatch will start
+	// goroutines to fetch data and write the results back to the `results` channel. If we
+	// close the channel when this method exits before all goroutines have finished writing
+	// (such as when our context is cancelled) they will panic trying to write to a closed
+	// channel. Instead, we let the GC take care of cleaning the channel up when it is no
+	// longer referenced by this method or the workers in doWithBatch.
 
 	// Ignore the error here since it can only be returned by our provided function which
 	// always returns nil.
@@ -475,7 +480,7 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 		batchKeys := keys[startIndex:endIndex]
 
 		res := &memcachedGetMultiResult{}
-		res.items, res.err = c.getMultiSingle(batchKeys)
+		res.items, res.err = c.getMultiSingle(ctx, batchKeys)
 
 		results <- res
 		return nil
@@ -487,22 +492,38 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	var lastErr error
 
 	for i := 0; i < numResults; i++ {
-		result := <-results
-		if result.err != nil {
-			lastErr = result.err
-			continue
-		}
+		select {
+		case <-ctx.Done():
+			// If the context is cancelled, it's possible not all batches will be run by doWithBatch,
+			// so we should avoid waiting on the results channel here. This ensures that we don't block
+			// indefinitely waiting results that will never come.
+			return nil, ctx.Err()
+		case result := <-results:
+			if result.err != nil {
+				lastErr = result.err
+				continue
+			}
 
-		items = append(items, result.items)
+			items = append(items, result.items)
+		}
 	}
 
 	return items, lastErr
 }
 
-func (c *memcachedClient) getMultiSingle(keys []string) (items map[string]*memcache.Item, err error) {
+func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (items map[string]*memcache.Item, err error) {
 	start := time.Now()
 	c.operations.WithLabelValues(opGetMulti).Inc()
-	items, err = c.client.GetMulti(keys)
+
+	select {
+	case <-ctx.Done():
+		// Make sure our context hasn't been cancelled before fetching cache items using
+		// cache client backend.
+		return nil, ctx.Err()
+	default:
+		items, err = c.client.GetMulti(keys)
+	}
+
 	if err != nil {
 		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err)
 		c.trackError(opGetMulti, err)
