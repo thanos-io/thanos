@@ -4,6 +4,7 @@
 package e2e_test
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -79,28 +80,25 @@ scrape_configs:
 		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "receive.yaml"),
 			[]byte(promQLCompatConfig(prom, queryReceive, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
 
-		stdout, stderr, err := compliance.Exec(e2e.NewCommand(
+		testutil.Ok(t, compliance.Exec(e2e.NewCommand(
 			"/promql-compliance-tester",
 			"-config-file", filepath.Join(compliance.InternalDir(), "receive.yaml"),
 			"-config-file", "/promql-test-queries.yml",
-		))
-		t.Log(stdout, stderr)
-		testutil.Ok(t, err)
+		)))
 	})
 	t.Run("sidecar", func(t *testing.T) {
 		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "sidecar.yaml"),
 			[]byte(promQLCompatConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
 
-		stdout, stderr, err := compliance.Exec(e2e.NewCommand(
+		testutil.Ok(t, compliance.Exec(e2e.NewCommand(
 			"/promql-compliance-tester",
 			"-config-file", filepath.Join(compliance.InternalDir(), "sidecar.yaml"),
 			"-config-file", "/promql-test-queries.yml",
-		))
-		t.Log(stdout, stderr)
-		testutil.Ok(t, err)
+		)))
 	})
 }
 
+// nolint (it's still used in skipped test).
 func promQLCompatConfig(reference *e2edb.Prometheus, target e2e.Runnable, dropLabels []string) string {
 	return `reference_target_config:
   query_url: 'http://` + reference.InternalEndpoint("http") + `'
@@ -120,14 +118,16 @@ query_tweaks:
 	}()
 }
 
+// nolint (it's still used in skipped test).
 type alwaysReadyProbe struct{}
 
+// nolint (it's still used in skipped test).
 func (p alwaysReadyProbe) Ready(e2e.Runnable) error { return nil }
 
 // TestAlertCompliance tests Alert compatibility against https://github.com/prometheus/compliance/blob/main/alert_generator.
 // NOTE: This requires dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
 func TestAlertCompliance_StatelessRuler(t *testing.T) {
-	//t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator testing is not optimized for CI runs")
+	t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator testing is not optimized for CI runs")
 
 	e, err := e2e.NewDockerEnvironment("alert_compatibility")
 	testutil.Ok(t, err)
@@ -169,10 +169,10 @@ func TestAlertCompliance_StatelessRuler(t *testing.T) {
 
 	// Pull rules.yaml:
 	{
-		stdout, stderr, err := compliance.Exec(e2e.NewCommand("cat", "/rules.yaml"))
-		testutil.Ok(t, err, stderr)
+		var stdout bytes.Buffer
+		testutil.Ok(t, compliance.Exec(e2e.NewCommand("cat", "/rules.yaml"), e2e.WithExecOptionStdout(&stdout)))
 		testutil.Ok(t, os.MkdirAll(filepath.Join(ruler.Dir(), "rules"), os.ModePerm))
-		testutil.Ok(t, os.WriteFile(filepath.Join(ruler.Dir(), "rules", "rules.yaml"), []byte(stdout), os.ModePerm))
+		testutil.Ok(t, os.WriteFile(filepath.Join(ruler.Dir(), "rules", "rules.yaml"), stdout.Bytes(), os.ModePerm))
 	}
 
 	testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "test-thanos.yaml"),
@@ -180,13 +180,12 @@ func TestAlertCompliance_StatelessRuler(t *testing.T) {
 
 	fmt.Println(alertCompatConfig(receive, query))
 
-	stdout, stderr, err := compliance.Exec(e2e.NewCommand(
+	testutil.Ok(t, compliance.Exec(e2e.NewCommand(
 		"/alert_generator_compliance_tester", "-config-file", filepath.Join(compliance.InternalDir(), "test-thanos.yaml")),
-	)
-	t.Log(stdout, stderr)
-	testutil.Ok(t, err)
+	))
 }
 
+// nolint (it's still used in skipped test).
 func alertCompatConfig(receive e2e.Runnable, query e2e.Runnable) string {
 	return `settings:
   remote_write_url: '` + e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("http")) + `'
