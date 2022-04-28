@@ -245,7 +245,7 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(am1, am2))
 
-	r, err := e2ethanos.NewTSDBRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
+	r := e2ethanos.NewTSDBRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				FileSDConfigs: []httpconfig.FileSDConfig{
@@ -278,7 +278,6 @@ func TestRule(t *testing.T) {
 			},
 		},
 	})
-	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
 	q, err := e2ethanos.NewQuerierBuilder(e, "1", r.InternalEndpoint("grpc")).Build()
@@ -500,7 +499,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	q, err := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
-	r, err := e2ethanos.NewStatelessRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
+	r := e2ethanos.NewStatelessRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{
@@ -524,7 +523,6 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 		{URL: &common_cfg.URL{URL: rwURL}, Name: "thanos-receiver"},
 		{URL: &common_cfg.URL{URL: rwURL2}, Name: "thanos-receiver2"},
 	})
-	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
 	// Wait until remote write samples are written to receivers successfully.

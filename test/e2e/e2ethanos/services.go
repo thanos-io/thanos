@@ -560,32 +560,32 @@ func NewIngestingReceiver(e e2e.Environment, name string) (e2e.InstrumentedRunna
 	return receiver, nil
 }
 
-func NewTSDBRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config) (e2e.InstrumentedRunnable, error) {
+func NewTSDBRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config) e2e.InstrumentedRunnable {
 	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, nil)
 }
 
-func NewStatelessRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) (e2e.InstrumentedRunnable, error) {
+func NewStatelessRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) e2e.InstrumentedRunnable {
 	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, remoteWriteCfg)
 }
 
-func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) (e2e.InstrumentedRunnable, error) {
+func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) e2e.InstrumentedRunnable {
 	dir := filepath.Join(e.SharedDir(), "data", "rule", name)
 	container := filepath.Join(ContainerSharedDir, "data", "rule", name)
 
 	if err := os.MkdirAll(dir, 0750); err != nil {
-		return nil, errors.Wrap(err, "create rule dir")
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create rule dir"))
 	}
 
 	amCfgBytes, err := yaml.Marshal(alert.AlertingConfig{
 		Alertmanagers: amCfg,
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "generate am file: %v", amCfg)
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate am file: %v", amCfg))
 	}
 
 	queryCfgBytes, err := yaml.Marshal(queryCfg)
 	if err != nil {
-		return nil, errors.Wrapf(err, "generate query file: %v", queryCfg)
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate query file: %v", queryCfg))
 	}
 
 	ruleArgs := map[string]string{
@@ -609,12 +609,12 @@ func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Alertman
 			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
 		}{remoteWriteCfg})
 		if err != nil {
-			return nil, errors.Wrapf(err, "generate remote write config: %v", remoteWriteCfg)
+			return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate remote write config: %v", remoteWriteCfg))
 		}
 		ruleArgs["--remote-write.config"] = string(rwCfgBytes)
 	}
 
-	ruler := NewService(e,
+	return NewService(e,
 		fmt.Sprintf("rule-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("rule", e2e.BuildArgs(ruleArgs)...),
@@ -623,7 +623,6 @@ func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Alertman
 		9091,
 	)
 
-	return ruler, nil
 }
 
 func NewAlertmanager(e e2e.Environment, name string) (e2e.InstrumentedRunnable, error) {

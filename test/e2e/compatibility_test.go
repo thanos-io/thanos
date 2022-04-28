@@ -4,8 +4,8 @@
 package e2e_test
 
 import (
+	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,11 +21,11 @@ import (
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
-// TestPromQLCompliance tests PromQL compatibility.
+// TestPromQLCompliance tests PromQL compatibility against https://github.com/prometheus/compliance/tree/main/promql.
 // NOTE: This requires dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
 // Test requires at least ~11m, so run this with `-test.timeout 9999m`.
 func TestPromQLCompliance(t *testing.T) {
-	//t.Skip("This is interactive test, it requires time to build up (scrape) the data. The data is also obtain from remote promlab servers.")
+	t.Skip("This is interactive test, it requires time to build up (scrape) the data. The data is also obtain from remote promlab servers.")
 
 	e, err := e2e.NewDockerEnvironment("compatibility")
 	testutil.Ok(t, err)
@@ -77,24 +77,31 @@ scrape_configs:
 
 	t.Run("receive", func(t *testing.T) {
 		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "receive.yaml"),
-			[]byte(promLabelsPromQLConfig(prom, queryReceive, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
+			[]byte(promQLCompatConfig(prom, queryReceive, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
 
-		stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "receive.yaml")))
+		stdout, stderr, err := compliance.Exec(e2e.NewCommand(
+			"/promql-compliance-tester",
+			"-config-file", filepath.Join(compliance.InternalDir(), "receive.yaml"),
+			"-config-file", "/promql-test-queries.yml",
+		))
 		t.Log(stdout, stderr)
 		testutil.Ok(t, err)
 	})
 	t.Run("sidecar", func(t *testing.T) {
 		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "sidecar.yaml"),
-			[]byte(promLabelsPromQLConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
+			[]byte(promQLCompatConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
 
-		stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "sidecar.yaml")))
+		stdout, stderr, err := compliance.Exec(e2e.NewCommand(
+			"/promql-compliance-tester",
+			"-config-file", filepath.Join(compliance.InternalDir(), "sidecar.yaml"),
+			"-config-file", "/promql-test-queries.yml",
+		))
 		t.Log(stdout, stderr)
 		testutil.Ok(t, err)
-
 	})
 }
 
-func promLabelsPromQLConfig(reference *e2edb.Prometheus, target e2e.Runnable, dropLabels []string) string {
+func promQLCompatConfig(reference *e2edb.Prometheus, target e2e.Runnable, dropLabels []string) string {
 	return `reference_target_config:
   query_url: 'http://` + reference.InternalEndpoint("http") + `'
 
@@ -113,9 +120,14 @@ query_tweaks:
 	}()
 }
 
-// TestAlertCompliance tests Alert compatibility against https://github.com/prometheus/compliance/blob/main/alert_generator/test-thanos.yaml.
+type alwaysReadyProbe struct{}
+
+func (p alwaysReadyProbe) Ready(e2e.Runnable) error { return nil }
+
+// TestAlertCompliance tests Alert compatibility against https://github.com/prometheus/compliance/blob/main/alert_generator.
+// NOTE: This requires dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
 func TestAlertCompliance_StatelessRuler(t *testing.T) {
-	t.Skip("This is an interactive test, mean to use with https://github.com/prometheus/compliance/tree/main/alert_generator")
+	t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator testing is not optimized for CI runs")
 
 	e, err := e2e.NewDockerEnvironment("alert_compatibility")
 	testutil.Ok(t, err)
@@ -125,10 +137,17 @@ func TestAlertCompliance_StatelessRuler(t *testing.T) {
 	receive, err := e2ethanos.NewIngestingReceiver(e, "receive")
 	testutil.Ok(t, err)
 	query := e2edb.NewThanosQuerier(e, "query_receive", []string{receive.InternalEndpoint("grpc")})
-	ruler, err := e2ethanos.NewStatelessRuler(e, "1", "rules", []alert.AlertmanagerConfig{
+
+	compliance := e.Runnable("alert_generator_compliance_tester").WithPorts(map[string]int{"http": 8080}).Init(e2e.StartOptions{
+		Image: "alert_generator_compliance_tester:latest",
+		// Batch job with HTTP port, we will start it with Exec, no need for readiness.
+		Readiness: alwaysReadyProbe{},
+		Command:   e2e.NewCommandWithoutEntrypoint("tail", "-f", "/dev/null"),
+	})
+	ruler := e2ethanos.NewStatelessRuler(e, "1", "rules", []alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
-				StaticAddresses: []string{},
+				StaticAddresses: []string{compliance.InternalEndpoint("http")},
 				Scheme:          "http",
 			},
 			Timeout:    amTimeout,
@@ -146,43 +165,34 @@ func TestAlertCompliance_StatelessRuler(t *testing.T) {
 	}, []*config.RemoteWriteConfig{
 		{URL: &common_cfg.URL{URL: urlParse(t, e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("remote-write")))}, Name: "thanos-receiver"},
 	})
-	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(receive, query, ruler))
+	testutil.Ok(t, e2e.StartAndWaitReady(receive, query, ruler, compliance))
 
-	// Pull fresh rules.yaml:
+	// Pull rules.yaml:
 	{
-		resp, err := http.Get("https://raw.githubusercontent.com/prometheus/compliance/main/alert_generator/rules.yaml")
-		testutil.Ok(t, err)
-		testutil.Equals(t, http.StatusOK, resp.StatusCode)
-		b, err := ioutil.ReadAll(resp.Body)
-		testutil.Ok(t, err)
-		testutil.Ok(t, os.WriteFile(filepath.Join(ruler.Dir(), "rules", "rules.yaml"), b, os.ModePerm))
+		stdout, stderr, err := compliance.Exec(e2e.NewCommand("cat", "/rules.yaml"))
+		testutil.Ok(t, err, stderr)
+		testutil.Ok(t, os.MkdirAll(filepath.Join(ruler.Dir(), "rules"), os.ModePerm))
+		testutil.Ok(t, os.WriteFile(filepath.Join(ruler.Dir(), "rules", "rules.yaml"), []byte(stdout), os.ModePerm))
 	}
 
-	compliance := e.Runnable("promql-compliance-tester").Init(e2e.StartOptions{
-		Image:   "promql-compliance-tester:latest",
-		Command: e2e.NewCommandWithoutEntrypoint("tail", "-f", "/dev/null"),
-	})
-	testutil.Ok(t, e2e.StartAndWaitReady(compliance))
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "test-thanos.yaml"),
+		[]byte(alertCompatConfig(receive, query)), os.ModePerm))
 
-	// Wait 10 minutes for Prometheus to scrape relevant data.
-	time.Sleep(10 * time.Minute)
+	fmt.Println(alertCompatConfig(receive, query))
 
-	//t.Run("receive", func(t *testing.T) {
-	//	testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "receive.yaml"),
-	//		[]byte(promLabelsPromQLConfig(prom, query, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
-	//
-	//	stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "receive.yaml")))
-	//	t.Log(stdout, stderr)
-	//	testutil.Ok(t, err)
-	//})
-	//t.Run("sidecar", func(t *testing.T) {
-	//	testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "sidecar.yaml"),
-	//		[]byte(promLabelsPromQLConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
-	//
-	//	stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "sidecar.yaml")))
-	//	t.Log(stdout, stderr)
-	//	testutil.Ok(t, err)
-	//
-	//})
+	stdout, stderr, err := compliance.Exec(e2e.NewCommand(
+		"/alert_generator_compliance_tester", "-config-file", filepath.Join(compliance.InternalDir(), "test-thanos.yaml")),
+	)
+	t.Log(stdout, stderr)
+	testutil.Ok(t, err)
+}
+
+func alertCompatConfig(receive e2e.Runnable, query e2e.Runnable) string {
+	return `settings:
+  remote_write_url: '` + e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("http")) + `'
+  query_base_url: 'http://` + query.InternalEndpoint("http") + `'
+  rules_and_alerts_api_base_url: 'http://` + query.InternalEndpoint("http") + `'
+  alert_reception_server_port: 8080
+  alert_message_parser: default
+`
 }
