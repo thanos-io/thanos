@@ -140,7 +140,7 @@ func TestMemcachedClient_SetAsync(t *testing.T) {
 	testutil.Ok(t, client.SetAsync(ctx, "key-2", []byte("value-2"), time.Second))
 	testutil.Ok(t, backendMock.waitItems(2))
 
-	actual, err := client.getMultiSingle(ctx, []string{"key-1", "key-2"})
+	actual, err := client.getMultiSingle([]string{"key-1", "key-2"})
 	testutil.Ok(t, err)
 	testutil.Equals(t, []byte("value-1"), actual["key-1"].Value)
 	testutil.Equals(t, []byte("value-2"), actual["key-2"].Value)
@@ -166,7 +166,7 @@ func TestMemcachedClient_SetAsyncWithCustomMaxItemSize(t *testing.T) {
 	testutil.Ok(t, client.SetAsync(ctx, "key-2", []byte("value-2-too-long-to-be-stored"), time.Second))
 	testutil.Ok(t, backendMock.waitItems(1))
 
-	actual, err := client.getMultiSingle(ctx, []string{"key-1", "key-2"})
+	actual, err := client.getMultiSingle([]string{"key-1", "key-2"})
 	testutil.Ok(t, err)
 	testutil.Equals(t, []byte("value-1"), actual["key-1"].Value)
 	testutil.Equals(t, (*memcache.Item)(nil), actual["key-2"])
