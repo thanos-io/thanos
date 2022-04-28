@@ -25,7 +25,7 @@ import (
 // NOTE: This requires dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
 // Test requires at least ~11m, so run this with `-test.timeout 9999m`.
 func TestPromQLCompliance(t *testing.T) {
-	t.Skip("This is interactive test, it requires time to build up (scrape) the data. The data is also obtain from remote promlab servers.")
+	//t.Skip("This is interactive test, it requires time to build up (scrape) the data. The data is also obtain from remote promlab servers.")
 
 	e, err := e2e.NewDockerEnvironment("compatibility")
 	testutil.Ok(t, err)
@@ -168,21 +168,21 @@ func TestAlertCompliance_StatelessRuler(t *testing.T) {
 	// Wait 10 minutes for Prometheus to scrape relevant data.
 	time.Sleep(10 * time.Minute)
 
-	t.Run("receive", func(t *testing.T) {
-		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "receive.yaml"),
-			[]byte(promLabelsPromQLConfig(prom, query, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
-
-		stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "receive.yaml")))
-		t.Log(stdout, stderr)
-		testutil.Ok(t, err)
-	})
-	t.Run("sidecar", func(t *testing.T) {
-		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "sidecar.yaml"),
-			[]byte(promLabelsPromQLConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
-
-		stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "sidecar.yaml")))
-		t.Log(stdout, stderr)
-		testutil.Ok(t, err)
-
-	})
+	//t.Run("receive", func(t *testing.T) {
+	//	testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "receive.yaml"),
+	//		[]byte(promLabelsPromQLConfig(prom, query, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
+	//
+	//	stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "receive.yaml")))
+	//	t.Log(stdout, stderr)
+	//	testutil.Ok(t, err)
+	//})
+	//t.Run("sidecar", func(t *testing.T) {
+	//	testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "sidecar.yaml"),
+	//		[]byte(promLabelsPromQLConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
+	//
+	//	stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "sidecar.yaml")))
+	//	t.Log(stdout, stderr)
+	//	testutil.Ok(t, err)
+	//
+	//})
 }
