@@ -103,7 +103,7 @@ func targetAndAssert(t *testing.T, ctx context.Context, addr, state string, want
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().TargetsInGRPC(ctx, mustURLParse(t, "http://"+addr), state)
+		res, err := promclient.NewDefaultClient().TargetsInGRPC(ctx, urlParse(t, "http://"+addr), state)
 		if err != nil {
 			return err
 		}

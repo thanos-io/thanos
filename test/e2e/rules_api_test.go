@@ -168,7 +168,7 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().RulesInGRPC(ctx, mustURLParse(t, "http://"+addr), typ)
+		res, err := promclient.NewDefaultClient().RulesInGRPC(ctx, urlParse(t, "http://"+addr), typ)
 		if err != nil {
 			return err
 		}

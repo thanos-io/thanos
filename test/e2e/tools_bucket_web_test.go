@@ -95,7 +95,7 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(b))
 
-	toolsBucketWebURL := mustURLParse(t, "http://"+b.Endpoint("http")+"/"+externalPrefix)
+	toolsBucketWebURL := urlParse(t, "http://"+b.Endpoint("http")+"/"+externalPrefix)
 
 	toolsBucketWebProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(toolsBucketWebURL, externalPrefix))
 	t.Cleanup(toolsBucketWebProxy.Close)
@@ -135,7 +135,7 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(b))
 
-	toolsBucketWebURL := mustURLParse(t, "http://"+b.Endpoint("http")+"/"+routePrefix)
+	toolsBucketWebURL := urlParse(t, "http://"+b.Endpoint("http")+"/"+routePrefix)
 
 	toolsBucketWebProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(toolsBucketWebURL, externalPrefix))
 	t.Cleanup(toolsBucketWebProxy.Close)

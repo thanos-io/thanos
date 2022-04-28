@@ -452,7 +452,7 @@ func TestRule(t *testing.T) {
 			},
 		}
 
-		alrts, err := promclient.NewDefaultClient().AlertmanagerAlerts(ctx, mustURLParse(t, "http://"+am2.Endpoint("http")))
+		alrts, err := promclient.NewDefaultClient().AlertmanagerAlerts(ctx, urlParse(t, "http://"+am2.Endpoint("http")))
 		testutil.Ok(t, err)
 
 		testutil.Equals(t, len(expAlertLabels), len(alrts))
@@ -490,12 +490,12 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	receiver, err := e2ethanos.NewIngestingReceiver(e, "1")
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
-	rwURL := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")))
+	rwURL := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")))
 
 	receiver2, err := e2ethanos.NewIngestingReceiver(e, "2")
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver2))
-	rwURL2 := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver2.InternalEndpoint("remote-write")))
+	rwURL2 := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver2.InternalEndpoint("remote-write")))
 
 	q, err := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).Build()
 	testutil.Ok(t, err)

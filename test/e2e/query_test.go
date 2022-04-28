@@ -223,7 +223,7 @@ func TestQueryExternalPrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
-	querierURL := mustURLParse(t, "http://"+q.Endpoint("http")+"/"+externalPrefix)
+	querierURL := urlParse(t, "http://"+q.Endpoint("http")+"/"+externalPrefix)
 
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
 	t.Cleanup(querierProxy.Close)
@@ -248,7 +248,7 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
-	querierURL := mustURLParse(t, "http://"+q.Endpoint("http")+"/"+routePrefix)
+	querierURL := urlParse(t, "http://"+q.Endpoint("http")+"/"+routePrefix)
 
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
 	t.Cleanup(querierProxy.Close)
@@ -470,7 +470,7 @@ config:
 				var promMeta map[string][]metadatapb.Meta
 				// Wait metadata response to be ready as Prometheus gets metadata after scrape.
 				testutil.Ok(t, runutil.Retry(3*time.Second, ctx.Done(), func() error {
-					promMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, mustURLParse(t, "http://"+p1.Endpoint("http")), "", -1)
+					promMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+p1.Endpoint("http")), "", -1)
 					testutil.Ok(t, err)
 					if len(promMeta) > 0 {
 						return nil
@@ -478,7 +478,7 @@ config:
 					return fmt.Errorf("empty metadata response from Prometheus")
 				}))
 
-				thanosMeta, err := promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, mustURLParse(t, "http://"+q.Endpoint("http")), "", -1)
+				thanosMeta, err := promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), "", -1)
 				testutil.Ok(t, err)
 				testutil.Assert(t, len(thanosMeta) > 0, "got empty metadata response from Thanos")
 
@@ -886,7 +886,7 @@ func checkNetworkRequests(t *testing.T, addr string) {
 	}))
 }
 
-func mustURLParse(t testing.TB, addr string) *url.URL {
+func urlParse(t testing.TB, addr string) *url.URL {
 	u, err := url.Parse(addr)
 	testutil.Ok(t, err)
 
@@ -902,7 +902,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, mustURLParse(t, "http://"+addr), q(), ts(), opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 		if err != nil {
 			return err
 		}
@@ -947,7 +947,7 @@ func labelNames(t *testing.T, ctx context.Context, addr string, matchers []*labe
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, mustURLParse(t, "http://"+addr), matchers, start, end)
+		res, err := promclient.NewDefaultClient().LabelNamesInGRPC(ctx, urlParse(t, "http://"+addr), matchers, start, end)
 		if err != nil {
 			return err
 		}
@@ -966,7 +966,7 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, mustURLParse(t, "http://"+addr), label, matchers, start, end)
+		res, err := promclient.NewDefaultClient().LabelValuesInGRPC(ctx, urlParse(t, "http://"+addr), label, matchers, start, end)
 		if err != nil {
 			return err
 		}
@@ -984,7 +984,7 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.M
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-		res, err := promclient.NewDefaultClient().SeriesInGRPC(ctx, mustURLParse(t, "http://"+addr), matchers, start, end)
+		res, err := promclient.NewDefaultClient().SeriesInGRPC(ctx, urlParse(t, "http://"+addr), matchers, start, end)
 		if err != nil {
 			return err
 		}
@@ -1003,7 +1003,7 @@ func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string,
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, mustURLParse(t, "http://"+addr), q(), start, end, step, opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, urlParse(t, "http://"+addr), q(), start, end, step, opts)
 		if err != nil {
 			return err
 		}
@@ -1025,7 +1025,7 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 
 	logger := log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	u := mustURLParse(t, "http://"+addr)
+	u := urlParse(t, "http://"+addr)
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
 		res, err := promclient.NewDefaultClient().ExemplarsInGRPC(ctx, u, q, start, end)
 		if err != nil {
@@ -1276,7 +1276,7 @@ func TestSidecarAlignmentPushdown(t *testing.T) {
 
 	var expectedRes model.Matrix
 	testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, mustURLParse(t, "http://"+q1.Endpoint("http")), testQuery(),
+		res, warnings, err := promclient.NewDefaultClient().QueryRange(ctx, urlParse(t, "http://"+q1.Endpoint("http")), testQuery(),
 			timestamp.FromTime(now.Add(time.Duration(-7*24)*time.Hour)),
 			timestamp.FromTime(now),
 			2419, // Taken from UI.
