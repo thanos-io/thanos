@@ -55,17 +55,17 @@ gRPC StoreAPI service is an interface that Thanos uses to communicate with diffe
 * Non-Prometheus systems:
   * e.g [OpenTSDB](../integrations.md#opentsdb-as-storeapi) or [RemoteRead](https://github.com/G-Research/thanos-remote-read)
 
-Thanks to that, you can run queries through API, Thanos UI, Grafana UI or via alerting or recording rule that aggregate metrics from mix of those sources.
+Thanks to that, you can run queries through API, Thanos UI, Grafana UI or via alerting or recording rules that aggregate metrics from mix of those sources.
 
 Some examples:
 
-* `sum(cpu_used{cluster=~"cluster-(eu1|eu2|eu3|us1|us2|us3)", job="service1"})` might give you sum of CPU used inside all listed clusters for service `service1`. This will work even if those clusters runs multiple Prometheus servers each. Querier will know which data sources to query.
+* `sum(cpu_used{cluster=~"cluster-(eu1|eu2|eu3|us1|us2|us3)", job="service1"})` might give you sum of CPU used inside all listed clusters for service `service1`. This will work even if those clusters run multiple Prometheus servers each. Querier will know which data sources to query.
 
 * In single cluster you shard Prometheus functionally or have different Prometheus instances for different tenants. You can spin up Querier to have access to all of the instances within single Query evaluation.
 
 ### Use Case 2: Run-time deduplication of HA groups
 
-Prometheus is stateful and by design does not allow replicating its database. This means that increasing high availability by running multiple Prometheus replicas is not very easy to use. Simple load balancing will not work as for example after some crash, replica might be up but querying such replica will result in small gap during the period it was down. You have a second replica that maybe was up, but it could be down in other moment (e.g. rolling restart), so requests based load-balancing on top of those two or more instances won't be accurate.
+Prometheus is stateful and by design does not allow replicating its database. This means that increasing high availability by running multiple Prometheus replicas is not very easy to use. Simple load balancing will not work as for example after some crash, a replica might be up but querying such replica will result in small gap during the period it was down. You have a second replica that maybe was up, but it could be down in other moment (e.g. rolling restart), so requests based load-balancing on top of those two or more instances won't be accurate.
 
 To solve this Thanos Querier pulls the data from both replicas, and deduplicate those signals, filling the gaps if any, transparently to the Querier consumer. Read more about deduplication process in [Deduplication](#deduplication) section.
 
@@ -168,7 +168,7 @@ In details:
 
 Before deduplication does anything we remove exactly the same TSDB chunks from StoreAPI results [here](https://github.com/thanos-io/thanos/blob/de0e3848ff6085acf89a5f77e053c555a2cce550/pkg/query/iter.go#L76).
 
-Then if deduplication and replica labels were configured `dedup.NewSeriesSet` is invoked. It's algorithm can be outlined as follows:
+If deduplication and replica labels were configured then `dedup.NewSeriesSet` is invoked. It's algorithm can be outlined as follows:
 
 1. It removes replica labels from sorted series streams to find duplicates.
 2. If next sorted series has only no duplicates it yields that.
