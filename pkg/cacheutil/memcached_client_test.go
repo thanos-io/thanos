@@ -140,7 +140,7 @@ func TestMemcachedClient_SetAsync(t *testing.T) {
 	testutil.Ok(t, client.SetAsync(ctx, "key-2", []byte("value-2"), time.Second))
 	testutil.Ok(t, backendMock.waitItems(2))
 
-	actual, err := client.getMultiSingle([]string{"key-1", "key-2"})
+	actual, err := client.getMultiSingle(ctx, []string{"key-1", "key-2"})
 	testutil.Ok(t, err)
 	testutil.Equals(t, []byte("value-1"), actual["key-1"].Value)
 	testutil.Equals(t, []byte("value-2"), actual["key-2"].Value)
@@ -166,7 +166,7 @@ func TestMemcachedClient_SetAsyncWithCustomMaxItemSize(t *testing.T) {
 	testutil.Ok(t, client.SetAsync(ctx, "key-2", []byte("value-2-too-long-to-be-stored"), time.Second))
 	testutil.Ok(t, backendMock.waitItems(1))
 
-	actual, err := client.getMultiSingle([]string{"key-1", "key-2"})
+	actual, err := client.getMultiSingle(ctx, []string{"key-1", "key-2"})
 	testutil.Ok(t, err)
 	testutil.Equals(t, []byte("value-1"), actual["key-1"].Value)
 	testutil.Equals(t, (*memcache.Item)(nil), actual["key-2"])
@@ -465,4 +465,51 @@ func TestMultipleClientsCanUseSameRegistry(t *testing.T) {
 	client2, err := NewMemcachedClientWithConfig(log.NewNopLogger(), "b", config, reg)
 	testutil.Ok(t, err)
 	defer client2.Stop()
+}
+
+func TestMemcachedClient_GetMulti_ContextCancelled(t *testing.T) {
+	config := defaultMemcachedClientConfig
+	config.Addresses = []string{"127.0.0.1:11211"}
+	config.MaxGetMultiBatchSize = 2
+	config.MaxGetMultiConcurrency = 2
+
+	// Create a new context that will be used for our "blocking" backend so that we can
+	// actually stop it at the end of the test and not leak goroutines.
+	backendCtx, backendCancel := context.WithCancel(context.Background())
+	defer backendCancel()
+
+	selector := &MemcachedJumpHashSelector{}
+	backendMock := newMemcachedClientBlockingMock(backendCtx)
+
+	client, err := newMemcachedClient(log.NewNopLogger(), backendMock, selector, config, prometheus.NewPedanticRegistry(), "test")
+	testutil.Ok(t, err)
+	defer client.Stop()
+
+	// Immediately cancel the context that will be used for the GetMulti request. This will
+	// ensure that the method called by the batching logic (getMultiSingle) returns immediately
+	// instead of calling the underlying memcached client (which blocks forever in this test).
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	items := client.GetMulti(ctx, []string{"key1", "key2", "key3", "key4"})
+	testutil.Equals(t, 0, len(items))
+}
+
+type memcachedClientBlockingMock struct {
+	ctx context.Context
+}
+
+func newMemcachedClientBlockingMock(ctx context.Context) *memcachedClientBlockingMock {
+	return &memcachedClientBlockingMock{ctx: ctx}
+}
+
+func (c *memcachedClientBlockingMock) GetMulti([]string) (map[string]*memcache.Item, error) {
+	// Block until this backend client is explicitly stopped so that we can ensure the memcached
+	// client won't be blocked waiting for results that will never be returned.
+	<-c.ctx.Done()
+	return nil, nil
+}
+
+func (c *memcachedClientBlockingMock) Set(*memcache.Item) error {
+	return nil
 }

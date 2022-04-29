@@ -442,7 +442,7 @@ func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[strin
 func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([]map[string]*memcache.Item, error) {
 	// Do not batch if the input keys are less than the max batch size.
 	if (c.config.MaxGetMultiBatchSize <= 0) || (len(keys) <= c.config.MaxGetMultiBatchSize) {
-		items, err := c.getMultiSingle(keys)
+		items, err := c.getMultiSingle(ctx, keys)
 		if err != nil {
 			return nil, err
 		}
@@ -470,12 +470,16 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	defer close(results)
 
 	// Ignore the error here since it can only be returned by our provided function which
-	// always returns nil.
-	_ = doWithBatch(ctx, len(keys), c.config.MaxGetMultiBatchSize, getMultiGate, func(startIndex, endIndex int) error {
+	// always returns nil. NOTE also we are using a background context here for the doWithBatch
+	// method. This is to ensure that it runs the expected number of batches _even if_ our
+	// context (`ctx`) is canceled since we expect a certain number of batches to be read
+	// from `results` below. The wrapped `getMultiSingle` method will still check our context
+	// and short-circuit if it has been canceled.
+	_ = doWithBatch(context.Background(), len(keys), c.config.MaxGetMultiBatchSize, getMultiGate, func(startIndex, endIndex int) error {
 		batchKeys := keys[startIndex:endIndex]
 
 		res := &memcachedGetMultiResult{}
-		res.items, res.err = c.getMultiSingle(batchKeys)
+		res.items, res.err = c.getMultiSingle(ctx, batchKeys)
 
 		results <- res
 		return nil
@@ -499,10 +503,19 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	return items, lastErr
 }
 
-func (c *memcachedClient) getMultiSingle(keys []string) (items map[string]*memcache.Item, err error) {
+func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (items map[string]*memcache.Item, err error) {
 	start := time.Now()
 	c.operations.WithLabelValues(opGetMulti).Inc()
-	items, err = c.client.GetMulti(keys)
+
+	select {
+	case <-ctx.Done():
+		// Make sure our context hasn't been canceled before fetching cache items using
+		// cache client backend.
+		return nil, ctx.Err()
+	default:
+		items, err = c.client.GetMulti(keys)
+	}
+
 	if err != nil {
 		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err)
 		c.trackError(opGetMulti, err)
