@@ -467,16 +467,15 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	// Allocate a channel to store results for each batch request. The max concurrency will be
 	// enforced by doWithBatch.
 	results := make(chan *memcachedGetMultiResult, numResults)
-	// NOTE: we are not closing the results channel here on purpose. doWithBatch will start
-	// goroutines to fetch data and write the results back to the `results` channel. If we
-	// close the channel when this method exits before all goroutines have finished writing
-	// (such as when our context is canceled) they will panic trying to write to a closed
-	// channel. Instead, we let the GC take care of cleaning the channel up when it is no
-	// longer referenced by this method or the workers in doWithBatch.
+	defer close(results)
 
 	// Ignore the error here since it can only be returned by our provided function which
-	// always returns nil.
-	_ = doWithBatch(ctx, len(keys), c.config.MaxGetMultiBatchSize, getMultiGate, func(startIndex, endIndex int) error {
+	// always returns nil. NOTE also we are using a background context here for the doWithBatch
+	// method. This is to ensure that it runs the expected number of batches _even if_ our
+	// context (`ctx`) is canceled since we expect a certain number of batches to be read
+	// from `results` below. The wrapped `getMultiSingle` method will still check our context
+	// and short-circuit if it has been canceled.
+	_ = doWithBatch(context.Background(), len(keys), c.config.MaxGetMultiBatchSize, getMultiGate, func(startIndex, endIndex int) error {
 		batchKeys := keys[startIndex:endIndex]
 
 		res := &memcachedGetMultiResult{}
@@ -492,20 +491,13 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	var lastErr error
 
 	for i := 0; i < numResults; i++ {
-		select {
-		case <-ctx.Done():
-			// If the context is canceled, it's possible not all batches will be run by doWithBatch,
-			// so we should avoid waiting on the results channel here. This ensures that we don't block
-			// indefinitely waiting results that will never come.
-			return nil, ctx.Err()
-		case result := <-results:
-			if result.err != nil {
-				lastErr = result.err
-				continue
-			}
-
-			items = append(items, result.items)
+		result := <-results
+		if result.err != nil {
+			lastErr = result.err
+			continue
 		}
+
+		items = append(items, result.items)
 	}
 
 	return items, lastErr

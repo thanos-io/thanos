@@ -486,9 +486,8 @@ func TestMemcachedClient_GetMulti_ContextCancelled(t *testing.T) {
 	defer client.Stop()
 
 	// Immediately cancel the context that will be used for the GetMulti request. This will
-	// ensure that the underlying batching doesn't actually take place and won't generate any
-	// results. We're making sure that we don't block forever waiting for results that will
-	// not be generated. If we did, this test would hang.
+	// ensure that the method called by the batching logic (getMultiSingle) returns immediately
+	// instead of calling the underlying memcached client (which blocks forever in this test).
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
