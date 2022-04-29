@@ -15,6 +15,13 @@ func NewPrefixedBucket(bkt Bucket, prefix string) Bucket {
 	return pbkt
 }
 
+func conditionalPrefix(prefix, name string) string {
+	if len(name) > 0 && len(prefix) > 0 {
+		return prefix + "/" + name
+	}
+	return name
+}
+
 func withPrefix(prefix, name string) string {
 	return prefix + "/" + name
 }
@@ -27,17 +34,17 @@ func (p *PrefixedBucket) Close() error {
 // object name including the prefix of the inspected directory.
 // Entries are passed to function in sorted order.
 func (p *PrefixedBucket) Iter(ctx context.Context, dir string, f func(string) error, options ...IterOption) error {
-	return p.bkt.Iter(ctx, withPrefix(p.prefix, dir), f, options...)
+	return p.bkt.Iter(ctx, conditionalPrefix(p.prefix, dir), f, options...)
 }
 
 // Get returns a reader for the given object name.
 func (p *PrefixedBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	return p.bkt.Get(ctx, withPrefix(p.prefix, name))
+	return p.bkt.Get(ctx, conditionalPrefix(p.prefix, name))
 }
 
 // GetRange returns a new range reader for the given object name and range.
 func (p *PrefixedBucket) GetRange(ctx context.Context, name string, off int64, length int64) (io.ReadCloser, error) {
-	return p.bkt.GetRange(ctx, withPrefix(p.prefix, name), off, length)
+	return p.bkt.GetRange(ctx, conditionalPrefix(p.prefix, name), off, length)
 }
 
 // Exists checks if the given object exists in the bucket.
@@ -52,7 +59,7 @@ func (p *PrefixedBucket) IsObjNotFoundErr(err error) bool {
 
 // Attributes returns information about the specified object.
 func (p PrefixedBucket) Attributes(ctx context.Context, name string) (ObjectAttributes, error) {
-	return p.bkt.Attributes(ctx, withPrefix(p.prefix, name))
+	return p.bkt.Attributes(ctx, conditionalPrefix(p.prefix, name))
 }
 
 // func (p *PrefixedBucket) Attributes(ctx context.Context, name string) (ObjectAttributes, error) {
