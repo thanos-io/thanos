@@ -3,6 +3,7 @@ package objstore
 import (
 	"context"
 	"io"
+	"strings"
 )
 
 type PrefixedBucket struct {
@@ -11,8 +12,19 @@ type PrefixedBucket struct {
 }
 
 func NewPrefixedBucket(bkt Bucket, prefix string) Bucket {
-	pbkt := &PrefixedBucket{bkt: bkt, prefix: prefix}
+	pbkt := &PrefixedBucket{bkt: bkt, prefix: PrefixFormater(prefix)}
 	return pbkt
+}
+
+func PrefixFormater(prefix string) string {
+	formatedPrefix := prefix
+	if prefix[len(prefix)-1:] == "/" {
+		formatedPrefix = prefix[0 : len(prefix)-1]
+	}
+	if prefix[0:1] == "/" {
+		formatedPrefix = formatedPrefix[1:]
+	}
+	return formatedPrefix
 }
 
 func conditionalPrefix(prefix, name string) string {
@@ -34,7 +46,13 @@ func (p *PrefixedBucket) Close() error {
 // object name including the prefix of the inspected directory.
 // Entries are passed to function in sorted order.
 func (p *PrefixedBucket) Iter(ctx context.Context, dir string, f func(string) error, options ...IterOption) error {
-	return p.bkt.Iter(ctx, conditionalPrefix(p.prefix, dir), f, options...)
+	pdir := withPrefix(p.prefix, dir)
+	if len(p.prefix) > 0 {
+		return p.bkt.Iter(ctx, pdir, func(s string) error {
+			return f(strings.Join(strings.Split(s, p.prefix+"/")[1:], "/"))
+		}, options...)
+	}
+	return p.bkt.Iter(ctx, pdir, f)
 }
 
 // Get returns a reader for the given object name.
@@ -49,7 +67,7 @@ func (p *PrefixedBucket) GetRange(ctx context.Context, name string, off int64, l
 
 // Exists checks if the given object exists in the bucket.
 func (p *PrefixedBucket) Exists(ctx context.Context, name string) (bool, error) {
-	return p.bkt.Exists(ctx, withPrefix(p.prefix, name))
+	return p.bkt.Exists(ctx, conditionalPrefix(p.prefix, name))
 }
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
@@ -62,20 +80,16 @@ func (p PrefixedBucket) Attributes(ctx context.Context, name string) (ObjectAttr
 	return p.bkt.Attributes(ctx, conditionalPrefix(p.prefix, name))
 }
 
-// func (p *PrefixedBucket) Attributes(ctx context.Context, name string) (ObjectAttributes, error) {
-// 	return p.bkt.Attributes(ctx, withPrefix(p.prefix, name))
-// }
-
 // Upload the contents of the reader as an object into the bucket.
 // Upload should be idempotent.
 func (p *PrefixedBucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	return p.bkt.Upload(ctx, withPrefix(p.prefix, name), r)
+	return p.bkt.Upload(ctx, conditionalPrefix(p.prefix, name), r)
 }
 
 // Delete removes the object with the given name.
 // If object does not exists in the moment of deletion, Delete should throw error.
 func (p *PrefixedBucket) Delete(ctx context.Context, name string) error {
-	return p.bkt.Delete(ctx, withPrefix(p.prefix, name))
+	return p.bkt.Delete(ctx, conditionalPrefix(p.prefix, name))
 }
 
 // Name returns the bucket name for the provider.
