@@ -281,13 +281,13 @@ func (c *Groupcache) Fetch(ctx context.Context, keys []string) map[string][]byte
 		codec := galaxycache.ByteCodec{}
 
 		if err := c.galaxy.Get(ctx, k, &codec); err != nil {
-			level.Error(c.logger).Log("msg", "failed fetching data from groupcache", "err", err, "key", k)
+			level.Debug(c.logger).Log("msg", "failed fetching data from groupcache", "err", err, "key", k)
 			continue
 		}
 
 		retrievedData, _, err := codec.MarshalBinary()
 		if err != nil {
-			level.Error(c.logger).Log("msg", "failed retrieving data", "err", err, "key", k)
+			level.Debug(c.logger).Log("msg", "failed retrieving data", "err", err, "key", k)
 			continue
 		}
 
