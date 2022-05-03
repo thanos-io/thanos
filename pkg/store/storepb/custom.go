@@ -5,9 +5,9 @@ package storepb
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"hash"
 	"sort"
 	"strconv"
 	"strings"
@@ -258,10 +258,10 @@ func (s *uniqueSeriesSet) Next() bool {
 	return true
 }
 
-func (m AggrChunk) Hash() string {
-	h := sha256.New()
+func (m AggrChunk) Hash(previousHash hash.Hash) string {
+	previousHash.Reset()
 
-	_, _ = h.Write([]byte(fmt.Sprintf("%v%v", m.MinTime, m.MaxTime)))
+	_, _ = previousHash.Write([]byte(fmt.Sprintf("%v%v", m.MinTime, m.MaxTime)))
 
 	for _, ch := range []*Chunk{
 		m.Raw,
@@ -272,12 +272,12 @@ func (m AggrChunk) Hash() string {
 		m.Counter,
 	} {
 		if ch != nil {
-			_, _ = h.Write(ch.Data)
-			_, _ = h.Write([]byte(ch.Type.String()))
+			_, _ = previousHash.Write(ch.Data)
+			_, _ = previousHash.Write([]byte(ch.Type.String()))
 		}
 	}
 
-	return fmt.Sprintf("%x", h.Sum(nil))
+	return fmt.Sprintf("%x", previousHash.Sum(nil))
 }
 
 // Compare returns positive 1 if chunk is smaller -1 if larger than b by min time, then max time.

@@ -5,6 +5,7 @@ package store
 
 import (
 	"container/heap"
+	"crypto/md5"
 	"sort"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -44,9 +45,11 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 
 	chunkDedupMap := map[string]*storepb.AggrChunk{}
 
+	md5Hash := md5.New()
+
 	for _, resp := range d.responses {
 		for _, chk := range resp.GetSeries().Chunks {
-			h := chk.Hash()
+			h := chk.Hash(md5Hash)
 
 			if _, ok := chunkDedupMap[h]; !ok {
 				chk := chk
