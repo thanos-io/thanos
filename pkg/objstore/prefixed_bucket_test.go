@@ -10,27 +10,36 @@ import (
 )
 
 func TestPrefixedBucket_Acceptance(t *testing.T) {
-	bkt := NewPrefixedBucket(NewInMemBucket(), "/someprefix/anotherprefix/")
+	prefix := "/someprefix/anotherprefix/"
+	bkt := NewPrefixedBucket(NewInMemBucket(), prefix)
 	AcceptanceTest(t, bkt)
+	UsesPrefixTest(t, bkt, prefix)
 
-	bkt = NewPrefixedBucket(NewInMemBucket(), "someprefix/anotherprefix/")
+	prefix = "someprefix/anotherprefix/"
+	bkt = NewPrefixedBucket(NewInMemBucket(), prefix)
 	AcceptanceTest(t, bkt)
+	UsesPrefixTest(t, bkt, prefix)
 
-	bkt = NewPrefixedBucket(NewInMemBucket(), "someprefix/anotherprefix")
+	prefix = "someprefix/anotherprefix"
+	bkt = NewPrefixedBucket(NewInMemBucket(), prefix)
 	AcceptanceTest(t, bkt)
+	UsesPrefixTest(t, bkt, prefix)
 
-	bkt = NewPrefixedBucket(NewInMemBucket(), "someprefix/")
+	prefix = "someprefix/"
+	bkt = NewPrefixedBucket(NewInMemBucket(), prefix)
 	AcceptanceTest(t, bkt)
+	UsesPrefixTest(t, bkt, prefix)
 
-	bkt = NewPrefixedBucket(NewInMemBucket(), "someprefix")
+	prefix = "someprefix"
+	bkt = NewPrefixedBucket(NewInMemBucket(), prefix)
 	AcceptanceTest(t, bkt)
+	UsesPrefixTest(t, bkt, prefix)
 }
 
-func TestPrefixedBucket_UsesPrefix(t *testing.T) {
-	bkt := NewInMemBucket()
-	bkt.Upload(context.Background(), "our_prefix/file1.jpg", strings.NewReader("@test-data1"))
+func UsesPrefixTest(t *testing.T, bkt Bucket, prefix string) {
+	bkt.Upload(context.Background(), strings.Trim(prefix, "/")+"/file1.jpg", strings.NewReader("@test-data1"))
 
-	pBkt := NewPrefixedBucket(bkt, "our_prefix")
+	pBkt := NewPrefixedBucket(bkt, prefix)
 	rc1, err := pBkt.Get(context.Background(), "file1.jpg")
 
 	testutil.Ok(t, err)
@@ -38,4 +47,10 @@ func TestPrefixedBucket_UsesPrefix(t *testing.T) {
 	content, err := ioutil.ReadAll(rc1)
 	testutil.Ok(t, err)
 	testutil.Equals(t, "@test-data1", string(content))
+
+	// Upload
+	// Delete
+	// GetRange
+	// Exists
+	// IsObjNotFoundErr
 }
