@@ -86,6 +86,17 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
 	}
 
-	prefixedBucket := objstore.NewPrefixedBucket(bucket, bucketConf.Config.Prefix)
+	var prefixedBucket objstore.Bucket
+	if ValidPrefix(bucketConf.Config.Prefix) {
+		prefixedBucket = objstore.NewPrefixedBucket(bucket, bucketConf.Config.Prefix)
+	} else {
+		prefixedBucket = bucket
+	}
+
 	return objstore.NewTracingBucket(objstore.BucketWithMetrics(bucket.Name(), prefixedBucket, reg)), nil
+}
+
+func ValidPrefix(prefix string) bool {
+	prefix = strings.Replace(prefix, "/", "", -1)
+	return len(prefix) > 0
 }
