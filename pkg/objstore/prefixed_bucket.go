@@ -12,19 +12,8 @@ type PrefixedBucket struct {
 }
 
 func NewPrefixedBucket(bkt Bucket, prefix string) Bucket {
-	pbkt := &PrefixedBucket{bkt: bkt, prefix: PrefixFormater(prefix)}
+	pbkt := &PrefixedBucket{bkt: bkt, prefix: strings.Trim(prefix, "/")}
 	return pbkt
-}
-
-func PrefixFormater(prefix string) string {
-	formatedPrefix := prefix
-	if prefix[len(prefix)-1:] == "/" {
-		formatedPrefix = prefix[0 : len(prefix)-1]
-	}
-	if prefix[0:1] == "/" {
-		formatedPrefix = formatedPrefix[1:]
-	}
-	return formatedPrefix
 }
 
 func conditionalPrefix(prefix, name string) string {
