@@ -39,8 +39,10 @@ Query Frontend supports caching query results and reuses them on subsequent quer
 ### Excluded from caching
 
 * Requests that support deduplication and having it disabled with `dedup=false`. Read more about deduplication in [Dedup documentation](query.md#deduplication-enabled).
-* Requests that specify store matchers.
-* Requests were the caching is explicitely disabled.
+* Requests that specify Store Matchers.
+* Requests where downstream queriers set the header `Cache-Control=no-store` in the response:
+  * Requests with a partial **response**.
+  * Requests with other warnings.
 
 #### In-memory
 
