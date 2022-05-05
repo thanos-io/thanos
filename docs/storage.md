@@ -64,6 +64,7 @@ type: S3
 config:
   bucket: ""
   endpoint: ""
+  prefix: ""
   region: ""
   aws_sdk_auth: false
   access_key: ""
@@ -330,6 +331,7 @@ config:
   storage_account_key: ""
   container: ""
   endpoint: ""
+  prefix: ""
   max_retries: 0
   msi_resource: ""
   user_assigned_id: ""
@@ -384,6 +386,7 @@ config:
   password: ""
   domain_id: ""
   domain_name: ""
+  prefix: ""
   project_id: ""
   project_name: ""
   project_domain_id: ""
@@ -411,6 +414,7 @@ config:
   region: ""
   app_id: ""
   endpoint: ""
+  prefix: ""
   secret_key: ""
   secret_id: ""
   http_config:
@@ -442,6 +446,7 @@ config:
   bucket: ""
   access_key_id: ""
   access_key_secret: ""
+  prefix: ""
 ```
 
 Use --objstore.config-file to reference to this configuration file.
@@ -457,6 +462,7 @@ config:
   endpoint: ""
   access_key: ""
   secret_key: ""
+  prefix: ""
 ```
 
 #### Filesystem
@@ -469,6 +475,7 @@ NOTE: This storage type is experimental and might be inefficient. It is NOT advi
 type: FILESYSTEM
 config:
   directory: ""
+  prefix: ""
 ```
 
 ### How to add a new client to Thanos?
