@@ -8,7 +8,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## [v0.26.0-rc0](https://github.com/thanos-io/thanos/tree/release-0.26) - 2022.04.28
+## [v0.26.0](https://github.com/thanos-io/thanos/tree/release-0.26) - 2022.05.05
 
 ### Fixed
 - [#5281](https://github.com/thanos-io/thanos/pull/5281) Blocks: Use correct separators for filesystem paths and object storage paths respectively.
