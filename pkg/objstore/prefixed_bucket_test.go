@@ -48,9 +48,33 @@ func UsesPrefixTest(t *testing.T, bkt Bucket, prefix string) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, "@test-data1", string(content))
 
-	// Upload
-	// Delete
-	// GetRange
-	// Exists
-	// IsObjNotFoundErr
+	pBkt.Upload(context.Background(), "file2.jpg", strings.NewReader("@test-data2"))
+	rc2, err := bkt.Get(context.Background(), strings.Trim(prefix, "/") + "/file2.jpg")
+
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, rc2.Close()) }()
+	contentUpload, err := ioutil.ReadAll(rc2)
+	testutil.Ok(t, err)
+	testutil.Equals(t, "@test-data2", string(contentUpload))
+
+	pBkt.Delete(context.Background(), "file2.jpg")
+	_, err = bkt.Get(context.Background(), strings.Trim(prefix, "/") + "/file2.jpg")
+
+	testutil.NotOk(t, err)
+	testutil.Assert(t, pBkt.IsObjNotFoundErr(err), "expected not found error got %s", err)
+
+	rc3, err := pBkt.GetRange(context.Background(), "file1.jpg", 1, 3)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, rc3.Close()) }()
+	content, err = ioutil.ReadAll(rc3)
+	testutil.Ok(t, err)
+	testutil.Equals(t, "tes", string(content))
+
+	ok, err := pBkt.Exists(context.Background(), "file1.jpg")
+	testutil.Ok(t, err)
+	testutil.Assert(t, ok, "expected exits")
+
+	attrs, err := pBkt.Attributes(context.Background(), "file1.jpg")
+	testutil.Ok(t, err)
+	testutil.Assert(t, attrs.Size == 11, "expected size to be equal to 11")
 }
