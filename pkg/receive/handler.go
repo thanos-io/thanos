@@ -693,6 +693,8 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 		return nil, status.Error(codes.AlreadyExists, err.Error())
 	case errBadReplica:
 		return nil, status.Error(codes.InvalidArgument, err.Error())
+	case errSeriesLimitReached:
+		return nil, status.Error(codes.ResourceExhausted, err.Error())
 	default:
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -726,6 +728,7 @@ func isUnavailable(err error) bool {
 // isLimitReached returns whether or not the given error represents an limit reached error.
 func isLimitReached(err error) bool {
 	return err == errSeriesLimitReached ||
+		errors.Is(err, errSeriesLimitReached) ||
 		status.Code(err) == codes.ResourceExhausted
 }
 
