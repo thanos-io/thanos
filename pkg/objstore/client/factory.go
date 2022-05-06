@@ -87,8 +87,9 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	}
 
 	var prefixedBucket objstore.Bucket
-	if ValidPrefix(bucketConf.Config.Prefix) {
+	if validPrefix(bucketConf.Config.Prefix) {
 		prefixedBucket = objstore.NewPrefixedBucket(bucket, bucketConf.Config.Prefix)
+		level.Debug(logger).Log("msg", "using prefix on bucket access", "prefix", bucketConf.Config.Prefix)
 	} else {
 		prefixedBucket = bucket
 	}
@@ -96,7 +97,7 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	return objstore.NewTracingBucket(objstore.BucketWithMetrics(bucket.Name(), prefixedBucket, reg)), nil
 }
 
-func ValidPrefix(prefix string) bool {
+func validPrefix(prefix string) bool {
 	prefix = strings.Replace(prefix, "/", "", -1)
 	return len(prefix) > 0
 }
