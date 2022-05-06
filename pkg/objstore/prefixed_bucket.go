@@ -35,13 +35,14 @@ func (p *PrefixedBucket) Close() error {
 // object name including the prefix of the inspected directory.
 // Entries are passed to function in sorted order.
 func (p *PrefixedBucket) Iter(ctx context.Context, dir string, f func(string) error, options ...IterOption) error {
-	pdir := withPrefix(p.prefix, dir)
 	if len(p.prefix) > 0 {
+		pdir := withPrefix(p.prefix, dir)
+
 		return p.bkt.Iter(ctx, pdir, func(s string) error {
-			return f(strings.Join(strings.Split(s, p.prefix+"/")[1:], "/"))
+			return f(strings.TrimPrefix(s, p.prefix+"/"))
 		}, options...)
 	}
-	return p.bkt.Iter(ctx, pdir, f)
+	return p.bkt.Iter(ctx, dir, f, options...)
 }
 
 // Get returns a reader for the given object name.
