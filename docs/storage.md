@@ -103,6 +103,8 @@ At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `ac
 
 However if you set `aws_sdk_auth: true` Thanos will use the default authentication methods of the AWS SDK for go based on [known environment variables](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html) (`AWS_PROFILE`, `AWS_WEB_IDENTITY_TOKEN_FILE` ... etc) and known AWS config files (~/.aws/config). If you turn this on, then the `bucket` and `endpoint` are the required config keys.
 
+The field `prefix` can be used to transparently use bucket prefixes in your S3 bucket. That way, you may point distinct Thanos instances to the same bucket, while avoiding one instance messing with the data from another instance. This will allow multiple Thanos deployments to use the same bucket without 
+
 The AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/s3.html).
 
 Make sure you use a correct signature version. Currently AWS requires signature v4, so it needs `signature_version2: false`. If you don't specify it, you will get an `Access Denied` error. On the other hand, several S3 compatible APIs use `signature_version2: true`.
