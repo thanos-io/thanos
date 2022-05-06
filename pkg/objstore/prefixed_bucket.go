@@ -12,19 +12,19 @@ type PrefixedBucket struct {
 }
 
 func NewPrefixedBucket(bkt Bucket, prefix string) Bucket {
-	pbkt := &PrefixedBucket{bkt: bkt, prefix: strings.Trim(prefix, "/")}
+	pbkt := &PrefixedBucket{bkt: bkt, prefix: strings.Trim(prefix, DirDelim)}
 	return pbkt
 }
 
 func conditionalPrefix(prefix, name string) string {
 	if len(name) > 0 && len(prefix) > 0 {
-		return prefix + "/" + name
+		return prefix + DirDelim + name
 	}
 	return name
 }
 
 func withPrefix(prefix, name string) string {
-	return prefix + "/" + name
+	return prefix + DirDelim + name
 }
 
 func (p *PrefixedBucket) Close() error {
@@ -39,7 +39,7 @@ func (p *PrefixedBucket) Iter(ctx context.Context, dir string, f func(string) er
 		pdir := withPrefix(p.prefix, dir)
 
 		return p.bkt.Iter(ctx, pdir, func(s string) error {
-			return f(strings.TrimPrefix(s, p.prefix+"/"))
+			return f(strings.TrimPrefix(s, p.prefix+DirDelim))
 		}, options...)
 	}
 	return p.bkt.Iter(ctx, dir, f, options...)
