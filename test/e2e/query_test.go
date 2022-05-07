@@ -192,6 +192,7 @@ func TestQuery(t *testing.T) {
 	})
 }
 
+// TestQueryExternalPrefixWithoutReverseProxy tests the behavior of defaulting the value of '--web.route-prefix' to '--web.external-prefix'.
 func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 	t.Parallel()
 
@@ -207,6 +208,8 @@ func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	checkNetworkRequests(t, "http://"+q.Endpoint("http")+"/"+externalPrefix+"/graph")
+	checkNetworkRequests(t, "http://"+q.Endpoint("http")+"/"+externalPrefix+"/metrics")
+	checkNetworkRequests(t, "http://"+q.Endpoint("http")+"/"+externalPrefix+"/debug/pprof/cmdline")
 }
 
 func TestQueryExternalPrefix(t *testing.T) {
@@ -223,12 +226,17 @@ func TestQueryExternalPrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
+	// externalPrefix is included in the URL since the value of routePrefix defaults to externalPrefix when not specified.
+	// So even after the ReverseProxy strips the externalPrefix, we still want traffic to go the Querier on the routePrefix'd path.
 	querierURL := mustURLParse(t, "http://"+q.Endpoint("http")+"/"+externalPrefix)
 
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
 	t.Cleanup(querierProxy.Close)
 
 	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
+	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/metrics")
+	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/debug/pprof/cmdline")
+
 }
 
 func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
@@ -248,12 +256,17 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
-	querierURL := mustURLParse(t, "http://"+q.Endpoint("http")+"/"+routePrefix)
+	// Since externalPrefix and routePrefix differ, we do not need to specify a path to forward traffic to.
+	// The routePrefix will still remain after the ReverseProxy strips the externalPrefix.
+	// /thanos/test/metrics will be rewritten to /test/metrics, which is on the path that the Querier expects.
+	querierURL := mustURLParse(t, "http://"+q.Endpoint("http"))
 
 	querierProxy := httptest.NewServer(e2ethanos.NewSingleHostReverseProxy(querierURL, externalPrefix))
 	t.Cleanup(querierProxy.Close)
 
-	checkNetworkRequests(t, querierProxy.URL+"/"+externalPrefix+"/graph")
+	checkNetworkRequests(t, fmt.Sprintf("%s/%s/%s/graph", querierProxy.URL, externalPrefix, routePrefix))
+	checkNetworkRequests(t, fmt.Sprintf("%s/%s/%s/metrics", querierProxy.URL, externalPrefix, routePrefix))
+	checkNetworkRequests(t, fmt.Sprintf("%s/%s/%s/debug/pprof/cmdline", querierProxy.URL, externalPrefix, routePrefix))
 }
 
 func TestQueryLabelNames(t *testing.T) {
