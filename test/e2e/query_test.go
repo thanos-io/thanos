@@ -868,7 +868,11 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 }
 
 func checkNetworkRequests(t *testing.T, addr string) {
-	ctx, cancel := chromedp.NewContext(context.Background())
+	deadline, _ := t.Deadline()
+	parentCtx, parentCancel := context.WithDeadline(context.Background(), deadline)
+	defer parentCancel()
+	ctx, cancel := chromedp.NewContext(parentCtx)
+
 	t.Cleanup(cancel)
 
 	testutil.Ok(t, runutil.Retry(1*time.Minute, ctx.Done(), func() error {
@@ -879,6 +883,12 @@ func checkNetworkRequests(t *testing.T, addr string) {
 			switch ev := ev.(type) {
 			case *network.EventLoadingFailed:
 				networkErrors = append(networkErrors, ev.ErrorText)
+			case *network.EventResponseReceived:
+				// Fail if response code is an error
+				if ev.Response.Status >= 400 {
+					networkErrors = append(networkErrors, fmt.Sprintf("%d - %s (%s)", ev.Response.Status, ev.Response.StatusText, ev.Response.URL))
+				}
+
 			}
 		})
 
