@@ -80,6 +80,7 @@ type storeConfig struct {
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.httpConfig = *sc.httpConfig.registerFlag(cmd)
 	sc.grpcConfig = *sc.grpcConfig.registerFlag(cmd)
+	sc.webConfig = *sc.webConfig.registerFlag(cmd)
 
 	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar.").
 		Default("./data").StringVar(&sc.dataDir)
@@ -156,15 +157,6 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("store.index-header-lazy-reader-idle-timeout", "If index-header lazy reader is enabled and this idle timeout setting is > 0, memory map-ed index-headers will be automatically released after 'idle timeout' inactivity.").
 		Hidden().Default("5m").DurationVar(&sc.lazyIndexReaderIdleTimeout)
-
-	cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").
-		Default("").StringVar(&sc.webConfig.externalPrefix)
-
-	cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").
-		Default("").StringVar(&sc.webConfig.prefixHeaderName)
-
-	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").
-		Default("false").BoolVar(&sc.webConfig.disableCORS)
 
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 }
