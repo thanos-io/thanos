@@ -542,7 +542,7 @@ func TestStoreGatewayRoutePrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	routePrefix := "test"
+	routePrefix := t.Name()
 
 	const bucket = "store_gateway_test"
 	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
@@ -557,7 +557,7 @@ func TestStoreGatewayRoutePrefix(t *testing.T) {
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 		},
 		"",
-		[]string{"--web.route-prefix=test", "--web.external-prefix=test"},
+		[]string{"--web.route-prefix=" + t.Name(), "--web.external-prefix=" + t.Name()},
 	)
 	testutil.Ok(t, err)
 	testutil.Ok(t, s.Start())

@@ -111,7 +111,7 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	externalPrefix := "testThanos"
-	routePrefix := "test"
+	routePrefix := t.Name()
 	const bucket = "toolsBucketWeb_test"
 	m, err := e2ethanos.NewMinio(e, "thanos", bucket)
 	testutil.Ok(t, err)

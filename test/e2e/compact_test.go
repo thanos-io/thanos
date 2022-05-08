@@ -871,7 +871,7 @@ func TestCompactRoutePrefix(t *testing.T) {
 	e, err := e2e.NewDockerEnvironment(name)
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
-	routePrefix := "test"
+	routePrefix := t.Name()
 
 	dir := filepath.Join(e.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
@@ -886,7 +886,7 @@ func TestCompactRoutePrefix(t *testing.T) {
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
 	}
 
-	c, err := e2ethanos.NewCompactor(e, "expect-to-halt", svcConfig, nil, "--web.external-prefix=test", "--web.route-prefix=test")
+	c, err := e2ethanos.NewCompactor(e, "expect-to-halt", svcConfig, nil, "--web.external-prefix="+routePrefix, "--web.route-prefix="+routePrefix)
 	testutil.Ok(t, err)
 
 	// Not using e2e.StartAndWaitReady(c) because the health check will fail since its path is not prefixed.

@@ -574,7 +574,7 @@ func TestRuleRoutePrefix(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	routePrefix := "test"
+	routePrefix := t.Name()
 
 	r, err := e2ethanos.NewTSDBRuler(e, "1", "/tmp", routePrefix, []alert.AlertmanagerConfig{}, []httpconfig.Config{
 		{
