@@ -12,7 +12,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#4471](https://github.com/thanos-io/thanos/pull/4471) **breaking:** if `--web.route-prefix` or `--web.external-prefix` is set: Serve `/debug/*`, `/-/ready`, `/-/healthy`, and `/metrics` routes under the prefix from `--web.route-prefix`. Previously, these endpoints were served from the root URL.
+- [#4471](https://github.com/thanos-io/thanos/pull/4471) Compact, Query, Rule, Store: *breaking :warning:* If `--web.route-prefix` or `--web.external-prefix` is set, serve `/debug/*`, `/-/ready`, `/-/healthy`, and `/metrics` routes under the prefix from `--web.route-prefix`. Previously, these endpoints were served from the root URL even when the rest of the app was served from a subpath.
 
 ### Added
 
