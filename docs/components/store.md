@@ -211,6 +211,10 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
+      --web.route-prefix=""      Prefix for API and UI endpoints. This allows
+                                 thanos UI to be served on a sub-path. This
+                                 option is analogous to --web.route-prefix of
+                                 Prometheus.
 
 ```
 
