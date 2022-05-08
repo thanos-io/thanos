@@ -865,3 +865,32 @@ func ensureGETStatusCode(t testing.TB, code int, url string) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, code, r.StatusCode)
 }
+
+func TestCompactRoutePrefix(t *testing.T) {
+	name := "e2e_test_compact_route_prefix"
+	e, err := e2e.NewDockerEnvironment(name)
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+	routePrefix := "test"
+
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
+
+	const bucket = "compact_test"
+	m, err := e2ethanos.NewMinio(e, "minio", bucket)
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	svcConfig := client.BucketConfig{
+		Type:   client.S3,
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
+	}
+
+	c, err := e2ethanos.NewCompactor(e, "expect-to-halt", svcConfig, nil, "--web.external-prefix=test", "--web.route-prefix=test")
+	testutil.Ok(t, err)
+
+	// Not using e2e.StartAndWaitReady(c) because the health check will fail since its path is not prefixed.
+	testutil.Ok(t, c.Start())
+
+	checkNetworkRequests(t, "http://"+c.Endpoint("http")+"/"+routePrefix+"/metrics")
+}

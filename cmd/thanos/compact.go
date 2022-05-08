@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 	"strconv"
@@ -179,6 +180,9 @@ func runCompact(
 		httpProbe,
 		prober.NewInstrumentation(component, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
+
+	// RoutePrefix must always start with '/'.
+	conf.webConf.routePrefix = "/" + strings.Trim(conf.webConf.routePrefix, "/")
 
 	srv := httpserver.New(logger, reg, component, conf.webConf.routePrefix, httpProbe,
 		httpserver.WithListen(conf.http.bindAddress),
@@ -508,6 +512,14 @@ func runCompact(
 
 	if conf.wait {
 		r := route.New()
+
+		// Redirect from / to /webRoutePrefix.
+		if conf.webConf.routePrefix != "/" {
+			r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, conf.webConf.routePrefix, http.StatusFound)
+			})
+			r = r.WithPrefix(conf.webConf.routePrefix)
+		}
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
