@@ -571,15 +571,15 @@ func NewIngestingReceiver(e e2e.Environment, name string) (e2e.InstrumentedRunna
 	return receiver, nil
 }
 
-func NewTSDBRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config) (e2e.InstrumentedRunnable, error) {
-	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, nil)
+func NewTSDBRuler(e e2e.Environment, name, ruleSubDir, routePrefix string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config) (e2e.InstrumentedRunnable, error) {
+	return newRuler(e, name, ruleSubDir, routePrefix, amCfg, queryCfg, nil)
 }
 
 func NewStatelessRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) (e2e.InstrumentedRunnable, error) {
-	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, remoteWriteCfg)
+	return newRuler(e, name, ruleSubDir, "", amCfg, queryCfg, remoteWriteCfg)
 }
 
-func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) (e2e.InstrumentedRunnable, error) {
+func newRuler(e e2e.Environment, name, ruleSubDir, routePrefix string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) (e2e.InstrumentedRunnable, error) {
 	dir := filepath.Join(e.SharedDir(), "data", "rule", name)
 	container := filepath.Join(ContainerSharedDir, "data", "rule", name)
 
@@ -615,6 +615,12 @@ func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Alertman
 		"--query.sd-dns-interval":         "1s",
 		"--resend-delay":                  "5s",
 	}
+	// Set --web.route-prefix and --web.external-prefix to the same value in order for requests to route correctly without a reverse proxy.
+	if routePrefix != "" {
+		ruleArgs["--web.route-prefix"] = routePrefix
+		ruleArgs["--web.external-prefix"] = routePrefix
+	}
+
 	if remoteWriteCfg != nil {
 		rwCfgBytes, err := yaml.Marshal(struct {
 			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
@@ -625,11 +631,13 @@ func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Alertman
 		ruleArgs["--remote-write.config"] = string(rwCfgBytes)
 	}
 
+	routePrefix = "/" + routePrefix
+
 	ruler := NewService(e,
 		fmt.Sprintf("rule-%v", name),
 		DefaultImage(),
 		e2e.NewCommand("rule", e2e.BuildArgs(ruleArgs)...),
-		e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		e2e.NewHTTPReadinessProbe("http", singleJoiningSlash(routePrefix, "/-/ready"), 200, 200),
 		8080,
 		9091,
 	)

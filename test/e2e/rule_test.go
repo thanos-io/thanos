@@ -245,7 +245,7 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(am1, am2))
 
-	r, err := e2ethanos.NewTSDBRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
+	r, err := e2ethanos.NewTSDBRuler(e, "1", rulesSubDir, "", []alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				FileSDConfigs: []httpconfig.FileSDConfig{
@@ -564,4 +564,31 @@ func TestRulePartialResponse(t *testing.T) {
 	t.Skip("TODO: Allow HTTP ports from binaries running on host to be accessible.")
 
 	// TODO: Implement with failing store.
+}
+
+// TestRuleRoutePrefix tests that setting the "--web.route-prefix" flag properly adjusts expected URL paths.
+func TestRuleRoutePrefix(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e_test_rule_route_prefix")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	routePrefix := "test"
+
+	r, err := e2ethanos.NewTSDBRuler(e, "1", "/tmp", routePrefix, []alert.AlertmanagerConfig{}, []httpconfig.Config{
+		{
+			EndpointsConfig: httpconfig.EndpointsConfig{
+				// We don't need a querier, so this is fake.
+				StaticAddresses: []string{"127.0.0.1:10901"},
+				Scheme:          "http",
+			},
+		},
+	})
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	checkNetworkRequests(t, "http://"+r.Endpoint("http")+"/"+routePrefix+"/alerts")
+	checkNetworkRequests(t, "http://"+r.Endpoint("http")+"/"+routePrefix+"/metrics")
+	checkNetworkRequests(t, "http://"+r.Endpoint("http")+"/"+routePrefix+"/debug/pprof/cmdline")
 }
