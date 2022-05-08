@@ -533,3 +533,36 @@ metafile_content_ttl: 0s`
 		testutil.Ok(t, store2.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_cache_groupcache_peer_loads_total`}))
 	})
 }
+
+// TestStoreGatewayRoutePrefix tests that setting the "--web.route-prefix" flag properly adjusts expected URL paths.
+func TestStoreGatewayRoutePrefix(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e_test_store_gateway_route_prefix")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	routePrefix := "test"
+
+	const bucket = "store_gateway_test"
+	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	s, err := e2ethanos.NewStoreGW(
+		e,
+		"1",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
+		},
+		"",
+		[]string{"--web.route-prefix=test", "--web.external-prefix=test"},
+	)
+	testutil.Ok(t, err)
+	testutil.Ok(t, s.Start())
+
+	checkNetworkRequests(t, "http://"+s.Endpoint("http")+"/"+routePrefix+"/loaded")
+	checkNetworkRequests(t, "http://"+s.Endpoint("http")+"/"+routePrefix+"/metrics")
+	checkNetworkRequests(t, "http://"+s.Endpoint("http")+"/"+routePrefix+"/debug/pprof/cmdline")
+}

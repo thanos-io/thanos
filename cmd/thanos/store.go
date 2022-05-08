@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/alecthomas/units"
@@ -217,6 +218,9 @@ func runStore(
 		prober.NewInstrumentation(conf.component, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
+	// RoutePrefix must always start with '/'.
+	conf.webConfig.routePrefix = "/" + strings.Trim(conf.webConfig.routePrefix, "/")
+
 	srv := httpserver.New(logger, reg, conf.component, conf.webConfig.routePrefix, httpProbe,
 		httpserver.WithListen(conf.httpConfig.bindAddress),
 		httpserver.WithGracePeriod(time.Duration(conf.httpConfig.gracePeriod)),
@@ -251,6 +255,10 @@ func runStore(
 	}
 
 	r := route.New()
+
+	if conf.webConfig.routePrefix != "/" {
+		r = r.WithPrefix(conf.webConfig.routePrefix)
+	}
 
 	if len(cachingBucketConfigYaml) > 0 {
 		bkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg, r)
