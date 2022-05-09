@@ -43,8 +43,7 @@ func TestStoreGateway(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store_gateway_test"
-	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
-	testutil.Ok(t, err)
+	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	memcached := e2ethanos.NewMemcached(e, "1")
@@ -58,12 +57,12 @@ metafile_exists_ttl: 0s
 metafile_doesnt_exist_ttl: 0s
 metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
-	s1, err := e2ethanos.NewStoreGW(
+	s1 := e2ethanos.NewStoreGW(
 		e,
 		"1",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 		},
 		memcachedConfig,
 		nil,
@@ -78,8 +77,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	// Ensure bucket UI.
 	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.Endpoint("http"), "loaded"))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).WithEnabledFeatures([]string{"promql-negative-offset", "promql-at-modifier"}).Build()
-	testutil.Ok(t, err)
+	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).WithEnabledFeatures([]string{"promql-negative-offset", "promql-at-modifier"}).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	dir := filepath.Join(e.SharedDir(), "tmp")
@@ -284,8 +282,7 @@ func TestStoreGatewayMemcachedCache(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store_gateway_memcached_cache_test"
-	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
-	testutil.Ok(t, err)
+	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	memcached := e2ethanos.NewMemcached(e, "1")
@@ -296,12 +293,12 @@ config:
   addresses: [%s]
 blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
-	s1, err := e2ethanos.NewStoreGW(
+	s1 := e2ethanos.NewStoreGW(
 		e,
 		"1",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 		},
 		memcachedConfig,
 		nil,
@@ -309,8 +306,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Build()
-	testutil.Ok(t, err)
+	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	dir := filepath.Join(e.SharedDir(), "tmp")
@@ -389,8 +385,7 @@ func TestStoreGatewayGroupCache(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store_gateway_groupcache_test"
-	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
-	testutil.Ok(t, err)
+	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	groupcacheConfig := `type: GROUPCACHE
@@ -407,51 +402,43 @@ metafile_exists_ttl: 0s
 metafile_doesnt_exist_ttl: 0s
 metafile_content_ttl: 0s`
 
-	store1, err := e2ethanos.NewStoreGW(
+	store1 := e2ethanos.NewStoreGW(
 		e,
 		"1",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 1),
 		nil,
 	)
-	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(store1))
-
-	store2, err := e2ethanos.NewStoreGW(
+	store2 := e2ethanos.NewStoreGW(
 		e,
 		"2",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 2),
 		nil,
 	)
-	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(store2))
-
-	store3, err := e2ethanos.NewStoreGW(
+	store3 := e2ethanos.NewStoreGW(
 		e,
 		"3",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 3),
 		nil,
 	)
+	testutil.Ok(t, e2e.StartAndWaitReady(store1, store2, store3))
 
-	testutil.Ok(t, err)
-	testutil.Ok(t, e2e.StartAndWaitReady(store3))
-
-	q, err := e2ethanos.NewQuerierBuilder(e, "1",
+	q := e2ethanos.NewQuerierBuilder(e, "1",
 		store1.InternalEndpoint("grpc"),
 		store2.InternalEndpoint("grpc"),
 		store3.InternalEndpoint("grpc"),
-	).Build()
+	).Init()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 

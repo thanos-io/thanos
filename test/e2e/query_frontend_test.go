@@ -32,12 +32,10 @@ func TestQueryFrontend(t *testing.T) {
 
 	now := time.Now()
 
-	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	testutil.Ok(t, err)
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).Build()
-	testutil.Ok(t, err)
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
@@ -48,8 +46,7 @@ func TestQueryFrontend(t *testing.T) {
 		},
 	}
 
-	queryFrontend, err := e2ethanos.NewQueryFrontend(e, "1", "http://"+q.InternalEndpoint("http"), inMemoryCacheConfig)
-	testutil.Ok(t, err)
+	queryFrontend := e2ethanos.NewQueryFrontend(e, "1", "http://"+q.InternalEndpoint("http"), inMemoryCacheConfig)
 	testutil.Ok(t, e2e.StartAndWaitReady(queryFrontend))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -402,12 +399,10 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 
 	now := time.Now()
 
-	prom, sidecar, err := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	testutil.Ok(t, err)
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).Build()
-	testutil.Ok(t, err)
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	memcached := e2ethanos.NewMemcached(e, "1")
@@ -429,8 +424,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		},
 	}
 
-	queryFrontend, err := e2ethanos.NewQueryFrontend(e, "1", "http://"+q.InternalEndpoint("http"), memCachedConfig)
-	testutil.Ok(t, err)
+	queryFrontend := e2ethanos.NewQueryFrontend(e, "1", "http://"+q.InternalEndpoint("http"), memCachedConfig)
 	testutil.Ok(t, e2e.StartAndWaitReady(queryFrontend))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

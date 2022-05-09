@@ -35,43 +35,41 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
+	qBuilder := e2ethanos.NewQuerierBuilder(e, "query")
+
+	// Use querier work dir for shared resources (easiest to obtain).
 	promRulesSubDir := filepath.Join("rules")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), promRulesSubDir), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Future().Dir(), promRulesSubDir), os.ModePerm))
 	// Create the abort_on_partial_response alert for Prometheus.
 	// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.
-	createRuleFile(t, filepath.Join(e.SharedDir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
+	createRuleFile(t, filepath.Join(qBuilder.Future().Dir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
 
 	thanosRulesSubDir := filepath.Join("thanos-rules")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), thanosRulesSubDir), os.ModePerm))
-	createRuleFiles(t, filepath.Join(e.SharedDir(), thanosRulesSubDir))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Future().Dir(), thanosRulesSubDir), os.ModePerm))
+	createRuleFiles(t, filepath.Join(qBuilder.Future().Dir(), thanosRulesSubDir))
 	// We create a rule group with limit.
-	createRuleFile(t, filepath.Join(e.SharedDir(), thanosRulesSubDir, "rules-with-limit.yaml"), testAlertRuleWithLimit)
+	createRuleFile(t, filepath.Join(qBuilder.Future().Dir(), thanosRulesSubDir, "rules-with-limit.yaml"), testAlertRuleWithLimit)
 	// 2x Prometheus.
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
-		e2ethanos.DefaultPromConfig("ha", 0, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 0, "", filepath.Join(qBuilder.Future().InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
-	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
-		e2ethanos.DefaultPromConfig("ha", 1, "", filepath.Join(e2ethanos.ContainerSharedDir, promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 1, "", filepath.Join(qBuilder.Future().InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
-	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
-
-	qBuilder := e2ethanos.NewQuerierBuilder(e, "query")
-	qUninit := qBuilder.BuildUninitiated()
 
 	queryCfg := []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
-				StaticAddresses: []string{qUninit.Future().InternalEndpoint("http")},
+				StaticAddresses: []string{qBuilder.Future().InternalEndpoint("http")},
 				Scheme:          "http",
 			},
 		},
@@ -83,8 +81,10 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(r1, r2))
 
 	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")}
-	q, err := qBuilder.WithRuleAddresses(stores...).Initiate(qUninit, stores...)
-	testutil.Ok(t, err)
+	q := qBuilder.
+		WithStoreAddresses(stores...).
+		WithRuleAddresses(stores...).
+		Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)

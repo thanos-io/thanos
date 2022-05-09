@@ -344,8 +344,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 
 	const bucket = "compact_test"
-	m, err := e2ethanos.NewMinio(e, "minio", bucket)
-	testutil.Ok(t, err)
+	m := e2ethanos.NewMinio(e, "minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger,
@@ -452,19 +451,17 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 
 	svcConfig := client.BucketConfig{
 		Type:   client.S3,
-		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 	}
 
 	// Crank down the deletion mark delay since deduplication can miss blocks in the presence of replica labels it doesn't know about.
-	str, err := e2ethanos.NewStoreGW(e, "1", svcConfig, "", []string{"--ignore-deletion-marks-delay=2s"})
-	testutil.Ok(t, err)
+	str := e2ethanos.NewStoreGW(e, "1", svcConfig, "", []string{"--ignore-deletion-marks-delay=2s"})
 	testutil.Ok(t, e2e.StartAndWaitReady(str))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8)), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", str.InternalEndpoint("grpc")).Build()
-	testutil.Ok(t, err)
+	q := e2ethanos.NewQuerierBuilder(e, "1", str.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
@@ -626,8 +623,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, f.Close())
 
-		c, err := e2ethanos.NewCompactor(e, "expect-to-halt", svcConfig, nil)
-		testutil.Ok(t, err)
+		c := e2ethanos.NewCompactor(e, "expect-to-halt", svcConfig, nil)
 		testutil.Ok(t, e2e.StartAndWaitReady(c))
 
 		// Expect compactor halted and for one cleanup iteration to happen.
@@ -690,8 +686,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		}
 
 		// We expect 2x 4-block compaction, 2-block vertical compaction, 2x 3-block compaction.
-		c, err := e2ethanos.NewCompactor(e, "working", svcConfig, nil, extArgs...)
-		testutil.Ok(t, err)
+		c := e2ethanos.NewCompactor(e, "working", svcConfig, nil, extArgs...)
 		testutil.Ok(t, e2e.StartAndWaitReady(c))
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
@@ -760,8 +755,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		if penaltyDedup {
 			extArgs = append(extArgs, "--deduplication.func=penalty")
 		}
-		c, err := e2ethanos.NewCompactor(e, "working-dedup", svcConfig, nil, extArgs...)
-		testutil.Ok(t, err)
+		c := e2ethanos.NewCompactor(e, "working-dedup", svcConfig, nil, extArgs...)
 		testutil.Ok(t, e2e.StartAndWaitReady(c))
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many

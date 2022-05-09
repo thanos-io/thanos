@@ -32,28 +32,26 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	// 2x Prometheus.
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
 		e2ethanos.DefaultPromConfig("ha", 0, "", "", e2ethanos.LocalPrometheusTarget, "localhost:80"),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
-	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
 		e2ethanos.DefaultPromConfig("ha", 1, "", "", e2ethanos.LocalPrometheusTarget, "localhost:80"),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
-	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")}
-	q, err := e2ethanos.NewQuerierBuilder(e, "query", stores...).
+	q := e2ethanos.NewQuerierBuilder(e, "query", stores...).
 		WithTargetAddresses(stores...).
-		Build()
+		Init()
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 

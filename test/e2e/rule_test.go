@@ -228,29 +228,24 @@ func TestRule(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	t.Cleanup(cancel)
 
-	// Prepare work dirs.
-	rulesSubDir := filepath.Join("rules")
-	rulesPath := filepath.Join(e.SharedDir(), rulesSubDir)
-	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
-	createRuleFiles(t, rulesPath)
-	amTargetsSubDir := filepath.Join("rules_am_targets")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), amTargetsSubDir), os.ModePerm))
-	queryTargetsSubDir := filepath.Join("rules_query_targets")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), queryTargetsSubDir), os.ModePerm))
-
-	am1, err := e2ethanos.NewAlertmanager(e, "1")
-	testutil.Ok(t, err)
-	am2, err := e2ethanos.NewAlertmanager(e, "2")
-	testutil.Ok(t, err)
+	am1 := e2ethanos.NewAlertmanager(e, "1")
+	am2 := e2ethanos.NewAlertmanager(e, "2")
 	testutil.Ok(t, e2e.StartAndWaitReady(am1, am2))
 
+	// Use am1 work dir for shared resources.
+	amTargetsSubDir := filepath.Join("rules_am_targets")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(am1.Dir(), amTargetsSubDir), os.ModePerm))
+	queryTargetsSubDir := filepath.Join("rules_query_targets")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(am1.Dir(), queryTargetsSubDir), os.ModePerm))
+
+	rulesSubDir := filepath.Join("rules")
 	r := e2ethanos.NewTSDBRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				FileSDConfigs: []httpconfig.FileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically am1.
-						Files:           []string{filepath.Join(e2ethanos.ContainerSharedDir, amTargetsSubDir, "*.yaml")},
+						Files:           []string{filepath.Join(am1.InternalDir(), amTargetsSubDir, "*.yaml")},
 						RefreshInterval: model.Duration(time.Second),
 					},
 				},
@@ -269,7 +264,7 @@ func TestRule(t *testing.T) {
 				FileSDConfigs: []httpconfig.FileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically q.
-						Files:           []string{filepath.Join(e2ethanos.ContainerSharedDir, queryTargetsSubDir, "*.yaml")},
+						Files:           []string{filepath.Join(am1.InternalDir(), queryTargetsSubDir, "*.yaml")},
 						RefreshInterval: model.Duration(time.Second),
 					},
 				},
@@ -279,8 +274,11 @@ func TestRule(t *testing.T) {
 	})
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", r.InternalEndpoint("grpc")).Build()
-	testutil.Ok(t, err)
+	rulesPath := filepath.Join(r.Dir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+	createRuleFiles(t, rulesPath)
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", r.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	t.Run("no query configured", func(t *testing.T) {
@@ -481,22 +479,18 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 		createRuleFile(t, filepath.Join(rulesPath, fmt.Sprintf("rules-%d.yaml", i)), rule)
 	}
 
-	am, err := e2ethanos.NewAlertmanager(e, "1")
-	testutil.Ok(t, err)
+	am := e2ethanos.NewAlertmanager(e, "1")
 	testutil.Ok(t, e2e.StartAndWaitReady(am))
 
-	receiver, err := e2ethanos.NewIngestingReceiver(e, "1")
-	testutil.Ok(t, err)
+	receiver := e2ethanos.NewIngestingReceiver(e, "1")
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 	rwURL := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")))
 
-	receiver2, err := e2ethanos.NewIngestingReceiver(e, "2")
-	testutil.Ok(t, err)
+	receiver2 := e2ethanos.NewIngestingReceiver(e, "2")
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver2))
 	rwURL2 := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver2.InternalEndpoint("remote-write")))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).Build()
-	testutil.Ok(t, err)
+	q := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 	r := e2ethanos.NewStatelessRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
 		{

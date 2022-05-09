@@ -23,7 +23,7 @@ require (
 	github.com/chromedp/chromedp v0.5.3
 	github.com/cortexproject/cortex v1.10.1-0.20211124141505-4e9fc3a2b5ab
 	github.com/davecgh/go-spew v1.1.1
-	github.com/efficientgo/e2e v0.12.1-0.20220429160159-c0641fd0b1e6
+	github.com/efficientgo/e2e v0.12.1
 	github.com/efficientgo/tools/core v0.0.0-20210829154005-c7bad8450208
 	github.com/efficientgo/tools/extkingpin v0.0.0-20210609125236-d73259166f20
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
