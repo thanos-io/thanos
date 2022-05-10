@@ -640,31 +640,42 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 	}))
 }
 
-func NewCompactor(e e2e.Environment, name string, bucketConfig client.BucketConfig, relabelConfig []relabel.Config, extArgs ...string) e2e.InstrumentedRunnable {
+type CompactorBuilder struct {
+	e2e.Linkable
+	f e2e.FutureInstrumentedRunnable
+}
+
+func NewCompactorBuilder(e e2e.Environment, name string) *CompactorBuilder {
 	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("compact-%s", name)).
 		WithPorts(map[string]int{"http": 8080}, "http").
 		Future()
+	return &CompactorBuilder{
+		Linkable: f,
+		f:        f,
+	}
+}
 
-	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create compact dir"))
+func (c *CompactorBuilder) Init(bucketConfig client.BucketConfig, relabelConfig []relabel.Config, extArgs ...string) e2e.InstrumentedRunnable {
+	if err := os.MkdirAll(c.Dir(), 0750); err != nil {
+		return e2e.NewErrInstrumentedRunnable(c.Name(), errors.Wrap(err, "create compact dir"))
 	}
 
 	bktConfigBytes, err := yaml.Marshal(bucketConfig)
 	if err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate compact config file: %v", bucketConfig))
+		return e2e.NewErrInstrumentedRunnable(c.Name(), errors.Wrapf(err, "generate compact config file: %v", bucketConfig))
 	}
 
 	relabelConfigBytes, err := yaml.Marshal(relabelConfig)
 	if err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate compact relabel file: %v", relabelConfig))
+		return e2e.NewErrInstrumentedRunnable(c.Name(), errors.Wrapf(err, "generate compact relabel file: %v", relabelConfig))
 	}
 
-	return f.Init(wrapWithDefaults(e2e.StartOptions{
+	return c.f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image: DefaultImage(),
 		Command: e2e.NewCommand("compact", append(e2e.BuildArgs(map[string]string{
-			"--debug.name":               fmt.Sprintf("compact-%s", name),
+			"--debug.name":               c.Name(),
 			"--log.level":                infoLogLevel,
-			"--data-dir":                 f.InternalDir(),
+			"--data-dir":                 c.InternalDir(),
 			"--objstore.config":          string(bktConfigBytes),
 			"--http-address":             ":8080",
 			"--block-sync-concurrency":   "50",

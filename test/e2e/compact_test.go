@@ -449,13 +449,13 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 	}
 
-	svcConfig := client.BucketConfig{
+	bktConfig := client.BucketConfig{
 		Type:   client.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 	}
 
 	// Crank down the deletion mark delay since deduplication can miss blocks in the presence of replica labels it doesn't know about.
-	str := e2ethanos.NewStoreGW(e, "1", svcConfig, "", []string{"--ignore-deletion-marks-delay=2s"})
+	str := e2ethanos.NewStoreGW(e, "1", bktConfig, "", []string{"--ignore-deletion-marks-delay=2s"})
 	testutil.Ok(t, e2e.StartAndWaitReady(str))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8)), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
@@ -606,27 +606,27 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	// uploaded blocks and blocks with deletion marks. We also check that Thanos Compactor
 	// deletes directories inside of a compaction group that do not belong there.
 	{
+		cFuture := e2ethanos.NewCompactorBuilder(e, "expect-to-halt")
+
 		// Precreate a directory. It should be deleted.
 		// In a hypothetical scenario, the directory could be a left-over from
 		// a compaction that had crashed.
-		p := filepath.Join(e.SharedDir(), "data", "compact", "expect-to-halt", "compact")
-
 		testutil.Assert(t, len(blocksWithHashes) > 0)
 
 		m, err := block.DownloadMeta(ctx, logger, bkt, blocksWithHashes[0])
 		testutil.Ok(t, err)
 
-		randBlockDir := filepath.Join(p, m.Thanos.GroupKey(), "ITISAVERYRANDULIDFORTESTS0")
+		randBlockDir := filepath.Join(cFuture.Dir(), "compact", m.Thanos.GroupKey(), "ITISAVERYRANDULIDFORTESTS0")
 		testutil.Ok(t, os.MkdirAll(randBlockDir, os.ModePerm))
 
 		f, err := os.Create(filepath.Join(randBlockDir, "index"))
 		testutil.Ok(t, err)
 		testutil.Ok(t, f.Close())
 
-		c := e2ethanos.NewCompactor(e, "expect-to-halt", svcConfig, nil)
+		c := cFuture.Init(bktConfig, nil)
 		testutil.Ok(t, e2e.StartAndWaitReady(c))
 
-		// Expect compactor halted and for one cleanup iteration to happen.
+		// Expect compactor halted and one cleanup iteration to happen.
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_halted"))
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(1), "thanos_compact_block_cleanup_loops_total"))
 
@@ -635,10 +635,9 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_modified"))
 
 		// The compact directory is still there.
-		dataDir := filepath.Join(e.SharedDir(), "data", "compact", "expect-to-halt")
-		empty, err := isEmptyDir(dataDir)
+		empty, err := isEmptyDir(c.Dir())
 		testutil.Ok(t, err)
-		testutil.Equals(t, false, empty, "directory %e should not be empty", dataDir)
+		testutil.Equals(t, false, empty, "directory %e should not be empty", c.Dir())
 
 		// We expect no ops.
 		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_iterations_total"))
@@ -669,15 +668,16 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	// touch files it does not need to.
 	// Dedup enabled; compactor should work as expected.
 	{
-		// Predownload block dirs with hashes. We should not try downloading them again.
-		p := filepath.Join(e.SharedDir(), "data", "compact", "working")
 
+		cFuture := e2ethanos.NewCompactorBuilder(e, "working")
+
+		// Predownload block dirs with hashes. We should not try downloading them again.
 		for _, id := range blocksWithHashes {
 			m, err := block.DownloadMeta(ctx, logger, bkt, id)
 			testutil.Ok(t, err)
 
 			delete(m.Thanos.Labels, "replica")
-			testutil.Ok(t, block.Download(ctx, logger, bkt, id, filepath.Join(p, "compact", m.Thanos.GroupKey(), id.String())))
+			testutil.Ok(t, block.Download(ctx, logger, bkt, id, filepath.Join(cFuture.Dir(), "compact", m.Thanos.GroupKey(), id.String())))
 		}
 
 		extArgs := []string{"--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica"}
@@ -686,7 +686,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		}
 
 		// We expect 2x 4-block compaction, 2-block vertical compaction, 2x 3-block compaction.
-		c := e2ethanos.NewCompactor(e, "working", svcConfig, nil, extArgs...)
+		c := cFuture.Init(bktConfig, nil, extArgs...)
 		testutil.Ok(t, e2e.StartAndWaitReady(c))
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
@@ -755,7 +755,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		if penaltyDedup {
 			extArgs = append(extArgs, "--deduplication.func=penalty")
 		}
-		c := e2ethanos.NewCompactor(e, "working-dedup", svcConfig, nil, extArgs...)
+		c := e2ethanos.NewCompactorBuilder(e, "working-dedup").Init(bktConfig, nil, extArgs...)
 		testutil.Ok(t, e2e.StartAndWaitReady(c))
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
