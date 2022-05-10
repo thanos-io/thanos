@@ -40,11 +40,7 @@ const (
 
 type BucketConfig struct {
 	Type   ObjProvider `yaml:"type"`
-	Config Config      `yaml:"config"`
-}
-
-type Config struct {
-	Prefix string `yaml:"prefix" default:""`
+	Config interface{} `yaml:"config"`
 }
 
 // NewBucket initializes and returns new object storage clients.
@@ -86,10 +82,11 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
 	}
 
+	prefix := PrefixFromConfig(string(confContentYaml))
 	var prefixedBucket objstore.Bucket
-	if validPrefix(bucketConf.Config.Prefix) {
-		prefixedBucket = objstore.NewPrefixedBucket(bucket, bucketConf.Config.Prefix)
-		level.Debug(logger).Log("msg", "using prefix on bucket access", "prefix", bucketConf.Config.Prefix)
+	if validPrefix(prefix) {
+		prefixedBucket = objstore.NewPrefixedBucket(bucket, prefix)
+		level.Debug(logger).Log("msg", "using prefix on bucket access", "prefix", prefix)
 	} else {
 		prefixedBucket = bucket
 	}
@@ -100,4 +97,19 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 func validPrefix(prefix string) bool {
 	prefix = strings.Replace(prefix, "/", "", -1)
 	return len(prefix) > 0
+}
+
+func PrefixFromConfig(confYaml string) string {
+	bucketConf := &BucketConfig{}
+	err := yaml.UnmarshalStrict([]byte(confYaml), &bucketConf)
+	if err != nil {
+		return ""
+	}
+
+	prefix, ok := bucketConf.Config.(map[interface{}]interface{})["prefix"]
+	if !ok {
+		return ""
+	}
+
+	return prefix.(string)
 }
