@@ -5,13 +5,21 @@ package store
 
 import (
 	"container/heap"
+	"context"
 	"crypto/md5"
+	"io"
 	"sort"
+	"sync"
+	"time"
 
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // dedupResponseHeap is a wrapper around ProxyResponseHeap
@@ -31,6 +39,10 @@ func NewDedupResponseHeap(h *ProxyResponseHeap) *dedupResponseHeap {
 		h:            h,
 		previousNext: h.Next(),
 	}
+}
+
+func (d *dedupResponseHeap) Err() error {
+	return d.h.Error()
 }
 
 func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
@@ -68,7 +80,6 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 	}
 
 	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
-
 	for _, chk := range chunkDedupMap {
 		finalChunks = append(finalChunks, *chk)
 	}
@@ -203,10 +214,10 @@ func (h *ProxyResponseHeap) Min() *ProxyResponseHeapNode {
 }
 
 type ProxyResponseHeapNode struct {
-	rs *respSet
+	rs *lazyRespSet
 }
 
-func NewProxyResponseHeap(seriesSets ...*respSet) *ProxyResponseHeap {
+func NewProxyResponseHeap(seriesSets ...*lazyRespSet) *ProxyResponseHeap {
 	ret := make(ProxyResponseHeap, 0, len(seriesSets))
 
 	for _, ss := range seriesSets {
@@ -237,28 +248,206 @@ func (h *ProxyResponseHeap) At() *storepb.SeriesResponse {
 	return atResp
 }
 
-func (h *ProxyResponseHeap) Err() error {
-	return nil
+func (h *ProxyResponseHeap) Error() error {
+	if len(*h) == 0 || h.Min() == nil {
+		return nil
+	}
+	return h.Min().rs.Err()
 }
 
-type respSet struct {
-	responses []*storepb.SeriesResponse
-	i         int
+// lazyRespSet is a lazy storepb.SeriesSet that buffers
+// everything as fast as possible while at the same it permits
+// reading response-by-response. It blocks if there is no data
+// in Next().
+type lazyRespSet struct {
+	st Client
+	cl storepb.Store_SeriesClient
+
+	closeSeries  context.CancelFunc
+	span         opentracing.Span
+	ctx          context.Context
+	frameTimeout time.Duration
+
+	dataOrEndEvent       *sync.Cond
+	bufferedResponses    []*storepb.SeriesResponse
+	bufferedResponsesMtx *sync.Mutex
+	readThrough          int
+	lastResp             *storepb.SeriesResponse
+
+	errs       errutil.MultiError
+	errsMtx    sync.Mutex
+	noMoreData bool
 }
 
-func (ss *respSet) Next() bool {
-	ss.i++
-	return ss.i < len(ss.responses)
+func (l *lazyRespSet) Err() error {
+	l.errsMtx.Lock()
+	defer l.errsMtx.Unlock()
+	return l.errs.Err()
 }
 
-func (ss *respSet) Err() error {
-	return nil
+// Next either blocks until more data is available or reads
+// the next response.
+func (l *lazyRespSet) Next() bool {
+	l.bufferedResponsesMtx.Lock()
+	defer l.bufferedResponsesMtx.Unlock()
+
+	if l.noMoreData && len(l.bufferedResponses) == 0 {
+		l.lastResp = nil
+
+		return false
+	}
+
+	for len(l.bufferedResponses) == 0 {
+		l.dataOrEndEvent.Wait()
+		if l.noMoreData && len(l.bufferedResponses) == 0 {
+			break
+		}
+	}
+
+	if len(l.bufferedResponses) > 0 {
+		l.lastResp = l.bufferedResponses[0]
+		l.bufferedResponses = l.bufferedResponses[1:]
+		l.readThrough++
+		return true
+	}
+
+	l.lastResp = nil
+	return false
 }
 
-func (ss *respSet) Warnings() storage.Warnings {
-	return nil
+func (l *lazyRespSet) At() *storepb.SeriesResponse {
+	return l.lastResp
 }
 
-func (ss *respSet) At() *storepb.SeriesResponse {
-	return ss.responses[ss.i]
+func newLazyRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest, frameTimeout time.Duration) *lazyRespSet {
+	storeID := labelpb.PromLabelSetsToString(st.LabelSets())
+	if storeID == "" {
+		storeID = "Store Gateway"
+	}
+
+	seriesCtx, closeSeries := context.WithCancel(ctx)
+	seriesCtx = grpc_opentracing.ClientAddContextTags(seriesCtx, opentracing.Tags{
+		"target": st.Addr(),
+	})
+
+	span, seriesCtx := tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
+		"store.id":   storeID,
+		"store.addr": st.Addr(),
+	})
+
+	errs := errutil.MultiError{}
+	cl, err := st.Series(seriesCtx, req)
+	if err != nil {
+		errs.Add(err)
+		span.SetTag("err", err.Error())
+		span.Finish()
+	}
+
+	bufferedResponses := []*storepb.SeriesResponse{}
+	bufferedResponsesMtx := &sync.Mutex{}
+	dataAvailable := sync.NewCond(bufferedResponsesMtx)
+
+	respSet := &lazyRespSet{
+		frameTimeout:         frameTimeout,
+		cl:                   cl,
+		st:                   st,
+		closeSeries:          closeSeries,
+		span:                 span,
+		ctx:                  seriesCtx,
+		errs:                 errs,
+		dataOrEndEvent:       dataAvailable,
+		bufferedResponsesMtx: bufferedResponsesMtx,
+		bufferedResponses:    bufferedResponses,
+	}
+
+	if errs.Err() != nil {
+		respSet.noMoreData = true
+		return respSet
+	}
+
+	// Start a goroutine and immediately buffer everything.
+	go func(st Client, l *lazyRespSet) {
+		handleRecvResponse := func() bool {
+			frameTimeoutCtx, cancel := frameCtx(l.ctx, frameTimeout)
+			defer cancel()
+
+			select {
+			case <-l.ctx.Done():
+				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", st.String())
+				l.errsMtx.Lock()
+				l.errs.Add(err)
+				l.errsMtx.Unlock()
+				l.span.SetTag("err", err.Error())
+				l.span.Finish()
+
+				l.bufferedResponsesMtx.Lock()
+				l.noMoreData = true
+				l.dataOrEndEvent.Signal()
+				l.bufferedResponsesMtx.Unlock()
+				return false
+			case <-frameTimeoutCtx.Done():
+				err := errors.Wrapf(frameTimeoutCtx.Err(), "failed to receive any data in %v from %s", frameTimeout, st.String())
+				l.errsMtx.Lock()
+				l.errs.Add(err)
+				l.errsMtx.Unlock()
+				l.span.SetTag("err", err.Error())
+				l.span.Finish()
+
+				l.bufferedResponsesMtx.Lock()
+				l.noMoreData = true
+				l.dataOrEndEvent.Signal()
+				l.bufferedResponsesMtx.Unlock()
+				return false
+			default:
+				resp, err := cl.Recv()
+				if err == io.EOF {
+					l.span.Finish()
+
+					l.bufferedResponsesMtx.Lock()
+					l.noMoreData = true
+					l.dataOrEndEvent.Signal()
+					l.bufferedResponsesMtx.Unlock()
+					return false
+				}
+
+				if err != nil {
+					err := errors.Wrapf(err, "receive series from %s", st.String())
+					l.errsMtx.Lock()
+					l.errs.Add(err)
+					l.errsMtx.Unlock()
+
+					l.span.SetTag("err", err.Error())
+					l.span.Finish()
+
+					l.bufferedResponsesMtx.Lock()
+					l.noMoreData = true
+					l.dataOrEndEvent.Signal()
+					l.bufferedResponsesMtx.Unlock()
+					return false
+				}
+
+				l.bufferedResponsesMtx.Lock()
+				l.bufferedResponses = append(l.bufferedResponses, resp)
+				l.dataOrEndEvent.Signal()
+				l.bufferedResponsesMtx.Unlock()
+				return true
+			}
+		}
+		for {
+			if !handleRecvResponse() {
+				return
+			}
+		}
+	}(st, respSet)
+
+	return respSet
+}
+
+func (l *lazyRespSet) Close() {
+	l.bufferedResponsesMtx.Lock()
+	defer l.bufferedResponsesMtx.Unlock()
+
+	l.closeSeries()
+	l.noMoreData = true
+	l.dataOrEndEvent.Signal()
 }

@@ -6,7 +6,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"strings"
 	"sync"
@@ -24,14 +23,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
-
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
-	"github.com/opentracing/opentracing-go"
 )
 
 type ctxKey int
@@ -238,27 +233,20 @@ func (s cancelableRespSender) send(r *storepb.SeriesResponse) {
 	}
 }
 
-type recvResponse struct {
-	r   *storepb.SeriesResponse
-	err error
-}
-
-func frameCtx(responseTimeout time.Duration) (context.Context, context.CancelFunc) {
-	frameTimeoutCtx := context.Background()
-	var cancel context.CancelFunc
+func frameCtx(ctx context.Context, responseTimeout time.Duration) (context.Context, context.CancelFunc) {
+	frameTimeoutCtx := ctx
 	if responseTimeout != 0 {
-		frameTimeoutCtx, cancel = context.WithTimeout(frameTimeoutCtx, responseTimeout)
-		return frameTimeoutCtx, cancel
+		return context.WithTimeout(frameTimeoutCtx, responseTimeout)
 	}
 	return frameTimeoutCtx, func() {}
 }
 
-func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	// TODO(bwplotka): This should be part of request logger, otherwise it does not make much sense. Also, could be
 	// tiggered by tracing span to reduce cognitive load.
-	reqLogger := log.With(s.logger, "component", "proxy", "request", r.String())
+	reqLogger := log.With(s.logger, "component", "proxy", "request", originalRequest.String())
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -270,25 +258,23 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	}
 	storeMatchers, _ := storepb.PromMatchersToMatchers(matchers...) // Error would be returned by matchesExternalLabels, so skip check.
 
-	wg := &sync.WaitGroup{}
-
 	storeDebugMsgs := []string{}
-	actualRequest := &storepb.SeriesRequest{
-		MinTime:                 r.MinTime,
-		MaxTime:                 r.MaxTime,
+	r := &storepb.SeriesRequest{
+		MinTime:                 originalRequest.MinTime,
+		MaxTime:                 originalRequest.MaxTime,
 		Matchers:                storeMatchers,
-		Aggregates:              r.Aggregates,
-		MaxResolutionWindow:     r.MaxResolutionWindow,
-		SkipChunks:              r.SkipChunks,
-		QueryHints:              r.QueryHints,
-		PartialResponseDisabled: r.PartialResponseDisabled,
-		PartialResponseStrategy: r.PartialResponseStrategy,
+		Aggregates:              originalRequest.Aggregates,
+		MaxResolutionWindow:     originalRequest.MaxResolutionWindow,
+		SkipChunks:              originalRequest.SkipChunks,
+		QueryHints:              originalRequest.QueryHints,
+		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
+		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 	}
 
 	stores := []Client{}
 	for _, st := range s.stores() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
-		if ok, reason := storeMatches(srv.Context(), st, r.MinTime, r.MaxTime, matchers...); !ok {
+		if ok, reason := storeMatches(srv.Context(), st, originalRequest.MinTime, originalRequest.MaxTime, matchers...); !ok {
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s filtered out: %v", st, reason))
 			continue
 		}
@@ -296,157 +282,19 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		stores = append(stores, st)
 	}
 
-	wg.Add(len(stores))
-
 	var (
-		errs           = errutil.MultiError{}
-		errMtx         sync.Mutex
-		storeResponses = make([]struct {
-			responses []*storepb.SeriesResponse
-		}, len(stores))
+		storeResponses = make([]*lazyRespSet, len(stores))
 	)
 
 	for i, st := range stores {
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
 
-		go func(i int, st Client) {
-			defer wg.Done()
-
-			storeID := labelpb.PromLabelSetsToString(st.LabelSets())
-			if storeID == "" {
-				storeID = "Store Gateway"
-			}
-
-			seriesCtx, closeSeries := context.WithCancel(srv.Context())
-			seriesCtx = grpc_opentracing.ClientAddContextTags(seriesCtx, opentracing.Tags{
-				"target": st.Addr(),
-			})
-			defer closeSeries()
-
-			span, seriesCtx := tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
-				"store.id":   storeID,
-				"store.addr": st.Addr(),
-			})
-			cl, err := st.Series(seriesCtx, actualRequest)
-			if err != nil {
-				err = errors.Wrapf(err, "fetch series for %s %s", storeID, st)
-				errMtx.Lock()
-				errs.Add(err)
-				errMtx.Unlock()
-
-				span.SetTag("err", err.Error())
-				span.Finish()
-				return
-			}
-
-			rCh := make(chan *recvResponse)
-			done := make(chan struct{})
-			go func() {
-				for {
-					// TODO: we can buffer this in files to have infinitely
-					// scalable read path.
-					// TODO: this sorely needs some limit on the number of series
-					// per each request.
-					r, err := cl.Recv()
-					select {
-					case <-done:
-						close(rCh)
-						return
-					case rCh <- &recvResponse{r: r, err: err}:
-					}
-				}
-			}()
-
-			// The `defer` only executed when function return, we do `defer cancel` in for loop,
-			// so make the loop body as a function, release timers created by context as early.
-			handleRecvResponse := func() (next bool) {
-				frameTimeoutCtx, cancel := frameCtx(s.responseTimeout)
-				defer cancel()
-				var rr *recvResponse
-				select {
-				case <-seriesCtx.Done():
-					err := errors.Wrapf(seriesCtx.Err(), "failed to receive any data from %s", st.String())
-
-					errMtx.Lock()
-					errs.Add(err)
-					errMtx.Unlock()
-
-					span.SetTag("err", err.Error())
-					span.Finish()
-					close(done)
-					return false
-				case <-frameTimeoutCtx.Done():
-					err := errors.Wrapf(frameTimeoutCtx.Err(), "failed to receive any data in %v from %s", s.responseTimeout, st.String())
-
-					errMtx.Lock()
-					errs.Add(err)
-					errMtx.Unlock()
-
-					span.SetTag("err", err.Error())
-					span.Finish()
-					close(done)
-					return false
-				case rr = <-rCh:
-				}
-
-				if rr.err == io.EOF {
-					span.Finish()
-					close(done)
-					return false
-				}
-
-				if rr.err != nil {
-					err := errors.Wrapf(rr.err, "receive series from %s", st.String())
-					errMtx.Lock()
-					errs.Add(err)
-					errMtx.Unlock()
-
-					span.SetTag("err", err.Error())
-					span.Finish()
-					close(done)
-					return false
-				}
-
-				storeResponses[i].responses = append(storeResponses[i].responses, rr.r)
-				return true
-			}
-
-			for {
-				if !handleRecvResponse() {
-					return
-				}
-			}
-		}(i, st)
+		st := st
+		storeResponses[i] = newLazyRespSet(srv.Context(), st, r, s.responseTimeout)
+		defer storeResponses[i].Close()
 	}
 
-	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
-
-	wg.Wait()
-
-	if (actualRequest.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT || actualRequest.PartialResponseDisabled) && errs.Err() != nil {
-		level.Error(reqLogger).Log("err", errs.Err(), "msg", "partial response disabled; aborting request")
-
-		return errs.Err()
-	} else if errs.Err() != nil && (actualRequest.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN || !actualRequest.PartialResponseDisabled) {
-		for _, rerr := range errs {
-			if err := srv.Send(storepb.NewWarnSeriesResponse(rerr)); err != nil {
-				level.Error(reqLogger).Log("err", err)
-
-				return status.Error(codes.Unknown, errors.Wrap(err, "send warning response").Error())
-			}
-		}
-	}
-
-	seriesSets := []*respSet{}
-	for _, resp := range storeResponses {
-		if len(resp.responses) == 0 {
-			s.metrics.emptyStreamResponses.Inc()
-			continue
-		}
-		seriesSets = append(seriesSets, &respSet{responses: resp.responses})
-	}
-
-	if len(seriesSets) == 0 {
+	if len(stores) == 0 {
 		err := errors.New("No StoreAPIs matched for this query")
 		level.Warn(reqLogger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
 		if sendErr := srv.Send(storepb.NewWarnSeriesResponse(err)); sendErr != nil {
@@ -458,13 +306,44 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return nil
 	}
 
-	respHeap := NewDedupResponseHeap(NewProxyResponseHeap(seriesSets...))
+	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
+
+	respHeap := NewDedupResponseHeap(NewProxyResponseHeap(storeResponses...))
 
 	for respHeap.Next() {
 		resp := respHeap.At()
 
 		if err := srv.Send(resp); err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+		}
+	}
+
+	for _, respSet := range storeResponses {
+		if respSet.Err() == nil {
+			continue
+		}
+
+		if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
+			if err := srv.Send(storepb.NewWarnSeriesResponse(respSet.Err())); err != nil {
+				return errors.Wrap(err, "send series response")
+			}
+		} else {
+			storeID := labelpb.PromLabelSetsToString(respSet.st.LabelSets())
+			if storeID == "" {
+				storeID = "Store Gateway"
+			}
+
+			return errors.Wrapf(respSet.Err(), "fetch series for %s %s", storeID, respSet.st)
+		}
+	}
+
+	if respHeap.Err() != nil {
+		if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
+			if err := srv.Send(storepb.NewWarnSeriesResponse(respHeap.Err())); err != nil {
+				return errors.Wrap(err, "send series response")
+			}
+		} else {
+			return status.Error(codes.Unknown, respHeap.Err().Error())
 		}
 	}
 
