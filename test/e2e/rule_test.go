@@ -244,13 +244,13 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
 	createRuleFiles(t, rulesPath)
 
-	rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
+	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				FileSDConfigs: []httpconfig.FileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically am1.
-						Files:           []string{filepath.Join(am1.InternalDir(), amTargetsSubDir, "*.yaml")},
+						Files:           []string{filepath.Join(rFuture.InternalDir(), amTargetsSubDir, "*.yaml")},
 						RefreshInterval: model.Duration(time.Second),
 					},
 				},
@@ -262,15 +262,14 @@ func TestRule(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	})
-	r := rFuture.InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+	}).InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				// We test Statically Addressed queries in other tests. Focus on FileSD here.
 				FileSDConfigs: []httpconfig.FileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically q.
-						Files:           []string{filepath.Join(am1.InternalDir(), queryTargetsSubDir, "*.yaml")},
+						Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
 						RefreshInterval: model.Duration(time.Second),
 					},
 				},
@@ -393,14 +392,14 @@ func TestRule(t *testing.T) {
 
 	t.Run("signal reload works", func(t *testing.T) {
 		// Add a new rule via sending sighup
-		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLaterSignal)
+		createRuleFile(t, filepath.Join(rulesPath, "newrule.yaml"), testAlertRuleAddedLaterSignal)
 		reloadRulesSignal(t, r)
 		checkReloadSuccessful(t, ctx, r.Endpoint("http"), 4)
 	})
 
 	t.Run("http reload works", func(t *testing.T) {
 		// Add a new rule via /-/reload.
-		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLaterWebHandler)
+		createRuleFile(t, filepath.Join(rulesPath, "newrule.yaml"), testAlertRuleAddedLaterWebHandler)
 		reloadRulesHTTP(t, ctx, r.Endpoint("http"))
 		checkReloadSuccessful(t, ctx, r.Endpoint("http"), 3)
 	})
@@ -496,7 +495,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	q := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
-	rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
+	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{
@@ -507,8 +506,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	})
-	r := rFuture.InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+	}).InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{
