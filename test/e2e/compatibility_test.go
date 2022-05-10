@@ -195,5 +195,5 @@ func alertCompatConfig(receive e2e.Runnable, query e2e.Runnable) string {
   rules_and_alerts_api_base_url: 'http://%s'
   alert_reception_server_port: 8080
   alert_message_parser: default
-`, e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("http")), query.InternalEndpoint("http"), query.InternalEndpoint("http"))
+`, e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("remote-write")), query.InternalEndpoint("http"), query.InternalEndpoint("http"))
 }
