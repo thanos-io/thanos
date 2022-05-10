@@ -295,7 +295,7 @@ func TestRule(t *testing.T) {
 	var currentFailures float64
 	t.Run("attach query", func(t *testing.T) {
 		// Attach querier to target files.
-		writeTargets(t, filepath.Join(e.SharedDir(), queryTargetsSubDir, "targets.yaml"), q.InternalEndpoint("http"))
+		writeTargets(t, filepath.Join(rFuture.Dir(), queryTargetsSubDir, "targets.yaml"), q.InternalEndpoint("http"))
 
 		testutil.Ok(t, r.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_rule_query_apis_dns_provider_results"}, e2e.WaitMissingMetrics()))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
@@ -328,7 +328,7 @@ func TestRule(t *testing.T) {
 	})
 	t.Run("attach am1", func(t *testing.T) {
 		// Attach am1 to target files.
-		writeTargets(t, filepath.Join(e.SharedDir(), amTargetsSubDir, "targets.yaml"), am1.InternalEndpoint("http"))
+		writeTargets(t, filepath.Join(rFuture.Dir(), amTargetsSubDir, "targets.yaml"), am1.InternalEndpoint("http"))
 
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(2), "thanos_rule_alertmanagers_dns_provider_results"))
@@ -352,7 +352,7 @@ func TestRule(t *testing.T) {
 	})
 
 	t.Run("am1 drops again", func(t *testing.T) {
-		testutil.Ok(t, os.RemoveAll(filepath.Join(e.SharedDir(), amTargetsSubDir, "targets.yaml")))
+		testutil.Ok(t, os.RemoveAll(filepath.Join(rFuture.Dir(), amTargetsSubDir, "targets.yaml")))
 
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
@@ -381,7 +381,7 @@ func TestRule(t *testing.T) {
 
 	t.Run("duplicate am", func(t *testing.T) {
 		// am2 is already registered in static addresses.
-		writeTargets(t, filepath.Join(e.SharedDir(), amTargetsSubDir, "targets.yaml"), am2.InternalEndpoint("http"))
+		writeTargets(t, filepath.Join(rFuture.Dir(), amTargetsSubDir, "targets.yaml"), am2.InternalEndpoint("http"))
 
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
