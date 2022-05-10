@@ -348,7 +348,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), e.SharedDir()), "test-feed")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.InternalDir()), "test-feed")
 	testutil.Ok(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
