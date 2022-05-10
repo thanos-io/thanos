@@ -742,7 +742,7 @@ func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable 
 		filepath.Join(f.Dir(), "certs", "public.crt"),
 		filepath.Join(f.Dir(), "certs", "private.key"),
 		filepath.Join(f.Dir(), "certs", "CAs", "ca.crt"),
-		e.Name()+"-"+name,
+		fmt.Sprintf("minio-%s", name),
 	); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "fail to generate certs"))
 	}
