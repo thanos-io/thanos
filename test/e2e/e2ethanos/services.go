@@ -714,7 +714,7 @@ http {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating nginx config file failed"))
 	}
 
-	return e2e.NewInstrumentedRunnable(e, fmt.Sprintf("nginx-%s", name)).WithPorts(map[string]int{"http": 80}, "http").Init(
+	return f.Init(
 		e2e.StartOptions{
 			Image:            "docker.io/nginx:1.21.1-alpine",
 			Volumes:          []string{filepath.Join(f.Dir(), "/nginx.conf") + ":/etc/nginx/nginx.conf:ro"},
