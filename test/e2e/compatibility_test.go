@@ -131,7 +131,7 @@ func TestAlertCompliance(t *testing.T) {
 
 		// Start receive + Querier.
 		receive := e2ethanos.NewIngestingReceiver(e, "receive")
-		querierBuilder := e2ethanos.NewQuerierBuilder(e, "query", receive.InternalEndpoint("grpc"))
+		querierBuilder := e2ethanos.NewQuerierBuilder(e, "query")
 
 		compliance := e.Runnable("alert_generator_compliance_tester").WithPorts(map[string]int{"http": 8080}).Init(e2e.StartOptions{
 			Image:   "alert_generator_compliance_tester:latest",
@@ -158,7 +158,13 @@ func TestAlertCompliance(t *testing.T) {
 		}, []*config.RemoteWriteConfig{
 			{URL: &common_cfg.URL{URL: urlParse(t, e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("remote-write")))}, Name: "thanos-receiver"},
 		})
-		query := querierBuilder.WithRuleAddresses(ruler.InternalEndpoint("grpc")).Init()
+		query := querierBuilder.
+			WithStoreAddresses(receive.InternalEndpoint("grpc")).
+			WithRuleAddresses(ruler.InternalEndpoint("grpc")).
+			// We deduplicate by this, since alert compatibility tool requires clean metric without labels
+			// attached by receivers.
+			WithReplicaLabels("receive", "tenant_id").
+			Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(receive, query, ruler, compliance))
 
 		// Pull rules.yaml:

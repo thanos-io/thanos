@@ -183,18 +183,22 @@ type QuerierBuilder struct {
 	enableFeatures       []string
 	endpoints            []string
 
+	replicaLabels []string
 	tracingConfig string
 
 	f e2e.FutureInstrumentedRunnable
 }
 
 func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string) *QuerierBuilder {
+	const replicaLabel = "replica"
+
 	return &QuerierBuilder{
 		environment:    e,
 		sharedDir:      e.SharedDir(),
 		name:           name,
 		storeAddresses: storeAddresses,
 		image:          DefaultImage(),
+		replicaLabels:  []string{replicaLabel},
 	}
 }
 
@@ -258,6 +262,12 @@ func (q *QuerierBuilder) WithTracingConfig(tracingConfig string) *QuerierBuilder
 	return q
 }
 
+// WithReplicaLabels replaces default [replica] replica label configuration for the querier.
+func (q *QuerierBuilder) WithReplicaLabels(labels ...string) *QuerierBuilder {
+	q.replicaLabels = labels
+	return q
+}
+
 func (q *QuerierBuilder) Future() e2e.FutureInstrumentedRunnable {
 	if q.f != nil {
 		return q.f
@@ -285,47 +295,41 @@ func (q *QuerierBuilder) Init() e2e.InstrumentedRunnable {
 }
 
 func (q *QuerierBuilder) collectArgs(f e2e.FutureInstrumentedRunnable) ([]string, error) {
-	const replicaLabel = "replica"
-
 	args := e2e.BuildArgs(map[string]string{
 		"--debug.name":            fmt.Sprintf("querier-%v", q.name),
 		"--grpc-address":          ":9091",
 		"--grpc-grace-period":     "0s",
 		"--http-address":          ":8080",
-		"--query.replica-label":   replicaLabel,
 		"--store.sd-dns-interval": "5s",
 		"--log.level":             infoLogLevel,
 		"--query.max-concurrent":  "1",
 		"--store.sd-interval":     "5s",
 	})
+
+	for _, repl := range q.replicaLabels {
+		args = append(args, "--query.replica-label="+repl)
+	}
 	for _, addr := range q.storeAddresses {
 		args = append(args, "--store="+addr)
 	}
-
 	for _, addr := range q.ruleAddresses {
 		args = append(args, "--rule="+addr)
 	}
-
 	for _, addr := range q.targetAddresses {
 		args = append(args, "--target="+addr)
 	}
-
 	for _, addr := range q.metadataAddresses {
 		args = append(args, "--metadata="+addr)
 	}
-
 	for _, addr := range q.exemplarAddresses {
 		args = append(args, "--exemplar="+addr)
 	}
-
 	for _, feature := range q.enableFeatures {
 		args = append(args, "--enable-feature="+feature)
 	}
-
 	for _, addr := range q.endpoints {
 		args = append(args, "--endpoint="+addr)
 	}
-
 	if len(q.fileSDStoreAddresses) > 0 {
 		if err := os.MkdirAll(f.Dir(), 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
@@ -347,19 +351,15 @@ func (q *QuerierBuilder) collectArgs(f e2e.FutureInstrumentedRunnable) ([]string
 
 		args = append(args, "--store.sd-files="+filepath.Join(f.InternalDir(), "filesd.yaml"))
 	}
-
 	if q.routePrefix != "" {
 		args = append(args, "--web.route-prefix="+q.routePrefix)
 	}
-
 	if q.externalPrefix != "" {
 		args = append(args, "--web.external-prefix="+q.externalPrefix)
 	}
-
 	if q.tracingConfig != "" {
 		args = append(args, "--tracing.config="+q.tracingConfig)
 	}
-
 	return args, nil
 }
 
