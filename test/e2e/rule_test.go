@@ -515,7 +515,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	}, []*config.RemoteWriteConfig{
 		{URL: &common_cfg.URL{URL: rwURL}, Name: "thanos-receiver"},
 		{URL: &common_cfg.URL{URL: rwURL2}, Name: "thanos-receiver2"},
-	})
+	}, true)
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
 	// Wait until remote write samples are written to receivers successfully.

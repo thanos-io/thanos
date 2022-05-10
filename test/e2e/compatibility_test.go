@@ -157,7 +157,7 @@ func TestAlertCompliance(t *testing.T) {
 			},
 		}, []*config.RemoteWriteConfig{
 			{URL: &common_cfg.URL{URL: urlParse(t, e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("remote-write")))}, Name: "thanos-receiver"},
-		})
+		}, false)
 		query := querierBuilder.
 			WithStoreAddresses(receive.InternalEndpoint("grpc")).
 			WithRuleAddresses(ruler.InternalEndpoint("grpc")).

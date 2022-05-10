@@ -476,14 +476,14 @@ func NewIngestingReceiver(e e2e.Environment, name string) e2e.InstrumentedRunnab
 }
 
 func NewTSDBRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config) e2e.InstrumentedRunnable {
-	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, nil)
+	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, nil, true)
 }
 
-func NewStatelessRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) e2e.InstrumentedRunnable {
-	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, remoteWriteCfg)
+func NewStatelessRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig, withReplicaLabel bool) e2e.InstrumentedRunnable {
+	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, remoteWriteCfg, withReplicaLabel)
 }
 
-func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) e2e.InstrumentedRunnable {
+func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig, withReplicaLabel bool) e2e.InstrumentedRunnable {
 	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("rule-%v", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}, "http").
 		Future()
@@ -509,7 +509,6 @@ func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Alertman
 		"--grpc-address":                  ":9091",
 		"--grpc-grace-period":             "0s",
 		"--http-address":                  ":8080",
-		"--label":                         fmt.Sprintf(`replica="%s"`, name),
 		"--data-dir":                      f.InternalDir(),
 		"--rule-file":                     filepath.Join(f.InternalDir(), ruleSubDir, "*.yaml"),
 		"--eval-interval":                 "1s",
@@ -520,6 +519,11 @@ func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Alertman
 		"--query.sd-dns-interval":         "1s",
 		"--resend-delay":                  "5s",
 	}
+
+	if withReplicaLabel {
+		ruleArgs["--label"] = fmt.Sprintf("replica=%s", name)
+	}
+
 	if remoteWriteCfg != nil {
 		rwCfgBytes, err := yaml.Marshal(struct {
 			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
