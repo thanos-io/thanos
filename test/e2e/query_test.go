@@ -391,15 +391,15 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 
 			// Use qBuilder work dir to share rules.
 			promRulesSubDir := "rules"
-			testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Future().Dir(), promRulesSubDir), os.ModePerm))
+			testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Dir(), promRulesSubDir), os.ModePerm))
 			// Create the abort_on_partial_response alert for Prometheus.
 			// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.
-			createRuleFile(t, filepath.Join(qBuilder.Future().Dir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
+			createRuleFile(t, filepath.Join(qBuilder.Dir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
 
 			p1, s1 := e2ethanos.NewPrometheusWithSidecarCustomImage(
 				e,
 				"p1",
-				e2ethanos.DefaultPromConfig("p1", 0, "", filepath.Join(qBuilder.Future().InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget, qBuilder.Future().InternalEndpoint("http")),
+				e2ethanos.DefaultPromConfig("p1", 0, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget, qBuilder.InternalEndpoint("http")),
 				"",
 				e2ethanos.DefaultPrometheusImage(),
 				"",
@@ -419,7 +419,7 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 config:
   sampler_type: const
   sampler_param: 1
-  service_name: %s`, qBuilder.Future().Name())). // Use fake tracing config to trigger exemplar.
+  service_name: %s`, qBuilder.Name())). // Use fake tracing config to trigger exemplar.
 				WithImage(tcase.queryImage).
 				Init()
 			testutil.Ok(t, e2e.StartAndWaitReady(q))

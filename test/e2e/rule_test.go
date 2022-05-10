@@ -232,14 +232,19 @@ func TestRule(t *testing.T) {
 	am2 := e2ethanos.NewAlertmanager(e, "2")
 	testutil.Ok(t, e2e.StartAndWaitReady(am1, am2))
 
-	// Use am1 work dir for shared resources.
+	rFuture := e2ethanos.NewRulerBuilder(e, "1")
+
 	amTargetsSubDir := filepath.Join("rules_am_targets")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(am1.Dir(), amTargetsSubDir), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(rFuture.Dir(), amTargetsSubDir), os.ModePerm))
 	queryTargetsSubDir := filepath.Join("rules_query_targets")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(am1.Dir(), queryTargetsSubDir), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(rFuture.Dir(), queryTargetsSubDir), os.ModePerm))
 
 	rulesSubDir := filepath.Join("rules")
-	r := e2ethanos.NewTSDBRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
+	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+	createRuleFiles(t, rulesPath)
+
+	rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				FileSDConfigs: []httpconfig.FileSDConfig{
@@ -257,7 +262,8 @@ func TestRule(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}, []httpconfig.Config{
+	})
+	r := rFuture.InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				// We test Statically Addressed queries in other tests. Focus on FileSD here.
@@ -273,10 +279,6 @@ func TestRule(t *testing.T) {
 		},
 	})
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
-
-	rulesPath := filepath.Join(r.Dir(), rulesSubDir)
-	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
-	createRuleFiles(t, rulesPath)
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", r.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
@@ -471,8 +473,9 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	t.Cleanup(cancel)
 
+	rFuture := e2ethanos.NewRulerBuilder(e, "1")
 	rulesSubDir := "rules"
-	rulesPath := filepath.Join(e.SharedDir(), rulesSubDir)
+	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
 	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
 
 	for i, rule := range []string{testRuleRecordAbsentMetric, testAlertRuleWarnOnPartialResponse} {
@@ -492,7 +495,8 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
-	r := e2ethanos.NewStatelessRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
+
+	rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{
@@ -503,7 +507,8 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}, []httpconfig.Config{
+	})
+	r := rFuture.InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{

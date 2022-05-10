@@ -167,8 +167,6 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, we
 }
 
 type QuerierBuilder struct {
-	environment    e2e.Environment
-	sharedDir      string
 	name           string
 	routePrefix    string
 	externalPrefix string
@@ -185,13 +183,20 @@ type QuerierBuilder struct {
 
 	tracingConfig string
 
+	e2e.Linkable
 	f e2e.FutureInstrumentedRunnable
 }
 
 func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string) *QuerierBuilder {
+	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("querier-%v", name)).
+		WithPorts(map[string]int{
+			"http": 8080,
+			"grpc": 9091,
+		}, "http").
+		Future()
 	return &QuerierBuilder{
-		environment:    e,
-		sharedDir:      e.SharedDir(),
+		Linkable:       f,
+		f:              f,
 		name:           name,
 		storeAddresses: storeAddresses,
 		image:          DefaultImage(),
@@ -258,21 +263,8 @@ func (q *QuerierBuilder) WithTracingConfig(tracingConfig string) *QuerierBuilder
 	return q
 }
 
-func (q *QuerierBuilder) Future() e2e.FutureInstrumentedRunnable {
-	if q.f != nil {
-		return q.f
-	}
-	q.f = e2e.NewInstrumentedRunnable(q.environment, fmt.Sprintf("querier-%v", q.name)).
-		WithPorts(map[string]int{
-			"http": 8080,
-			"grpc": 9091,
-		}, "http").
-		Future()
-	return q.f
-}
-
 func (q *QuerierBuilder) Init() e2e.InstrumentedRunnable {
-	args, err := q.collectArgs(q.Future())
+	args, err := q.collectArgs()
 	if err != nil {
 		return e2e.NewErrInstrumentedRunnable(q.name, err)
 	}
@@ -284,9 +276,9 @@ func (q *QuerierBuilder) Init() e2e.InstrumentedRunnable {
 	}))
 }
 
-func (q *QuerierBuilder) collectArgs(f e2e.FutureInstrumentedRunnable) ([]string, error) {
-	const replicaLabel = "replica"
+const replicaLabel = "replica"
 
+func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	args := e2e.BuildArgs(map[string]string{
 		"--debug.name":            fmt.Sprintf("querier-%v", q.name),
 		"--grpc-address":          ":9091",
@@ -327,7 +319,7 @@ func (q *QuerierBuilder) collectArgs(f e2e.FutureInstrumentedRunnable) ([]string
 	}
 
 	if len(q.fileSDStoreAddresses) > 0 {
-		if err := os.MkdirAll(f.Dir(), 0750); err != nil {
+		if err := os.MkdirAll(q.Dir(), 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
 		}
 
@@ -341,11 +333,11 @@ func (q *QuerierBuilder) collectArgs(f e2e.FutureInstrumentedRunnable) ([]string
 			return nil, err
 		}
 
-		if err := ioutil.WriteFile(f.Dir()+"/filesd.yaml", b, 0600); err != nil {
+		if err := ioutil.WriteFile(q.Dir()+"/filesd.yaml", b, 0600); err != nil {
 			return nil, errors.Wrap(err, "creating query SD config failed")
 		}
 
-		args = append(args, "--store.sd-files="+filepath.Join(f.InternalDir(), "filesd.yaml"))
+		args = append(args, "--store.sd-files="+filepath.Join(q.InternalDir(), "filesd.yaml"))
 	}
 
 	if q.routePrefix != "" {
@@ -475,43 +467,68 @@ func NewIngestingReceiver(e e2e.Environment, name string) e2e.InstrumentedRunnab
 	}))
 }
 
-func NewTSDBRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config) e2e.InstrumentedRunnable {
-	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, nil)
+type RulerBuilder struct {
+	e2e.Linkable
+
+	f e2e.FutureInstrumentedRunnable
+
+	amCfg        []alert.AlertmanagerConfig
+	replicaLabel string
 }
 
-func NewStatelessRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) e2e.InstrumentedRunnable {
-	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, remoteWriteCfg)
-}
-
-func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) e2e.InstrumentedRunnable {
+func NewRulerBuilder(e e2e.Environment, name string) *RulerBuilder {
 	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("rule-%v", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}, "http").
 		Future()
+	return &RulerBuilder{
+		replicaLabel: name,
+		Linkable:     f,
+		f:            f,
+	}
+}
 
-	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create rule dir"))
+func (r *RulerBuilder) WithAlertManagerConfig(amCfg []alert.AlertmanagerConfig) *RulerBuilder {
+	r.amCfg = amCfg
+	return r
+}
+
+func (r *RulerBuilder) WithReplicaLabel(replicaLabel string) *RulerBuilder {
+	r.replicaLabel = replicaLabel
+	return r
+}
+
+func (r *RulerBuilder) InitTSDB(internalRuleDir string, queryCfg []httpconfig.Config) e2e.InstrumentedRunnable {
+	return r.initRule(internalRuleDir, queryCfg, nil)
+}
+
+func (r *RulerBuilder) InitStateless(internalRuleDir string, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) e2e.InstrumentedRunnable {
+	return r.initRule(internalRuleDir, queryCfg, remoteWriteCfg)
+}
+
+func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) e2e.InstrumentedRunnable {
+	if err := os.MkdirAll(r.f.Dir(), 0750); err != nil {
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "create rule dir"))
 	}
 
 	amCfgBytes, err := yaml.Marshal(alert.AlertingConfig{
-		Alertmanagers: amCfg,
+		Alertmanagers: r.amCfg,
 	})
 	if err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate am file: %v", amCfg))
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate am file: %v", r.amCfg))
 	}
 
 	queryCfgBytes, err := yaml.Marshal(queryCfg)
 	if err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate query file: %v", queryCfg))
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate query file: %v", queryCfg))
 	}
 
 	ruleArgs := map[string]string{
-		"--debug.name":                    fmt.Sprintf("rule-%v", name),
+		"--debug.name":                    r.Name(),
 		"--grpc-address":                  ":9091",
 		"--grpc-grace-period":             "0s",
 		"--http-address":                  ":8080",
-		"--label":                         fmt.Sprintf(`replica="%s"`, name),
-		"--data-dir":                      f.InternalDir(),
-		"--rule-file":                     filepath.Join(f.InternalDir(), ruleSubDir, "*.yaml"),
+		"--data-dir":                      r.InternalDir(),
+		"--rule-file":                     filepath.Join(internalRuleDir, "*.yaml"),
 		"--eval-interval":                 "1s",
 		"--alertmanagers.config":          string(amCfgBytes),
 		"--alertmanagers.sd-dns-interval": "1s",
@@ -520,17 +537,20 @@ func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Alertman
 		"--query.sd-dns-interval":         "1s",
 		"--resend-delay":                  "5s",
 	}
+	if r.replicaLabel != "" {
+		ruleArgs["--label"] = fmt.Sprintf(`%s="%s"`, replicaLabel, r.replicaLabel)
+	}
 	if remoteWriteCfg != nil {
 		rwCfgBytes, err := yaml.Marshal(struct {
 			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
 		}{remoteWriteCfg})
 		if err != nil {
-			return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate remote write config: %v", remoteWriteCfg))
+			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate remote write config: %v", remoteWriteCfg))
 		}
 		ruleArgs["--remote-write.config"] = string(rwCfgBytes)
 	}
 
-	return f.Init(wrapWithDefaults(e2e.StartOptions{
+	return r.f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image:     DefaultImage(),
 		Command:   e2e.NewCommand("rule", e2e.BuildArgs(ruleArgs)...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
