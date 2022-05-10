@@ -122,7 +122,7 @@ query_tweaks:
 // TestAlertCompliance tests Alert compatibility against https://github.com/prometheus/compliance/blob/main/alert_generator.
 // NOTE: This requires a dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
 func TestAlertCompliance(t *testing.T) {
-	//t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator. This tool is not optimized for CI runs (e.g. it infinitely retries")
+	t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator. This tool is not optimized for CI runs (e.g. it infinitely retries, takes 38 minutes)")
 
 	t.Run("staleness ruler", func(t *testing.T) {
 		e, err := e2e.NewDockerEnvironment("alert_compatibility")
