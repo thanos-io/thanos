@@ -734,7 +734,7 @@ func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable 
 		"mkdir -p /data/%s && minio server --certs-dir /shared/data/certs --address :%v --quiet /data",
 	}
 
-	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("minio-", name)).
+	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("minio-%s", name)).
 		WithPorts(map[string]int{"https": 8090}, "https").
 		Future()
 
