@@ -457,29 +457,33 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 		numResults++
 	}
 
-	// Spawn a goroutine for each batch request. The max concurrency will be
-	// enforced by getMultiSingle().
+	// If max concurrency is disabled, use a nil gate for the doWithBatch method which will
+	// not apply any limit to the number goroutines started to make batch requests in that case.
+	var getMultiGate gate.Gate
+	if c.config.MaxGetMultiConcurrency > 0 {
+		getMultiGate = c.getMultiGate
+	}
+
+	// Allocate a channel to store results for each batch request. The max concurrency will be
+	// enforced by doWithBatch.
 	results := make(chan *memcachedGetMultiResult, numResults)
 	defer close(results)
 
-	for batchStart := 0; batchStart < len(keys); batchStart += batchSize {
-		batchEnd := batchStart + batchSize
-		if batchEnd > len(keys) {
-			batchEnd = len(keys)
-		}
+	// Ignore the error here since it can only be returned by our provided function which
+	// always returns nil. NOTE also we are using a background context here for the doWithBatch
+	// method. This is to ensure that it runs the expected number of batches _even if_ our
+	// context (`ctx`) is canceled since we expect a certain number of batches to be read
+	// from `results` below. The wrapped `getMultiSingle` method will still check our context
+	// and short-circuit if it has been canceled.
+	_ = doWithBatch(context.Background(), len(keys), c.config.MaxGetMultiBatchSize, getMultiGate, func(startIndex, endIndex int) error {
+		batchKeys := keys[startIndex:endIndex]
 
-		batchKeys := keys[batchStart:batchEnd]
+		res := &memcachedGetMultiResult{}
+		res.items, res.err = c.getMultiSingle(ctx, batchKeys)
 
-		c.workers.Add(1)
-		go func() {
-			defer c.workers.Done()
-
-			res := &memcachedGetMultiResult{}
-			res.items, res.err = c.getMultiSingle(ctx, batchKeys)
-
-			results <- res
-		}()
-	}
+		results <- res
+		return nil
+	})
 
 	// Wait for all batch results. In case of error, we keep
 	// track of the last error occurred.
@@ -500,18 +504,18 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 }
 
 func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (items map[string]*memcache.Item, err error) {
-	// Wait until we get a free slot from the gate, if the max
-	// concurrency should be enforced.
-	if c.config.MaxGetMultiConcurrency > 0 {
-		if err := c.getMultiGate.Start(ctx); err != nil {
-			return nil, errors.Wrapf(err, "failed to wait for turn. Instance: %s", c.name)
-		}
-		defer c.getMultiGate.Done()
-	}
-
 	start := time.Now()
 	c.operations.WithLabelValues(opGetMulti).Inc()
-	items, err = c.client.GetMulti(keys)
+
+	select {
+	case <-ctx.Done():
+		// Make sure our context hasn't been canceled before fetching cache items using
+		// cache client backend.
+		return nil, ctx.Err()
+	default:
+		items, err = c.client.GetMulti(keys)
+	}
+
 	if err != nil {
 		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err)
 		c.trackError(opGetMulti, err)

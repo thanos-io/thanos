@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -178,15 +180,19 @@ func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdi
 	if !df.IsDir() {
 		return errors.Errorf("%s is not a directory", srcdir)
 	}
-	return filepath.Walk(srcdir, func(src string, fi os.FileInfo, err error) error {
+	return filepath.WalkDir(srcdir, func(src string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if fi.IsDir() {
+		if d.IsDir() {
 			return nil
 		}
-		dst := filepath.Join(dstdir, strings.TrimPrefix(src, srcdir))
+		srcRel, err := filepath.Rel(srcdir, src)
+		if err != nil {
+			return errors.Wrap(err, "getting relative path")
+		}
 
+		dst := path.Join(dstdir, filepath.ToSlash(srcRel))
 		return UploadFile(ctx, logger, bkt, src, dst)
 	})
 }

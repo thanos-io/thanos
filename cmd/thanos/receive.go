@@ -217,12 +217,13 @@ func runReceive(
 	reloadGRPCServer := make(chan struct{}, 1)
 	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
 	hashringChangedChan := make(chan struct{}, 1)
-	// uploadC signals when new blocks should be uploaded.
-	uploadC := make(chan struct{}, 1)
-	// uploadDone signals when uploading has finished.
-	uploadDone := make(chan struct{}, 1)
 
 	if enableIngestion {
+		// uploadC signals when new blocks should be uploaded.
+		uploadC := make(chan struct{}, 1)
+		// uploadDone signals when uploading has finished.
+		uploadDone := make(chan struct{}, 1)
+
 		level.Debug(logger).Log("msg", "setting up tsdb")
 		{
 			if err := startTSDBAndUpload(g, logger, reg, dbs, reloadGRPCServer, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt); err != nil {
@@ -370,7 +371,9 @@ func setupAndRunGRPCServer(g *run.Group,
 			}
 		}
 		return nil
-	}, func(error) {})
+	}, func(error) {
+		defer close(reloadGRPCServer)
+	})
 
 	return nil
 
@@ -516,7 +519,6 @@ func startTSDBAndUpload(g *run.Group,
 	// TSDBs reload logic, listening on hashring changes.
 	cancel := make(chan struct{})
 	g.Add(func() error {
-		defer close(reloadGRPCServer)
 		defer close(uploadC)
 
 		// Before quitting, ensure the WAL is flushed and the DBs are closed.

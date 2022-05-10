@@ -145,11 +145,11 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.Wrap(err, "encode meta file")
 	}
 
-	if err := objstore.UploadDir(ctx, logger, bkt, path.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
+	if err := objstore.UploadDir(ctx, logger, bkt, filepath.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload chunks"))
 	}
 
-	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
+	if err := objstore.UploadFile(ctx, logger, bkt, filepath.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index"))
 	}
 
