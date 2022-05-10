@@ -72,7 +72,6 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			SourceLabels: model.LabelNames{"ext1"},
 		},
 	)
-	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
 	// Ensure bucket UI.
 	ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(s1.Endpoint("http"), "loaded"))
@@ -303,7 +302,6 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		memcachedConfig,
 		nil,
 	)
-	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Init()

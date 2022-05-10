@@ -579,7 +579,7 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}, "http").
 		Future()
 
-	if err := os.MkdirAll(f.InternalDir(), 0750); err != nil {
+	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create store dir"))
 	}
 
@@ -729,10 +729,6 @@ http {
 func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable {
 	image := "minio/minio:RELEASE.2019-12-30T05-45-39Z"
 	minioKESGithubContent := "https://raw.githubusercontent.com/minio/kes/master"
-	commands := []string{
-		"curl -sSL --tlsv1.2 -O '%s/root.key'	-O '%s/root.cert'",
-		"mkdir -p /data/%s && minio server --certs-dir /shared/data/certs --address :%v --quiet /data",
-	}
 
 	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("minio-%s", name)).
 		WithPorts(map[string]int{"https": 8090}, "https").
@@ -751,25 +747,28 @@ func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable 
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "fail to generate certs"))
 	}
 
-	return f.Init(
-		e2e.StartOptions{
-			Image: image,
-			// Create the required bucket before starting minio.
-			Command:   e2e.NewCommandWithoutEntrypoint("sh", "-c", fmt.Sprintf(strings.Join(commands, " && "), minioKESGithubContent, minioKESGithubContent, bktName, 8090)),
-			Readiness: e2e.NewHTTPSReadinessProbe("https", "/minio/health/ready", 200, 200),
-			EnvVars: map[string]string{
-				"MINIO_ACCESS_KEY": e2edb.MinioAccessKey,
-				"MINIO_SECRET_KEY": e2edb.MinioSecretKey,
-				"MINIO_BROWSER":    "off",
-				"ENABLE_HTTPS":     "1",
-				// https://docs.min.io/docs/minio-kms-quickstart-guide.html
-				"MINIO_KMS_KES_ENDPOINT":  "https://play.min.io:7373",
-				"MINIO_KMS_KES_KEY_FILE":  "root.key",
-				"MINIO_KMS_KES_CERT_FILE": "root.cert",
-				"MINIO_KMS_KES_KEY_NAME":  "my-minio-key",
-			},
+	commands := []string{
+		fmt.Sprintf("curl -sSL --tlsv1.2 -O '%s/root.key' -O '%s/root.cert'", minioKESGithubContent, minioKESGithubContent),
+		fmt.Sprintf("mkdir -p /data/%s && minio server --certs-dir %s/certs --address :%v --quiet /data", bktName, f.InternalDir(), 8090),
+	}
+
+	return f.Init(e2e.StartOptions{
+		Image: image,
+		// Create the required bucket before starting minio.
+		Command:   e2e.NewCommandWithoutEntrypoint("sh", "-c", strings.Join(commands, " && ")),
+		Readiness: e2e.NewHTTPSReadinessProbe("https", "/minio/health/ready", 200, 200),
+		EnvVars: map[string]string{
+			"MINIO_ACCESS_KEY": e2edb.MinioAccessKey,
+			"MINIO_SECRET_KEY": e2edb.MinioSecretKey,
+			"MINIO_BROWSER":    "off",
+			"ENABLE_HTTPS":     "1",
+			// https://docs.min.io/docs/minio-kms-quickstart-guide.html
+			"MINIO_KMS_KES_ENDPOINT":  "https://play.min.io:7373",
+			"MINIO_KMS_KES_KEY_FILE":  "root.key",
+			"MINIO_KMS_KES_CERT_FILE": "root.cert",
+			"MINIO_KMS_KES_KEY_NAME":  "my-minio-key",
 		},
-	)
+	})
 }
 
 func NewMemcached(e e2e.Environment, name string) e2e.InstrumentedRunnable {
