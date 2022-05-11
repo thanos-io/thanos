@@ -16,6 +16,8 @@ import (
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
+// TestPromQLCompliance tests PromQL compatibility against https://github.com/prometheus/compliance/tree/main/promql.
+// NOTE: This requires dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
 // Test requires at least ~11m, so run this with `-test.timeout 9999m`.
 func TestPromQLCompliance(t *testing.T) {
 	t.Skip("This is interactive test, it requires time to build up (scrape) the data. The data is also obtain from remote promlab servers.")
@@ -24,9 +26,8 @@ func TestPromQLCompliance(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e.Close)
 
-	// Start separate receive + Querier.
-	receiverRunnable, err := e2ethanos.NewIngestingReceiver(e, "receive")
-	testutil.Ok(t, err)
+	// Start receive + Querier.
+	receiverRunnable := e2ethanos.NewIngestingReceiver(e, "receive")
 	queryReceive := e2edb.NewThanosQuerier(e, "query_receive", []string{receiverRunnable.InternalEndpoint("grpc")})
 	testutil.Ok(t, e2e.StartAndWaitReady(receiverRunnable, queryReceive))
 
@@ -53,7 +54,7 @@ scrape_configs:
 	))
 	testutil.Ok(t, e2e.StartAndWaitReady(prom))
 
-	// Start separate sidecar + Querier
+	// Start sidecar + Querier
 	sidecar := e2edb.NewThanosSidecar(e, "sidecar", prom, e2edb.WithImage("thanos"))
 	querySidecar := e2edb.NewThanosQuerier(e, "query_sidecar", []string{sidecar.InternalEndpoint("grpc")}, e2edb.WithImage("thanos"))
 	testutil.Ok(t, e2e.StartAndWaitReady(sidecar, querySidecar))
@@ -70,24 +71,28 @@ scrape_configs:
 
 	t.Run("receive", func(t *testing.T) {
 		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "receive.yaml"),
-			[]byte(promLabelsPromQLConfig(prom, queryReceive, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
+			[]byte(promQLCompatConfig(prom, queryReceive, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
 
-		stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "receive.yaml")))
-		t.Log(stdout, stderr)
-		testutil.Ok(t, err)
+		testutil.Ok(t, compliance.Exec(e2e.NewCommand(
+			"/promql-compliance-tester",
+			"-config-file", filepath.Join(compliance.InternalDir(), "receive.yaml"),
+			"-config-file", "/promql-test-queries.yml",
+		)))
 	})
 	t.Run("sidecar", func(t *testing.T) {
 		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "sidecar.yaml"),
-			[]byte(promLabelsPromQLConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
+			[]byte(promQLCompatConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
 
-		stdout, stderr, err := compliance.Exec(e2e.NewCommand("/promql-compliance-tester", "-config-file", filepath.Join(compliance.InternalDir(), "sidecar.yaml")))
-		t.Log(stdout, stderr)
-		testutil.Ok(t, err)
-
+		testutil.Ok(t, compliance.Exec(e2e.NewCommand(
+			"/promql-compliance-tester",
+			"-config-file", filepath.Join(compliance.InternalDir(), "sidecar.yaml"),
+			"-config-file", "/promql-test-queries.yml",
+		)))
 	})
 }
 
-func promLabelsPromQLConfig(reference *e2edb.Prometheus, target e2e.Runnable, dropLabels []string) string {
+// nolint (it's still used in skipped test).
+func promQLCompatConfig(reference *e2edb.Prometheus, target e2e.Runnable, dropLabels []string) string {
 	return `reference_target_config:
   query_url: 'http://` + reference.InternalEndpoint("http") + `'
 
