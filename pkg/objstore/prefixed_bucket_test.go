@@ -42,6 +42,7 @@ func UsesPrefixTest(t *testing.T, bkt Bucket, prefix string) {
 
 	pBkt := NewPrefixedBucket(bkt, prefix)
 	rc1, err := pBkt.Get(context.Background(), "file1.jpg")
+	testutil.Ok(t, err)
 
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, rc1.Close()) }()
@@ -51,6 +52,7 @@ func UsesPrefixTest(t *testing.T, bkt Bucket, prefix string) {
 
 	pBkt.Upload(context.Background(), "file2.jpg", strings.NewReader("test-data2"))
 	rc2, err := bkt.Get(context.Background(), strings.Trim(prefix, "/")+"/file2.jpg")
+	testutil.Ok(t, err)
 
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, rc2.Close()) }()
@@ -60,6 +62,7 @@ func UsesPrefixTest(t *testing.T, bkt Bucket, prefix string) {
 
 	pBkt.Delete(context.Background(), "file2.jpg")
 	_, err = bkt.Get(context.Background(), strings.Trim(prefix, "/")+"/file2.jpg")
+	testutil.Ok(t, err)
 
 	testutil.NotOk(t, err)
 	testutil.Assert(t, pBkt.IsObjNotFoundErr(err), "expected not found error got %s", err)
