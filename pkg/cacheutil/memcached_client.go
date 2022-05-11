@@ -442,6 +442,16 @@ func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[strin
 func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([]map[string]*memcache.Item, error) {
 	// Do not batch if the input keys are less than the max batch size.
 	if (c.config.MaxGetMultiBatchSize <= 0) || (len(keys) <= c.config.MaxGetMultiBatchSize) {
+		// Even if we're not splitting the input into batches, make sure that our single request
+		// still counts against the concurrency limit.
+		if c.config.MaxGetMultiConcurrency > 0 {
+			if err := c.getMultiGate.Start(ctx); err != nil {
+				return nil, errors.Wrapf(err, "failed to wait for turn. Instance: %s", c.name)
+			}
+
+			defer c.getMultiGate.Done()
+		}
+
 		items, err := c.getMultiSingle(ctx, keys)
 		if err != nil {
 			return nil, err
