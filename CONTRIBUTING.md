@@ -157,6 +157,7 @@ $ git push origin <your_branch_for_new_pr>
 **Tests your changes**
 
 **Formatting**
+
 First of all, fall back to `make help` to see all availible commands. There are a few checks that happen when making a PR and these need to pass. We can make sure locally before making the PR by using commands that are related to your changes:
 - `make docs` generates, formats and cleans up white noise.
 - `make changed-docs` does same as above, but just for changed docs by checking `git diff` on which files are changed.
