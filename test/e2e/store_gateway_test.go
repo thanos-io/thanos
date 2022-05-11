@@ -493,28 +493,9 @@ metafile_content_ttl: 0s`
 		}
 	})
 
-	t.Run("query with cache hit", func(t *testing.T) {
-		retrievedMetrics, err := store1.SumMetrics([]string{`thanos_cache_groupcache_hits_total`, `thanos_cache_groupcache_loads_total`, `thanos_cache_groupcache_get_requests_total`})
+	t.Run("try to load file with slashes", func(t *testing.T) {
+		resp, err := http.Get(fmt.Sprintf("http://%s/_galaxycache/groupcache_test_group/content:%s/meta.json", store1.Endpoint("http"), id.String()))
 		testutil.Ok(t, err)
-		testutil.Assert(t, len(retrievedMetrics) == 3)
-
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
-			time.Now, promclient.QueryOptions{
-				Deduplicate: false,
-			},
-			[]model.Metric{
-				{
-					"a":       "1",
-					"b":       "2",
-					"ext1":    "value1",
-					"replica": "1",
-				},
-			},
-		)
-
-		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Greater(retrievedMetrics[0]), []string{`thanos_cache_groupcache_hits_total`}))
-		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Equals(retrievedMetrics[1]), []string{`thanos_cache_groupcache_loads_total`}))
-		testutil.Ok(t, store1.WaitSumMetricsWithOptions(e2e.Greater(retrievedMetrics[2]), []string{`thanos_cache_groupcache_get_requests_total`}))
-		testutil.Ok(t, store2.WaitSumMetricsWithOptions(e2e.Greater(0), []string{`thanos_cache_groupcache_peer_loads_total`}))
+		testutil.Equals(t, 200, resp.StatusCode)
 	})
 }
