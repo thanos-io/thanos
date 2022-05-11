@@ -389,7 +389,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 	}
 }
 
-func TestMemcachedClient_groupKeysByServer(t *testing.T) {
+func TestMemcachedClient_sortKeysByServer(t *testing.T) {
 	config := defaultMemcachedClientConfig
 	config.Addresses = []string{"127.0.0.1:11211", "127.0.0.2:11211"}
 	backendMock := newMemcachedClientBackendMock()
@@ -417,9 +417,9 @@ func TestMemcachedClient_groupKeysByServer(t *testing.T) {
 		"key6",
 	}
 
-	grouped := client.groupKeysByServer(keys)
-	testutil.Contains(t, grouped, []string{"key1", "key3", "key5"})
-	testutil.Contains(t, grouped, []string{"key2", "key4", "key6"})
+	sorted := client.sortKeysByServer(keys)
+	testutil.Contains(t, sorted, []string{"key1", "key3", "key5"})
+	testutil.Contains(t, sorted, []string{"key2", "key4", "key6"})
 }
 
 type mockAddr string

@@ -472,10 +472,10 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 		getMultiGate = c.getMultiGate
 	}
 
-	// Group keys based on which memcached server they will be sharded to. Grouping keys that
+	// Sort keys based on which memcached server they will be sharded to. Sorting keys that
 	// are on the same server together before splitting into batches reduces the number of
 	// connections required and increases the number of "gets" per connection.
-	groupedKeys := c.groupKeysByServer(keys)
+	sortedKeys := c.sortKeysByServer(keys)
 
 	// Allocate a channel to store results for each batch request. The max concurrency will be
 	// enforced by doWithBatch.
@@ -489,7 +489,7 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	// from `results` below. The wrapped `getMultiSingle` method will still check our context
 	// and short-circuit if it has been canceled.
 	_ = doWithBatch(context.Background(), len(keys), c.config.MaxGetMultiBatchSize, getMultiGate, func(startIndex, endIndex int) error {
-		batchKeys := groupedKeys[startIndex:endIndex]
+		batchKeys := sortedKeys[startIndex:endIndex]
 
 		res := &memcachedGetMultiResult{}
 		res.items, res.err = c.getMultiSingle(ctx, batchKeys)
@@ -544,14 +544,14 @@ func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (it
 	return items, err
 }
 
-// groupKeysByServer groups cache keys within a slice based on which server they are
+// sortKeysByServer sorts cache keys within a slice based on which server they are
 // sharded to using a memcache.ServerSelector instance. The keys are ordered so keys
 // on the same server are next to each other. Any errors encountered determining which
-// server a key should be on will result in returning keys ungrouped, in the same order
-// they were supplied in. Note that output is not guaranteed to be any particular order
-// *except* that keys will be grouped by server. The order of keys returned may change
-// from call to call.
-func (c *memcachedClient) groupKeysByServer(keys []string) []string {
+// server a key should be on will result in returning keys unsorted (in the same order
+// they were supplied in). Note that output is not guaranteed to be any particular order
+// *except* that keys sharded to the same server will be together. The order of keys
+// returned may change from call to call.
+func (c *memcachedClient) sortKeysByServer(keys []string) []string {
 	bucketed := make(map[string][]string)
 
 	for _, key := range keys {
