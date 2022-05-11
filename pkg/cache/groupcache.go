@@ -254,7 +254,7 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 		},
 	))
 
-	RegisterCacheStatsCollector(galaxy, reg)
+	RegisterCacheStatsCollector(galaxy, &conf, reg)
 
 	return &Groupcache{
 		logger:   logger,
@@ -305,8 +305,13 @@ func (c *Groupcache) Name() string {
 
 type CacheStatsCollector struct {
 	galaxy *galaxycache.Galaxy
+	conf   *GroupcacheConfig
 
 	// GalaxyCache Metric descriptions.
+	bytes             *prometheus.Desc
+	evictions         *prometheus.Desc
+	items             *prometheus.Desc
+	maxBytes          *prometheus.Desc
 	gets              *prometheus.Desc
 	loads             *prometheus.Desc
 	peerLoads         *prometheus.Desc
@@ -317,7 +322,16 @@ type CacheStatsCollector struct {
 }
 
 // RegisterCacheStatsCollector registers a groupcache metrics collector.
-func RegisterCacheStatsCollector(galaxy *galaxycache.Galaxy, reg prometheus.Registerer) {
+func RegisterCacheStatsCollector(galaxy *galaxycache.Galaxy, conf *GroupcacheConfig, reg prometheus.Registerer) {
+	// Cache metrics.
+	bytes := prometheus.NewDesc("thanos_cache_groupcache_bytes", "The number of bytes in the main cache.", []string{"cache"}, nil)
+	evictions := prometheus.NewDesc("thanos_cache_groupcache_evictions_total", "The number items evicted from the cache.", []string{"cache"}, nil)
+	items := prometheus.NewDesc("thanos_cache_groupcache_items", "The number of items in the cache.", []string{"cache"}, nil)
+
+	// Configuration Metrics.
+	maxBytes := prometheus.NewDesc("thanos_cache_groupcache_max_bytes", "The max number of bytes in the cache.", nil, nil)
+
+	// GroupCache metrics.
 	gets := prometheus.NewDesc("thanos_cache_groupcache_get_requests_total", "Total number of get requests, including from peers.", nil, nil)
 	loads := prometheus.NewDesc("thanos_cache_groupcache_loads_total", "Total number of loads from backend (gets - cacheHits).", nil, nil)
 	peerLoads := prometheus.NewDesc("thanos_cache_groupcache_peer_loads_total", "Total number of loads from peers (remote load or remote cache hit).", nil, nil)
@@ -328,6 +342,11 @@ func RegisterCacheStatsCollector(galaxy *galaxycache.Galaxy, reg prometheus.Regi
 
 	collector := &CacheStatsCollector{
 		galaxy:            galaxy,
+		conf:              conf,
+		bytes:             bytes,
+		evictions:         evictions,
+		items:             items,
+		maxBytes:          maxBytes,
 		gets:              gets,
 		loads:             loads,
 		peerLoads:         peerLoads,
@@ -340,6 +359,14 @@ func RegisterCacheStatsCollector(galaxy *galaxycache.Galaxy, reg prometheus.Regi
 }
 
 func (s *CacheStatsCollector) Collect(ch chan<- prometheus.Metric) {
+	for _, cache := range []galaxycache.CacheType{galaxycache.MainCache, galaxycache.HotCache} {
+		cacheStats := s.galaxy.CacheStats(cache)
+		ch <- prometheus.MustNewConstMetric(s.bytes, prometheus.GaugeValue, float64(cacheStats.Bytes), cache.String())
+		ch <- prometheus.MustNewConstMetric(s.evictions, prometheus.GaugeValue, float64(cacheStats.Evictions), cache.String())
+		ch <- prometheus.MustNewConstMetric(s.items, prometheus.GaugeValue, float64(cacheStats.Items), cache.String())
+	}
+
+	ch <- prometheus.MustNewConstMetric(s.maxBytes, prometheus.GaugeValue, float64(s.conf.MaxSize))
 	ch <- prometheus.MustNewConstMetric(s.gets, prometheus.CounterValue, float64(s.galaxy.Stats.Gets.Get()))
 	ch <- prometheus.MustNewConstMetric(s.loads, prometheus.CounterValue, float64(s.galaxy.Stats.Loads.Get()))
 	ch <- prometheus.MustNewConstMetric(s.peerLoads, prometheus.CounterValue, float64(s.galaxy.Stats.PeerLoads.Get()))
