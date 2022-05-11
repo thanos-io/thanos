@@ -110,6 +110,12 @@ func contains(haystack, needle []string) bool {
 		outer := i
 
 		for j := 0; j < len(needle); j++ {
+			// End of the haystack but not the end of the needle, end
+			if outer == len(haystack) {
+				return false
+			}
+
+			// No match, try the next index of the haystack
 			if haystack[outer] != needle[j] {
 				break
 			}

@@ -52,6 +52,12 @@ func TestContains(t *testing.T) {
 			needle:      []string{"key4"},
 			shouldMatch: false,
 		},
+
+		"haystack ends before needle": {
+			haystack:    []string{"key1", "key2", "key3"},
+			needle:      []string{"key3", "key4"},
+			shouldMatch: false,
+		},
 	}
 
 	for testName, testData := range tests {
