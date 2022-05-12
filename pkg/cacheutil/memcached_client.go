@@ -89,10 +89,17 @@ type memcachedClientBackend interface {
 }
 
 // updatableServerSelector extends the interface used for picking a memcached server
-// for a key to allow servers to be updated at runtime.
+// for a key to allow servers to be updated at runtime. It allows the selector used
+// by the client to be mocked in tests.
 type updatableServerSelector interface {
 	memcache.ServerSelector
 
+	// SetServers changes a ServerSelector's set of servers at runtime
+	// and is safe for concurrent use by multiple goroutines.
+	//
+	// SetServers returns an error if any of the server names fail to
+	// resolve. No attempt is made to connect to the server. If any
+	// error occurs, no changes are made to the internal server list.
 	SetServers(servers ...string) error
 }
 
