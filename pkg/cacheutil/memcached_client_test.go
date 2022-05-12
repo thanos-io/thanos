@@ -471,7 +471,7 @@ func (c *memcachedClientBackendMock) waitItems(expected int) error {
 	return errors.New("timeout expired while waiting for items in the memcached mock")
 }
 
-// countingGate implements gate.Gate and counts the number of times Start is called
+// countingGate implements gate.Gate and counts the number of times Start is called.
 type countingGate struct {
 	wrapped gate.Gate
 	count   *atomic.Uint32
