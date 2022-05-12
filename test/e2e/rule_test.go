@@ -484,11 +484,11 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	am := e2ethanos.NewAlertmanager(e, "1")
 	testutil.Ok(t, e2e.StartAndWaitReady(am))
 
-	receiver := e2ethanos.NewIngestingReceiver(e, "1")
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 	rwURL := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")))
 
-	receiver2 := e2ethanos.NewIngestingReceiver(e, "2")
+	receiver2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver2))
 	rwURL2 := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver2.InternalEndpoint("remote-write")))
 
@@ -532,14 +532,14 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 			{
 				"__name__":  "test_absent_metric",
 				"job":       "thanos-receive",
-				"receive":   "1",
+				"receive":   model.LabelValue(receiver.Name()),
 				"replica":   "1",
 				"tenant_id": "default-tenant",
 			},
 			{
 				"__name__":  "test_absent_metric",
 				"job":       "thanos-receive",
-				"receive":   "2",
+				"receive":   model.LabelValue(receiver2.Name()),
 				"replica":   "1",
 				"tenant_id": "default-tenant",
 			},

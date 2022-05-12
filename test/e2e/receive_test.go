@@ -60,7 +60,7 @@ func TestReceive(t *testing.T) {
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup Router Ingestor.
-		i := e2ethanos.NewIngestingReceiver(e, "ingestor")
+		i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(i))
 
 		// Setup Prometheus
@@ -82,7 +82,7 @@ func TestReceive(t *testing.T) {
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
-				"receive":    "ingestor",
+				"receive":    "receive-ingestor",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
 			},
@@ -125,9 +125,9 @@ func TestReceive(t *testing.T) {
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup 3 ingestors.
-		i1 := e2ethanos.NewIngestingReceiver(e, "i1")
-		i2 := e2ethanos.NewIngestingReceiver(e, "i2")
-		i3 := e2ethanos.NewIngestingReceiver(e, "i3")
+		i1 := e2ethanos.NewReceiveBuilder(e, "i1").WithIngestionEnabled().Init()
+		i2 := e2ethanos.NewReceiveBuilder(e, "i2").WithIngestionEnabled().Init()
+		i3 := e2ethanos.NewReceiveBuilder(e, "i3").WithIngestionEnabled().Init()
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
@@ -137,8 +137,8 @@ func TestReceive(t *testing.T) {
 			},
 		}
 
-		// Setup 1 distributor
-		r1 := e2ethanos.NewRoutingReceiver(e, "r1", 2, h)
+		// Setup 1 distributor with double replication
+		r1 := e2ethanos.NewReceiveBuilder(e, "r1").WithRouting(2, h).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(i1, i2, i3, r1))
 
 		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
@@ -224,23 +224,23 @@ func TestReceive(t *testing.T) {
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup ingestors.
-		i1 := e2ethanos.NewIngestingReceiver(e, "i1")
-		i2 := e2ethanos.NewIngestingReceiver(e, "i2")
-		i3 := e2ethanos.NewIngestingReceiver(e, "i3")
+		i1 := e2ethanos.NewReceiveBuilder(e, "i1").WithIngestionEnabled().Init()
+		i2 := e2ethanos.NewReceiveBuilder(e, "i2").WithIngestionEnabled().Init()
+		i3 := e2ethanos.NewReceiveBuilder(e, "i3").WithIngestionEnabled().Init()
 
 		// Setup distributors
-		r2 := e2ethanos.NewRoutingReceiver(e, "r2", 2, receive.HashringConfig{
+		r2 := e2ethanos.NewReceiveBuilder(e, "r2").WithRouting(2, receive.HashringConfig{
 			Endpoints: []string{
 				i2.InternalEndpoint("grpc"),
 				i3.InternalEndpoint("grpc"),
 			},
-		})
-		r1 := e2ethanos.NewRoutingReceiver(e, "r1", 2, receive.HashringConfig{
+		}).Init()
+		r1 := e2ethanos.NewReceiveBuilder(e, "r1").WithRouting(2, receive.HashringConfig{
 			Endpoints: []string{
 				i1.InternalEndpoint("grpc"),
 				r2.InternalEndpoint("grpc"),
 			},
-		})
+		}).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(i1, i2, i3, r1, r2))
 
 		// Setup Prometheus.
@@ -319,9 +319,9 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-		r1 := e2ethanos.NewFutureReceiver(e, "1")
-		r2 := e2ethanos.NewFutureReceiver(e, "2")
-		r3 := e2ethanos.NewFutureReceiver(e, "3")
+		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled()
+		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled()
+		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled()
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
@@ -332,9 +332,9 @@ func TestReceive(t *testing.T) {
 		}
 
 		// Create with hashring config watcher.
-		r1Runnable := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(r1, 1, h)
-		r2Runnable := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(r2, 1, h)
-		r3Runnable := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(r3, 1, h)
+		r1Runnable := r1.WithRouting(1, h).Init()
+		r2Runnable := r2.WithRouting(1, h).Init()
+		r3Runnable := r3.WithRouting(1, h).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r3Runnable))
 
 		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
@@ -391,9 +391,9 @@ func TestReceive(t *testing.T) {
 		// receivers and the test verifies that the time series are
 		// replicated to all of the nodes.
 
-		r1 := e2ethanos.NewFutureReceiver(e, "1")
-		r2 := e2ethanos.NewFutureReceiver(e, "2")
-		r3 := e2ethanos.NewFutureReceiver(e, "3")
+		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled()
+		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled()
+		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled()
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
@@ -404,9 +404,9 @@ func TestReceive(t *testing.T) {
 		}
 
 		// Create with hashring config.
-		r1Runnable := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(r1, 3, h)
-		r2Runnable := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(r2, 3, h)
-		r3Runnable := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(r3, 3, h)
+		r1Runnable := r1.WithRouting(3, h).Init()
+		r2Runnable := r2.WithRouting(3, h).Init()
+		r3Runnable := r3.WithRouting(3, h).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r3Runnable))
 
 		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
@@ -458,9 +458,9 @@ func TestReceive(t *testing.T) {
 		// receivers is dead. In this case, replication should still
 		// succeed and the time series should be replicated to the other nodes.
 
-		r1 := e2ethanos.NewFutureReceiver(e, "1")
-		r2 := e2ethanos.NewFutureReceiver(e, "2")
-		r3 := e2ethanos.NewFutureReceiver(e, "3")
+		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled()
+		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled()
+		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled()
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
@@ -471,8 +471,8 @@ func TestReceive(t *testing.T) {
 		}
 
 		// Create with hashring config.
-		r1Runnable := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(r1, 3, h)
-		r2Runnable := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(r2, 3, h)
+		r1Runnable := r1.WithRouting(3, h).Init()
+		r2Runnable := r2.WithRouting(3, h).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable))
 
 		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
@@ -513,7 +513,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-		r1 := e2ethanos.NewFutureReceiver(e, "1")
+		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled()
 
 		h := receive.HashringConfig{
 			Endpoints: []string{
@@ -522,7 +522,7 @@ func TestReceive(t *testing.T) {
 		}
 
 		// Create with hashring config.
-		r1Runnable := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(r1, 1, h)
+		r1Runnable := r1.WithRouting(1, h).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable))
 
 		rp1 := e2ethanos.NewReverseProxy(e, "1", "tenant-1", "http://"+r1.InternalEndpoint("remote-write"))

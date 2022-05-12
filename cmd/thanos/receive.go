@@ -769,7 +769,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.refreshInterval = extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
 
-	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration.").StringVar(&rc.endpoint)
+	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration. If it's empty AND hashring configuration was provided, it means thie receive will run in RoutingOnly mode.").StringVar(&rc.endpoint)
 
 	cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(receive.DefaultTenantHeader).StringVar(&rc.tenantHeader)
 

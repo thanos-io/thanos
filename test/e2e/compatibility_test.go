@@ -27,7 +27,7 @@ func TestPromQLCompliance(t *testing.T) {
 	t.Cleanup(e.Close)
 
 	// Start receive + Querier.
-	receiverRunnable := e2ethanos.NewIngestingReceiver(e, "receive")
+	receiverRunnable := e2ethanos.NewReceiveBuilder(e, "receive").WithIngestionEnabled().Init()
 	queryReceive := e2edb.NewThanosQuerier(e, "query_receive", []string{receiverRunnable.InternalEndpoint("grpc")})
 	testutil.Ok(t, e2e.StartAndWaitReady(receiverRunnable, queryReceive))
 

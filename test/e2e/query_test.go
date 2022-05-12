@@ -108,7 +108,7 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	receiver := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(e2ethanos.NewFutureReceiver(e, "1"), 1)
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
@@ -253,7 +253,7 @@ func TestQueryLabelNames(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	receiver := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(e2ethanos.NewFutureReceiver(e, "1"), 1)
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
@@ -300,7 +300,7 @@ func TestQueryLabelValues(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	receiver := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(e2ethanos.NewFutureReceiver(e, "1"), 1)
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
