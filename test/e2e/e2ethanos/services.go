@@ -366,6 +366,7 @@ type ReceiveBuilder struct {
 	ingestion       bool
 	hashringConfigs []receive.HashringConfig
 	replication     int
+	image           string
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -376,7 +377,13 @@ func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
 		Linkable:    f,
 		f:           f,
 		replication: 1,
+		image:       DefaultImage(),
 	}
+}
+
+func (r *ReceiveBuilder) WithImage(image string) *ReceiveBuilder {
+	r.image = image
+	return r
 }
 
 func (r *ReceiveBuilder) WithExemplarsInMemStorage(maxExemplars int) *ReceiveBuilder {
@@ -441,7 +448,7 @@ func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
 	}
 
 	return r.f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image:     DefaultImage(),
+		Image:     r.image,
 		Command:   e2e.NewCommand("receive", e2e.BuildArgs(args)...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	}))
@@ -454,17 +461,25 @@ type RulerBuilder struct {
 
 	amCfg        []alert.AlertmanagerConfig
 	replicaLabel string
+	image        string
 }
 
+// NewRulerBuilder is a Ruler future that allows extra configuration before initialization.
 func NewRulerBuilder(e e2e.Environment, name string) *RulerBuilder {
-	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("rule-%v", name)).
+	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("rule-%s", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}, "http").
 		Future()
 	return &RulerBuilder{
 		replicaLabel: name,
 		Linkable:     f,
 		f:            f,
+		image:        DefaultImage(),
 	}
+}
+
+func (r *RulerBuilder) WithImage(image string) *RulerBuilder {
+	r.image = image
+	return r
 }
 
 func (r *RulerBuilder) WithAlertManagerConfig(amCfg []alert.AlertmanagerConfig) *RulerBuilder {
@@ -531,7 +546,7 @@ func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Co
 	}
 
 	return r.f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image:     DefaultImage(),
+		Image:     r.image,
 		Command:   e2e.NewCommand("rule", e2e.BuildArgs(ruleArgs)...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	}))

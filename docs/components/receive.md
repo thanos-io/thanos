@@ -138,7 +138,7 @@ Flags:
                                  Endpoint of local receive node. Used to
                                  identify the local node in the hashring
                                  configuration. If it's empty AND hashring
-                                 configuration was provided, it means thie
+                                 configuration was provided, it means that
                                  receive will run in RoutingOnly mode.
       --receive.replica-header="THANOS-REPLICA"
                                  HTTP header specifying the replica number of a
