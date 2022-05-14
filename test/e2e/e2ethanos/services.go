@@ -357,112 +357,99 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
 
-// NewFutureReceiver returns a future receiver that can be initiated. It is useful
-// for obtaining a receiver address for hashring before the receiver is started.
-func NewFutureReceiver(e e2e.Environment, name string) e2e.FutureInstrumentedRunnable {
-	return e2e.NewInstrumentedRunnable(e, fmt.Sprintf("receive-%v", name)).
+type ReceiveBuilder struct {
+	e2e.Linkable
+
+	f e2e.FutureInstrumentedRunnable
+
+	maxExemplars    int
+	ingestion       bool
+	hashringConfigs []receive.HashringConfig
+	replication     int
+	image           string
+}
+
+func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
+	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("receive-%v", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091, "remote-write": 8081}, "http").
 		Future()
+	return &ReceiveBuilder{
+		Linkable:    f,
+		f:           f,
+		replication: 1,
+		image:       DefaultImage(),
+	}
 }
 
-// NewRoutingAndIngestingReceiverFromFuture creates a Thanos Receive instances from a future service.
-// It is configured both for ingesting samples and routing samples to other receivers.
-func NewRoutingAndIngestingReceiverFromFuture(f e2e.FutureInstrumentedRunnable, replicationFactor int, hashring ...receive.HashringConfig) e2e.InstrumentedRunnable {
-	var localEndpoint string
-	if len(hashring) == 0 {
-		localEndpoint = "0.0.0.0:9091"
-		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
-	} else {
-		localEndpoint = f.InternalEndpoint("grpc")
-	}
-
-	if err := os.MkdirAll(filepath.Join(f.Dir(), "data"), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(f.Name(), errors.Wrap(err, "create receive dir"))
-	}
-	b, err := json.Marshal(hashring)
-	if err != nil {
-		return e2e.NewErrInstrumentedRunnable(f.Name(), errors.Wrapf(err, "generate hashring file: %v", hashring))
-	}
-
-	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "hashrings.json"), b, 0600); err != nil {
-		return e2e.NewErrInstrumentedRunnable(f.Name(), errors.Wrap(err, "creating receive config"))
-	}
-
-	return f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image: DefaultImage(),
-		Command: // TODO(bwplotka): BuildArgs should be interface.
-		e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
-			"--debug.name":                              f.Name(),
-			"--grpc-address":                            ":9091",
-			"--grpc-grace-period":                       "0s",
-			"--http-address":                            ":8080",
-			"--remote-write.address":                    ":8081",
-			"--label":                                   fmt.Sprintf(`receive="%s"`, f.Name()),
-			"--tsdb.path":                               filepath.Join(f.InternalDir(), "data"),
-			"--log.level":                               infoLogLevel,
-			"--receive.replication-factor":              strconv.Itoa(replicationFactor),
-			"--receive.local-endpoint":                  localEndpoint,
-			"--receive.hashrings-file":                  filepath.Join(f.InternalDir(), "hashrings.json"),
-			"--receive.hashrings-file-refresh-interval": "5s",
-		})...),
-		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-	}))
+func (r *ReceiveBuilder) WithImage(image string) *ReceiveBuilder {
+	r.image = image
+	return r
 }
 
-// NewRoutingReceiver creates a Thanos Receive instance that is only configured to route to other receive instances. It has no local storage.
-func NewRoutingReceiver(e e2e.Environment, name string, replicationFactor int, hashring ...receive.HashringConfig) e2e.InstrumentedRunnable {
-	if len(hashring) == 0 {
-		return e2e.NewErrInstrumentedRunnable(name, errors.New("hashring should not be empty for receive-distributor mode"))
-	}
-
-	f := NewFutureReceiver(e, name)
-	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create receive dir"))
-	}
-	b, err := json.Marshal(hashring)
-	if err != nil {
-		e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate hashring file: %v", hashring))
-	}
-
-	return f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image: DefaultImage(),
-		// TODO(bwplotka): BuildArgs should be interface.
-		Command: e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
-			"--debug.name":                 fmt.Sprintf("receive-%v", name),
-			"--grpc-address":               ":9091",
-			"--grpc-grace-period":          "0s",
-			"--http-address":               ":8080",
-			"--remote-write.address":       ":8081",
-			"--label":                      fmt.Sprintf(`receive="%s"`, name),
-			"--tsdb.path":                  filepath.Join(f.InternalDir(), "data"),
-			"--log.level":                  infoLogLevel,
-			"--receive.replication-factor": strconv.Itoa(replicationFactor),
-			"--receive.hashrings":          string(b),
-		})...),
-		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-	}))
+func (r *ReceiveBuilder) WithExemplarsInMemStorage(maxExemplars int) *ReceiveBuilder {
+	r.maxExemplars = maxExemplars
+	r.ingestion = true
+	return r
 }
 
-// NewIngestingReceiver creates a Thanos Receive instance that is only configured to ingest, not route to other receivers.
-func NewIngestingReceiver(e e2e.Environment, name string) e2e.InstrumentedRunnable {
-	f := NewFutureReceiver(e, name)
-	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create receive dir"))
+func (r *ReceiveBuilder) WithIngestionEnabled() *ReceiveBuilder {
+	r.ingestion = true
+	return r
+}
+
+func (r *ReceiveBuilder) WithRouting(replication int, hashringConfigs ...receive.HashringConfig) *ReceiveBuilder {
+	r.hashringConfigs = hashringConfigs
+	r.replication = replication
+	return r
+}
+
+// Init creates a Thanos Receive instance.
+// If ingestion is enabled it will be configured for ingesting samples.
+// If routing is configured (i.e. hashring configuration is provided) it routes samples to other receivers.
+// If none, it errors out.
+func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
+	if !r.ingestion && len(r.hashringConfigs) == 0 {
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.New("enable ingestion or configure routing for this receiver"))
 	}
 
-	return f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image: DefaultImage(),
-		// TODO(bwplotka): BuildArgs should be interface.
-		Command: e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
-			"--debug.name":           fmt.Sprintf("receive-%v", name),
-			"--grpc-address":         ":9091",
-			"--grpc-grace-period":    "0s",
-			"--http-address":         ":8080",
-			"--remote-write.address": ":8081",
-			"--label":                fmt.Sprintf(`receive="%s"`, name),
-			"--tsdb.path":            filepath.Join(f.InternalDir(), "data"),
-			"--log.level":            infoLogLevel,
-		})...),
+	args := map[string]string{
+		"--debug.name":           r.Name(),
+		"--grpc-address":         ":9091",
+		"--grpc-grace-period":    "0s",
+		"--http-address":         ":8080",
+		"--remote-write.address": ":8081",
+		"--label":                fmt.Sprintf(`receive="%s"`, r.Name()),
+		"--tsdb.path":            filepath.Join(r.InternalDir(), "data"),
+		"--log.level":            infoLogLevel,
+	}
+
+	hashring := r.hashringConfigs
+	if len(hashring) > 0 && r.ingestion {
+		args["--receive.local-endpoint"] = r.InternalEndpoint("grpc")
+	}
+
+	if err := os.MkdirAll(filepath.Join(r.Dir(), "data"), 0750); err != nil {
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "create receive dir"))
+	}
+
+	if len(hashring) > 0 {
+		b, err := json.Marshal(hashring)
+		if err != nil {
+			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate hashring file: %v", hashring))
+		}
+
+		if err := ioutil.WriteFile(filepath.Join(r.Dir(), "hashrings.json"), b, 0600); err != nil {
+			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "creating receive config"))
+		}
+
+		args["--receive.hashrings-file"] = filepath.Join(r.InternalDir(), "hashrings.json")
+		args["--receive.hashrings-file-refresh-interval"] = "5s"
+		args["--receive.replication-factor"] = strconv.Itoa(r.replication)
+	}
+
+	return r.f.Init(wrapWithDefaults(e2e.StartOptions{
+		Image:     r.image,
+		Command:   e2e.NewCommand("receive", e2e.BuildArgs(args)...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	}))
 }
@@ -474,17 +461,25 @@ type RulerBuilder struct {
 
 	amCfg        []alert.AlertmanagerConfig
 	replicaLabel string
+	image        string
 }
 
+// NewRulerBuilder is a Ruler future that allows extra configuration before initialization.
 func NewRulerBuilder(e e2e.Environment, name string) *RulerBuilder {
-	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("rule-%v", name)).
+	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("rule-%s", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}, "http").
 		Future()
 	return &RulerBuilder{
 		replicaLabel: name,
 		Linkable:     f,
 		f:            f,
+		image:        DefaultImage(),
 	}
+}
+
+func (r *RulerBuilder) WithImage(image string) *RulerBuilder {
+	r.image = image
+	return r
 }
 
 func (r *RulerBuilder) WithAlertManagerConfig(amCfg []alert.AlertmanagerConfig) *RulerBuilder {
@@ -551,7 +546,7 @@ func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Co
 	}
 
 	return r.f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image:     DefaultImage(),
+		Image:     r.image,
 		Command:   e2e.NewCommand("rule", e2e.BuildArgs(ruleArgs)...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	}))
