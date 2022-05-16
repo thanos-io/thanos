@@ -156,7 +156,10 @@ func TestSenderSendsOk(t *testing.T) {
 	}
 	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute, APIv1)})
 
-	s.Send(context.Background(), []*notifier.Alert{{}, {}})
+	s.Send(context.Background(), []*notifier.Alert{
+		{Labels: labels.FromStrings("alertname", "test")}, {
+			Labels: labels.FromStrings("alertname", "test"),
+		}})
 
 	assertSameHosts(t, poster.urls, poster.seen)
 
@@ -166,6 +169,9 @@ func TestSenderSendsOk(t *testing.T) {
 	testutil.Equals(t, 2, int(promtestutil.ToFloat64(s.sent.WithLabelValues(poster.urls[1].Host))))
 	testutil.Equals(t, 0, int(promtestutil.ToFloat64(s.errs.WithLabelValues(poster.urls[1].Host))))
 	testutil.Equals(t, 0, int(promtestutil.ToFloat64(s.dropped)))
+
+	testutil.Equals(t, 2, int(promtestutil.ToFloat64(s.sentByAlertName.WithLabelValues(poster.urls[0].Host, "test"))))
+	testutil.Equals(t, 2, int(promtestutil.ToFloat64(s.sentByAlertName.WithLabelValues(poster.urls[1].Host, "test"))))
 }
 
 func TestSenderSendsOneFails(t *testing.T) {

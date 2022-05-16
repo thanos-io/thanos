@@ -229,10 +229,11 @@ type Sender struct {
 	alertmanagers []*Alertmanager
 	versions      []APIVersion
 
-	sent    *prometheus.CounterVec
-	errs    *prometheus.CounterVec
-	dropped prometheus.Counter
-	latency *prometheus.HistogramVec
+	sent            *prometheus.CounterVec
+	sentByAlertName *prometheus.CounterVec
+	errs            *prometheus.CounterVec
+	dropped         prometheus.Counter
+	latency         *prometheus.HistogramVec
 }
 
 // NewSender returns a new sender. On each call to Send the entire alert batch is sent
@@ -264,6 +265,11 @@ func NewSender(
 			Name: "thanos_alert_sender_alerts_sent_total",
 			Help: "Total number of alerts sent by alertmanager.",
 		}, []string{"alertmanager"}),
+
+		sentByAlertName: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Name: "thanos_alert_sender_alerts_sent_by_alertname_total",
+			Help: "Total number of alerts sent by alertmanager and alert name.",
+		}, []string{"alertmanager", "alertname"}),
 
 		errs: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_alert_sender_errors_total",
@@ -359,6 +365,10 @@ func (s *Sender) Send(ctx context.Context, alerts []*notifier.Alert) {
 					}
 					s.latency.WithLabelValues(u.Host).Observe(time.Since(start).Seconds())
 					s.sent.WithLabelValues(u.Host).Add(float64(len(alerts)))
+
+					for _, alert := range alerts {
+						s.sentByAlertName.WithLabelValues(u.Host, alert.Name()).Inc()
+					}
 
 					numSuccess.Inc()
 				})
