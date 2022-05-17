@@ -64,6 +64,7 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 		b, err := filesystem.NewBucket(dir)
 		testutil.Ok(t, err)
 		testFn(t, b)
+		testFn(t, objstore.NewPrefixedBucket(b, "some_prefix"))
 	})
 
 	// Optional GCS.
@@ -77,6 +78,7 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 
 			// TODO(bwplotka): Add goleak when https://github.com/GoogleCloudPlatform/google-cloud-go/issues/1025 is resolved.
 			testFn(t, bkt)
+			testFn(t, objstore.NewPrefixedBucket(bkt, "some_prefix"))
 		})
 	}
 
@@ -109,6 +111,7 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 			defer closeFn()
 
 			testFn(t, bkt)
+			testFn(t, objstore.NewPrefixedBucket(bkt, "some_prefix"))
 		})
 	}
 
@@ -122,6 +125,7 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 			defer closeFn()
 
 			testFn(t, container)
+			testFn(t, objstore.NewPrefixedBucket(container, "some_prefix"))
 		})
 	}
 
@@ -135,6 +139,7 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 			defer closeFn()
 
 			testFn(t, bkt)
+			testFn(t, objstore.NewPrefixedBucket(bkt, "some_prefix"))
 		})
 	}
 
@@ -148,6 +153,7 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 			defer closeFn()
 
 			testFn(t, bkt)
+			testFn(t, objstore.NewPrefixedBucket(bkt, "some_prefix"))
 		})
 	}
 
@@ -161,6 +167,7 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 			defer closeFn()
 
 			testFn(t, bkt)
+			testFn(t, objstore.NewPrefixedBucket(bkt, "some_prefix"))
 		})
 	}
 }
