@@ -95,6 +95,7 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 			// This needs to be investigated more.
 
 			testFn(t, bkt)
+			testFn(t, objstore.NewPrefixedBucket(bkt, "some_prefix"))
 		})
 	}
 
