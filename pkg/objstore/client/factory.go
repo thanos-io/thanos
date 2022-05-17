@@ -82,8 +82,9 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
 	}
 
-	prefix := PrefixFromConfig(string(confContentYaml))
+	prefix := prefixFromConfig(confContentYaml)
 	var prefixedBucket objstore.Bucket
+
 	if validPrefix(prefix) {
 		prefixedBucket = objstore.NewPrefixedBucket(bucket, prefix)
 		level.Debug(logger).Log("msg", "using prefix on bucket access", "prefix", prefix)
@@ -99,9 +100,10 @@ func validPrefix(prefix string) bool {
 	return len(prefix) > 0
 }
 
-func PrefixFromConfig(confYaml string) string {
+func prefixFromConfig(confYaml []byte) string {
 	bucketConf := &BucketConfig{}
-	err := yaml.UnmarshalStrict([]byte(confYaml), &bucketConf)
+	err := yaml.UnmarshalStrict(confYaml, &bucketConf)
+
 	if err != nil {
 		return ""
 	}
