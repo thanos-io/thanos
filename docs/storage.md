@@ -63,6 +63,7 @@ NOTE: Minio client was mainly for AWS S3, but it can be configured against other
 type: S3
 config:
   bucket: ""
+  prefix: ""
   endpoint: ""
   region: ""
   aws_sdk_auth: false
