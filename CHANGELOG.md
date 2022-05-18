@@ -15,7 +15,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5357](https://github.com/thanos-io/thanos/pull/5357) Store: fix groupcache handling of slashes
 
 ### Added
-
+- [#5369](https://github.com/thanos-io/thanos/pull/5369) Thanos UI: Added Additional Stats for BlockViewer
 - [#5352](https://github.com/thanos-io/thanos/pull/5352) Cache: Add cache metrics to groupcache.
 
 ### Changed
