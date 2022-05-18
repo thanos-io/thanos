@@ -1,23 +1,18 @@
-import React, { FC } from 'react';
+import React, { FC, useRef, useState } from 'react';
 import { Block, BlocksPool } from './block';
 import { BlockSpan } from './BlockSpan';
 import styles from './blocks.module.css';
-import { getBlockByUlid, getBlocksByCompactionLevel } from './helpers';
+import { Tooltip } from 'reactstrap';
 
 export const BlocksRow: FC<{
   blocks: Block[];
   gridMinTime: number;
   gridMaxTime: number;
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
-  blockSearch: string;
-  compactionLevel: number;
-}> = ({ blocks, gridMinTime, gridMaxTime, selectBlock, blockSearch, compactionLevel }) => {
-  let filteredBlocks = getBlockByUlid(blocks, blockSearch);
-  filteredBlocks = getBlocksByCompactionLevel(filteredBlocks, compactionLevel);
-
+}> = ({ blocks, gridMinTime, gridMaxTime, selectBlock }) => {
   return (
     <div className={styles.row}>
-      {filteredBlocks.map<JSX.Element>((b) => (
+      {blocks.map<JSX.Element>((b) => (
         <BlockSpan selectBlock={selectBlock} block={b} gridMaxTime={gridMaxTime} gridMinTime={gridMinTime} key={b.ulid} />
       ))}
     </div>
@@ -30,24 +25,24 @@ export interface SourceViewProps {
   gridMinTime: number;
   gridMaxTime: number;
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
-  blockSearch: string;
-  compactionLevel: number;
+  blockCount: { [key: string]: number };
 }
 
-export const SourceView: FC<SourceViewProps> = ({
-  data,
-  title,
-  gridMaxTime,
-  gridMinTime,
-  selectBlock,
-  blockSearch,
-  compactionLevel,
-}) => {
+export const SourceView: FC<SourceViewProps> = ({ data, title, gridMaxTime, gridMinTime, selectBlock, blockCount }) => {
+  const linkRef = useRef<HTMLSpanElement>();
+  const [open, setOpen] = useState(false);
+  const toggle = () => setOpen(!open);
+
   return (
     <>
       <div className={styles.source}>
         <div className={styles.title} title={title}>
-          <span>{title}</span>
+          <span ref={linkRef as React.RefObject<HTMLSpanElement>}>{title}</span>
+          {linkRef.current && (
+            <Tooltip placement="right" isOpen={open} target={linkRef.current} toggle={toggle} autohide={false}>
+              Blocks Count: {blockCount[title]}
+            </Tooltip>
+          )}
         </div>
         <div className={styles.rowsContainer}>
           {Object.keys(data).map((k) => (
@@ -59,8 +54,6 @@ export const SourceView: FC<SourceViewProps> = ({
                   key={`${k}-${i}`}
                   gridMaxTime={gridMaxTime}
                   gridMinTime={gridMinTime}
-                  blockSearch={blockSearch}
-                  compactionLevel={compactionLevel}
                 />
               ))}
             </React.Fragment>
