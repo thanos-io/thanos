@@ -363,14 +363,21 @@ func runStore(
 
 			level.Info(logger).Log("msg", "initializing bucket store")
 			begin := time.Now()
-			if err := bs.InitialSync(ctx); err != nil {
+
+			err := runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
+				syncErr := bs.InitialSync(ctx)
+				return errors.Wrap(syncErr, "bucket store initial sync")
+			})
+
+			if err != nil {
 				close(bucketStoreReady)
 				return errors.Wrap(err, "bucket store initial sync")
 			}
+
 			level.Info(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
 			close(bucketStoreReady)
 
-			err := runutil.Repeat(conf.syncInterval, ctx.Done(), func() error {
+			err = runutil.Repeat(conf.syncInterval, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}
