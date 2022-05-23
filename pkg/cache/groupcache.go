@@ -264,6 +264,30 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 	}, nil
 }
 
+// unsafeByteCodec is a byte slice type that implements Codec.
+type unsafeByteCodec struct {
+	bytes  []byte
+	expire time.Time
+}
+
+// MarshalBinary returns the contained byte-slice.
+func (c *unsafeByteCodec) MarshalBinary() ([]byte, time.Time, error) {
+	return c.bytes, c.expire, nil
+}
+
+// UnmarshalBinary to provided data so they share the same backing array
+// this is a generally unsafe performance optimization, but safe in our
+// case because we always use ioutil.ReadAll(). That is fine though
+// because later that slice remains in our local cache.
+// Used https://github.com/vimeo/galaxycache/pull/23/files as inspiration.
+// TODO(GiedriusS): figure out if pooling could be used somehow by hooking into
+// eviction.
+func (c *unsafeByteCodec) UnmarshalBinary(data []byte, expire time.Time) error {
+	c.bytes = data
+	c.expire = expire
+	return nil
+}
+
 func (c *Groupcache) Store(ctx context.Context, data map[string][]byte, ttl time.Duration) {
 	// Noop since cache is already filled during fetching.
 }
@@ -278,7 +302,7 @@ func (c *Groupcache) Fetch(ctx context.Context, keys []string) map[string][]byte
 	}
 
 	for _, k := range keys {
-		codec := galaxycache.ByteCodec{}
+		codec := unsafeByteCodec{}
 
 		if err := c.galaxy.Get(ctx, k, &codec); err != nil {
 			level.Debug(c.logger).Log("msg", "failed fetching data from groupcache", "err", err, "key", k)
