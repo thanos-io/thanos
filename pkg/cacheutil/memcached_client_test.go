@@ -5,6 +5,8 @@ package cacheutil
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -404,6 +406,76 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			testutil.Equals(t, float64(testData.mockedGetMultiErrors), prom_testutil.ToFloat64(client.failures.WithLabelValues(opGetMulti, reasonOther)))
 		})
 	}
+}
+
+func TestMemcachedClient_sortKeysByServer(t *testing.T) {
+	config := defaultMemcachedClientConfig
+	config.Addresses = []string{"127.0.0.1:11211", "127.0.0.2:11211"}
+	backendMock := newMemcachedClientBackendMock()
+	selector := &mockServerSelector{
+		serversByKey: map[string]mockAddr{
+			"key1": "127.0.0.1:11211",
+			"key2": "127.0.0.2:11211",
+			"key3": "127.0.0.1:11211",
+			"key4": "127.0.0.2:11211",
+			"key5": "127.0.0.1:11211",
+			"key6": "127.0.0.2:11211",
+		},
+	}
+
+	client, err := newMemcachedClient(log.NewNopLogger(), backendMock, selector, config, nil, "test")
+	testutil.Ok(t, err)
+	defer client.Stop()
+
+	keys := []string{
+		"key1",
+		"key2",
+		"key3",
+		"key4",
+		"key5",
+		"key6",
+	}
+
+	sorted := client.sortKeysByServer(keys)
+	testutil.Contains(t, sorted, []string{"key1", "key3", "key5"})
+	testutil.Contains(t, sorted, []string{"key2", "key4", "key6"})
+}
+
+type mockAddr string
+
+func (m mockAddr) Network() string {
+	return "mock"
+}
+
+func (m mockAddr) String() string {
+	return string(m)
+}
+
+type mockServerSelector struct {
+	serversByKey map[string]mockAddr
+}
+
+func (m *mockServerSelector) PickServer(key string) (net.Addr, error) {
+	if srv, ok := m.serversByKey[key]; ok {
+		return srv, nil
+	}
+
+	panic(fmt.Sprintf("unmapped key: %s", key))
+}
+
+func (m *mockServerSelector) Each(f func(net.Addr) error) error {
+	for k := range m.serversByKey {
+		addr := m.serversByKey[k]
+		if err := f(addr); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (m *mockServerSelector) SetServers(...string) error {
+	return nil
 }
 
 func prepare(config MemcachedClientConfig, backendMock *memcachedClientBackendMock) (*memcachedClient, error) {
