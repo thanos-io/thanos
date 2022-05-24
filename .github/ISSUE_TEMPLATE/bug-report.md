@@ -50,7 +50,6 @@ Uncomment if you would like to post collapsible logs:
 -->
 
 **Anything else we need to know**:
-
 <!--
 Uncomment and fill if you use not casual environment or if it might be relevant.
 
@@ -60,3 +59,16 @@ Uncomment and fill if you use not casual environment or if it might be relevant.
 - Others:
 
 -->
+
+**Screenshots**
+Add screenshots, if applicable, to help explain your problem.
+
+**Enviroment:**
+ - OS: [e.g. Ubuntu, Windows]
+ - Browser: [e.g. Chrome, Safari]
+ - Version: [e.g. 22]
+ - Device: [e.g. laptop, iPhone]
+
+**Contributor Resources**
+
+- See [contributing instructions](https://github.com/thanos-io/thanos/blob/main/CONTRIBUTING.md)

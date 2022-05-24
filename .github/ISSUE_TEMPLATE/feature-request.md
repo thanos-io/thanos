@@ -41,3 +41,10 @@ assignees: ''
 -->
 
 (Write your answer here.)
+
+**Screenshots / Mockups**
+<!-- Add any other context or screenshots about the feature request here. -->
+
+**Contributor Resources**
+
+- See [contributing instructions](https://github.com/thanos-io/thanos/blob/main/CONTRIBUTING.md)
