@@ -7,7 +7,7 @@ import (
 	"bufio"
 	"io"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 const (
@@ -96,7 +96,7 @@ func readByteRanges(src io.Reader, dst []byte, byteRanges byteRanges) ([]byte, e
 			if err == io.EOF {
 				err = io.ErrUnexpectedEOF
 			}
-			return nil, errors.Wrap(err, "discard bytes")
+			return nil, errors.Wrapf(err, "discard bytes")
 		}
 
 		// At this point the next byte to read from the reader is the current chunk,
@@ -117,7 +117,7 @@ func readByteRanges(src io.Reader, dst []byte, byteRanges byteRanges) ([]byte, e
 			if err == io.EOF {
 				err = io.ErrUnexpectedEOF
 			}
-			return nil, errors.Wrap(err, "read byte range")
+			return nil, errors.Wrapf(err, "read byte range")
 		}
 	}
 

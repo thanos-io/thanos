@@ -14,14 +14,14 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // NewServerConfig provides new server TLS configuration.
 func NewServerConfig(logger log.Logger, cert, key, clientCA string) (*tls.Config, error) {
 	if key == "" && cert == "" {
 		if clientCA != "" {
-			return nil, errors.New("when a client CA is used a server key and certificate must also be provided")
+			return nil, errors.Newf("when a client CA is used a server key and certificate must also be provided")
 		}
 
 		level.Info(logger).Log("msg", "disabled TLS, key and cert must be set to enable")
@@ -31,7 +31,7 @@ func NewServerConfig(logger log.Logger, cert, key, clientCA string) (*tls.Config
 	level.Info(logger).Log("msg", "enabling server side TLS")
 
 	if key == "" || cert == "" {
-		return nil, errors.New("both server key and certificate must be provided")
+		return nil, errors.Newf("both server key and certificate must be provided")
 	}
 
 	tlsCfg := &tls.Config{
@@ -48,12 +48,12 @@ func NewServerConfig(logger log.Logger, cert, key, clientCA string) (*tls.Config
 	if clientCA != "" {
 		caPEM, err := ioutil.ReadFile(filepath.Clean(clientCA))
 		if err != nil {
-			return nil, errors.Wrap(err, "reading client CA")
+			return nil, errors.Wrapf(err, "reading client CA")
 		}
 
 		certPool := x509.NewCertPool()
 		if !certPool.AppendCertsFromPEM(caPEM) {
-			return nil, errors.Wrap(err, "building client CA")
+			return nil, errors.Wrapf(err, "building client CA")
 		}
 		tlsCfg.ClientCAs = certPool
 		tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
@@ -90,7 +90,7 @@ func (m *serverTLSManager) getCertificate(clientHello *tls.ClientHelloInfo) (*tl
 	if m.srvCert == nil || !statCert.ModTime().Equal(m.srvCertModTime) || !statKey.ModTime().Equal(m.srvKeyModTime) {
 		cert, err := tls.LoadX509KeyPair(m.srvCertPath, m.srvKeyPath)
 		if err != nil {
-			return nil, errors.Wrap(err, "server credentials")
+			return nil, errors.Wrapf(err, "server credentials")
 		}
 		m.srvCertModTime = statCert.ModTime()
 		m.srvKeyModTime = statKey.ModTime()
@@ -105,19 +105,19 @@ func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, sk
 	if caCert != "" {
 		caPEM, err := ioutil.ReadFile(filepath.Clean(caCert))
 		if err != nil {
-			return nil, errors.Wrap(err, "reading client CA")
+			return nil, errors.Wrapf(err, "reading client CA")
 		}
 
 		certPool = x509.NewCertPool()
 		if !certPool.AppendCertsFromPEM(caPEM) {
-			return nil, errors.Wrap(err, "building client CA")
+			return nil, errors.Wrapf(err, "building client CA")
 		}
 		level.Info(logger).Log("msg", "TLS client using provided certificate pool")
 	} else {
 		var err error
 		certPool, err = x509.SystemCertPool()
 		if err != nil {
-			return nil, errors.Wrap(err, "reading system certificate pool")
+			return nil, errors.Wrapf(err, "reading system certificate pool")
 		}
 		level.Info(logger).Log("msg", "TLS client using system certificate pool")
 	}
@@ -135,7 +135,7 @@ func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, sk
 	}
 
 	if (key != "") != (cert != "") {
-		return nil, errors.New("both client key and certificate must be provided")
+		return nil, errors.Newf("both client key and certificate must be provided")
 	}
 
 	if cert != "" {
@@ -176,7 +176,7 @@ func (m *clientTLSManager) getClientCertificate(*tls.CertificateRequestInfo) (*t
 	if m.cert == nil || !statCert.ModTime().Equal(m.certModTime) || !statKey.ModTime().Equal(m.keyModTime) {
 		cert, err := tls.LoadX509KeyPair(m.certPath, m.keyPath)
 		if err != nil {
-			return nil, errors.Wrap(err, "client credentials")
+			return nil, errors.Wrapf(err, "client credentials")
 		}
 		m.certModTime = statCert.ModTime()
 		m.keyModTime = statKey.ModTime()

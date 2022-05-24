@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/rulefmt"
@@ -228,7 +228,7 @@ func (g *configRuleAdapter) UnmarshalYAML(unmarshal func(interface{}) error) err
 
 	var native map[string]interface{}
 	if err := unmarshal(&native); err != nil {
-		return errors.Wrap(err, "failed to unmarshal rulefmt.configRuleAdapter")
+		return errors.Wrapf(err, "failed to unmarshal rulefmt.configRuleAdapter")
 	}
 	delete(native, "partial_response_strategy")
 
@@ -248,7 +248,7 @@ func (g configRuleAdapter) MarshalYAML() (interface{}, error) {
 func (g configRuleAdapter) validate() (errs []error) {
 	set := map[string]struct{}{}
 	if g.group.Name == "" {
-		errs = append(errs, errors.New("Groupname should not be empty"))
+		errs = append(errs, errors.Newf("Groupname should not be empty"))
 	}
 
 	if _, ok := set[g.group.Name]; ok {
@@ -341,7 +341,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 
 		var rg configGroups
 		if err := yaml.Unmarshal(b, &rg); err != nil {
-			errs.Add(errors.Wrap(err, fn))
+			errs.Add(errors.Wrapf(err, fn))
 			continue
 		}
 
@@ -378,7 +378,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	for s, fs := range filesByStrategy {
 		mgr, ok := m.mgrs[s]
 		if !ok {
-			errs.Add(errors.Errorf("no manager found for %v", s))
+			errs.Add(errors.Newf("no manager found for %v", s))
 			continue
 		}
 		// We add external labels in `pkg/alert.Queue`.

@@ -7,7 +7,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -52,7 +52,7 @@ func (rr *GRPCClient) MetricMetadata(ctx context.Context, req *metadatapb.Metric
 	}
 
 	if err := rr.proxy.MetricMetadata(req, srv); err != nil {
-		return nil, nil, errors.Wrap(err, "proxy MetricMetadata")
+		return nil, nil, errors.Wrapf(err, "proxy MetricMetadata")
 	}
 
 	return srv.metadataMap, srv.warnings, nil
@@ -75,12 +75,12 @@ func (srv *metadataServer) Send(res *metadatapb.MetricMetadataResponse) error {
 	if res.GetWarning() != "" {
 		srv.mu.Lock()
 		defer srv.mu.Unlock()
-		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
+		srv.warnings = append(srv.warnings, errors.Newf(res.GetWarning()))
 		return nil
 	}
 
 	if res.GetMetadata() == nil {
-		return errors.New("no metadata")
+		return errors.Newf("no metadata")
 	}
 
 	// If limit is set to 0, we don't need to add anything.

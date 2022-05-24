@@ -18,7 +18,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/common/version"
@@ -128,7 +128,7 @@ func main() {
 	reloadCh := make(chan struct{}, 1)
 
 	if err := setup(&g, logger, metrics, tracer, reloadCh, *logLevel == "debug"); err != nil {
-		// Use %+v for github.com/pkg/errors error to print with stack.
+		// Use %+v for github.com/thanos-io/thanos/pkg/errors error to print with stack.
 		level.Error(logger).Log("err", fmt.Sprintf("%+v", errors.Wrapf(err, "preparing %s command failed", cmd)))
 		os.Exit(1)
 	}
@@ -154,7 +154,7 @@ func main() {
 	}
 
 	if err := g.Run(); err != nil {
-		// Use %+v for github.com/pkg/errors error to print with stack.
+		// Use %+v for github.com/thanos-io/thanos/pkg/errors error to print with stack.
 		level.Error(logger).Log("err", fmt.Sprintf("%+v", errors.Wrapf(err, "%s command failed", cmd)))
 		os.Exit(1)
 	}
@@ -169,7 +169,7 @@ func interrupt(logger log.Logger, cancel <-chan struct{}) error {
 		level.Info(logger).Log("msg", "caught signal. Exiting.", "signal", s)
 		return nil
 	case <-cancel:
-		return errors.New("canceled")
+		return errors.Newf("canceled")
 	}
 }
 
@@ -186,7 +186,7 @@ func reload(logger log.Logger, cancel <-chan struct{}, r chan<- struct{}) error 
 			default:
 			}
 		case <-cancel:
-			return errors.New("canceled")
+			return errors.Newf("canceled")
 		}
 	}
 }

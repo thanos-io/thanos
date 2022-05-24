@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
@@ -51,7 +51,7 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 	}{
 		{
 			name:        "empty block",
-			expectedErr: errors.New("cannot write from no readers"),
+			expectedErr: errors.Newf("cannot write from no readers"),
 		},
 		{
 			name: "1 blocks no modify",
@@ -741,16 +741,16 @@ func createBlockSeries(bDir string, inputSeries []seriesSamples) (err error) {
 			chks = append(chks, chunks.Meta{Chunk: x, MinTime: chk[0].t, MaxTime: chk[len(chk)-1].t})
 		}
 		if err := d.WriteChunks(chks...); err != nil {
-			return errors.Wrap(err, "write chunks")
+			return errors.Wrapf(err, "write chunks")
 		}
 		if err := d.AddSeries(ref, input.lset, chks...); err != nil {
-			return errors.Wrap(err, "add series")
+			return errors.Wrapf(err, "add series")
 		}
 		ref++
 	}
 
 	if _, err = d.Flush(); err != nil {
-		return errors.Wrap(err, "flush")
+		return errors.Wrapf(err, "flush")
 	}
 	return nil
 }

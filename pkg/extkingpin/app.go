@@ -12,7 +12,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/alecthomas/kingpin.v2"
 )

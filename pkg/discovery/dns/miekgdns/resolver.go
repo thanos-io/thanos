@@ -8,7 +8,7 @@ import (
 	"net"
 
 	"github.com/miekg/dns"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // DefaultResolvConfPath is a common, default resolv.conf file present on linux server.
@@ -42,7 +42,7 @@ func (r *Resolver) LookupSRV(ctx context.Context, service, proto, name string) (
 				Port:     addr.Port,
 			})
 		default:
-			return "", nil, errors.Errorf("invalid SRV response record %s", record)
+			return "", nil, errors.Newf("invalid SRV response record %s", record)
 		}
 	}
 
@@ -56,7 +56,7 @@ func (r *Resolver) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr, e
 func (r *Resolver) lookupIPAddr(host string, currIteration, maxIterations int) ([]net.IPAddr, error) {
 	// We want to protect from infinite loops when resolving DNS records recursively.
 	if currIteration > maxIterations {
-		return nil, errors.Errorf("maximum number of recursive iterations reached (%d)", maxIterations)
+		return nil, errors.Newf("maximum number of recursive iterations reached (%d)", maxIterations)
 	}
 
 	response, err := r.lookupWithSearchPath(host, dns.Type(dns.TypeAAAA))
@@ -83,7 +83,7 @@ func (r *Resolver) lookupIPAddr(host string, currIteration, maxIterations int) (
 			}
 			resp = append(resp, addrs...)
 		default:
-			return nil, errors.Errorf("invalid A, AAAA or CNAME response record %s", record)
+			return nil, errors.Newf("invalid A, AAAA or CNAME response record %s", record)
 		}
 	}
 	return resp, nil

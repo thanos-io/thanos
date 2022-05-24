@@ -13,7 +13,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -46,7 +46,7 @@ func BackupAndDelete(ctx Context, id ulid.ULID) error {
 		return err
 	}
 	if found {
-		return errors.Errorf("%s dir seems to exists in backup bucket. Remove this block manually if you are sure it is safe to do", id)
+		return errors.Newf("%s dir seems to exists in backup bucket. Remove this block manually if you are sure it is safe to do", id)
 	}
 
 	// Create a tempdir to locally store TSDB block.
@@ -63,7 +63,7 @@ func BackupAndDelete(ctx Context, id ulid.ULID) error {
 	// Download the TSDB block.
 	dir := filepath.Join(tempdir, id.String())
 	if err := block.Download(ctx, ctx.Logger, ctx.Bkt, id, dir); err != nil {
-		return errors.Wrap(err, "download from source")
+		return errors.Wrapf(err, "download from source")
 	}
 
 	// Backup the block.
@@ -75,13 +75,13 @@ func BackupAndDelete(ctx Context, id ulid.ULID) error {
 	if ctx.DeleteDelay.Seconds() == 0 {
 		level.Info(ctx.Logger).Log("msg", "Deleting block", "id", id.String())
 		if err := block.Delete(ctx, ctx.Logger, ctx.Bkt, id); err != nil {
-			return errors.Wrap(err, "delete from source")
+			return errors.Wrapf(err, "delete from source")
 		}
 	}
 
 	level.Info(ctx.Logger).Log("msg", "Marking block as deleted", "id", id.String())
 	if err := block.MarkForDeletion(ctx, ctx.Logger, ctx.Bkt, id, "manual verify-repair", ctx.metrics.blocksMarkedForDeletion); err != nil {
-		return errors.Wrap(err, "marking delete from source")
+		return errors.Wrapf(err, "marking delete from source")
 	}
 	return nil
 }
@@ -99,7 +99,7 @@ func BackupAndDeleteDownloaded(ctx Context, bdir string, id ulid.ULID) error {
 		return err
 	}
 	if found {
-		return errors.Errorf("%s dir seems to exists in backup bucket. Remove this block manually if you are sure it is safe to do", id)
+		return errors.Newf("%s dir seems to exists in backup bucket. Remove this block manually if you are sure it is safe to do", id)
 	}
 
 	// Backup the block.
@@ -111,14 +111,14 @@ func BackupAndDeleteDownloaded(ctx Context, bdir string, id ulid.ULID) error {
 	if ctx.DeleteDelay.Seconds() == 0 {
 		level.Info(ctx.Logger).Log("msg", "Deleting block", "id", id.String())
 		if err := block.Delete(ctx, ctx.Logger, ctx.Bkt, id); err != nil {
-			return errors.Wrap(err, "delete from source")
+			return errors.Wrapf(err, "delete from source")
 		}
 		return nil
 	}
 
 	level.Info(ctx.Logger).Log("msg", "Marking block as deleted", "id", id.String())
 	if err := block.MarkForDeletion(ctx, ctx.Logger, ctx.Bkt, id, "manual verify-repair", ctx.metrics.blocksMarkedForDeletion); err != nil {
-		return errors.Wrap(err, "marking delete from source")
+		return errors.Wrapf(err, "marking delete from source")
 	}
 	return nil
 }
@@ -132,13 +132,13 @@ func backupDownloaded(ctx context.Context, logger log.Logger, bdir string, backu
 		// If there is any error stat'ing meta.json inside the TSDB block
 		// then declare the existing block as bad and refuse to upload it.
 		// TODO: Make this check more robust.
-		return errors.Wrap(err, "existing tsdb block is invalid")
+		return errors.Wrapf(err, "existing tsdb block is invalid")
 	}
 
 	// Upload the on disk TSDB block.
 	level.Info(logger).Log("msg", "Uploading block to backup bucket", "id", id.String())
 	if err := block.Upload(ctx, logger, backupBkt, bdir, metadata.NoneFunc); err != nil {
-		return errors.Wrap(err, "upload to backup")
+		return errors.Wrapf(err, "upload to backup")
 	}
 
 	return nil

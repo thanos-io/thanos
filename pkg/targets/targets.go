@@ -8,7 +8,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
@@ -53,7 +53,7 @@ func (rr *GRPCClient) Targets(ctx context.Context, req *targetspb.TargetsRequest
 	}}
 
 	if err := rr.proxy.Targets(req, resp); err != nil {
-		return nil, nil, errors.Wrap(err, "proxy Targets")
+		return nil, nil, errors.Wrapf(err, "proxy Targets")
 	}
 
 	resp.targets = dedupTargets(resp.targets, rr.replicaLabels)
@@ -193,12 +193,12 @@ func (srv *targetsServer) Send(res *targetspb.TargetsResponse) error {
 	if res.GetWarning() != "" {
 		srv.mu.Lock()
 		defer srv.mu.Unlock()
-		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
+		srv.warnings = append(srv.warnings, errors.Newf(res.GetWarning()))
 		return nil
 	}
 
 	if res.GetTargets() == nil {
-		return errors.New("no targets")
+		return errors.Newf("no targets")
 	}
 	srv.mu.Lock()
 	defer srv.mu.Unlock()

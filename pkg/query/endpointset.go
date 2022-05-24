@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc"
@@ -78,7 +78,7 @@ func (es *GRPCEndpointSpec) Metadata(ctx context.Context, client *endpointClient
 		return metadata, nil
 	}
 
-	return nil, errors.New(noMetadataEndpointMessage)
+	return nil, errors.Newf(noMetadataEndpointMessage)
 }
 
 func (es *GRPCEndpointSpec) getMetadataUsingStoreAPI(ctx context.Context, client storepb.StoreClient) (*endpointMetadata, error) {
@@ -325,7 +325,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 
 		er.Close()
 		delete(endpoints, addr)
-		e.updateEndpointStatus(er, errors.New(unhealthyEndpointMessage))
+		e.updateEndpointStatus(er, errors.Newf(unhealthyEndpointMessage))
 		level.Info(er.logger).Log("msg", unhealthyEndpointMessage, "address", addr, "extLset", labelpb.PromLabelSetsToString(er.LabelSets()))
 	}
 
@@ -488,7 +488,7 @@ func (e *EndpointSet) getActiveEndpoints(ctx context.Context, endpoints map[stri
 				conn, err := grpc.DialContext(ctx, addr, e.dialOpts...)
 				if err != nil {
 					e.updateEndpointStatus(&endpointRef{addr: addr}, err)
-					level.Warn(e.logger).Log("msg", "update of node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
+					level.Warn(e.logger).Log("msg", "update of node failed", "err", errors.Wrapf(err, "dialing connection"), "address", addr)
 					return
 				}
 
@@ -514,7 +514,7 @@ func (e *EndpointSet) getActiveEndpoints(ctx context.Context, endpoints map[stri
 				}
 
 				e.updateEndpointStatus(er, err)
-				level.Warn(e.logger).Log("msg", "update of node failed", "err", errors.Wrap(err, "getting metadata"), "address", addr)
+				level.Warn(e.logger).Log("msg", "update of node failed", "err", errors.Wrapf(err, "getting metadata"), "address", addr)
 
 				if !spec.IsStrictStatic() {
 					return

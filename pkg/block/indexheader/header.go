@@ -6,12 +6,12 @@ package indexheader
 import (
 	"io"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb/index"
 )
 
 // NotFoundRangeErr is an error returned by PostingsOffset when there is no posting for given name and value pairs.
-var NotFoundRangeErr = errors.New("range not found")
+var NotFoundRangeErr = errors.Newf("range not found")
 
 // Reader is an interface allowing to read essential, minimal number of index fields from the small portion of index file called header.
 type Reader interface {

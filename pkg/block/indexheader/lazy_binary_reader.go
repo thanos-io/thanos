@@ -13,7 +13,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb/index"
@@ -24,8 +24,8 @@ import (
 )
 
 var (
-	errNotIdle              = errors.New("the reader is not idle")
-	errUnloadedWhileLoading = errors.New("the index-header has been concurrently unloaded")
+	errNotIdle              = errors.Newf("the reader is not idle")
+	errUnloadedWhileLoading = errors.Newf("the index-header has been concurrently unloaded")
 )
 
 // LazyBinaryReaderMetrics holds metrics tracked by LazyBinaryReader.
@@ -104,14 +104,14 @@ func NewLazyBinaryReader(
 	// If the index-header doesn't exist we should download it.
 	if _, err := os.Stat(filepath); err != nil {
 		if !os.IsNotExist(err) {
-			return nil, errors.Wrap(err, "read index header")
+			return nil, errors.Wrapf(err, "read index header")
 		}
 
 		level.Debug(logger).Log("msg", "the index-header doesn't exist on disk; recreating", "path", filepath)
 
 		start := time.Now()
 		if err := WriteBinary(ctx, bkt, id, filepath); err != nil {
-			return nil, errors.Wrap(err, "write index header")
+			return nil, errors.Wrapf(err, "write index header")
 		}
 
 		level.Debug(logger).Log("msg", "built index-header file", "path", filepath, "elapsed", time.Since(start))

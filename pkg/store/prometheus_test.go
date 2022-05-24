@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/storage"
@@ -206,7 +206,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 				MinTime:    baseT - 10000000000,
 				MaxTime:    baseT + 10000000000,
 			},
-			expectedErr: errors.New("rpc error: code = InvalidArgument desc = no matchers specified (excluding external labels)"),
+			expectedErr: errors.Newf("rpc error: code = InvalidArgument desc = no matchers specified (excluding external labels)"),
 		},
 		{
 			req: &storepb.SeriesRequest{
@@ -217,7 +217,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 				MinTime: baseT - 10000000000,
 				MaxTime: baseT + 10000000000,
 			},
-			expectedErr: errors.New("rpc error: code = InvalidArgument desc = expected 2xx response, got 400. Body: {\"status\":\"error\",\"errorType\":\"bad_data\",\"error\":\"1:7: parse error: unexpected character inside braces: '-'\"}"),
+			expectedErr: errors.Newf("rpc error: code = InvalidArgument desc = expected 2xx response, got 400. Body: {\"status\":\"error\",\"errorType\":\"bad_data\",\"error\":\"1:7: parse error: unexpected character inside braces: '-'\"}"),
 		},
 		{
 			req: &storepb.SeriesRequest{

@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -137,7 +137,7 @@ func TryToGetSize(r io.Reader) (int64, error) {
 	case *os.File:
 		fileInfo, err := f.Stat()
 		if err != nil {
-			return 0, errors.Wrap(err, "os.File.Stat()")
+			return 0, errors.Wrapf(err, "os.File.Stat()")
 		}
 		return fileInfo.Size(), nil
 	case *bytes.Buffer:
@@ -150,7 +150,7 @@ func TryToGetSize(r io.Reader) (int64, error) {
 	case ObjectSizer:
 		return f.ObjectSize()
 	}
-	return 0, errors.Errorf("unsupported type of io.Reader: %T", r)
+	return 0, errors.Newf("unsupported type of io.Reader: %T", r)
 }
 
 // ObjectSizer can return size of object.
@@ -175,10 +175,10 @@ func NopCloserWithSize(r io.Reader) io.ReadCloser {
 func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdir string) error {
 	df, err := os.Stat(srcdir)
 	if err != nil {
-		return errors.Wrap(err, "stat dir")
+		return errors.Wrapf(err, "stat dir")
 	}
 	if !df.IsDir() {
-		return errors.Errorf("%s is not a directory", srcdir)
+		return errors.Newf("%s is not a directory", srcdir)
 	}
 	return filepath.WalkDir(srcdir, func(src string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -189,7 +189,7 @@ func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdi
 		}
 		srcRel, err := filepath.Rel(srcdir, src)
 		if err != nil {
-			return errors.Wrap(err, "getting relative path")
+			return errors.Wrapf(err, "getting relative path")
 		}
 
 		dst := path.Join(dstdir, filepath.ToSlash(srcRel))
@@ -236,7 +236,7 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 
 	f, err := os.Create(dst)
 	if err != nil {
-		return errors.Wrap(err, "create file")
+		return errors.Wrapf(err, "create file")
 	}
 	defer func() {
 		if err != nil {
@@ -248,7 +248,7 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 	defer runutil.CloseWithLogOnErr(logger, f, "download block's output file")
 
 	if _, err = io.Copy(f, rc); err != nil {
-		return errors.Wrap(err, "copy object to file")
+		return errors.Wrapf(err, "copy object to file")
 	}
 	return nil
 }
@@ -256,7 +256,7 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 // DownloadDir downloads all object found in the directory into the local directory.
 func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, originalSrc, src, dst string, ignoredPaths ...string) error {
 	if err := os.MkdirAll(dst, 0750); err != nil {
-		return errors.Wrap(err, "create dir")
+		return errors.Wrapf(err, "create dir")
 	}
 
 	var downloadedFiles []string

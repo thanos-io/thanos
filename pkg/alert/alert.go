@@ -19,7 +19,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/go-openapi/strfmt"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/alertmanager/api/v2/models"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -421,7 +421,7 @@ func (a *Alertmanager) postAlerts(ctx context.Context, u url.URL, r io.Reader) e
 	defer runutil.ExhaustCloseWithLogOnErr(a.logger, resp.Body, "send one alert")
 
 	if resp.StatusCode/100 != 2 {
-		return errors.Errorf("bad response status %v from %q", resp.Status, u.String())
+		return errors.Newf("bad response status %v from %q", resp.Status, u.String())
 	}
 	return nil
 }

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/storage"
@@ -55,7 +55,7 @@ func testLabelAPIs(t *testing.T, startStore func(extLset labels.Labels, append f
 				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime)},
 			},
 			labelValuesCalls: []labelValuesCallCase{
-				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), expectErr: errors.New("rpc error: code = InvalidArgument desc = label name parameter cannot be empty")},
+				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), expectErr: errors.Newf("rpc error: code = InvalidArgument desc = label name parameter cannot be empty")},
 				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), label: "foo"},
 				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), label: "region", expectedValues: []string{"eu-west"}}, // External labels should be visible.
 			},

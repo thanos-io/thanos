@@ -17,7 +17,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
@@ -56,7 +56,7 @@ func registerSidecar(app *extkingpin.App) {
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
 		if err != nil {
-			return errors.Wrap(err, "error while parsing config for request logging")
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		rl := reloader.New(log.With(logger, "component", "reloader"),
@@ -87,16 +87,16 @@ func runSidecar(
 ) error {
 	httpConfContentYaml, err := conf.prometheus.httpClient.Content()
 	if err != nil {
-		return errors.Wrap(err, "getting http client config")
+		return errors.Wrapf(err, "getting http client config")
 	}
 	httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
 	if err != nil {
-		return errors.Wrap(err, "parsing http config YAML")
+		return errors.Wrapf(err, "parsing http config YAML")
 	}
 
 	httpClient, err := httpconfig.NewHTTPClient(*httpClientConfig, "thanos-sidecar")
 	if err != nil {
-		return errors.Wrap(err, "Improper http client config")
+		return errors.Wrapf(err, "Improper http client config")
 	}
 
 	reloader.SetHttpClient(*httpClient)
@@ -115,7 +115,7 @@ func runSidecar(
 
 	confContentYaml, err := conf.objStore.Content()
 	if err != nil {
-		return errors.Wrap(err, "getting object store config")
+		return errors.Wrapf(err, "getting object store config")
 	}
 
 	var uploads = true
@@ -162,7 +162,7 @@ func runSidecar(
 			if uploads {
 				// Check prometheus's flags to ensure same sidecar flags.
 				if err := validatePrometheus(ctx, m.client, logger, conf.shipper.ignoreBlockSize, m); err != nil {
-					return errors.Wrap(err, "validate Prometheus flags")
+					return errors.Wrapf(err, "validate Prometheus flags")
 				}
 			}
 
@@ -182,7 +182,7 @@ func runSidecar(
 				return nil
 			})
 			if err != nil {
-				return errors.Wrap(err, "failed to get prometheus version")
+				return errors.Wrapf(err, "failed to get prometheus version")
 			}
 
 			// Blocking query of external labels before joining as a Source Peer into gossip.
@@ -207,11 +207,11 @@ func runSidecar(
 				return nil
 			})
 			if err != nil {
-				return errors.Wrap(err, "initial external labels query")
+				return errors.Wrapf(err, "initial external labels query")
 			}
 
 			if len(m.Labels()) == 0 {
-				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured; see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
+				return errors.Newf("no external labels configured on Prometheus server, uniquely identifying external labels must be configured; see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 			}
 
 			// Periodically query the Prometheus config. We use this as a heartbeat as well as for updating
@@ -248,13 +248,13 @@ func runSidecar(
 
 		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
 		if err != nil {
-			return errors.Wrap(err, "create Prometheus store")
+			return errors.Wrapf(err, "create Prometheus store")
 		}
 
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"),
 			conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA)
 		if err != nil {
-			return errors.Wrap(err, "setup gRPC server")
+			return errors.Wrapf(err, "setup gRPC server")
 		}
 
 		exemplarSrv := exemplars.NewPrometheus(conf.prometheus.url, c, m.Labels)
@@ -329,7 +329,7 @@ func runSidecar(
 
 			if err := runutil.Retry(2*time.Second, extLabelsCtx.Done(), func() error {
 				if len(m.Labels()) == 0 {
-					return errors.New("not uploading as no external labels are configured yet - is Prometheus healthy/reachable?")
+					return errors.Newf("not uploading as no external labels are configured yet - is Prometheus healthy/reachable?")
 				}
 				return nil
 			}); err != nil {
@@ -385,7 +385,7 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 	// Check if compaction is disabled.
 	if flags.TSDBMinTime != flags.TSDBMaxTime {
 		if !ignoreBlockSize {
-			return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
+			return errors.Newf("found that TSDB Max time is %s and Min time is %s. "+
 				"Compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration)", flags.TSDBMaxTime, flags.TSDBMinTime)
 		}
 		level.Warn(logger).Log("msg", "flag to ignore Prometheus min/max block duration flags differing is being used. If the upload of a 2h block fails and a Prometheus compaction happens that block may be missing from your Thanos bucket storage.")

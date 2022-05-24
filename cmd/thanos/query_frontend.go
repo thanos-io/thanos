@@ -16,7 +16,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/weaveworks/common/user"
 	"gopkg.in/yaml.v2"
@@ -142,7 +142,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		httpLogOpts, err := logging.ParseHTTPOptions(cfg.RequestLoggingDecision, reqLogConfig)
 		if err != nil {
-			return errors.Wrap(err, "error while parsing config for request logging")
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		return runQueryFrontend(g, logger, reg, tracer, httpLogOpts, cfg, comp)
@@ -155,7 +155,7 @@ func parseTransportConfiguration(downstreamTripperConfContentYaml []byte) (*http
 	if len(downstreamTripperConfContentYaml) > 0 {
 		tripperConfig := &queryfrontend.DownstreamTripperConfig{}
 		if err := yaml.UnmarshalStrict(downstreamTripperConfContentYaml, tripperConfig); err != nil {
-			return nil, errors.Wrap(err, "parsing downstream tripper config YAML file")
+			return nil, errors.Wrapf(err, "parsing downstream tripper config YAML file")
 		}
 
 		if tripperConfig.IdleConnTimeout > 0 {
@@ -200,7 +200,7 @@ func runQueryFrontend(
 	if len(queryRangeCacheConfContentYaml) > 0 {
 		cacheConfig, err := queryfrontend.NewCacheConfig(logger, queryRangeCacheConfContentYaml)
 		if err != nil {
-			return errors.Wrap(err, "initializing the query range cache config")
+			return errors.Wrapf(err, "initializing the query range cache config")
 		}
 		cfg.QueryRangeConfig.ResultsCacheConfig = &queryrange.ResultsCacheConfig{
 			Compression: cfg.CacheCompression,
@@ -215,7 +215,7 @@ func runQueryFrontend(
 	if len(labelsCacheConfContentYaml) > 0 {
 		cacheConfig, err := queryfrontend.NewCacheConfig(logger, labelsCacheConfContentYaml)
 		if err != nil {
-			return errors.Wrap(err, "initializing the labels cache config")
+			return errors.Wrapf(err, "initializing the labels cache config")
 		}
 		cfg.LabelsConfig.ResultsCacheConfig = &queryrange.ResultsCacheConfig{
 			Compression: cfg.CacheCompression,
@@ -224,12 +224,12 @@ func runQueryFrontend(
 	}
 
 	if err := cfg.Validate(); err != nil {
-		return errors.Wrap(err, "error validating the config")
+		return errors.Wrapf(err, "error validating the config")
 	}
 
 	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger)
 	if err != nil {
-		return errors.Wrap(err, "setup tripperwares")
+		return errors.Wrapf(err, "setup tripperwares")
 	}
 
 	// Create a downstream roundtripper.
@@ -244,7 +244,7 @@ func runQueryFrontend(
 
 	roundTripper, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, downstreamTripper)
 	if err != nil {
-		return errors.Wrap(err, "setup downstream roundtripper")
+		return errors.Wrapf(err, "setup downstream roundtripper")
 	}
 
 	// Wrap the downstream RoundTripper into query frontend Tripperware.

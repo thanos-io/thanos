@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/storage"
@@ -271,7 +271,7 @@ func TestDownsample(t *testing.T) {
 			resolution: 100,
 
 			expectedDownsamplingErr: func(chks []chunks.Meta) error {
-				return errors.Errorf("found overlapping chunks within series 0. Chunks expected to be ordered by min time and non-overlapping, got: %v", chks)
+				return errors.Newf("found overlapping chunks within series 0. Chunks expected to be ordered by min time and non-overlapping, got: %v", chks)
 			},
 		},
 		{
@@ -379,7 +379,7 @@ func TestDownsample(t *testing.T) {
 			resolution: 500,
 
 			expectedDownsamplingErr: func(chks []chunks.Meta) error {
-				return errors.Errorf("found overlapping chunks within series 0. Chunks expected to be ordered by min time and non-overlapping, got: %v", chks)
+				return errors.Newf("found overlapping chunks within series 0. Chunks expected to be ordered by min time and non-overlapping, got: %v", chks)
 			},
 		},
 		{
@@ -904,7 +904,7 @@ func (b *memBlock) Postings(name string, val ...string) (index.Postings, error) 
 	allName, allVal := index.AllPostingsKey()
 
 	if name != allName || val[0] != allVal {
-		return nil, errors.New("unexpected call to Postings() that is not AllVall")
+		return nil, errors.Newf("unexpected call to Postings() that is not AllVall")
 	}
 	sort.Slice(b.postings, func(i, j int) bool {
 		return labels.Compare(b.series[b.postings[i]].lset, b.series[b.postings[j]].lset) < 0

@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/run"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -31,7 +31,7 @@ func TestHTTPProberReadinessInitialState(t *testing.T) {
 }
 
 func TestHTTPProberHealthyStatusSetting(t *testing.T) {
-	testError := errors.New("test error")
+	testError := errors.Newf("test error")
 	p := NewHTTP()
 
 	p.Healthy()
@@ -44,7 +44,7 @@ func TestHTTPProberHealthyStatusSetting(t *testing.T) {
 }
 
 func TestHTTPProberReadyStatusSetting(t *testing.T) {
-	testError := errors.New("test error")
+	testError := errors.Newf("test error")
 	p := NewHTTP()
 
 	p.Ready()
@@ -73,7 +73,7 @@ func TestHTTPProberMuxRegistering(t *testing.T) {
 
 	var g run.Group
 	g.Add(func() error {
-		return errors.Wrap(http.Serve(l, mux), "serve probes")
+		return errors.Wrapf(http.Serve(l, mux), "serve probes")
 	}, func(err error) {
 		t.Fatalf("server failed: %v", err)
 	})

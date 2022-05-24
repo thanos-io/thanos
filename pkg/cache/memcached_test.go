@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -62,7 +62,7 @@ func TestMemcachedCache(t *testing.T) {
 				key2: value2,
 				key3: value3,
 			},
-			mockedErr:    errors.New("mocked error"),
+			mockedErr:    errors.Newf("mocked error"),
 			fetchKeys:    []string{key1},
 			expectedHits: nil,
 		},

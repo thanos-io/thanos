@@ -9,7 +9,7 @@ import (
 	aws "github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // AWSSDKAuth retrieves credentials from the aws-sdk-go.
@@ -30,12 +30,12 @@ func NewAWSSDKAuth(region string) *credentials.Credentials {
 func (a *AWSSDKAuth) Retrieve() (credentials.Value, error) {
 	cfg, err := awsconfig.LoadDefaultConfig(context.TODO(), awsconfig.WithRegion(a.Region))
 	if err != nil {
-		return credentials.Value{}, errors.Wrap(err, "load AWS SDK config")
+		return credentials.Value{}, errors.Wrapf(err, "load AWS SDK config")
 	}
 
 	creds, err := cfg.Credentials.Retrieve(context.TODO())
 	if err != nil {
-		return credentials.Value{}, errors.Wrap(err, "retrieve AWS SDK credentials")
+		return credentials.Value{}, errors.Wrapf(err, "retrieve AWS SDK credentials")
 	}
 
 	a.creds = creds

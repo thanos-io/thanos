@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
@@ -199,7 +199,7 @@ func TestSenderSendsAllFail(t *testing.T) {
 	poster := &fakeClient{
 		urls: []*url.URL{{Host: "am1:9090"}, {Host: "am2:9090"}},
 		dof: func(u *url.URL) (*http.Response, error) {
-			return nil, errors.New("no such host")
+			return nil, errors.Newf("no such host")
 		},
 	}
 	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute, APIv1)})

@@ -5,7 +5,7 @@ package exemplars
 
 import (
 	"github.com/gogo/status"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"google.golang.org/grpc/codes"
@@ -37,7 +37,7 @@ func (t *TSDB) Exemplars(matchers [][]*labels.Matcher, start, end int64, s exemp
 	}
 
 	if len(selectors) == 0 {
-		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+		return status.Error(codes.InvalidArgument, errors.Newf("no matchers specified (excluding external labels)").Error())
 	}
 
 	eq, err := t.db.ExemplarQuerier(s.Context())

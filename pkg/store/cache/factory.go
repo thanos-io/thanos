@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v2"
 
@@ -35,12 +35,12 @@ func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Reg
 	level.Info(logger).Log("msg", "loading index cache configuration")
 	cacheConfig := &IndexCacheConfig{}
 	if err := yaml.UnmarshalStrict(confContentYaml, cacheConfig); err != nil {
-		return nil, errors.Wrap(err, "parsing config YAML file")
+		return nil, errors.Wrapf(err, "parsing config YAML file")
 	}
 
 	backendConfig, err := yaml.Marshal(cacheConfig.Config)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal content of cache backend configuration")
+		return nil, errors.Wrapf(err, "marshal content of cache backend configuration")
 	}
 
 	var cache IndexCache
@@ -60,10 +60,10 @@ func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Reg
 			cache, err = NewRemoteIndexCache(logger, redisCache, reg)
 		}
 	default:
-		return nil, errors.Errorf("index cache with type %s is not supported", cacheConfig.Type)
+		return nil, errors.Newf("index cache with type %s is not supported", cacheConfig.Type)
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("create %s index cache", cacheConfig.Type))
+		return nil, errors.Wrapf(err, fmt.Sprintf("create %s index cache", cacheConfig.Type))
 	}
 	return cache, nil
 }

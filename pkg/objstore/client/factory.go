@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	yaml "gopkg.in/yaml.v2"
 
@@ -49,12 +49,12 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	level.Info(logger).Log("msg", "loading bucket configuration")
 	bucketConf := &BucketConfig{}
 	if err := yaml.UnmarshalStrict(confContentYaml, bucketConf); err != nil {
-		return nil, errors.Wrap(err, "parsing config YAML file")
+		return nil, errors.Wrapf(err, "parsing config YAML file")
 	}
 
 	config, err := yaml.Marshal(bucketConf.Config)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal content of bucket configuration")
+		return nil, errors.Wrapf(err, "marshal content of bucket configuration")
 	}
 
 	var bucket objstore.Bucket
@@ -76,10 +76,10 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	case string(BOS):
 		bucket, err = bos.NewBucket(logger, config, component)
 	default:
-		return nil, errors.Errorf("bucket with type %s is not supported", bucketConf.Type)
+		return nil, errors.Newf("bucket with type %s is not supported", bucketConf.Type)
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
+		return nil, errors.Wrapf(err, fmt.Sprintf("create %s client", bucketConf.Type))
 	}
 	return objstore.NewTracingBucket(objstore.BucketWithMetrics(bucket.Name(), bucket, reg)), nil
 }

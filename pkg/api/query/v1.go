@@ -30,7 +30,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
@@ -218,7 +218,7 @@ func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplicatio
 
 func (qapi *QueryAPI) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string, _ *api.ApiError) {
 	if err := r.ParseForm(); err != nil {
-		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
+		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrapf(err, "parse form")}
 	}
 
 	replicaLabels = qapi.replicaLabels
@@ -232,7 +232,7 @@ func (qapi *QueryAPI) parseReplicaLabelsParam(r *http.Request) (replicaLabels []
 
 func (qapi *QueryAPI) parseStoreDebugMatchersParam(r *http.Request) (storeMatchers [][]*labels.Matcher, _ *api.ApiError) {
 	if err := r.ParseForm(); err != nil {
-		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
+		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrapf(err, "parse form")}
 	}
 
 	for _, s := range r.Form[StoreMatcherParam] {
@@ -262,7 +262,7 @@ func (qapi *QueryAPI) parseDownsamplingParamMillis(r *http.Request, defaultVal t
 	}
 
 	if maxSourceResolution < 0 {
-		return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("negative '%s' is not accepted. Try a positive integer", MaxSourceResolutionParam)}
+		return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Newf("negative '%s' is not accepted. Try a positive integer", MaxSourceResolutionParam)}
 	}
 
 	return int64(maxSourceResolution / time.Millisecond), nil
@@ -392,7 +392,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 	if end.Before(start) {
-		err := errors.New("end timestamp must not be before start time")
+		err := errors.Newf("end timestamp must not be before start time")
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
@@ -402,14 +402,14 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	}
 
 	if step <= 0 {
-		err := errors.New("zero or negative query resolution step widths are not accepted. Try a positive integer")
+		err := errors.Newf("zero or negative query resolution step widths are not accepted. Try a positive integer")
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
 	// For safety, limit the number of returned points per timeseries.
 	// This is sufficient for 60s resolution for a week or 1h resolution for a year.
 	if end.Sub(start)/step > 11000 {
-		err := errors.New("exceeded maximum resolution of 11,000 points per timeseries. Try decreasing the query resolution (?step=XX)")
+		err := errors.Newf("exceeded maximum resolution of 11,000 points per timeseries. Try decreasing the query resolution (?step=XX)")
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
 
@@ -507,7 +507,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 	name := route.Param(ctx, "name")
 
 	if !model.LabelNameRE.MatchString(name) {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid label name: %q", name)}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Newf("invalid label name: %q", name)}
 	}
 
 	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
@@ -580,11 +580,11 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 
 func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiError) {
 	if err := r.ParseForm(); err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}
+		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrapf(err, "parse form")}
 	}
 
 	if len(r.Form[MatcherParam]) == 0 {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("no match[] parameter provided")}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Newf("no match[] parameter provided")}
 	}
 
 	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
@@ -741,7 +741,7 @@ func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) f
 		state, ok := targetspb.TargetsRequest_State_value[strings.ToUpper(stateParam)]
 		if !ok {
 			if stateParam != "" {
-				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid targets parameter state='%v'", stateParam)}
+				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Newf("invalid targets parameter state='%v'", stateParam)}
 			}
 			state = int32(targetspb.TargetsRequest_ANY)
 		}
@@ -753,7 +753,7 @@ func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) f
 
 		t, warnings, err := client.Targets(r.Context(), req)
 		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving targets")}
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrapf(err, "retrieving targets")}
 		}
 
 		return t, warnings, nil
@@ -782,13 +782,13 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 		typ, ok := rulespb.RulesRequest_Type_value[strings.ToUpper(typeParam)]
 		if !ok {
 			if typeParam != "" {
-				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid rules parameter type='%v'", typeParam)}
+				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Newf("invalid rules parameter type='%v'", typeParam)}
 			}
 			typ = int32(rulespb.RulesRequest_ALL)
 		}
 
 		if err := r.ParseForm(); err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error parsing request form='%v'", MatcherParam)}
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Newf("error parsing request form='%v'", MatcherParam)}
 		}
 
 		// TODO(bwplotka): Allow exactly the same functionality as query API: passing replica, dedup and partial response as HTTP params as well.
@@ -801,7 +801,7 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 			groups, warnings, err = client.Rules(ctx, req)
 		})
 		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error retrieving rules: %v", err)}
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Newf("error retrieving rules: %v", err)}
 		}
 		return groups, warnings, nil
 	}
@@ -846,7 +846,7 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 		})
 
 		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving exemplars")}
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrapf(err, "retrieving exemplars")}
 		}
 		return data, warnings, nil
 	}
@@ -880,7 +880,7 @@ func parseMetadataTimeRange(r *http.Request, defaultMetadataTimeRange time.Durat
 	if end.Before(start) {
 		return time.Time{}, time.Time{}, &api.ApiError{
 			Typ: api.ErrorBadData,
-			Err: errors.New("end timestamp must not be before start time"),
+			Err: errors.Newf("end timestamp must not be before start time"),
 		}
 	}
 
@@ -908,21 +908,21 @@ func parseTime(s string) (time.Time, error) {
 	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
 		return t, nil
 	}
-	return time.Time{}, errors.Errorf("cannot parse %q to a valid timestamp", s)
+	return time.Time{}, errors.Newf("cannot parse %q to a valid timestamp", s)
 }
 
 func parseDuration(s string) (time.Duration, error) {
 	if d, err := strconv.ParseFloat(s, 64); err == nil {
 		ts := d * float64(time.Second)
 		if ts > float64(math.MaxInt64) || ts < float64(math.MinInt64) {
-			return 0, errors.Errorf("cannot parse %q to a valid duration. It overflows int64", s)
+			return 0, errors.Newf("cannot parse %q to a valid duration. It overflows int64", s)
 		}
 		return time.Duration(ts), nil
 	}
 	if d, err := model.ParseDuration(s); err == nil {
 		return time.Duration(d), nil
 	}
-	return 0, errors.Errorf("cannot parse %q to a valid duration", s)
+	return 0, errors.Newf("cannot parse %q to a valid duration", s)
 }
 
 // NewMetricMetadataHandler creates handler compatible with HTTP /api/v1/metadata https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metric-metadata
@@ -954,7 +954,7 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 		if limitStr != "" {
 			limit, err := strconv.ParseInt(limitStr, 10, 32)
 			if err != nil {
-				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid metric metadata limit='%v'", limit)}
+				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Newf("invalid metric metadata limit='%v'", limit)}
 			}
 			req.Limit = int32(limit)
 		}
@@ -963,7 +963,7 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 			t, warnings, err = client.MetricMetadata(ctx, req)
 		})
 		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving metadata")}
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrapf(err, "retrieving metadata")}
 		}
 
 		return t, warnings, nil

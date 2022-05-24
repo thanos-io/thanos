@@ -7,7 +7,7 @@ import (
 	"bytes"
 
 	"github.com/golang/snappy"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
@@ -68,7 +68,7 @@ func diffVarintEncodeNoHeader(p index.Postings, length int) ([]byte, error) {
 	for p.Next() {
 		v := p.At()
 		if v < prev {
-			return nil, errors.Errorf("postings entries must be in increasing order, current: %d, previous: %d", v, prev)
+			return nil, errors.Newf("postings entries must be in increasing order, current: %d, previous: %d", v, prev)
 		}
 
 		// This is the 'diff' part -- compute difference from previous value.
@@ -84,12 +84,12 @@ func diffVarintEncodeNoHeader(p index.Postings, length int) ([]byte, error) {
 
 func diffVarintSnappyDecode(input []byte) (index.Postings, error) {
 	if !isDiffVarintSnappyEncodedPostings(input) {
-		return nil, errors.New("header not found")
+		return nil, errors.Newf("header not found")
 	}
 
 	raw, err := snappy.Decode(nil, input[len(codecHeaderSnappy):])
 	if err != nil {
-		return nil, errors.Wrap(err, "snappy decode")
+		return nil, errors.Wrapf(err, "snappy decode")
 	}
 
 	return newDiffVarintPostings(raw), nil

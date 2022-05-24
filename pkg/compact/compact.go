@@ -18,7 +18,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
@@ -121,13 +121,13 @@ func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
 	timeRange := time.Duration((m.MaxTime - m.MinTime) * int64(time.Millisecond))
 	switch m.Thanos.Downsample.Resolution {
 	case downsample.ResLevel2:
-		return time.Duration(0), errors.New("no downsampling")
+		return time.Duration(0), errors.Newf("no downsampling")
 	case downsample.ResLevel1:
 		return time.Duration(downsample.ResLevel2DownsampleRange*time.Millisecond) - timeRange, nil
 	case downsample.ResLevel0:
 		return time.Duration(downsample.ResLevel1DownsampleRange*time.Millisecond) - timeRange, nil
 	default:
-		panic(errors.Errorf("invalid resolution %v", m.Thanos.Downsample.Resolution))
+		panic(errors.Newf("invalid resolution %v", m.Thanos.Downsample.Resolution))
 	}
 }
 
@@ -308,13 +308,13 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.hashFunc,
 			)
 			if err != nil {
-				return nil, errors.Wrap(err, "create compaction group")
+				return nil, errors.Wrapf(err, "create compaction group")
 			}
 			groups[groupKey] = group
 			res = append(res, group)
 		}
 		if err := group.AppendMeta(m); err != nil {
-			return nil, errors.Wrap(err, "add compaction group")
+			return nil, errors.Wrapf(err, "add compaction group")
 		}
 	}
 	sort.Slice(res, func(i, j int) bool {
@@ -413,10 +413,10 @@ func (cg *Group) AppendMeta(meta *metadata.Meta) error {
 	defer cg.mtx.Unlock()
 
 	if !labels.Equal(cg.labels, labels.FromMap(meta.Thanos.Labels)) {
-		return errors.New("block and group labels do not match")
+		return errors.Newf("block and group labels do not match")
 	}
 	if cg.resolution != meta.Thanos.Downsample.Resolution {
-		return errors.New("block and group resolution do not match")
+		return errors.Newf("block and group resolution do not match")
 	}
 
 	cg.metasByMinTime = append(cg.metasByMinTime, meta)
@@ -606,7 +606,7 @@ func (ds *DownsampleProgressCalculator) ProgressCalculate(ctx context.Context, g
 					sources1h[id] = struct{}{}
 				}
 			default:
-				return errors.Errorf("unexpected downsampling resolution %d", m.Thanos.Downsample.Resolution)
+				return errors.Newf("unexpected downsampling resolution %d", m.Thanos.Downsample.Resolution)
 			}
 
 		}
@@ -753,7 +753,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 	}()
 
 	if err := os.MkdirAll(subDir, 0750); err != nil {
-		return false, ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
+		return false, ulid.ULID{}, errors.Wrapf(err, "create compaction group dir")
 	}
 
 	var err error
@@ -897,7 +897,7 @@ func (cg *Group) areBlocksOverlapping(include *metadata.Meta, exclude ...*metada
 		return metas[i].MinTime < metas[j].MinTime
 	})
 	if overlaps := tsdb.OverlappingBlocks(metas); len(overlaps) > 0 {
-		return errors.Errorf("overlaps found while gathering blocks. %s", overlaps)
+		return errors.Newf("overlaps found while gathering blocks. %s", overlaps)
 	}
 	return nil
 }
@@ -906,7 +906,7 @@ func (cg *Group) areBlocksOverlapping(include *metadata.Meta, exclude ...*metada
 func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket, blocksMarkedForDeletion prometheus.Counter, issue347Err error) error {
 	ie, ok := errors.Cause(issue347Err).(Issue347Error)
 	if !ok {
-		return errors.Errorf("Given error is not an issue347 error: %v", issue347Err)
+		return errors.Newf("Given error is not an issue347 error: %v", issue347Err)
 	}
 
 	level.Info(logger).Log("msg", "Repairing block broken by https://github.com/prometheus/tsdb/issues/347", "id", ie.id, "err", issue347Err)
@@ -970,7 +970,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		// TODO(bwplotka): It would really nice if we could still check for other overlaps than replica. In fact this should be checked
 		// in syncer itself. Otherwise with vertical compaction enabled we will sacrifice this important check.
 		if !cg.enableVerticalCompaction {
-			return false, ulid.ULID{}, halt(errors.Wrap(err, "pre compaction overlap check"))
+			return false, ulid.ULID{}, halt(errors.Wrapf(err, "pre compaction overlap check"))
 		}
 
 		overlappingBlocks = true
@@ -982,7 +982,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		return err
 	})
 	if err != nil {
-		return false, ulid.ULID{}, errors.Wrap(err, "plan compaction")
+		return false, ulid.ULID{}, errors.Wrapf(err, "plan compaction")
 	}
 	if len(toCompact) == 0 {
 		// Nothing to do.
@@ -1003,7 +1003,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		bdir := filepath.Join(dir, meta.ULID.String())
 		for _, s := range meta.Compaction.Sources {
 			if _, ok := uniqueSources[s]; ok {
-				return false, ulid.ULID{}, halt(errors.Errorf("overlapping sources detected for plan %v", toCompact))
+				return false, ulid.ULID{}, halt(errors.Newf("overlapping sources detected for plan %v", toCompact))
 			}
 			uniqueSources[s] = struct{}{}
 		}
@@ -1088,7 +1088,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	}
 
 	if err = os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
-		return false, ulid.ULID{}, errors.Wrap(err, "remove tombstones")
+		return false, ulid.ULID{}, errors.Wrapf(err, "remove tombstones")
 	}
 
 	// Ensure the output block is valid.
@@ -1176,7 +1176,7 @@ func NewBucketCompactor(
 	skipBlocksWithOutOfOrderChunks bool,
 ) (*BucketCompactor, error) {
 	if concurrency <= 0 {
-		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
+		return nil, errors.Newf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
 	}
 	return &BucketCompactor{
 		logger:                         logger,
@@ -1267,19 +1267,19 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		level.Info(c.logger).Log("msg", "start sync of metas")
 		if err := c.sy.SyncMetas(ctx); err != nil {
-			return errors.Wrap(err, "sync")
+			return errors.Wrapf(err, "sync")
 		}
 
 		level.Info(c.logger).Log("msg", "start of GC")
 		// Blocks that were compacted are garbage collected after each Compaction.
 		// However if compactor crashes we need to resolve those on startup.
 		if err := c.sy.GarbageCollect(ctx); err != nil {
-			return errors.Wrap(err, "garbage")
+			return errors.Wrapf(err, "garbage")
 		}
 
 		groups, err := c.grouper.Groups(c.sy.Metas())
 		if err != nil {
-			return errors.Wrap(err, "build compaction groups")
+			return errors.Wrapf(err, "build compaction groups")
 		}
 
 		ignoreDirs := []string{}
@@ -1422,7 +1422,7 @@ func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[uli
 	})
 
 	if err := eg.Wait(); err != nil {
-		return errors.Wrap(err, "filter blocks marked for no compaction")
+		return errors.Wrapf(err, "filter blocks marked for no compaction")
 	}
 
 	return nil

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
@@ -67,7 +67,7 @@ scrape_configs:
 		if len(meta) > 0 {
 			return nil
 		}
-		return errors.New("empty metadata response from Prometheus")
+		return errors.Newf("empty metadata response from Prometheus")
 	}))
 
 	grpcClient := NewGRPCClient(NewPrometheus(u, c))

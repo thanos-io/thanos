@@ -24,7 +24,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/status"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
@@ -45,7 +45,7 @@ import (
 )
 
 var (
-	ErrFlagEndpointNotFound = errors.New("no flag endpoint found")
+	ErrFlagEndpointNotFound = errors.Newf("no flag endpoint found")
 
 	statusToCode = map[int]codes.Code{
 		http.StatusBadRequest:          codes.InvalidArgument,
@@ -133,10 +133,10 @@ func (c *Client) req2xx(ctx context.Context, u *url.URL, method string) (_ []byt
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, resp.StatusCode, errors.Wrap(err, "read body")
+		return nil, resp.StatusCode, errors.Wrapf(err, "read body")
 	}
 	if resp.StatusCode/100 != 2 {
-		return nil, resp.StatusCode, errors.Errorf("expected 2xx response, got %d. Body: %v", resp.StatusCode, string(body))
+		return nil, resp.StatusCode, errors.Newf("expected 2xx response, got %d. Body: %v", resp.StatusCode, string(body))
 	}
 	return body, resp.StatusCode, nil
 }
@@ -148,11 +148,11 @@ func IsWALDirAccessible(dir string) error {
 
 	f, err := os.Stat(filepath.Join(dir, "wal"))
 	if err != nil {
-		return errors.Wrap(err, errMsg)
+		return errors.Wrapf(err, errMsg)
 	}
 
 	if !f.IsDir() {
-		return errors.New(errMsg)
+		return errors.Newf(errMsg)
 	}
 
 	return nil
@@ -271,7 +271,7 @@ func (c *Client) ConfiguredFlags(ctx context.Context, base *url.URL) (Flags, err
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		return Flags{}, errors.Wrap(err, "create request")
+		return Flags{}, errors.Wrapf(err, "create request")
 	}
 
 	span, ctx := tracing.StartSpan(ctx, "/prom_flags HTTP[client]")
@@ -285,7 +285,7 @@ func (c *Client) ConfiguredFlags(ctx context.Context, base *url.URL) (Flags, err
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return Flags{}, errors.New("failed to read body")
+		return Flags{}, errors.Newf("failed to read body")
 	}
 
 	switch resp.StatusCode {
@@ -302,7 +302,7 @@ func (c *Client) ConfiguredFlags(ctx context.Context, base *url.URL) (Flags, err
 
 		return d.Data, nil
 	default:
-		return Flags{}, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+		return Flags{}, errors.Newf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
 	}
 
 }
@@ -322,7 +322,7 @@ func (c *Client) Snapshot(ctx context.Context, base *url.URL, skipHead bool) (st
 		strings.NewReader(url.Values{"skip_head": []string{strconv.FormatBool(skipHead)}}.Encode()),
 	)
 	if err != nil {
-		return "", errors.Wrap(err, "create request")
+		return "", errors.Wrapf(err, "create request")
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
@@ -337,11 +337,11 @@ func (c *Client) Snapshot(ctx context.Context, base *url.URL, skipHead bool) (st
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", errors.New("failed to read body")
+		return "", errors.Newf("failed to read body")
 	}
 
 	if resp.StatusCode != 200 {
-		return "", errors.Errorf("is 'web.enable-admin-api' flag enabled? got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+		return "", errors.Newf("is 'web.enable-admin-api' flag enabled? got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
 	}
 
 	var d struct {
@@ -376,7 +376,7 @@ func (p *QueryOptions) AddTo(values url.Values) error {
 	case storepb.PartialResponseStrategy_ABORT:
 		partialResponseValue = strconv.FormatBool(false)
 	default:
-		return errors.Errorf("unknown partial response strategy %v", p.PartialResponseStrategy)
+		return errors.Newf("unknown partial response strategy %v", p.PartialResponseStrategy)
 	}
 
 	// TODO(bwplotka): Apply change from bool to strategy in Query API as well.
@@ -394,7 +394,7 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 	params.Add("query", query)
 	params.Add("time", t.Format(time.RFC3339Nano))
 	if err := opts.AddTo(params); err != nil {
-		return nil, nil, errors.Wrap(err, "add thanos opts query params")
+		return nil, nil, errors.Wrapf(err, "add thanos opts query params")
 	}
 
 	u := *base
@@ -413,7 +413,7 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 
 	body, _, err := c.req2xx(ctx, &u, method)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "read query instant response")
+		return nil, nil, errors.Wrapf(err, "read query instant response")
 	}
 
 	// Decode only ResultType and load Result only as RawJson since we don't know
@@ -431,7 +431,7 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 	}
 
 	if err = json.Unmarshal(body, &m); err != nil {
-		return nil, nil, errors.Wrap(err, "unmarshal query instant response")
+		return nil, nil, errors.Wrapf(err, "unmarshal query instant response")
 	}
 
 	var vectorResult model.Vector
@@ -441,21 +441,21 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 	switch m.Data.ResultType {
 	case string(parser.ValueTypeVector):
 		if err = json.Unmarshal(m.Data.Result, &vectorResult); err != nil {
-			return nil, nil, errors.Wrap(err, "decode result into ValueTypeVector")
+			return nil, nil, errors.Wrapf(err, "decode result into ValueTypeVector")
 		}
 	case string(parser.ValueTypeScalar):
 		vectorResult, err = convertScalarJSONToVector(m.Data.Result)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "decode result into ValueTypeScalar")
+			return nil, nil, errors.Wrapf(err, "decode result into ValueTypeScalar")
 		}
 	default:
 		if m.Warnings != nil {
-			return nil, nil, errors.Errorf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
+			return nil, nil, errors.Newf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
 		}
 		if m.Error != "" {
-			return nil, nil, errors.Errorf("error: %s, type: %s", m.Error, m.ErrorType)
+			return nil, nil, errors.Newf("error: %s, type: %s", m.Error, m.ErrorType)
 		}
-		return nil, nil, errors.Errorf("received status code: 200, unknown response type: '%q'", m.Data.ResultType)
+		return nil, nil, errors.Newf("received status code: 200, unknown response type: '%q'", m.Data.ResultType)
 	}
 
 	return vectorResult, m.Warnings, nil
@@ -501,7 +501,7 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 	params.Add("end", formatTime(timestamp.Time(endTime)))
 	params.Add("step", strconv.FormatInt(step, 10))
 	if err := opts.AddTo(params); err != nil {
-		return nil, nil, errors.Wrap(err, "add thanos opts query params")
+		return nil, nil, errors.Wrapf(err, "add thanos opts query params")
 	}
 
 	u := *base
@@ -515,7 +515,7 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 
 	body, _, err := c.req2xx(ctx, &u, http.MethodGet)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "read query range response")
+		return nil, nil, errors.Wrapf(err, "read query range response")
 	}
 
 	// Decode only ResultType and load Result only as RawJson since we don't know
@@ -533,7 +533,7 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 	}
 
 	if err = json.Unmarshal(body, &m); err != nil {
-		return nil, nil, errors.Wrap(err, "unmarshal query range response")
+		return nil, nil, errors.Wrapf(err, "unmarshal query range response")
 	}
 
 	var matrixResult model.Matrix
@@ -542,17 +542,17 @@ func (c *Client) QueryRange(ctx context.Context, base *url.URL, query string, st
 	switch m.Data.ResultType {
 	case string(parser.ValueTypeMatrix):
 		if err = json.Unmarshal(m.Data.Result, &matrixResult); err != nil {
-			return nil, nil, errors.Wrap(err, "decode result into ValueTypeMatrix")
+			return nil, nil, errors.Wrapf(err, "decode result into ValueTypeMatrix")
 		}
 	default:
 		if m.Warnings != nil {
-			return nil, nil, errors.Errorf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
+			return nil, nil, errors.Newf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
 		}
 		if m.Error != "" {
-			return nil, nil, errors.Errorf("error: %s, type: %s", m.Error, m.ErrorType)
+			return nil, nil, errors.Newf("error: %s, type: %s", m.Error, m.ErrorType)
 		}
 
-		return nil, nil, errors.Errorf("received status code: 200, unknown response type: '%q'", m.Data.ResultType)
+		return nil, nil, errors.Newf("received status code: 200, unknown response type: '%q'", m.Data.ResultType)
 	}
 	return matrixResult, m.Warnings, nil
 }
@@ -571,7 +571,7 @@ func convertScalarJSONToVector(scalarJSONResult json.RawMessage) (model.Vector, 
 		return nil, err
 	}
 	if len(resultPointSlice) != 2 {
-		return nil, errors.Errorf("invalid scalar result format %v, expected timestamp -> value tuple", resultPointSlice)
+		return nil, errors.Newf("invalid scalar result format %v, expected timestamp -> value tuple", resultPointSlice)
 	}
 	if err := json.Unmarshal(resultPointSlice[0], &resultTime); err != nil {
 		return nil, errors.Wrapf(err, "unmarshaling scalar time from %v", resultPointSlice)
@@ -606,7 +606,7 @@ func (c *Client) AlertmanagerAlerts(ctx context.Context, base *url.URL) ([]*mode
 		Data []*model.Alert `json:"data"`
 	}
 	if err = json.Unmarshal(body, &v); err != nil {
-		return nil, errors.Wrap(err, "unmarshal alertmanager alert API response")
+		return nil, errors.Wrapf(err, "unmarshal alertmanager alert API response")
 	}
 	sort.Slice(v.Data, func(i, j int) bool {
 		return v.Data[i].Labels.Before(v.Data[j].Labels)
@@ -641,7 +641,7 @@ func (c *Client) BuildVersion(ctx context.Context, base *url.URL) (string, error
 	}
 
 	if err = json.Unmarshal(body, &b); err != nil {
-		return "", errors.Wrap(err, "unmarshal build info API response")
+		return "", errors.Wrapf(err, "unmarshal build info API response")
 	}
 
 	return b.Data.Version, nil

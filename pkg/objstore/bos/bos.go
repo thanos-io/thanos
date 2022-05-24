@@ -19,7 +19,7 @@ import (
 	"github.com/baidubce/bce-sdk-go/services/bos"
 	"github.com/baidubce/bce-sdk-go/services/bos/api"
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -48,7 +48,7 @@ func (conf *Config) validate() error {
 		conf.Endpoint == "" ||
 		conf.AccessKey == "" ||
 		conf.SecretKey == "" {
-		return errors.New("insufficient BOS configuration information")
+		return errors.Newf("insufficient BOS configuration information")
 	}
 
 	return nil
@@ -72,7 +72,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 
 	config, err := parseConfig(conf)
 	if err != nil {
-		return nil, errors.Wrap(err, "parsing BOS configuration")
+		return nil, errors.Wrapf(err, "parsing BOS configuration")
 	}
 
 	return NewBucketWithConfig(logger, config, component)
@@ -81,12 +81,12 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 // NewBucketWithConfig returns a new Bucket using the provided bos config struct.
 func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
 	if err := config.validate(); err != nil {
-		return nil, errors.Wrap(err, "validating BOS configuration")
+		return nil, errors.Wrapf(err, "validating BOS configuration")
 	}
 
 	client, err := bos.NewClient(config.AccessKey, config.SecretKey, config.Endpoint)
 	if err != nil {
-		return nil, errors.Wrap(err, "creating BOS client")
+		return nil, errors.Wrapf(err, "creating BOS client")
 	}
 
 	client.Config.UserAgent = fmt.Sprintf("thanos-%s", component)
@@ -289,7 +289,7 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 
 func (b *Bucket) getRange(_ context.Context, bucketName, objectKey string, off, length int64) (io.ReadCloser, error) {
 	if len(objectKey) == 0 {
-		return nil, errors.Errorf("given object name should not empty")
+		return nil, errors.Newf("given object name should not empty")
 	}
 
 	ranges := []int64{off}
@@ -325,7 +325,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 
 	if c.Bucket != "" {
 		if os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
-			return nil, nil, errors.New("BOS_BUCKET is defined. Normally this tests will create temporary bucket " +
+			return nil, nil, errors.Newf("BOS_BUCKET is defined. Normally this tests will create temporary bucket " +
 				"and delete it after test. Unset BOS_BUCKET env variable to use default logic. If you really want to run " +
 				"tests against provided (NOT USED!) bucket, set THANOS_ALLOW_EXISTING_BUCKET_USE=true. WARNING: That bucket " +
 				"needs to be manually cleared. This means that it is only useful to run one test in a time. This is due " +
@@ -343,7 +343,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 		}
 
 		if err := b.Iter(context.Background(), "", func(f string) error {
-			return errors.Errorf("bucket %s is not empty", c.Bucket)
+			return errors.Newf("bucket %s is not empty", c.Bucket)
 		}); err != nil {
 			return nil, nil, errors.Wrapf(err, "checking bucket %s", c.Bucket)
 		}
@@ -387,7 +387,7 @@ func validateForTest(conf Config) error {
 	if conf.Endpoint == "" ||
 		conf.AccessKey == "" ||
 		conf.SecretKey == "" {
-		return errors.New("insufficient BOS configuration information")
+		return errors.Newf("insufficient BOS configuration information")
 	}
 	return nil
 }

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 
 	"github.com/go-kit/log"
 
@@ -62,7 +62,7 @@ func TestProviderDoesNotUpdateAddressIfFailed(t *testing.T) {
 	testutil.Equals(t, []string{"dns-1:11211", "dns-2:8080"}, addresses)
 
 	resolver.configs = nil
-	resolver.err = errors.New("oops")
+	resolver.err = errors.Newf("oops")
 
 	testutil.NotOk(t, provider.Resolve(ctx, clusters))
 	addresses = provider.Addresses()

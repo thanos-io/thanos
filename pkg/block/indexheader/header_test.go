@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
@@ -432,17 +432,17 @@ func getSymbolTable(b index.ByteSlice) (map[uint32]string, error) {
 	version := int(b.Range(4, 5)[0])
 
 	if version != 1 && version != 2 {
-		return nil, errors.Errorf("unknown index file version %d", version)
+		return nil, errors.Newf("unknown index file version %d", version)
 	}
 
 	toc, err := index.NewTOCFromByteSlice(b)
 	if err != nil {
-		return nil, errors.Wrap(err, "read TOC")
+		return nil, errors.Wrapf(err, "read TOC")
 	}
 
 	symbolsV2, symbolsV1, err := readSymbols(b, version, int(toc.Symbols))
 	if err != nil {
-		return nil, errors.Wrap(err, "read symbols")
+		return nil, errors.Wrapf(err, "read symbols")
 	}
 
 	symbolsTable := make(map[uint32]string, len(symbolsV1)+len(symbolsV2))
@@ -487,5 +487,5 @@ func readSymbols(bs index.ByteSlice, version, off int) ([]string, map[uint32]str
 		}
 		cnt--
 	}
-	return symbolSlice, symbols, errors.Wrap(d.Err(), "read symbols")
+	return symbolSlice, symbols, errors.Wrapf(d.Err(), "read symbols")
 }

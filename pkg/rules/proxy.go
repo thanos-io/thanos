@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -80,7 +80,7 @@ func (s *Proxy) Rules(req *rulespb.RulesRequest, srv rulespb.Rules_RulesServer) 
 			err = srv.Send(rulespb.NewRuleGroupRulesResponse(g))
 		})
 		if err != nil {
-			return status.Error(codes.Unknown, errors.Wrap(err, "send rules response").Error())
+			return status.Error(codes.Unknown, errors.Wrapf(err, "send rules response").Error())
 		}
 	}
 
@@ -143,7 +143,7 @@ func (stream *rulesStream) receive(ctx context.Context) error {
 		}
 
 		if w := rule.GetWarning(); w != "" {
-			if err := stream.server.Send(rulespb.NewWarningRulesResponse(errors.New(w))); err != nil {
+			if err := stream.server.Send(rulespb.NewWarningRulesResponse(errors.Newf(w))); err != nil {
 				return errors.Wrapf(err, "sending rules warning to server %v", stream.server)
 			}
 			// Client stream is not aborted, it is ok to receive additional data.

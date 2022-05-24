@@ -13,7 +13,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -106,7 +106,7 @@ idLoop:
 			n.VerifierRepairers = append(n.VerifierRepairers, vr)
 			continue idLoop
 		}
-		return n, errors.Errorf("no such issue ID %s", id)
+		return n, errors.Newf("no such issue ID %s", id)
 	}
 	return n, nil
 }
@@ -131,7 +131,7 @@ func NewManager(reg prometheus.Registerer, logger log.Logger, bkt, backupBkt obj
 // TODO(blotka): Wrap bucket with BucketWithMetrics and print metrics after each issue (e.g how many blocks where touched).
 func (m *Manager) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool) error {
 	if len(m.vs.Verifiers)+len(m.vs.VerifierRepairers) == 0 {
-		return errors.New("nothing to verify. No verifiers and verifierRepairers registered")
+		return errors.Newf("nothing to verify. No verifiers and verifierRepairers registered")
 	}
 
 	logger := log.With(m.Logger, "verifiers", strings.Join(append(m.vs.VerifiersIDs(), m.vs.VerifierRepairersIDs()...), ","))
@@ -162,7 +162,7 @@ func (m *Manager) Verify(ctx context.Context, idMatcher func(ulid.ULID) bool) er
 // TODO(blotka): Wrap bucket with BucketWithMetrics and print metrics after each issue (e.g how many blocks where touched).
 func (m *Manager) VerifyAndRepair(ctx context.Context, idMatcher func(ulid.ULID) bool) error {
 	if len(m.vs.Verifiers)+len(m.vs.VerifierRepairers) == 0 {
-		return errors.New("nothing to verify. No verifierRepairers registered")
+		return errors.Newf("nothing to verify. No verifierRepairers registered")
 	}
 
 	logger := log.With(m.Logger, "verifiers", strings.Join(m.vs.VerifierRepairersIDs(), ","))

@@ -23,7 +23,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/encrypt"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
 	"gopkg.in/yaml.v2"
@@ -271,7 +271,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		Transport: rt,
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "initialize s3 client")
+		return nil, errors.Wrapf(err, "initialize s3 client")
 	}
 	client.SetAppInfo(fmt.Sprintf("thanos-%s", component), fmt.Sprintf("%s (%s)", version.Version, runtime.Version()))
 
@@ -287,7 +287,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 			}
 			sse, err = encrypt.NewSSEKMS(config.SSEConfig.KMSKeyID, config.SSEConfig.KMSEncryptionContext)
 			if err != nil {
-				return nil, errors.Wrap(err, "initialize s3 client SSE-KMS")
+				return nil, errors.Wrapf(err, "initialize s3 client SSE-KMS")
 			}
 
 		case SSEC:
@@ -298,15 +298,15 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 
 			sse, err = encrypt.NewSSEC(key)
 			if err != nil {
-				return nil, errors.Wrap(err, "initialize s3 client SSE-C")
+				return nil, errors.Wrapf(err, "initialize s3 client SSE-C")
 			}
 
 		case SSES3:
 			sse = encrypt.NewSSE()
 
 		default:
-			sseErrMsg := errors.Errorf("Unsupported type %q was provided. Supported types are SSE-S3, SSE-KMS, SSE-C", config.SSEConfig.Type)
-			return nil, errors.Wrap(sseErrMsg, "Initialize s3 client SSE Config")
+			sseErrMsg := errors.Newf("Unsupported type %q was provided. Supported types are SSE-S3, SSE-KMS, SSE-C", config.SSEConfig.Type)
+			return nil, errors.Wrapf(sseErrMsg, "Initialize s3 client SSE Config")
 		}
 	}
 
@@ -316,7 +316,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	}
 
 	if config.ListObjectsVersion != "" && config.ListObjectsVersion != "v1" && config.ListObjectsVersion != "v2" {
-		return nil, errors.Errorf("Initialize s3 client list objects version: Unsupported version %q was provided. Supported values are v1, v2", config.ListObjectsVersion)
+		return nil, errors.Newf("Initialize s3 client list objects version: Unsupported version %q was provided. Supported values are v1, v2", config.ListObjectsVersion)
 	}
 
 	bkt := &Bucket{
@@ -339,27 +339,27 @@ func (b *Bucket) Name() string {
 // validate checks to see the config options are set.
 func validate(conf Config) error {
 	if conf.Endpoint == "" {
-		return errors.New("no s3 endpoint in config file")
+		return errors.Newf("no s3 endpoint in config file")
 	}
 
 	if conf.AWSSDKAuth && conf.AccessKey != "" {
-		return errors.New("aws_sdk_auth and access_key are mutually exclusive configurations")
+		return errors.Newf("aws_sdk_auth and access_key are mutually exclusive configurations")
 	}
 
 	if conf.AccessKey == "" && conf.SecretKey != "" {
-		return errors.New("no s3 access_key specified while secret_key is present in config file; either both should be present in config or envvars/IAM should be used.")
+		return errors.Newf("no s3 access_key specified while secret_key is present in config file; either both should be present in config or envvars/IAM should be used.")
 	}
 
 	if conf.AccessKey != "" && conf.SecretKey == "" {
-		return errors.New("no s3 secret_key specified while access_key is present in config file; either both should be present in config or envvars/IAM should be used.")
+		return errors.Newf("no s3 secret_key specified while access_key is present in config file; either both should be present in config or envvars/IAM should be used.")
 	}
 
 	if conf.SSEConfig.Type == SSEC && conf.SSEConfig.EncryptionKey == "" {
-		return errors.New("encryption_key must be set if sse_config.type is set to 'SSE-C'")
+		return errors.Newf("encryption_key must be set if sse_config.type is set to 'SSE-C'")
 	}
 
 	if conf.SSEConfig.Type == SSEKMS && conf.SSEConfig.KMSKeyID == "" {
-		return errors.New("kms_key_id must be set if sse_config.type is set to 'SSE-KMS'")
+		return errors.Newf("kms_key_id must be set if sse_config.type is set to 'SSE-KMS'")
 	}
 
 	return nil
@@ -370,7 +370,7 @@ func ValidateForTests(conf Config) error {
 	if conf.Endpoint == "" ||
 		conf.AccessKey == "" ||
 		conf.SecretKey == "" {
-		return errors.New("insufficient s3 test configuration information")
+		return errors.Newf("insufficient s3 test configuration information")
 	}
 	return nil
 }
@@ -461,7 +461,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}
-		return false, errors.Wrap(err, "stat s3 object")
+		return false, errors.Wrapf(err, "stat s3 object")
 	}
 
 	return true, nil
@@ -497,7 +497,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 			UserMetadata:         b.putUserMetadata,
 		},
 	); err != nil {
-		return errors.Wrap(err, "upload s3 object")
+		return errors.Wrapf(err, "upload s3 object")
 	}
 
 	return nil
@@ -534,7 +534,7 @@ func (b *Bucket) getServerSideEncryption(ctx context.Context) (encrypt.ServerSid
 		if sse, ok := value.(encrypt.ServerSide); ok {
 			return sse, nil
 		}
-		return nil, errors.New("invalid SSE config override provided in the context")
+		return nil, errors.Newf("invalid SSE config override provided in the context")
 	}
 
 	return b.defaultSSE, nil
@@ -563,7 +563,7 @@ func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), erro
 	}
 
 	if c.Bucket != "" && os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
-		return nil, nil, errors.New("S3_BUCKET is defined. Normally this tests will create temporary bucket " +
+		return nil, nil, errors.Newf("S3_BUCKET is defined. Normally this tests will create temporary bucket " +
 			"and delete it after test. Unset S3_BUCKET env variable to use default logic. If you really want to run " +
 			"tests against provided (NOT USED!) bucket, set THANOS_ALLOW_EXISTING_BUCKET_USE=true. WARNING: That bucket " +
 			"needs to be manually cleared. This means that it is only useful to run one test in a time. This is due " +
@@ -588,7 +588,7 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 	bktToCreate := c.Bucket
 	if c.Bucket != "" && reuseBucket {
 		if err := b.Iter(ctx, "", func(f string) error {
-			return errors.Errorf("bucket %s is not empty", c.Bucket)
+			return errors.Newf("bucket %s is not empty", c.Bucket)
 		}); err != nil {
 			return nil, nil, errors.Wrapf(err, "s3 check bucket %s", c.Bucket)
 		}

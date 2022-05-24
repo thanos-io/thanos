@@ -18,7 +18,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/golang/groupcache/singleflight"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
@@ -214,8 +214,8 @@ func (f *BaseFetcher) NewMetaFetcher(reg prometheus.Registerer, filters []Metada
 }
 
 var (
-	ErrorSyncMetaNotFound  = errors.New("meta.json not found")
-	ErrorSyncMetaCorrupted = errors.New("meta.json corrupted")
+	ErrorSyncMetaNotFound  = errors.Newf("meta.json not found")
+	ErrorSyncMetaCorrupted = errors.Newf("meta.json corrupted")
 )
 
 // loadMeta returns metadata from object storage or error.
@@ -278,7 +278,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 	}
 
 	if m.Version != metadata.TSDBVersion1 {
-		return nil, errors.Errorf("unexpected meta file: %s version: %d", metaFile, m.Version)
+		return nil, errors.Newf("unexpected meta file: %s version: %d", metaFile, m.Version)
 	}
 
 	// Best effort cache in local dir.
@@ -372,7 +372,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 	})
 
 	if err := eg.Wait(); err != nil {
-		return nil, errors.Wrap(err, "BaseFetcher: iter bucket")
+		return nil, errors.Wrapf(err, "BaseFetcher: iter bucket")
 	}
 
 	if len(resp.metaErrs) > 0 {
@@ -456,7 +456,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 	for _, filter := range filters {
 		// NOTE: filter can update synced metric accordingly to the reason of the exclude.
 		if err := filter.Filter(ctx, metas, metrics.Synced, metrics.Modified); err != nil {
-			return nil, nil, errors.Wrap(err, "filter metas")
+			return nil, nil, errors.Wrapf(err, "filter metas")
 		}
 	}
 
@@ -464,7 +464,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *FetcherMetrics, filter
 	metrics.Submit()
 
 	if len(resp.metaErrs) > 0 {
-		return metas, resp.partial, errors.Wrap(resp.metaErrs.Err(), "incomplete view")
+		return metas, resp.partial, errors.Wrapf(resp.metaErrs.Err(), "incomplete view")
 	}
 
 	level.Info(f.logger).Log("msg", "successfully synchronized block metadata", "duration", time.Since(start).String(), "duration_ms", time.Since(start).Milliseconds(), "cached", f.countCached(), "returned", len(metas), "partial", len(resp.partial))
@@ -876,7 +876,7 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 	})
 
 	if err := eg.Wait(); err != nil {
-		return errors.Wrap(err, "filter blocks marked for deletion")
+		return errors.Wrapf(err, "filter blocks marked for deletion")
 	}
 
 	f.mtx.Lock()
@@ -895,13 +895,13 @@ var (
 func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, error) {
 	var relabelConfig []*relabel.Config
 	if err := yaml.Unmarshal(contentYaml, &relabelConfig); err != nil {
-		return nil, errors.Wrap(err, "parsing relabel configuration")
+		return nil, errors.Wrapf(err, "parsing relabel configuration")
 	}
 
 	if supportedActions != nil {
 		for _, cfg := range relabelConfig {
 			if _, ok := supportedActions[cfg.Action]; !ok {
-				return nil, errors.Errorf("unsupported relabel action: %v", cfg.Action)
+				return nil, errors.Newf("unsupported relabel action: %v", cfg.Action)
 			}
 		}
 	}

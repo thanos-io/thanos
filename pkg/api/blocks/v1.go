@@ -10,7 +10,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
@@ -92,16 +92,16 @@ func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.Ap
 	detailParam := r.FormValue("detail")
 
 	if idParam == "" {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("ID cannot be empty")}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Newf("ID cannot be empty")}
 	}
 
 	if actionParam == "" {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("Action cannot be empty")}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Newf("Action cannot be empty")}
 	}
 
 	id, err := ulid.Parse(idParam)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("ULID %q is not valid: %v", idParam, err)}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Newf("ULID %q is not valid: %v", idParam, err)}
 	}
 
 	actionType := parse(actionParam)
@@ -117,7 +117,7 @@ func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.Ap
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 		}
 	default:
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("not supported marker %v", actionParam)}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Newf("not supported marker %v", actionParam)}
 	}
 	return nil, nil, nil
 }

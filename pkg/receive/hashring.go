@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -114,7 +114,7 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 			return m.hashrings[i].GetN(tenant, ts, n)
 		}
 	}
-	return "", errors.New("no matching hashring to handle tenant")
+	return "", errors.Newf("no matching hashring to handle tenant")
 }
 
 // newMultiHashring creates a multi-tenant hashring for a given slice of
@@ -155,7 +155,7 @@ func HashringFromConfigWatcher(ctx context.Context, updates chan<- Hashring, cw 
 		select {
 		case cfg, ok := <-cw.C():
 			if !ok {
-				return errors.New("hashring config watcher stopped unexpectedly")
+				return errors.Newf("hashring config watcher stopped unexpectedly")
 			}
 			updates <- newMultiHashring(cfg)
 		case <-ctx.Done():

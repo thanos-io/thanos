@@ -26,7 +26,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/route"
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -73,7 +73,7 @@ func TestRespondSuccess(t *testing.T) {
 
 func TestRespondError(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		RespondError(w, &ApiError{ErrorTimeout, errors.New("message")}, "test")
+		RespondError(w, &ApiError{ErrorTimeout, errors.Newf("message")}, "test")
 	}))
 	defer s.Close()
 

@@ -13,7 +13,7 @@ import (
 	"github.com/go-kit/log"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"golang.org/x/sync/errgroup"
@@ -177,7 +177,7 @@ func (s *tenantSeriesSetServer) Series(store storepb.StoreServer, r *storepb.Ser
 			s.err = errors.Wrapf(err, "get series for tenant %s", s.tenant)
 		} else {
 			// Consistently prefix tenant specific warnings as done in various other places.
-			err = errors.New(prefixTenantWarning(s.tenant, err.Error()))
+			err = errors.Newf(prefixTenantWarning(s.tenant, err.Error()))
 			s.directCh.send(storepb.NewWarnSeriesResponse(err))
 		}
 	}
@@ -301,7 +301,7 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 		// respCh channel is closed OR on error from client.
 		for resp := range respCh {
 			if err := srv.Send(resp); err != nil {
-				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+				return status.Error(codes.Unknown, errors.Wrapf(err, "send series response").Error())
 			}
 		}
 		return nil

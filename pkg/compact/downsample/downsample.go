@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/tsdb"
@@ -48,18 +48,18 @@ func Downsample(
 	resolution int64,
 ) (id ulid.ULID, err error) {
 	if origMeta.Thanos.Downsample.Resolution >= resolution {
-		return id, errors.New("target resolution not lower than existing one")
+		return id, errors.Newf("target resolution not lower than existing one")
 	}
 
 	indexr, err := b.Index()
 	if err != nil {
-		return id, errors.Wrap(err, "open index reader")
+		return id, errors.Wrapf(err, "open index reader")
 	}
 	defer runutil.CloseWithErrCapture(&err, indexr, "downsample index reader")
 
 	chunkr, err := b.Chunks()
 	if err != nil {
-		return id, errors.Wrap(err, "open chunk reader")
+		return id, errors.Wrapf(err, "open chunk reader")
 	}
 	defer runutil.CloseWithErrCapture(&err, chunkr, "downsample chunk reader")
 
@@ -69,7 +69,7 @@ func Downsample(
 	// Create block directory to populate with chunks, meta and index files into.
 	blockDir := filepath.Join(dir, uid.String())
 	if err := os.MkdirAll(blockDir, 0750); err != nil {
-		return id, errors.Wrap(err, "mkdir block dir")
+		return id, errors.Wrapf(err, "mkdir block dir")
 	}
 
 	// Remove blockDir in case of errors.
@@ -91,13 +91,13 @@ func Downsample(
 	// Flushes index and meta data after aggregations.
 	streamedBlockWriter, err := NewStreamedBlockWriter(blockDir, indexr, logger, newMeta)
 	if err != nil {
-		return id, errors.Wrap(err, "get streamed block writer")
+		return id, errors.Wrapf(err, "get streamed block writer")
 	}
 	defer runutil.CloseWithErrCapture(&err, streamedBlockWriter, "close stream block writer")
 
 	postings, err := indexr.Postings(index.AllPostingsKey())
 	if err != nil {
-		return id, errors.Wrap(err, "get all postings list")
+		return id, errors.Wrapf(err, "get all postings list")
 	}
 
 	var (
@@ -121,7 +121,7 @@ func Downsample(
 
 		for i, c := range chks[1:] {
 			if chks[i].MaxTime >= c.MinTime {
-				return id, errors.Errorf("found overlapping chunks within series %d. Chunks expected to be ordered by min time and non-overlapping, got: %v", postings.At(), chks)
+				return id, errors.Newf("found overlapping chunks within series %d. Chunks expected to be ordered by min time and non-overlapping, got: %v", postings.At(), chks)
 			}
 		}
 
@@ -153,7 +153,7 @@ func Downsample(
 			for _, c := range chks {
 				ac, ok := c.Chunk.(*AggrChunk)
 				if !ok {
-					return id, errors.Errorf("expected downsampled chunk (*downsample.AggrChunk) got %T instead for series: %d", c.Chunk, postings.At())
+					return id, errors.Newf("expected downsampled chunk (*downsample.AggrChunk) got %T instead for series: %d", c.Chunk, postings.At())
 				}
 				aggrChunks = append(aggrChunks, ac)
 			}
@@ -174,7 +174,7 @@ func Downsample(
 		}
 	}
 	if postings.Err() != nil {
-		return id, errors.Wrap(postings.Err(), "iterate series set")
+		return id, errors.Wrapf(postings.Err(), "iterate series set")
 	}
 
 	id = uid
@@ -682,7 +682,7 @@ func NewAverageChunkIterator(cnt, sum chunkenc.Iterator) *AverageChunkIterator {
 func (it *AverageChunkIterator) Next() bool {
 	cok, sok := it.cntIt.Next(), it.sumIt.Next()
 	if cok != sok {
-		it.err = errors.New("sum and count iterator not aligned")
+		it.err = errors.Newf("sum and count iterator not aligned")
 		return false
 	}
 	if !cok {
@@ -692,7 +692,7 @@ func (it *AverageChunkIterator) Next() bool {
 	cntT, cntV := it.cntIt.At()
 	sumT, sumV := it.sumIt.At()
 	if cntT != sumT {
-		it.err = errors.New("sum and count timestamps not aligned")
+		it.err = errors.Newf("sum and count timestamps not aligned")
 		return false
 	}
 	it.t, it.v = cntT, sumV/cntV
@@ -700,7 +700,7 @@ func (it *AverageChunkIterator) Next() bool {
 }
 
 func (it *AverageChunkIterator) Seek(t int64) bool {
-	it.err = errors.New("seek used, but not implemented")
+	it.err = errors.Newf("seek used, but not implemented")
 	return false
 }
 

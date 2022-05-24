@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/tencentyun/cos-go-sdk-v5"
 	"gopkg.in/yaml.v2"
@@ -66,11 +66,11 @@ type Config struct {
 func (conf *Config) validate() error {
 	if conf.Endpoint != "" {
 		if _, err := url.Parse(conf.Endpoint); err != nil {
-			return errors.Wrap(err, "parse endpoint")
+			return errors.Wrapf(err, "parse endpoint")
 		}
 		if conf.SecretId == "" ||
 			conf.SecretKey == "" {
-			return errors.New("secret_id or secret_key is empty")
+			return errors.Newf("secret_id or secret_key is empty")
 		}
 		return nil
 	}
@@ -79,7 +79,7 @@ func (conf *Config) validate() error {
 		conf.Region == "" ||
 		conf.SecretId == "" ||
 		conf.SecretKey == "" {
-		return errors.New("insufficient cos configuration information")
+		return errors.Newf("insufficient cos configuration information")
 	}
 	return nil
 }
@@ -126,7 +126,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 
 	config, err := parseConfig(conf)
 	if err != nil {
-		return nil, errors.Wrap(err, "parsing cos configuration")
+		return nil, errors.Wrapf(err, "parsing cos configuration")
 	}
 
 	return NewBucketWithConfig(logger, config, component)
@@ -135,7 +135,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 // NewBucketWithConfig returns a new Bucket using the provided cos config values.
 func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
 	if err := config.validate(); err != nil {
-		return nil, errors.Wrap(err, "validate cos configuration")
+		return nil, errors.Wrapf(err, "validate cos configuration")
 	}
 
 	var bucketURL *url.URL
@@ -143,7 +143,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	if config.Endpoint != "" {
 		bucketURL, err = url.Parse(config.Endpoint)
 		if err != nil {
-			return nil, errors.Wrap(err, "parse endpoint")
+			return nil, errors.Wrapf(err, "parse endpoint")
 		}
 	} else {
 		bucketURL = cos.NewBucketURL(fmt.Sprintf("%s-%s", config.Bucket, config.AppId), config.Region, true)
@@ -282,7 +282,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
 	if _, err := b.client.Object.Delete(ctx, name); err != nil {
-		return errors.Wrap(err, "delete cos object")
+		return errors.Wrapf(err, "delete cos object")
 	}
 	return nil
 }
@@ -311,7 +311,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 
 func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	if name == "" {
-		return nil, errors.New("given object name should not empty")
+		return nil, errors.Newf("given object name should not empty")
 	}
 
 	opts := &cos.ObjectGetOptions{}
@@ -364,7 +364,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}
-		return false, errors.Wrap(err, "head cos object")
+		return false, errors.Wrapf(err, "head cos object")
 	}
 
 	return true, nil
@@ -460,7 +460,7 @@ func setRange(opts *cos.ObjectGetOptions, start, end int64) error {
 	} else if 0 <= start && start <= end {
 		opts.Range = fmt.Sprintf("bytes=%d-%d", start, end)
 	} else {
-		return errors.Errorf("Invalid range specified: start=%d end=%d", start, end)
+		return errors.Newf("Invalid range specified: start=%d end=%d", start, end)
 	}
 	return nil
 }
@@ -488,7 +488,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 
 	if c.Bucket != "" {
 		if os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
-			return nil, nil, errors.New("COS_BUCKET is defined. Normally this tests will create temporary bucket " +
+			return nil, nil, errors.Newf("COS_BUCKET is defined. Normally this tests will create temporary bucket " +
 				"and delete it after test. Unset COS_BUCKET env variable to use default logic. If you really want to run " +
 				"tests against provided (NOT USED!) bucket, set THANOS_ALLOW_EXISTING_BUCKET_USE=true. WARNING: That bucket " +
 				"needs to be manually cleared. This means that it is only useful to run one test in a time. This is due " +
@@ -506,7 +506,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 		}
 
 		if err := b.Iter(context.Background(), "", func(f string) error {
-			return errors.Errorf("bucket %s is not empty", c.Bucket)
+			return errors.Newf("bucket %s is not empty", c.Bucket)
 		}); err != nil {
 			return nil, nil, errors.Wrapf(err, "cos check bucket %s", c.Bucket)
 		}
@@ -542,11 +542,11 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 func validateForTest(conf Config) error {
 	if conf.Endpoint != "" {
 		if _, err := url.Parse(conf.Endpoint); err != nil {
-			return errors.Wrap(err, "parse endpoint")
+			return errors.Wrapf(err, "parse endpoint")
 		}
 		if conf.SecretId == "" ||
 			conf.SecretKey == "" {
-			return errors.New("secret_id or secret_key is empty")
+			return errors.Newf("secret_id or secret_key is empty")
 		}
 		return nil
 	}
@@ -554,7 +554,7 @@ func validateForTest(conf Config) error {
 		conf.Region == "" ||
 		conf.SecretId == "" ||
 		conf.SecretKey == "" {
-		return errors.New("insufficient cos configuration information")
+		return errors.Newf("insufficient cos configuration information")
 	}
 	return nil
 }

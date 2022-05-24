@@ -14,7 +14,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/jsonpb"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"google.golang.org/grpc/codes"
@@ -159,7 +159,7 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return nil
 	}
 	if len(matchers) == 0 {
-		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+		return status.Error(codes.InvalidArgument, errors.Newf("no matchers specified (excluding external labels)").Error())
 	}
 
 	var chosen []int

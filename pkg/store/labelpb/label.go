@@ -15,7 +15,7 @@ import (
 	"unsafe"
 
 	"github.com/cespare/xxhash/v2"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 )
 

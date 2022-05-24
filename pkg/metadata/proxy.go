@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -80,7 +80,7 @@ func (s *Proxy) MetricMetadata(req *metadatapb.MetricMetadataRequest, srv metada
 			err = srv.Send(metadatapb.NewMetricMetadataResponse(t))
 		})
 		if err != nil {
-			return status.Error(codes.Unknown, errors.Wrap(err, "send metric metadata response").Error())
+			return status.Error(codes.Unknown, errors.Wrapf(err, "send metric metadata response").Error())
 		}
 	}
 
@@ -140,7 +140,7 @@ func (stream *metricMetadataStream) receive(ctx context.Context) error {
 		}
 
 		if w := resp.GetWarning(); w != "" {
-			if err := stream.server.Send(metadatapb.NewWarningMetadataResponse(errors.New(w))); err != nil {
+			if err := stream.server.Send(metadatapb.NewWarningMetadataResponse(errors.Newf(w))); err != nil {
 				return errors.Wrapf(err, "sending metadata warning to server %v", stream.server)
 			}
 			continue

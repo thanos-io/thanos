@@ -17,7 +17,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/ncw/swift"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"gopkg.in/yaml.v2"
 
@@ -101,7 +101,7 @@ func configFromEnv() (*Config, error) {
 		var err error
 		config.ChunkSize, err = strconv.ParseInt(os.Getenv("SWIFT_CHUNK_SIZE"), 10, 64)
 		if err != nil {
-			return nil, errors.Wrap(err, "parsing chunk size")
+			return nil, errors.Wrapf(err, "parsing chunk size")
 		}
 	}
 	if strings.ToLower(os.Getenv("SWIFT_USE_DYNAMIC_LARGE_OBJECTS")) == "true" {
@@ -143,7 +143,7 @@ type Container struct {
 func NewContainer(logger log.Logger, conf []byte) (*Container, error) {
 	sc, err := parseConfig(conf)
 	if err != nil {
-		return nil, errors.Wrap(err, "parse config")
+		return nil, errors.Wrapf(err, "parse config")
 	}
 	return NewContainerFromConfig(logger, sc, false)
 }
@@ -167,7 +167,7 @@ func ensureContainer(connection *swift.Connection, name string, createIfNotExist
 func NewContainerFromConfig(logger log.Logger, sc *Config, createContainer bool) (*Container, error) {
 	connection := connectionFromConfig(sc)
 	if err := connection.Authenticate(); err != nil {
-		return nil, errors.Wrap(err, "authentication")
+		return nil, errors.Wrapf(err, "authentication")
 	}
 
 	if err := ensureContainer(connection, sc.ContainerName, createContainer); err != nil {
@@ -212,14 +212,14 @@ func (c *Container) Iter(_ context.Context, dir string, f func(string) error, op
 	return c.connection.ObjectsWalk(c.name, listOptions, func(opts *swift.ObjectsOpts) (interface{}, error) {
 		objects, err := c.connection.ObjectNames(c.name, opts)
 		if err != nil {
-			return objects, errors.Wrap(err, "list object names")
+			return objects, errors.Wrapf(err, "list object names")
 		}
 		for _, object := range objects {
 			if object == SegmentsDir {
 				continue
 			}
 			if err := f(object); err != nil {
-				return objects, errors.Wrap(err, "iteration over objects")
+				return objects, errors.Wrapf(err, "iteration over objects")
 			}
 		}
 		return objects, nil
@@ -228,11 +228,11 @@ func (c *Container) Iter(_ context.Context, dir string, f func(string) error, op
 
 func (c *Container) get(name string, headers swift.Headers, checkHash bool) (io.ReadCloser, error) {
 	if name == "" {
-		return nil, errors.New("object name cannot be empty")
+		return nil, errors.Newf("object name cannot be empty")
 	}
 	file, _, err := c.connection.ObjectOpen(c.name, name, checkHash, headers)
 	if err != nil {
-		return nil, errors.Wrap(err, "open object")
+		return nil, errors.Wrapf(err, "open object")
 	}
 	return file, err
 }
@@ -254,11 +254,11 @@ func (c *Container) GetRange(_ context.Context, name string, off, length int64) 
 // Attributes returns information about the specified object.
 func (c *Container) Attributes(_ context.Context, name string) (objstore.ObjectAttributes, error) {
 	if name == "" {
-		return objstore.ObjectAttributes{}, errors.New("object name cannot be empty")
+		return objstore.ObjectAttributes{}, errors.Newf("object name cannot be empty")
 	}
 	info, _, err := c.connection.Object(c.name, name)
 	if err != nil {
-		return objstore.ObjectAttributes{}, errors.Wrap(err, "get object attributes")
+		return objstore.ObjectAttributes{}, errors.Wrapf(err, "get object attributes")
 	}
 	return objstore.ObjectAttributes{
 		Size:         info.Bytes,
@@ -301,28 +301,28 @@ func (c *Container) Upload(_ context.Context, name string, r io.Reader) (err err
 		}
 		if c.useDynamicLargeObjects {
 			if file, err = c.connection.DynamicLargeObjectCreateFile(&opts); err != nil {
-				return errors.Wrap(err, "create DLO file")
+				return errors.Wrapf(err, "create DLO file")
 			}
 		} else {
 			if file, err = c.connection.StaticLargeObjectCreateFile(&opts); err != nil {
-				return errors.Wrap(err, "create SLO file")
+				return errors.Wrapf(err, "create SLO file")
 			}
 		}
 	} else {
 		if file, err = c.connection.ObjectCreate(c.name, name, true, "", "", swift.Headers{}); err != nil {
-			return errors.Wrap(err, "create file")
+			return errors.Wrapf(err, "create file")
 		}
 	}
 	defer runutil.CloseWithErrCapture(&err, file, "upload object close")
 	if _, err := io.Copy(file, r); err != nil {
-		return errors.Wrap(err, "uploading object")
+		return errors.Wrapf(err, "uploading object")
 	}
 	return nil
 }
 
 // Delete removes the object with the given name.
 func (c *Container) Delete(_ context.Context, name string) error {
-	return errors.Wrap(c.connection.LargeObjectDelete(c.name, name), "delete object")
+	return errors.Wrapf(c.connection.LargeObjectDelete(c.name, name), "delete object")
 }
 
 func (*Container) Close() error {
@@ -335,11 +335,11 @@ func (*Container) Close() error {
 func NewTestContainer(t testing.TB) (objstore.Bucket, func(), error) {
 	config, err := configFromEnv()
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "loading config from ENV")
+		return nil, nil, errors.Wrapf(err, "loading config from ENV")
 	}
 	if config.ContainerName != "" {
 		if os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
-			return nil, nil, errors.New("OS_CONTAINER_NAME is defined. Normally this tests will create temporary container " +
+			return nil, nil, errors.Newf("OS_CONTAINER_NAME is defined. Normally this tests will create temporary container " +
 				"and delete it after test. Unset OS_CONTAINER_NAME env variable to use default logic. If you really want to run " +
 				"tests against provided (NOT USED!) container, set THANOS_ALLOW_EXISTING_BUCKET_USE=true. WARNING: That container " +
 				"needs to be manually cleared. This means that it is only useful to run one test in a time. This is due " +
@@ -347,10 +347,10 @@ func NewTestContainer(t testing.TB) (objstore.Bucket, func(), error) {
 		}
 		c, err := NewContainerFromConfig(log.NewNopLogger(), config, false)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "initializing new container")
+			return nil, nil, errors.Wrapf(err, "initializing new container")
 		}
 		if err := c.Iter(context.Background(), "", func(f string) error {
-			return errors.Errorf("container %s is not empty", c.Name())
+			return errors.Newf("container %s is not empty", c.Name())
 		}); err != nil {
 			return nil, nil, errors.Wrapf(err, "check container %s", c.Name())
 		}
@@ -361,7 +361,7 @@ func NewTestContainer(t testing.TB) (objstore.Bucket, func(), error) {
 	config.SegmentContainerName = config.ContainerName
 	c, err := NewContainerFromConfig(log.NewNopLogger(), config, true)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "initializing new container")
+		return nil, nil, errors.Wrapf(err, "initializing new container")
 	}
 	t.Log("created temporary container for swift tests with name", c.Name())
 

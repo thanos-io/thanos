@@ -15,7 +15,7 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gopkg.in/yaml.v2"
@@ -41,10 +41,10 @@ const (
 )
 
 var (
-	errMemcachedAsyncBufferFull                = errors.New("the async buffer is full")
-	errMemcachedConfigNoAddrs                  = errors.New("no memcached addresses provided")
-	errMemcachedDNSUpdateIntervalNotPositive   = errors.New("DNS provider update interval must be positive")
-	errMemcachedMaxAsyncConcurrencyNotPositive = errors.New("max async concurrency must be positive")
+	errMemcachedAsyncBufferFull                = errors.Newf("the async buffer is full")
+	errMemcachedConfigNoAddrs                  = errors.Newf("no memcached addresses provided")
+	errMemcachedDNSUpdateIntervalNotPositive   = errors.Newf("DNS provider update interval must be positive")
+	errMemcachedMaxAsyncConcurrencyNotPositive = errors.Newf("max async concurrency must be positive")
 
 	defaultMemcachedClientConfig = MemcachedClientConfig{
 		Timeout:                   500 * time.Millisecond,

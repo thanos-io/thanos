@@ -24,7 +24,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/storage"
@@ -156,7 +156,7 @@ func newPrometheus(binPath, prefix string) (*Prometheus, error) {
 // Start running the Prometheus instance and return.
 func (p *Prometheus) Start() error {
 	if p.running {
-		return errors.New("Already started")
+		return errors.Newf("Already started")
 	}
 
 	if err := p.db.Close(); err != nil {
@@ -211,7 +211,7 @@ func (p *Prometheus) start() error {
 
 func (p *Prometheus) WaitPrometheusUp(ctx context.Context, logger log.Logger) error {
 	if !p.running {
-		return errors.New("method Start was not invoked.")
+		return errors.Newf("method Start was not invoked.")
 	}
 	return runutil.Retry(time.Second, ctx.Done(), func() error {
 		r, err := http.Get(fmt.Sprintf("http://%s/-/ready", p.addr))
@@ -221,7 +221,7 @@ func (p *Prometheus) WaitPrometheusUp(ctx context.Context, logger log.Logger) er
 		defer runutil.ExhaustCloseWithLogOnErr(logger, r.Body, "failed to exhaust and close body")
 
 		if r.StatusCode != 200 {
-			return errors.Errorf("Got non 200 response: %v", r.StatusCode)
+			return errors.Newf("Got non 200 response: %v", r.StatusCode)
 		}
 		return nil
 	})
@@ -229,7 +229,7 @@ func (p *Prometheus) WaitPrometheusUp(ctx context.Context, logger log.Logger) er
 
 func (p *Prometheus) Restart() error {
 	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		return errors.Wrap(err, "failed to kill Prometheus. Kill it manually")
+		return errors.Wrapf(err, "failed to kill Prometheus. Kill it manually")
 	}
 	_ = p.cmd.Wait()
 	return p.start()
@@ -302,20 +302,20 @@ func CreateEmptyBlock(dir string, mint, maxt int64, extLset labels.Labels, resol
 	uid := ulid.MustNew(ulid.Now(), entropy)
 
 	if err := os.Mkdir(path.Join(dir, uid.String()), os.ModePerm); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "close index")
+		return ulid.ULID{}, errors.Wrapf(err, "close index")
 	}
 
 	if err := os.Mkdir(path.Join(dir, uid.String(), "chunks"), os.ModePerm); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "close index")
+		return ulid.ULID{}, errors.Wrapf(err, "close index")
 	}
 
 	w, err := index.NewWriter(context.Background(), path.Join(dir, uid.String(), "index"))
 	if err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "new index")
+		return ulid.ULID{}, errors.Wrapf(err, "new index")
 	}
 
 	if err := w.Close(); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "close index")
+		return ulid.ULID{}, errors.Wrapf(err, "close index")
 	}
 
 	m := tsdb.BlockMeta{
@@ -334,7 +334,7 @@ func CreateEmptyBlock(dir string, mint, maxt int64, extLset labels.Labels, resol
 	}
 
 	if err := ioutil.WriteFile(path.Join(dir, uid.String(), "meta.json"), b, os.ModePerm); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "saving meta.json")
+		return ulid.ULID{}, errors.Wrapf(err, "saving meta.json")
 	}
 
 	if _, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(dir, uid.String()), metadata.Thanos{
@@ -342,7 +342,7 @@ func CreateEmptyBlock(dir string, mint, maxt int64, extLset labels.Labels, resol
 		Downsample: metadata.ThanosDownsample{Resolution: resolution},
 		Source:     metadata.TestSource,
 	}, nil); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "finalize block")
+		return ulid.ULID{}, errors.Wrapf(err, "finalize block")
 	}
 
 	return uid, nil
@@ -393,24 +393,24 @@ func CreateBlockWithBlockDelay(
 ) (ulid.ULID, error) {
 	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc)
 	if err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "block creation")
+		return ulid.ULID{}, errors.Wrapf(err, "block creation")
 	}
 
 	id, err := ulid.New(uint64(timestamp.FromTime(timestamp.Time(int64(blockID.Time())).Add(-blockDelay))), bytes.NewReader(blockID.Entropy()))
 	if err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "create block id")
+		return ulid.ULID{}, errors.Wrapf(err, "create block id")
 	}
 
 	m, err := metadata.ReadFromDir(path.Join(dir, blockID.String()))
 	if err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "open meta file")
+		return ulid.ULID{}, errors.Wrapf(err, "open meta file")
 	}
 
 	m.ULID = id
 	m.Compaction.Sources = []ulid.ULID{id}
 
 	if err := m.WriteToDir(log.NewNopLogger(), path.Join(dir, blockID.String())); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "write meta.json file")
+		return ulid.ULID{}, errors.Wrapf(err, "write meta.json file")
 	}
 
 	return id, os.Rename(path.Join(dir, blockID.String()), path.Join(dir, id.String()))
@@ -432,12 +432,12 @@ func createBlock(
 	headOpts.ChunkRange = 10000000000
 	h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
 	if err != nil {
-		return id, errors.Wrap(err, "create head block")
+		return id, errors.Wrapf(err, "create head block")
 	}
 	defer func() {
 		runutil.CloseWithErrCapture(&err, h, "TSDB Head")
 		if e := os.RemoveAll(headOpts.ChunkDirRoot); e != nil {
-			err = errors.Wrap(e, "delete chunks dir")
+			err = errors.Wrapf(e, "delete chunks dir")
 		}
 	}()
 
@@ -466,11 +466,11 @@ func createBlock(
 							err = errors.Wrapf(err, "rollback failed: %v", rerr)
 						}
 
-						return errors.Wrap(err, "add sample")
+						return errors.Wrapf(err, "add sample")
 					}
 				}
 				if err := app.Commit(); err != nil {
-					return errors.Wrap(err, "commit")
+					return errors.Wrapf(err, "commit")
 				}
 				t += timeStepSize
 			}
@@ -482,16 +482,16 @@ func createBlock(
 	}
 	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil, nil)
 	if err != nil {
-		return id, errors.Wrap(err, "create compactor")
+		return id, errors.Wrapf(err, "create compactor")
 	}
 
 	id, err = c.Write(dir, h, mint, maxt, nil)
 	if err != nil {
-		return id, errors.Wrap(err, "write block")
+		return id, errors.Wrapf(err, "write block")
 	}
 
 	if id.Compare(ulid.ULID{}) == 0 {
-		return id, errors.Errorf("nothing to write, asked for %d samples", numSamples)
+		return id, errors.Newf("nothing to write, asked for %d samples", numSamples)
 	}
 
 	blockDir := filepath.Join(dir, id.String())
@@ -527,12 +527,12 @@ func createBlock(
 		Source:     metadata.TestSource,
 		Files:      files,
 	}, nil); err != nil {
-		return id, errors.Wrap(err, "finalize block")
+		return id, errors.Wrapf(err, "finalize block")
 	}
 
 	if !tombstones {
 		if err = os.Remove(filepath.Join(dir, id.String(), "tombstones")); err != nil {
-			return id, errors.Wrap(err, "remove tombstones")
+			return id, errors.Wrapf(err, "remove tombstones")
 		}
 	}
 

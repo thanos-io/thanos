@@ -13,7 +13,7 @@ import (
 	"github.com/go-kit/log/level"
 	lru "github.com/hashicorp/golang-lru/simplelru"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
@@ -85,7 +85,7 @@ func NewInMemoryIndexCache(logger log.Logger, reg prometheus.Registerer, conf []
 // size approximately does not exceed maxBytes.
 func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registerer, config InMemoryIndexCacheConfig) (*InMemoryIndexCache, error) {
 	if config.MaxItemSize > config.MaxSize {
-		return nil, errors.Errorf("max item size (%v) cannot be bigger than overall cache size (%v)", config.MaxItemSize, config.MaxSize)
+		return nil, errors.Newf("max item size (%v) cannot be bigger than overall cache size (%v)", config.MaxItemSize, config.MaxSize)
 	}
 
 	c := &InMemoryIndexCache{

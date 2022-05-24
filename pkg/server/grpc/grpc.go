@@ -18,7 +18,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"google.golang.org/grpc"
@@ -129,7 +129,7 @@ func (s *Server) ListenAndServe() error {
 	s.listener = l
 
 	level.Info(s.logger).Log("msg", "listening for serving gRPC", "address", s.opts.listen)
-	return errors.Wrap(s.srv.Serve(s.listener), "serve gRPC")
+	return errors.Wrapf(s.srv.Serve(s.listener), "serve gRPC")
 }
 
 // Shutdown gracefully shuts down the server by waiting,

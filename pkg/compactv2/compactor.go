@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -76,7 +76,7 @@ func NewDryRun(tmpDir string, logger log.Logger, changeLogger ChangeLogger, pool
 // TODO(bwplotka): Upstream this.
 func (w *Compactor) WriteSeries(ctx context.Context, readers []block.Reader, sWriter block.Writer, p ProgressLogger, modifiers ...Modifier) (err error) {
 	if len(readers) == 0 {
-		return errors.New("cannot write from no readers")
+		return errors.Newf("cannot write from no readers")
 	}
 
 	var (
@@ -86,7 +86,7 @@ func (w *Compactor) WriteSeries(ctx context.Context, readers []block.Reader, sWr
 	defer func() {
 		errs := tsdb_errors.NewMulti(err)
 		if cerr := tsdb_errors.CloseAll(closers); cerr != nil {
-			errs.Add(errors.Wrap(cerr, "close"))
+			errs.Add(errors.Wrapf(cerr, "close"))
 		}
 		err = errs.Err()
 	}()
@@ -146,7 +146,7 @@ func (w *Compactor) WriteSeries(ctx context.Context, readers []block.Reader, sWr
 	}
 
 	if err := w.write(ctx, symbols, set, sWriter, p); err != nil {
-		return errors.Wrap(err, "write")
+		return errors.Wrapf(err, "write")
 	}
 	return nil
 }
@@ -154,7 +154,7 @@ func (w *Compactor) WriteSeries(ctx context.Context, readers []block.Reader, sWr
 // compactSeries compacts blocks' series into symbols and one ChunkSeriesSet with lazy populating chunks.
 func compactSeries(ctx context.Context, sReaders ...seriesReader) (symbols index.StringIter, set storage.ChunkSeriesSet, _ error) {
 	if len(sReaders) == 0 {
-		return nil, nil, errors.New("cannot populate block from no readers")
+		return nil, nil, errors.Newf("cannot populate block from no readers")
 	}
 
 	var sets []storage.ChunkSeriesSet

@@ -6,7 +6,7 @@ package godns
 import (
 	"net"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // Resolver is a wrapper for net.Resolver.

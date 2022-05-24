@@ -15,7 +15,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 
@@ -178,18 +178,18 @@ func registerStore(app *extkingpin.App) {
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		if conf.filterConf.MinTime.PrometheusTimestamp() > conf.filterConf.MaxTime.PrometheusTimestamp() {
-			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
+			return errors.Newf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
 				conf.filterConf.MinTime, conf.filterConf.MaxTime)
 		}
 
 		httpLogOpts, err := logging.ParseHTTPOptions("", conf.reqLogConfig)
 		if err != nil {
-			return errors.Wrap(err, "error while parsing config for request logging")
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
 		if err != nil {
-			return errors.Wrap(err, "error while parsing config for request logging")
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		return runStore(g,
@@ -250,12 +250,12 @@ func runStore(
 
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, conf.component.String())
 	if err != nil {
-		return errors.Wrap(err, "create bucket client")
+		return errors.Wrapf(err, "create bucket client")
 	}
 
 	cachingBucketConfigYaml, err := conf.cachingBucketConfig.Content()
 	if err != nil {
-		return errors.Wrap(err, "get caching bucket configuration")
+		return errors.Wrapf(err, "get caching bucket configuration")
 	}
 
 	r := route.New()
@@ -263,13 +263,13 @@ func runStore(
 	if len(cachingBucketConfigYaml) > 0 {
 		bkt, err = storecache.NewCachingBucketFromYaml(cachingBucketConfigYaml, bkt, logger, reg, r)
 		if err != nil {
-			return errors.Wrap(err, "create caching bucket")
+			return errors.Wrapf(err, "create caching bucket")
 		}
 	}
 
 	relabelContentYaml, err := conf.selectorRelabelConf.Content()
 	if err != nil {
-		return errors.Wrap(err, "get content of relabel configuration")
+		return errors.Wrapf(err, "get content of relabel configuration")
 	}
 
 	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
@@ -279,7 +279,7 @@ func runStore(
 
 	indexCacheContentYaml, err := conf.indexCacheConfigs.Content()
 	if err != nil {
-		return errors.Wrap(err, "get content of index cache configuration")
+		return errors.Wrapf(err, "get content of index cache configuration")
 	}
 
 	// Create the index cache loading its config from config file, while keeping
@@ -294,7 +294,7 @@ func runStore(
 		})
 	}
 	if err != nil {
-		return errors.Wrap(err, "create index cache")
+		return errors.Wrapf(err, "create index cache")
 	}
 
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
@@ -307,19 +307,19 @@ func runStore(
 			block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
 		})
 	if err != nil {
-		return errors.Wrap(err, "meta fetcher")
+		return errors.Wrapf(err, "meta fetcher")
 	}
 
 	// Limit the concurrency on queries against the Thanos store.
 	if conf.maxConcurrency < 0 {
-		return errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", conf.maxConcurrency)
+		return errors.Newf("max concurrency value cannot be lower than 0 (got %v)", conf.maxConcurrency)
 	}
 
 	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), int(conf.maxConcurrency))
 
 	chunkPool, err := store.NewDefaultChunkBytesPool(uint64(conf.chunkPoolSize))
 	if err != nil {
-		return errors.Wrap(err, "create chunk pool")
+		return errors.Wrapf(err, "create chunk pool")
 	}
 
 	options := []store.BucketStoreOption{
@@ -351,7 +351,7 @@ func runStore(
 		options...,
 	)
 	if err != nil {
-		return errors.Wrap(err, "create object storage store")
+		return errors.Wrapf(err, "create object storage store")
 	}
 
 	// bucketStoreReady signals when bucket store is ready.
@@ -365,7 +365,7 @@ func runStore(
 			begin := time.Now()
 			if err := bs.InitialSync(ctx); err != nil {
 				close(bucketStoreReady)
-				return errors.Wrap(err, "bucket store initial sync")
+				return errors.Wrapf(err, "bucket store initial sync")
 			}
 			level.Info(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
 			close(bucketStoreReady)
@@ -405,7 +405,7 @@ func runStore(
 	{
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA)
 		if err != nil {
-			return errors.Wrap(err, "setup gRPC server")
+			return errors.Wrapf(err, "setup gRPC server")
 		}
 
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, conf.component, grpcProbe,

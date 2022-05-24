@@ -19,7 +19,6 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
@@ -34,6 +33,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/dedup"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -70,7 +70,7 @@ func (cs compactionSet) String() string {
 // levels returns set of compaction levels not higher than specified max compaction level.
 func (cs compactionSet) levels(maxLevel int) ([]int64, error) {
 	if maxLevel >= len(cs) {
-		return nil, errors.Errorf("level is bigger then default set of %d", len(cs))
+		return nil, errors.Newf("level is bigger then default set of %d", len(cs))
 	}
 
 	levels := make([]int64, maxLevel+1)
@@ -209,7 +209,7 @@ func runCompact(
 
 	relabelContentYaml, err := conf.selectorRelabelConf.Content()
 	if err != nil {
-		return errors.Wrap(err, "get content of relabel configuration")
+		return errors.Wrapf(err, "get content of relabel configuration")
 	}
 
 	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
@@ -236,7 +236,7 @@ func runCompact(
 
 	baseMetaFetcher, err := block.NewBaseFetcher(logger, conf.blockMetaFetchConcurrency, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
-		return errors.Wrap(err, "create meta fetcher")
+		return errors.Wrapf(err, "create meta fetcher")
 	}
 
 	enableVerticalCompaction := conf.enableVerticalCompaction
@@ -282,13 +282,13 @@ func runCompact(
 			compactMetrics.garbageCollectedBlocks,
 			conf.blockSyncConcurrency)
 		if err != nil {
-			return errors.Wrap(err, "create syncer")
+			return errors.Wrapf(err, "create syncer")
 		}
 	}
 
 	levels, err := compactions.levels(conf.maxCompactionLevel)
 	if err != nil {
-		return errors.Wrap(err, "get compaction levels")
+		return errors.Wrapf(err, "get compaction levels")
 	}
 
 	if conf.maxCompactionLevel < compactions.maxLevel() {
@@ -310,20 +310,20 @@ func runCompact(
 		mergeFunc = dedup.NewChunkSeriesMerger()
 
 		if len(conf.dedupReplicaLabels) == 0 {
-			return errors.New("penalty based deduplication needs at least one replica label specified")
+			return errors.Newf("penalty based deduplication needs at least one replica label specified")
 		}
 	case "":
 		mergeFunc = storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)
 
 	default:
-		return errors.Errorf("unsupported deduplication func, got %s", conf.dedupFunc)
+		return errors.Newf("unsupported deduplication func, got %s", conf.dedupFunc)
 	}
 
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
 	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), mergeFunc)
 	if err != nil {
-		return errors.Wrap(err, "create compactor")
+		return errors.Wrapf(err, "create compactor")
 	}
 
 	var (
@@ -332,11 +332,11 @@ func runCompact(
 	)
 
 	if err := os.MkdirAll(compactDir, os.ModePerm); err != nil {
-		return errors.Wrap(err, "create working compact directory")
+		return errors.Wrapf(err, "create working compact directory")
 	}
 
 	if err := os.MkdirAll(downsamplingDir, os.ModePerm); err != nil {
-		return errors.Wrap(err, "create working downsample directory")
+		return errors.Wrapf(err, "create working downsample directory")
 	}
 
 	grouper := compact.NewDefaultGrouper(
@@ -370,7 +370,7 @@ func runCompact(
 		conf.skipBlockWithOutOfOrderChunks,
 	)
 	if err != nil {
-		return errors.Wrap(err, "create bucket compactor")
+		return errors.Wrapf(err, "create bucket compactor")
 	}
 
 	retentionByResolution := map[compact.ResolutionLevel]time.Duration{
@@ -382,14 +382,14 @@ func runCompact(
 	if retentionByResolution[compact.ResolutionLevelRaw].Milliseconds() != 0 {
 		// If downsampling is enabled, error if raw retention is not sufficient for downsampling to occur (upper bound 10 days for 1h resolution)
 		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevelRaw].Milliseconds() < downsample.ResLevel1DownsampleRange {
-			return errors.New("raw resolution must be higher than the minimum block size after which 5m resolution downsampling will occur (40 hours)")
+			return errors.Newf("raw resolution must be higher than the minimum block size after which 5m resolution downsampling will occur (40 hours)")
 		}
 		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
 	}
 	if retentionByResolution[compact.ResolutionLevel5m].Milliseconds() != 0 {
 		// If retention is lower than minimum downsample range, then no downsampling at this resolution will be persisted
 		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevel5m].Milliseconds() < downsample.ResLevel2DownsampleRange {
-			return errors.New("5m resolution retention must be higher than the minimum block size after which 1h resolution downsampling will occur (10 days)")
+			return errors.Newf("5m resolution retention must be higher than the minimum block size after which 1h resolution downsampling will occur (10 days)")
 		}
 		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel5m])
 	}
@@ -405,12 +405,12 @@ func runCompact(
 
 		if err := sy.SyncMetas(ctx); err != nil {
 			cancel()
-			return errors.Wrap(err, "syncing metas")
+			return errors.Wrapf(err, "syncing metas")
 		}
 
 		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, compactMetrics.partialUploadDeleteAttempts, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
 		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
-			return errors.Wrap(err, "cleaning marked blocks")
+			return errors.Wrapf(err, "cleaning marked blocks")
 		}
 		compactMetrics.cleanups.Inc()
 
@@ -419,7 +419,7 @@ func runCompact(
 
 	compactMainFn := func() error {
 		if err := compactor.Compact(ctx); err != nil {
-			return errors.Wrap(err, "compaction")
+			return errors.Wrapf(err, "compaction")
 		}
 
 		if !conf.disableDownsampling {
@@ -428,7 +428,7 @@ func runCompact(
 			// for 5m downsamplings created in the first run.
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 			if err := sy.SyncMetas(ctx); err != nil {
-				return errors.Wrap(err, "sync before first pass of downsampling")
+				return errors.Wrapf(err, "sync before first pass of downsampling")
 			}
 
 			for _, meta := range sy.Metas() {
@@ -437,15 +437,15 @@ func runCompact(
 				downsampleMetrics.downsampleFailures.WithLabelValues(groupKey)
 			}
 			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir, conf.downsampleConcurrency, metadata.HashFunc(conf.hashFunc)); err != nil {
-				return errors.Wrap(err, "first pass of downsampling failed")
+				return errors.Wrapf(err, "first pass of downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
 			if err := sy.SyncMetas(ctx); err != nil {
-				return errors.Wrap(err, "sync before second pass of downsampling")
+				return errors.Wrapf(err, "sync before second pass of downsampling")
 			}
 			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, sy.Metas(), downsamplingDir, conf.downsampleConcurrency, metadata.HashFunc(conf.hashFunc)); err != nil {
-				return errors.Wrap(err, "second pass of downsampling failed")
+				return errors.Wrapf(err, "second pass of downsampling failed")
 			}
 			level.Info(logger).Log("msg", "downsampling iterations done")
 		} else {
@@ -454,11 +454,11 @@ func runCompact(
 
 		// TODO(bwplotka): Find a way to avoid syncing if no op was done.
 		if err := sy.SyncMetas(ctx); err != nil {
-			return errors.Wrap(err, "sync before retention")
+			return errors.Wrapf(err, "sync before retention")
 		}
 
 		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")); err != nil {
-			return errors.Wrap(err, "retention failed")
+			return errors.Wrapf(err, "retention failed")
 		}
 
 		return cleanPartialMarked()
@@ -487,7 +487,7 @@ func runCompact(
 					compactMetrics.halted.Set(1)
 					select {}
 				} else {
-					return errors.Wrap(err, "critical error detected")
+					return errors.Wrapf(err, "critical error detected")
 				}
 			}
 
@@ -500,7 +500,7 @@ func runCompact(
 				return nil
 			}
 
-			return errors.Wrap(err, "error executing compaction")
+			return errors.Wrapf(err, "error executing compaction")
 		})
 	}, func(error) {
 		cancel()

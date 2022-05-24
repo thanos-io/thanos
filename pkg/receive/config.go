@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
@@ -24,9 +24,9 @@ import (
 
 var (
 	// An errParseConfigurationFile is returned by the ConfigWatcher when parsing failed.
-	errParseConfigurationFile = errors.New("configuration file is not parsable")
+	errParseConfigurationFile = errors.Newf("configuration file is not parsable")
 	// An errEmptyConfigurationFile is returned by the ConfigWatcher when attempting to load an empty configuration file.
-	errEmptyConfigurationFile = errors.New("configuration file is empty")
+	errEmptyConfigurationFile = errors.Newf("configuration file is empty")
 )
 
 type ReceiverMode string
@@ -75,7 +75,7 @@ func NewConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string,
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return nil, errors.Wrap(err, "creating file watcher")
+		return nil, errors.Wrapf(err, "creating file watcher")
 	}
 	if err := watcher.Add(path); err != nil {
 		return nil, errors.Wrapf(err, "adding path %s to file watcher", path)
@@ -258,7 +258,7 @@ func (cw *ConfigWatcher) refresh(ctx context.Context) {
 func loadConfig(logger log.Logger, path string) ([]HashringConfig, float64, error) {
 	cfgContent, err := readFile(logger, path)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "failed to read configuration file")
+		return nil, 0, errors.Wrapf(err, "failed to read configuration file")
 	}
 
 	config, err := parseConfig(cfgContent)

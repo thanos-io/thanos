@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/block"
@@ -23,14 +23,14 @@ func (OverlappedBlocksIssue) IssueID() string { return "overlapped_blocks" }
 
 func (OverlappedBlocksIssue) Verify(ctx Context, idMatcher func(ulid.ULID) bool) error {
 	if idMatcher != nil {
-		return errors.Errorf("id matching is not supported")
+		return errors.Newf("id matching is not supported")
 	}
 
 	level.Info(ctx.Logger).Log("msg", "started verifying issue")
 
 	overlaps, err := fetchOverlaps(ctx, ctx.Fetcher)
 	if err != nil {
-		return errors.Wrap(err, "fetch overlaps")
+		return errors.Wrapf(err, "fetch overlaps")
 	}
 
 	if len(overlaps) == 0 {

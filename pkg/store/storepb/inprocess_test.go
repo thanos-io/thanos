@@ -9,7 +9,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -80,7 +80,7 @@ func TestServerAsClient(t *testing.T) {
 					}
 				})
 				t.Run("error", func(t *testing.T) {
-					s.err = errors.New("some error")
+					s.err = errors.Newf("some error")
 					for i := 0; i < 20; i++ {
 						r := &InfoRequest{}
 						_, err := ServerAsClient(s, 0).Info(context.TODO(), r)
@@ -100,7 +100,7 @@ func TestServerAsClient(t *testing.T) {
 							Labels: []labelpb.ZLabel{{Name: "a", Value: "b1"}},
 							Chunks: []AggrChunk{{MinTime: 1231, MaxTime: 124}, {MinTime: 12455, MaxTime: 14124}},
 						}),
-						NewWarnSeriesResponse(errors.New("yolo")),
+						NewWarnSeriesResponse(errors.Newf("yolo")),
 						NewSeriesResponse(&Series{
 							Labels: []labelpb.ZLabel{{Name: "a", Value: "b3"}},
 							Chunks: []AggrChunk{{MinTime: 123, MaxTime: 124}, {MinTime: 124554, MaxTime: 14124}},
@@ -131,7 +131,7 @@ func TestServerAsClient(t *testing.T) {
 					}
 				})
 				t.Run("ok, close send", func(t *testing.T) {
-					s.err = errors.New("some error")
+					s.err = errors.Newf("some error")
 					for i := 0; i < 20; i++ {
 						r := &SeriesRequest{
 							MinTime:                 -214,
@@ -210,7 +210,7 @@ func TestServerAsClient(t *testing.T) {
 					}
 				})
 				t.Run("error", func(t *testing.T) {
-					s.err = errors.New("some error")
+					s.err = errors.Newf("some error")
 					for i := 0; i < 20; i++ {
 						r := &LabelNamesRequest{
 							Start:                   -1,
@@ -246,7 +246,7 @@ func TestServerAsClient(t *testing.T) {
 					}
 				})
 				t.Run("error", func(t *testing.T) {
-					s.err = errors.New("some error")
+					s.err = errors.Newf("some error")
 					for i := 0; i < 20; i++ {
 						r := &LabelValuesRequest{
 							Label:                   "__name__",

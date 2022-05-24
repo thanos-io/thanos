@@ -8,10 +8,10 @@ import (
 	"net"
 
 	"github.com/miekg/dns"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
-var ErrNoSuchHost = errors.New("no such host")
+var ErrNoSuchHost = errors.Newf("no such host")
 
 // Copied and slightly adjusted from Prometheus DNS SD:
 // https://github.com/prometheus/prometheus/blob/be3c082539d85908ce03b6d280f83343e7c930eb/discovery/dns/dns.go#L212
@@ -73,7 +73,7 @@ func (r *Resolver) lookupWithSearchPath(name string, qtype dns.Type) (*dns.Msg, 
 		return &dns.Msg{}, ErrNoSuchHost
 	}
 	// Outcome 3: boned.
-	return nil, errors.Errorf("could not resolve %q: all servers responded with errors to at least one search domain. Errs %s", name, fmtErrs(errs))
+	return nil, errors.Newf("could not resolve %q: all servers responded with errors to at least one search domain. Errs %s", name, fmtErrs(errs))
 }
 
 // lookupFromAnyServer uses all configured servers to try and resolve a specific
@@ -111,7 +111,7 @@ func lookupFromAnyServer(name string, qtype dns.Type, conf *dns.ClientConfig) (*
 		}
 	}
 
-	return nil, errors.Errorf("could not resolve %s: no servers returned a viable answer. Errs %v", name, fmtErrs(errs))
+	return nil, errors.Newf("could not resolve %s: no servers returned a viable answer. Errs %v", name, fmtErrs(errs))
 }
 
 func fmtErrs(errs []error) string {
@@ -142,7 +142,7 @@ func askServerForName(name string, qType dns.Type, client *dns.Client, servAddr 
 
 	if response.Truncated {
 		if client.Net == "tcp" {
-			return nil, errors.New("got truncated message on TCP (64kiB limit exceeded?)")
+			return nil, errors.Newf("got truncated message on TCP (64kiB limit exceeded?)")
 		}
 
 		// TCP fallback.

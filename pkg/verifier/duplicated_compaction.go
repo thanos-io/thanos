@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb"
 )
 
@@ -25,14 +25,14 @@ func (DuplicatedCompactionBlocks) IssueID() string { return "duplicated_compacti
 
 func (DuplicatedCompactionBlocks) VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool, repair bool) error {
 	if idMatcher != nil {
-		return errors.Errorf("id matching is not supported")
+		return errors.Newf("id matching is not supported")
 	}
 
 	level.Info(ctx.Logger).Log("msg", "started verifying issue", "with-repair", repair)
 
 	overlaps, err := fetchOverlaps(ctx, ctx.Fetcher)
 	if err != nil {
-		return errors.Wrap(err, "fetch overlaps")
+		return errors.Wrapf(err, "fetch overlaps")
 	}
 
 	if len(overlaps) == 0 {

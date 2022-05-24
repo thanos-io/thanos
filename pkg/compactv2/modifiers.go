@@ -7,7 +7,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
@@ -302,12 +302,12 @@ func (p *delChunkSeriesIterator) Next() bool {
 
 	if !p.currDelIter.Next() {
 		if err := p.currDelIter.Err(); err != nil {
-			p.err = errors.Wrap(err, "iterate chunk while re-encoding")
+			p.err = errors.Wrapf(err, "iterate chunk while re-encoding")
 			return false
 		}
 
 		// Empty chunk, this should not happen, as we assume full deletions being filtered before this iterator.
-		p.err = errors.Wrap(err, "populateWithDelChunkSeriesIterator: unexpected empty chunk found while rewriting chunk")
+		p.err = errors.Wrapf(err, "populateWithDelChunkSeriesIterator: unexpected empty chunk found while rewriting chunk")
 		return false
 	}
 
@@ -320,7 +320,7 @@ func (p *delChunkSeriesIterator) Next() bool {
 		app.Append(t, v)
 	}
 	if err := p.currDelIter.Err(); err != nil {
-		p.err = errors.Wrap(err, "iterate chunk while re-encoding")
+		p.err = errors.Wrapf(err, "iterate chunk while re-encoding")
 		return false
 	}
 

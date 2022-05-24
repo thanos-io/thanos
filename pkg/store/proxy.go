@@ -16,7 +16,7 @@ import (
 	"github.com/go-kit/log/level"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
@@ -251,7 +251,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return nil
 	}
 	if len(matchers) == 0 {
-		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding selector labels)").Error())
+		return status.Error(codes.InvalidArgument, errors.Newf("no matchers specified (excluding selector labels)").Error())
 	}
 	storeMatchers, _ := storepb.PromMatchersToMatchers(matchers...) // Error would be returned by matchesExternalLabels, so skip check.
 
@@ -334,7 +334,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 		if len(seriesSet) == 0 {
 			// This is indicates that configured StoreAPIs are not the ones end user expects.
-			err := errors.New("No StoreAPIs matched for this query")
+			err := errors.Newf("No StoreAPIs matched for this query")
 			level.Warn(reqLogger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
 			respSender.send(storepb.NewWarnSeriesResponse(err))
 			return nil
@@ -356,7 +356,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		// respCh channel is closed OR on error from client.
 		for resp := range respCh {
 			if err := srv.Send(resp); err != nil {
-				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+				return status.Error(codes.Unknown, errors.Wrapf(err, "send series response").Error())
 			}
 		}
 		return nil
@@ -499,7 +499,7 @@ func startStreamSeriesSet(
 			bytesProcessed += rr.r.Size()
 
 			if w := rr.r.GetWarning(); w != "" {
-				s.warnCh.send(storepb.NewWarnSeriesResponse(errors.New(w)))
+				s.warnCh.send(storepb.NewWarnSeriesResponse(errors.Newf(w)))
 			}
 
 			if series := rr.r.GetSeries(); series != nil {
@@ -553,7 +553,7 @@ func (s *streamSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
 func (s *streamSeriesSet) Err() error {
 	s.errMtx.Lock()
 	defer s.errMtx.Unlock()
-	return errors.Wrap(s.err, s.name)
+	return errors.Wrapf(s.err, s.name)
 }
 
 // storeMatches returns boolean if the given store may hold data for the given label matchers, time ranges and debug store matches gathered from context.
@@ -720,7 +720,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 				}
 
 				mtx.Lock()
-				warnings = append(warnings, errors.Wrap(err, "fetch label values").Error())
+				warnings = append(warnings, errors.Wrapf(err, "fetch label values").Error())
 				mtx.Unlock()
 				return nil
 			}

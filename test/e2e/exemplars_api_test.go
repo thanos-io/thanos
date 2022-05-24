@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/timestamp"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -115,7 +115,7 @@ config:
 		queryExemplars(t, ctx, q.Endpoint("http"), `http_request_duration_seconds_bucket{handler="label_names", replica="foo"}`,
 			start, end, func(data []*exemplarspb.ExemplarData) error {
 				if len(data) > 0 {
-					return errors.Errorf("expected no examplers, got %v", data)
+					return errors.Newf("expected no examplers, got %v", data)
 				}
 				return nil
 			})
@@ -125,7 +125,7 @@ config:
 func exemplarsOnExpectedSeries(requiredSeriesLabels map[string]string) func(data []*exemplarspb.ExemplarData) error {
 	return func(data []*exemplarspb.ExemplarData) error {
 		if len(data) != 1 {
-			return errors.Errorf("unexpected result size, expected 1, got: %v", len(data))
+			return errors.Newf("unexpected result size, expected 1, got: %v", len(data))
 		}
 
 		// Compare series labels.
@@ -133,7 +133,7 @@ func exemplarsOnExpectedSeries(requiredSeriesLabels map[string]string) func(data
 		for _, lbls := range seriesLabels {
 			for k, v := range requiredSeriesLabels {
 				if lbls.Get(k) != v {
-					return errors.Errorf("unexpected labels in result, expected %v, got: %v", requiredSeriesLabels, seriesLabels)
+					return errors.Newf("unexpected labels in result, expected %v, got: %v", requiredSeriesLabels, seriesLabels)
 				}
 			}
 		}
@@ -142,7 +142,7 @@ func exemplarsOnExpectedSeries(requiredSeriesLabels map[string]string) func(data
 		for _, exemplar := range data[0].Exemplars {
 			for _, lbls := range labelpb.ZLabelSetsToPromLabelSets(exemplar.Labels) {
 				if !lbls.Has(traceIDLabel) {
-					return errors.Errorf("unexpected labels in exemplar, expected %v, got: %v", traceIDLabel, exemplar.Labels)
+					return errors.Newf("unexpected labels in exemplar, expected %v, got: %v", traceIDLabel, exemplar.Labels)
 				}
 			}
 		}

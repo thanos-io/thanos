@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 
 	thanoscache "github.com/thanos-io/thanos/pkg/cache"
@@ -376,11 +376,11 @@ type testBucket struct {
 
 func (b *testBucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	if off < 0 {
-		return nil, errors.Errorf("invalid offset: %d", off)
+		return nil, errors.Newf("invalid offset: %d", off)
 	}
 
 	if length <= 0 {
-		return nil, errors.Errorf("invalid length: %d", length)
+		return nil, errors.Newf("invalid length: %d", length)
 	}
 
 	return b.InMemBucket.GetRange(ctx, name, off, length)
@@ -416,7 +416,7 @@ func TestCachedIter(t *testing.T) {
 
 	cache.flush()
 
-	e := errors.Errorf("test error")
+	e := errors.Newf("test error")
 
 	// This iteration returns false. Result will not be cached.
 	testutil.Equals(t, e, cb.Iter(context.Background(), "/", func(_ string) error {

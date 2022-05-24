@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -75,7 +75,7 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 				{block: block1, label: label2, value: value2},
 				{block: block2, label: label1, value: value3},
 			},
-			mockedErr:      errors.New("mocked error"),
+			mockedErr:      errors.Newf("mocked error"),
 			fetchBlockID:   block1,
 			fetchLabels:    []labels.Label{label1, label2},
 			expectedHits:   nil,
@@ -164,7 +164,7 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 				{block: block1, id: 2, value: value2},
 				{block: block2, id: 1, value: value3},
 			},
-			mockedErr:      errors.New("mocked error"),
+			mockedErr:      errors.Newf("mocked error"),
 			fetchBlockID:   block1,
 			fetchIds:       []storage.SeriesRef{1, 2},
 			expectedHits:   nil,

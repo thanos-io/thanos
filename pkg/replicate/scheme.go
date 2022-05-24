@@ -15,7 +15,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
@@ -225,7 +225,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 
 	originMetaFile, err := rs.fromBkt.ReaderWithExpectedErrs(rs.fromBkt.IsObjNotFoundErr).Get(ctx, metaFile)
 	if err != nil {
-		return errors.Wrap(err, "get meta file from origin bucket")
+		return errors.Wrapf(err, "get meta file from origin bucket")
 	}
 
 	defer runutil.CloseWithLogOnErr(rs.logger, originMetaFile, "close original meta file")
@@ -237,19 +237,19 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	}
 
 	if err != nil && !rs.toBkt.IsObjNotFoundErr(err) && err != io.EOF {
-		return errors.Wrap(err, "get meta file from target bucket")
+		return errors.Wrapf(err, "get meta file from target bucket")
 	}
 
 	// TODO(bwplotka): Allow injecting custom labels as shipper does.
 	originMetaFileContent, err := ioutil.ReadAll(originMetaFile)
 	if err != nil {
-		return errors.Wrap(err, "read origin meta file")
+		return errors.Wrapf(err, "read origin meta file")
 	}
 
 	if targetMetaFile != nil && !rs.toBkt.IsObjNotFoundErr(err) {
 		targetMetaFileContent, err := ioutil.ReadAll(targetMetaFile)
 		if err != nil {
-			return errors.Wrap(err, "read target meta file")
+			return errors.Wrapf(err, "read target meta file")
 		}
 
 		if bytes.Equal(originMetaFileContent, targetMetaFileContent) {
@@ -275,13 +275,13 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	}
 
 	if err := rs.ensureObjectReplicated(ctx, indexFile); err != nil {
-		return errors.Wrap(err, "replicate index file")
+		return errors.Wrapf(err, "replicate index file")
 	}
 
 	level.Debug(rs.logger).Log("msg", "replicating meta file", "object", metaFile)
 
 	if err := rs.toBkt.Upload(ctx, metaFile, bytes.NewBuffer(originMetaFileContent)); err != nil {
-		return errors.Wrap(err, "upload meta file")
+		return errors.Wrapf(err, "upload meta file")
 	}
 
 	rs.metrics.blocksReplicated.Inc()

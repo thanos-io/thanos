@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -101,7 +101,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("rule: no type field provided: {\"name\":\"recording1\",\"query\":\"\",\"labels\":{},\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"\"}"),
+			expectedErr: errors.Newf("rule: no type field provided: {\"name\":\"recording1\",\"query\":\"\",\"labels\":{},\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"\"}"),
 		},
 		{
 			name: "one valid group, with 1 rule with invalid rule type",
@@ -123,7 +123,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("rule: unknown type field provided wrong; {\"name\":\"recording1\",\"query\":\"\",\"labels\":{},\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"wrong\"}"),
+			expectedErr: errors.Newf("rule: unknown type field provided wrong; {\"name\":\"recording1\",\"query\":\"\",\"labels\":{},\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"wrong\"}"),
 		},
 		{
 			name: "one valid group, with 1 rule with invalid alert state",
@@ -146,7 +146,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("rule: alerting rule unmarshal: {\"state\":\"sdfsdf\",\"name\":\"alert1\",\"query\":\"\",\"duration\":0,\"labels\":{},\"annotations\":{},\"alerts\":null,\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"alerting\"}: unknown alertState: \"sdfsdf\""),
+			expectedErr: errors.Newf("rule: alerting rule unmarshal: {\"state\":\"sdfsdf\",\"name\":\"alert1\",\"query\":\"\",\"duration\":0,\"labels\":{},\"annotations\":{},\"alerts\":null,\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"alerting\"}: unknown alertState: \"sdfsdf\""),
 		},
 		{
 			name: "one group with WRONG partial response fields",
@@ -162,7 +162,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("failed to unmarshal \"asdfsdfsdfsd\" as 'partial_response_strategy'. Possible values are ABORT,WARN"),
+			expectedErr: errors.Newf("failed to unmarshal \"asdfsdfsdfsd\" as 'partial_response_strategy'. Possible values are ABORT,WARN"),
 		},
 		{
 			name: "one valid group with 1 alerting rule containing no alerts.",

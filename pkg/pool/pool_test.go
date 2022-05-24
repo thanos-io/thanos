@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"go.uber.org/goleak"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -93,14 +93,14 @@ func TestRacePutGet(t *testing.T) {
 
 				*c = append(*c, txt...)
 				if string(*c) != txt {
-					errs <- errors.New("expected to get the data just written")
+					errs <- errors.Newf("expected to get the data just written")
 					return
 				}
 				if grow {
 					*c = append(*c, txt...)
 					*c = append(*c, txt...)
 					if string(*c) != txt+txt+txt {
-						errs <- errors.New("expected to get the data just written")
+						errs <- errors.Newf("expected to get the data just written")
 						return
 					}
 				}

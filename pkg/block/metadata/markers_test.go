@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"go.uber.org/goleak"
 
 	"github.com/thanos-io/thanos/pkg/objstore"

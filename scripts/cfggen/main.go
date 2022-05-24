@@ -14,7 +14,7 @@ import (
 	"github.com/fatih/structtag"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
 
@@ -128,14 +128,14 @@ func main() {
 		return
 	}
 
-	errLogger.Log("err", errors.Errorf("%v struct not found. Possible values %v", *structName, strings.Join(possibleValues, ",")))
+	errLogger.Log("err", errors.Newf("%v struct not found. Possible values %v", *structName, strings.Join(possibleValues, ",")))
 	os.Exit(1)
 }
 
 func generate(obj interface{}, w io.Writer) error {
 	// We forbid omitempty option. This is for simplification for doc generation.
 	if err := checkForOmitEmptyTagOption(obj); err != nil {
-		return errors.Wrap(err, "invalid type")
+		return errors.Wrapf(err, "invalid type")
 	}
 	return yaml.NewEncoder(w).Encode(obj)
 }
@@ -160,7 +160,7 @@ func checkForOmitEmptyTagOptionRec(v reflect.Value) error {
 
 			for _, opts := range tag.Options {
 				if opts == "omitempty" {
-					return errors.Errorf("omitempty is forbidden for config, but spotted on field '%s'", v.Type().Field(i).Name)
+					return errors.Newf("omitempty is forbidden for config, but spotted on field '%s'", v.Type().Field(i).Name)
 				}
 			}
 
@@ -170,7 +170,7 @@ func checkForOmitEmptyTagOptionRec(v reflect.Value) error {
 		}
 
 	case reflect.Ptr:
-		return errors.New("nil pointers are not allowed in configuration")
+		return errors.Newf("nil pointers are not allowed in configuration")
 
 	case reflect.Interface:
 		return checkForOmitEmptyTagOptionRec(v.Elem())

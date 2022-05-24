@@ -24,7 +24,7 @@ import (
 	"github.com/klauspost/compress/s2"
 	"github.com/mwitkow/go-conntrack"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
@@ -59,11 +59,11 @@ const (
 
 var (
 	// errConflict is returned whenever an operation fails due to any conflict-type error.
-	errConflict = errors.New("conflict")
+	errConflict = errors.Newf("conflict")
 
-	errBadReplica  = errors.New("request replica exceeds receiver replication factor")
-	errNotReady    = errors.New("target not ready")
-	errUnavailable = errors.New("target not available")
+	errBadReplica  = errors.Newf("request replica exceeds receiver replication factor")
+	errNotReady    = errors.Newf("target not ready")
+	errUnavailable = errors.Newf("target not available")
 )
 
 // Options for the web Handler.
@@ -311,14 +311,14 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := io.Copy(&compressed, r.Body)
 	if err != nil {
-		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
+		http.Error(w, errors.Wrapf(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
 	}
 
 	reqBuf, err := s2.Decode(nil, compressed.Bytes())
 	if err != nil {
 		level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
-		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
+		http.Error(w, errors.Wrapf(err, "snappy decode error").Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -395,7 +395,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 	h.mtx.RLock()
 	if h.hashring == nil {
 		h.mtx.RUnlock()
-		return errors.New("hashring is not ready")
+		return errors.Newf("hashring is not ready")
 	}
 
 	// Batch all of the time series in the write request
@@ -635,7 +635,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	h.mtx.RLock()
 	if h.hashring == nil {
 		h.mtx.RUnlock()
-		return errors.New("hashring is not ready")
+		return errors.Newf("hashring is not ready")
 	}
 
 	for i = 0; i < h.options.ReplicationFactor; i++ {
@@ -652,7 +652,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	quorum := h.writeQuorum()
 	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
 	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum); err != nil {
-		return errors.Wrap(determineWriteErrorCause(err, quorum), "quorum not reached")
+		return errors.Wrapf(determineWriteErrorCause(err, quorum), "quorum not reached")
 	}
 	return nil
 }
@@ -803,7 +803,7 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	}
 	conn, err := p.dialer(ctx, addr, p.dialOpts...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to dial peer")
+		return nil, errors.Wrapf(err, "failed to dial peer")
 	}
 
 	client := storepb.NewWriteableStoreClient(conn)

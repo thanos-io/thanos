@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -414,7 +414,7 @@ func TestQuerier_Select(t *testing.T) {
 			storeAPI: &testStoreServer{
 				resps: []*storepb.SeriesResponse{
 					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storepb.NewWarnSeriesResponse(errors.New("partial error")),
+					storepb.NewWarnSeriesResponse(errors.Newf("partial error")),
 					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 6}, {7, 7}}),
 					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 66}}), // Overlap samples for some reason.
 					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),

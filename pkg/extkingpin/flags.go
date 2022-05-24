@@ -9,7 +9,7 @@ import (
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -54,17 +54,17 @@ func validateAddrs(addrs addressSlice) error {
 
 	for _, addr := range addrs {
 		if addr == "" {
-			return errors.New("Address is empty.")
+			return errors.Newf("Address is empty.")
 		}
 
 		qtypeAndName := strings.SplitN(addr, "+", 2)
 		hostAndPort := strings.SplitN(addr, ":", 2)
 		if len(qtypeAndName) != 2 && len(hostAndPort) != 2 {
-			return errors.Errorf("Address %s is not of <host>:<port> format or a valid DNS query.", addr)
+			return errors.Newf("Address %s is not of <host>:<port> format or a valid DNS query.", addr)
 		}
 
 		if _, ok := set[addr]; ok {
-			return errors.Errorf("Address %s is duplicated.", addr)
+			return errors.Newf("Address %s is duplicated.", addr)
 		}
 
 		set[addr] = struct{}{}

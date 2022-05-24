@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -37,7 +37,7 @@ func NewBucketFromConfig(conf []byte) (*Bucket, error) {
 		return nil, err
 	}
 	if c.Directory == "" {
-		return nil, errors.New("missing directory for filesystem bucket")
+		return nil, errors.Newf("missing directory for filesystem bucket")
 	}
 	return NewBucket(c.Directory)
 }
@@ -136,7 +136,7 @@ func (b *Bucket) Attributes(_ context.Context, name string) (objstore.ObjectAttr
 // GetRange returns a new range reader for the given object name and range.
 func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	if name == "" {
-		return nil, errors.New("object name is empty")
+		return nil, errors.Newf("object name is empty")
 	}
 
 	file := filepath.Join(b.rootDir, name)

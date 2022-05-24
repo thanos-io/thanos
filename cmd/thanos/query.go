@@ -18,7 +18,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
@@ -179,7 +179,7 @@ func registerQuery(app *extkingpin.App) {
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
-			return errors.Wrap(err, "parse federation labels")
+			return errors.Wrapf(err, "parse federation labels")
 		}
 
 		var enableQueryPushdown bool
@@ -197,12 +197,12 @@ func registerQuery(app *extkingpin.App) {
 
 		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
 		if err != nil {
-			return errors.Wrap(err, "error while parsing config for request logging")
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(*reqLogDecision, reqLogConfig)
 		if err != nil {
-			return errors.Wrap(err, "error while parsing config for request logging")
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		var fileSD *file.Discovery
@@ -366,7 +366,7 @@ func runQuery(
 
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, skipVerify, cert, key, caCert, serverName)
 	if err != nil {
-		return errors.Wrap(err, "building gRPC client")
+		return errors.Wrapf(err, "building gRPC client")
 	}
 
 	fileSDCache := cache.New()
@@ -378,13 +378,13 @@ func runQuery(
 
 	for _, store := range strictStores {
 		if dns.IsDynamicNode(store) {
-			return errors.Errorf("%s is a dynamically specified store i.e. it uses SD and that is not permitted under strict mode. Use --store for this", store)
+			return errors.Newf("%s is a dynamically specified store i.e. it uses SD and that is not permitted under strict mode. Use --store for this", store)
 		}
 	}
 
 	for _, endpoint := range strictEndpoints {
 		if dns.IsDynamicNode(endpoint) {
-			return errors.Errorf("%s is a dynamically specified endpoint i.e. it uses SD and that is not permitted under strict mode. Use --endpoint for this", endpoint)
+			return errors.Newf("%s is a dynamically specified endpoint i.e. it uses SD and that is not permitted under strict mode. Use --endpoint for this", endpoint)
 		}
 	}
 
@@ -655,7 +655,7 @@ func runQuery(
 	{
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 		if err != nil {
-			return errors.Wrap(err, "setup gRPC server")
+			return errors.Wrapf(err, "setup gRPC server")
 		}
 
 		infoSrv := info.NewInfoServer(

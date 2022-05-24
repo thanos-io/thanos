@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -86,7 +86,7 @@ func repairIndex(stats block.HealthStats, ctx Context, id ulid.ULID, meta *metad
 	}
 
 	if meta.Thanos.Downsample.Resolution > 0 {
-		return errors.Wrap(err, "cannot repair downsampled blocks")
+		return errors.Wrapf(err, "cannot repair downsampled blocks")
 	}
 
 	level.Info(ctx.Logger).Log("msg", "downloading block for repair", "id", id)

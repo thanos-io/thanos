@@ -20,7 +20,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -47,7 +47,7 @@ const (
 // we do not download it. We always re-download the meta file.
 func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID, dst string) error {
 	if err := os.MkdirAll(dst, 0750); err != nil {
-		return errors.Wrap(err, "create dir")
+		return errors.Wrapf(err, "create dir")
 	}
 
 	if err := objstore.DownloadFile(ctx, logger, bucket, path.Join(id.String(), MetaFilename), path.Join(dst, MetaFilename)); err != nil {
@@ -114,43 +114,43 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return err
 	}
 	if !df.IsDir() {
-		return errors.Errorf("%s is not a directory", bdir)
+		return errors.Newf("%s is not a directory", bdir)
 	}
 
 	// Verify dir.
 	id, err := ulid.Parse(df.Name())
 	if err != nil {
-		return errors.Wrap(err, "not a block dir")
+		return errors.Wrapf(err, "not a block dir")
 	}
 
 	meta, err := metadata.ReadFromDir(bdir)
 	if err != nil {
 		// No meta or broken meta file.
-		return errors.Wrap(err, "read meta")
+		return errors.Wrapf(err, "read meta")
 	}
 
 	if checkExternalLabels {
 		if meta.Thanos.Labels == nil || len(meta.Thanos.Labels) == 0 {
-			return errors.New("empty external labels are not allowed for Thanos block.")
+			return errors.Newf("empty external labels are not allowed for Thanos block.")
 		}
 	}
 
 	metaEncoded := strings.Builder{}
 	meta.Thanos.Files, err = gatherFileStats(bdir, hf, logger)
 	if err != nil {
-		return errors.Wrap(err, "gather meta file stats")
+		return errors.Wrapf(err, "gather meta file stats")
 	}
 
 	if err := meta.Write(&metaEncoded); err != nil {
-		return errors.Wrap(err, "encode meta file")
+		return errors.Wrapf(err, "encode meta file")
 	}
 
 	if err := objstore.UploadDir(ctx, logger, bkt, filepath.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload chunks"))
+		return cleanUp(logger, bkt, id, errors.Wrapf(err, "upload chunks"))
 	}
 
 	if err := objstore.UploadFile(ctx, logger, bkt, filepath.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index"))
+		return cleanUp(logger, bkt, id, errors.Wrapf(err, "upload index"))
 	}
 
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file to be pending uploads.
@@ -159,7 +159,7 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		// and even though cleanUp will not see it yet, meta.json may appear in the bucket later.
 		// (Eg. S3 is known to behave this way when it returns 503 "SlowDown" error).
 		// If meta.json is not uploaded, this will produce partial blocks, but such blocks will be cleaned later.
-		return errors.Wrap(err, "upload meta file")
+		return errors.Wrapf(err, "upload meta file")
 	}
 
 	return nil
@@ -182,7 +182,7 @@ func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 		return errors.Wrapf(err, "check exists %s in bucket", deletionMarkFile)
 	}
 	if deletionMarkExists {
-		level.Warn(logger).Log("msg", "requested to mark for deletion, but file already exists; this should not happen; investigate", "err", errors.Errorf("file %s already exists in bucket", deletionMarkFile))
+		level.Warn(logger).Log("msg", "requested to mark for deletion, but file already exists; this should not happen; investigate", "err", errors.Newf("file %s already exists in bucket", deletionMarkFile))
 		return nil
 	}
 
@@ -193,7 +193,7 @@ func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 		Details:      details,
 	})
 	if err != nil {
-		return errors.Wrap(err, "json encode deletion mark")
+		return errors.Wrapf(err, "json encode deletion mark")
 	}
 
 	if err := bkt.Upload(ctx, deletionMarkFile, bytes.NewBuffer(deletionMark)); err != nil {
@@ -375,7 +375,7 @@ func MarkForNoCompact(ctx context.Context, logger log.Logger, bkt objstore.Bucke
 		return errors.Wrapf(err, "check exists %s in bucket", m)
 	}
 	if noCompactMarkExists {
-		level.Warn(logger).Log("msg", "requested to mark for no compaction, but file already exists; this should not happen; investigate", "err", errors.Errorf("file %s already exists in bucket", m))
+		level.Warn(logger).Log("msg", "requested to mark for no compaction, but file already exists; this should not happen; investigate", "err", errors.Newf("file %s already exists in bucket", m))
 		return nil
 	}
 
@@ -388,7 +388,7 @@ func MarkForNoCompact(ctx context.Context, logger log.Logger, bkt objstore.Bucke
 		Details:       details,
 	})
 	if err != nil {
-		return errors.Wrap(err, "json encode no compact mark")
+		return errors.Wrapf(err, "json encode no compact mark")
 	}
 
 	if err := bkt.Upload(ctx, m, bytes.NewBuffer(noCompactMark)); err != nil {

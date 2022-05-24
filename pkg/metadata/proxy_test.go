@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 
@@ -53,7 +53,7 @@ func TestProxyDataRace(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 	p := NewProxy(logger, func() []metadatapb.MetadataClient {
 		es := &testMetadataClient{
-			recvErr: errors.New("err"),
+			recvErr: errors.Newf("err"),
 		}
 		size := 100
 		endpoints := make([]metadatapb.MetadataClient, 0, size)

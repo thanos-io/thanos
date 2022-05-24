@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
@@ -125,14 +125,14 @@ func TestProxy(t *testing.T) {
 			clients: []*exemplarspb.ExemplarStore{
 				{
 					ExemplarsClient: &testExemplarClient{
-						response: exemplarspb.NewWarningExemplarsResponse(errors.New("warning from client")),
+						response: exemplarspb.NewWarningExemplarsResponse(errors.Newf("warning from client")),
 					},
 					LabelSets: []labels.Labels{labels.FromMap(map[string]string{"cluster": "A"})},
 				},
 			},
 			server: &testExemplarServer{},
 			wantResponses: []*exemplarspb.ExemplarsResponse{
-				exemplarspb.NewWarningExemplarsResponse(errors.New("warning from client")),
+				exemplarspb.NewWarningExemplarsResponse(errors.Newf("warning from client")),
 			},
 		},
 		{
@@ -299,7 +299,7 @@ func TestProxyDataRace(t *testing.T) {
 	p := NewProxy(logger, func() []*exemplarspb.ExemplarStore {
 		es := &exemplarspb.ExemplarStore{
 			ExemplarsClient: &testExemplarClient{
-				recvErr: errors.New("err"),
+				recvErr: errors.Newf("err"),
 			},
 			LabelSets: []labels.Labels{labels.FromMap(map[string]string{"cluster": "A"})},
 		}

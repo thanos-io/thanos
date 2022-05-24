@@ -11,7 +11,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/thanos-io/thanos/pkg/block"
@@ -40,7 +40,7 @@ func ApplyRetentionPolicyByResolution(
 		if time.Now().After(maxTime.Add(retentionDuration)) {
 			level.Info(logger).Log("msg", "applying retention: marking block for deletion", "id", id, "maxTime", maxTime.String())
 			if err := block.MarkForDeletion(ctx, logger, bkt, id, fmt.Sprintf("block exceeding retention of %v", retentionDuration), blocksMarkedForDeletion); err != nil {
-				return errors.Wrap(err, "delete block")
+				return errors.Wrapf(err, "delete block")
 			}
 		}
 	}

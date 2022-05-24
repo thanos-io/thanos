@@ -11,7 +11,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -53,7 +53,7 @@ func checkRulesFiles(logger log.Logger, patterns *[]string) error {
 		level.Info(logger).Log("msg", "checking", "pattern", p)
 		matches, err := filepath.Glob(p)
 		if err != nil || matches == nil {
-			err = errors.New("matching file not found")
+			err = errors.Newf("matching file not found")
 			level.Error(logger).Log("result", "FAILED", "error", err)
 			level.Info(logger).Log()
 			failed.Add(err)

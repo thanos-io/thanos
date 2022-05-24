@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
 	"gopkg.in/yaml.v2"
@@ -75,7 +75,7 @@ func ParseConfigFromYaml(cfg []byte) (*config.Configuration, error) {
 	if r, err := reporterConfigFromConfig(*conf); err == nil {
 		c.Reporter = r
 	} else {
-		return nil, errors.Wrap(err, "cannot obtain reporter config from YAML")
+		return nil, errors.Wrapf(err, "cannot obtain reporter config from YAML")
 	}
 
 	return c, nil
@@ -133,7 +133,7 @@ func reporterConfigFromConfig(cfg Config) (*config.ReporterConfig, error) {
 		user := cfg.User
 		pswd := cfg.Password
 		if user != "" && pswd == "" || user == "" && pswd != "" {
-			return nil, errors.Errorf("you must set %s and %s parameters together", cfg.User, cfg.Password)
+			return nil, errors.Newf("you must set %s and %s parameters together", cfg.User, cfg.Password)
 		}
 		rc.User = user
 		rc.Password = pswd

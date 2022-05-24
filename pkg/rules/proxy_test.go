@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
@@ -106,11 +106,11 @@ func TestProxy(t *testing.T) {
 				PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 			},
 			client: &testRulesClient{
-				response: rulespb.NewWarningRulesResponse(errors.New("warning from client")),
+				response: rulespb.NewWarningRulesResponse(errors.Newf("warning from client")),
 				recvErr:  nil,
 			},
 			server:       &testRulesServer{},
-			wantResponse: rulespb.NewWarningRulesResponse(errors.New("warning from client")),
+			wantResponse: rulespb.NewWarningRulesResponse(errors.Newf("warning from client")),
 		},
 		{
 			name: "warn: retreiving rules client failed",
@@ -120,10 +120,10 @@ func TestProxy(t *testing.T) {
 			},
 			client: &testRulesClient{
 				response: nil,
-				rulesErr: errors.New("retreiving rules failed"),
+				rulesErr: errors.Newf("retreiving rules failed"),
 			},
 			server:       &testRulesServer{},
-			wantResponse: rulespb.NewWarningRulesResponse(errors.New("fetching rules from rules client test: retreiving rules failed")),
+			wantResponse: rulespb.NewWarningRulesResponse(errors.Newf("fetching rules from rules client test: retreiving rules failed")),
 		},
 		{
 			name: "warn: retreiving rules client failed, forward warning failed",
@@ -133,12 +133,12 @@ func TestProxy(t *testing.T) {
 			},
 			client: &testRulesClient{
 				response: nil,
-				rulesErr: errors.New("retreiving rules failed"),
+				rulesErr: errors.Newf("retreiving rules failed"),
 			},
 			server: &testRulesServer{
-				sendErr: errors.New("forwarding warning response failed"),
+				sendErr: errors.Newf("forwarding warning response failed"),
 			},
-			wantError: errors.New("forwarding warning response failed"),
+			wantError: errors.Newf("forwarding warning response failed"),
 		},
 		{
 			name: "abort: retreiving rules client failed",
@@ -148,10 +148,10 @@ func TestProxy(t *testing.T) {
 			},
 			client: &testRulesClient{
 				response: nil,
-				rulesErr: errors.New("retreiving rules failed"),
+				rulesErr: errors.Newf("retreiving rules failed"),
 			},
 			server:    &testRulesServer{},
-			wantError: errors.New("fetching rules from rules client test: retreiving rules failed"),
+			wantError: errors.Newf("fetching rules from rules client test: retreiving rules failed"),
 		},
 		{
 			name: "warn: receive failed",
@@ -161,10 +161,10 @@ func TestProxy(t *testing.T) {
 			},
 			client: &testRulesClient{
 				response: nil,
-				recvErr:  errors.New("503 from Prometheus"),
+				recvErr:  errors.Newf("503 from Prometheus"),
 			},
 			server:       &testRulesServer{},
-			wantResponse: rulespb.NewWarningRulesResponse(errors.New("receiving rules from rules client test: 503 from Prometheus")),
+			wantResponse: rulespb.NewWarningRulesResponse(errors.Newf("receiving rules from rules client test: 503 from Prometheus")),
 		},
 		{
 			name: "warn: receive failed, forward warning failed",
@@ -174,12 +174,12 @@ func TestProxy(t *testing.T) {
 			},
 			client: &testRulesClient{
 				response: nil,
-				recvErr:  errors.New("503 from Prometheus"),
+				recvErr:  errors.Newf("503 from Prometheus"),
 			},
 			server: &testRulesServer{
-				sendErr: errors.New("forwarding warning response failed"),
+				sendErr: errors.Newf("forwarding warning response failed"),
 			},
-			wantError: errors.New("sending rules error to server test: forwarding warning response failed"),
+			wantError: errors.Newf("sending rules error to server test: forwarding warning response failed"),
 		},
 		{
 			name: "abort: receive failed",
@@ -189,10 +189,10 @@ func TestProxy(t *testing.T) {
 			},
 			client: &testRulesClient{
 				response: nil,
-				recvErr:  errors.New("503 from Prometheus"),
+				recvErr:  errors.Newf("503 from Prometheus"),
 			},
 			server:    &testRulesServer{},
-			wantError: errors.New("receiving rules from rules client test: 503 from Prometheus"),
+			wantError: errors.Newf("receiving rules from rules client test: 503 from Prometheus"),
 		},
 		{
 			name: "send failed",
@@ -207,9 +207,9 @@ func TestProxy(t *testing.T) {
 				recvErr: nil,
 			},
 			server: &testRulesServer{
-				sendErr: errors.New("sending message failed"),
+				sendErr: errors.Newf("sending message failed"),
 			},
-			wantError: errors.New("rpc error: code = Unknown desc = send rules response: sending message failed"),
+			wantError: errors.Newf("rpc error: code = Unknown desc = send rules response: sending message failed"),
 		},
 		{
 			name: "sending warning response failed",
@@ -218,13 +218,13 @@ func TestProxy(t *testing.T) {
 				PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 			},
 			client: &testRulesClient{
-				response: rulespb.NewWarningRulesResponse(errors.New("warning from client")),
+				response: rulespb.NewWarningRulesResponse(errors.Newf("warning from client")),
 				recvErr:  nil,
 			},
 			server: &testRulesServer{
-				sendErr: errors.New("sending message failed"),
+				sendErr: errors.Newf("sending message failed"),
 			},
-			wantError: errors.New("sending rules warning to server test: sending message failed"),
+			wantError: errors.Newf("sending rules warning to server test: sending message failed"),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -258,7 +258,7 @@ func TestProxyDataRace(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 	p := NewProxy(logger, func() []rulespb.RulesClient {
 		es := &testRulesClient{
-			recvErr: errors.New("err"),
+			recvErr: errors.Newf("err"),
 		}
 		size := 100
 		endpoints := make([]rulespb.RulesClient, 0, size)

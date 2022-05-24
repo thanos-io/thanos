@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-kit/log"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -50,7 +50,7 @@ type DNSSDTest struct {
 }
 
 var (
-	errorFromResolver = errors.New("error from resolver")
+	errorFromResolver = errors.Newf("error from resolver")
 
 	dnsSDTests = []DNSSDTest{
 		{
@@ -83,7 +83,7 @@ var (
 			addr:           "test.mycompany.com",
 			qtype:          A,
 			expectedResult: nil,
-			expectedErr:    errors.New("missing port in address given for dns lookup: test.mycompany.com"),
+			expectedErr:    errors.Newf("missing port in address given for dns lookup: test.mycompany.com"),
 			resolver:       &mockHostnameResolver{},
 		},
 		{
@@ -175,7 +175,7 @@ var (
 			addr:           "test.mycompany.com",
 			qtype:          "invalid",
 			expectedResult: nil,
-			expectedErr:    errors.New("invalid lookup scheme \"invalid\""),
+			expectedErr:    errors.Newf("invalid lookup scheme \"invalid\""),
 			resolver:       &mockHostnameResolver{},
 		},
 	}

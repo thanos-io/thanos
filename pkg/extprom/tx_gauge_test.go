@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -167,7 +167,7 @@ func toFloat64(t *testing.T, c prometheus.Collector) map[string]float64 {
 		if pb.Untyped != nil {
 			exp[lbToString(pb.GetLabel())] = pb.Untyped.GetValue()
 		}
-		panic(errors.Errorf("collected a non-gauge/counter/untyped metric: %s", pb))
+		panic(errors.Newf("collected a non-gauge/counter/untyped metric: %s", pb))
 	}
 
 	return exp

@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
@@ -244,7 +244,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 			err = q.selectGate.Start(ctx)
 		})
 		if err != nil {
-			promise <- storage.ErrSeriesSet(errors.Wrap(err, "failed to wait for turn"))
+			promise <- storage.ErrSeriesSet(errors.Wrapf(err, "failed to wait for turn"))
 			return
 		}
 		defer q.selectGate.Done()
@@ -268,7 +268,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		// Only gets called once, for the first Next() call of the series set.
 		set, ok := <-promise
 		if !ok {
-			return storage.ErrSeriesSet(errors.New("channel closed before a value received")), false
+			return storage.ErrSeriesSet(errors.Newf("channel closed before a value received")), false
 		}
 		return set, set.Next()
 	}}
@@ -277,7 +277,7 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	sms, err := storepb.PromMatchersToMatchers(ms...)
 	if err != nil {
-		return nil, errors.Wrap(err, "convert matchers")
+		return nil, errors.Wrapf(err, "convert matchers")
 	}
 
 	aggrs := aggrsFromFunc(hints.Func)
@@ -303,12 +303,12 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		Step:                    hints.Step,
 		Range:                   hints.Range,
 	}, resp); err != nil {
-		return nil, errors.Wrap(err, "proxy Series()")
+		return nil, errors.Wrapf(err, "proxy Series()")
 	}
 
 	var warns storage.Warnings
 	for _, w := range resp.warnings {
-		warns = append(warns, errors.New(w))
+		warns = append(warns, errors.Newf(w))
 	}
 
 	// Delete the metric's name from the result because that's what the
@@ -392,7 +392,7 @@ func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]strin
 
 	pbMatchers, err := storepb.PromMatchersToMatchers(matchers...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "converting prom matchers to storepb matchers")
+		return nil, nil, errors.Wrapf(err, "converting prom matchers to storepb matchers")
 	}
 
 	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -403,12 +403,12 @@ func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]strin
 		Matchers:                pbMatchers,
 	})
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "proxy LabelValues()")
+		return nil, nil, errors.Wrapf(err, "proxy LabelValues()")
 	}
 
 	var warns storage.Warnings
 	for _, w := range resp.Warnings {
-		warns = append(warns, errors.New(w))
+		warns = append(warns, errors.Newf(w))
 	}
 
 	return resp.Values, warns, nil
@@ -425,7 +425,7 @@ func (q *querier) LabelNames(matchers ...*labels.Matcher) ([]string, storage.War
 
 	pbMatchers, err := storepb.PromMatchersToMatchers(matchers...)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "converting prom matchers to storepb matchers")
+		return nil, nil, errors.Wrapf(err, "converting prom matchers to storepb matchers")
 	}
 
 	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
@@ -435,12 +435,12 @@ func (q *querier) LabelNames(matchers ...*labels.Matcher) ([]string, storage.War
 		Matchers:                pbMatchers,
 	})
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "proxy LabelNames()")
+		return nil, nil, errors.Wrapf(err, "proxy LabelNames()")
 	}
 
 	var warns storage.Warnings
 	for _, w := range resp.Warnings {
-		warns = append(warns, errors.New(w))
+		warns = append(warns, errors.Newf(w))
 	}
 
 	return resp.Names, warns, nil

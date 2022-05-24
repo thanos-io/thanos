@@ -19,7 +19,7 @@ import (
 
 	alioss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -55,7 +55,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 	}
 
 	if c.Endpoint == "" || c.AccessKeyID == "" || c.AccessKeySecret == "" {
-		return nil, nil, errors.New("aliyun oss endpoint or access_key_id or access_key_secret " +
+		return nil, nil, errors.Newf("aliyun oss endpoint or access_key_id or access_key_secret " +
 			"is not present in config file")
 	}
 	if c.Bucket != "" && os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "true" {
@@ -81,23 +81,23 @@ func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
 	switch chunksnum {
 	case 0:
 		if err := b.bucket.PutObject(name, ncloser); err != nil {
-			return errors.Wrap(err, "failed to upload oss object")
+			return errors.Wrapf(err, "failed to upload oss object")
 		}
 	default:
 		{
 			init, err := b.bucket.InitiateMultipartUpload(name)
 			if err != nil {
-				return errors.Wrap(err, "failed to initiate multi-part upload")
+				return errors.Wrapf(err, "failed to initiate multi-part upload")
 			}
 			chunk := 0
 			uploadEveryPart := func(everypartsize int64, cnk int) (alioss.UploadPart, error) {
 				prt, err := b.bucket.UploadPart(init, ncloser, everypartsize, cnk)
 				if err != nil {
 					if err := b.bucket.AbortMultipartUpload(init); err != nil {
-						return prt, errors.Wrap(err, "failed to abort multi-part upload")
+						return prt, errors.Wrapf(err, "failed to abort multi-part upload")
 					}
 
-					return prt, errors.Wrap(err, "failed to upload multi-part chunk")
+					return prt, errors.Wrapf(err, "failed to upload multi-part chunk")
 				}
 				return prt, nil
 			}
@@ -105,19 +105,19 @@ func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
 			for ; chunk < chunksnum; chunk++ {
 				part, err := uploadEveryPart(PartSize, chunk+1)
 				if err != nil {
-					return errors.Wrap(err, "failed to upload every part")
+					return errors.Wrapf(err, "failed to upload every part")
 				}
 				parts = append(parts, part)
 			}
 			if lastslice != 0 {
 				part, err := uploadEveryPart(lastslice, chunksnum+1)
 				if err != nil {
-					return errors.Wrap(err, "failed to upload the last chunk")
+					return errors.Wrapf(err, "failed to upload the last chunk")
 				}
 				parts = append(parts, part)
 			}
 			if _, err := b.bucket.CompleteMultipartUpload(init, parts); err != nil {
-				return errors.Wrap(err, "failed to set multi-part upload completive")
+				return errors.Wrapf(err, "failed to set multi-part upload completive")
 			}
 		}
 	}
@@ -127,7 +127,7 @@ func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
 	if err := b.bucket.DeleteObject(name); err != nil {
-		return errors.Wrap(err, "delete oss object")
+		return errors.Wrapf(err, "delete oss object")
 	}
 	return nil
 }
@@ -161,7 +161,7 @@ func (b *Bucket) Attributes(ctx context.Context, name string) (objstore.ObjectAt
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	var config Config
 	if err := yaml.Unmarshal(conf, &config); err != nil {
-		return nil, errors.Wrap(err, "parse aliyun oss config file failed")
+		return nil, errors.Wrapf(err, "parse aliyun oss config file failed")
 	}
 
 	return NewBucketWithConfig(logger, config, component)
@@ -175,7 +175,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 
 	client, err := alioss.New(config.Endpoint, config.AccessKeyID, config.AccessKeySecret)
 	if err != nil {
-		return nil, errors.Wrap(err, "create aliyun oss client failed")
+		return nil, errors.Wrapf(err, "create aliyun oss client failed")
 	}
 	bk, err := client.Bucket(config.Bucket)
 	if err != nil {
@@ -195,10 +195,10 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 // validate checks to see the config options are set.
 func validate(config Config) error {
 	if config.Endpoint == "" || config.Bucket == "" {
-		return errors.New("aliyun oss endpoint or bucket is not present in config file")
+		return errors.Newf("aliyun oss endpoint or bucket is not present in config file")
 	}
 	if config.AccessKeyID == "" || config.AccessKeySecret == "" {
-		return errors.New("aliyun oss access_key_id or access_key_secret is not present in config file")
+		return errors.Newf("aliyun oss access_key_id or access_key_secret is not present in config file")
 	}
 
 	return nil
@@ -219,11 +219,11 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error, opt
 	marker := alioss.Marker("")
 	for {
 		if err := ctx.Err(); err != nil {
-			return errors.Wrap(err, "context closed while iterating bucket")
+			return errors.Wrapf(err, "context closed while iterating bucket")
 		}
 		objects, err := b.bucket.ListObjects(alioss.Prefix(dir), delimiter, marker)
 		if err != nil {
-			return errors.Wrap(err, "listing aliyun oss bucket failed")
+			return errors.Wrapf(err, "listing aliyun oss bucket failed")
 		}
 		marker = alioss.Marker(objects.NextMarker)
 
@@ -260,7 +260,7 @@ func NewTestBucketFromConfig(t testing.TB, c Config, reuseBucket bool) (objstore
 		}
 		testclient, err := alioss.New(c.Endpoint, c.AccessKeyID, c.AccessKeySecret)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "create aliyun oss client failed")
+			return nil, nil, errors.Wrapf(err, "create aliyun oss client failed")
 		}
 
 		if err := testclient.CreateBucket(bktToCreate); err != nil {
@@ -281,7 +281,7 @@ func NewTestBucketFromConfig(t testing.TB, c Config, reuseBucket bool) (objstore
 
 	if reuseBucket {
 		if err := b.Iter(context.Background(), "", func(f string) error {
-			return errors.Errorf("bucket %s is not empty", c.Bucket)
+			return errors.Newf("bucket %s is not empty", c.Bucket)
 		}); err != nil {
 			return nil, nil, errors.Wrapf(err, "oss check bucket %s", c.Bucket)
 		}
@@ -319,14 +319,14 @@ func (b *Bucket) setRange(start, end int64, name string) (alioss.Option, error) 
 
 		opt = alioss.Range(start, end)
 	} else {
-		return nil, errors.Errorf("Invalid range specified: start=%d end=%d", start, end)
+		return nil, errors.Newf("Invalid range specified: start=%d end=%d", start, end)
 	}
 	return opt, nil
 }
 
 func (b *Bucket) getRange(_ context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	if name == "" {
-		return nil, errors.New("given object name should not empty")
+		return nil, errors.Newf("given object name should not empty")
 	}
 
 	var opts []alioss.Option
@@ -362,7 +362,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}
-		return false, errors.Wrap(err, "cloud not check if object exists")
+		return false, errors.Wrapf(err, "cloud not check if object exists")
 	}
 
 	return exists, nil

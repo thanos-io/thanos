@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -74,24 +74,24 @@ func NewStreamedBlockWriter(
 
 	chunkWriter, err := chunks.NewWriter(filepath.Join(blockDir, block.ChunksDirname))
 	if err != nil {
-		return nil, errors.Wrap(err, "create chunk writer in streamedBlockWriter")
+		return nil, errors.Wrapf(err, "create chunk writer in streamedBlockWriter")
 	}
 	closers = append(closers, chunkWriter)
 
 	indexWriter, err := index.NewWriter(context.TODO(), filepath.Join(blockDir, block.IndexFilename))
 	if err != nil {
-		return nil, errors.Wrap(err, "open index writer in streamedBlockWriter")
+		return nil, errors.Wrapf(err, "open index writer in streamedBlockWriter")
 	}
 	closers = append(closers, indexWriter)
 
 	symbols := indexReader.Symbols()
 	for symbols.Next() {
 		if err = indexWriter.AddSymbol(symbols.At()); err != nil {
-			return nil, errors.Wrap(err, "add symbols")
+			return nil, errors.Wrapf(err, "add symbols")
 		}
 	}
 	if err := symbols.Err(); err != nil {
-		return nil, errors.Wrap(err, "read symbols")
+		return nil, errors.Wrapf(err, "read symbols")
 	}
 
 	return &streamedBlockWriter{
@@ -109,7 +109,7 @@ func NewStreamedBlockWriter(
 // labelsValues sets and memPostings to be written on the finalize state in the end of downsampling process.
 func (w *streamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Meta) error {
 	if w.finalized || w.ignoreFinalize {
-		return errors.New("series can't be added, writers has been closed or internal error happened")
+		return errors.Newf("series can't be added, writers has been closed or internal error happened")
 	}
 
 	if len(chunks) == 0 {
@@ -119,12 +119,12 @@ func (w *streamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Me
 
 	if err := w.chunkWriter.WriteChunks(chunks...); err != nil {
 		w.ignoreFinalize = true
-		return errors.Wrap(err, "add chunks")
+		return errors.Wrapf(err, "add chunks")
 	}
 
 	if err := w.indexWriter.AddSeries(w.seriesRefs, lset, chunks...); err != nil {
 		w.ignoreFinalize = true
-		return errors.Wrap(err, "add series")
+		return errors.Wrapf(err, "add series")
 	}
 
 	w.seriesRefs++
@@ -162,15 +162,15 @@ func (w *streamedBlockWriter) Close() error {
 	}
 
 	if err := w.writeMetaFile(); err != nil {
-		return errors.Wrap(err, "write meta meta")
+		return errors.Wrapf(err, "write meta meta")
 	}
 
 	if err := w.syncDir(); err != nil {
-		return errors.Wrap(err, "sync blockDir")
+		return errors.Wrapf(err, "sync blockDir")
 	}
 
 	if err := merr.Err(); err != nil {
-		return errors.Wrap(err, "finalize")
+		return errors.Wrapf(err, "finalize")
 	}
 
 	// No error, claim success.
@@ -189,13 +189,13 @@ func (w *streamedBlockWriter) Close() error {
 func (w *streamedBlockWriter) syncDir() (err error) {
 	df, err := fileutil.OpenDir(w.blockDir)
 	if err != nil {
-		return errors.Wrap(err, "open temporary block blockDir")
+		return errors.Wrapf(err, "open temporary block blockDir")
 	}
 
 	defer runutil.CloseWithErrCapture(&err, df, "close temporary block blockDir")
 
 	if err := fileutil.Fdatasync(df); err != nil {
-		return errors.Wrap(err, "sync temporary blockDir")
+		return errors.Wrapf(err, "sync temporary blockDir")
 	}
 
 	return nil

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -34,7 +34,7 @@ func copyRecursive(src, dst string) error {
 		}
 
 		if !info.Mode().IsRegular() {
-			return errors.Errorf("%s is not a regular file", path)
+			return errors.Newf("%s is not a regular file", path)
 		}
 
 		source, err := os.Open(filepath.Clean(path))

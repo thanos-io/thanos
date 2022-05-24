@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -36,18 +36,18 @@ func TestCloseWithErrCapture(t *testing.T) {
 			expectedErrStr: "",
 		},
 		{
-			err:            errors.New("test"),
+			err:            errors.Newf("test"),
 			closer:         testCloser{err: nil},
 			expectedErrStr: "test",
 		},
 		{
 			err:            nil,
-			closer:         testCloser{err: errors.New("test")},
+			closer:         testCloser{err: errors.Newf("test")},
 			expectedErrStr: "close: test",
 		},
 		{
-			err:            errors.New("test"),
-			closer:         testCloser{err: errors.New("test")},
+			err:            errors.Newf("test"),
+			closer:         testCloser{err: errors.Newf("test")},
 			expectedErrStr: "2 errors: test; close: test",
 		},
 	} {
@@ -100,9 +100,9 @@ func (e *emulatedCloser) Close() error {
 		return nil
 	}
 	if e.calls == 2 {
-		return errors.Wrap(os.ErrClosed, "can even be a wrapped one")
+		return errors.Wrapf(os.ErrClosed, "can even be a wrapped one")
 	}
-	return errors.New("something very bad happened")
+	return errors.Newf("something very bad happened")
 }
 
 // newEmulatedCloser returns a ReadCloser with a Close method

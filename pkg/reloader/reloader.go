@@ -73,7 +73,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -276,32 +276,32 @@ func (r *Reloader) apply(ctx context.Context) error {
 	if r.cfgFile != "" {
 		h := sha256.New()
 		if err := hashFile(h, r.cfgFile); err != nil {
-			return errors.Wrap(err, "hash file")
+			return errors.Wrapf(err, "hash file")
 		}
 		cfgHash = h.Sum(nil)
 		if r.cfgOutputFile != "" {
 			b, err := ioutil.ReadFile(r.cfgFile)
 			if err != nil {
-				return errors.Wrap(err, "read file")
+				return errors.Wrapf(err, "read file")
 			}
 
 			// Detect and extract gzipped file.
 			if bytes.Equal(b[0:3], firstGzipBytes) {
 				zr, err := gzip.NewReader(bytes.NewReader(b))
 				if err != nil {
-					return errors.Wrap(err, "create gzip reader")
+					return errors.Wrapf(err, "create gzip reader")
 				}
 				defer runutil.CloseWithLogOnErr(r.logger, zr, "gzip reader close")
 
 				b, err = ioutil.ReadAll(zr)
 				if err != nil {
-					return errors.Wrap(err, "read compressed config file")
+					return errors.Wrapf(err, "read compressed config file")
 				}
 			}
 
 			b, err = expandEnv(b)
 			if err != nil {
-				return errors.Wrap(err, "expand environment variables")
+				return errors.Wrapf(err, "expand environment variables")
 			}
 
 			tmpFile := r.cfgOutputFile + ".tmp"
@@ -309,10 +309,10 @@ func (r *Reloader) apply(ctx context.Context) error {
 				_ = os.Remove(tmpFile)
 			}()
 			if err := ioutil.WriteFile(tmpFile, b, 0644); err != nil {
-				return errors.Wrap(err, "write file")
+				return errors.Wrapf(err, "write file")
 			}
 			if err := os.Rename(tmpFile, r.cfgOutputFile); err != nil {
-				return errors.Wrap(err, "rename file")
+				return errors.Wrapf(err, "rename file")
 			}
 		}
 	}
@@ -321,7 +321,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 	for _, dir := range r.watchedDirs {
 		walkDir, err := filepath.EvalSymlinks(dir)
 		if err != nil {
-			return errors.Wrap(err, "dir symlink eval")
+			return errors.Wrapf(err, "dir symlink eval")
 		}
 		err = filepath.Walk(walkDir, func(path string, f os.FileInfo, err error) error {
 			if err != nil {
@@ -346,7 +346,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			return nil
 		})
 		if err != nil {
-			return errors.Wrap(err, "build hash")
+			return errors.Wrapf(err, "build hash")
 		}
 	}
 	if len(r.watchedDirs) > 0 {
@@ -366,7 +366,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		if err := r.triggerReload(ctx); err != nil {
 			r.reloadErrors.Inc()
 			r.lastReloadSuccess.Set(0)
-			return errors.Wrap(err, "trigger reload")
+			return errors.Wrapf(err, "trigger reload")
 		}
 
 		r.forceReload = false
@@ -414,18 +414,18 @@ func hashFile(h hash.Hash, fn string) error {
 func (r *Reloader) triggerReload(ctx context.Context) error {
 	req, err := http.NewRequest("POST", r.reloadURL.String(), nil)
 	if err != nil {
-		return errors.Wrap(err, "create request")
+		return errors.Wrapf(err, "create request")
 	}
 	req = req.WithContext(ctx)
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
-		return errors.Wrap(err, "reload request failed")
+		return errors.Wrapf(err, "reload request failed")
 	}
 	defer runutil.ExhaustCloseWithLogOnErr(r.logger, resp.Body, "trigger reload resp body")
 
 	if resp.StatusCode != 200 {
-		return errors.Errorf("received non-200 response: %s; have you set `--web.enable-lifecycle` Prometheus flag?", resp.Status)
+		return errors.Newf("received non-200 response: %s; have you set `--web.enable-lifecycle` Prometheus flag?", resp.Status)
 	}
 	return nil
 }
@@ -453,7 +453,7 @@ func expandEnv(b []byte) (r []byte, err error) {
 
 		v, ok := os.LookupEnv(string(n))
 		if !ok {
-			err = errors.Errorf("found reference to unset environment variable %q", n)
+			err = errors.Newf("found reference to unset environment variable %q", n)
 			return nil
 		}
 		return []byte(v)
@@ -516,7 +516,7 @@ func (w *watcher) addPath(name string) error {
 	if w.w == nil {
 		fsWatcher, err := fsnotify.NewWatcher()
 		if err != nil {
-			return errors.Wrap(err, "create watcher")
+			return errors.Wrapf(err, "create watcher")
 		}
 		w.w = fsWatcher
 	}

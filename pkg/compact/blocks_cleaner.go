@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/thanos-io/thanos/pkg/block"
@@ -48,7 +48,7 @@ func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) error {
 		if time.Since(time.Unix(deletionMark.DeletionTime, 0)).Seconds() > s.deleteDelay.Seconds() {
 			if err := block.Delete(ctx, s.logger, s.bkt, deletionMark.ID); err != nil {
 				s.blockCleanupFailures.Inc()
-				return errors.Wrap(err, "delete block")
+				return errors.Wrapf(err, "delete block")
 			}
 			s.blocksCleaned.Inc()
 			level.Info(s.logger).Log("msg", "deleted block marked for deletion", "block", deletionMark.ID)

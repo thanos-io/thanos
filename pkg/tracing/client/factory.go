@@ -11,7 +11,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v2"
 
@@ -42,7 +42,7 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 	tracingConf := &TracingConfig{}
 
 	if err := yaml.UnmarshalStrict(confContentYaml, tracingConf); err != nil {
-		return nil, nil, errors.Wrap(err, "parsing config tracing YAML")
+		return nil, nil, errors.Wrapf(err, "parsing config tracing YAML")
 	}
 
 	var config []byte
@@ -50,7 +50,7 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 	if tracingConf.Config != nil {
 		config, err = yaml.Marshal(tracingConf.Config)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "marshal content of tracing configuration")
+			return nil, nil, errors.Wrapf(err, "marshal content of tracing configuration")
 		}
 	}
 
@@ -69,7 +69,7 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 	case string(Lightstep):
 		return lightstep.NewTracer(ctx, config)
 	default:
-		return nil, nil, errors.Errorf("tracing with type %s is not supported", tracingConf.Type)
+		return nil, nil, errors.Newf("tracing with type %s is not supported", tracingConf.Type)
 	}
 }
 

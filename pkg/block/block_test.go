@@ -18,7 +18,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
@@ -533,7 +533,7 @@ func TestUploadCleanup(t *testing.T) {
 	}
 }
 
-var errUploadFailed = errors.New("upload failed")
+var errUploadFailed = errors.Newf("upload failed")
 
 type errBucket struct {
 	objstore.Bucket

@@ -22,7 +22,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
@@ -74,7 +74,7 @@ type BinaryTOC struct {
 func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, filename string) (err error) {
 	ir, indexVersion, err := newChunkedIndexReader(ctx, bkt, id)
 	if err != nil {
-		return errors.Wrap(err, "new index reader")
+		return errors.Wrapf(err, "new index reader")
 	}
 	tmpFilename := filename + ".tmp"
 
@@ -83,12 +83,12 @@ func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, f
 	buf := make([]byte, 32*1024)
 	bw, err := newBinaryWriter(tmpFilename, buf)
 	if err != nil {
-		return errors.Wrap(err, "new binary index header writer")
+		return errors.Wrapf(err, "new binary index header writer")
 	}
 	defer runutil.CloseWithErrCapture(&err, bw, "close binary writer for %s", tmpFilename)
 
 	if err := bw.AddIndexMeta(indexVersion, ir.toc.PostingsTable); err != nil {
-		return errors.Wrap(err, "add index meta")
+		return errors.Wrapf(err, "add index meta")
 	}
 
 	if err := ir.CopySymbols(bw.SymbolsWriter(), buf); err != nil {
@@ -96,7 +96,7 @@ func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, f
 	}
 
 	if err := bw.f.Flush(); err != nil {
-		return errors.Wrap(err, "flush")
+		return errors.Wrapf(err, "flush")
 	}
 
 	if err := ir.CopyPostingsOffsets(bw.PostingOffsetsWriter(), buf); err != nil {
@@ -104,19 +104,19 @@ func WriteBinary(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID, f
 	}
 
 	if err := bw.f.Flush(); err != nil {
-		return errors.Wrap(err, "flush")
+		return errors.Wrapf(err, "flush")
 	}
 
 	if err := bw.WriteTOC(); err != nil {
-		return errors.Wrap(err, "write index header TOC")
+		return errors.Wrapf(err, "write index header TOC")
 	}
 
 	if err := bw.f.Flush(); err != nil {
-		return errors.Wrap(err, "flush")
+		return errors.Wrapf(err, "flush")
 	}
 
 	if err := bw.f.f.Sync(); err != nil {
-		return errors.Wrap(err, "sync")
+		return errors.Wrapf(err, "sync")
 	}
 
 	// Create index-header in atomic way, to avoid partial writes (e.g during restart or crash of store GW).
@@ -150,17 +150,17 @@ func newChunkedIndexReader(ctx context.Context, bkt objstore.BucketReader, id ul
 	}
 
 	if err := rc.Close(); err != nil {
-		return nil, 0, errors.Wrap(err, "close reader")
+		return nil, 0, errors.Wrapf(err, "close reader")
 	}
 
 	if m := binary.BigEndian.Uint32(b[0:4]); m != index.MagicIndex {
-		return nil, 0, errors.Errorf("invalid magic number %x for %s", m, indexFilepath)
+		return nil, 0, errors.Newf("invalid magic number %x for %s", m, indexFilepath)
 	}
 
 	version := int(b[4:5][0])
 
 	if version != index.FormatV1 && version != index.FormatV2 {
-		return nil, 0, errors.Errorf("not supported index file version %d of %s", version, indexFilepath)
+		return nil, 0, errors.Newf("not supported index file version %d of %s", version, indexFilepath)
 	}
 
 	ir := &chunkedIndexReader{
@@ -192,12 +192,12 @@ func (r *chunkedIndexReader) readTOC() (*index.TOC, error) {
 	}
 
 	if err := rc.Close(); err != nil {
-		return nil, errors.Wrap(err, "close toc reader")
+		return nil, errors.Wrapf(err, "close toc reader")
 	}
 
 	toc, err := index.NewTOCFromByteSlice(realByteSlice(tocBytes))
 	if err != nil {
-		return nil, errors.Wrap(err, "new TOC")
+		return nil, errors.Wrapf(err, "new TOC")
 	}
 	return toc, nil
 }
@@ -210,7 +210,7 @@ func (r *chunkedIndexReader) CopySymbols(w io.Writer, buf []byte) (err error) {
 	defer runutil.CloseWithErrCapture(&err, rc, "close symbol reader")
 
 	if _, err := io.CopyBuffer(w, rc, buf); err != nil {
-		return errors.Wrap(err, "copy symbols")
+		return errors.Wrapf(err, "copy symbols")
 	}
 
 	return nil
@@ -224,7 +224,7 @@ func (r *chunkedIndexReader) CopyPostingsOffsets(w io.Writer, buf []byte) (err e
 	defer runutil.CloseWithErrCapture(&err, rc, "close posting offsets reader")
 
 	if _, err := io.CopyBuffer(w, rc, buf); err != nil {
-		return errors.Wrap(err, "copy posting offsets")
+		return errors.Wrapf(err, "copy posting offsets")
 	}
 
 	return nil
@@ -260,7 +260,7 @@ func newBinaryWriter(fn string, buf []byte) (w *binaryWriter, err error) {
 	defer runutil.CloseWithErrCapture(&err, df, "dir close")
 
 	if err := os.RemoveAll(fn); err != nil {
-		return nil, errors.Wrap(err, "remove any existing index at path")
+		return nil, errors.Wrapf(err, "remove any existing index at path")
 	}
 
 	// We use file writer for buffers not larger than reused one.
@@ -269,7 +269,7 @@ func newBinaryWriter(fn string, buf []byte) (w *binaryWriter, err error) {
 		return nil, err
 	}
 	if err := df.Sync(); err != nil {
-		return nil, errors.Wrap(err, "sync dir")
+		return nil, errors.Wrapf(err, "sync dir")
 	}
 
 	w = &binaryWriter{
@@ -324,7 +324,7 @@ func (fw *FileWriter) Write(bufs ...[]byte) error {
 		// Once we move to compressed/varint representations in those areas, this limitation
 		// can be lifted.
 		if fw.pos > 16*math.MaxUint32 {
-			return errors.Errorf("%q exceeding max size of 64GiB", fw.name)
+			return errors.Newf("%q exceeding max size of 64GiB", fw.name)
 		}
 	}
 	return nil
@@ -351,7 +351,7 @@ func (fw *FileWriter) AddPadding(size int) error {
 	p = uint64(size) - p
 
 	if err := fw.Write(make([]byte, p)); err != nil {
-		return errors.Wrap(err, "add padding")
+		return errors.Wrapf(err, "add padding")
 	}
 	return nil
 }
@@ -469,7 +469,7 @@ func NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 
 	start := time.Now()
 	if err := WriteBinary(ctx, bkt, id, binfn); err != nil {
-		return nil, errors.Wrap(err, "write index header")
+		return nil, errors.Wrapf(err, "write index header")
 	}
 
 	level.Debug(logger).Log("msg", "built index-header file", "path", binfn, "elapsed", time.Since(start))
@@ -496,10 +496,10 @@ func newFileBinaryReader(path string, postingOffsetsInMemSampling int) (bw *Bina
 
 	// Verify header.
 	if r.b.Len() < headerLen {
-		return nil, errors.Wrap(encoding.ErrInvalidSize, "index header's header")
+		return nil, errors.Wrapf(encoding.ErrInvalidSize, "index header's header")
 	}
 	if m := binary.BigEndian.Uint32(r.b.Range(0, 4)); m != MagicIndex {
-		return nil, errors.Errorf("invalid magic number %x", m)
+		return nil, errors.Newf("invalid magic number %x", m)
 	}
 	r.version = int(r.b.Range(4, 5)[0])
 	r.indexVersion = int(r.b.Range(5, 6)[0])
@@ -507,18 +507,18 @@ func newFileBinaryReader(path string, postingOffsetsInMemSampling int) (bw *Bina
 	r.indexLastPostingEnd = int64(binary.BigEndian.Uint64(r.b.Range(6, headerLen)))
 
 	if r.version != BinaryFormatV1 {
-		return nil, errors.Errorf("unknown index header file version %d", r.version)
+		return nil, errors.Newf("unknown index header file version %d", r.version)
 	}
 
 	r.toc, err = newBinaryTOCFromByteSlice(r.b)
 	if err != nil {
-		return nil, errors.Wrap(err, "read index header TOC")
+		return nil, errors.Wrapf(err, "read index header TOC")
 	}
 
 	// TODO(bwplotka): Consider contributing to Prometheus to allow specifying custom number for symbolsFactor.
 	r.symbols, err = index.NewSymbols(r.b, r.indexVersion, int(r.toc.Symbols))
 	if err != nil {
-		return nil, errors.Wrap(err, "read symbols")
+		return nil, errors.Wrapf(err, "read symbols")
 	}
 
 	var lastKey []string
@@ -530,7 +530,7 @@ func newFileBinaryReader(path string, postingOffsetsInMemSampling int) (bw *Bina
 		var prevRng index.Range
 		if err := index.ReadOffsetTable(r.b, r.toc.PostingsOffsetTable, func(key []string, off uint64, _ int) error {
 			if len(key) != 2 {
-				return errors.Errorf("unexpected key length for posting table %d", len(key))
+				return errors.Newf("unexpected key length for posting table %d", len(key))
 			}
 
 			if lastKey != nil {
@@ -547,7 +547,7 @@ func newFileBinaryReader(path string, postingOffsetsInMemSampling int) (bw *Bina
 			prevRng = index.Range{Start: int64(off + postingLengthFieldSize)}
 			return nil
 		}); err != nil {
-			return nil, errors.Wrap(err, "read postings table")
+			return nil, errors.Wrapf(err, "read postings table")
 		}
 		if lastKey != nil {
 			prevRng.End = r.indexLastPostingEnd - crc32.Size
@@ -561,7 +561,7 @@ func newFileBinaryReader(path string, postingOffsetsInMemSampling int) (bw *Bina
 		// label value (plus the first and last one), to save memory.
 		if err := index.ReadOffsetTable(r.b, r.toc.PostingsOffsetTable, func(key []string, off uint64, tableOff int) error {
 			if len(key) != 2 {
-				return errors.Errorf("unexpected key length for posting table %d", len(key))
+				return errors.Newf("unexpected key length for posting table %d", len(key))
 			}
 
 			if _, ok := r.postings[key[0]]; !ok {
@@ -589,7 +589,7 @@ func newFileBinaryReader(path string, postingOffsetsInMemSampling int) (bw *Bina
 
 			return nil
 		}); err != nil {
-			return nil, errors.Wrap(err, "read postings table")
+			return nil, errors.Wrapf(err, "read postings table")
 		}
 		if lastKey != nil {
 			if (valueCount-1)%postingOffsetsInMemSampling != 0 {
@@ -615,7 +615,7 @@ func newFileBinaryReader(path string, postingOffsetsInMemSampling int) (bw *Bina
 		}
 		off, err := r.symbols.ReverseLookup(k)
 		if err != nil {
-			return nil, errors.Wrap(err, "reverse symbol lookup")
+			return nil, errors.Wrapf(err, "reverse symbol lookup")
 		}
 		r.nameSymbols[off] = k
 	}
@@ -636,7 +636,7 @@ func newBinaryTOCFromByteSlice(bs index.ByteSlice) (*BinaryTOC, error) {
 	d := encoding.Decbuf{B: b[:len(b)-4]}
 
 	if d.Crc32(castagnoliTable) != expCRC {
-		return nil, errors.Wrap(encoding.ErrInvalidChecksum, "read index header TOC")
+		return nil, errors.Wrapf(encoding.ErrInvalidChecksum, "read index header TOC")
 	}
 
 	if err := d.Err(); err != nil {
@@ -806,7 +806,7 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 			break
 		}
 		if d.Err() != nil {
-			return nil, errors.Wrap(d.Err(), "get postings offset entry")
+			return nil, errors.Wrapf(d.Err(), "get postings offset entry")
 		}
 	}
 
@@ -893,7 +893,7 @@ func (r *BinaryReader) LabelValues(name string) ([]string, error) {
 		d.Uvarint64() // Offset.
 	}
 	if d.Err() != nil {
-		return nil, errors.Wrap(d.Err(), "get postings offset entry")
+		return nil, errors.Wrapf(d.Err(), "get postings offset entry")
 	}
 	return values, nil
 }

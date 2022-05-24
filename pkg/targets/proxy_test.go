@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -53,7 +53,7 @@ func TestProxyDataRace(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 	p := NewProxy(logger, func() []targetspb.TargetsClient {
 		es := &testTargetsClient{
-			recvErr: errors.New("err"),
+			recvErr: errors.Newf("err"),
 		}
 		size := 100
 		endpoints := make([]targetspb.TargetsClient, 0, size)

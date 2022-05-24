@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 
@@ -70,7 +70,7 @@ scrape_configs:
 		if len(targets.ActiveTargets) > 0 {
 			return nil
 		}
-		return errors.New("empty targets response from Prometheus")
+		return errors.Newf("empty targets response from Prometheus")
 	}))
 
 	promTargets := NewPrometheus(u, promclient.NewDefaultClient(), func() labels.Labels {

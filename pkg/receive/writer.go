@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -53,7 +53,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 	s, err := r.multiTSDB.TenantAppendable(tenantID)
 	if err != nil {
-		return errors.Wrap(err, "get tenant appendable")
+		return errors.Wrapf(err, "get tenant appendable")
 	}
 
 	app, err := s.Appender(ctx)
@@ -61,7 +61,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		return err
 	}
 	if err != nil {
-		return errors.Wrap(err, "get appender")
+		return errors.Wrapf(err, "get appender")
 	}
 	getRef := app.(storage.GetRef)
 
@@ -155,7 +155,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	}
 
 	if err := app.Commit(); err != nil {
-		errs.Add(errors.Wrap(err, "commit samples"))
+		errs.Add(errors.Wrapf(err, "commit samples"))
 	}
 	return errs.Err()
 }

@@ -6,7 +6,7 @@ package downsample
 import (
 	"encoding/binary"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 )
 
@@ -46,7 +46,7 @@ func (c AggrChunk) Bytes() []byte {
 }
 
 func (c AggrChunk) Appender() (chunkenc.Appender, error) {
-	return nil, errors.New("not implemented")
+	return nil, errors.Newf("not implemented")
 }
 
 func (c AggrChunk) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
@@ -62,7 +62,7 @@ func (c AggrChunk) NumSamples() int {
 }
 
 // ErrAggrNotExist is returned if a requested aggregation is not present in an AggrChunk.
-var ErrAggrNotExist = errors.New("aggregate does not exist")
+var ErrAggrNotExist = errors.Newf("aggregate does not exist")
 
 func (c AggrChunk) Encoding() chunkenc.Encoding {
 	return ChunkEncAggr
@@ -78,7 +78,7 @@ func (c AggrChunk) Get(t AggrType) (chunkenc.Chunk, error) {
 	for i := AggrType(0); i <= t; i++ {
 		l, n := binary.Uvarint(b)
 		if n < 1 || len(b[n:]) < int(l)+1 {
-			return nil, errors.New("invalid size")
+			return nil, errors.Newf("invalid size")
 		}
 		b = b[n:]
 		// If length is set to zero explicitly, that means the aggregate is unset.

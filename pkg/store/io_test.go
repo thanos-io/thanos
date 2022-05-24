@@ -8,7 +8,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )

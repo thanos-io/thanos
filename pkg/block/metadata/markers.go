@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -33,11 +33,11 @@ const (
 
 var (
 	// ErrorMarkerNotFound is the error when marker file is not found.
-	ErrorMarkerNotFound = errors.New("marker not found")
+	ErrorMarkerNotFound = errors.Newf("marker not found")
 	// ErrorUnmarshalMarker is the error when unmarshalling marker JSON file.
 	// This error can occur because marker has been partially uploaded to block storage
 	// or the marker file is not a valid json file.
-	ErrorUnmarshalMarker = errors.New("unmarshal marker JSON")
+	ErrorUnmarshalMarker = errors.Newf("unmarshal marker JSON")
 )
 
 type Marker interface {
@@ -111,11 +111,11 @@ func ReadMarker(ctx context.Context, logger log.Logger, bkt objstore.Instrumente
 	switch marker.markerFilename() {
 	case NoCompactMarkFilename:
 		if version := marker.(*NoCompactMark).Version; version != NoCompactMarkVersion1 {
-			return errors.Errorf("unexpected no-compact-mark file version %d, expected %d", version, NoCompactMarkVersion1)
+			return errors.Newf("unexpected no-compact-mark file version %d, expected %d", version, NoCompactMarkVersion1)
 		}
 	case DeletionMarkFilename:
 		if version := marker.(*DeletionMark).Version; version != DeletionMarkVersion1 {
-			return errors.Errorf("unexpected deletion-mark file version %d, expected %d", version, DeletionMarkVersion1)
+			return errors.Newf("unexpected deletion-mark file version %d, expected %d", version, DeletionMarkVersion1)
 		}
 	}
 	return nil

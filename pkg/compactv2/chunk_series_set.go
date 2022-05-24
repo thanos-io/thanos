@@ -6,7 +6,7 @@ package compactv2
 import (
 	"context"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -163,11 +163,11 @@ func (w *Compactor) write(ctx context.Context, symbols index.StringIter, populat
 
 	for symbols.Next() {
 		if err := sWriter.AddSymbol(symbols.At()); err != nil {
-			return errors.Wrap(err, "add symbol")
+			return errors.Wrapf(err, "add symbol")
 		}
 	}
 	if err := symbols.Err(); err != nil {
-		return errors.Wrap(err, "symbols")
+		return errors.Wrapf(err, "symbols")
 	}
 
 	// Iterate over all sorted chunk series.
@@ -188,7 +188,7 @@ func (w *Compactor) write(ctx context.Context, symbols index.StringIter, populat
 		}
 
 		if chksIter.Err() != nil {
-			return errors.Wrap(chksIter.Err(), "chunk iter")
+			return errors.Wrapf(chksIter.Err(), "chunk iter")
 		}
 
 		// Skip the series with all deleted chunks.
@@ -199,22 +199,22 @@ func (w *Compactor) write(ctx context.Context, symbols index.StringIter, populat
 		}
 
 		if err := sWriter.WriteChunks(chks...); err != nil {
-			return errors.Wrap(err, "write chunks")
+			return errors.Wrapf(err, "write chunks")
 		}
 		if err := sWriter.AddSeries(ref, s.Labels(), chks...); err != nil {
-			return errors.Wrap(err, "add series")
+			return errors.Wrapf(err, "add series")
 		}
 		for _, chk := range chks {
 			// ChunkPool is used by tsdb.OpenBlock BlockReader.
 			if err := w.chunkPool.Put(chk.Chunk); err != nil {
-				return errors.Wrap(err, "put chunk")
+				return errors.Wrapf(err, "put chunk")
 			}
 		}
 		ref++
 		p.SeriesProcessed()
 	}
 	if populatedSet.Err() != nil {
-		return errors.Wrap(populatedSet.Err(), "iterate populated chunk series set")
+		return errors.Wrapf(populatedSet.Err(), "iterate populated chunk series set")
 	}
 
 	return nil

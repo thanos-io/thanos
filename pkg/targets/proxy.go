@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -73,7 +73,7 @@ func (s *Proxy) Targets(req *targetspb.TargetsRequest, srv targetspb.Targets_Tar
 
 	for _, t := range targets {
 		if err := srv.Send(targetspb.NewTargetsResponse(t)); err != nil {
-			return status.Error(codes.Unknown, errors.Wrap(err, "send targets response").Error())
+			return status.Error(codes.Unknown, errors.Wrapf(err, "send targets response").Error())
 		}
 	}
 
@@ -124,7 +124,7 @@ func (stream *targetsStream) receive(ctx context.Context) error {
 		}
 
 		if w := target.GetWarning(); w != "" {
-			if err := stream.server.Send(targetspb.NewWarningTargetsResponse(errors.New(w))); err != nil {
+			if err := stream.server.Send(targetspb.NewWarningTargetsResponse(errors.Newf(w))); err != nil {
 				return errors.Wrapf(err, "sending targets warning to server %v", stream.server)
 			}
 			continue

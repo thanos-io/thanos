@@ -60,7 +60,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.2
 	github.com/opentracing/basictracer-go v1.0.0
 	github.com/opentracing/opentracing-go v1.2.0
-	github.com/pkg/errors v0.9.1
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/prometheus/alertmanager v0.23.1-0.20210914172521-e35efbddb66a
 	github.com/prometheus/client_golang v1.12.1

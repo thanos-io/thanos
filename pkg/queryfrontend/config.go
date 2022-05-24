@@ -14,7 +14,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/flagext"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"gopkg.in/yaml.v2"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
@@ -88,12 +88,12 @@ type CacheProviderConfig struct {
 func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Config, error) {
 	cacheConfig := &CacheProviderConfig{}
 	if err := yaml.UnmarshalStrict(confContentYaml, cacheConfig); err != nil {
-		return nil, errors.Wrap(err, "parsing config YAML file")
+		return nil, errors.Wrapf(err, "parsing config YAML file")
 	}
 
 	backendConfig, err := yaml.Marshal(cacheConfig.Config)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal content of cache backend configuration")
+		return nil, errors.Wrapf(err, "marshal content of cache backend configuration")
 	}
 
 	switch strings.ToUpper(string(cacheConfig.Type)) {
@@ -175,7 +175,7 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 			},
 		}, nil
 	default:
-		return nil, errors.Errorf("response cache with type %s is not supported", cacheConfig.Type)
+		return nil, errors.Newf("response cache with type %s is not supported", cacheConfig.Type)
 	}
 }
 
@@ -242,28 +242,28 @@ type LabelsConfig struct {
 func (cfg *Config) Validate() error {
 	if cfg.QueryRangeConfig.ResultsCacheConfig != nil {
 		if cfg.QueryRangeConfig.SplitQueriesByInterval <= 0 {
-			return errors.New("split queries interval should be greater than 0 when caching is enabled")
+			return errors.Newf("split queries interval should be greater than 0 when caching is enabled")
 		}
 		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(); err != nil {
-			return errors.Wrap(err, "invalid ResultsCache config for query_range tripperware")
+			return errors.Wrapf(err, "invalid ResultsCache config for query_range tripperware")
 		}
 	}
 
 	if cfg.LabelsConfig.ResultsCacheConfig != nil {
 		if cfg.LabelsConfig.SplitQueriesByInterval <= 0 {
-			return errors.New("split queries interval should be greater than 0  when caching is enabled")
+			return errors.Newf("split queries interval should be greater than 0  when caching is enabled")
 		}
 		if err := cfg.LabelsConfig.ResultsCacheConfig.Validate(); err != nil {
-			return errors.Wrap(err, "invalid ResultsCache config for labels tripperware")
+			return errors.Wrapf(err, "invalid ResultsCache config for labels tripperware")
 		}
 	}
 
 	if cfg.LabelsConfig.DefaultTimeRange == 0 {
-		return errors.New("labels.default-time-range cannot be set to 0")
+		return errors.Newf("labels.default-time-range cannot be set to 0")
 	}
 
 	if cfg.DownstreamURL == "" {
-		return errors.New("downstream URL should be configured")
+		return errors.Newf("downstream URL should be configured")
 	}
 
 	return nil

@@ -18,7 +18,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
@@ -124,7 +124,7 @@ func New(
 func (s *Shipper) Timestamps() (minTime, maxSyncTime int64, err error) {
 	meta, err := ReadMetaFile(s.dir)
 	if err != nil {
-		return 0, 0, errors.Wrap(err, "read shipper meta file")
+		return 0, 0, errors.Wrapf(err, "read shipper meta file")
 	}
 	// Build a map of blocks we already uploaded.
 	hasUploaded := make(map[ulid.ULID]struct{}, len(meta.Uploaded))
@@ -196,7 +196,7 @@ func (c *lazyOverlapChecker) sync(ctx context.Context) error {
 		return nil
 
 	}); err != nil {
-		return errors.Wrap(err, "get all block meta.")
+		return errors.Wrapf(err, "get all block meta.")
 	}
 
 	c.synced = true
@@ -218,7 +218,7 @@ func (c *lazyOverlapChecker) IsOverlapping(ctx context.Context, newMeta tsdb.Blo
 	})
 	if o := tsdb.OverlappingBlocks(metas); len(o) > 0 {
 		// TODO(bwplotka): Consider checking if overlaps relates to block in concern?
-		return errors.Errorf("shipping compacted block %s is blocked; overlap spotted: %s", newMeta.ULID, o.String())
+		return errors.Newf("shipping compacted block %s is blocked; overlap spotted: %s", newMeta.ULID, o.String())
 	}
 	return nil
 }
@@ -283,7 +283,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		// Check against bucket if the meta file for this block exists.
 		ok, err := s.bucket.Exists(ctx, path.Join(m.ULID.String(), block.MetaFilename))
 		if err != nil {
-			return 0, errors.Wrap(err, "check exists")
+			return 0, errors.Wrapf(err, "check exists")
 		}
 		if ok {
 			meta.Uploaded = append(meta.Uploaded, m.ULID)
@@ -293,7 +293,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		// Skip overlap check if out of order uploads is enabled.
 		if m.Compaction.Level > 1 && !s.allowOutOfOrderUploads {
 			if err := checker.IsOverlapping(ctx, m.BlockMeta); err != nil {
-				return 0, errors.Errorf("Found overlap or error during sync, cannot upload compacted block, details: %v", err)
+				return 0, errors.Newf("Found overlap or error during sync, cannot upload compacted block, details: %v", err)
 			}
 		}
 
@@ -319,7 +319,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	s.metrics.dirSyncs.Inc()
 	if uploadErrs > 0 {
 		s.metrics.uploadFailures.Add(float64(uploadErrs))
-		return uploaded, errors.Errorf("failed to sync %v blocks", uploadErrs)
+		return uploaded, errors.Newf("failed to sync %v blocks", uploadErrs)
 	}
 
 	if s.uploadCompacted {
@@ -339,10 +339,10 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 
 	// Remove updir just in case.
 	if err := os.RemoveAll(updir); err != nil {
-		return errors.Wrap(err, "clean upload directory")
+		return errors.Wrapf(err, "clean upload directory")
 	}
 	if err := os.MkdirAll(updir, 0750); err != nil {
-		return errors.Wrap(err, "create upload dir")
+		return errors.Wrapf(err, "create upload dir")
 	}
 	defer func() {
 		if err := os.RemoveAll(updir); err != nil {
@@ -352,7 +352,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 
 	dir := filepath.Join(s.dir, meta.ULID.String())
 	if err := hardlinkBlock(dir, updir); err != nil {
-		return errors.Wrap(err, "hard link block")
+		return errors.Wrapf(err, "hard link block")
 	}
 	// Attach current labels and write a new meta file with Thanos extensions.
 	if lset := s.labels(); lset != nil {
@@ -361,7 +361,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	meta.Thanos.Source = s.source
 	meta.Thanos.SegmentFiles = block.GetSegmentFiles(updir)
 	if err := meta.WriteToDir(s.logger, updir); err != nil {
-		return errors.Wrap(err, "write meta file")
+		return errors.Wrapf(err, "write meta file")
 	}
 	return block.Upload(ctx, s.logger, s.bucket, updir, s.hashFunc)
 }
@@ -371,7 +371,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, _ error) {
 	fis, err := ioutil.ReadDir(s.dir)
 	if err != nil {
-		return nil, errors.Wrap(err, "read dir")
+		return nil, errors.Wrapf(err, "read dir")
 	}
 	names := make([]string, 0, len(fis))
 	for _, fi := range fis {
@@ -406,12 +406,12 @@ func hardlinkBlock(src, dst string) error {
 	chunkDir := filepath.Join(dst, block.ChunksDirname)
 
 	if err := os.MkdirAll(chunkDir, 0750); err != nil {
-		return errors.Wrap(err, "create chunks dir")
+		return errors.Wrapf(err, "create chunks dir")
 	}
 
 	fis, err := ioutil.ReadDir(filepath.Join(src, block.ChunksDirname))
 	if err != nil {
-		return errors.Wrap(err, "read chunk dir")
+		return errors.Wrapf(err, "read chunk dir")
 	}
 	files := make([]string, 0, len(fis))
 	for _, fi := range fis {
@@ -481,7 +481,7 @@ func ReadMetaFile(dir string) (*Meta, error) {
 		return nil, errors.Wrapf(err, "failed to parse %s as JSON: %q", fpath, string(b))
 	}
 	if m.Version != MetaVersion1 {
-		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
+		return nil, errors.Newf("unexpected meta file version %d", m.Version)
 	}
 
 	return &m, nil

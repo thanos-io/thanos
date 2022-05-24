@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"go.uber.org/atomic"
 
@@ -147,7 +147,7 @@ type unreliableBucket struct {
 
 func (b unreliableBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
 	if b.current.Inc()%b.n == 0 {
-		return nil, errors.Errorf("some error message")
+		return nil, errors.Newf("some error message")
 	}
 	return b.Bucket.Get(ctx, name)
 }

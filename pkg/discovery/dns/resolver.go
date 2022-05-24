@@ -12,7 +12,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 type QType string
@@ -72,7 +72,7 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 	switch qtype {
 	case A:
 		if port == "" {
-			return nil, errors.Errorf("missing port in address given for dns lookup: %v", name)
+			return nil, errors.Newf("missing port in address given for dns lookup: %v", name)
 		}
 		ips, err := s.resolver.LookupIPAddr(ctx, host)
 		if err != nil {
@@ -126,7 +126,7 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 			}
 		}
 	default:
-		return nil, errors.Errorf("invalid lookup scheme %q", qtype)
+		return nil, errors.Newf("invalid lookup scheme %q", qtype)
 	}
 
 	if res == nil && err == nil {

@@ -10,7 +10,7 @@ import (
 	"text/template"
 	"text/template/parse"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
@@ -58,7 +58,7 @@ func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*ru
 	resp := &rulesServer{ctx: ctx}
 
 	if err := rr.proxy.Rules(req, resp); err != nil {
-		return nil, nil, errors.Wrap(err, "proxy Rules")
+		return nil, nil, errors.Wrapf(err, "proxy Rules")
 	}
 
 	var err error
@@ -66,7 +66,7 @@ func (rr *GRPCClient) Rules(ctx context.Context, req *rulespb.RulesRequest) (*ru
 	for i, s := range req.MatcherString {
 		matcherSets[i], err = parser.ParseMetricSelector(s)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "parser ParseMetricSelector")
+			return nil, nil, errors.Wrapf(err, "parser ParseMetricSelector")
 		}
 	}
 
@@ -221,12 +221,12 @@ func (srv *rulesServer) Send(res *rulespb.RulesResponse) error {
 	if res.GetWarning() != "" {
 		srv.mu.Lock()
 		defer srv.mu.Unlock()
-		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
+		srv.warnings = append(srv.warnings, errors.Newf(res.GetWarning()))
 		return nil
 	}
 
 	if res.GetGroup() == nil {
-		return errors.New("no group")
+		return errors.Newf("no group")
 	}
 
 	srv.mu.Lock()

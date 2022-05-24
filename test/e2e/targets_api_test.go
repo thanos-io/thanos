@@ -14,7 +14,7 @@ import (
 
 	"github.com/efficientgo/e2e"
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -107,11 +107,11 @@ func targetAndAssert(t *testing.T, ctx context.Context, addr, state string, want
 		}
 
 		if len(res.ActiveTargets) != len(want.ActiveTargets) {
-			return errors.Errorf("unexpected result.ActiveTargets size, want %d; got: %d result: %v", len(want.ActiveTargets), len(res.ActiveTargets), res)
+			return errors.Newf("unexpected result.ActiveTargets size, want %d; got: %d result: %v", len(want.ActiveTargets), len(res.ActiveTargets), res)
 		}
 
 		if len(res.DroppedTargets) != len(want.DroppedTargets) {
-			return errors.Errorf("unexpected result.DroppedTargets size, want %d; got: %d result: %v", len(want.DroppedTargets), len(res.DroppedTargets), res)
+			return errors.Newf("unexpected result.DroppedTargets size, want %d; got: %d result: %v", len(want.DroppedTargets), len(res.DroppedTargets), res)
 		}
 
 		for it := range res.ActiveTargets {
@@ -124,7 +124,7 @@ func targetAndAssert(t *testing.T, ctx context.Context, addr, state string, want
 		sort.Slice(res.DroppedTargets, func(i, j int) bool { return res.DroppedTargets[i].Compare(res.DroppedTargets[j]) < 0 })
 
 		if !reflect.DeepEqual(want, res) {
-			return errors.Errorf("unexpected result\nwant %v\ngot: %v", want, res)
+			return errors.Newf("unexpected result\nwant %v\ngot: %v", want, res)
 		}
 
 		return nil

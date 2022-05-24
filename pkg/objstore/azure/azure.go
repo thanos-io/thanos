@@ -16,7 +16,7 @@ import (
 	blob "github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"gopkg.in/yaml.v2"
 
@@ -146,7 +146,7 @@ func (conf *Config) validate() error {
 	}
 
 	if len(errMsg) > 0 {
-		return errors.New(strings.Join(errMsg, ", "))
+		return errors.Newf(strings.Join(errMsg, ", "))
 	}
 
 	return nil
@@ -301,7 +301,7 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length int64) (io.ReadCloser, error) {
 	level.Debug(b.logger).Log("msg", "getting blob", "blob", name, "offset", offset, "length", length)
 	if name == "" {
-		return nil, errors.New("X-Ms-Error-Code: [EmptyContainerName]")
+		return nil, errors.Newf("X-Ms-Error-Code: [EmptyContainerName]")
 	}
 	exists, err := b.Exists(ctx, name)
 	if err != nil {
@@ -309,7 +309,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 	}
 
 	if !exists {
-		return nil, errors.New("X-Ms-Error-Code: [BlobNotFound]")
+		return nil, errors.Newf("X-Ms-Error-Code: [BlobNotFound]")
 	}
 
 	blobURL := getBlobURL(name, b.containerURL)

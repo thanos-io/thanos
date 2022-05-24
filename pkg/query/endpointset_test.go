@@ -15,7 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -1091,7 +1091,7 @@ func TestUpdateEndpointStateLastError(t *testing.T) {
 		InputError      error
 		ExpectedLastErr string
 	}{
-		{errors.New("normal_err"), `"normal_err"`},
+		{errors.Newf("normal_err"), `"normal_err"`},
 		{nil, `null`},
 		{&errThatMarshalsToEmptyDict{"the error message"}, `"the error message"`},
 	}
@@ -1126,7 +1126,7 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 		},
 	}
 
-	mockEndpointSet.updateEndpointStatus(mockEndpointRef, errors.New("test err"))
+	mockEndpointSet.updateEndpointStatus(mockEndpointRef, errors.Newf("test err"))
 
 	b, err := json.Marshal(mockEndpointSet.endpointStatuses["mockedStore"].LastError)
 	testutil.Ok(t, err)

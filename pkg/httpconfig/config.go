@@ -10,7 +10,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // Config is a structure that allows pointing to various HTTP endpoint, e.g ruler connecting to queriers.
@@ -50,7 +50,7 @@ func BuildConfig(addrs []string) ([]Config, error) {
 	configs := make([]Config, 0, len(addrs))
 	for i, addr := range addrs {
 		if addr == "" {
-			return nil, errors.Errorf("static address cannot be empty at index %d", i)
+			return nil, errors.Newf("static address cannot be empty at index %d", i)
 		}
 		// If addr is missing schema, add http.
 		if !strings.Contains(addr, "://") {
@@ -61,7 +61,7 @@ func BuildConfig(addrs []string) ([]Config, error) {
 			return nil, errors.Wrapf(err, "failed to parse addr %q", addr)
 		}
 		if u.Scheme != "http" && u.Scheme != "https" {
-			return nil, errors.Errorf("%q is not supported scheme for address", u.Scheme)
+			return nil, errors.Newf("%q is not supported scheme for address", u.Scheme)
 		}
 		configs = append(configs, Config{
 			EndpointsConfig: EndpointsConfig{

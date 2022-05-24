@@ -22,13 +22,13 @@ import (
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/efficientgo/tools/core/pkg/backoff"
-	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/relabel"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -97,16 +97,16 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 	f := e2e.NewInstrumentedRunnable(e, name).WithPorts(map[string]int{"http": 9090}, "http").Future()
 
 	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create prometheus dir"))
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "create prometheus dir"))
 	}
 
 	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "prometheus.yml"), []byte(promConfig), 0600); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating prom config"))
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "creating prom config"))
 	}
 
 	if len(webConfig) > 0 {
 		if err := ioutil.WriteFile(filepath.Join(f.Dir(), "web-config.yml"), []byte(webConfig), 0600); err != nil {
-			return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating web-config"))
+			return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "creating web-config"))
 		}
 	}
 
@@ -320,7 +320,7 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 
 	if len(q.fileSDStoreAddresses) > 0 {
 		if err := os.MkdirAll(q.Dir(), 0750); err != nil {
-			return nil, errors.Wrap(err, "create query dir failed")
+			return nil, errors.Wrapf(err, "create query dir failed")
 		}
 
 		fileSD := []*targetgroup.Group{{}}
@@ -334,7 +334,7 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 		}
 
 		if err := ioutil.WriteFile(q.Dir()+"/filesd.yaml", b, 0600); err != nil {
-			return nil, errors.Wrap(err, "creating query SD config failed")
+			return nil, errors.Wrapf(err, "creating query SD config failed")
 		}
 
 		args = append(args, "--store.sd-files="+filepath.Join(q.InternalDir(), "filesd.yaml"))
@@ -409,7 +409,7 @@ func (r *ReceiveBuilder) WithRouting(replication int, hashringConfigs ...receive
 // If none, it errors out.
 func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
 	if !r.ingestion && len(r.hashringConfigs) == 0 {
-		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.New("enable ingestion or configure routing for this receiver"))
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Newf("enable ingestion or configure routing for this receiver"))
 	}
 
 	args := map[string]string{
@@ -430,7 +430,7 @@ func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
 	}
 
 	if err := os.MkdirAll(filepath.Join(r.Dir(), "data"), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "create receive dir"))
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "create receive dir"))
 	}
 
 	if len(hashring) > 0 {
@@ -440,7 +440,7 @@ func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
 		}
 
 		if err := ioutil.WriteFile(filepath.Join(r.Dir(), "hashrings.json"), b, 0600); err != nil {
-			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "creating receive config"))
+			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "creating receive config"))
 		}
 
 		args["--receive.hashrings-file"] = filepath.Join(r.InternalDir(), "hashrings.json")
@@ -503,7 +503,7 @@ func (r *RulerBuilder) InitStateless(internalRuleDir string, queryCfg []httpconf
 
 func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) e2e.InstrumentedRunnable {
 	if err := os.MkdirAll(r.f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "create rule dir"))
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "create rule dir"))
 	}
 
 	amCfgBytes, err := yaml.Marshal(alert.AlertingConfig{
@@ -559,7 +559,7 @@ func NewAlertmanager(e e2e.Environment, name string) e2e.InstrumentedRunnable {
 		Future()
 
 	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create am dir"))
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "create am dir"))
 	}
 	const config = `
 route:
@@ -571,7 +571,7 @@ receivers:
 - name: 'null'
 `
 	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "config.yaml"), []byte(config), 0600); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating alertmanager config file failed"))
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "creating alertmanager config file failed"))
 	}
 
 	return f.Init(wrapWithDefaults(e2e.StartOptions{
@@ -596,7 +596,7 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		Future()
 
 	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create store dir"))
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "create store dir"))
 	}
 
 	bktConfigBytes, err := yaml.Marshal(bucketConfig)
@@ -653,7 +653,7 @@ func NewCompactorBuilder(e e2e.Environment, name string) *CompactorBuilder {
 
 func (c *CompactorBuilder) Init(bucketConfig client.BucketConfig, relabelConfig []relabel.Config, extArgs ...string) e2e.InstrumentedRunnable {
 	if err := os.MkdirAll(c.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(c.Name(), errors.Wrap(err, "create compact dir"))
+		return e2e.NewErrInstrumentedRunnable(c.Name(), errors.Wrapf(err, "create compact dir"))
 	}
 
 	bktConfigBytes, err := yaml.Marshal(bucketConfig)
@@ -734,11 +734,11 @@ http {
 		Future()
 
 	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create store dir"))
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "create store dir"))
 	}
 
 	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "nginx.conf"), []byte(conf), 0600); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating nginx config file failed"))
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "creating nginx config file failed"))
 	}
 
 	return f.Init(
@@ -762,7 +762,7 @@ func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable 
 		Future()
 
 	if err := os.MkdirAll(filepath.Join(f.Dir(), "certs", "CAs"), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create certs dir"))
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "create certs dir"))
 	}
 
 	if err := genCerts(
@@ -771,7 +771,7 @@ func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable 
 		filepath.Join(f.Dir(), "certs", "CAs", "ca.crt"),
 		fmt.Sprintf("%s-minio-%s", e.Name(), name),
 	); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "fail to generate certs"))
+		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "fail to generate certs"))
 	}
 
 	commands := []string{

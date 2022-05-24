@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -191,7 +191,7 @@ func parse(input string) (cmds []interface{}, err error) {
 func raise(line int, format string, v ...interface{}) error {
 	return &parser.ParseErr{
 		LineOffset: line,
-		Err:        errors.Errorf(format, v...),
+		Err:        errors.Newf(format, v...),
 	}
 }
 
@@ -234,7 +234,7 @@ func (t *test) exec(tc interface{}, createQueryableFn func([]*testStore) storage
 		}
 
 	default:
-		return errors.Errorf("pkg/query.Test.exec: unknown test command type %v", cmd)
+		return errors.Newf("pkg/query.Test.exec: unknown test command type %v", cmd)
 	}
 	return nil
 }
@@ -386,7 +386,7 @@ func parseNumber(s string) (float64, error) {
 		f, err = strconv.ParseFloat(s, 64)
 	}
 	if err != nil {
-		return 0, errors.Wrap(err, "error parsing number")
+		return 0, errors.Wrapf(err, "error parsing number")
 	}
 	return f, nil
 }
@@ -519,21 +519,21 @@ func almostEqual(a, b float64) bool {
 func (ev *evalCmd) compareResult(result parser.Value) error {
 	switch val := result.(type) {
 	case promql.Matrix:
-		return errors.New("received range result on instant evaluation")
+		return errors.Newf("received range result on instant evaluation")
 
 	case promql.Vector:
 		seen := map[uint64]bool{}
 		for pos, v := range val {
 			fp := v.Metric.Hash()
 			if _, ok := ev.metrics[fp]; !ok {
-				return errors.Errorf("unexpected metric %s in result", v.Metric)
+				return errors.Newf("unexpected metric %s in result", v.Metric)
 			}
 			exp := ev.expected[fp]
 			if ev.ordered && exp.pos != pos+1 {
-				return errors.Errorf("expected metric %s with %v at position %d but was at %d", v.Metric, exp.vals, exp.pos, pos+1)
+				return errors.Newf("expected metric %s with %v at position %d but was at %d", v.Metric, exp.vals, exp.pos, pos+1)
 			}
 			if !almostEqual(exp.vals[0].Value, v.V) {
-				return errors.Errorf("expected %v for %s but got %v", exp.vals[0].Value, v.Metric, v.V)
+				return errors.Newf("expected %v for %s but got %v", exp.vals[0].Value, v.Metric, v.V)
 			}
 
 			seen[fp] = true
@@ -544,17 +544,17 @@ func (ev *evalCmd) compareResult(result parser.Value) error {
 				for _, ss := range val {
 					details += fmt.Sprintln("    ", ss.Metric, ss.Point)
 				}
-				return errors.Errorf("expected metric %s with %v not found; details: %v", ev.metrics[fp], expVals, details)
+				return errors.Newf("expected metric %s with %v not found; details: %v", ev.metrics[fp], expVals, details)
 			}
 		}
 
 	case promql.Scalar:
 		if !almostEqual(ev.expected[0].vals[0].Value, val.V) {
-			return errors.Errorf("expected Scalar %v but got %v", val.V, ev.expected[0].vals[0].Value)
+			return errors.Newf("expected Scalar %v but got %v", val.V, ev.expected[0].vals[0].Value)
 		}
 
 	default:
-		panic(errors.Errorf("promql.Test.compareResult: unexpected result type %T", result))
+		panic(errors.Newf("promql.Test.compareResult: unexpected result type %T", result))
 	}
 	return nil
 }
@@ -574,7 +574,7 @@ func (ev *evalCmd) Eval(ctx context.Context, queryEngine *promql.Engine, queryab
 		return errors.Wrapf(res.Err, "error evaluating query %q (line %d)", ev.expr, ev.line)
 	}
 	if res.Err == nil && ev.fail {
-		return errors.Errorf("expected error evaluating query %q (line %d) but got none", ev.expr, ev.line)
+		return errors.Newf("expected error evaluating query %q (line %d) but got none", ev.expr, ev.line)
 	}
 
 	err = ev.compareResult(res.Value)

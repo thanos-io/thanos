@@ -24,7 +24,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
@@ -213,7 +213,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		case labels.MatchNotRegexp:
 			pm.Type = prompb.LabelMatcher_NRE
 		default:
-			return errors.New("unrecognized matcher type")
+			return errors.Newf("unrecognized matcher type")
 		}
 		q.Matchers = append(q.Matchers, pm)
 	}
@@ -224,7 +224,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	httpResp, err := p.startPromRemoteRead(ctx, q)
 	if err != nil {
 		queryPrometheusSpan.Finish()
-		return errors.Wrap(err, "query Prometheus")
+		return errors.Wrapf(err, "query Prometheus")
 	}
 
 	// Negotiate content. We requested streamed chunked response type, but still we need to support old versions of
@@ -235,7 +235,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	}
 
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
-		return errors.Errorf("not supported remote read content type: %s", contentType)
+		return errors.Newf("not supported remote read content type: %s", contentType)
 	}
 	return p.handleStreamedPrometheusResponse(s, httpResp, queryPrometheusSpan, extLset)
 }
@@ -378,7 +378,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 			break
 		}
 		if err != nil {
-			return errors.Wrap(err, "next proto")
+			return errors.Wrapf(err, "next proto")
 		}
 
 		if len(res.ChunkedSeries) != 1 {
@@ -453,7 +453,7 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 	buf := bytes.NewBuffer(*b)
 	defer p.putBuffer(b)
 	if _, err := io.Copy(buf, resp.Body); err != nil {
-		return nil, errors.Wrap(err, "copy response")
+		return nil, errors.Wrapf(err, "copy response")
 	}
 
 	sb := p.getBuffer()
@@ -463,7 +463,7 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 	})
 	defer p.putBuffer(sb)
 	if err != nil {
-		return nil, errors.Wrap(err, "decompress response")
+		return nil, errors.Wrapf(err, "decompress response")
 	}
 
 	var data prompb.ReadResponse
@@ -471,10 +471,10 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 		err = proto.Unmarshal(decomp, &data)
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "unmarshal response")
+		return nil, errors.Wrapf(err, "unmarshal response")
 	}
 	if len(data.Results) != 1 {
-		return nil, errors.Errorf("unexpected result size %d", len(data.Results))
+		return nil, errors.Newf("unexpected result size %d", len(data.Results))
 	}
 
 	return &data, nil
@@ -512,7 +512,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 		AcceptedResponseTypes: p.remoteReadAcceptableResponses,
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal read request")
+		return nil, errors.Wrapf(err, "marshal read request")
 	}
 
 	u := *p.base
@@ -520,7 +520,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 
 	preq, err := http.NewRequest("POST", u.String(), bytes.NewReader(snappy.Encode(nil, reqb)))
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to create request")
+		return nil, errors.Wrapf(err, "unable to create request")
 	}
 	preq.Header.Add("Content-Encoding", "snappy")
 	preq.Header.Set("Content-Type", "application/x-stream-protobuf")
@@ -529,7 +529,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 	preq.Header.Set("User-Agent", httpconfig.ThanosUserAgent)
 	presp, err = p.client.Do(preq.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "send request")
+		return nil, errors.Wrapf(err, "send request")
 	}
 	if presp.StatusCode/100 != 2 {
 		// Best effort read.
@@ -538,7 +538,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 			level.Error(p.logger).Log("msg", "failed to read response from non 2XX remote read request", "err", err)
 		}
 		_ = presp.Body.Close()
-		return nil, errors.Errorf("request failed with code %s; msg %s", presp.Status, string(b))
+		return nil, errors.Newf("request failed with code %s; msg %s", presp.Status, string(b))
 	}
 
 	return presp, nil

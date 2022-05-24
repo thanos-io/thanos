@@ -15,7 +15,7 @@ import (
 
 	"github.com/efficientgo/e2e"
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/rules"
 
 	"github.com/thanos-io/thanos/pkg/httpconfig"
@@ -178,7 +178,7 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 		}
 
 		if len(res) != len(want) {
-			return errors.Errorf("unexpected result size, want %d; got: %d result: %v", len(want), len(res), res)
+			return errors.Newf("unexpected result size, want %d; got: %d result: %v", len(want), len(res), res)
 		}
 
 		for ig, g := range res {
@@ -210,7 +210,7 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 		}
 
 		if !reflect.DeepEqual(want, res) {
-			return errors.Errorf("unexpected result\nwant %v\ngot: %v", want, res)
+			return errors.Newf("unexpected result\nwant %v\ngot: %v", want, res)
 		}
 
 		return nil

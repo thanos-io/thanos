@@ -14,7 +14,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/version"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
@@ -55,7 +55,7 @@ func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component st
 // NewBucketWithConfig returns a new Bucket with gcs Config struct.
 func NewBucketWithConfig(ctx context.Context, logger log.Logger, gc Config, component string) (*Bucket, error) {
 	if gc.Bucket == "" {
-		return nil, errors.New("missing Google Cloud Storage bucket name for stored blocks")
+		return nil, errors.Newf("missing Google Cloud Storage bucket name for stored blocks")
 	}
 
 	var opts []option.ClientOption
@@ -64,7 +64,7 @@ func NewBucketWithConfig(ctx context.Context, logger log.Logger, gc Config, comp
 	if gc.ServiceAccount != "" {
 		credentials, err := google.CredentialsFromJSON(ctx, []byte(gc.ServiceAccount), storage.ScopeFullControl)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create credentials from JSON")
+			return nil, errors.Wrapf(err, "failed to create credentials from JSON")
 		}
 		opts = append(opts, option.WithCredentials(credentials))
 	}

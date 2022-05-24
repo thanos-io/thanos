@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
-var errNotFound = errors.New("inmem: object not found")
+var errNotFound = errors.Newf("inmem: object not found")
 
 // InMemBucket implements the objstore.Bucket interfaces against local memory.
 // Methods from Bucket interface are thread-safe. Objects are assumed to be immutable.
@@ -102,7 +102,7 @@ func (b *InMemBucket) Iter(_ context.Context, dir string, f func(string) error, 
 // Get returns a reader for the given object name.
 func (b *InMemBucket) Get(_ context.Context, name string) (io.ReadCloser, error) {
 	if name == "" {
-		return nil, errors.New("inmem: object name is empty")
+		return nil, errors.Newf("inmem: object name is empty")
 	}
 
 	b.mtx.RLock()
@@ -118,7 +118,7 @@ func (b *InMemBucket) Get(_ context.Context, name string) (io.ReadCloser, error)
 // GetRange returns a new range reader for the given object name and range.
 func (b *InMemBucket) GetRange(_ context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	if name == "" {
-		return nil, errors.New("inmem: object name is empty")
+		return nil, errors.Newf("inmem: object name is empty")
 	}
 
 	b.mtx.RLock()
@@ -137,7 +137,7 @@ func (b *InMemBucket) GetRange(_ context.Context, name string, off, length int64
 	}
 
 	if length <= 0 {
-		return ioutil.NopCloser(bytes.NewReader(nil)), errors.New("length cannot be smaller or equal 0")
+		return ioutil.NopCloser(bytes.NewReader(nil)), errors.Newf("length cannot be smaller or equal 0")
 	}
 
 	if int64(len(file)) <= off+length {

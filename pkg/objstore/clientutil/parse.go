@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // ParseContentLength returns the content length (in bytes) parsed from the Content-Length
@@ -18,11 +18,11 @@ func ParseContentLength(m http.Header) (int64, error) {
 
 	v, ok := m[name]
 	if !ok {
-		return 0, errors.Errorf("%s header not found", name)
+		return 0, errors.Newf("%s header not found", name)
 	}
 
 	if len(v) == 0 {
-		return 0, errors.Errorf("%s header has no values", name)
+		return 0, errors.Newf("%s header has no values", name)
 	}
 
 	ret, err := strconv.ParseInt(v[0], 10, 64)
@@ -45,11 +45,11 @@ func ParseLastModified(m http.Header, f string) (time.Time, error) {
 
 	v, ok := m[name]
 	if !ok {
-		return time.Time{}, errors.Errorf("%s header not found", name)
+		return time.Time{}, errors.Newf("%s header not found", name)
 	}
 
 	if len(v) == 0 {
-		return time.Time{}, errors.Errorf("%s header has no values", name)
+		return time.Time{}, errors.Newf("%s header has no values", name)
 	}
 
 	if f == "" {

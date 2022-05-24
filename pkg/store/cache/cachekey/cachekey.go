@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 var (
-	ErrInvalidBucketCacheKeyFormat = errors.New("key has invalid format")
-	ErrInvalidBucketCacheKeyVerb   = errors.New("key has invalid verb")
-	ErrParseKeyInt                 = errors.New("failed to parse integer in key")
+	ErrInvalidBucketCacheKeyFormat = errors.Newf("key has invalid format")
+	ErrInvalidBucketCacheKeyVerb   = errors.Newf("key has invalid verb")
+	ErrParseKeyInt                 = errors.Newf("failed to parse integer in key")
 )
 
 // VerbType is the type of operation whose result has been stored in the caching bucket's cache.

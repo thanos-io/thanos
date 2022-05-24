@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -349,7 +349,7 @@ func TestMergeSeriesSetError(t *testing.T) {
 	}}} {
 		input = append(input, newListSeriesSet(t, iss))
 	}
-	expectedErr := errors.New("test error")
+	expectedErr := errors.Newf("test error")
 	ss := MergeSeriesSets(append(input, errSeriesSet{err: expectedErr})...)
 	testutil.Equals(t, expectedErr, ss.Err())
 }

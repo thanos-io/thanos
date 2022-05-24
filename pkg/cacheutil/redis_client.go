@@ -13,7 +13,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/go-redis/redis/v8"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gopkg.in/yaml.v3"
@@ -98,7 +98,7 @@ type RedisClientConfig struct {
 
 func (c *RedisClientConfig) validate() error {
 	if c.Addr == "" {
-		return errors.New("no redis addr provided")
+		return errors.Newf("no redis addr provided")
 	}
 	return nil
 }

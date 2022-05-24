@@ -17,7 +17,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -97,7 +97,7 @@ type HealthStats struct {
 // #5372 and affects Prometheus versions 2.8.0 and below.
 func (i HealthStats) PrometheusIssue5372Err() error {
 	if i.OutOfOrderLabels > 0 {
-		return errors.Errorf("index contains %d postings with out of order labels",
+		return errors.Newf("index contains %d postings with out of order labels",
 			i.OutOfOrderLabels)
 	}
 	return nil
@@ -106,14 +106,14 @@ func (i HealthStats) PrometheusIssue5372Err() error {
 // Issue347OutsideChunksErr returns error if stats indicates issue347 block issue, that is repaired explicitly before compaction (on plan block).
 func (i HealthStats) Issue347OutsideChunksErr() error {
 	if i.Issue347OutsideChunks > 0 {
-		return errors.Errorf("found %d chunks outside the block time range introduced by https://github.com/prometheus/tsdb/issues/347", i.Issue347OutsideChunks)
+		return errors.Newf("found %d chunks outside the block time range introduced by https://github.com/prometheus/tsdb/issues/347", i.Issue347OutsideChunks)
 	}
 	return nil
 }
 
 func (i HealthStats) OutOfOrderChunksErr() error {
 	if i.OutOfOrderChunks > 0 {
-		return errors.New(fmt.Sprintf(
+		return errors.Newf(fmt.Sprintf(
 			"%d/%d series have an average of %.3f out-of-order chunks: "+
 				"%.3f of these are exact duplicates (in terms of data and time range)",
 			i.OutOfOrderSeries,
@@ -139,7 +139,7 @@ func (i HealthStats) CriticalErr() error {
 	}
 
 	if len(errMsg) > 0 {
-		return errors.New(strings.Join(errMsg, ", "))
+		return errors.Newf(strings.Join(errMsg, ", "))
 	}
 
 	return nil
@@ -166,7 +166,7 @@ func (i HealthStats) AnyErr() error {
 	}
 
 	if len(errMsg) > 0 {
-		return errors.New(strings.Join(errMsg, ", "))
+		return errors.Newf(strings.Join(errMsg, ", "))
 	}
 
 	return nil
@@ -212,13 +212,13 @@ func (n *minMaxSumInt64) Avg() int64 {
 func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64) (stats HealthStats, err error) {
 	r, err := index.NewFileReader(fn)
 	if err != nil {
-		return stats, errors.Wrap(err, "open index file")
+		return stats, errors.Wrapf(err, "open index file")
 	}
 	defer runutil.CloseWithErrCapture(&err, r, "gather index issue file reader")
 
 	p, err := r.Postings(index.AllPostingsKey())
 	if err != nil {
-		return stats, errors.Wrap(err, "get all postings")
+		return stats, errors.Wrapf(err, "get all postings")
 	}
 	var (
 		lastLset labels.Labels
@@ -234,13 +234,13 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 
 	lnames, err := r.LabelNames()
 	if err != nil {
-		return stats, errors.Wrap(err, "label names")
+		return stats, errors.Wrapf(err, "label names")
 	}
 	stats.LabelNamesCount = int64(len(lnames))
 
 	lvals, err := r.LabelValues("__name__")
 	if err != nil {
-		return stats, errors.Wrap(err, "metric label values")
+		return stats, errors.Wrapf(err, "metric label values")
 	}
 	stats.MetricLabelValuesCount = int64(len(lvals))
 
@@ -252,13 +252,13 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		stats.TotalSeries++
 
 		if err := r.Series(id, &lset, &chks); err != nil {
-			return stats, errors.Wrap(err, "read series")
+			return stats, errors.Wrapf(err, "read series")
 		}
 		if len(lset) == 0 {
-			return stats, errors.Errorf("empty label set detected for series %d", id)
+			return stats, errors.Newf("empty label set detected for series %d", id)
 		}
 		if lastLset != nil && labels.Compare(lastLset, lset) >= 0 {
-			return stats, errors.Errorf("series %v out of order; previous %v", lset, lastLset)
+			return stats, errors.Newf("series %v out of order; previous %v", lset, lastLset)
 		}
 		l0 := lset[0]
 		for _, l := range lset[1:] {
@@ -273,7 +273,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 			l0 = l
 		}
 		if len(chks) == 0 {
-			return stats, errors.Errorf("empty chunks for series %d", id)
+			return stats, errors.Newf("empty chunks for series %d", id)
 		}
 
 		ooo := 0
@@ -341,7 +341,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		}
 	}
 	if p.Err() != nil {
-		return stats, errors.Wrap(err, "walk postings")
+		return stats, errors.Wrapf(err, "walk postings")
 	}
 
 	stats.SeriesMaxLifeDuration = time.Duration(seriesLifeDuration.max) * time.Millisecond
@@ -377,7 +377,7 @@ type ignoreFnType func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (
 // TODO(bplotka): https://github.com/thanos-io/thanos/issues/378.
 func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceType, ignoreChkFns ...ignoreFnType) (resid ulid.ULID, err error) {
 	if len(ignoreChkFns) == 0 {
-		return resid, errors.New("no ignore chunk function specified")
+		return resid, errors.Newf("no ignore chunk function specified")
 	}
 
 	bdir := filepath.Join(dir, id.String())
@@ -386,27 +386,27 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 
 	meta, err := metadata.ReadFromDir(bdir)
 	if err != nil {
-		return resid, errors.Wrap(err, "read meta file")
+		return resid, errors.Wrapf(err, "read meta file")
 	}
 	if meta.Thanos.Downsample.Resolution > 0 {
-		return resid, errors.New("cannot repair downsampled block")
+		return resid, errors.Newf("cannot repair downsampled block")
 	}
 
 	b, err := tsdb.OpenBlock(logger, bdir, nil)
 	if err != nil {
-		return resid, errors.Wrap(err, "open block")
+		return resid, errors.Wrapf(err, "open block")
 	}
 	defer runutil.CloseWithErrCapture(&err, b, "repair block reader")
 
 	indexr, err := b.Index()
 	if err != nil {
-		return resid, errors.Wrap(err, "open index")
+		return resid, errors.Wrapf(err, "open index")
 	}
 	defer runutil.CloseWithErrCapture(&err, indexr, "repair index reader")
 
 	chunkr, err := b.Chunks()
 	if err != nil {
-		return resid, errors.Wrap(err, "open chunks")
+		return resid, errors.Wrapf(err, "open chunks")
 	}
 	defer runutil.CloseWithErrCapture(&err, chunkr, "repair chunk reader")
 
@@ -414,13 +414,13 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 
 	chunkw, err := chunks.NewWriter(filepath.Join(resdir, ChunksDirname))
 	if err != nil {
-		return resid, errors.Wrap(err, "open chunk writer")
+		return resid, errors.Wrapf(err, "open chunk writer")
 	}
 	defer runutil.CloseWithErrCapture(&err, chunkw, "repair chunk writer")
 
 	indexw, err := index.NewWriter(context.TODO(), filepath.Join(resdir, IndexFilename))
 	if err != nil {
-		return resid, errors.Wrap(err, "open index writer")
+		return resid, errors.Wrapf(err, "open index writer")
 	}
 	defer runutil.CloseWithErrCapture(&err, indexw, "repair index writer")
 
@@ -432,7 +432,7 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	resmeta.Thanos.Source = source    // Update source.
 
 	if err := rewrite(logger, indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
-		return resid, errors.Wrap(err, "rewrite block")
+		return resid, errors.Wrapf(err, "rewrite block")
 	}
 	resmeta.Thanos.SegmentFiles = GetSegmentFiles(resdir)
 	if err := resmeta.WriteToDir(logger, resdir); err != nil {
@@ -476,14 +476,14 @@ func IgnoreDuplicateOutsideChunk(_, _ int64, last, curr *chunks.Meta) (bool, err
 	// Verify that the overlapping chunks are exact copies so we can safely discard
 	// the current one.
 	if curr.MinTime != last.MinTime || curr.MaxTime != last.MaxTime {
-		return false, errors.Errorf("non-sequential chunks not equal: [%d, %d] and [%d, %d]",
+		return false, errors.Newf("non-sequential chunks not equal: [%d, %d] and [%d, %d]",
 			last.MinTime, last.MaxTime, curr.MinTime, curr.MaxTime)
 	}
 	ca := crc32.Checksum(last.Chunk.Bytes(), castagnoli)
 	cb := crc32.Checksum(curr.Chunk.Bytes(), castagnoli)
 
 	if ca != cb {
-		return false, errors.Errorf("non-sequential chunks not equal: %x and %x", ca, cb)
+		return false, errors.Newf("non-sequential chunks not equal: %x and %x", ca, cb)
 	}
 
 	return true, nil
@@ -514,7 +514,7 @@ OUTER:
 		for _, ignoreChkFn := range ignoreChkFns {
 			ignore, err := ignoreChkFn(mint, maxt, last, &chks[i])
 			if err != nil {
-				return nil, errors.Wrap(err, "ignore function")
+				return nil, errors.Wrapf(err, "ignore function")
 			}
 
 			if ignore {
@@ -546,16 +546,16 @@ func rewrite(
 	symbols := indexr.Symbols()
 	for symbols.Next() {
 		if err := indexw.AddSymbol(symbols.At()); err != nil {
-			return errors.Wrap(err, "add symbol")
+			return errors.Wrapf(err, "add symbol")
 		}
 	}
 	if symbols.Err() != nil {
-		return errors.Wrap(symbols.Err(), "next symbol")
+		return errors.Wrapf(symbols.Err(), "next symbol")
 	}
 
 	all, err := indexr.Postings(index.AllPostingsKey())
 	if err != nil {
-		return errors.Wrap(err, "postings")
+		return errors.Wrapf(err, "postings")
 	}
 	all = indexr.SortedPostings(all)
 
@@ -573,7 +573,7 @@ func rewrite(
 		id := all.At()
 
 		if err := indexr.Series(id, &lset, &chks); err != nil {
-			return errors.Wrap(err, "series")
+			return errors.Wrapf(err, "series")
 		}
 		// Make sure labels are in sorted order.
 		sort.Sort(lset)
@@ -581,7 +581,7 @@ func rewrite(
 		for i, c := range chks {
 			chks[i].Chunk, err = chunkr.Chunk(c.Ref)
 			if err != nil {
-				return errors.Wrap(err, "chunk read")
+				return errors.Wrapf(err, "chunk read")
 			}
 		}
 
@@ -601,7 +601,7 @@ func rewrite(
 	}
 
 	if all.Err() != nil {
-		return errors.Wrap(all.Err(), "iterate series")
+		return errors.Wrapf(all.Err(), "iterate series")
 	}
 
 	// Sort the series, if labels are re-ordered then the ordering of series
@@ -627,10 +627,10 @@ func rewrite(
 			continue
 		}
 		if err := chunkw.WriteChunks(s.chks...); err != nil {
-			return errors.Wrap(err, "write chunks")
+			return errors.Wrapf(err, "write chunks")
 		}
 		if err := indexw.AddSeries(i, s.lset, s.chks...); err != nil {
-			return errors.Wrap(err, "add series")
+			return errors.Wrapf(err, "add series")
 		}
 
 		meta.Stats.NumChunks += uint64(len(s.chks))

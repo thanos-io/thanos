@@ -6,7 +6,7 @@ package pool
 import (
 	"sync"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // Bytes is a pool of bytes that can be reused.
@@ -45,13 +45,13 @@ type BucketedBytes struct {
 // No more than maxTotal bytes can be used at any given time unless maxTotal is set to 0.
 func NewBucketedBytes(minSize, maxSize int, factor float64, maxTotal uint64) (*BucketedBytes, error) {
 	if minSize < 1 {
-		return nil, errors.New("invalid minimum pool size")
+		return nil, errors.Newf("invalid minimum pool size")
 	}
 	if maxSize < 1 {
-		return nil, errors.New("invalid maximum pool size")
+		return nil, errors.Newf("invalid maximum pool size")
 	}
 	if factor < 1 {
-		return nil, errors.New("invalid factor")
+		return nil, errors.Newf("invalid factor")
 	}
 
 	var sizes []int
@@ -72,7 +72,7 @@ func NewBucketedBytes(minSize, maxSize int, factor float64, maxTotal uint64) (*B
 }
 
 // ErrPoolExhausted is returned if a pool cannot provide the request bytes.
-var ErrPoolExhausted = errors.New("pool exhausted")
+var ErrPoolExhausted = errors.Newf("pool exhausted")
 
 // Get returns a new byte slice that fits the given size.
 func (p *BucketedBytes) Get(sz int) (*[]byte, error) {

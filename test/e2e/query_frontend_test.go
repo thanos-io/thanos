@@ -11,7 +11,7 @@ import (
 
 	"github.com/efficientgo/e2e"
 	"github.com/efficientgo/e2e/matchers"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -111,7 +111,7 @@ func TestQueryFrontend(t *testing.T) {
 			},
 			func(res model.Matrix) error {
 				if len(res) == 0 {
-					return errors.Errorf("expected some results, got nothing")
+					return errors.Newf("expected some results, got nothing")
 				}
 				return nil
 			},
@@ -155,7 +155,7 @@ func TestQueryFrontend(t *testing.T) {
 			},
 			func(res model.Matrix) error {
 				if len(res) == 0 {
-					return errors.Errorf("expected some results, got nothing")
+					return errors.Newf("expected some results, got nothing")
 				}
 				return nil
 			},
@@ -202,7 +202,7 @@ func TestQueryFrontend(t *testing.T) {
 			},
 			func(res model.Matrix) error {
 				if len(res) == 0 {
-					return errors.Errorf("expected some results, got nothing")
+					return errors.Newf("expected some results, got nothing")
 				}
 				return nil
 			},
@@ -464,7 +464,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		},
 		func(res model.Matrix) error {
 			if len(res) == 0 {
-				return errors.Errorf("expected some results, got nothing")
+				return errors.Newf("expected some results, got nothing")
 			}
 			return nil
 		},
@@ -496,7 +496,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		},
 		func(res model.Matrix) error {
 			if len(res) == 0 {
-				return errors.Errorf("expected some results, got nothing")
+				return errors.Newf("expected some results, got nothing")
 			}
 			return nil
 		},

@@ -17,7 +17,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -135,7 +135,7 @@ type ThanosDownsample struct {
 func InjectThanos(logger log.Logger, bdir string, meta Thanos, downsampledMeta *tsdb.BlockMeta) (*Meta, error) {
 	newMeta, err := ReadFromDir(bdir)
 	if err != nil {
-		return nil, errors.Wrap(err, "read new meta")
+		return nil, errors.Wrapf(err, "read new meta")
 	}
 	newMeta.Thanos = meta
 
@@ -145,7 +145,7 @@ func InjectThanos(logger log.Logger, bdir string, meta Thanos, downsampledMeta *
 	}
 
 	if err := newMeta.WriteToDir(logger, bdir); err != nil {
-		return nil, errors.Wrap(err, "write new meta")
+		return nil, errors.Wrapf(err, "write new meta")
 	}
 
 	return newMeta, nil
@@ -225,7 +225,7 @@ func Read(rc io.ReadCloser) (_ *Meta, err error) {
 	}
 
 	if m.Version != TSDBVersion1 {
-		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
+		return nil, errors.Newf("unexpected meta file version %d", m.Version)
 	}
 
 	version := m.Thanos.Version
@@ -235,7 +235,7 @@ func Read(rc io.ReadCloser) (_ *Meta, err error) {
 	}
 
 	if version != ThanosVersion1 {
-		return nil, errors.Errorf("unexpected meta file Thanos section version %d", m.Version)
+		return nil, errors.Newf("unexpected meta file Thanos section version %d", m.Version)
 	}
 
 	if m.Thanos.Labels == nil {

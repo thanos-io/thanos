@@ -20,7 +20,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
@@ -232,7 +232,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				expectedMetas:         ULIDs(1, 3, 6),
 				expectedCorruptedMeta: ULIDs(5),
 				expectedNoMeta:        ULIDs(4),
-				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+				expectedMetaErr:       errors.Newf("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
 			},
 		} {
 			if ok := t.Run(tcase.name, func(t *testing.T) {

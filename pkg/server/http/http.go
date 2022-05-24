@@ -11,7 +11,7 @@ import (
 	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	toolkit_web "github.com/prometheus/exporter-toolkit/web"
@@ -73,9 +73,9 @@ func (s *Server) ListenAndServe() error {
 	level.Info(s.logger).Log("msg", "listening for requests and metrics", "address", s.opts.listen)
 	err := toolkit_web.Validate(s.opts.tlsConfigPath)
 	if err != nil {
-		return errors.Wrap(err, "server could not be started")
+		return errors.Wrapf(err, "server could not be started")
 	}
-	return errors.Wrap(toolkit_web.ListenAndServe(s.srv, s.opts.tlsConfigPath, s.logger), "serve HTTP and metrics")
+	return errors.Wrapf(toolkit_web.ListenAndServe(s.srv, s.opts.tlsConfigPath, s.logger), "serve HTTP and metrics")
 }
 
 // Shutdown gracefully shuts down the server by waiting,

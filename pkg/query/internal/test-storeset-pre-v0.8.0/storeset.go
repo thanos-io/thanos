@@ -17,7 +17,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
@@ -241,7 +241,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 		// Peer does not exists anymore.
 		store.close()
 		delete(s.stores, addr)
-		s.updateStoreStatus(store, errors.New(unhealthyStoreMessage))
+		s.updateStoreStatus(store, errors.Newf(unhealthyStoreMessage))
 		level.Info(s.logger).Log("msg", unhealthyStoreMessage, "address", addr)
 	}
 
@@ -256,7 +256,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 		if len(store.LabelSets()) > 0 &&
 			externalLabelOccurrencesInStores[externalLabels] != 1 {
 			store.close()
-			s.updateStoreStatus(store, errors.New(droppingStoreMessage))
+			s.updateStoreStatus(store, errors.Newf(droppingStoreMessage))
 			level.Warn(s.logger).Log("msg", droppingStoreMessage, "address", addr, "extLset", externalLabels, "duplicates", externalLabelOccurrencesInStores[externalLabels])
 			// We don't want to block all of them. Leave one to not disrupt in terms of migration.
 			externalLabelOccurrencesInStores[externalLabels]--
@@ -315,7 +315,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 				conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
 				if err != nil {
 					s.updateStoreStatus(&storeRef{addr: addr}, err)
-					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
+					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrapf(err, "dialing connection"), "address", addr)
 					return
 				}
 				store = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr, logger: s.logger}
@@ -325,7 +325,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 				if err != nil {
 					store.close()
 					s.updateStoreStatus(store, err)
-					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "initial store client info fetch"), "address", addr)
+					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrapf(err, "initial store client info fetch"), "address", addr)
 					return
 				}
 				if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {

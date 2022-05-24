@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
@@ -44,14 +44,14 @@ func CalculateHash(p string, hf HashFunc, logger log.Logger) (ObjectHash, error)
 	case SHA256Func:
 		f, err := os.Open(filepath.Clean(p))
 		if err != nil {
-			return ObjectHash{}, errors.Wrap(err, "opening file")
+			return ObjectHash{}, errors.Wrapf(err, "opening file")
 		}
 		defer runutil.CloseWithLogOnErr(logger, f, "closing %s", p)
 
 		h := sha256.New()
 
 		if _, err := io.Copy(h, f); err != nil {
-			return ObjectHash{}, errors.Wrap(err, "copying")
+			return ObjectHash{}, errors.Wrapf(err, "copying")
 		}
 
 		return ObjectHash{

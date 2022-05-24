@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/sync/errgroup"
@@ -32,7 +32,7 @@ const (
 )
 
 var (
-	errObjNotFound = errors.Errorf("object not found")
+	errObjNotFound = errors.Newf("object not found")
 )
 
 // CachingBucket implementation that provides some caching features, based on passed configuration.
@@ -55,7 +55,7 @@ type CachingBucket struct {
 // changed after creating caching bucket.
 func NewCachingBucket(b objstore.Bucket, cfg *cache.CachingBucketConfig, logger log.Logger, reg prometheus.Registerer) (*CachingBucket, error) {
 	if b == nil {
-		return nil, errors.New("bucket is nil")
+		return nil, errors.Newf("bucket is nil")
 	}
 
 	cb := &CachingBucket{
@@ -443,7 +443,7 @@ func (cb *CachingBucket) fetchMissingSubranges(ctx context.Context, name string,
 			for off := m.start; off < m.end && gctx.Err() == nil; off += cfg.SubrangeSize {
 				key := cacheKeys[off]
 				if key == "" {
-					return errors.Errorf("fetching range [%d, %d]: caching key for offset %d not found", m.start, m.end, off)
+					return errors.Newf("fetching range [%d, %d]: caching key for offset %d not found", m.start, m.end, off)
 				}
 
 				// We need a new buffer for each subrange, both for storing into hits, and also for caching.
@@ -538,7 +538,7 @@ func (c *subrangesReader) Read(p []byte) (n int, err error) {
 	toCopy := len(currentSubrange) - offsetInSubrange
 	if toCopy <= 0 {
 		// This can only happen if subrange's length is not subrangeSize, and reader is told to read more data.
-		return 0, errors.Errorf("no more data left in subrange at position %d, subrange length %d, reading position %d", currentSubrangeOffset, len(currentSubrange), c.readOffset)
+		return 0, errors.Newf("no more data left in subrange at position %d, subrange length %d, reading position %d", currentSubrangeOffset, len(currentSubrange), c.readOffset)
 	}
 
 	if len(p) < toCopy {
@@ -558,7 +558,7 @@ func (c *subrangesReader) Read(p []byte) (n int, err error) {
 func (c *subrangesReader) subrangeAt(offset int64) ([]byte, error) {
 	b := c.subranges[c.offsetsKeys[offset]]
 	if b == nil {
-		return nil, errors.Errorf("subrange for offset %d not found", offset)
+		return nil, errors.Newf("subrange for offset %d not found", offset)
 	}
 	return b, nil
 }

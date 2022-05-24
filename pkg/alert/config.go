@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/relabel"
 	"gopkg.in/yaml.v2"
@@ -47,7 +47,7 @@ var supportedAPIVersions = []APIVersion{
 func (v *APIVersion) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var s string
 	if err := unmarshal(&s); err != nil {
-		return errors.Wrap(err, "invalid Alertmanager API version")
+		return errors.Wrapf(err, "invalid Alertmanager API version")
 	}
 
 	for _, ver := range supportedAPIVersions {
@@ -56,7 +56,7 @@ func (v *APIVersion) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			return nil
 		}
 	}
-	return errors.Errorf("expected Alertmanager API version to be one of %v but got %q", supportedAPIVersions, s)
+	return errors.Newf("expected Alertmanager API version to be one of %v but got %q", supportedAPIVersions, s)
 }
 
 func DefaultAlertmanagerConfig() AlertmanagerConfig {

@@ -10,7 +10,7 @@ import (
 	"sort"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"google.golang.org/grpc"
@@ -72,7 +72,7 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	minTime, err := s.db.StartTime()
 	if err != nil {
-		return nil, errors.Wrap(err, "TSDB min Time")
+		return nil, errors.Wrapf(err, "TSDB min Time")
 	}
 
 	res := &storepb.InfoResponse{
@@ -136,7 +136,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	}
 
 	if len(matchers) == 0 {
-		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+		return status.Error(codes.InvalidArgument, errors.Newf("no matchers specified (excluding external labels)").Error())
 	}
 
 	q, err := s.db.ChunkQuerier(context.Background(), r.MinTime, r.MaxTime)
@@ -204,7 +204,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 			}
 		}
 		if err := chIter.Err(); err != nil {
-			return status.Error(codes.Internal, errors.Wrap(err, "chunk iter").Error())
+			return status.Error(codes.Internal, errors.Wrapf(err, "chunk iter").Error())
 		}
 
 	}

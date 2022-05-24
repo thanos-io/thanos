@@ -8,7 +8,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -45,12 +45,12 @@ func (srv *exemplarsServer) Send(res *exemplarspb.ExemplarsResponse) error {
 	if res.GetWarning() != "" {
 		srv.mu.Lock()
 		defer srv.mu.Unlock()
-		srv.warnings = append(srv.warnings, errors.New(res.GetWarning()))
+		srv.warnings = append(srv.warnings, errors.Newf(res.GetWarning()))
 		return nil
 	}
 
 	if res.GetData() == nil {
-		return errors.New("empty exemplars data")
+		return errors.Newf("empty exemplars data")
 	}
 
 	srv.mu.Lock()
@@ -86,7 +86,7 @@ func (rr *GRPCClient) Exemplars(ctx context.Context, req *exemplarspb.ExemplarsR
 	resp := &exemplarsServer{ctx: ctx}
 
 	if err := rr.proxy.Exemplars(req, resp); err != nil {
-		return nil, nil, errors.Wrap(err, "proxy Exemplars")
+		return nil, nil, errors.Wrapf(err, "proxy Exemplars")
 	}
 
 	if resp.data == nil {

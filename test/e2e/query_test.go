@@ -32,7 +32,7 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/efficientgo/e2e"
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -876,11 +876,11 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 		}
 
 		if len(warnings) > 0 {
-			return errors.Errorf("unexpected warnings %s", warnings)
+			return errors.Newf("unexpected warnings %s", warnings)
 		}
 
 		if len(res) != expectedSeriesLen {
-			return errors.Errorf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
+			return errors.Newf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
 		}
 		result = res
 		return nil
@@ -923,7 +923,7 @@ func labelNames(t *testing.T, ctx context.Context, addr string, matchers []*labe
 			return nil
 		}
 
-		return errors.Errorf("unexpected results %v", res)
+		return errors.Newf("unexpected results %v", res)
 	}))
 }
 
@@ -942,7 +942,7 @@ func labelValues(t *testing.T, ctx context.Context, addr, label string, matchers
 			return nil
 		}
 
-		return errors.Errorf("unexpected results %v", res)
+		return errors.Newf("unexpected results %v", res)
 	}))
 }
 
@@ -960,7 +960,7 @@ func series(t *testing.T, ctx context.Context, addr string, matchers []*labels.M
 			return nil
 		}
 
-		return errors.Errorf("unexpected results %v", res)
+		return errors.Newf("unexpected results %v", res)
 	}))
 }
 
@@ -977,11 +977,11 @@ func rangeQuery(t *testing.T, ctx context.Context, addr string, q func() string,
 		}
 
 		if len(warnings) > 0 {
-			return errors.Errorf("unexpected warnings %s", warnings)
+			return errors.Newf("unexpected warnings %s", warnings)
 		}
 
 		if err := check(res); err != nil {
-			return errors.Wrap(err, "result check failed")
+			return errors.Wrapf(err, "result check failed")
 		}
 
 		return nil
@@ -1001,7 +1001,7 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 		}
 
 		if err := check(res); err != nil {
-			return errors.Wrap(err, "exemplar check failed")
+			return errors.Wrapf(err, "exemplar check failed")
 		}
 
 		return nil
@@ -1253,7 +1253,7 @@ func TestSidecarAlignmentPushdown(t *testing.T) {
 		}
 
 		if len(warnings) > 0 {
-			return errors.Errorf("unexpected warnings %s", warnings)
+			return errors.Newf("unexpected warnings %s", warnings)
 		}
 
 		expectedRes = res

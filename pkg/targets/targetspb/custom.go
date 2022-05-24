@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -36,12 +36,12 @@ func (x *TargetHealth) UnmarshalJSON(entry []byte) error {
 	}
 
 	if fieldStr == "" {
-		return errors.New("empty targetHealth")
+		return errors.Newf("empty targetHealth")
 	}
 
 	state, ok := TargetHealth_value[strings.ToUpper(fieldStr)]
 	if !ok {
-		return errors.Errorf("unknown targetHealth: %v", string(entry))
+		return errors.Newf("unknown targetHealth: %v", string(entry))
 	}
 	*x = TargetHealth(state)
 	return nil

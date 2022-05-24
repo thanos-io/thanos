@@ -14,7 +14,7 @@ import (
 	e2edb "github.com/efficientgo/e2e/db"
 	e2einteractive "github.com/efficientgo/e2e/interactive"
 	e2emonitoring "github.com/efficientgo/e2e/monitoring"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -40,7 +40,7 @@ var (
 
 func exec(cmd string, args ...string) error {
 	if o, err := execlib.Command(cmd, args...).CombinedOutput(); err != nil {
-		return errors.Wrap(err, string(o))
+		return errors.Wrapf(err, string(o))
 	}
 	return nil
 }

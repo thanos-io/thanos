@@ -24,7 +24,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
@@ -66,38 +66,38 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 		{
 			name: "non-matching multierror",
 			err: errutil.NonNilMultiError([]error{
-				errors.New("foo"),
-				errors.New("bar"),
+				errors.Newf("foo"),
+				errors.Newf("bar"),
 			}),
-			exp: errors.New("2 errors: foo; bar"),
+			exp: errors.Newf("2 errors: foo; bar"),
 		},
 		{
 			name: "nested non-matching multierror",
-			err: errors.Wrap(errutil.NonNilMultiError([]error{
-				errors.New("foo"),
-				errors.New("bar"),
+			err: errors.Wrapf(errutil.NonNilMultiError([]error{
+				errors.Newf("foo"),
+				errors.Newf("bar"),
 			}), "baz"),
 			threshold: 1,
-			exp:       errors.New("baz: 2 errors: foo; bar"),
+			exp:       errors.Newf("baz: 2 errors: foo; bar"),
 		},
 		{
 			name: "deep nested non-matching multierror",
-			err: errors.Wrap(errutil.NonNilMultiError([]error{
-				errors.New("foo"),
+			err: errors.Wrapf(errutil.NonNilMultiError([]error{
+				errors.Newf("foo"),
 				errutil.NonNilMultiError([]error{
-					errors.New("bar"),
-					errors.New("qux"),
+					errors.Newf("bar"),
+					errors.Newf("qux"),
 				}),
 			}), "baz"),
 			threshold: 1,
-			exp:       errors.New("baz: 2 errors: foo; 2 errors: bar; qux"),
+			exp:       errors.Newf("baz: 2 errors: foo; 2 errors: bar; qux"),
 		},
 		{
 			name: "matching multierror",
 			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
-				errors.New("foo"),
-				errors.New("bar"),
+				errors.Newf("foo"),
+				errors.Newf("bar"),
 			}),
 			threshold: 1,
 			exp:       errConflict,
@@ -106,11 +106,11 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			name: "matching but below threshold multierror",
 			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
-				errors.New("foo"),
-				errors.New("bar"),
+				errors.Newf("foo"),
+				errors.Newf("bar"),
 			}),
 			threshold: 2,
-			exp:       errors.New("3 errors: out of order sample; foo; bar"),
+			exp:       errors.Newf("3 errors: out of order sample; foo; bar"),
 		},
 		{
 			name: "matching multierror many",
@@ -118,8 +118,8 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 				storage.ErrOutOfOrderSample,
 				errConflict,
 				status.Error(codes.AlreadyExists, "conflict"),
-				errors.New("foo"),
-				errors.New("bar"),
+				errors.Newf("foo"),
+				errors.Newf("bar"),
 			}),
 			threshold: 1,
 			exp:       errConflict,
@@ -132,7 +132,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 				tsdb.ErrNotReady,
 				tsdb.ErrNotReady,
 				tsdb.ErrNotReady,
-				errors.New("foo"),
+				errors.Newf("foo"),
 			}),
 			threshold: 2,
 			exp:       errNotReady,
@@ -146,34 +146,34 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 				tsdb.ErrNotReady,
 				tsdb.ErrNotReady,
 				status.Error(codes.AlreadyExists, "conflict"),
-				errors.New("foo"),
+				errors.Newf("foo"),
 			}),
 			threshold: 2,
 			exp:       errConflict,
 		},
 		{
 			name: "nested matching multierror",
-			err: errors.Wrap(errors.Wrap(errutil.NonNilMultiError([]error{
+			err: errors.Wrapf(errors.Wrapf(errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
-				errors.New("foo"),
-				errors.New("bar"),
+				errors.Newf("foo"),
+				errors.Newf("bar"),
 			}), "baz"), "qux"),
 			threshold: 1,
 			exp:       errConflict,
 		},
 		{
 			name: "deep nested matching multierror",
-			err: errors.Wrap(errutil.NonNilMultiError([]error{
+			err: errors.Wrapf(errutil.NonNilMultiError([]error{
 				errutil.NonNilMultiError([]error{
-					errors.New("qux"),
+					errors.Newf("qux"),
 					status.Error(codes.AlreadyExists, "conflict"),
 					status.Error(codes.AlreadyExists, "conflict"),
 				}),
-				errors.New("foo"),
-				errors.New("bar"),
+				errors.Newf("foo"),
+				errors.Newf("bar"),
 			}), "baz"),
 			threshold: 1,
-			exp:       errors.New("baz: 3 errors: 3 errors: qux; rpc error: code = AlreadyExists desc = conflict; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
+			exp:       errors.Newf("baz: 3 errors: 3 errors: qux; rpc error: code = AlreadyExists desc = conflict; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
 		},
 	} {
 		err := determineWriteErrorCause(tc.err, tc.threshold)
@@ -303,7 +303,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			// dialer should never be called since we are creating fake clients with fake addresses
 			// this protects against some leaking test that may attempt to dial random IP addresses
 			// which may pose a security risk.
-			return nil, errors.New("unexpected dial called in testing")
+			return nil, errors.Newf("unexpected dial called in testing")
 		},
 	}
 
@@ -330,9 +330,9 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 }
 
 func TestReceiveQuorum(t *testing.T) {
-	appenderErrFn := func() error { return errors.New("failed to get appender") }
+	appenderErrFn := func() error { return errors.Newf("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
-	commitErrFn := func() error { return errors.New("failed to commit") }
+	commitErrFn := func() error { return errors.Newf("failed to commit") }
 	wreq1 := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
@@ -666,9 +666,9 @@ func TestReceiveQuorum(t *testing.T) {
 }
 
 func TestReceiveWithConsistencyDelay(t *testing.T) {
-	appenderErrFn := func() error { return errors.New("failed to get appender") }
+	appenderErrFn := func() error { return errors.Newf("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
-	commitErrFn := func() error { return errors.New("failed to commit") }
+	commitErrFn := func() error { return errors.Newf("failed to commit") }
 	wreq1 := &prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
@@ -1042,11 +1042,11 @@ func cycleErrors(errs []error) func() error {
 func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (*httptest.ResponseRecorder, error) {
 	buf, err := proto.Marshal(wreq)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal request")
+		return nil, errors.Wrapf(err, "marshal request")
 	}
 	req, err := http.NewRequest("POST", h.options.Endpoint, bytes.NewBuffer(snappy.Encode(nil, buf)))
 	if err != nil {
-		return nil, errors.Wrap(err, "create request")
+		return nil, errors.Wrapf(err, "create request")
 	}
 	req.Header.Add(h.options.TenantHeader, tenant)
 

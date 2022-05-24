@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -229,9 +229,9 @@ func (m *Rule) UnmarshalJSON(entry []byte) error {
 
 		m.Result = &Rule_Alert{Alert: r}
 	case "":
-		return errors.Errorf("rule: no type field provided: %v", string(entry))
+		return errors.Newf("rule: no type field provided: %v", string(entry))
 	default:
-		return errors.Errorf("rule: unknown type field provided %s; %v", decider.Type, string(entry))
+		return errors.Newf("rule: unknown type field provided %s; %v", decider.Type, string(entry))
 	}
 	return nil
 }
@@ -276,12 +276,12 @@ func (x *AlertState) UnmarshalJSON(entry []byte) error {
 	}
 
 	if fieldStr == "" {
-		return errors.New("empty alertState")
+		return errors.Newf("empty alertState")
 	}
 
 	state, ok := AlertState_value[strings.ToUpper(fieldStr)]
 	if !ok {
-		return errors.Errorf("unknown alertState: %v", string(entry))
+		return errors.Newf("unknown alertState: %v", string(entry))
 	}
 	*x = AlertState(state)
 	return nil

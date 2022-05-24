@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -200,7 +200,7 @@ func (t *MultiTSDB) Close() error {
 
 func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 	if t.bucket == nil {
-		return 0, errors.New("bucket is not specified, Sync should not be invoked")
+		return 0, errors.Newf("bucket is not specified, Sync should not be invoked")
 	}
 
 	t.mtx.RLock()
@@ -224,7 +224,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 			up, err := s.Sync(ctx)
 			if err != nil {
 				errmtx.Lock()
-				merr.Add(errors.Wrap(err, "upload"))
+				merr.Add(errors.Wrapf(err, "upload"))
 				errmtx.Unlock()
 			}
 			uploaded.Add(int64(up))
@@ -376,7 +376,7 @@ func (t *MultiTSDB) TenantAppendable(tenantID string) (Appendable, error) {
 }
 
 // ErrNotReady is returned if the underlying storage is not ready yet.
-var ErrNotReady = errors.New("TSDB not ready")
+var ErrNotReady = errors.Newf("TSDB not ready")
 
 // ReadyStorage implements the Storage interface while allowing to set the actual
 // storage at a later point in time.
@@ -411,7 +411,7 @@ func (s *ReadyStorage) get() *adapter {
 
 // StartTime implements the Storage interface.
 func (s *ReadyStorage) StartTime() (int64, error) {
-	return 0, errors.New("not implemented")
+	return 0, errors.Newf("not implemented")
 }
 
 // Querier implements the Storage interface.
@@ -453,7 +453,7 @@ type adapter struct {
 
 // StartTime implements the Storage interface.
 func (a adapter) StartTime() (int64, error) {
-	return 0, errors.New("not implemented")
+	return 0, errors.Newf("not implemented")
 }
 
 func (a adapter) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {

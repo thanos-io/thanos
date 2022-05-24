@@ -11,7 +11,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	lru "github.com/hashicorp/golang-lru/simplelru"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gopkg.in/yaml.v2"
@@ -95,7 +95,7 @@ func NewInMemoryCache(name string, logger log.Logger, reg prometheus.Registerer,
 // size approximately does not exceed maxBytes.
 func NewInMemoryCacheWithConfig(name string, logger log.Logger, reg prometheus.Registerer, config InMemoryCacheConfig) (*InMemoryCache, error) {
 	if config.MaxItemSize > config.MaxSize {
-		return nil, errors.Errorf("max item size (%v) cannot be bigger than overall cache size (%v)", config.MaxItemSize, config.MaxSize)
+		return nil, errors.Newf("max item size (%v) cannot be bigger than overall cache size (%v)", config.MaxItemSize, config.MaxSize)
 	}
 
 	c := &InMemoryCache{

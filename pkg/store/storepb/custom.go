@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/types"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -329,7 +329,7 @@ func (x *PartialResponseStrategy) UnmarshalJSON(entry []byte) error {
 
 	strategy, ok := PartialResponseStrategy_value[strings.ToUpper(fieldStr)]
 	if !ok {
-		return errors.Errorf(fmt.Sprintf("failed to unmarshal %v as 'partial_response_strategy'. Possible values are %s", string(entry), strings.Join(PartialResponseStrategyValues, ",")))
+		return errors.Newf(fmt.Sprintf("failed to unmarshal %v as 'partial_response_strategy'. Possible values are %s", string(entry), strings.Join(PartialResponseStrategyValues, ",")))
 	}
 	*x = PartialResponseStrategy(strategy)
 	return nil
@@ -356,7 +356,7 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 		case labels.MatchNotRegexp:
 			t = LabelMatcher_NRE
 		default:
-			return nil, errors.Errorf("unrecognized matcher type %d", m.Type)
+			return nil, errors.Newf("unrecognized matcher type %d", m.Type)
 		}
 		res = append(res, LabelMatcher{Type: t, Name: m.Name, Value: m.Value})
 	}
@@ -380,7 +380,7 @@ func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 		case LabelMatcher_NRE:
 			t = labels.MatchNotRegexp
 		default:
-			return nil, errors.Errorf("unrecognized label matcher type %d", m.Type)
+			return nil, errors.Newf("unrecognized label matcher type %d", m.Type)
 		}
 		m, err := labels.NewMatcher(t, m.Name, m.Value)
 		if err != nil {

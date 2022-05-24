@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -85,7 +85,7 @@ func NewDiskWriter(ctx context.Context, logger log.Logger, bDir string) (_ *Disk
 
 	chunkw, err := chunks.NewWriter(filepath.Join(bTmp, ChunksDirname))
 	if err != nil {
-		return nil, errors.Wrap(err, "open chunk writer")
+		return nil, errors.Wrapf(err, "open chunk writer")
 	}
 	d.closers = append(d.closers, chunkw)
 
@@ -93,7 +93,7 @@ func NewDiskWriter(ctx context.Context, logger log.Logger, bDir string) (_ *Disk
 
 	indexw, err := index.NewWriter(ctx, filepath.Join(bTmp, IndexFilename))
 	if err != nil {
-		return nil, errors.Wrap(err, "open index writer")
+		return nil, errors.Wrapf(err, "open index writer")
 	}
 	d.closers = append(d.closers, indexw)
 	d.statsGatheringSeriesWriter = statsGatheringSeriesWriter{iw: indexw, cw: chunkw}
@@ -111,7 +111,7 @@ func (d *DiskWriter) Flush() (_ tsdb.BlockStats, err error) {
 	}()
 	df, err := fileutil.OpenDir(d.bTmp)
 	if err != nil {
-		return tsdb.BlockStats{}, errors.Wrap(err, "open temporary block dir")
+		return tsdb.BlockStats{}, errors.Wrapf(err, "open temporary block dir")
 	}
 	defer func() {
 		if df != nil {
@@ -120,12 +120,12 @@ func (d *DiskWriter) Flush() (_ tsdb.BlockStats, err error) {
 	}()
 
 	if err := df.Sync(); err != nil {
-		return tsdb.BlockStats{}, errors.Wrap(err, "sync temporary dir file")
+		return tsdb.BlockStats{}, errors.Wrapf(err, "sync temporary dir file")
 	}
 
 	// Close temp dir before rename block dir (for windows platform).
 	if err = df.Close(); err != nil {
-		return tsdb.BlockStats{}, errors.Wrap(err, "close temporary dir")
+		return tsdb.BlockStats{}, errors.Wrapf(err, "close temporary dir")
 	}
 	df = nil
 
@@ -137,10 +137,10 @@ func (d *DiskWriter) Flush() (_ tsdb.BlockStats, err error) {
 
 	// Block files successfully written, make them visible by moving files from tmp dir.
 	if err := fileutil.Replace(filepath.Join(d.bTmp, IndexFilename), filepath.Join(d.bDir, IndexFilename)); err != nil {
-		return tsdb.BlockStats{}, errors.Wrap(err, "replace index file")
+		return tsdb.BlockStats{}, errors.Wrapf(err, "replace index file")
 	}
 	if err := fileutil.Replace(filepath.Join(d.bTmp, ChunksDirname), filepath.Join(d.bDir, ChunksDirname)); err != nil {
-		return tsdb.BlockStats{}, errors.Wrap(err, "replace chunks dir")
+		return tsdb.BlockStats{}, errors.Wrapf(err, "replace chunks dir")
 	}
 	return d.stats, nil
 }

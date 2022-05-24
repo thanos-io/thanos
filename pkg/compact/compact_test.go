@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
@@ -30,35 +30,35 @@ import (
 )
 
 func TestHaltError(t *testing.T) {
-	err := errors.New("test")
+	err := errors.Newf("test")
 	testutil.Assert(t, !IsHaltError(err), "halt error")
 
-	err = halt(errors.New("test"))
+	err = halt(errors.Newf("test"))
 	testutil.Assert(t, IsHaltError(err), "not a halt error")
 
-	err = errors.Wrap(halt(errors.New("test")), "something")
+	err = errors.Wrapf(halt(errors.Newf("test")), "something")
 	testutil.Assert(t, IsHaltError(err), "not a halt error")
 
-	err = errors.Wrap(errors.Wrap(halt(errors.New("test")), "something"), "something2")
+	err = errors.Wrapf(errors.Wrapf(halt(errors.Newf("test")), "something"), "something2")
 	testutil.Assert(t, IsHaltError(err), "not a halt error")
 }
 
 func TestHaltMultiError(t *testing.T) {
-	haltErr := halt(errors.New("halt error"))
-	nonHaltErr := errors.New("not a halt error")
+	haltErr := halt(errors.Newf("halt error"))
+	nonHaltErr := errors.Newf("not a halt error")
 
 	errs := errutil.MultiError{nonHaltErr}
 	testutil.Assert(t, !IsHaltError(errs.Err()), "should not be a halt error")
 
 	errs.Add(haltErr)
 	testutil.Assert(t, IsHaltError(errs.Err()), "if any halt errors are present this should return true")
-	testutil.Assert(t, IsHaltError(errors.Wrap(errs.Err(), "wrap")), "halt error with wrap")
+	testutil.Assert(t, IsHaltError(errors.Wrapf(errs.Err(), "wrap")), "halt error with wrap")
 
 }
 
 func TestRetryMultiError(t *testing.T) {
-	retryErr := retry(errors.New("retry error"))
-	nonRetryErr := errors.New("not a retry error")
+	retryErr := retry(errors.Newf("retry error"))
+	nonRetryErr := errors.Newf("not a retry error")
 
 	errs := errutil.MultiError{nonRetryErr}
 	testutil.Assert(t, !IsRetryError(errs.Err()), "should not be a retry error")
@@ -66,26 +66,26 @@ func TestRetryMultiError(t *testing.T) {
 	errs = errutil.MultiError{retryErr}
 	testutil.Assert(t, IsRetryError(errs.Err()), "if all errors are retriable this should return true")
 
-	testutil.Assert(t, IsRetryError(errors.Wrap(errs.Err(), "wrap")), "retry error with wrap")
+	testutil.Assert(t, IsRetryError(errors.Wrapf(errs.Err(), "wrap")), "retry error with wrap")
 
 	errs = errutil.MultiError{nonRetryErr, retryErr}
 	testutil.Assert(t, !IsRetryError(errs.Err()), "mixed errors should return false")
 }
 
 func TestRetryError(t *testing.T) {
-	err := errors.New("test")
+	err := errors.Newf("test")
 	testutil.Assert(t, !IsRetryError(err), "retry error")
 
-	err = retry(errors.New("test"))
+	err = retry(errors.Newf("test"))
 	testutil.Assert(t, IsRetryError(err), "not a retry error")
 
-	err = errors.Wrap(retry(errors.New("test")), "something")
+	err = errors.Wrapf(retry(errors.Newf("test")), "something")
 	testutil.Assert(t, IsRetryError(err), "not a retry error")
 
-	err = errors.Wrap(errors.Wrap(retry(errors.New("test")), "something"), "something2")
+	err = errors.Wrapf(errors.Wrapf(retry(errors.Newf("test")), "something"), "something2")
 	testutil.Assert(t, IsRetryError(err), "not a retry error")
 
-	err = errors.Wrap(retry(errors.Wrap(halt(errors.New("test")), "something")), "something2")
+	err = errors.Wrapf(retry(errors.Wrapf(halt(errors.Newf("test")), "something")), "something2")
 	testutil.Assert(t, IsHaltError(err), "not a halt error. Retry should not hide halt error")
 }
 

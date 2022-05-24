@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -206,7 +206,7 @@ func FaultOrPanicToErr(f func()) (err error) {
 	debug.SetPanicOnFault(true)
 	defer func() {
 		if r := recover(); r != nil {
-			err = errors.Errorf("invoked function panicked or caused segmentation fault: %v", r)
+			err = errors.Newf("invoked function panicked or caused segmentation fault: %v", r)
 		}
 		debug.SetPanicOnFault(false)
 	}()

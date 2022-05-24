@@ -17,7 +17,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
@@ -54,19 +54,19 @@ func registerReceive(app *extkingpin.App) {
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(conf.labelStrs)
 		if err != nil {
-			return errors.Wrap(err, "parse labels")
+			return errors.Wrapf(err, "parse labels")
 		}
 
 		if !model.LabelName.IsValid(model.LabelName(conf.tenantLabelName)) {
-			return errors.Errorf("unsupported format for tenant label name, got %s", conf.tenantLabelName)
+			return errors.Newf("unsupported format for tenant label name, got %s", conf.tenantLabelName)
 		}
 		if len(lset) == 0 {
-			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
+			return errors.Newf("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
 
 		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
 		if err != nil {
-			return errors.Wrap(err, "error while parsing config for request logging")
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		tsdbOpts := &tsdb.Options{
@@ -151,7 +151,7 @@ func runReceive(
 		if upload {
 			if tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
 				if !conf.ignoreBlockSize {
-					return errors.Errorf("found that TSDB Max time is %d and Min time is %d. "+
+					return errors.Newf("found that TSDB Max time is %d and Min time is %d. "+
 						"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
 				}
 				level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
@@ -270,7 +270,7 @@ func runReceive(
 	{
 		g.Add(
 			func() error {
-				return errors.Wrap(webHandler.Run(), "error starting web server")
+				return errors.Wrapf(webHandler.Run(), "error starting web server")
 			},
 			func(err error) {
 				webHandler.Close()
@@ -308,12 +308,12 @@ func setupAndRunGRPCServer(g *run.Group,
 
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), *conf.grpcCert, *conf.grpcKey, *conf.grpcClientCA)
 		if err != nil {
-			return errors.Wrap(err, "setup gRPC server")
+			return errors.Wrapf(err, "setup gRPC server")
 		}
 
 		for range reloadGRPCServer {
 			if s != nil {
-				s.Shutdown(errors.New("reload hashrings"))
+				s.Shutdown(errors.Newf("reload hashrings"))
 			}
 
 			mts := store.NewMultiTSDBStore(
@@ -367,7 +367,7 @@ func setupAndRunGRPCServer(g *run.Group,
 		for range startGRPCListening {
 			level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", *conf.grpcBindAddr)
 			if err := s.ListenAndServe(); err != nil {
-				return errors.Wrap(err, "serve gRPC")
+				return errors.Wrapf(err, "serve gRPC")
 			}
 		}
 		return nil
@@ -401,14 +401,14 @@ func setupHashring(g *run.Group,
 	if conf.hashringsFilePath != "" {
 		cw, err := receive.NewConfigWatcher(log.With(logger, "component", "config-watcher"), reg, conf.hashringsFilePath, *conf.refreshInterval)
 		if err != nil {
-			return errors.Wrap(err, "failed to initialize config watcher")
+			return errors.Wrapf(err, "failed to initialize config watcher")
 		}
 
 		// Check the hashring configuration on before running the watcher.
 		if err := cw.ValidateConfig(); err != nil {
 			cw.Stop()
 			close(updates)
-			return errors.Wrap(err, "failed to validate hashring configuration file")
+			return errors.Wrapf(err, "failed to validate hashring configuration file")
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -428,7 +428,7 @@ func setupHashring(g *run.Group,
 			ring, err = receive.HashringFromConfig(conf.hashringsFileContent)
 			if err != nil {
 				close(updates)
-				return errors.Wrap(err, "failed to validate hashring configuration file")
+				return errors.Wrapf(err, "failed to validate hashring configuration file")
 			}
 			level.Info(logger).Log("msg", "the hashring initialized directly with the given content through the flag.")
 		} else {
@@ -462,7 +462,7 @@ func setupHashring(g *run.Group,
 				}
 				webHandler.Hashring(h)
 				msg := "hashring has changed; server is not ready to receive web requests"
-				statusProber.NotReady(errors.New(msg))
+				statusProber.NotReady(errors.Newf(msg))
 				level.Info(logger).Log("msg", msg)
 
 				if enableIngestion {
@@ -513,7 +513,7 @@ func startTSDBAndUpload(g *run.Group,
 
 	level.Debug(logger).Log("msg", "removing storage lock files if any")
 	if err := dbs.RemoveLockFilesIfAny(); err != nil {
-		return errors.Wrap(err, "remove storage lock files")
+		return errors.Wrapf(err, "remove storage lock files")
 	}
 
 	// TSDBs reload logic, listening on hashring changes.
@@ -548,10 +548,10 @@ func startTSDBAndUpload(g *run.Group,
 				level.Info(logger).Log("msg", "updating storage")
 
 				if err := dbs.Flush(); err != nil {
-					return errors.Wrap(err, "flushing storage")
+					return errors.Wrapf(err, "flushing storage")
 				}
 				if err := dbs.Open(); err != nil {
-					return errors.Wrap(err, "opening storage")
+					return errors.Wrapf(err, "opening storage")
 				}
 				if upload {
 					uploadC <- struct{}{}
@@ -584,7 +584,7 @@ func startTSDBAndUpload(g *run.Group,
 		{
 			level.Info(logger).Log("msg", "upload enabled, starting initial sync")
 			if err := upload(context.Background()); err != nil {
-				return errors.Wrap(err, "initial upload failed")
+				return errors.Wrapf(err, "initial upload failed")
 			}
 			level.Info(logger).Log("msg", "initial sync done")
 		}

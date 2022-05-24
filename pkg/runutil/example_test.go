@@ -9,7 +9,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -36,7 +36,7 @@ func ExampleRetry() {
 	// It will print out "Retry" every 5 seconds.
 	err := runutil.Retry(5*time.Second, ctx.Done(), func() error {
 		fmt.Println("Retry")
-		return errors.New("Try to retry")
+		return errors.Newf("Try to retry")
 	})
 	if err != nil {
 		log.Fatal(err)

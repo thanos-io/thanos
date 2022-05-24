@@ -13,7 +13,7 @@ import (
 	"github.com/cortexproject/cortex/pkg/util/validation"
 
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -36,14 +36,14 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 	if config.QueryRangeConfig.Limits != nil {
 		queryRangeLimits, err = validation.NewOverrides(*config.QueryRangeConfig.Limits, nil)
 		if err != nil {
-			return nil, errors.Wrap(err, "initialize query range limits")
+			return nil, errors.Wrapf(err, "initialize query range limits")
 		}
 	}
 
 	if config.LabelsConfig.Limits != nil {
 		labelsLimits, err = validation.NewOverrides(*config.LabelsConfig.Limits, nil)
 		if err != nil {
-			return nil, errors.Wrap(err, "initialize labels limits")
+			return nil, errors.Wrapf(err, "initialize labels limits")
 		}
 	}
 
@@ -185,7 +185,7 @@ func newQueryRangeTripperware(
 			reg,
 		)
 		if err != nil {
-			return nil, errors.Wrap(err, "create results cache middleware")
+			return nil, errors.Wrapf(err, "create results cache middleware")
 		}
 
 		queryRangeMiddleware = append(
@@ -249,7 +249,7 @@ func newLabelsTripperware(
 			reg,
 		)
 		if err != nil {
-			return nil, errors.Wrap(err, "create results cache middleware")
+			return nil, errors.Wrapf(err, "create results cache middleware")
 		}
 
 		labelsMiddleware = append(

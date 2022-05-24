@@ -26,7 +26,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/olekukonko/tablewriter"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	prommodel "github.com/prometheus/common/model"
@@ -313,7 +313,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		var backupBkt objstore.Bucket
 		if len(backupconfContentYaml) == 0 {
 			if tbc.repair {
-				return errors.New("repair is specified, so backup client is required")
+				return errors.Newf("repair is specified, so backup client is required")
 			}
 		} else {
 			// nil Prometheus registerer: don't create conflicting metrics.
@@ -346,7 +346,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			for _, bid := range tbc.ids {
 				id, err := ulid.Parse(bid)
 				if err != nil {
-					return errors.Wrap(err, "invalid ULID found in --id flag")
+					return errors.Wrapf(err, "invalid ULID found in --id flag")
 				}
 				idsMap[id.String()] = struct{}{}
 			}
@@ -438,11 +438,11 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 		default:
 			tmpl, err := template.New("").Parse(format)
 			if err != nil {
-				return errors.Wrap(err, "invalid template")
+				return errors.Wrapf(err, "invalid template")
 			}
 			printBlock = func(m *metadata.Meta) error {
 				if err := tmpl.Execute(os.Stdout, &m); err != nil {
-					return errors.Wrap(err, "execute template")
+					return errors.Wrapf(err, "execute template")
 				}
 				fmt.Fprintln(os.Stdout, "")
 				return nil
@@ -457,7 +457,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 		for _, meta := range metas {
 			objects++
 			if err := printBlock(meta); err != nil {
-				return errors.Wrap(err, "iter")
+				return errors.Wrapf(err, "iter")
 			}
 		}
 		level.Info(logger).Log("msg", "ls done", "objects", objects)
@@ -478,7 +478,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		// Parse selector.
 		selectorLabels, err := parseFlagLabels(tbc.selector)
 		if err != nil {
-			return errors.Wrap(err, "error parsing selector flag")
+			return errors.Wrapf(err, "error parsing selector flag")
 		}
 
 		confContentYaml, err := objStoreConfig.Content()
@@ -596,7 +596,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 
 		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Bucket.String())
 		if err != nil {
-			return errors.Wrap(err, "bucket client")
+			return errors.Wrapf(err, "bucket client")
 		}
 
 		api := v1.NewBlocksAPI(logger, tbc.webDisableCORS, tbc.label, flagsMap, bkt)
@@ -625,7 +625,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 
 		relabelContentYaml, err := selectorRelabelConf.Content()
 		if err != nil {
-			return errors.Wrap(err, "get content of relabel configuration")
+			return errors.Wrapf(err, "get content of relabel configuration")
 		}
 
 		relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
@@ -704,7 +704,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		matchers, err := replicate.ParseFlagMatchers(tbc.matcherStrs)
 		if err != nil {
-			return errors.Wrap(err, "parse block label matchers")
+			return errors.Wrapf(err, "parse block label matchers")
 		}
 
 		var resolutionLevels []compact.ResolutionLevel
@@ -716,7 +716,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 		for _, id := range *ids {
 			bid, err := ulid.Parse(id)
 			if err != nil {
-				return errors.Wrap(err, "invalid ULID found in --id flag")
+				return errors.Wrapf(err, "invalid ULID found in --id flag")
 			}
 			blockIDs = append(blockIDs, bid)
 		}
@@ -771,7 +771,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 
 		relabelContentYaml, err := selectorRelabelConf.Content()
 		if err != nil {
-			return errors.Wrap(err, "get content of relabel configuration")
+			return errors.Wrapf(err, "get content of relabel configuration")
 		}
 
 		relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
@@ -802,7 +802,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		{
 			baseMetaFetcher, err := block.NewBaseFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
 			if err != nil {
-				return errors.Wrap(err, "create meta fetcher")
+				return errors.Wrapf(err, "create meta fetcher")
 			}
 			cf := baseMetaFetcher.NewMetaFetcher(
 				extprom.WrapRegistererWithPrefix(extpromPrefix, reg), []block.MetadataFilter{
@@ -823,20 +823,20 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				stubCounter,
 				tbc.blockSyncConcurrency)
 			if err != nil {
-				return errors.Wrap(err, "create syncer")
+				return errors.Wrapf(err, "create syncer")
 			}
 		}
 
 		level.Info(logger).Log("msg", "syncing blocks metadata")
 		if err := sy.SyncMetas(ctx); err != nil {
-			return errors.Wrap(err, "sync blocks")
+			return errors.Wrapf(err, "sync blocks")
 		}
 
 		level.Info(logger).Log("msg", "synced blocks done")
 
 		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, stubCounter, stubCounter, stubCounter)
 		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
-			return errors.Wrap(err, "error cleaning blocks")
+			return errors.Wrapf(err, "error cleaning blocks")
 		}
 
 		level.Info(logger).Log("msg", "cleanup done")
@@ -938,7 +938,7 @@ func printBlockData(blockMetas []*metadata.Meta, selectorLabels labels.Labels, s
 	for _, col := range sortBy {
 		index := getIndex(header, col)
 		if index == -1 {
-			return errors.Errorf("column %s not found", col)
+			return errors.Newf("column %s not found", col)
 		}
 		sortByColNum = append(sortByColNum, index)
 	}
@@ -947,7 +947,7 @@ func printBlockData(blockMetas []*metadata.Meta, selectorLabels labels.Labels, s
 	sort.Sort(t)
 	err := printer(os.Stdout, t)
 	if err != nil {
-		return errors.Errorf("unable to write output.")
+		return errors.Newf("unable to write output.")
 	}
 	return nil
 }
@@ -1043,7 +1043,7 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 		for _, id := range tbc.blockIDs {
 			u, err := ulid.Parse(id)
 			if err != nil {
-				return errors.Errorf("block.id is not a valid UUID, got: %v", id)
+				return errors.Newf("block.id is not a valid UUID, got: %v", id)
 			}
 			ids = append(ids, u)
 		}
@@ -1061,7 +1061,7 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 						return errors.Wrapf(err, "mark %v for %v", id, tbc.marker)
 					}
 				default:
-					return errors.Errorf("not supported marker %v", tbc.marker)
+					return errors.Newf("not supported marker %v", tbc.marker)
 				}
 			}
 			level.Info(logger).Log("msg", "marking done", "marker", tbc.marker, "IDs", strings.Join(tbc.blockIDs, ","))
@@ -1131,14 +1131,14 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		}
 
 		if len(modifiers) == 0 {
-			return errors.New("rewrite configuration should be provided")
+			return errors.Newf("rewrite configuration should be provided")
 		}
 
 		var ids []ulid.ULID
 		for _, id := range tbc.blockIDs {
 			u, err := ulid.Parse(id)
 			if err != nil {
-				return errors.Errorf("id is not a valid block ULID, got: %v", id)
+				return errors.Newf("id is not a valid block ULID, got: %v", id)
 			}
 			ids = append(ids, u)
 		}
@@ -1222,7 +1222,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				level.Info(logger).Log("msg", "wrote new block after modifications; flushing", "source", id, "new", newID)
 				meta.Stats, err = d.Flush()
 				if err != nil {
-					return errors.Wrap(err, "flush")
+					return errors.Wrapf(err, "flush")
 				}
 				if err := meta.WriteToDir(logger, filepath.Join(tbc.tmpDir, newID.String())); err != nil {
 					return err
@@ -1231,11 +1231,11 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				level.Info(logger).Log("msg", "uploading new block", "source", id, "new", newID)
 				if tbc.promBlocks {
 					if err := block.UploadPromBlock(ctx, logger, bkt, filepath.Join(tbc.tmpDir, newID.String()), metadata.HashFunc(*hashFunc)); err != nil {
-						return errors.Wrap(err, "upload")
+						return errors.Wrapf(err, "upload")
 					}
 				} else {
 					if err := block.Upload(ctx, logger, bkt, filepath.Join(tbc.tmpDir, newID.String()), metadata.HashFunc(*hashFunc)); err != nil {
-						return errors.Wrap(err, "upload")
+						return errors.Wrapf(err, "upload")
 					}
 				}
 				level.Info(logger).Log("msg", "uploaded", "source", id, "new", newID)
@@ -1297,7 +1297,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 
 		relabelContentYaml, err := selectorRelabelConf.Content()
 		if err != nil {
-			return errors.Wrap(err, "get content of relabel configuration")
+			return errors.Wrapf(err, "get content of relabel configuration")
 		}
 
 		relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
@@ -1326,7 +1326,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 		{
 			baseMetaFetcher, err := block.NewBaseFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
 			if err != nil {
-				return errors.Wrap(err, "create meta fetcher")
+				return errors.Wrapf(err, "create meta fetcher")
 			}
 			cf := baseMetaFetcher.NewMetaFetcher(
 				extprom.WrapRegistererWithPrefix(extpromPrefix, reg), []block.MetadataFilter{
@@ -1347,14 +1347,14 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 				stubCounter,
 				tbc.blockSyncConcurrency)
 			if err != nil {
-				return errors.Wrap(err, "create syncer")
+				return errors.Wrapf(err, "create syncer")
 			}
 		}
 
 		ctx := context.Background()
 		level.Info(logger).Log("msg", "syncing blocks metadata")
 		if err := sy.SyncMetas(ctx); err != nil {
-			return errors.Wrap(err, "sync blocks")
+			return errors.Wrapf(err, "sync blocks")
 		}
 
 		level.Info(logger).Log("msg", "synced blocks done")
@@ -1362,7 +1362,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 		level.Warn(logger).Log("msg", "GLOBAL COMPACTOR SHOULD __NOT__ BE RUNNING ON THE SAME BUCKET")
 
 		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, stubCounter); err != nil {
-			return errors.Wrap(err, "retention failed")
+			return errors.Wrapf(err, "retention failed")
 		}
 		return nil
 	})

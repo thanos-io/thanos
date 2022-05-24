@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
@@ -36,10 +36,10 @@ func (p *tsdbPlannerAdapter) Plan(_ context.Context, metasByMinTime []*metadata.
 	for _, meta := range metasByMinTime {
 		bdir := filepath.Join(p.dir, meta.ULID.String())
 		if err := os.MkdirAll(bdir, 0777); err != nil {
-			return nil, errors.Wrap(err, "create planning block dir")
+			return nil, errors.Wrapf(err, "create planning block dir")
 		}
 		if err := meta.WriteToDir(log.NewNopLogger(), bdir); err != nil {
-			return nil, errors.Wrap(err, "write planning meta file")
+			return nil, errors.Wrapf(err, "write planning meta file")
 		}
 	}
 	plan, err := p.comp.Plan(p.dir)

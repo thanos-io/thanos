@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"gopkg.in/yaml.v2"
@@ -78,12 +78,12 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 	config.Defaults()
 
 	if err := yaml.UnmarshalStrict(yamlContent, config); err != nil {
-		return nil, errors.Wrap(err, "parsing config YAML file")
+		return nil, errors.Wrapf(err, "parsing config YAML file")
 	}
 
 	backendConfig, err := yaml.Marshal(config.BackendConfig)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal content of cache backend configuration")
+		return nil, errors.Wrapf(err, "marshal content of cache backend configuration")
 	}
 
 	var c cache.Cache
@@ -116,7 +116,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 
 		c, err = cache.NewGroupcache(logger, reg, backendConfig, basePath, r, bucket, cfg)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create groupcache")
+			return nil, errors.Wrapf(err, "failed to create groupcache")
 		}
 
 	case string(RedisBucketCacheProvider):
@@ -126,7 +126,7 @@ func NewCachingBucketFromYaml(yamlContent []byte, bucket objstore.Bucket, logger
 		}
 		c = cache.NewRedisCache("caching-bucket", logger, redisCache, reg)
 	default:
-		return nil, errors.Errorf("unsupported cache type: %s", config.Type)
+		return nil, errors.Newf("unsupported cache type: %s", config.Type)
 	}
 
 	// Include interactions with cache in the traces.

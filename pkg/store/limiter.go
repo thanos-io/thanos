@@ -6,7 +6,7 @@ package store
 import (
 	"sync"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 )
@@ -56,7 +56,7 @@ func (l *Limiter) Reserve(num uint64) error {
 		// We need to protect from the counter being incremented twice due to concurrency
 		// while calling Reserve().
 		l.failedOnce.Do(l.failedCounter.Inc)
-		return errors.Errorf("limit %v violated (got %v)", l.limit, reserved)
+		return errors.Newf("limit %v violated (got %v)", l.limit, reserved)
 	}
 	return nil
 }

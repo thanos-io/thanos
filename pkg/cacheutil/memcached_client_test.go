@@ -11,7 +11,7 @@ import (
 
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/go-kit/log"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"go.uber.org/atomic"
@@ -433,7 +433,7 @@ func (c *memcachedClientBackendMock) GetMulti(keys []string) (map[string]*memcac
 
 	c.getMultiCount++
 	if c.getMultiCount <= c.getMultiErrors {
-		return nil, errors.New("mocked GetMulti error")
+		return nil, errors.Newf("mocked GetMulti error")
 	}
 
 	items := make(map[string]*memcache.Item)
@@ -468,7 +468,7 @@ func (c *memcachedClientBackendMock) waitItems(expected int) error {
 		}
 	}
 
-	return errors.New("timeout expired while waiting for items in the memcached mock")
+	return errors.Newf("timeout expired while waiting for items in the memcached mock")
 }
 
 // countingGate implements gate.Gate and counts the number of times Start is called.

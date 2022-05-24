@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"golang.org/x/sync/errgroup"
@@ -70,7 +70,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	}
 
 	if len(selectors) == 0 {
-		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+		return status.Error(codes.InvalidArgument, errors.Newf("no matchers specified (excluding external labels)").Error())
 	}
 
 	var (
@@ -153,7 +153,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 			err = srv.Send(exemplarspb.NewExemplarsResponse(e))
 		})
 		if err != nil {
-			return status.Error(codes.Unknown, errors.Wrap(err, "send exemplars response").Error())
+			return status.Error(codes.Unknown, errors.Wrapf(err, "send exemplars response").Error())
 		}
 	}
 
@@ -197,7 +197,7 @@ func (stream *exemplarsStream) receive(ctx context.Context) error {
 		}
 
 		if w := exemplar.GetWarning(); w != "" {
-			if err := stream.server.Send(exemplarspb.NewWarningExemplarsResponse(errors.New(w))); err != nil {
+			if err := stream.server.Send(exemplarspb.NewWarningExemplarsResponse(errors.Newf(w))); err != nil {
 				return errors.Wrapf(err, "sending exemplars warning to server %v", stream.server)
 			}
 			continue

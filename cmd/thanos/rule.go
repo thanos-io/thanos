@@ -22,7 +22,6 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
@@ -45,6 +44,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -139,12 +139,12 @@ func registerRule(app *extkingpin.App) {
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reload <-chan struct{}, _ bool) error {
 		conf.lset, err = parseFlagLabels(*labelStrs)
 		if err != nil {
-			return errors.Wrap(err, "parse labels")
+			return errors.Wrapf(err, "parse labels")
 		}
 
 		conf.alertQueryURL, err = url.Parse(*conf.alertmgr.alertQueryURL)
 		if err != nil {
-			return errors.Wrap(err, "parse alert query url")
+			return errors.Wrapf(err, "parse alert query url")
 		}
 
 		tsdbOpts := &tsdb.Options{
@@ -164,7 +164,7 @@ func registerRule(app *extkingpin.App) {
 		lookupQueries := map[string]struct{}{}
 		for _, q := range conf.query.addrs {
 			if _, ok := lookupQueries[q]; ok {
-				return errors.Errorf("Address %s is duplicated for --query flag.", q)
+				return errors.Newf("Address %s is duplicated for --query flag.", q)
 			}
 
 			lookupQueries[q] = struct{}{}
@@ -175,10 +175,10 @@ func registerRule(app *extkingpin.App) {
 			return err
 		}
 		if len(conf.query.sdFiles) == 0 && len(conf.query.addrs) == 0 && len(conf.queryConfigYAML) == 0 {
-			return errors.New("no --query parameter was given")
+			return errors.Newf("no --query parameter was given")
 		}
 		if (len(conf.query.sdFiles) != 0 || len(conf.query.addrs) != 0) && len(conf.queryConfigYAML) != 0 {
-			return errors.New("--query/--query.sd-files and --query.config* parameters cannot be defined at the same time")
+			return errors.Newf("--query/--query.sd-files and --query.config* parameters cannot be defined at the same time")
 		}
 
 		// Parse and check alerting configuration.
@@ -187,7 +187,7 @@ func registerRule(app *extkingpin.App) {
 			return err
 		}
 		if len(conf.alertmgrsConfigYAML) != 0 && len(conf.alertmgr.alertmgrURLs) != 0 {
-			return errors.New("--alertmanagers.url and --alertmanagers.config* parameters cannot be defined at the same time")
+			return errors.Newf("--alertmanagers.url and --alertmanagers.config* parameters cannot be defined at the same time")
 		}
 
 		conf.alertRelabelConfigYAML, err = conf.alertmgr.alertRelabelConfigPath.Content()
@@ -197,12 +197,12 @@ func registerRule(app *extkingpin.App) {
 
 		httpLogOpts, err := logging.ParseHTTPOptions(*reqLogDecision, reqLogConfig)
 		if err != nil {
-			return errors.Wrap(err, "error while parsing config for request logging")
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions(*reqLogDecision, reqLogConfig)
 		if err != nil {
-			return errors.Wrap(err, "error while parsing config for request logging")
+			return errors.Wrapf(err, "error while parsing config for request logging")
 		}
 
 		return runRule(g,
@@ -295,7 +295,7 @@ func runRule(
 	} else {
 		queryCfg, err = httpconfig.BuildConfig(conf.query.addrs)
 		if err != nil {
-			return errors.Wrap(err, "query configuration")
+			return errors.Wrapf(err, "query configuration")
 		}
 
 		// Build the query configuration from the legacy query flags.
@@ -368,12 +368,12 @@ func runRule(
 			},
 			RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
 		}); err != nil {
-			return errors.Wrap(err, "applying config to remote storage")
+			return errors.Wrapf(err, "applying config to remote storage")
 		}
 
 		agentDB, err = agent.Open(logger, reg, remoteStore, conf.dataDir, agentOpts)
 		if err != nil {
-			return errors.Wrap(err, "start remote write agent db")
+			return errors.Wrapf(err, "start remote write agent db")
 		}
 		fanoutStore := storage.NewFanout(logger, agentDB, remoteStore)
 		appendable = fanoutStore
@@ -381,12 +381,12 @@ func runRule(
 	} else {
 		tsdbDB, err = tsdb.Open(conf.dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts, nil)
 		if err != nil {
-			return errors.Wrap(err, "open TSDB")
+			return errors.Wrapf(err, "open TSDB")
 		}
 
 		level.Debug(logger).Log("msg", "removing storage lock file if any")
 		if err := removeLockfileIfAny(logger, conf.dataDir); err != nil {
-			return errors.Wrap(err, "remove storage lock files")
+			return errors.Wrapf(err, "remove storage lock files")
 		}
 
 		{
@@ -586,7 +586,7 @@ func runRule(
 	// Start gRPC server.
 	tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpc.tlsSrvCert, conf.grpc.tlsSrvKey, conf.grpc.tlsSrvClientCA)
 	if err != nil {
-		return errors.Wrap(err, "setup gRPC server")
+		return errors.Wrapf(err, "setup gRPC server")
 	}
 
 	options := []grpcserver.Option{
@@ -747,14 +747,14 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 	for _, l := range s {
 		parts := strings.SplitN(l, "=", 2)
 		if len(parts) != 2 {
-			return nil, errors.Errorf("unrecognized label %q", l)
+			return nil, errors.Newf("unrecognized label %q", l)
 		}
 		if !model.LabelName.IsValid(model.LabelName(parts[0])) {
-			return nil, errors.Errorf("unsupported format for label %s", l)
+			return nil, errors.Newf("unsupported format for label %s", l)
 		}
 		val, err := strconv.Unquote(parts[1])
 		if err != nil {
-			return nil, errors.Wrap(err, "unquote label value")
+			return nil, errors.Wrapf(err, "unquote label value")
 		}
 		lset = append(lset, labels.Label{Name: parts[0], Value: val})
 	}
@@ -807,7 +807,7 @@ func queryFuncCreator(
 			spanID = "/rule_instant_query_part_resp_abort HTTP[client]"
 		default:
 			// Programming error will be caught by tests.
-			panic(errors.Errorf("unknown partial response strategy %v", partialResponseStrategy).Error())
+			panic(errors.Newf("unknown partial response strategy %v", partialResponseStrategy).Error())
 		}
 
 		promClients := make([]*promclient.Client, 0, len(queriers))
@@ -840,7 +840,7 @@ func queryFuncCreator(
 					return v, nil
 				}
 			}
-			return nil, errors.Errorf("no query API server reachable")
+			return nil, errors.Newf("no query API server reachable")
 		}
 	}
 }
@@ -895,7 +895,7 @@ func reloadRules(logger log.Logger,
 
 	if err := ruleMgr.Update(evalInterval, files); err != nil {
 		metrics.configSuccess.Set(0)
-		errs.Add(errors.Wrap(err, "reloading rules failed"))
+		errs.Add(errors.Wrapf(err, "reloading rules failed"))
 		return errs.Err()
 	}
 

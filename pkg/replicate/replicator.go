@@ -16,7 +16,7 @@ import (
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
@@ -47,21 +47,21 @@ func ParseFlagMatchers(s []string) ([]*labels.Matcher, error) {
 	for _, l := range s {
 		parts := strings.SplitN(l, "=", 2)
 		if len(parts) != 2 {
-			return nil, errors.Errorf("unrecognized label %q", l)
+			return nil, errors.Newf("unrecognized label %q", l)
 		}
 
 		labelName := parts[0]
 		if !model.LabelName.IsValid(model.LabelName(labelName)) {
-			return nil, errors.Errorf("unsupported format for label %s", l)
+			return nil, errors.Newf("unsupported format for label %s", l)
 		}
 
 		labelValue, err := strconv.Unquote(parts[1])
 		if err != nil {
-			return nil, errors.Wrap(err, "unquote label value")
+			return nil, errors.Wrapf(err, "unquote label value")
 		}
 		newEqualMatcher, err := labels.NewMatcher(labels.MatchEqual, labelName, labelValue)
 		if err != nil {
-			return nil, errors.Wrap(err, "new equal matcher")
+			return nil, errors.Wrapf(err, "new equal matcher")
 		}
 		matchers = append(matchers, newEqualMatcher)
 	}
@@ -123,7 +123,7 @@ func RunReplicate(
 	}
 
 	if len(fromConfContentYaml) == 0 {
-		return errors.New("No supported bucket was configured to replicate from")
+		return errors.Newf("No supported bucket was configured to replicate from")
 	}
 
 	fromBkt, err := client.NewBucket(
@@ -142,7 +142,7 @@ func RunReplicate(
 	}
 
 	if len(toConfContentYaml) == 0 {
-		return errors.New("No supported bucket was configured to replicate to")
+		return errors.Newf("No supported bucket was configured to replicate to")
 	}
 
 	toBkt, err := client.NewBucket(
@@ -189,14 +189,14 @@ func RunReplicate(
 
 		runID, err := ulid.New(ulid.Timestamp(timestamp), entropy)
 		if err != nil {
-			return errors.Wrap(err, "generate replication run-id")
+			return errors.Wrapf(err, "generate replication run-id")
 		}
 
 		logger := log.With(logger, "replication-run-id", runID.String())
 		level.Info(logger).Log("msg", "running replication attempt")
 
 		if err := newReplicationScheme(logger, metrics, blockFilter, fetcher, fromBkt, toBkt, reg).execute(ctx); err != nil {
-			return errors.Wrap(err, "replication execute")
+			return errors.Wrapf(err, "replication execute")
 		}
 
 		return nil

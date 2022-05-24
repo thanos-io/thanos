@@ -60,7 +60,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/errutil"
 )
@@ -123,7 +123,7 @@ func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...
 		logger = log.NewLogfmtLogger(os.Stderr)
 	}
 
-	level.Warn(logger).Log("msg", "detected close error", "err", errors.Wrap(err, fmt.Sprintf(format, a...)))
+	level.Warn(logger).Log("msg", "detected close error", "err", errors.Wrapf(err, fmt.Sprintf(format, a...)))
 }
 
 // ExhaustCloseWithLogOnErr closes the io.ReadCloser with a log message on error but exhausts the reader before.
@@ -170,7 +170,7 @@ func DeleteAll(dir string, ignoreDirs ...string) error {
 		return nil
 	}
 	if err != nil {
-		return errors.Wrap(err, "read dir")
+		return errors.Wrapf(err, "read dir")
 	}
 	var groupErrs errutil.MultiError
 
@@ -213,7 +213,7 @@ func DeleteAll(dir string, ignoreDirs ...string) error {
 	}
 
 	if groupErrs.Err() != nil {
-		return errors.Wrap(groupErrs.Err(), "delete file/dir")
+		return errors.Wrapf(groupErrs.Err(), "delete file/dir")
 	}
 	return nil
 }
