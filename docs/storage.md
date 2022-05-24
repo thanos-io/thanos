@@ -102,7 +102,7 @@ At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `ac
 
 However if you set `aws_sdk_auth: true` Thanos will use the default authentication methods of the AWS SDK for go based on [known environment variables](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html) (`AWS_PROFILE`, `AWS_WEB_IDENTITY_TOKEN_FILE` ... etc) and known AWS config files (~/.aws/config). If you turn this on, then the `bucket` and `endpoint` are the required config keys.
 
-The field `prefix` can be used to transparently use prefixes in your S3 bucket. That way, you may point distinct Thanos instances to the same bucket, while avoiding one instance messing with the data from another instance. This allows multiple Thanos deployments to use the same bucket without having to list all the files in it when you point Thanos store to the bucket (even when you are using tenants feature).
+The field `prefix` can be used to transparently use prefixes in your S3 bucket. This allows you to separate blocks coming from different sources into paths with different prefixes, making it easier to understand what's going on (i.e. you don't have to use Thanos tooling to know from where which blocks came).
 
 The AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/s3.html).
 
