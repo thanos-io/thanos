@@ -83,7 +83,7 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	}
 
 	prefix := prefixFromConfig(confContentYaml, bucketConf)
-	
+
 	return objstore.NewTracingBucket(objstore.BucketWithMetrics(bucket.Name(), objstore.NewPrefixedBucket(bucket, prefix), reg)), nil
 }
 
