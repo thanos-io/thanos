@@ -11,10 +11,10 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
-	"github.com/thanos-io/thanos/pkg/errors"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"go.uber.org/atomic"
 
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
@@ -25,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"gopkg.in/yaml.v3"
 
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"

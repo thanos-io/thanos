@@ -30,7 +30,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
@@ -44,6 +43,7 @@ import (
 	"github.com/prometheus/prometheus/util/stats"
 
 	"github.com/thanos-io/thanos/pkg/api"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"

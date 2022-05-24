@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/thanos-io/thanos/pkg/errors"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 

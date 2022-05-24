@@ -10,8 +10,9 @@ import (
 
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/thanos-io/thanos/pkg/errors"
+
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // DuplicatedCompactionBlocks is for bug fixed in https://github.com/thanos-io/thanos/commit/94e26c63e52ba45b713fd998638d0e7b2492664f.

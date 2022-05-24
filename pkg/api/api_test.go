@@ -26,9 +26,9 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/route"
 
+	"github.com/thanos-io/thanos/pkg/errors"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/testutil"

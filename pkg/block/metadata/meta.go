@@ -17,7 +17,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -26,6 +25,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"gopkg.in/yaml.v3"
 
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 

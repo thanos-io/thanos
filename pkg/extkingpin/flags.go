@@ -9,9 +9,10 @@ import (
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"gopkg.in/alecthomas/kingpin.v2"
+
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 func ModelDuration(flags *kingpin.FlagClause) *model.Duration {

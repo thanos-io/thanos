@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/tencentyun/cos-go-sdk-v5"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/clientutil"

@@ -13,13 +13,13 @@ import (
 	"github.com/go-kit/log/level"
 	lru "github.com/hashicorp/golang-lru/simplelru"
 	"github.com/oklog/ulid"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/model"
 )
 

@@ -6,8 +6,9 @@ package indexheader
 import (
 	"io"
 
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb/index"
+
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // NotFoundRangeErr is an error returned by PostingsOffset when there is no posting for given name and value pairs.

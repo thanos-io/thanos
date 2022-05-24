@@ -15,12 +15,12 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/log"
 	"github.com/thanos-io/thanos/pkg/errors"
-	"github.com/prometheus/common/version"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"gopkg.in/yaml.v2"
 
+	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 

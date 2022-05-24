@@ -4,11 +4,11 @@
 package exemplars
 
 import (
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/promql/parser"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 )
 

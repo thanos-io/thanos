@@ -26,7 +26,6 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/olekukonko/tablewriter"
 	"github.com/opentracing/opentracing-go"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	prommodel "github.com/prometheus/common/model"
@@ -37,6 +36,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"gopkg.in/yaml.v3"

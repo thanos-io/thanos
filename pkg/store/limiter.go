@@ -6,9 +6,10 @@ package store
 import (
 	"sync"
 
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
+
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 type ChunksLimiter interface {

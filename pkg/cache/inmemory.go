@@ -11,11 +11,11 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	lru "github.com/hashicorp/golang-lru/simplelru"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/model"
 )
 

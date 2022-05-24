@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -25,6 +24,8 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"go.uber.org/goleak"
+
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // Assert fails the test if the condition is false.

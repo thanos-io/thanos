@@ -7,10 +7,11 @@ import (
 	"bytes"
 
 	"github.com/golang/snappy"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
+
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // This file implements encoding and decoding of postings using diff (or delta) + varint

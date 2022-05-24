@@ -7,7 +7,6 @@ import (
 	"math"
 	"sort"
 
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
@@ -18,6 +17,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 type Modifier interface {

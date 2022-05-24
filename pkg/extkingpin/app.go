@@ -12,9 +12,10 @@ import (
 	"github.com/go-kit/log"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/alecthomas/kingpin.v2"
+
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 const UsageTemplate = `{{define "FormatCommand"}}\

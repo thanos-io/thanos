@@ -9,10 +9,10 @@ import (
 
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // OverlappedBlocksIssue checks bucket for blocks with overlapped time ranges.

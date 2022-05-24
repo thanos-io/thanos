@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/errors"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 
 	thanoscache "github.com/thanos-io/thanos/pkg/cache"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/cache/cachekey"

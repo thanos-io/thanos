@@ -15,8 +15,9 @@ import (
 	"unsafe"
 
 	"github.com/cespare/xxhash/v2"
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 var sep = []byte{'\xff'}

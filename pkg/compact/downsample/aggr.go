@@ -6,8 +6,9 @@ package downsample
 import (
 	"encoding/binary"
 
-	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
+	"github.com/thanos-io/thanos/pkg/errors"
 )
 
 // ChunkEncAggr is the top level encoding byte for the AggrChunk.

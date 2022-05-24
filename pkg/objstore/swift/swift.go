@@ -18,9 +18,9 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/ncw/swift"
 	"github.com/thanos-io/thanos/pkg/errors"
-	"github.com/prometheus/common/model"
 	"gopkg.in/yaml.v2"
 
+	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
