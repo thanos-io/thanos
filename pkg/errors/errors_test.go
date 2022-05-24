@@ -10,8 +10,6 @@ import (
 	"regexp"
 	"strconv"
 	"testing"
-
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 const msg = "test_error_message"
@@ -19,10 +17,14 @@ const wrapper = "test_wrapper"
 
 func TestNewf(t *testing.T) {
 	err := Newf(msg)
-	testutil.Equals(t, err.Error(), msg, "the root error message must match")
+	if err.Error() != msg {
+		t.Fatalf("failed to match the root error message: %+v", err)
+	}
 
 	reg := regexp.MustCompile(msg + `[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestNewf	.*\/pkg\/errors\/errors_test\.go:\d+`)
-	testutil.Equals(t, reg.MatchString(fmt.Sprintf("%+v", err)), true, "matching stacktrace in errors.New")
+	if !reg.MatchString(fmt.Sprintf("%+v", err)) {
+		t.Fatalf("failed to match stacktrace in errors.New: %+v", err)
+	}
 }
 
 func TestNewfFormatted(t *testing.T) {
@@ -30,9 +32,13 @@ func TestNewfFormatted(t *testing.T) {
 	expectedMsg := msg + " key=value"
 
 	err := Newf(fmtMsg, "value")
-	testutil.Equals(t, err.Error(), expectedMsg, "the root error message must match")
+	if err.Error() != expectedMsg {
+		t.Fatalf("failed to match the root error message: %+v", err)
+	}
 	reg := regexp.MustCompile(expectedMsg + `[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestNewfFormatted	.*\/pkg\/errors\/errors_test\.go:\d+`)
-	testutil.Equals(t, reg.MatchString(fmt.Sprintf("%+v", err)), true, "matching stacktrace in errors.New with format string")
+	if !reg.MatchString(fmt.Sprintf("%+v", err)) {
+		t.Fatalf("failed to match stacktrace in errors.New with format string: %+v", err)
+	}
 }
 
 func TestWrapf(t *testing.T) {
@@ -40,12 +46,16 @@ func TestWrapf(t *testing.T) {
 	err = Wrapf(err, wrapper)
 
 	expectedMsg := wrapper + ": " + msg
-	testutil.Equals(t, err.Error(), expectedMsg, "the root error message must match")
+	if err.Error() != expectedMsg {
+		t.Fatalf("failed to match the root error message: %+v", err)
+	}
 
 	reg := regexp.MustCompile(`test_wrapper[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestWrapf	.*\/pkg\/errors\/errors_test\.go:\d+
 [[:ascii:]]+test_error_message[ \n]+> github\.com\/thanos-io\/thanos\/pkg\/errors\.TestWrapf	.*\/pkg\/errors\/errors_test\.go:\d+`)
 
-	testutil.Equals(t, reg.MatchString(fmt.Sprintf("%+v", err)), true, "matching stacktrace in errors.Wrap")
+	if !reg.MatchString(fmt.Sprintf("%+v", err)) {
+		t.Fatalf("failed to match stacktrace in errors.Wrapf: %+v", err)
+	}
 }
 
 func TestUnwrap(t *testing.T) {
@@ -87,10 +97,14 @@ func TestUnwrap(t *testing.T) {
 		t.Run("TestCase"+strconv.Itoa(i), func(t *testing.T) {
 			unwrapped := Unwrap(tc.err)
 			if tc.isNil {
-				testutil.Equals(t, unwrapped, nil)
+				if unwrapped != nil {
+					t.Fatalf("expected nil, received %+v", unwrapped)
+				}
 				return
 			}
-			testutil.Equals(t, unwrapped.Error(), tc.expected, "Unwrap must match expected output")
+			if unwrapped.Error() != tc.expected {
+				t.Fatalf("failed to match 'Unwrapped' output with expected error output: %+v", unwrapped)
+			}
 		})
 	}
 }
@@ -134,10 +148,14 @@ func TestCause(t *testing.T) {
 		t.Run("TestCase"+strconv.Itoa(i), func(t *testing.T) {
 			cause := Cause(tc.err)
 			if tc.isNil {
-				testutil.Equals(t, cause, nil)
+				if cause != nil {
+					t.Fatalf("expected nil, received %+v", cause)
+				}
 				return
 			}
-			testutil.Equals(t, cause.Error(), tc.expected, "Cause must match expected output")
+			if cause.Error() != tc.expected {
+				t.Fatalf("failed to match 'Cause' output with expected error output: %+v", cause)
+			}
 		})
 	}
 }
