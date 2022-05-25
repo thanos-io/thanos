@@ -28,8 +28,8 @@ func validPrefix(prefix string) bool {
 }
 
 func conditionalPrefix(prefix, name string) string {
-	if len(name) > 0 && len(prefix) > 0 {
-		return prefix + DirDelim + name
+	if len(name) > 0 {
+		return withPrefix(prefix, name)
 	}
 	return name
 }
@@ -46,14 +46,11 @@ func (p *PrefixedBucket) Close() error {
 // object name including the prefix of the inspected directory.
 // Entries are passed to function in sorted order.
 func (p *PrefixedBucket) Iter(ctx context.Context, dir string, f func(string) error, options ...IterOption) error {
-	if len(p.prefix) > 0 {
-		pdir := withPrefix(p.prefix, dir)
+	pdir := withPrefix(p.prefix, dir)
 
-		return p.bkt.Iter(ctx, pdir, func(s string) error {
-			return f(strings.TrimPrefix(s, p.prefix+DirDelim))
-		}, options...)
-	}
-	return p.bkt.Iter(ctx, dir, f, options...)
+	return p.bkt.Iter(ctx, pdir, func(s string) error {
+		return f(strings.TrimPrefix(s, p.prefix+DirDelim))
+	}, options...)
 }
 
 // Get returns a reader for the given object name.

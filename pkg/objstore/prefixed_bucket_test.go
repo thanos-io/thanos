@@ -14,25 +14,18 @@ import (
 )
 
 func TestPrefixedBucket_Acceptance(t *testing.T) {
-	prefix := "/someprefix/anotherprefix/"
-	AcceptanceTest(t, NewPrefixedBucket(NewInMemBucket(), prefix))
-	UsesPrefixTest(t, NewInMemBucket(), prefix)
 
-	prefix = "someprefix/anotherprefix/"
-	AcceptanceTest(t, NewPrefixedBucket(NewInMemBucket(), prefix))
-	UsesPrefixTest(t, NewInMemBucket(), prefix)
+	prefixes := []string{
+		"/someprefix/anotherprefix/",
+		"someprefix/anotherprefix/",
+		"someprefix/anotherprefix",
+		"someprefix/",
+		"someprefix"}
 
-	prefix = "someprefix/anotherprefix"
-	AcceptanceTest(t, NewPrefixedBucket(NewInMemBucket(), prefix))
-	UsesPrefixTest(t, NewInMemBucket(), prefix)
-
-	prefix = "someprefix/"
-	AcceptanceTest(t, NewPrefixedBucket(NewInMemBucket(), prefix))
-	UsesPrefixTest(t, NewInMemBucket(), prefix)
-
-	prefix = "someprefix"
-	AcceptanceTest(t, NewPrefixedBucket(NewInMemBucket(), prefix))
-	UsesPrefixTest(t, NewInMemBucket(), prefix)
+	for _, prefix := range prefixes {
+		AcceptanceTest(t, NewPrefixedBucket(NewInMemBucket(), prefix))
+		UsesPrefixTest(t, NewInMemBucket(), prefix)
+	}
 }
 
 func UsesPrefixTest(t *testing.T, bkt Bucket, prefix string) {
@@ -50,8 +43,6 @@ func UsesPrefixTest(t *testing.T, bkt Bucket, prefix string) {
 
 	testutil.Ok(t, pBkt.Upload(context.Background(), "file2.jpg", strings.NewReader("test-data2")))
 	rc2, err := bkt.Get(context.Background(), strings.Trim(prefix, "/")+"/file2.jpg")
-	testutil.Ok(t, err)
-
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, rc2.Close()) }()
 	contentUpload, err := ioutil.ReadAll(rc2)
