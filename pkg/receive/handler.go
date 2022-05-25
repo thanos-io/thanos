@@ -829,7 +829,7 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	return client, nil
 }
 
-// GetTenantFromCertificate extracts the tenant value from a client's presented certificate. The x509 field to use as
+// getTenantFromCertificate extracts the tenant value from a client's presented certificate. The x509 field to use as
 // value can be configured with Options.TenantField. An error is returned when the extraction has not succeeded.
 func (h *Handler) getTenantFromCertificate(r *http.Request) (string, error) {
 	var tenant string
