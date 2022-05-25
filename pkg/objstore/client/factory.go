@@ -88,12 +88,6 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 }
 
 func prefixFromConfig(confYaml []byte, bucketConf *BucketConfig) string {
-	err := yaml.UnmarshalStrict(confYaml, &bucketConf)
-
-	if err != nil {
-		return ""
-	}
-
 	prefix, ok := bucketConf.Config.(map[interface{}]interface{})["prefix"]
 	if !ok {
 		return ""
