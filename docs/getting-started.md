@@ -101,6 +101,10 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 
 ## Blog posts
 
+* 2022:
+
+  * [Leveraging Consul for Thanos Query Discovery](https://nicolastakashi.medium.com/leveraging-consul-for-thanos-query-discovery-34212d496c88)
+
 * 2021:
 
   * [Adopting Thanos at LastPass](https://krisztianfekete.org/adopting-thanos-at-lastpass/)
