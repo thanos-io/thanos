@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"github.com/prometheus/prometheus/model/relabel"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -555,6 +556,54 @@ func TestReceive(t *testing.T) {
 				"receive":    "receive-1",
 				"replica":    "0",
 				"tenant_id":  "tenant-2",
+			},
+		})
+	})
+
+	t.Run("relabel", func(t *testing.T) {
+		t.Parallel()
+		e, err := e2e.NewDockerEnvironment("e2e_receive_relabel")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		// Setup Router Ingestor.
+		i := e2ethanos.NewReceiveBuilder(e, "ingestor").
+			WithIngestionEnabled().
+			WithRelabelConfigs([]*relabel.Config{
+				{
+					TargetLabel: "job",
+					Action:      relabel.LabelDrop,
+					Regex:       relabel.MustNewRegexp("myself"),
+				},
+				{
+					TargetLabel: "prometheus",
+					Action:      relabel.LabelDrop,
+					Regex:       relabel.MustNewRegexp("prom1"),
+				},
+			}).Init()
+
+		testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+		// Setup Prometheus
+		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(i.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, e2e.StartAndWaitReady(prom))
+
+		q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		t.Cleanup(cancel)
+
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+
+		// We expect the data from each Prometheus instance to be replicated twice across our ingesting instances
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"receive":   "receive-ingestor",
+				"replica":   "0",
+				"tenant_id": "default-tenant",
 			},
 		})
 	})

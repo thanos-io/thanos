@@ -365,6 +365,7 @@ type ReceiveBuilder struct {
 	maxExemplars    int
 	ingestion       bool
 	hashringConfigs []receive.HashringConfig
+	relabelConfigs  []*relabel.Config
 	replication     int
 	image           string
 }
@@ -400,6 +401,11 @@ func (r *ReceiveBuilder) WithIngestionEnabled() *ReceiveBuilder {
 func (r *ReceiveBuilder) WithRouting(replication int, hashringConfigs ...receive.HashringConfig) *ReceiveBuilder {
 	r.hashringConfigs = hashringConfigs
 	r.replication = replication
+	return r
+}
+
+func (r *ReceiveBuilder) WithRelabelConfigs(relabelConfigs []*relabel.Config) *ReceiveBuilder {
+	r.relabelConfigs = relabelConfigs
 	return r
 }
 
@@ -446,6 +452,14 @@ func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
 		args["--receive.hashrings-file"] = filepath.Join(r.InternalDir(), "hashrings.json")
 		args["--receive.hashrings-file-refresh-interval"] = "5s"
 		args["--receive.replication-factor"] = strconv.Itoa(r.replication)
+	}
+
+	if len(r.relabelConfigs) > 0 {
+		relabelConfigBytes, err := yaml.Marshal(r.relabelConfigs)
+		if err != nil {
+			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate relabel configs: %v", relabelConfigBytes))
+		}
+		args["--receive.relabel-config"] = string(relabelConfigBytes)
 	}
 
 	return r.f.Init(wrapWithDefaults(e2e.StartOptions{
