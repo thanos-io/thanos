@@ -5,7 +5,6 @@ package e2e_test
 
 import (
 	"context"
-	"github.com/prometheus/prometheus/model/relabel"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -14,6 +13,8 @@ import (
 
 	"github.com/efficientgo/e2e"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/relabel"
+
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/testutil"
