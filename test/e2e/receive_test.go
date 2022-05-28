@@ -572,14 +572,8 @@ func TestReceive(t *testing.T) {
 			WithIngestionEnabled().
 			WithRelabelConfigs([]*relabel.Config{
 				{
-					TargetLabel: "job",
-					Action:      relabel.LabelDrop,
-					Regex:       relabel.MustNewRegexp("myself"),
-				},
-				{
-					TargetLabel: "prometheus",
-					Action:      relabel.LabelDrop,
-					Regex:       relabel.MustNewRegexp("prom1"),
+					Action: relabel.LabelDrop,
+					Regex:  relabel.MustNewRegexp("prometheus"),
 				},
 			}).Init()
 
@@ -602,6 +596,7 @@ func TestReceive(t *testing.T) {
 			Deduplicate: false,
 		}, []model.Metric{
 			{
+				"job":       "myself",
 				"receive":   "receive-ingestor",
 				"replica":   "0",
 				"tenant_id": "default-tenant",
