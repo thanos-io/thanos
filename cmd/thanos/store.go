@@ -61,6 +61,8 @@ type storeConfig struct {
 	maxConcurrency              int
 	component                   component.StoreAPI
 	debugLogging                bool
+	initialSyncRetryInterval    time.Duration
+	initialSyncRetryTimeout     time.Duration
 	syncInterval                time.Duration
 	blockSyncConcurrency        int
 	blockMetaFetchConcurrency   int
@@ -113,6 +115,12 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.component = component.Store
 
 	sc.objStoreConfig = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", true)
+
+	cmd.Flag("initial-sync-retry-interval", "Interval between retries for the initial sync of the bucket store.").
+		Default("2s").DurationVar(&sc.initialSyncRetryInterval)
+
+	cmd.Flag("initial-sync-retry-timeout", "Timeout for the initial sync of the bucket store.").
+		Default("3m").DurationVar(&sc.initialSyncRetryTimeout)
 
 	cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
 		Default("3m").DurationVar(&sc.syncInterval)
@@ -364,7 +372,10 @@ func runStore(
 			level.Info(logger).Log("msg", "initializing bucket store")
 			begin := time.Now()
 
-			err := runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
+			initialSyncCtx, cancel := context.WithTimeout(ctx, conf.initialSyncRetryTimeout)
+			defer cancel()
+
+			err := runutil.RetryWithLog(logger, conf.initialSyncRetryInterval, initialSyncCtx.Done(), func() error {
 				return bs.InitialSync(ctx)
 			})
 

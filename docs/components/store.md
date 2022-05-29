@@ -106,6 +106,12 @@ Flags:
                                  Path to YAML file that contains index cache
                                  configuration. See format details:
                                  https://thanos.io/tip/components/store.md/#index-cache
+      --initial-sync-retry-interval=2s
+                                 Interval between retries for the initial sync
+                                 of the bucket store.
+      --initial-sync-retry-timeout=3m
+                                 Timeout for the initial sync of the bucket
+                                 store.
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
