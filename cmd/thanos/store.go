@@ -365,8 +365,7 @@ func runStore(
 			begin := time.Now()
 
 			err := runutil.RetryWithLog(logger, 2*time.Second, ctx.Done(), func() error {
-				syncErr := bs.InitialSync(ctx)
-				return errors.Wrap(syncErr, "bucket store initial sync")
+				return bs.InitialSync(ctx)
 			})
 
 			if err != nil {
