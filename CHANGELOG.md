@@ -17,7 +17,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#5352](https://github.com/thanos-io/thanos/pull/5352) Cache: Add cache metrics to groupcache.
-- [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Add relabeling support. 
+- [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Add relabeling support.
 
 ### Changed
 
