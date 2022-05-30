@@ -181,7 +181,7 @@ func runReceive(
 	}
 	var relabelConfig []*relabel.Config
 	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
-		return errors.Wrap(err, "parsing relabel configuration")
+		return errors.Wrap(err, "parse relabel configuration")
 	}
 
 	dbs := receive.NewMultiTSDB(
@@ -796,7 +796,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
-	rc.relabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabelling configuration.", extflag.WithEnvSubstitution())
+	rc.relabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 

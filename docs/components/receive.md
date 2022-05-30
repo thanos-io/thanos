@@ -143,9 +143,9 @@ Flags:
       --receive.relabel-config=<content>
                                  Alternative to 'receive.relabel-config-file'
                                  flag (mutually exclusive). Content of YAML file
-                                 that contains relabelling configuration.
+                                 that contains relabeling configuration.
       --receive.relabel-config-file=<file-path>
-                                 Path to YAML file that contains relabelling
+                                 Path to YAML file that contains relabeling
                                  configuration.
       --receive.replica-header="THANOS-REPLICA"
                                  HTTP header specifying the replica number of a
