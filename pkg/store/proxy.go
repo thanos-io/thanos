@@ -283,15 +283,19 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	}
 
 	var (
-		storeResponses = make([]*lazyRespSet, len(stores))
+		storeResponses = make([]respSet, len(stores))
 	)
 
 	for i, st := range stores {
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
 
 		st := st
-		storeResponses[i] = newLazyRespSet(srv.Context(), st, r, s.responseTimeout)
-		defer storeResponses[i].Close()
+		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, EagerRetrieval)
+		if err != nil {
+			return status.Error(codes.Unknown, errors.Wrapf(err, "starting %s stream", st.String()).Error())
+		}
+		storeResponses[i] = respSet
+		defer respSet.Close()
 	}
 
 	if len(stores) == 0 {
@@ -328,12 +332,12 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 				return errors.Wrap(err, "send series response")
 			}
 		} else {
-			storeID := labelpb.PromLabelSetsToString(respSet.st.LabelSets())
+			storeID := respSet.Labelset()
 			if storeID == "" {
 				storeID = "Store Gateway"
 			}
 
-			return errors.Wrapf(respSet.Err(), "fetch series for %s %s", storeID, respSet.st)
+			return errors.Wrapf(respSet.Err(), "fetch series for %s %s", storeID, respSet.StoreID())
 		}
 	}
 
