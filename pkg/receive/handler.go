@@ -694,18 +694,19 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 
 // relabel relabels the time series labels in the remote write request.
 func (h *Handler) relabel(wreq *prompb.WriteRequest) {
-	if len(h.options.RelabelConfigs) > 0 {
-		timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
-		for _, ts := range wreq.Timeseries {
-			lbls := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
-			if lbls == nil {
-				continue
-			}
-			ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
-			timeSeries = append(timeSeries, ts)
-		}
-		wreq.Timeseries = timeSeries
+	if len(h.options.RelabelConfigs) == 0 {
+		return
 	}
+	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
+	for _, ts := range wreq.Timeseries {
+		lbls := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		if lbls == nil {
+			continue
+		}
+		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+		timeSeries = append(timeSeries, ts)
+	}
+	wreq.Timeseries = timeSeries
 }
 
 // isConflict returns whether or not the given error represents a conflict.
