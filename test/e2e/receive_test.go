@@ -13,6 +13,8 @@ import (
 
 	"github.com/efficientgo/e2e"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/relabel"
+
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -555,6 +557,48 @@ func TestReceive(t *testing.T) {
 				"receive":    "receive-1",
 				"replica":    "0",
 				"tenant_id":  "tenant-2",
+			},
+		})
+	})
+
+	t.Run("relabel", func(t *testing.T) {
+		t.Parallel()
+		e, err := e2e.NewDockerEnvironment("e2e_receive_relabel")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		// Setup Router Ingestor.
+		i := e2ethanos.NewReceiveBuilder(e, "ingestor").
+			WithIngestionEnabled().
+			WithRelabelConfigs([]*relabel.Config{
+				{
+					Action: relabel.LabelDrop,
+					Regex:  relabel.MustNewRegexp("prometheus"),
+				},
+			}).Init()
+
+		testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+		// Setup Prometheus
+		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(i.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, e2e.StartAndWaitReady(prom))
+
+		q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		t.Cleanup(cancel)
+
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+		// Label `prometheus` should be dropped.
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"job":       "myself",
+				"receive":   "receive-ingestor",
+				"replica":   "0",
+				"tenant_id": "default-tenant",
 			},
 		})
 	})
