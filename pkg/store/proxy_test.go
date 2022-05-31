@@ -1128,9 +1128,10 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 
 	testutil.Ok(t, q.Series(
 		&storepb.SeriesRequest{
-			MinTime:  1,
-			MaxTime:  300,
-			Matchers: []storepb.LabelMatcher{{Name: "any", Value: ".*", Type: storepb.LabelMatcher_RE}},
+			MinTime:                 1,
+			MaxTime:                 300,
+			Matchers:                []storepb.LabelMatcher{{Name: "any", Value: ".*", Type: storepb.LabelMatcher_RE}},
+			PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 		}, s,
 	))
 	testutil.Equals(t, 0, len(s.SeriesSet))

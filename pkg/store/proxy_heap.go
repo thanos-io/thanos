@@ -459,6 +459,8 @@ func newAsyncRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest,
 
 	cl, err := st.Series(seriesCtx, req)
 	if err != nil {
+		err = errors.Wrapf(err, "fetch series for %s %s", storeID, st)
+
 		span.SetTag("err", err.Error())
 		span.Finish()
 		closeSeries()
@@ -597,19 +599,16 @@ func (l *eagerRespSet) At() *storepb.SeriesResponse {
 	if len(l.bufferedResponses) == 0 {
 		return nil
 	}
-	if l.i-1 < 0 {
-		return l.bufferedResponses[0]
-	}
-	return l.bufferedResponses[l.i-1]
+
+	return l.bufferedResponses[l.i]
 }
 
 func (l *eagerRespSet) Next() bool {
 	l.wg.Wait()
 
-	savedIndex := l.i
 	l.i++
 
-	return savedIndex < len(l.bufferedResponses)
+	return l.i < len(l.bufferedResponses)
 }
 
 func (l *eagerRespSet) Err() error {

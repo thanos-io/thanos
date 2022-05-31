@@ -282,19 +282,28 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		stores = append(stores, st)
 	}
 
-	var (
-		storeResponses = make([]respSet, len(stores))
-	)
+	storeResponses := make([]respSet, 0, len(stores))
 
-	for i, st := range stores {
+	for _, st := range stores {
+		st := st
+
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
 
-		st := st
 		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, EagerRetrieval)
 		if err != nil {
-			return status.Error(codes.Unknown, errors.Wrapf(err, "starting %s stream", st.String()).Error())
+			level.Error(reqLogger).Log("err", err)
+
+			if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
+				if err := srv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
+					return err
+				}
+				continue
+			} else {
+				return err
+			}
 		}
-		storeResponses[i] = respSet
+
+		storeResponses = append(storeResponses, respSet)
 		defer respSet.Close()
 	}
 
@@ -319,35 +328,6 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		if err := srv.Send(resp); err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
-		}
-	}
-
-	for _, respSet := range storeResponses {
-		if respSet.Err() == nil {
-			continue
-		}
-
-		if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
-			if err := srv.Send(storepb.NewWarnSeriesResponse(respSet.Err())); err != nil {
-				return errors.Wrap(err, "send series response")
-			}
-		} else {
-			storeID := respSet.Labelset()
-			if storeID == "" {
-				storeID = "Store Gateway"
-			}
-
-			return errors.Wrapf(respSet.Err(), "fetch series for %s %s", storeID, respSet.StoreID())
-		}
-	}
-
-	if respHeap.Err() != nil {
-		if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
-			if err := srv.Send(storepb.NewWarnSeriesResponse(respHeap.Err())); err != nil {
-				return errors.Wrap(err, "send series response")
-			}
-		} else {
-			return status.Error(codes.Unknown, respHeap.Err().Error())
 		}
 	}
 
