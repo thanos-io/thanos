@@ -17,6 +17,9 @@ import (
 	"sync"
 	"time"
 
+	statusapi "github.com/thanos-io/thanos/pkg/api/status"
+	"github.com/thanos-io/thanos/pkg/logging"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -72,7 +75,7 @@ var (
 type Options struct {
 	Writer            *Writer
 	ListenAddress     string
-	Registry          prometheus.Registerer
+	Registry          *prometheus.Registry
 	TenantHeader      string
 	DefaultTenantID   string
 	ReplicaHeader     string
@@ -84,6 +87,7 @@ type Options struct {
 	DialOpts          []grpc.DialOption
 	ForwardTimeout    time.Duration
 	RelabelConfigs    []*relabel.Config
+	GetTSDBStats      GetStatsFunc
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -173,6 +177,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	h.router.Post("/api/v1/receive", instrf("receive", readyf(middleware.RequestID(http.HandlerFunc(h.receiveHTTP)))))
 
+	statusAPI := statusapi.New(statusapi.Options{
+		GetStats: h.getStats,
+		Registry: o.Registry,
+	})
+	statusAPI.Register(h.router, o.Tracer, logger, ins, logging.NewHTTPServerMiddleware(logger))
+
 	return h
 }
 
@@ -212,6 +222,19 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 			h.logger.Log("msg", "failed to write to response body", "err", err)
 		}
 	}
+}
+
+func (h *Handler) getStats(r *http.Request, statsByLabelName string) (*tsdb.Stats, error) {
+	if !h.isReady() {
+		return nil, fmt.Errorf("service unavailable")
+	}
+
+	tenantID := r.Header.Get(h.options.TenantHeader)
+	if tenantID == "" {
+		tenantID = h.options.DefaultTenantID
+	}
+
+	return h.options.GetTSDBStats(tenantID, statsByLabelName), nil
 }
 
 // Close stops the Handler.
