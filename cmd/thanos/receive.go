@@ -22,7 +22,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
+	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -173,6 +175,15 @@ func runReceive(
 		return errors.Wrapf(err, "migrate legacy storage in %v to default tenant %v", conf.dataDir, conf.defaultTenantID)
 	}
 
+	relabelContentYaml, err := conf.relabelConfigPath.Content()
+	if err != nil {
+		return errors.Wrap(err, "get content of relabel configuration")
+	}
+	var relabelConfig []*relabel.Config
+	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
+		return errors.Wrap(err, "parse relabel configuration")
+	}
+
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
@@ -194,6 +205,7 @@ func runReceive(
 		DefaultTenantID:   conf.defaultTenantID,
 		ReplicaHeader:     conf.replicaHeader,
 		ReplicationFactor: conf.replicationFactor,
+		RelabelConfigs:    relabelConfig,
 		ReceiverMode:      receiveMode,
 		Tracer:            tracer,
 		TLSConfig:         rwTLSConfig,
@@ -729,7 +741,8 @@ type receiveConfig struct {
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
 
-	reqLogConfig *extflag.PathOrContent
+	reqLogConfig      *extflag.PathOrContent
+	relabelConfigPath *extflag.PathOrContent
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -782,6 +795,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
+
+	rc.relabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 
