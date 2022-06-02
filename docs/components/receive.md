@@ -44,6 +44,7 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+prefix: ""
 ```
 
 The example content of `hashring.json`:

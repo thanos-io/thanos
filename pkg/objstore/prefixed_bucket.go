@@ -31,6 +31,7 @@ func conditionalPrefix(prefix, name string) string {
 	if len(name) > 0 {
 		return withPrefix(prefix, name)
 	}
+
 	return name
 }
 
