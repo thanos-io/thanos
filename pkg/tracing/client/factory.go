@@ -20,6 +20,15 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/pkg/tracing/lightstep"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type TracingProvider string
@@ -30,12 +39,40 @@ const (
 	Jaeger      TracingProvider = "JAEGER"
 	ElasticAPM  TracingProvider = "ELASTIC_APM"
 	Lightstep   TracingProvider = "LIGHTSTEP"
+	name                        = "thanos"
 )
 
 type TracingConfig struct {
 	Type   TracingProvider `yaml:"type"`
 	Config interface{}     `yaml:"config"`
 }
+
+func NewOTELTracer(ctx context.Context, logger log.Logger) trace.Tracer {
+	client := otlptracehttp.NewClient()
+	exporter, err := otlptrace.New(ctx, client)
+	if err != nil {
+		level.Error(logger).Log("err with new client", err.Error())
+	}
+
+	tp := tracesdk.NewTracerProvider(
+		tracesdk.WithBatcher(exporter),
+		tracesdk.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+		)),
+	)
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	tracer := otel.GetTracerProvider().Tracer(
+		name,
+		trace.WithInstrumentationVersion("v0.1"),
+		trace.WithSchemaURL(semconv.SchemaURL),
+	)
+	return tracer
+}
+
+// exporter will export data in OTLP format
+// need to add a collector which will export data in multiple formats eg. Jaeger
 
 func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Registry, confContentYaml []byte) (opentracing.Tracer, io.Closer, error) {
 	level.Info(logger).Log("msg", "loading tracing configuration")
@@ -63,6 +100,7 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 		tracer, closerFunc := migration.Bridge(tracerProvider, logger)
 		return tracer, closerFunc, nil
 	case string(Jaeger):
+		// next step - create newTracerProvider like google_cloud
 		return jaeger.NewTracer(ctx, logger, metrics, config)
 	case string(ElasticAPM):
 		return elasticapm.NewTracer(config)

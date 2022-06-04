@@ -18,6 +18,7 @@ import (
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
 	jaeger_prometheus "github.com/uber/jaeger-lib/metrics/prometheus"
+	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
 )
 
 // Tracer extends opentracing.Tracer.
@@ -52,6 +53,7 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 		return nil, nil, err
 	}
 
+	level.Info(logger).Log("msg", "getting tracing config", cfg)
 	cfg.Headers = &jaeger.HeadersConfig{
 		JaegerDebugHeader: strings.ToLower(tracing.ForceTracingBaggageKey),
 	}
@@ -62,6 +64,14 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 			logger: logger,
 		}),
 	)
+	// return OTEL Jaeger exporter here instead
+	// exp, err := otel_jaeger.New(otel_jaeger.WithCollectorEndpoint(otel_jaeger.WithEndpoint(url)))
+	exp, err := otel_jaeger.New(otel_jaeger.WithCollectorEndpoint())
+	if err != nil {
+		return nil, nil, err
+	}
+	_ = exp
+
 	t := &Tracer{
 		jaegerTracer,
 	}
