@@ -133,6 +133,10 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 			err:     true,
 		},
 		{
+			address: "http://user:pass@",
+			err:     true,
+		},
+		{
 			address: "dnssrv+_http._tcp.example.com",
 			err:     true,
 		},
