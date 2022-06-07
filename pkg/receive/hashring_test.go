@@ -4,7 +4,10 @@
 package receive
 
 import (
+	"fmt"
 	"testing"
+
+	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -131,7 +134,7 @@ func TestHashringGet(t *testing.T) {
 			},
 		},
 	} {
-		hs := newMultiHashring(tc.cfg)
+		hs := newMultiHashring(AlgorithmHashmod, tc.cfg)
 		h, err := hs.Get(tc.tenant, ts)
 		if tc.nodes != nil {
 			if err != nil {
@@ -147,4 +150,211 @@ func TestHashringGet(t *testing.T) {
 			t.Errorf("case %q: expected error", tc.name)
 		}
 	}
+}
+
+func TestConsistentHashringGet(t *testing.T) {
+	baseTS := &prompb.TimeSeries{
+		Labels: []labelpb.ZLabel{
+			{
+				Name:  "pod",
+				Value: "nginx",
+			},
+		},
+	}
+	tests := []struct {
+		name         string
+		nodes        []string
+		expectedNode string
+		ts           *prompb.TimeSeries
+		n            uint64
+	}{
+		{
+			name:         "base case",
+			nodes:        []string{"node-1", "node-2", "node-3"},
+			ts:           baseTS,
+			expectedNode: "node-2",
+		},
+		{
+			name:         "base case with replication",
+			nodes:        []string{"node-1", "node-2", "node-3"},
+			ts:           baseTS,
+			n:            1,
+			expectedNode: "node-3",
+		},
+		{
+			name:         "base case with replication",
+			nodes:        []string{"node-1", "node-2", "node-3"},
+			ts:           baseTS,
+			n:            2,
+			expectedNode: "node-1",
+		},
+		{
+			name:         "base case with replication and reordered nodes",
+			nodes:        []string{"node-1", "node-3", "node-2"},
+			ts:           baseTS,
+			n:            2,
+			expectedNode: "node-1",
+		},
+		{
+			name:         "base case with new node at beginning of ring",
+			nodes:        []string{"node-0", "node-1", "node-2", "node-3"},
+			ts:           baseTS,
+			expectedNode: "node-2",
+		},
+		{
+			name:         "base case with new node at end of ring",
+			nodes:        []string{"node-1", "node-2", "node-3", "node-4"},
+			ts:           baseTS,
+			expectedNode: "node-2",
+		},
+		{
+			name:  "base case with different timeseries",
+			nodes: []string{"node-1", "node-2", "node-3"},
+			ts: &prompb.TimeSeries{
+				Labels: []labelpb.ZLabel{
+					{
+						Name:  "pod",
+						Value: "thanos",
+					},
+				},
+			},
+			expectedNode: "node-3",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			hashRing := newConsistentHashring(test.nodes, 10)
+			result, err := hashRing.GetN("tenant", test.ts, test.n)
+			if err != nil {
+				t.Error(err)
+			}
+
+			if result != test.expectedNode {
+				t.Fatalf("invalid result: got %s, want %s", result, test.expectedNode)
+			}
+		})
+	}
+}
+
+func TestConsistentHashringConsistency(t *testing.T) {
+	series := makeSeries(10000)
+
+	ringA := []string{"node-1", "node-2", "node-3"}
+	a1, err := assignSeries(series, ringA)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ringB := []string{"node-1", "node-2", "node-3"}
+	a2, err := assignSeries(series, ringB)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for node, ts := range a1 {
+		if len(a2[node]) != len(ts) {
+			t.Fatalf("node %s has an inconsistent number of series", node)
+		}
+	}
+
+	for node, ts := range a2 {
+		if len(a1[node]) != len(ts) {
+			t.Fatalf("node %s has an inconsistent number of series", node)
+		}
+	}
+}
+
+func TestConsistentHashringIncreaseAtEnd(t *testing.T) {
+	series := makeSeries(10000)
+
+	initialRing := []string{"node-1", "node-2", "node-3"}
+	initialAssignments, err := assignSeries(series, initialRing)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resizedRing := []string{"node-1", "node-2", "node-3", "node-4", "node-5"}
+	reassignments, err := assignSeries(series, resizedRing)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert that the initial nodes have no new keys after increasing the ring size
+	for _, node := range initialRing {
+		for _, ts := range reassignments[node] {
+			foundInInitialAssignment := findSeries(initialAssignments, node, ts)
+			if !foundInInitialAssignment {
+				t.Fatalf("node %s contains new series after resizing: %s", node, ts)
+			}
+		}
+	}
+}
+
+func TestConsistentHashringIncreaseInMiddle(t *testing.T) {
+	series := makeSeries(10000)
+
+	initialRing := []string{"node-1", "node-3"}
+	initialAssignments, err := assignSeries(series, initialRing)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resizedRing := []string{"node-1", "node-2", "node-3"}
+	reassignments, err := assignSeries(series, resizedRing)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert that the initial nodes have no new keys after increasing the ring size
+	for _, node := range initialRing {
+		for _, ts := range reassignments[node] {
+			foundInInitialAssignment := findSeries(initialAssignments, node, ts)
+			if !foundInInitialAssignment {
+				t.Fatalf("node %s contains new series after resizing", node)
+			}
+		}
+	}
+}
+
+func makeSeries(numSeries int) []*prompb.TimeSeries {
+	series := make([]*prompb.TimeSeries, numSeries)
+	for i := 0; i < numSeries; i++ {
+		series[i] = &prompb.TimeSeries{
+			Labels: []labelpb.ZLabel{
+				{
+					Name:  "pod",
+					Value: fmt.Sprintf("nginx-%d", i),
+				},
+			},
+		}
+	}
+	return series
+}
+
+func findSeries(initialAssignments map[string][]*prompb.TimeSeries, node string, newSeries *prompb.TimeSeries) bool {
+	for _, oldSeries := range initialAssignments[node] {
+		l1 := labelpb.ZLabelsToPromLabels(newSeries.Labels)
+		l2 := labelpb.ZLabelsToPromLabels(oldSeries.Labels)
+		if labels.Equal(l1, l2) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func assignSeries(series []*prompb.TimeSeries, nodes []string) (map[string][]*prompb.TimeSeries, error) {
+	hashRing := newConsistentHashring(nodes, SectionsPerNode)
+	assignments := make(map[string][]*prompb.TimeSeries)
+	for _, ts := range series {
+		result, err := hashRing.Get("tenant", ts)
+		if err != nil {
+			return nil, err
+		}
+		assignments[result] = append(assignments[result], ts)
+
+	}
+
+	return assignments, nil
 }
