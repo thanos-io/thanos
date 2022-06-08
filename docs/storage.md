@@ -89,6 +89,7 @@ config:
   trace:
     enable: false
   list_objects_version: ""
+  dns_style: false
   part_size: 67108864
   sse_config:
     type: ""
@@ -118,6 +119,8 @@ Please refer to the documentation of [the Transport type](https://golang.org/pkg
 Set `list_objects_version: "v1"` for S3 compatible APIs that don't support ListObjectsV2 (e.g. some versions of Ceph). Default value (`""`) is equivalent to `"v2"`.
 
 `http_config.tls_config` allows configuring TLS connections. Please refer to the document of [tls_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#tls_config) for detailed information on what each option does.
+
+`dns_style` can be set to enforce the DNS style lookup.
 
 For debug and testing purposes you can set
 
