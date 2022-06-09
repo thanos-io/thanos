@@ -52,9 +52,11 @@ func newTracerProvider(ctx context.Context, logger log.Logger, processor tracesd
 		level.Warn(logger).Log("msg", "detecting resources for tracing provider failed", "err", err)
 	}
 
-	fraction := 1 / float64(sampleFactor)
+	var fraction float64
 	if sampleFactor == 0 {
 		fraction = 0
+	} else {
+		fraction = 1 / float64(sampleFactor)
 	}
 
 	tp := tracesdk.NewTracerProvider(
