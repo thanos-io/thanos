@@ -21,6 +21,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#5410](https://github.com/thanos-io/thanos/pull/5410) Query: Close() after using query. This should reduce bumps in memory allocations.
+
 ### Removed
 
 ## [v0.26.0](https://github.com/thanos-io/thanos/tree/release-0.26) - 2022.05.05
