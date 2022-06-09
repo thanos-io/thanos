@@ -10,14 +10,13 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-- [#5337](https://github.com/thanos-io/thanos/pull/5337) Thanos Object Store: Add the `prefix` option to buckets
-
 ### Fixed
 - [#5339](https://github.com/thanos-io/thanos/pull/5339) Receive: Fix deadlock on interrupt in routerOnly mode
 - [#5357](https://github.com/thanos-io/thanos/pull/5357) Store: fix groupcache handling of slashes
 
 ### Added
 
+- [#5337](https://github.com/thanos-io/thanos/pull/5337) Thanos Object Store: Add the `prefix` option to buckets
 - [#5352](https://github.com/thanos-io/thanos/pull/5352) Cache: Add cache metrics to groupcache.
 - [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Add relabeling support.
 
