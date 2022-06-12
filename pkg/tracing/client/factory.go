@@ -47,6 +47,7 @@ type TracingConfig struct {
 	Config interface{}     `yaml:"config"`
 }
 
+// NewOTELTracer returns an OTLP exporter based tracer.
 func NewOTELTracer(ctx context.Context, logger log.Logger) trace.Tracer {
 	client := otlptracehttp.NewClient()
 	exporter, err := otlptrace.New(ctx, client)
@@ -65,14 +66,10 @@ func NewOTELTracer(ctx context.Context, logger log.Logger) trace.Tracer {
 
 	tracer := otel.GetTracerProvider().Tracer(
 		name,
-		trace.WithInstrumentationVersion("v0.1"),
 		trace.WithSchemaURL(semconv.SchemaURL),
 	)
 	return tracer
 }
-
-// exporter will export data in OTLP format
-// need to add a collector which will export data in multiple formats eg. Jaeger
 
 func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Registry, confContentYaml []byte) (opentracing.Tracer, io.Closer, error) {
 	level.Info(logger).Log("msg", "loading tracing configuration")
@@ -100,8 +97,12 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 		tracer, closerFunc := migration.Bridge(tracerProvider, logger)
 		return tracer, closerFunc, nil
 	case string(Jaeger):
-		// next step - create newTracerProvider like google_cloud
-		return jaeger.NewTracer(ctx, logger, metrics, config)
+		tracerProvider, err := jaeger.NewTracerProvider(ctx, logger, config)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "new tracer provider err")
+		}
+		tracer, closerFunc := migration.Bridge(tracerProvider, logger)
+		return tracer, closerFunc, nil
 	case string(ElasticAPM):
 		return elasticapm.NewTracer(config)
 	case string(Lightstep):
