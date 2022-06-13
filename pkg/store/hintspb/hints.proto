@@ -4,20 +4,10 @@
 syntax = "proto3";
 package hintspb;
 
-//import "gogoproto/gogo.proto";
 import "store/storepb/types.proto";
 
-option go_package = "store/hintspb";
+option go_package = "github.com/thanos-io/thanos/pkg/store/hintspb";
 
-// option (gogoproto.sizer_all) = true;
-// option (gogoproto.marshaler_all) = true;
-// option (gogoproto.unmarshaler_all) = true;
-// option (gogoproto.goproto_getters_all) = false;
-
-// // Do not generate XXX fields to reduce memory.
-// option (gogoproto.goproto_unkeyed_all) = false;
-// option (gogoproto.goproto_unrecognized_all) = false;
-// option (gogoproto.goproto_sizecache_all) = false;
 
 message SeriesRequestHints {
     /// block_matchers is a list of label matchers that are evaluated against each single block's

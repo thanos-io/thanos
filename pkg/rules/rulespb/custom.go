@@ -148,7 +148,7 @@ func NewRecordingRule(r *RecordingRule) *Rule {
 //
 // Note: This method assumes r1 and r2 are logically equal as per Rule#Compare.
 func (r1 *RecordingRule) Compare(r2 *RecordingRule) int {
-	if TimestampToTime(r1.LastEvaluation).Before(TimestampToTime(r2.LastEvaluation)){
+	if TimestampToTime(r1.LastEvaluation).Before(TimestampToTime(r2.LastEvaluation)) {
 		return 1
 	}
 

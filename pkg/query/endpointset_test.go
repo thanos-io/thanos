@@ -83,6 +83,8 @@ var (
 type mockedEndpoint struct {
 	infoDelay time.Duration
 	info      infopb.InfoResponse
+
+	infopb.UnimplementedInfoServer
 }
 
 func (c *mockedEndpoint) Info(ctx context.Context, r *infopb.InfoRequest) (*infopb.InfoResponse, error) {

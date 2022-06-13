@@ -135,6 +135,12 @@ $(PROTOC_GEN_GO_GRPC): $(BINGO_DIR)/protoc-gen-go-grpc.mod
 	@echo "(re)installing $(GOBIN)/protoc-gen-go-grpc-v1.2.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=protoc-gen-go-grpc.mod -o=$(GOBIN)/protoc-gen-go-grpc-v1.2.0 "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
 
+PROTOC_GEN_GO_VTPROTO := $(GOBIN)/protoc-gen-go-vtproto-v0.3.0
+$(PROTOC_GEN_GO_VTPROTO): $(BINGO_DIR)/protoc-gen-go-vtproto.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/protoc-gen-go-vtproto-v0.3.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=protoc-gen-go-vtproto.mod -o=$(GOBIN)/protoc-gen-go-vtproto-v0.3.0 "github.com/planetscale/vtprotobuf/cmd/protoc-gen-go-vtproto"
+
 PROTOC_GEN_GO := $(GOBIN)/protoc-gen-go-v1.28.0
 $(PROTOC_GEN_GO): $(BINGO_DIR)/protoc-gen-go.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.

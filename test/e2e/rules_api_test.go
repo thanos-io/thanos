@@ -33,6 +33,17 @@ func timeToProtoTimestamp(t time.Time) *protobuf.Timestamp {
 	return timestamp
 }
 
+func timeToRulespbTimestamp(t time.Time) *rulespb.Timestamp {
+	timestamp, _ := protobuf.TimestampProto(t)
+
+	ret := &rulespb.Timestamp{}
+
+	ret.Nanos = timestamp.Nanos
+	ret.Seconds = timestamp.Seconds
+
+	return ret
+}
+
 func TestRulesAPI_Fanout(t *testing.T) {
 	t.Parallel()
 
@@ -109,7 +120,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		{
 			Name:           "example_abort",
 			File:           "/shared/rules/rules.yaml",
-			LastEvaluation: (*rulespb.Timestamp)(timeToProtoTimestamp(time.Time{})),
+			LastEvaluation: (*rulespb.Timestamp)(timeToRulespbTimestamp(time.Time{})),
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
@@ -125,7 +136,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		{
 			Name:           "example_abort",
 			File:           "/shared/thanos-rules/rules-0.yaml",
-			LastEvaluation: (*rulespb.Timestamp)(timeToProtoTimestamp(time.Time{})),
+			LastEvaluation: (*rulespb.Timestamp)(timeToRulespbTimestamp(time.Time{})),
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
@@ -140,7 +151,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		{
 			Name:           "example_warn",
 			File:           "/shared/thanos-rules/rules-1.yaml",
-			LastEvaluation: (*rulespb.Timestamp)(timeToProtoTimestamp(time.Time{})),
+			LastEvaluation: (*rulespb.Timestamp)(timeToRulespbTimestamp(time.Time{})),
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_WarnOnPartialResponse",
@@ -178,7 +189,7 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 		}
 
 		for ig, g := range res {
-			res[ig].LastEvaluation = (*rulespb.Timestamp)(timeToProtoTimestamp(time.Time{}))
+			res[ig].LastEvaluation = (*rulespb.Timestamp)(timeToRulespbTimestamp(time.Time{}))
 			res[ig].EvaluationDurationSeconds = 0
 			res[ig].Interval = 0
 			res[ig].PartialResponseStrategy = 0

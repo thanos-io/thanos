@@ -41,6 +41,8 @@ type LocalStore struct {
 	// For small debug purposes, this is good enough.
 	series       []*storepb.Series
 	sortedChunks [][]int
+
+	storepb.UnimplementedStoreServer
 }
 
 // TODO(bwplotka): Add remote read so Prometheus users can use this. Potentially after streaming will be added

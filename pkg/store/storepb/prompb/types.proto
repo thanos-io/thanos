@@ -19,14 +19,8 @@ package prometheus_copy;
 
 option go_package = "github.com/thanos-io/thanos/pkg/store/storepb/prompb";
 
-//import "gogoproto/gogo.proto";
 import "store/labelpb/types.proto";
 
-// Do not generate XXX fields to reduce memory footprint and opening a door
-// for zero-copy casts to/from prometheus data types.
-// option (gogoproto.goproto_unkeyed_all) = false;
-// option (gogoproto.goproto_unrecognized_all) = false;
-// option (gogoproto.goproto_sizecache_all) = false;
 
 message MetricMetadata {
   enum MetricType {

@@ -4,9 +4,8 @@
 syntax = "proto3";
 package thanos;
 
-option go_package = "store/storepb";
+option go_package = "github.com/thanos-io/thanos/pkg/store/storepb";
 
-//import "gogoproto/gogo.proto";
 import "store/labelpb/types.proto";
 
 // option (gogoproto.sizer_all) = true;
