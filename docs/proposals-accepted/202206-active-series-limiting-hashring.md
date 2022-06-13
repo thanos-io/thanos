@@ -199,6 +199,7 @@ There are a few alternative to what is proposed above,
 
 * An alternative could be just not to limit active series globally and make do with local limits only.
 * [Consistent hashing](https://github.com/thanos-io/thanos/issues/4972) might be implemented and problems with sharding can be sorted out, which would make adding Receive replicas to hashring a non-disruptive operation, so that solutions like HPA can be used and make scale up/down operations much easier to the point where limits are not needed.
+* Not implementing this within Thanos, but rather using some other API gateway-like component, which can parse remote write requests and maintain running counts of active series for all tenants and limit based on that. A particular example of such a project where this can be implemented is [Observatorium](https://github.com/observatorium/observatorium).
 
 ## Open Questions
 
