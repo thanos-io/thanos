@@ -54,6 +54,8 @@ type PrometheusStore struct {
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 
 	framesRead prometheus.Histogram
+
+	storepb.UnimplementedStoreServer
 }
 
 // Label{Values,Names} call with matchers is supported for Prometheus versions >= 2.24.0.

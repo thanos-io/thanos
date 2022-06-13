@@ -46,7 +46,7 @@ ARCH ?= $(shell uname -m)
 
 # Tools.
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
-PROTOC_VERSION    ?= 3.4.0
+PROTOC_VERSION    ?= 3.20.0
 GIT               ?= $(shell which git)
 
 # Support gsed on OSX (installed via brew), falling back to sed. On Linux
@@ -394,7 +394,7 @@ $(SHELLCHECK): $(BIN_DIR)
 	@echo "Downloading Shellcheck"
 	curl -sNL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.$(OS).$(ARCH).tar.xz" | tar --strip-components=1 -xJf - -C $(BIN_DIR)
 
-$(PROTOC) $(TMP_PROTOPATH): 
+$(PROTOC) $(TMP_PROTOPATH):
 	@mkdir -p $(TMP_GOPATH)
 	@mkdir -p $(TMP_PROTOPATH)
 	@echo ">> fetching protoc@${PROTOC_VERSION}"

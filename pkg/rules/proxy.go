@@ -23,6 +23,8 @@ import (
 type Proxy struct {
 	logger log.Logger
 	rules  func() []rulespb.RulesClient
+
+	rulespb.UnimplementedRulesServer
 }
 
 func RegisterRulesServer(rulesSrv rulespb.RulesServer) func(*grpc.Server) {

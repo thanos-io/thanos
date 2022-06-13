@@ -4,7 +4,7 @@
 syntax = "proto3";
 package thanos;
 
-option go_package = "store/labelpb";
+option go_package = "github.com/thanos-io/thanos/pkg/store/labelpb";
 
 //import "gogoproto/gogo.proto";
 

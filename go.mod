@@ -32,7 +32,6 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
-	github.com/golang/protobuf v1.5.2
 	github.com/golang/snappy v0.0.4
 	github.com/googleapis/gax-go v2.0.2+incompatible
 	github.com/grafana/dskit v0.0.0-20210819132858-471020752967
@@ -79,7 +78,8 @@ require (
 	google.golang.org/api v0.50.0
 	google.golang.org/genproto v0.0.0-20210713002101-d411969a0d9a
 	google.golang.org/grpc v1.39.0
-	google.golang.org/protobuf v1.27.1
+	google.golang.org/grpc/examples v0.0.0-20220608152536-584d9cd11a1d
+	google.golang.org/protobuf v1.28.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/fsnotify.v1 v1.4.7
 	gopkg.in/yaml.v2 v2.4.0
@@ -99,7 +99,6 @@ replace (
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v1.8.2-0.20210720123808-b1ed4a0a663d
 	github.com/sercand/kuberesolver => github.com/sercand/kuberesolver v2.4.0+incompatible
-	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 
 	// Overriding to use latest commit
 	gopkg.in/alecthomas/kingpin.v2 => github.com/alecthomas/kingpin v1.3.8-0.20210301060133-17f40c25f497

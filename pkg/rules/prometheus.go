@@ -19,6 +19,8 @@ type Prometheus struct {
 	client *promclient.Client
 
 	extLabels func() labels.Labels
+
+	rulespb.UnimplementedRulesServer
 }
 
 // NewPrometheus creates new rules.Prometheus.

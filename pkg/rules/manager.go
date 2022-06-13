@@ -23,13 +23,13 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	"gopkg.in/yaml.v3"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
-	"github.com/gogo/protobuf/types"
 )
 
 const tmpRuleDir = ".tmp-rules"
@@ -40,12 +40,12 @@ type Group struct {
 	PartialResponseStrategy storepb.PartialResponseStrategy
 }
 
-func timeToProtoTimestamp(t time.Time) *types.Timestamp{
-	timestamp,_ := types.TimestampProto(t)
+func timeToProtoTimestamp(t time.Time) *types.Timestamp {
+	timestamp, _ := types.TimestampProto(t)
 	return timestamp
 }
 
-func defaultTimeToTimestamp(t time.Time) *rulespb.Timestamp{
+func defaultTimeToTimestamp(t time.Time) *rulespb.Timestamp {
 	t1 := &rulespb.Timestamp{}
 	protoTime := timeToProtoTimestamp(t)
 
@@ -63,7 +63,7 @@ func (g Group) toProto() *rulespb.RuleGroup {
 		Interval:                g.Interval().Seconds(),
 		PartialResponseStrategy: g.PartialResponseStrategy,
 		// UTC needed due to https://github.com/gogo/protobuf/issues/519.
-		LastEvaluation:          lastEvaluation,
+		LastEvaluation:            lastEvaluation,
 		EvaluationDurationSeconds: g.GetEvaluationTime().Seconds(),
 	}
 
@@ -138,6 +138,8 @@ type Manager struct {
 	mtx         sync.RWMutex
 	ruleFiles   map[string]string
 	externalURL string
+
+	rulespb.UnimplementedRulesServer
 }
 
 // NewManager creates new Manager.

@@ -34,6 +34,8 @@ type MultiTSDBStore struct {
 	logger     log.Logger
 	component  component.SourceStoreAPI
 	tsdbStores func() map[string]storepb.StoreServer
+
+	storepb.UnimplementedStoreServer
 }
 
 // NewMultiTSDBStore creates a new MultiTSDBStore.

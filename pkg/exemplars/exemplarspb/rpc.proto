@@ -8,7 +8,7 @@ import "store/storepb/types.proto";
 import "store/labelpb/types.proto";
 //import "gogoproto/gogo.proto";
 
-option go_package = "exemplarspb";
+option go_package = "github.com/thanos-io/thanos/pkg/pkg/exemplars/exemplarspb";
 
 // option (gogoproto.sizer_all) = true;
 // option (gogoproto.marshaler_all) = true;

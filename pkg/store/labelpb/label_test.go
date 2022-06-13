@@ -42,16 +42,6 @@ func TestLabelsToPromLabels_LabelsToPromLabels(t *testing.T) {
 	testutil.Equals(t, testLsetMap, m)
 }
 
-func TestLabelMarshal_Unmarshal(t *testing.T) {
-	l := ProtobufLabelsFromPromLabels(labels.FromStrings("aaaaaaa", "bbbbb"))[0]
-	b, err := (l).Marshal()
-	testutil.Ok(t, err)
-
-	l2 := &Label{}
-	testutil.Ok(t, l2.Unmarshal(b))
-	testutil.Equals(t, labels.FromStrings("aaaaaaa", "bbbbb"), ProtobufLabelsToPromLabels([]*Label{l2}))
-}
-
 func TestExtendLabels(t *testing.T) {
 	testutil.Equals(t, labels.Labels{{Name: "a", Value: "1"}, {Name: "replica", Value: "01"}, {Name: "xb", Value: "2"}},
 		ExtendSortedLabels(labels.Labels{{Name: "a", Value: "1"}, {Name: "xb", Value: "2"}}, labels.FromStrings("replica", "01")))
@@ -127,52 +117,6 @@ func testInjectExtLabels(tb testutil.TB) {
 		}
 	}
 	fmt.Fprint(ioutil.Discard, x)
-}
-
-var (
-	zdest ZLabel
-	dest  Label
-)
-
-func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
-	const (
-		fmtLbl = "%07daaaaaaaaaabbbbbbbbbbccccccccccdddddddddd"
-		num    = 1000000
-	)
-
-	b.Run("Label", func(b *testing.B) {
-		b.ReportAllocs()
-		lbls := LabelSet{Labels: make([]*Label, 0, num)}
-		for i := 0; i < num; i++ {
-			lbls.Labels = append(lbls.Labels, &Label{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
-		}
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			data, err := lbls.Marshal()
-			testutil.Ok(b, err)
-
-			dest = Label{}
-			testutil.Ok(b, (&dest).Unmarshal(data))
-		}
-	})
-
-	b.Run("ZLabel", func(b *testing.B) {
-		b.ReportAllocs()
-		lbls := LabelSet{Labels: make([]*Label, 0, num)}
-		for i := 0; i < num; i++ {
-			lbls.Labels = append(lbls.Labels, &Label{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
-		}
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			data, err := lbls.Marshal()
-			testutil.Ok(b, err)
-
-			zdest = ZLabel{}
-			testutil.Ok(b, (&zdest).Unmarshal(data))
-		}
-	})
 }
 
 var ret labels.Labels

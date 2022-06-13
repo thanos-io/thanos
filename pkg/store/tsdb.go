@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"unsafe"
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -39,6 +40,8 @@ type TSDBStore struct {
 	component        component.StoreAPI
 	extLset          labels.Labels
 	maxBytesPerFrame int
+
+	storepb.UnimplementedStoreServer
 }
 
 func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*grpc.Server) {
@@ -141,7 +144,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 
 		bytesLeftForChunks := s.maxBytesPerFrame
 		for _, lbl := range storeSeries.Labels {
-			bytesLeftForChunks -= lbl.Size()
+			bytesLeftForChunks -= int(unsafe.Sizeof(*lbl))
 		}
 		frameBytesLeft := bytesLeftForChunks
 
@@ -162,7 +165,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 					Data: chk.Chunk.Bytes(),
 				},
 			}
-			frameBytesLeft -= c.Size()
+			frameBytesLeft -= int(unsafe.Sizeof(c))
 			seriesChunks = append(seriesChunks, &c)
 
 			// We are fine with minor inaccuracy of max bytes per frame. The inaccuracy will be max of full chunk size.

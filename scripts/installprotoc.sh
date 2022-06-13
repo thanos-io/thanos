@@ -7,7 +7,7 @@ set -u
 PROTOC_VERSION=${PROTOC_VERSION:-3.4.0}
 TMP_GOPATH=${TMP_GOPATH:-/tmp/thanos-go}
 TMP_PROTOPATH=${TMP_PROTOPATH:-/tmp/proto}
-PROTOC_DOWNLOAD_URL="https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}"
+PROTOC_DOWNLOAD_URL="https://github.com/vitessio/vitess-resources/releases/download/v2.0"
 
 OS=$(go env GOOS)
 ARCH=$(go env GOARCH)

@@ -6,21 +6,10 @@ package thanos;
 
 import "store/storepb/types.proto";
 import "store/labelpb/types.proto";
-//import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "store/rulespb";
 
-// option (gogoproto.sizer_all) = true;
-// option (gogoproto.marshaler_all) = true;
-// option (gogoproto.unmarshaler_all) = true;
-// option (gogoproto.goproto_getters_all) = false;
-
-// // Do not generate XXX fields to reduce memory footprint and opening a door
-// // for zero-copy casts to/from prometheus data types.
-// option (gogoproto.goproto_unkeyed_all) = false;
-// option (gogoproto.goproto_unrecognized_all) = false;
-// option (gogoproto.goproto_sizecache_all) = false;
 message Timestamp {
     // Represents seconds of UTC time since Unix epoch
     // 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to

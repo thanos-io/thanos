@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -61,6 +62,7 @@ type ProxyStore struct {
 
 	responseTimeout time.Duration
 	metrics         *proxyStoreMetrics
+	storepb.UnimplementedStoreServer
 }
 
 type proxyStoreMetrics struct {
@@ -442,7 +444,7 @@ func startStreamSeriesSet(
 				return
 			}
 			numResponses++
-			bytesProcessed += rr.r.Size()
+			bytesProcessed += int(unsafe.Sizeof(*rr.r))
 
 			if w := rr.r.GetWarning(); w != "" {
 				s.warnCh.send(storepb.NewWarnSeriesResponse(errors.New(w)))

@@ -19,10 +19,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/gogo/protobuf/types"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,6 +35,8 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -296,6 +298,8 @@ type BucketStore struct {
 
 	// Enables hints in the Series() response.
 	enableSeriesResponseHints bool
+
+	storepb.UnimplementedStoreServer
 }
 
 type noopCache struct{}
@@ -978,7 +982,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 	if req.Hints != nil {
 		reqHints := &hintspb.SeriesRequestHints{}
-		if err := types.UnmarshalAny(req.Hints, reqHints); err != nil {
+		if err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{}); err != nil {
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal series request hints").Error())
 		}
 
@@ -1144,9 +1148,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	})
 
 	if s.enableSeriesResponseHints {
-		var anyHints *types.Any
+		var anyHints *anypb.Any
 
-		if anyHints, err = types.MarshalAny(resHints); err != nil {
+		if anyHints, err = anypb.New(resHints); err != nil {
 			err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
 			return
 		}
@@ -1162,7 +1166,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 func chunksSize(chks []*storepb.AggrChunk) (size int) {
 	for _, chk := range chks {
-		size += chk.Size() // This gets the encoded proto size.
+		size += int(unsafe.Sizeof(*chk)) // This gets the encoded proto size.
 	}
 	return size
 }
@@ -1179,7 +1183,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	var reqBlockMatchers []*labels.Matcher
 	if req.Hints != nil {
 		reqHints := &hintspb.LabelNamesRequestHints{}
-		err := types.UnmarshalAny(req.Hints, reqHints)
+		err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{})
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label names request hints").Error())
 		}
@@ -1284,7 +1288,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	anyHints, err := types.MarshalAny(resHints)
+	anyHints, err := anypb.New(resHints)
 	if err != nil {
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label names response hints").Error())
 	}
@@ -1309,7 +1313,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var reqBlockMatchers []*labels.Matcher
 	if req.Hints != nil {
 		reqHints := &hintspb.LabelValuesRequestHints{}
-		err := types.UnmarshalAny(req.Hints, reqHints)
+		err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{})
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label values request hints").Error())
 		}
@@ -1415,7 +1419,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
 
-	anyHints, err := types.MarshalAny(resHints)
+	anyHints, err := anypb.New(resHints)
 	if err != nil {
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label values response hints").Error())
 	}

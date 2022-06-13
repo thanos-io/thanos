@@ -7,7 +7,7 @@ package thanos;
 import "store/storepb/types.proto";
 //import "gogoproto/gogo.proto";
 
-option go_package = "metadatapb";
+option go_package = "github.com/thanos-io/thanos/pkg/pkg/metadata/metadatapb";
 
 // option (gogoproto.sizer_all) = true;
 // option (gogoproto.marshaler_all) = true;

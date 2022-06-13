@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -42,7 +42,7 @@ func NewSeriesResponse(series *Series) *SeriesResponse {
 	}
 }
 
-func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
+func NewHintsSeriesResponse(hints *anypb.Any) *SeriesResponse {
 	return &SeriesResponse{
 		Result: &SeriesResponse_Hints{
 			Hints: hints,

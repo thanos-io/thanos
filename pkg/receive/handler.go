@@ -101,6 +101,8 @@ type Handler struct {
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
+
+	storepb.UnimplementedWriteableStoreServer
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
