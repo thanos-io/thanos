@@ -4,6 +4,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -95,12 +96,13 @@ func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64) 
 // value. http_requests_total is a metric vector partitioned by HTTP method
 // (label name "method") and HTTP status code (label name "code").
 func (ins *defaultInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler) http.HandlerFunc {
+	baseLabels := prometheus.Labels{"handler": handlerName}
 	return promhttp.InstrumentHandlerRequestSize(
-		ins.requestSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
+		ins.requestSize.MustCurryWith(baseLabels),
 		promhttp.InstrumentHandlerCounter(
-			ins.requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName}),
+			ins.requestsTotal.MustCurryWith(baseLabels),
 			promhttp.InstrumentHandlerResponseSize(
-				ins.responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
+				ins.responseSize.MustCurryWith(baseLabels),
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					now := time.Now()
 
@@ -163,4 +165,28 @@ func (wd *responseWriterDelegator) StatusCode() int {
 
 func (wd *responseWriterDelegator) Status() string {
 	return fmt.Sprintf("%d", wd.StatusCode())
+}
+
+// TenantCtxKey is the context key to hold the tenant's identifier.
+var TenantCtxKey struct{}
+
+// NewTenantParserMiddleware parses the tenant from the request given the tenant header and default tenant.
+// The tenant is then put in the request's context under the key TenantCtxKey.
+func NewTenantParserMiddleware(tenantHeader string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tenant := r.Header.Get(tenantHeader)
+		ctxWithTenant := context.WithValue(r.Context(), TenantCtxKey, tenant)
+		next.ServeHTTP(w, r.WithContext(ctxWithTenant))
+	}
+}
+
+// NewInstrumentHandlerInflightTenant creates a middleware used to export the current amount of concurrent requests
+// being handled. It has an optional tenant label whenever a tenant is present in the context.
+// For more information about how to have the tenant in the context check NewTenantParserMiddleware.
+func NewInstrumentHandlerInflightTenant(gaugeVec *prometheus.GaugeVec, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rawTenant := r.Context().Value(TenantCtxKey)
+		tenant := rawTenant.(string)
+		promhttp.InstrumentHandlerInFlight(gaugeVec.With(prometheus.Labels{"tenant": tenant}), next).ServeHTTP(w, r)
+	}
 }

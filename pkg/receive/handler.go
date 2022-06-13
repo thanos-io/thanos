@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"fmt"
 	"io"
 	stdlog "log"
@@ -104,6 +105,11 @@ type Handler struct {
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
+
+	writeBytesTotal           *prometheus.CounterVec
+	writeSamplesTotal         *prometheus.CounterVec
+	writeTimeseriesTotal      *prometheus.CounterVec
+	writeInflightHTTPRequests *prometheus.GaugeVec
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -112,18 +118,18 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h := &Handler{
-		logger:       logger,
-		writer:       o.Writer,
-		router:       route.New(),
-		options:      o,
-		peers:        newPeerGroup(o.DialOpts...),
-		receiverMode: o.ReceiverMode,
+		logger:  logger,
+		writer:  o.Writer,
+		router:  route.New(),
+		options: o,
+		peers:   newPeerGroup(o.DialOpts...),
 		expBackoff: backoff.Backoff{
 			Factor: 2,
 			Min:    100 * time.Millisecond,
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
+		receiverMode: o.ReceiverMode,
 		forwardRequests: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -141,6 +147,30 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Name: "thanos_receive_replication_factor",
 				Help: "The number of times to replicate incoming write requests.",
 			},
+		),
+		writeTimeseriesTotal: promauto.With(o.Registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_write_timeseries_total",
+				Help: "The number of timeseries received in the incoming write requests.",
+			}, []string{"code", "method", "tenant"},
+		),
+		writeSamplesTotal: promauto.With(o.Registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_write_samples_total",
+				Help: "The number of sampled received in the incoming write requests.",
+			}, []string{"code", "method", "tenant"},
+		),
+		writeBytesTotal: promauto.With(o.Registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_write_bytes_total",
+				Help: "The number of bytes received in the body of incoming write requests.",
+			}, []string{"code", "method", "tenant"},
+		),
+		writeInflightHTTPRequests: promauto.With(o.Registry).NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_write_requests_inflight",
+				Help: "The number of inflight write HTTP requests being handled at the same time.",
+			}, []string{"tenant"},
 		),
 	}
 
@@ -164,14 +194,31 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-		next = ins.NewHandler(name, http.HandlerFunc(next))
+		next = extpromhttp.NewTenantParserMiddleware(
+			h.options.TenantHeader,
+			extpromhttp.NewInstrumentHandlerInflightTenant(
+				h.writeInflightHTTPRequests,
+				ins.NewHandler(name, http.HandlerFunc(next)),
+			),
+		)
+
 		if o.Tracer != nil {
 			next = tracing.HTTPMiddleware(o.Tracer, name, logger, http.HandlerFunc(next))
 		}
 		return next
 	}
 
-	h.router.Post("/api/v1/receive", instrf("receive", readyf(middleware.RequestID(http.HandlerFunc(h.receiveHTTP)))))
+	h.router.Post(
+		"/api/v1/receive",
+		instrf(
+			"receive",
+			readyf(
+				middleware.RequestID(
+					http.HandlerFunc(h.receiveHTTP),
+				),
+			),
+		),
+	)
 
 	return h
 }
@@ -297,10 +344,14 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
-	tenant := r.Header.Get(h.options.TenantHeader)
+	rawTenant := r.Context().Value(extpromhttp.TenantCtxKey)
+	tenant := rawTenant.(string)
 	if tenant == "" {
 		tenant = h.options.DefaultTenantID
 	}
+
+	h.writeInflightHTTPRequests.WithLabelValues(tenant).Inc()
+	defer h.writeInflightHTTPRequests.WithLabelValues(tenant).Dec()
 
 	tLogger := log.With(h.logger, "tenant", tenant)
 
@@ -363,25 +414,33 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	responseStatusCode := http.StatusOK
 	err = h.handleRequest(ctx, rep, tenant, &wreq)
 	if err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
+		switch determineWriteErrorCause(err, 1) {
+		case errNotReady:
+			responseStatusCode = http.StatusServiceUnavailable
+			http.Error(w, err.Error(), responseStatusCode)
+		case errUnavailable:
+			responseStatusCode = http.StatusServiceUnavailable
+			http.Error(w, err.Error(), responseStatusCode)
+		case errConflict:
+			responseStatusCode = http.StatusConflict
+			http.Error(w, err.Error(), responseStatusCode)
+		case errBadReplica:
+			responseStatusCode = http.StatusBadRequest
+			http.Error(w, err.Error(), responseStatusCode)
+		default:
+			level.Error(tLogger).Log("err", err, "msg", "internal server error")
+			responseStatusCode = http.StatusInternalServerError
+			http.Error(w, err.Error(), responseStatusCode)
+		}
 	}
-
-	switch determineWriteErrorCause(err, 1) {
-	case nil:
-		return
-	case errNotReady:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case errUnavailable:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case errConflict:
-		http.Error(w, err.Error(), http.StatusConflict)
-	case errBadReplica:
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	default:
-		level.Error(tLogger).Log("err", err, "msg", "internal server error")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	h.writeBytesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Add(float64(binary.Size(reqBuf)))
+	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Add(float64(len(wreq.Timeseries)))
+	for _, timeseries := range wreq.Timeseries {
+		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Add(float64(len(timeseries.Samples)))
 	}
 }
 
