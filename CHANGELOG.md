@@ -23,6 +23,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Changed
 
 - [#5410](https://github.com/thanos-io/thanos/pull/5410) Query: Close() after using query. This should reduce bumps in memory allocations.
+- [#5417](https://github.com/thanos-io/thanos/pull/5417) Ruler: Change default evaluation interval to 1 minute.
 
 ### Removed
 
