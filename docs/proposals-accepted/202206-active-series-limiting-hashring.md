@@ -6,9 +6,6 @@ owner: saswatamcode
 menu: proposals-accepted
 ---
 
-* **Owners:**
-  * @saswatamcode
-
 ## Related links/tickets
 
 * https://github.com/thanos-io/thanos/pull/5333
@@ -82,7 +79,7 @@ This value can also be cached, and the query for latest value can be executed pe
 
 So if a user configures a *per-tenant* limit, say `globalSeriesLimit`, the resultant limiting equation here would simply be `globalSeriesLimit >= latestCurrentSeries` which is checked on request.
 
-![Meta-monitoring-based Validator](../img/meta-monitoring-validator.png "Meta-monitoring-based Validator")
+<img src="../img/meta-monitoring-validator.png" alt="Meta-monitoring-based Validator" width="800"/>
 
 #### Pros:
 * Simpler as compared to other solutions and easier to implement
@@ -121,7 +118,7 @@ The implementation would be as follows,
 * Implement an endpoint in Receive, `api/v1/getrefmap`, which when provided with a tenant id and a remote write request returns a map of SeriesRef and labelsets
 * We can then merge this with maps from other replicas, in Receive Validator, and get the number of series for which `SeriesRef == 0` for all replicas. This is the increase in the number of active series if the remote write request is ingested i.e `increaseOnRequest`. For example,
 
-![SeriesRef Map merge across replicas](../img/get-ref-map.png "SeriesRef Map merge across replicas")
+<img src="../img/get-ref-map.png" alt="SeriesRef Map merge across replicas" width="600"/>
 
 * The above merged results may be exposed as metrics by Validator
 * Each remote write request is first intercepted by a Validator, which perform the above and calculates if the request is under the limit.
@@ -129,7 +126,7 @@ The implementation would be as follows,
 
 So, the limiting equation in this case becomes `globalSeriesLimit >= currentSeries + increaseOnRequest`.
 
-![Receive Validator](../img/receive-validator.png "Receive Validator")
+<img src="../img/receive-validator.png" alt="Receive Validator" width="800"/>
 
 We treat the two endpoints `api/v1/status/tsdb` & `api/v1/getrefmap` as two different endpoints throughout this proposal but maybe exposing some gRPC API that combines the two would be much more suitable here, for example,
 
@@ -179,7 +176,7 @@ The implementation would be as follows,
 
 So, the limiting equation in this case is also the same as before, `globalSeriesLimit >= currentSeries + increaseOnRequest`.
 
-![Per-Receive](../img/per-receive.png "Per-Receive")
+<img src="../img/per-receive.png" alt="Per-Receive Validation" width="800"/>
 
 The option of using gRPC instead of two API calls each time is also valid here.
 
