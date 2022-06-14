@@ -10,10 +10,10 @@ import (
 
 // SamplesFromSamplePairs converts a slice of model.SamplePair
 // to a slice of Sample.
-func SamplesFromSamplePairs(samples []model.SamplePair) []Sample {
-	result := make([]Sample, 0, len(samples))
+func SamplesFromSamplePairs(samples []model.SamplePair) []*Sample {
+	result := make([]*Sample, 0, len(samples))
 	for _, s := range samples {
-		result = append(result, Sample{
+		result = append(result, &Sample{
 			Value:     float64(s.Value),
 			Timestamp: int64(s.Timestamp),
 		})
@@ -24,10 +24,10 @@ func SamplesFromSamplePairs(samples []model.SamplePair) []Sample {
 
 // SamplesFromPromqlPoints converts a slice of promql.Point
 // to a slice of Sample.
-func SamplesFromPromqlPoints(samples []promql.Point) []Sample {
-	result := make([]Sample, 0, len(samples))
+func SamplesFromPromqlPoints(samples []promql.Point) []*Sample {
+	result := make([]*Sample, 0, len(samples))
 	for _, s := range samples {
-		result = append(result, Sample{
+		result = append(result, &Sample{
 			Value:     s.V,
 			Timestamp: s.T,
 		})

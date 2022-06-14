@@ -19,11 +19,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/types"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,6 +37,8 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -301,7 +303,7 @@ type BucketStore struct {
 	partitioner          Partitioner
 
 	filterConfig             *FilterConfig
-	advLabelSets             []labelpb.ZLabelSet
+	advLabelSets             []*labelpb.ZLabelSet
 	enableCompatibilityLabel bool
 
 	// Every how many posting offset entry we pool in heap memory. Default in Prometheus is 32.
@@ -309,6 +311,8 @@ type BucketStore struct {
 
 	// Enables hints in the Series() response.
 	enableSeriesResponseHints bool
+
+	storepb.UnimplementedStoreServer
 }
 
 func (b *BucketStore) validate() error {
@@ -508,10 +512,10 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	// Sync advertise labels.
 	var storeLabels labels.Labels
 	s.mtx.Lock()
-	s.advLabelSets = make([]labelpb.ZLabelSet, 0, len(s.advLabelSets))
+	s.advLabelSets = make([]*labelpb.ZLabelSet, 0, len(s.advLabelSets))
 	for _, bs := range s.blockSets {
 		storeLabels = storeLabels[:0]
-		s.advLabelSets = append(s.advLabelSets, labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(append(storeLabels, bs.labels...))})
+		s.advLabelSets = append(s.advLabelSets, &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(append(storeLabels, bs.labels...))})
 	}
 	sort.Slice(s.advLabelSets, func(i, j int) bool {
 		return strings.Compare(s.advLabelSets[i].String(), s.advLabelSets[j].String()) < 0
@@ -683,13 +687,13 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 	return mint, maxt
 }
 
-func (s *BucketStore) LabelSet() []labelpb.ZLabelSet {
+func (s *BucketStore) LabelSet() []*labelpb.ZLabelSet {
 	s.mtx.RLock()
 	labelSets := s.advLabelSets
 	s.mtx.RUnlock()
 
 	if s.enableCompatibilityLabel && len(labelSets) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: CompatibilityTypeLabelName, Value: "store"}}})
+		labelSets = append(labelSets, &labelpb.ZLabelSet{Labels: []*labelpb.Label{{Name: CompatibilityTypeLabelName, Value: "store"}}})
 	}
 
 	return labelSets
@@ -739,7 +743,7 @@ func (s *BucketStore) limitMaxTime(maxt int64) int64 {
 type seriesEntry struct {
 	lset labels.Labels
 	refs []chunks.ChunkRef
-	chks []storepb.AggrChunk
+	chks []*storepb.AggrChunk
 }
 
 type bucketSeriesSet struct {
@@ -763,7 +767,7 @@ func (s *bucketSeriesSet) Next() bool {
 	return true
 }
 
-func (s *bucketSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
+func (s *bucketSeriesSet) At() (labels.Labels, []*storepb.AggrChunk) {
 	return s.set[s.i].lset, s.set[s.i].chks
 }
 
@@ -827,14 +831,14 @@ func blockSeries(
 		if !skipChunks {
 			// Schedule loading chunks.
 			s.refs = make([]chunks.ChunkRef, 0, len(chks))
-			s.chks = make([]storepb.AggrChunk, 0, len(chks))
+			s.chks = make([]*storepb.AggrChunk, 0, len(chks))
 			for j, meta := range chks {
 				// seriesEntry s is appended to res, but not at every outer loop iteration,
 				// therefore len(res) is the index we need here, not outer loop iteration number.
 				if err := chunkr.addLoad(meta.Ref, len(res), j); err != nil {
 					return nil, nil, errors.Wrap(err, "add chunk load")
 				}
-				s.chks = append(s.chks, storepb.AggrChunk{
+				s.chks = append(s.chks, &storepb.AggrChunk{
 					MinTime: meta.MinTime,
 					MaxTime: meta.MaxTime,
 				})
@@ -865,13 +869,13 @@ func blockSeries(
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
 }
 
-func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, save func([]byte) ([]byte, error)) error {
+func populateChunk(out **storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, save func([]byte) ([]byte, error)) error {
 	if in.Encoding() == chunkenc.EncXOR {
 		b, err := save(in.Bytes())
 		if err != nil {
 			return err
 		}
-		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+		(*out).Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		return nil
 	}
 	if in.Encoding() != downsample.ChunkEncAggr {
@@ -891,7 +895,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			(*out).Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		case storepb.Aggr_SUM:
 			x, err := ac.Get(downsample.AggrSum)
 			if err != nil {
@@ -901,7 +905,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			(*out).Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		case storepb.Aggr_MIN:
 			x, err := ac.Get(downsample.AggrMin)
 			if err != nil {
@@ -911,7 +915,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			(*out).Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		case storepb.Aggr_MAX:
 			x, err := ac.Get(downsample.AggrMax)
 			if err != nil {
@@ -921,7 +925,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			(*out).Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		case storepb.Aggr_COUNTER:
 			x, err := ac.Get(downsample.AggrCounter)
 			if err != nil {
@@ -931,7 +935,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			(*out).Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
 		}
 	}
 	return nil
@@ -1006,7 +1010,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 	if req.Hints != nil {
 		reqHints := &hintspb.SeriesRequestHints{}
-		if err := types.UnmarshalAny(req.Hints, reqHints); err != nil {
+		if err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{}); err != nil {
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal series request hints").Error())
 		}
 
@@ -1156,7 +1160,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				stats.mergedChunksCount += len(series.Chunks)
 				s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
 			}
-			series.Labels = labelpb.ZLabelsFromPromLabels(lset)
+			series.Labels = labelpb.ProtobufLabelsFromPromLabels(lset)
 			if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
 				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 				return
@@ -1173,9 +1177,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	})
 
 	if s.enableSeriesResponseHints {
-		var anyHints *types.Any
+		var anyHints *anypb.Any
 
-		if anyHints, err = types.MarshalAny(resHints); err != nil {
+		if anyHints, err = anypb.New(resHints); err != nil {
 			err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
 			return
 		}
@@ -1189,9 +1193,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	return err
 }
 
-func chunksSize(chks []storepb.AggrChunk) (size int) {
+func chunksSize(chks []*storepb.AggrChunk) (size int) {
 	for _, chk := range chks {
-		size += chk.Size() // This gets the encoded proto size.
+		size += int(unsafe.Sizeof(*chk)) // This gets the encoded proto size.
 	}
 	return size
 }
@@ -1208,7 +1212,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	var reqBlockMatchers []*labels.Matcher
 	if req.Hints != nil {
 		reqHints := &hintspb.LabelNamesRequestHints{}
-		err := types.UnmarshalAny(req.Hints, reqHints)
+		err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{})
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label names request hints").Error())
 		}
@@ -1313,7 +1317,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	anyHints, err := types.MarshalAny(resHints)
+	anyHints, err := anypb.New(resHints)
 	if err != nil {
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label names response hints").Error())
 	}
@@ -1338,7 +1342,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var reqBlockMatchers []*labels.Matcher
 	if req.Hints != nil {
 		reqHints := &hintspb.LabelValuesRequestHints{}
-		err := types.UnmarshalAny(req.Hints, reqHints)
+		err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{})
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label values request hints").Error())
 		}
@@ -1444,7 +1448,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
 
-	anyHints, err := types.MarshalAny(resHints)
+	anyHints, err := anypb.New(resHints)
 	if err != nil {
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label values response hints").Error())
 	}

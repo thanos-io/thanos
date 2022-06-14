@@ -24,6 +24,8 @@ import (
 type Proxy struct {
 	logger   log.Logger
 	metadata func() []metadatapb.MetadataClient
+
+	metadatapb.UnimplementedMetadataServer
 }
 
 func RegisterMetadataServer(metadataSrv metadatapb.MetadataServer) func(*grpc.Server) {

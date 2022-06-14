@@ -444,7 +444,7 @@ config:
 
 			// Metadata.
 			{
-				var promMeta map[string][]metadatapb.Meta
+				var promMeta map[string][]*metadatapb.Meta
 				// Wait metadata response to be ready as Prometheus gets metadata after scrape.
 				testutil.Ok(t, runutil.Retry(3*time.Second, ctx.Done(), func() error {
 					promMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+p1.Endpoint("http")), "", -1)
@@ -488,14 +488,15 @@ config:
 				targetAndAssert(t, ctx, q.Endpoint("http"), "", &targetspb.TargetDiscovery{
 					ActiveTargets: []*targetspb.ActiveTarget{
 						{
-							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+							LastScrape: rulespb.TimeToTimestamp(time.Time{}),
+							DiscoveredLabels: &labelpb.ZLabelSet{Labels: []*labelpb.Label{
 								{Name: "__address__", Value: fmt.Sprintf("e2e_test_query_comp_query_%d-querier-1:8080", i)},
 								{Name: "__metrics_path__", Value: "/metrics"},
 								{Name: "__scheme__", Value: "http"},
 								{Name: "job", Value: "myself"},
 								{Name: "prometheus", Value: "p1"},
 							}},
-							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+							Labels: &labelpb.ZLabelSet{Labels: []*labelpb.Label{
 								{Name: "instance", Value: fmt.Sprintf("e2e_test_query_comp_query_%d-querier-1:8080", i)},
 								{Name: "job", Value: "myself"},
 								{Name: "prometheus", Value: "p1"},
@@ -505,14 +506,15 @@ config:
 							Health:     targetspb.TargetHealth_UP,
 						},
 						{
-							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+							LastScrape: rulespb.TimeToTimestamp(time.Time{}),
+							DiscoveredLabels: &labelpb.ZLabelSet{Labels: []*labelpb.Label{
 								{Name: "__address__", Value: "localhost:9090"},
 								{Name: "__metrics_path__", Value: "/metrics"},
 								{Name: "__scheme__", Value: "http"},
 								{Name: "job", Value: "myself"},
 								{Name: "prometheus", Value: "p1"},
 							}},
-							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+							Labels: &labelpb.ZLabelSet{Labels: []*labelpb.Label{
 								{Name: "instance", Value: "localhost:9090"},
 								{Name: "job", Value: "myself"},
 								{Name: "prometheus", Value: "p1"},
@@ -530,14 +532,16 @@ config:
 			{
 				ruleAndAssert(t, ctx, q.Endpoint("http"), "", []*rulespb.RuleGroup{
 					{
-						Name: "example_abort",
-						File: "/shared/data/querier-1/rules/rules.yaml",
+						Name:           "example_abort",
+						File:           "/shared/data/querier-1/rules/rules.yaml",
+						LastEvaluation: rulespb.TimeToTimestamp(time.Time{}),
+
 						Rules: []*rulespb.Rule{
 							rulespb.NewAlertingRule(&rulespb.Alert{
 								Name:  "TestAlert_AbortOnPartialResponse",
 								State: rulespb.AlertState_FIRING,
 								Query: "absent(some_metric)",
-								Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								Labels: &labelpb.ZLabelSet{Labels: []*labelpb.Label{
 									{Name: "prometheus", Value: "p1"},
 									{Name: "severity", Value: "page"},
 								}},

@@ -386,7 +386,7 @@ func runStore(
 
 	infoSrv := info.NewInfoServer(
 		component.Store.String(),
-		info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
+		info.WithLabelSetFunc(func() []*labelpb.ZLabelSet {
 			return bs.LabelSet()
 		}),
 		info.WithStoreInfoFunc(func() *infopb.StoreInfo {

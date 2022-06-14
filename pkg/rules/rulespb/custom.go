@@ -5,6 +5,7 @@ package rulespb
 
 import (
 	"encoding/json"
+	fmt "fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -20,6 +21,96 @@ const (
 	RuleRecordingType = "recording"
 	RuleAlertingType  = "alerting"
 )
+
+func TimestampToTime(ts *Timestamp) time.Time {
+	var tm time.Time
+	if ts == nil {
+		tm = time.Unix(0, 0).UTC() // treat nil like the empty Timestamp
+	} else {
+		tm = time.Unix(ts.Seconds, int64(ts.Nanos)).UTC()
+	}
+	return tm
+}
+
+const (
+	// Seconds field of the earliest valid Timestamp.
+	// This is time.Date(1, 1, 1, 0, 0, 0, 0, time.UTC).Unix().
+	minValidSeconds = -62135596800
+	// Seconds field just after the latest valid Timestamp.
+	// This is time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC).Unix().
+	maxValidSeconds = 253402300800
+)
+
+func validateTimestamp(ts *Timestamp) error {
+	if ts == nil {
+		return errors.New("timestamp: nil Timestamp")
+	}
+	if ts.Seconds < minValidSeconds {
+		return fmt.Errorf("timestamp: %#v before 0001-01-01", ts)
+	}
+	if ts.Seconds >= maxValidSeconds {
+		return fmt.Errorf("timestamp: %#v after 10000-01-01", ts)
+	}
+	if ts.Nanos < 0 || ts.Nanos >= 1e9 {
+		return fmt.Errorf("timestamp: %#v: nanos not in range [0, 1e9)", ts)
+	}
+	return nil
+}
+
+func TimeToTimestamp(t time.Time) *Timestamp {
+	if t.IsZero() {
+		ts := &Timestamp{}
+		ts.Seconds = time.Time{}.Unix()
+		return ts
+	}
+	ts := &Timestamp{
+		Seconds: t.Unix(),
+		Nanos:   int32(t.Nanosecond()),
+	}
+	/*if err := validateTimestamp(ts); err != nil {
+		return nil, err
+	}
+	return ts, nil
+
+	timestamp, _ := protobuf.TimestampProto(t)
+	*/
+	return ts
+}
+
+func (m *Timestamp) MarshalJSON() ([]byte, error) {
+	ret := TimestampToTime(m)
+	return json.Marshal(ret)
+}
+
+func (m *Timestamp) UnmarshalJSON(data []byte) error {
+	ret := time.Time{}
+	err := json.Unmarshal(data, &ret)
+	if err != nil {
+		return err
+	}
+
+	actualTimestamp := TimeToTimestamp(ret)
+
+	m.Seconds = actualTimestamp.Seconds
+	m.Nanos = actualTimestamp.Nanos
+
+	return nil
+}
+
+func (r *RuleGroups) UnmarshalJSON(data []byte) error {
+	type plain RuleGroups
+	ret := &plain{}
+	err := json.Unmarshal(data, &ret)
+	if err != nil {
+		return err
+	}
+	if ret.Groups == nil {
+		ret.Groups = []*RuleGroup{}
+	}
+
+	*r = RuleGroups(*ret)
+	return nil
+}
 
 func NewRuleGroupRulesResponse(rg *RuleGroup) *RulesResponse {
 	return &RulesResponse{
@@ -38,6 +129,9 @@ func NewWarningRulesResponse(warning error) *RulesResponse {
 }
 
 func NewRecordingRule(r *RecordingRule) *Rule {
+	if r.Labels == nil {
+		r.Labels = &labelpb.ZLabelSet{}
+	}
 	return &Rule{
 		Result: &Rule_Recording{Recording: r},
 	}
@@ -55,11 +149,11 @@ func NewRecordingRule(r *RecordingRule) *Rule {
 //
 // Note: This method assumes r1 and r2 are logically equal as per Rule#Compare.
 func (r1 *RecordingRule) Compare(r2 *RecordingRule) int {
-	if r1.LastEvaluation.Before(r2.LastEvaluation) {
+	if TimestampToTime(r1.LastEvaluation).Before(TimestampToTime(r2.LastEvaluation)) {
 		return 1
 	}
 
-	if r1.LastEvaluation.After(r2.LastEvaluation) {
+	if TimestampToTime(r1.LastEvaluation).After(TimestampToTime(r2.LastEvaluation)) {
 		return -1
 	}
 
@@ -67,6 +161,13 @@ func (r1 *RecordingRule) Compare(r2 *RecordingRule) int {
 }
 
 func NewAlertingRule(a *Alert) *Rule {
+	if a.Annotations == nil {
+		a.Annotations = &labelpb.ZLabelSet{}
+	}
+	if a.Labels == nil {
+		a.Labels = &labelpb.ZLabelSet{}
+	}
+
 	return &Rule{
 		Result: &Rule_Alert{Alert: a},
 	}
@@ -87,14 +188,14 @@ func (r *Rule) SetLabels(ls labels.Labels) {
 	var result labelpb.ZLabelSet
 
 	if len(ls) > 0 {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
+		result = labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(ls)}
 	}
 
 	switch {
 	case r.GetRecording() != nil:
-		r.GetRecording().Labels = result
+		r.GetRecording().Labels = &result
 	case r.GetAlert() != nil:
-		r.GetAlert().Labels = result
+		r.GetAlert().Labels = &result
 	}
 }
 
@@ -120,14 +221,14 @@ func (r *Rule) GetQuery() string {
 	}
 }
 
-func (r *Rule) GetLastEvaluation() time.Time {
+func (r *Rule) GetLastEvaluation() *Timestamp {
 	switch {
 	case r.GetRecording() != nil:
 		return r.GetRecording().LastEvaluation
 	case r.GetAlert() != nil:
 		return r.GetAlert().LastEvaluation
 	default:
-		return time.Time{}
+		return nil
 	}
 }
 
@@ -206,6 +307,7 @@ func (r *RuleGroup) Key() string {
 }
 
 func (m *Rule) UnmarshalJSON(entry []byte) error {
+
 	decider := struct {
 		Type string `json:"type"`
 	}{}
@@ -220,13 +322,22 @@ func (m *Rule) UnmarshalJSON(entry []byte) error {
 			return errors.Wrapf(err, "rule: recording rule unmarshal: %v", string(entry))
 		}
 
+		if r.Labels == nil {
+			r.Labels = &labelpb.ZLabelSet{}
+		}
+
 		m.Result = &Rule_Recording{Recording: r}
 	case "alerting":
 		r := &Alert{}
 		if err := json.Unmarshal(entry, r); err != nil {
 			return errors.Wrapf(err, "rule: alerting rule unmarshal: %v", string(entry))
 		}
-
+		if r.Annotations == nil {
+			r.Annotations = &labelpb.ZLabelSet{}
+		}
+		if r.Labels == nil {
+			r.Labels = &labelpb.ZLabelSet{}
+		}
 		m.Result = &Rule_Alert{Alert: r}
 	case "":
 		return errors.Errorf("rule: no type field provided: %v", string(entry))
@@ -319,11 +430,11 @@ func (a1 *Alert) Compare(a2 *Alert) int {
 		return d
 	}
 
-	if a1.LastEvaluation.Before(a2.LastEvaluation) {
+	if TimestampToTime(a1.LastEvaluation).Before(TimestampToTime(a2.LastEvaluation)) {
 		return 1
 	}
 
-	if a1.LastEvaluation.After(a2.LastEvaluation) {
+	if TimestampToTime(a1.LastEvaluation).After(TimestampToTime(a2.LastEvaluation)) {
 		return -1
 	}
 

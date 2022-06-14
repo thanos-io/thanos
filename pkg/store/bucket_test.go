@@ -23,8 +23,6 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
@@ -37,6 +35,9 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"go.uber.org/atomic"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -621,8 +622,8 @@ func TestBucketStore_Info(t *testing.T) {
 	testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
 	testutil.Equals(t, int64(math.MinInt64), resp.MaxTime)
-	testutil.Equals(t, []labelpb.ZLabelSet(nil), resp.LabelSets)
-	testutil.Equals(t, []labelpb.ZLabel(nil), resp.Labels)
+	testutil.Equals(t, []*labelpb.ZLabelSet(nil), resp.LabelSets)
+	testutil.Equals(t, []*labelpb.Label(nil), resp.Labels)
 }
 
 type recorder struct {
@@ -699,32 +700,32 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 		name              string
 		relabel           string
 		expectedIDs       []ulid.ULID
-		expectedAdvLabels []labelpb.ZLabelSet
+		expectedAdvLabels []*labelpb.ZLabelSet
 	}{
 		{
 			name:        "no sharding",
 			expectedIDs: all,
-			expectedAdvLabels: []labelpb.ZLabelSet{
+			expectedAdvLabels: []*labelpb.ZLabelSet{
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r2"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "b"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -739,15 +740,15 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - cluster
             `,
 			expectedIDs: []ulid.ULID{all[2]},
-			expectedAdvLabels: []labelpb.ZLabelSet{
+			expectedAdvLabels: []*labelpb.ZLabelSet{
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "b"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -762,21 +763,21 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - cluster
             `,
 			expectedIDs: []ulid.ULID{all[0], all[1], all[3]},
-			expectedAdvLabels: []labelpb.ZLabelSet{
+			expectedAdvLabels: []*labelpb.ZLabelSet{
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r2"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -795,15 +796,15 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - region
             `,
 			expectedIDs: []ulid.ULID{all[0], all[1]},
-			expectedAdvLabels: []labelpb.ZLabelSet{
+			expectedAdvLabels: []*labelpb.ZLabelSet{
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -822,7 +823,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - region
             `,
 			expectedIDs:       []ulid.ULID{},
-			expectedAdvLabels: []labelpb.ZLabelSet{},
+			expectedAdvLabels: []*labelpb.ZLabelSet{},
 		},
 	} {
 		t.Run(sc.name, func(t *testing.T) {
@@ -880,7 +881,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			testutil.Ok(t, err)
 
 			testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
-			testutil.Equals(t, []labelpb.ZLabel(nil), resp.Labels)
+			testutil.Equals(t, []*labelpb.Label(nil), resp.Labels)
 			testutil.Equals(t, sc.expectedAdvLabels, resp.LabelSets)
 
 			// Make sure we don't download files we did not expect to.
@@ -1320,7 +1321,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: int64(expectedSamples) - 1,
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 				SkipChunks: skipChunk,
@@ -1515,7 +1516,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
 			MinTime: 0,
 			MaxTime: int64(numSeries) - 1,
-			Matchers: []storepb.LabelMatcher{
+			Matchers: []*storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
 				// This bug shows only when we use lot's of symbols for matching.
@@ -1530,7 +1531,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
 			MinTime: 0,
 			MaxTime: int64(numSeries) - 1,
-			Matchers: []storepb.LabelMatcher{
+			Matchers: []*storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "2"},
 				// This bug shows only when we use lot's of symbols for matching.
@@ -1547,7 +1548,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
 			MinTime: 0,
 			MaxTime: int64(numSeries) - 1,
-			Matchers: []storepb.LabelMatcher{
+			Matchers: []*storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
 				// This bug shows only when we use lot's of symbols for matching.
@@ -1569,14 +1570,14 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: 1,
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 			},
 			ExpectedSeries: seriesSet1,
 			ExpectedHints: []hintspb.SeriesResponseHints{
 				{
-					QueriedBlocks: []hintspb.Block{
+					QueriedBlocks: []*hintspb.Block{
 						{Id: block1.String()},
 					},
 				},
@@ -1586,14 +1587,14 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: 3,
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 			},
 			ExpectedSeries: append(append([]*storepb.Series{}, seriesSet1...), seriesSet2...),
 			ExpectedHints: []hintspb.SeriesResponseHints{
 				{
-					QueriedBlocks: []hintspb.Block{
+					QueriedBlocks: []*hintspb.Block{
 						{Id: block1.String()},
 						{Id: block2.String()},
 					},
@@ -1604,11 +1605,11 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: 3,
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 				Hints: mustMarshalAny(&hintspb.SeriesRequestHints{
-					BlockMatchers: []storepb.LabelMatcher{
+					BlockMatchers: []*storepb.LabelMatcher{
 						{Type: storepb.LabelMatcher_EQ, Name: block.BlockIDLabel, Value: block1.String()},
 					},
 				}),
@@ -1616,7 +1617,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 			ExpectedSeries: seriesSet1,
 			ExpectedHints: []hintspb.SeriesResponseHints{
 				{
-					QueriedBlocks: []hintspb.Block{
+					QueriedBlocks: []*hintspb.Block{
 						{Id: block1.String()},
 					},
 				},
@@ -1676,7 +1677,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	req := &storepb.SeriesRequest{
 		MinTime: 0,
 		MaxTime: 3,
-		Matchers: []storepb.LabelMatcher{
+		Matchers: []*storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 		},
 		Hints: mustMarshalAny(&hintspb.SeriesResponseHints{}),
@@ -1794,7 +1795,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 			req := &storepb.SeriesRequest{
 				MinTime: testData.reqMinTime,
 				MaxTime: testData.reqMaxTime,
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "test"},
 				},
 			}
@@ -1818,8 +1819,9 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	}
 }
 
-func mustMarshalAny(pb proto.Message) *types.Any {
-	out, err := types.MarshalAny(pb)
+func mustMarshalAny(pb protoreflect.ProtoMessage) *anypb.Any {
+	out, err := anypb.New(pb)
+
 	if err != nil {
 		panic(err)
 	}
@@ -1980,7 +1982,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			},
 			expectedNames: labelNamesFromSeriesSet(seriesSet1),
 			expectedNamesHints: hintspb.LabelNamesResponseHints{
-				QueriedBlocks: []hintspb.Block{
+				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
 			},
@@ -1992,7 +1994,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			},
 			expectedValues: []string{"1"},
 			expectedValuesHints: hintspb.LabelValuesResponseHints{
-				QueriedBlocks: []hintspb.Block{
+				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
 			},
@@ -2008,7 +2010,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				append(append([]*storepb.Series{}, seriesSet1...), seriesSet2...),
 			),
 			expectedNamesHints: hintspb.LabelNamesResponseHints{
-				QueriedBlocks: []hintspb.Block{
+				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 					{Id: block2.String()},
 				},
@@ -2021,7 +2023,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			},
 			expectedValues: []string{"1"},
 			expectedValuesHints: hintspb.LabelValuesResponseHints{
-				QueriedBlocks: []hintspb.Block{
+				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 					{Id: block2.String()},
 				},
@@ -2033,14 +2035,14 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				Start: 0,
 				End:   3,
 				Hints: mustMarshalAny(&hintspb.LabelNamesRequestHints{
-					BlockMatchers: []storepb.LabelMatcher{
+					BlockMatchers: []*storepb.LabelMatcher{
 						{Type: storepb.LabelMatcher_EQ, Name: block.BlockIDLabel, Value: block1.String()},
 					},
 				}),
 			},
 			expectedNames: labelNamesFromSeriesSet(seriesSet1),
 			expectedNamesHints: hintspb.LabelNamesResponseHints{
-				QueriedBlocks: []hintspb.Block{
+				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
 			},
@@ -2050,14 +2052,14 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				Start: 0,
 				End:   3,
 				Hints: mustMarshalAny(&hintspb.LabelValuesRequestHints{
-					BlockMatchers: []storepb.LabelMatcher{
+					BlockMatchers: []*storepb.LabelMatcher{
 						{Type: storepb.LabelMatcher_EQ, Name: block.BlockIDLabel, Value: block1.String()},
 					},
 				}),
 			},
 			expectedValues: []string{"1"},
 			expectedValuesHints: hintspb.LabelValuesResponseHints{
-				QueriedBlocks: []hintspb.Block{
+				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
 			},
@@ -2071,7 +2073,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			testutil.Equals(t, tc.expectedNames, namesResp.Names)
 
 			var namesHints hintspb.LabelNamesResponseHints
-			testutil.Ok(t, types.UnmarshalAny(namesResp.Hints, &namesHints))
+			testutil.Ok(t, anypb.UnmarshalTo(namesResp.Hints, &namesHints, proto.UnmarshalOptions{}))
 			// The order is not determinate, so we are sorting them.
 			sort.Slice(namesHints.QueriedBlocks, func(i, j int) bool {
 				return namesHints.QueriedBlocks[i].Id < namesHints.QueriedBlocks[j].Id
@@ -2083,7 +2085,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			testutil.Equals(t, tc.expectedValues, valuesResp.Values)
 
 			var valuesHints hintspb.LabelValuesResponseHints
-			testutil.Ok(t, types.UnmarshalAny(valuesResp.Hints, &valuesHints))
+			testutil.Ok(t, anypb.UnmarshalTo(valuesResp.Hints, &valuesHints, proto.UnmarshalOptions{}))
 			// The order is not determinate, so we are sorting them.
 			sort.Slice(valuesHints.QueriedBlocks, func(i, j int) bool {
 				return valuesHints.QueriedBlocks[i].Id < valuesHints.QueriedBlocks[j].Id
@@ -2275,7 +2277,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				req := &storepb.SeriesRequest{
 					MinTime: blockMeta.MinTime,
 					MaxTime: blockMeta.MaxTime,
-					Matchers: []storepb.LabelMatcher{
+					Matchers: []*storepb.LabelMatcher{
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: labelMatcher},
 					},
 					SkipChunks: false,

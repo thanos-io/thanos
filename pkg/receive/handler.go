@@ -104,6 +104,8 @@ type Handler struct {
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
+
+	storepb.UnimplementedWriteableStoreServer
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -416,7 +418,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 	// to every other node in the hashring, rather than
 	// one request per time series.
 	for i := range wreq.Timeseries {
-		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[i], r.n)
+		endpoint, err := h.hashring.GetN(tenant, wreq.Timeseries[i], r.n)
 		if err != nil {
 			h.mtx.RUnlock()
 			return err
@@ -649,7 +651,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	}
 
 	for i = 0; i < h.options.ReplicationFactor; i++ {
-		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[0], i)
+		endpoint, err := h.hashring.GetN(tenant, wreq.Timeseries[0], i)
 		if err != nil {
 			h.mtx.RUnlock()
 			return err
@@ -697,13 +699,13 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest) {
 	if len(h.options.RelabelConfigs) == 0 {
 		return
 	}
-	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
+	timeSeries := make([]*prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
-		lbls := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		lbls := relabel.Process(labelpb.ProtobufLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
 		if lbls == nil {
 			continue
 		}
-		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+		ts.Labels = labelpb.ProtobufLabelsFromPromLabels(lbls)
 		timeSeries = append(timeSeries, ts)
 	}
 	wreq.Timeseries = timeSeries

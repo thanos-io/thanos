@@ -33,7 +33,7 @@ import (
 // to be able to obtain information about a particular store.
 type InfoStoreServer interface {
 	storepb.StoreServer
-	LabelSet() []labelpb.ZLabelSet
+	LabelSet() []*labelpb.ZLabelSet
 	TimeRange() (int64, int64)
 }
 
@@ -43,6 +43,7 @@ type MultiTSDBStore struct {
 	logger     log.Logger
 	component  component.SourceStoreAPI
 	tsdbStores func() map[string]InfoStoreServer
+	storepb.UnimplementedStoreServer
 }
 
 // NewMultiTSDBStore creates a new MultiTSDBStore.
@@ -91,7 +92,7 @@ func (s *MultiTSDBStore) Info(ctx context.Context, req *storepb.InfoRequest) (*s
 
 	// We can rely on every underlying TSDB to only have one labelset, so this
 	// will always allocate the correct length immediately.
-	resp.LabelSets = make([]labelpb.ZLabelSet, 0, len(infos))
+	resp.LabelSets = make([]*labelpb.ZLabelSet, 0, len(infos))
 	for _, info := range infos {
 		resp.LabelSets = append(resp.LabelSets, info.LabelSets...)
 	}
@@ -99,15 +100,15 @@ func (s *MultiTSDBStore) Info(ctx context.Context, req *storepb.InfoRequest) (*s
 	return resp, nil
 }
 
-func (s *MultiTSDBStore) LabelSet() []labelpb.ZLabelSet {
+func (s *MultiTSDBStore) LabelSet() []*labelpb.ZLabelSet {
 	stores := s.tsdbStores()
 	if len(stores) == 0 {
-		return []labelpb.ZLabelSet{}
+		return []*labelpb.ZLabelSet{}
 	}
 
 	// We can rely on every underlying TSDB to only have one labelset, so this
 	// will always allocate the correct length immediately.
-	lsets := make([]labelpb.ZLabelSet, 0, len(stores))
+	lsets := make([]*labelpb.ZLabelSet, 0, len(stores))
 	for _, store := range stores {
 		lsets = append(lsets, store.LabelSet()...)
 	}
@@ -193,7 +194,7 @@ func (s *tenantSeriesSetServer) Send(r *storepb.SeriesResponse) error {
 	}
 
 	// TODO(bwplotka): Consider avoid copying / learn why it has to copied.
-	chunks := make([]storepb.AggrChunk, len(series.Chunks))
+	chunks := make([]*storepb.AggrChunk, len(series.Chunks))
 	copy(chunks, series.Chunks)
 
 	// For series, pass it to our AggChunkSeriesSet.
@@ -225,7 +226,7 @@ func (s *tenantSeriesSetServer) Next() (ok bool) {
 	return ok
 }
 
-func (s *tenantSeriesSetServer) At() (labels.Labels, []storepb.AggrChunk) {
+func (s *tenantSeriesSetServer) At() (labels.Labels, []*storepb.AggrChunk) {
 	if s.cur == nil {
 		return nil, nil
 	}
@@ -290,7 +291,7 @@ func (s *MultiTSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_Seri
 		for mergedSet.Next() {
 			lset, chks := mergedSet.At()
 			respSender.send(storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.ZLabelsFromPromLabels(lset),
+				Labels: labelpb.ProtobufLabelsFromPromLabels(lset),
 				Chunks: chks,
 			}))
 		}

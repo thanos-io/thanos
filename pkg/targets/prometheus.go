@@ -20,6 +20,8 @@ type Prometheus struct {
 	client *promclient.Client
 
 	extLabels func() labels.Labels
+
+	targetspb.UnimplementedTargetsServer
 }
 
 // NewPrometheus creates new targets.Prometheus.

@@ -12,7 +12,7 @@ import (
 
 func TestHashringGet(t *testing.T) {
 	ts := &prompb.TimeSeries{
-		Labels: []labelpb.ZLabel{
+		Labels: []*labelpb.Label{
 			{
 				Name:  "foo",
 				Value: "bar",

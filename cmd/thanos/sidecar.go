@@ -261,7 +261,7 @@ func runSidecar(
 
 		infoSrv := info.NewInfoServer(
 			component.Sidecar.String(),
-			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
+			info.WithLabelSetFunc(func() []*labelpb.ZLabelSet {
 				return promStore.LabelSet()
 			}),
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {

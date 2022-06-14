@@ -41,6 +41,8 @@ type LocalStore struct {
 	// For small debug purposes, this is good enough.
 	series       []*storepb.Series
 	sortedChunks [][]int
+
+	storepb.UnimplementedStoreServer
 }
 
 // TODO(bwplotka): Add remote read so Prometheus users can use this. Potentially after streaming will be added
@@ -68,8 +70,8 @@ func NewLocalStoreFromJSONMmappableFile(
 		extLabels: extLabels,
 		c:         f,
 		info: &storepb.InfoResponse{
-			LabelSets: []labelpb.ZLabelSet{
-				{Labels: labelpb.ZLabelsFromPromLabels(extLabels)},
+			LabelSets: []*labelpb.ZLabelSet{
+				{Labels: labelpb.ProtobufLabelsFromPromLabels(extLabels)},
 			},
 			StoreType: component.ToProto(),
 			MinTime:   math.MaxInt64,
@@ -164,7 +166,7 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 	var chosen []int
 	for si, series := range s.series {
-		lbls := labelpb.ZLabelsToPromLabels(series.Labels)
+		lbls := labelpb.ProtobufLabelsToPromLabels(series.Labels)
 		var noMatch bool
 		for _, m := range matchers {
 			extValue := lbls.Get(m.Name)
@@ -183,7 +185,7 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		chosen = chosen[:0]
 		resp := &storepb.Series{
 			Labels: series.Labels,
-			Chunks: make([]storepb.AggrChunk, 0, len(s.sortedChunks[si])),
+			Chunks: make([]*storepb.AggrChunk, 0, len(s.sortedChunks[si])),
 		}
 
 		for _, ci := range s.sortedChunks[si] {
@@ -232,7 +234,7 @@ func (s *LocalStore) LabelValues(_ context.Context, r *storepb.LabelValuesReques
 ) {
 	vals := map[string]struct{}{}
 	for _, series := range s.series {
-		lbls := labelpb.ZLabelsToPromLabels(series.Labels)
+		lbls := labelpb.ProtobufLabelsToPromLabels(series.Labels)
 		val := lbls.Get(r.Label)
 		if val == "" {
 			continue

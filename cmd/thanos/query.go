@@ -660,7 +660,7 @@ func runQuery(
 
 		infoSrv := info.NewInfoServer(
 			component.Query.String(),
-			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return proxy.LabelSet() }),
+			info.WithLabelSetFunc(func() []*labelpb.ZLabelSet { return proxy.LabelSet() }),
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 				if httpProbe.IsReady() {
 					mint, maxt := proxy.TimeRange()

@@ -341,7 +341,7 @@ func setupAndRunGRPCServer(g *run.Group,
 
 			infoSrv := info.NewInfoServer(
 				component.Receive.String(),
-				info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return mts.LabelSet() }),
+				info.WithLabelSetFunc(func() []*labelpb.ZLabelSet { return mts.LabelSet() }),
 				info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 					if isReady() {
 						minTime, maxTime := mts.TimeRange()

@@ -18,7 +18,7 @@ import (
 )
 
 type labelNameCallCase struct {
-	matchers []storepb.LabelMatcher
+	matchers []*storepb.LabelMatcher
 	start    int64
 	end      int64
 
@@ -29,7 +29,7 @@ type labelNameCallCase struct {
 type labelValuesCallCase struct {
 	label string
 
-	matchers []storepb.LabelMatcher
+	matchers []*storepb.LabelMatcher
 	start    int64
 	end      int64
 
@@ -111,30 +111,30 @@ func testLabelAPIs(t *testing.T, startStore func(extLset labels.Labels, append f
 					start:         timestamp.FromTime(minTime),
 					end:           timestamp.FromTime(maxTime),
 					expectedNames: []string{"bar", "foo", "region"},
-					matchers:      []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "barvalue1"}},
+					matchers:      []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "barvalue1"}},
 				},
 				{
 					start:         timestamp.FromTime(minTime),
 					end:           timestamp.FromTime(maxTime),
 					expectedNames: []string{"foo", "region"},
-					matchers:      []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "foovalue2"}},
+					matchers:      []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "foovalue2"}},
 				},
 				{
 					start:    timestamp.FromTime(minTime),
 					end:      timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "different"}},
+					matchers: []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "different"}},
 				},
 				// Matchers on external labels.
 				{
 					start:         timestamp.FromTime(minTime),
 					end:           timestamp.FromTime(maxTime),
 					expectedNames: []string{"bar", "foo", "region"},
-					matchers:      []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
+					matchers:      []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
 				},
 				{
 					start:    timestamp.FromTime(minTime),
 					end:      timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
+					matchers: []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
 				},
 			},
 			labelValuesCalls: []labelValuesCallCase{
@@ -150,13 +150,13 @@ func testLabelAPIs(t *testing.T, startStore func(extLset labels.Labels, append f
 					end:            timestamp.FromTime(maxTime),
 					label:          "foo",
 					expectedValues: []string{"foovalue1"},
-					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "barvalue1"}},
+					matchers:       []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "barvalue1"}},
 				},
 				{
 					start:    timestamp.FromTime(minTime),
 					end:      timestamp.FromTime(maxTime),
 					label:    "foo",
-					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "different"}},
+					matchers: []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "different"}},
 				},
 				// Matchers on external labels.
 				{
@@ -164,26 +164,26 @@ func testLabelAPIs(t *testing.T, startStore func(extLset labels.Labels, append f
 					end:            timestamp.FromTime(maxTime),
 					label:          "foo",
 					expectedValues: []string{"foovalue1", "foovalue2"},
-					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
+					matchers:       []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
 				},
 				{
 					start:          timestamp.FromTime(minTime),
 					end:            timestamp.FromTime(maxTime),
 					label:          "bar",
 					expectedValues: []string{"barvalue1"},
-					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
+					matchers:       []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
 				},
 				{
 					start:    timestamp.FromTime(minTime),
 					end:      timestamp.FromTime(maxTime),
 					label:    "foo",
-					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
+					matchers: []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
 				},
 				{
 					start:    timestamp.FromTime(minTime),
 					end:      timestamp.FromTime(maxTime),
 					label:    "bar",
-					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
+					matchers: []*storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
 				},
 			},
 		},

@@ -21,6 +21,8 @@ type GRPCAPI struct {
 	queryableCreate             query.QueryableCreator
 	queryEngine                 func(int64) *promql.Engine
 	defaultMaxResolutionSeconds time.Duration
+
+	querypb.UnimplementedQueryServer
 }
 
 func NewGRPCAPI(now func() time.Time, replicaLabels []string, creator query.QueryableCreator, queryEngine func(int64) *promql.Engine, defaultMaxResolutionSeconds time.Duration) *GRPCAPI {
@@ -93,7 +95,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	switch vector := result.Value.(type) {
 	case promql.Scalar:
 		series := &prompb.TimeSeries{
-			Samples: []prompb.Sample{{Value: vector.V, Timestamp: vector.T}},
+			Samples: []*prompb.Sample{{Value: vector.V, Timestamp: vector.T}},
 		}
 		if err := server.Send(querypb.NewQueryResponse(series)); err != nil {
 			return err
@@ -101,7 +103,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	case promql.Vector:
 		for _, sample := range vector {
 			series := &prompb.TimeSeries{
-				Labels:  labelpb.ZLabelsFromPromLabels(sample.Metric),
+				Labels:  labelpb.ProtobufLabelsFromPromLabels(sample.Metric),
 				Samples: prompb.SamplesFromPromqlPoints([]promql.Point{sample.Point}),
 			}
 			if err := server.Send(querypb.NewQueryResponse(series)); err != nil {
@@ -167,7 +169,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	case promql.Matrix:
 		for _, series := range matrix {
 			series := &prompb.TimeSeries{
-				Labels:  labelpb.ZLabelsFromPromLabels(series.Metric),
+				Labels:  labelpb.ProtobufLabelsFromPromLabels(series.Metric),
 				Samples: prompb.SamplesFromPromqlPoints(series.Points),
 			}
 			if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"unsafe"
 
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
@@ -39,6 +40,8 @@ type TSDBStore struct {
 	component        component.StoreAPI
 	extLset          labels.Labels
 	maxBytesPerFrame int
+
+	storepb.UnimplementedStoreServer
 }
 
 func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*grpc.Server) {
@@ -76,7 +79,7 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 	}
 
 	res := &storepb.InfoResponse{
-		Labels:    labelpb.ZLabelsFromPromLabels(s.extLset),
+		Labels:    labelpb.ProtobufLabelsFromPromLabels(s.extLset),
 		StoreType: s.component.ToProto(),
 		MinTime:   minTime,
 		MaxTime:   math.MaxInt64,
@@ -84,20 +87,20 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 
 	// Until we deprecate the single labels in the reply, we just duplicate
 	// them here for migration/compatibility purposes.
-	res.LabelSets = []labelpb.ZLabelSet{}
+	res.LabelSets = []*labelpb.ZLabelSet{}
 	if len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{
+		res.LabelSets = append(res.LabelSets, &labelpb.ZLabelSet{
 			Labels: res.Labels,
 		})
 	}
 	return res, nil
 }
 
-func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
-	labels := labelpb.ZLabelsFromPromLabels(s.extLset)
-	labelSets := []labelpb.ZLabelSet{}
+func (s *TSDBStore) LabelSet() []*labelpb.ZLabelSet {
+	labels := labelpb.ProtobufLabelsFromPromLabels(s.extLset)
+	labelSets := []*labelpb.ZLabelSet{}
 	if len(labels) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{
+		labelSets = append(labelSets, &labelpb.ZLabelSet{
 			Labels: labels,
 		})
 	}
@@ -155,7 +158,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
-		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendSortedLabels(series.Labels(), s.extLset))}
+		storeSeries := storepb.Series{Labels: labelpb.ProtobufLabelsFromPromLabels(labelpb.ExtendSortedLabels(series.Labels(), s.extLset))}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
@@ -165,11 +168,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 
 		bytesLeftForChunks := s.maxBytesPerFrame
 		for _, lbl := range storeSeries.Labels {
-			bytesLeftForChunks -= lbl.Size()
+			bytesLeftForChunks -= int(unsafe.Sizeof(*lbl))
 		}
 		frameBytesLeft := bytesLeftForChunks
 
-		seriesChunks := []storepb.AggrChunk{}
+		seriesChunks := []*storepb.AggrChunk{}
 		chIter := series.Iterator()
 		isNext := chIter.Next()
 		for isNext {
@@ -186,8 +189,8 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 					Data: chk.Chunk.Bytes(),
 				},
 			}
-			frameBytesLeft -= c.Size()
-			seriesChunks = append(seriesChunks, c)
+			frameBytesLeft -= int(unsafe.Sizeof(c))
+			seriesChunks = append(seriesChunks, &c)
 
 			// We are fine with minor inaccuracy of max bytes per frame. The inaccuracy will be max of full chunk size.
 			isNext = chIter.Next()
@@ -200,7 +203,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 
 			if isNext {
 				frameBytesLeft = bytesLeftForChunks
-				seriesChunks = make([]storepb.AggrChunk, 0, len(seriesChunks))
+				seriesChunks = make([]*storepb.AggrChunk, 0, len(seriesChunks))
 			}
 		}
 		if err := chIter.Err(); err != nil {

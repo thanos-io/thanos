@@ -600,7 +600,7 @@ func runRule(
 		tsdbStore := store.NewTSDBStore(logger, tsdbDB, component.Rule, conf.lset)
 		infoOptions = append(
 			infoOptions,
-			info.WithLabelSetFunc(func() []labelpb.ZLabelSet {
+			info.WithLabelSetFunc(func() []*labelpb.ZLabelSet {
 				return tsdbStore.LabelSet()
 			}),
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {

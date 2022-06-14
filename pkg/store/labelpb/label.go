@@ -7,9 +7,7 @@
 package labelpb
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 	"unsafe"
@@ -29,22 +27,36 @@ func noAllocBytes(buf string) []byte {
 	return *(*[]byte)(unsafe.Pointer(&buf))
 }
 
-// ZLabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed labels.Labels.
-func ZLabelsFromPromLabels(lset labels.Labels) []ZLabel {
-	return *(*[]ZLabel)(unsafe.Pointer(&lset))
+// ProtobufLabelsFromPromLabels converts Prometheus labels to a slice pointers to labelpb.Label.
+func ProtobufLabelsFromPromLabels(lset labels.Labels) []*Label {
+	labels := make([]*Label, 0, len(lset))
+	for _, lbl := range lset {
+		labels = append(labels, &Label{Name: lbl.Name, Value: lbl.Value})
+	}
+
+	return labels
 }
 
-// ZLabelsToPromLabels convert slice of labelpb.ZLabel to Prometheus labels in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed []ZLabel.
-// NOTE: Use with care. ZLabels holds memory from the whole protobuf unmarshal, so the returned
-// Prometheus Labels will hold this memory as well.
-func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
-	return *(*labels.Labels)(unsafe.Pointer(&lset))
+// ZLabelSetFromProtobufLabels converts a slice of pointers to labelpb.Label to a pointer to a ZLabelSet.
+func ZLabelSetFromProtobufLabels(lset []*Label) *ZLabelSet {
+	if len(lset) == 0 {
+		return nil
+	}
+	return &ZLabelSet{Labels: lset}
+}
+
+// ProtobufLabelsToPromLabels converts a slice of pointers labelpb.Label to Prometheus labels.
+func ProtobufLabelsToPromLabels(lset []*Label) labels.Labels {
+	promLabels := make([]labels.Label, 0, len(lset))
+	for _, lbl := range lset {
+		promLabels = append(promLabels, labels.Label{Name: lbl.Name, Value: lbl.Value})
+	}
+
+	return promLabels
 }
 
 // ReAllocZLabelsStrings re-allocates all underlying bytes for string, detaching it from bigger memory pool.
-func ReAllocZLabelsStrings(lset *[]ZLabel) {
+func ReAllocZLabelsStrings(lset *[]*Label) {
 	for j, l := range *lset {
 		// NOTE: This trick converts from string to byte without copy, but copy when creating string.
 		(*lset)[j].Name = string(noAllocBytes(l.Name))
@@ -65,7 +77,7 @@ func LabelsToPromLabels(lset []Label) labels.Labels {
 }
 
 // ZLabelSetsToPromLabelSets converts slice of labelpb.ZLabelSet to slice of Prometheus labels.
-func ZLabelSetsToPromLabelSets(lss ...ZLabelSet) []labels.Labels {
+func ZLabelSetsToPromLabelSets(lss ...*ZLabelSet) []labels.Labels {
 	res := make([]labels.Labels, 0, len(lss))
 	for _, ls := range lss {
 		res = append(res, ls.PromLabels())
@@ -73,176 +85,8 @@ func ZLabelSetsToPromLabelSets(lss ...ZLabelSet) []labels.Labels {
 	return res
 }
 
-// ZLabel is a Label (also easily transformable to Prometheus labels.Labels) that can be unmarshalled from protobuf
-// reusing the same memory address for string bytes.
-// NOTE: While unmarshalling it uses exactly same bytes that were allocated for protobuf. This mean that *whole* protobuf
-// bytes will be not GC-ed as long as ZLabels are referenced somewhere. Use it carefully, only for short living
-// protobuf message processing.
-type ZLabel Label
-
-func (m *ZLabel) MarshalTo(data []byte) (int, error) {
-	f := Label(*m)
-	return f.MarshalTo(data)
-}
-
-func (m *ZLabel) MarshalToSizedBuffer(data []byte) (int, error) {
-	f := Label(*m)
-	return f.MarshalToSizedBuffer(data)
-}
-
-// Unmarshal unmarshalls gRPC protobuf into ZLabel struct. ZLabel string is directly using bytes passed in `data`.
-// To use it add (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel" to proto field tag.
-// NOTE: This exists in internal Google protobuf implementation, but not in open source one: https://news.ycombinator.com/item?id=23588882
-func (m *ZLabel) Unmarshal(data []byte) error {
-	l := len(data)
-
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowTypes
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := data[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ZLabel: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ZLabel: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTypes
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthTypes
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthTypes
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Name = noAllocString(data[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTypes
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := data[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthTypes
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthTypes
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Value = noAllocString(data[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipTypes(data[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthTypes
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthTypes
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-
-func (m *ZLabel) UnmarshalJSON(entry []byte) error {
-	f := Label(*m)
-	if err := json.Unmarshal(entry, &f); err != nil {
-		return errors.Wrapf(err, "labels: label field unmarshal: %v", string(entry))
-	}
-	*m = ZLabel(f)
-	return nil
-}
-
-func (m *ZLabel) Marshal() ([]byte, error) {
-	f := Label(*m)
-	return f.Marshal()
-}
-
-func (m *ZLabel) MarshalJSON() ([]byte, error) {
-	return json.Marshal(Label(*m))
-}
-
-// Size implements proto.Sizer.
-func (m *ZLabel) Size() (n int) {
-	f := Label(*m)
-	return f.Size()
-}
-
-// Equal implements proto.Equaler.
-func (m *ZLabel) Equal(other ZLabel) bool {
-	return m.Name == other.Name && m.Value == other.Value
-}
-
-// Compare implements proto.Comparer.
-func (m *ZLabel) Compare(other ZLabel) int {
+// Compare compares two labels.
+func (m *Label) Compare(other *Label) int {
 	if c := strings.Compare(m.Name, other.Name); c != 0 {
 		return c
 	}
@@ -295,7 +139,7 @@ func (m *ZLabelSet) UnmarshalJSON(entry []byte) error {
 		return errors.Wrapf(err, "labels: labels field unmarshal: %v", string(entry))
 	}
 	sort.Sort(lbls)
-	m.Labels = ZLabelsFromPromLabels(lbls)
+	m.Labels = ProtobufLabelsFromPromLabels(lbls)
 	return nil
 }
 
@@ -305,21 +149,14 @@ func (m *ZLabelSet) MarshalJSON() ([]byte, error) {
 
 // PromLabels return Prometheus labels.Labels without extra allocation.
 func (m *ZLabelSet) PromLabels() labels.Labels {
-	return ZLabelsToPromLabels(m.Labels)
-}
-
-// DeepCopy copies labels and each label's string to separate bytes.
-func DeepCopy(lbls []ZLabel) []ZLabel {
-	ret := make([]ZLabel, len(lbls))
-	for i := range lbls {
-		ret[i].Name = string(noAllocBytes(lbls[i].Name))
-		ret[i].Value = string(noAllocBytes(lbls[i].Value))
+	if len(m.Labels) == 0 {
+		fmt.Println("nil")
 	}
-	return ret
+	return ProtobufLabelsToPromLabels(m.Labels)
 }
 
 // HashWithPrefix returns a hash for the given prefix and labels.
-func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
+func HashWithPrefix(prefix string, lbls []*Label) uint64 {
 	// Use xxhash.Sum64(b) for fast path as it's faster.
 	b := make([]byte, 0, 1024)
 	b = append(b, prefix...)
@@ -347,7 +184,7 @@ func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
 }
 
 // ZLabelSets is a sortable list of ZLabelSet. It assumes the label pairs in each ZLabelSet element are already sorted.
-type ZLabelSets []ZLabelSet
+type ZLabelSets []*ZLabelSet
 
 func (z ZLabelSets) Len() int { return len(z) }
 

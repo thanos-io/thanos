@@ -261,19 +261,19 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 	// TODO(bwplotka): Add those test cases to TSDB querier_test.go as well, there are no tests for matching.
 	for i, tcase := range []struct {
 		req              *storepb.SeriesRequest
-		expected         [][]labelpb.ZLabel
+		expected         [][]*labelpb.Label
 		expectedChunkLen int
 	}{
 		{
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
 				},
 				MinTime: mint,
 				MaxTime: maxt,
 			},
 			expectedChunkLen: 3,
-			expected: [][]labelpb.ZLabel{
+			expected: [][]*labelpb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
@@ -286,14 +286,14 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 		},
 		{
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1"},
 				},
 				MinTime: mint,
 				MaxTime: maxt,
 			},
 			expectedChunkLen: 3,
-			expected: [][]labelpb.ZLabel{
+			expected: [][]*labelpb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
@@ -302,14 +302,14 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 		},
 		{
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_NRE, Name: "a", Value: "2"},
 				},
 				MinTime: mint,
 				MaxTime: maxt,
 			},
 			expectedChunkLen: 3,
-			expected: [][]labelpb.ZLabel{
+			expected: [][]*labelpb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
@@ -318,14 +318,14 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 		},
 		{
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_NRE, Name: "a", Value: "not_existing"},
 				},
 				MinTime: mint,
 				MaxTime: maxt,
 			},
 			expectedChunkLen: 3,
-			expected: [][]labelpb.ZLabel{
+			expected: [][]*labelpb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
@@ -338,14 +338,14 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 		},
 		{
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_NRE, Name: "not_existing", Value: "1"},
 				},
 				MinTime: mint,
 				MaxTime: maxt,
 			},
 			expectedChunkLen: 3,
-			expected: [][]labelpb.ZLabel{
+			expected: [][]*labelpb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
@@ -358,14 +358,14 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 		},
 		{
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "2"},
 				},
 				MinTime: mint,
 				MaxTime: maxt,
 			},
 			expectedChunkLen: 3,
-			expected: [][]labelpb.ZLabel{
+			expected: [][]*labelpb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 			},
@@ -373,7 +373,7 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 		{
 			// Matching by external label should work as well.
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 					{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "value2"},
 				},
@@ -381,14 +381,14 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				MaxTime: maxt,
 			},
 			expectedChunkLen: 3,
-			expected: [][]labelpb.ZLabel{
+			expected: [][]*labelpb.Label{
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
 			},
 		},
 		{
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 					{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "wrong-value"},
 				},
@@ -398,14 +398,14 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 		},
 		{
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "2"},
 				},
 				MinTime: mint,
 				MaxTime: maxt,
 			},
 			expectedChunkLen: 3,
-			expected: [][]labelpb.ZLabel{
+			expected: [][]*labelpb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
@@ -414,14 +414,14 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 		},
 		{
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "not_existing"},
 				},
 				MinTime: mint,
 				MaxTime: maxt,
 			},
 			expectedChunkLen: 3,
-			expected: [][]labelpb.ZLabel{
+			expected: [][]*labelpb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
@@ -436,7 +436,7 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 		// Problem: Matcher that was selecting NO series, was ignored instead of passed as emptyPosting to Intersect.
 		{
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 					{Type: storepb.LabelMatcher_RE, Name: "non_existing", Value: "something"},
 				},
@@ -447,7 +447,7 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 		// Test skip-chunk option.
 		{
 			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				},
 				MinTime:    mint,
@@ -455,7 +455,7 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				SkipChunks: true,
 			},
 			expectedChunkLen: 0,
-			expected: [][]labelpb.ZLabel{
+			expected: [][]*labelpb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
@@ -582,14 +582,14 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 	testutil.Equals(t, filterMaxTime.PrometheusTimestamp(), maxt)
 
 	req := &storepb.SeriesRequest{
-		Matchers: []storepb.LabelMatcher{
+		Matchers: []*storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 		},
 		MinTime: mint,
 		MaxTime: timestamp.FromTime(time.Now().AddDate(0, 0, 1)),
 	}
 
-	expectedLabels := [][]labelpb.ZLabel{
+	expectedLabels := [][]*labelpb.Label{
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
@@ -656,7 +656,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 			testutil.Ok(t, s.store.SyncBlocks(ctx))
 
 			req := &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				},
 				MinTime: minTimeDuration.PrometheusTimestamp(),
@@ -718,7 +718,7 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 				req: &storepb.LabelNamesRequest{
 					Start: timestamp.FromTime(minTime),
 					End:   timestamp.FromTime(maxTime),
-					Matchers: []storepb.LabelMatcher{
+					Matchers: []*storepb.LabelMatcher{
 						{
 							Type:  storepb.LabelMatcher_EQ,
 							Name:  "a",
@@ -732,7 +732,7 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 				req: &storepb.LabelNamesRequest{
 					Start: timestamp.FromTime(minTime),
 					End:   timestamp.FromTime(maxTime),
-					Matchers: []storepb.LabelMatcher{
+					Matchers: []*storepb.LabelMatcher{
 						{
 							Type:  storepb.LabelMatcher_EQ,
 							Name:  "b",
@@ -747,7 +747,7 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 				req: &storepb.LabelNamesRequest{
 					Start: timestamp.FromTime(minTime),
 					End:   timestamp.FromTime(maxTime),
-					Matchers: []storepb.LabelMatcher{
+					Matchers: []*storepb.LabelMatcher{
 						{
 							Type:  storepb.LabelMatcher_EQ,
 							Name:  "b",
@@ -761,7 +761,7 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 				req: &storepb.LabelNamesRequest{
 					Start: timestamp.FromTime(time.Now().Add(-24 * time.Hour)),
 					End:   timestamp.FromTime(time.Now().Add(-23 * time.Hour)),
-					Matchers: []storepb.LabelMatcher{
+					Matchers: []*storepb.LabelMatcher{
 						{
 							Type:  storepb.LabelMatcher_EQ,
 							Name:  "a",
@@ -823,7 +823,7 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 					Label: "a",
 					Start: timestamp.FromTime(minTime),
 					End:   timestamp.FromTime(maxTime),
-					Matchers: []storepb.LabelMatcher{
+					Matchers: []*storepb.LabelMatcher{
 						{
 							Type:  storepb.LabelMatcher_EQ,
 							Name:  "a",
@@ -838,7 +838,7 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 					Label: "a",
 					Start: timestamp.FromTime(minTime),
 					End:   timestamp.FromTime(maxTime),
-					Matchers: []storepb.LabelMatcher{
+					Matchers: []*storepb.LabelMatcher{
 						{
 							Type:  storepb.LabelMatcher_EQ,
 							Name:  "a",
@@ -866,7 +866,7 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 					Label: "ext1",
 					Start: timestamp.FromTime(minTime),
 					End:   timestamp.FromTime(maxTime),
-					Matchers: []storepb.LabelMatcher{
+					Matchers: []*storepb.LabelMatcher{
 						{
 							Type:  storepb.LabelMatcher_EQ,
 							Name:  "c",

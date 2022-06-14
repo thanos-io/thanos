@@ -146,7 +146,7 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: math.MaxInt64,
-				Matchers: []storepb.LabelMatcher{
+				Matchers: []*storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
@@ -171,8 +171,8 @@ func (m *mockedStoreServer) Series(_ *storepb.SeriesRequest, server storepb.Stor
 	return nil
 }
 
-func (m *mockedStoreServer) LabelSet() []labelpb.ZLabelSet { return nil }
-func (m *mockedStoreServer) TimeRange() (int64, int64)     { return 0, 0 }
+func (m *mockedStoreServer) LabelSet() []*labelpb.ZLabelSet { return nil }
+func (m *mockedStoreServer) TimeRange() (int64, int64)      { return 0, 0 }
 
 // Regression test against https://github.com/thanos-io/thanos/issues/2823.
 func TestTenantSeriesSetServert_NotLeakingIfNotExhausted(t *testing.T) {
@@ -198,7 +198,7 @@ func TestTenantSeriesSetServert_NotLeakingIfNotExhausted(t *testing.T) {
 		for s.Next() {
 			l, c := s.At()
 
-			testutil.Equals(t, labelpb.ZLabelsToPromLabels(resps[i].GetSeries().Labels), l)
+			testutil.Equals(t, labelpb.ProtobufLabelsToPromLabels(resps[i].GetSeries().Labels), l)
 			testutil.Equals(t, resps[i].GetSeries().Chunks, c)
 
 			i++

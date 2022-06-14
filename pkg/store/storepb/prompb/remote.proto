@@ -17,23 +17,17 @@
 syntax = "proto3";
 package prometheus_copy;
 
-option go_package = "prompb";
+option go_package = "github.com/thanos-io/thanos/pkg/store/storepb/prompb";
 
 import "store/storepb/prompb/types.proto";
-import "gogoproto/gogo.proto";
 
-// Do not generate XXX fields to reduce memory footprint and opening a door
-// for zero-copy casts to/from prometheus data types.
-option (gogoproto.goproto_unkeyed_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.goproto_sizecache_all) = false;
 
 message WriteRequest {
-  repeated TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
+  repeated prometheus_copy.TimeSeries timeseries = 1 ;
   // Cortex uses this field to determine the source of the write request.
   // We reserve it to avoid any compatibility issues.
   reserved  2;
-  repeated MetricMetadata metadata = 3 [(gogoproto.nullable) = false];
+  repeated prometheus_copy.MetricMetadata metadata = 3 ;
 }
 
 // ReadRequest represents a remote read request.
@@ -74,13 +68,13 @@ message ReadResponse {
 message Query {
   int64 start_timestamp_ms = 1;
   int64 end_timestamp_ms = 2;
-  repeated LabelMatcher matchers = 3;
-  ReadHints hints = 4;
+  repeated prometheus_copy.LabelMatcher matchers = 3;
+  prometheus_copy.ReadHints hints = 4;
 }
 
 message QueryResult {
   // Samples within a time series must be ordered by time.
-  repeated TimeSeries timeseries = 1;
+  repeated prometheus_copy.TimeSeries timeseries = 1;
 }
 
 // ChunkedReadResponse is a response when response_type equals STREAMED_XOR_CHUNKS.
@@ -88,7 +82,7 @@ message QueryResult {
 // partition of the single series, but once a new series is started to be streamed it means that no more chunks will
 // be sent for previous one.
 message ChunkedReadResponse {
-  repeated ChunkedSeries chunked_series = 1;
+  repeated prometheus_copy.ChunkedSeries chunked_series = 1;
 
   // query_index represents an index of the query from ReadRequest.queries these chunks relates to.
   int64 query_index = 2;

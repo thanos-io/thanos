@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -62,6 +63,7 @@ type ProxyStore struct {
 
 	responseTimeout time.Duration
 	metrics         *proxyStoreMetrics
+	storepb.UnimplementedStoreServer
 }
 
 type proxyStoreMetrics struct {
@@ -115,7 +117,7 @@ func NewProxyStore(
 func (s *ProxyStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
 		StoreType: s.component.ToProto(),
-		Labels:    labelpb.ZLabelsFromPromLabels(s.selectorLabels),
+		Labels:    labelpb.ProtobufLabelsFromPromLabels(s.selectorLabels),
 	}
 
 	minTime := int64(math.MaxInt64)
@@ -143,15 +145,15 @@ func (s *ProxyStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.I
 	res.MaxTime = maxTime
 	res.MinTime = minTime
 
-	labelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
+	labelSets := make(map[uint64]*labelpb.ZLabelSet, len(stores))
 	for _, st := range stores {
 		for _, lset := range st.LabelSets() {
 			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			labelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
+			labelSets[mergedLabelSet.Hash()] = &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(mergedLabelSet)}
 		}
 	}
 
-	res.LabelSets = make([]labelpb.ZLabelSet, 0, len(labelSets))
+	res.LabelSets = make([]*labelpb.ZLabelSet, 0, len(labelSets))
 	for _, v := range labelSets {
 		res.LabelSets = append(res.LabelSets, v)
 	}
@@ -161,38 +163,39 @@ func (s *ProxyStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.I
 	// store-proxy's discovered stores, then we still want to enforce
 	// announcing this subset by announcing the selector as the label-set.
 	if len(res.LabelSets) == 0 && len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{Labels: res.Labels})
+		res.LabelSets = append(res.LabelSets, &labelpb.ZLabelSet{Labels: res.Labels})
 	}
 
 	return res, nil
 }
 
-func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
+func (s *ProxyStore) LabelSet() []*labelpb.ZLabelSet {
 	stores := s.stores()
 	if len(stores) == 0 {
-		return []labelpb.ZLabelSet{}
+		return []*labelpb.ZLabelSet{}
 	}
 
 	mergedLabelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
 	for _, st := range stores {
 		for _, lset := range st.LabelSets() {
 			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(mergedLabelSet)}
+			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(mergedLabelSet)}
 		}
 	}
 
-	labelSets := make([]labelpb.ZLabelSet, 0, len(mergedLabelSets))
+	labelSets := make([]*labelpb.ZLabelSet, 0, len(mergedLabelSets))
 	for _, v := range mergedLabelSets {
-		labelSets = append(labelSets, v)
+		v := v
+		labelSets = append(labelSets, &v)
 	}
 
 	// We always want to enforce announcing the subset of data that
 	// selector-labels represents. If no label-sets are announced by the
 	// store-proxy's discovered stores, then we still want to enforce
 	// announcing this subset by announcing the selector as the label-set.
-	selectorLabels := labelpb.ZLabelsFromPromLabels(s.selectorLabels)
+	selectorLabels := labelpb.ProtobufLabelsFromPromLabels(s.selectorLabels)
 	if len(labelSets) == 0 && len(selectorLabels) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: selectorLabels})
+		labelSets = append(labelSets, &labelpb.ZLabelSet{Labels: selectorLabels})
 	}
 
 	return labelSets
@@ -347,7 +350,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		mergedSet := storepb.MergeSeriesSets(seriesSet...)
 		for mergedSet.Next() {
 			lset, chk := mergedSet.At()
-			respSender.send(storepb.NewSeriesResponse(&storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chk}))
+			respSender.send(storepb.NewSeriesResponse(&storepb.Series{Labels: labelpb.ProtobufLabelsFromPromLabels(lset), Chunks: chk}))
 		}
 		return mergedSet.Err()
 	})
@@ -496,7 +499,7 @@ func startStreamSeriesSet(
 				return false
 			}
 			numResponses++
-			bytesProcessed += rr.r.Size()
+			bytesProcessed += int(unsafe.Sizeof(*rr.r))
 
 			if w := rr.r.GetWarning(); w != "" {
 				s.warnCh.send(storepb.NewWarnSeriesResponse(errors.New(w)))
@@ -543,7 +546,7 @@ func (s *streamSeriesSet) Next() (ok bool) {
 	return ok
 }
 
-func (s *streamSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
+func (s *streamSeriesSet) At() (labels.Labels, []*storepb.AggrChunk) {
 	if s.currSeries == nil {
 		return nil, nil
 	}
