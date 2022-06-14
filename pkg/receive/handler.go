@@ -350,9 +350,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
-	h.writeInflightHTTPRequests.WithLabelValues(tenant).Inc()
-	defer h.writeInflightHTTPRequests.WithLabelValues(tenant).Dec()
-
 	tLogger := log.With(h.logger, "tenant", tenant)
 
 	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
