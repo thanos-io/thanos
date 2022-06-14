@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -226,13 +228,8 @@ func TestConsistentHashringGet(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			hashRing := newConsistentHashring(test.nodes, 10)
 			result, err := hashRing.GetN("tenant", test.ts, test.n)
-			if err != nil {
-				t.Error(err)
-			}
-
-			if result != test.expectedNode {
-				t.Fatalf("invalid result: got %s, want %s", result, test.expectedNode)
-			}
+			require.NoError(t, err)
+			require.Equal(t, test.expectedNode, result)
 		})
 	}
 }
@@ -242,26 +239,18 @@ func TestConsistentHashringConsistency(t *testing.T) {
 
 	ringA := []string{"node-1", "node-2", "node-3"}
 	a1, err := assignSeries(series, ringA)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	ringB := []string{"node-1", "node-2", "node-3"}
 	a2, err := assignSeries(series, ringB)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	for node, ts := range a1 {
-		if len(a2[node]) != len(ts) {
-			t.Fatalf("node %s has an inconsistent number of series", node)
-		}
+		require.Len(t, a2[node], len(ts), "node %s has an inconsistent number of series", node)
 	}
 
 	for node, ts := range a2 {
-		if len(a1[node]) != len(ts) {
-			t.Fatalf("node %s has an inconsistent number of series", node)
-		}
+		require.Len(t, a1[node], len(ts), "node %s has an inconsistent number of series", node)
 	}
 }
 
@@ -270,23 +259,17 @@ func TestConsistentHashringIncreaseAtEnd(t *testing.T) {
 
 	initialRing := []string{"node-1", "node-2", "node-3"}
 	initialAssignments, err := assignSeries(series, initialRing)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	resizedRing := []string{"node-1", "node-2", "node-3", "node-4", "node-5"}
 	reassignments, err := assignSeries(series, resizedRing)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Assert that the initial nodes have no new keys after increasing the ring size
 	for _, node := range initialRing {
 		for _, ts := range reassignments[node] {
 			foundInInitialAssignment := findSeries(initialAssignments, node, ts)
-			if !foundInInitialAssignment {
-				t.Fatalf("node %s contains new series after resizing: %s", node, ts)
-			}
+			require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
 		}
 	}
 }
@@ -296,23 +279,17 @@ func TestConsistentHashringIncreaseInMiddle(t *testing.T) {
 
 	initialRing := []string{"node-1", "node-3"}
 	initialAssignments, err := assignSeries(series, initialRing)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	resizedRing := []string{"node-1", "node-2", "node-3"}
 	reassignments, err := assignSeries(series, resizedRing)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Assert that the initial nodes have no new keys after increasing the ring size
 	for _, node := range initialRing {
 		for _, ts := range reassignments[node] {
 			foundInInitialAssignment := findSeries(initialAssignments, node, ts)
-			if !foundInInitialAssignment {
-				t.Fatalf("node %s contains new series after resizing", node)
-			}
+			require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
 		}
 	}
 }
