@@ -65,6 +65,7 @@ type Options struct {
 	Registry *prometheus.Registry
 }
 
+// TODO(fpetkovski): replace with upstream struct after dependency update.
 type StatusAPI struct {
 	getTSDBStats GetStatsFunc
 	options      Options
