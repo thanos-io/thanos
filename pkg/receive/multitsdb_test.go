@@ -407,7 +407,7 @@ func checkExemplarsResponse(t *testing.T, name string, expected, data []exemplar
 		testutil.Equals(t, expected[i].SeriesLabels, data[i].SeriesLabels)
 		testutil.Equals(t, len(expected[i].Exemplars), len(data[i].Exemplars))
 		for j := range data[i].Exemplars {
-			testutil.Equals(t, *expected[i].Exemplars[j], *data[i].Exemplars[j])
+			testutil.Equals(t, expected[i].Exemplars[j], data[i].Exemplars[j])
 		}
 	}
 }

@@ -125,7 +125,7 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 	store := NewMultiTSDBStore(logger, nil, component.Receive, func() map[string]InfoStoreServer { return tsdbs })
 
 	var expected []*storepb.Series
-	lastLabels := storepb.Series{}
+	lastLabels := &storepb.Series{}
 	for _, resp := range resps {
 		for _, r := range resp {
 			// MultiTSDB same as Proxy will merge all series with same labels without limit (https://github.com/thanos-io/thanos/issues/2332).
@@ -135,7 +135,7 @@ func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToB
 				expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, r.GetSeries().Chunks...)
 				continue
 			}
-			lastLabels = x
+			lastLabels = &x
 			expected = append(expected, r.GetSeries())
 		}
 	}

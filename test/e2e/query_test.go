@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/prometheus/prompb"
@@ -1056,12 +1055,12 @@ func synthesizeSamples(ctx context.Context, prometheus e2e.InstrumentedRunnable,
 	}
 
 	var buf []byte
-	pBuf := proto.NewBuffer(nil)
-	if err := pBuf.Marshal(sample); err != nil {
+	pBuf, err := sample.Marshal()
+	if err != nil {
 		return err
 	}
 
-	compressed := snappy.Encode(buf, pBuf.Bytes())
+	compressed := snappy.Encode(buf, pBuf)
 	return client.Store(ctx, compressed)
 }
 

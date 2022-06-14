@@ -1,0 +1,6 @@
+github.com/Songmu/gotesplit v0.1.2 h1:8PJ0j62PdBdvNFsX6Hufr5qp1bQGXJZS5dWA7dc+U6Y=
+github.com/Songmu/gotesplit v0.1.2/go.mod h1:SE1mdkM3jyX4cjjs4N2nhYjfntqf2VdvxgMCIzsJNoo=
+github.com/jstemmer/go-junit-report v0.9.1 h1:6QPYqodiu3GuPL+7mfx+NwDdp2eTkp9IfEUpgAwUN0o=
+github.com/jstemmer/go-junit-report v0.9.1/go.mod h1:Brl9GWCQeLvo8nXZwPNNblvFj/XSXhF0NWZEnDohbsk=
+golang.org/x/sync v0.0.0-20210220032951-036812b2e83c h1:5KslGYwFpkhGh+Q16bwMP3cOontH8FOep7tGV86Y7SQ=
+golang.org/x/sync v0.0.0-20210220032951-036812b2e83c/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=

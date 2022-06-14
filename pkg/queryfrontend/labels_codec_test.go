@@ -16,6 +16,7 @@ import (
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/weaveworks/common/httpgrpc"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -315,7 +316,7 @@ func TestLabelsCodec_DecodeResponse(t *testing.T) {
 		Status: "success",
 		Data:   []string{"__name__"},
 	}
-	labelsData, err := json.Marshal(labelResponse)
+	labelsData, err := protojson.Marshal(labelResponse)
 	testutil.Ok(t, err)
 
 	labelResponseWithHeaders := &ThanosLabelsResponse{
@@ -323,14 +324,19 @@ func TestLabelsCodec_DecodeResponse(t *testing.T) {
 		Data:    []string{"__name__"},
 		Headers: []*ResponseHeader{{Name: cacheControlHeader, Values: []string{noStoreValue}}},
 	}
-	labelsDataWithHeaders, err := json.Marshal(labelResponseWithHeaders)
+	labelsDataWithHeaders, err := protojson.Marshal(labelResponseWithHeaders)
 	testutil.Ok(t, err)
 
 	seriesResponse := &ThanosSeriesResponse{
 		Status: "success",
-		Data:   []*labelpb.ZLabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}},
-	}
-	seriesData, err := json.Marshal(seriesResponse)
+		Data: []*labelpb.ZLabelSet{
+			{
+				Labels: []*labelpb.Label{
+					{Name: "foo", Value: "bar"},
+				},
+			},
+		}}
+	seriesData, err := protojson.Marshal(seriesResponse)
 	testutil.Ok(t, err)
 
 	seriesResponseWithHeaders := &ThanosSeriesResponse{
@@ -338,7 +344,7 @@ func TestLabelsCodec_DecodeResponse(t *testing.T) {
 		Data:    []*labelpb.ZLabelSet{{Labels: []*labelpb.Label{{Name: "foo", Value: "bar"}}}},
 		Headers: []*ResponseHeader{{Name: cacheControlHeader, Values: []string{noStoreValue}}},
 	}
-	seriesDataWithHeaders, err := json.Marshal(seriesResponseWithHeaders)
+	seriesDataWithHeaders, err := protojson.Marshal(seriesResponseWithHeaders)
 	testutil.Ok(t, err)
 
 	for _, tc := range []struct {

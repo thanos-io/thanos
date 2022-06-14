@@ -402,7 +402,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			t.Parallel()
 
-			jsonInput, err := json.Marshal(tcase.input)
+			jsonInput, err := json.MarshalIndent(tcase.input, "", "\t")
 			testutil.Ok(t, err)
 			proto := &RuleGroups{}
 			err = json.Unmarshal(jsonInput, &proto)
@@ -413,7 +413,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 			}
 			testutil.Ok(t, err)
 
-			jsonProto, err := json.Marshal(proto)
+			jsonProto, err := json.MarshalIndent(proto, "", "\t")
 			testutil.Ok(t, err)
 			if tcase.expectedJSONOutput != "" {
 				testutil.Equals(t, tcase.expectedJSONOutput, string(jsonProto))

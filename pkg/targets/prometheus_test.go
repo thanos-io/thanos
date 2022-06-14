@@ -12,27 +12,19 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
-	protobuf "github.com/gogo/protobuf/types"
-	"github.com/thanos-io/thanos/pkg/rules/rulespb"
-
 )
-
-
-func timeToProtoTimestamp(t time.Time) *protobuf.Timestamp{
-	timestamp,_ := protobuf.TimestampProto(t)
-	return timestamp
-}
 
 func TestPrometheus_Targets_e2e(t *testing.T) {
 	p, err := e2eutil.NewPrometheus()

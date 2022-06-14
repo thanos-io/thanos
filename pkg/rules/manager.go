@@ -15,15 +15,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	"github.com/prometheus/prometheus/rules"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
@@ -40,9 +40,8 @@ type Group struct {
 	PartialResponseStrategy storepb.PartialResponseStrategy
 }
 
-func timeToProtoTimestamp(t time.Time) *types.Timestamp {
-	timestamp, _ := types.TimestampProto(t)
-	return timestamp
+func timeToProtoTimestamp(t time.Time) *timestamppb.Timestamp {
+	return timestamppb.New(t)
 }
 
 func defaultTimeToTimestamp(t time.Time) *rulespb.Timestamp {

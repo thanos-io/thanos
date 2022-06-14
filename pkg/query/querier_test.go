@@ -964,19 +964,19 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 func TestSortReplicaLabel(t *testing.T) {
 	tests := []struct {
-		input       []storepb.Series
-		exp         []storepb.Series
+		input       []*storepb.Series
+		exp         []*storepb.Series
 		dedupLabels map[string]struct{}
 	}{
 		// 0 Single deduplication label.
 		{
-			input: []storepb.Series{
+			input: []*storepb.Series{
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
 			},
-			exp: []storepb.Series{
+			exp: []*storepb.Series{
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}}},
@@ -986,14 +986,14 @@ func TestSortReplicaLabel(t *testing.T) {
 		},
 		// 1 Multi deduplication labels.
 		{
-			input: []storepb.Series{
+			input: []*storepb.Series{
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "4"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}, {Name: "c", Value: "3"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
 			},
-			exp: []storepb.Series{
+			exp: []*storepb.Series{
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}}},
@@ -1004,13 +1004,13 @@ func TestSortReplicaLabel(t *testing.T) {
 		},
 		// Pushdown label at the end.
 		{
-			input: []storepb.Series{
+			input: []*storepb.Series{
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}, {Name: dedup.PushdownMarker.Name, Value: dedup.PushdownMarker.Value}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
 			},
-			exp: []storepb.Series{
+			exp: []*storepb.Series{
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
 				{Labels: []*labelpb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}}},

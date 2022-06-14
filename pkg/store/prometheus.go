@@ -22,7 +22,6 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -375,12 +374,16 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 	stream := remote.NewChunkedReader(bodySizer, remote.DefaultChunkedReadLimit, *data)
 	for {
 		res := &prompb.ChunkedReadResponse{}
-		err := stream.NextProto(res)
+		rec, err := stream.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return errors.Wrap(err, "next proto")
+		}
+		err = res.UnmarshalVT(rec)
+		if err != nil {
+			return errors.Wrap(err, "unmarshal proto")
 		}
 
 		if len(res.ChunkedSeries) != 1 {
@@ -470,7 +473,7 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 
 	var data prompb.ReadResponse
 	tracing.DoInSpan(ctx, "unmarshal_response", func(ctx context.Context) {
-		err = proto.Unmarshal(decomp, &data)
+		err = data.UnmarshalVT(decomp)
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "unmarshal response")
@@ -509,10 +512,11 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 }
 
 func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Query) (presp *http.Response, err error) {
-	reqb, err := proto.Marshal(&prompb.ReadRequest{
+	readReq := &prompb.ReadRequest{
 		Queries:               []*prompb.Query{q},
 		AcceptedResponseTypes: p.remoteReadAcceptableResponses,
-	})
+	}
+	reqb, err := readReq.MarshalVT()
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal read request")
 	}

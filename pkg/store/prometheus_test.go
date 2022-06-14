@@ -478,7 +478,7 @@ func testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, appender st
 
 	testutil.Equals(t, 1, len(srv.SeriesSet))
 
-	firstSeries := srv.SeriesSet[0]
+	firstSeries := &srv.SeriesSet[0]
 
 	testutil.Equals(t, []*labelpb.Label{
 		{Name: "a", Value: "b"},

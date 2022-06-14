@@ -23,6 +23,7 @@ import (
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/weaveworks/common/httpgrpc"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -225,20 +226,14 @@ func (c labelsCodec) DecodeResponse(ctx context.Context, r *http.Response, req q
 	switch req.(type) {
 	case *ThanosLabelsRequest:
 		var resp ThanosLabelsResponse
-		if err := json.Unmarshal(buf, &resp); err != nil {
+		if err := protojson.Unmarshal(buf, &resp); err != nil {
 			return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error decoding response: %v", err)
-		}
-		for h, hv := range r.Header {
-			resp.Headers = append(resp.Headers, &ResponseHeader{Name: h, Values: hv})
 		}
 		return &resp, nil
 	case *ThanosSeriesRequest:
 		var resp ThanosSeriesResponse
-		if err := json.Unmarshal(buf, &resp); err != nil {
+		if err := protojson.Unmarshal(buf, &resp); err != nil {
 			return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error decoding response: %v", err)
-		}
-		for h, hv := range r.Header {
-			resp.Headers = append(resp.Headers, &ResponseHeader{Name: h, Values: hv})
 		}
 		return &resp, nil
 	default:

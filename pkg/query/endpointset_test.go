@@ -26,6 +26,7 @@ import (
 
 var testGRPCOpts = []grpc.DialOption{
 	grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
+	//lint:ignore SA1019 Update in the future.
 	grpc.WithInsecure(),
 }
 

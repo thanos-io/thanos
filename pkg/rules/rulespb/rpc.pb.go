@@ -418,7 +418,8 @@ type RuleGroup struct {
 	EvaluationDurationSeconds float64 `protobuf:"fixed64,5,opt,name=evaluation_duration_seconds,json=evaluationDurationSeconds,proto3" json:"evaluationTime"` // TODO: Is it really second?
 	// @gotags: json:"lastEvaluation,omitempty"
 	LastEvaluation *Timestamp `protobuf:"bytes,6,opt,name=last_evaluation,json=lastEvaluation,proto3" json:"lastEvaluation,omitempty"`
-	Limit          int64      `protobuf:"varint,9,opt,name=limit,proto3" json:"limit,omitempty"`
+	// @gotags: json:"limit"
+	Limit int64 `protobuf:"varint,9,opt,name=limit,proto3" json:"limit"`
 	// Thanos specific.
 	// @gotags: json:"partialResponseStrategy"
 	PartialResponseStrategy storepb.PartialResponseStrategy `protobuf:"varint,8,opt,name=PartialResponseStrategy,proto3,enum=thanos.PartialResponseStrategy" json:"partialResponseStrategy"`

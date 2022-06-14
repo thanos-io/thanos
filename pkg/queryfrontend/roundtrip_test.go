@@ -4,8 +4,10 @@
 package queryfrontend
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,10 +20,12 @@ import (
 	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/log"
+	"github.com/golang/protobuf/jsonpb"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -736,7 +740,7 @@ func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
 func promqlResults(fail bool) (*int, http.Handler) {
 	count := 0
 	var lock sync.Mutex
-	q := queryrange.PrometheusResponse{
+	q := &queryrange.PrometheusResponse{
 		Status: "success",
 		Data: queryrange.PrometheusData{
 			ResultType: string(parser.ValueTypeMatrix),
@@ -760,7 +764,10 @@ func promqlResults(fail bool) (*int, http.Handler) {
 		if fail {
 			w.WriteHeader(500)
 		}
-		if err := json.NewEncoder(w).Encode(q); err != nil {
+		// TODO: need to use a deprecated package here because
+		// queryrange package uses v1 protobuf API.
+		m := &jsonpb.Marshaler{}
+		if err := m.Marshal(w, q); err != nil {
 			panic(err)
 		}
 		count++
@@ -771,7 +778,7 @@ func promqlResults(fail bool) (*int, http.Handler) {
 func labelsResults(fail bool) (*int, http.Handler) {
 	count := 0
 	var lock sync.Mutex
-	q := ThanosLabelsResponse{
+	q := &ThanosLabelsResponse{
 		Status: "success",
 		Data:   []string{"__name__", "job"},
 	}
@@ -795,7 +802,7 @@ func labelsResults(fail bool) (*int, http.Handler) {
 func seriesResults(fail bool) (*int, http.Handler) {
 	count := 0
 	var lock sync.Mutex
-	q := ThanosSeriesResponse{
+	q := &ThanosSeriesResponse{
 		Status: "success",
 		Data:   []*labelpb.ZLabelSet{{Labels: []*labelpb.Label{{Name: "__name__", Value: "up"}, {Name: "foo", Value: "bar"}}}},
 	}
@@ -808,7 +815,11 @@ func seriesResults(fail bool) (*int, http.Handler) {
 		if fail {
 			w.WriteHeader(500)
 		}
-		if err := json.NewEncoder(w).Encode(q); err != nil {
+		respMarshalled, err := protojson.Marshal(q)
+		if err != nil {
+			panic(err)
+		}
+		if _, err := io.Copy(w, bytes.NewBuffer(respMarshalled)); err != nil {
 			panic(err)
 		}
 		count++

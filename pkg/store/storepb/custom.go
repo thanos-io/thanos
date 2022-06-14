@@ -259,7 +259,7 @@ func (s *uniqueSeriesSet) Next() bool {
 
 // Compare returns positive 1 if chunk is smaller -1 if larger than b by min time, then max time.
 // It returns 0 if chunks are exactly the same.
-func (m AggrChunk) Compare(b *AggrChunk) int {
+func (m *AggrChunk) Compare(b *AggrChunk) int {
 	if m.MinTime < b.MinTime {
 		return 1
 	}

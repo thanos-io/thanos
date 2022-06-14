@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -1042,7 +1041,7 @@ func cycleErrors(errs []error) func() error {
 
 // makeRequest is a helper to make a correct request against a remote write endpoint given a request.
 func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (*httptest.ResponseRecorder, error) {
-	buf, err := proto.Marshal(wreq)
+	buf, err := wreq.MarshalVT()
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal request")
 	}
@@ -1132,7 +1131,7 @@ func serializeSeriesWithOneSample(t testing.TB, series [][]*labelpb.Label) []byt
 			Samples: []*prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}},
 		})
 	}
-	body, err := proto.Marshal(r)
+	body, err := r.MarshalVT()
 	testutil.Ok(t, err)
 	return snappy.Encode(nil, body)
 }
@@ -1304,15 +1303,15 @@ func Heap(dir string) (err error) {
 }
 
 func TestRelabel(t *testing.T) {
-	for _, tcase := range []struct {
+	for _, tcase := range []*struct {
 		name                 string
 		relabel              []*relabel.Config
-		writeRequest         prompb.WriteRequest
-		expectedWriteRequest prompb.WriteRequest
+		writeRequest         *prompb.WriteRequest
+		expectedWriteRequest *prompb.WriteRequest
 	}{
 		{
 			name: "empty relabel configs",
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1334,7 +1333,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1368,7 +1367,7 @@ func TestRelabel(t *testing.T) {
 					Replacement:  "baz",
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1390,7 +1389,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1429,7 +1428,7 @@ func TestRelabel(t *testing.T) {
 					Replacement: "foo",
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1451,7 +1450,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1482,7 +1481,7 @@ func TestRelabel(t *testing.T) {
 					Regex:  relabel.MustNewRegexp("foo"),
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1504,7 +1503,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1532,7 +1531,7 @@ func TestRelabel(t *testing.T) {
 					Regex:        relabel.MustNewRegexp("bar"),
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1554,7 +1553,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{},
 			},
 		},
@@ -1566,7 +1565,7 @@ func TestRelabel(t *testing.T) {
 					Regex:  relabel.MustNewRegexp("foo"),
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1594,7 +1593,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1628,7 +1627,7 @@ func TestRelabel(t *testing.T) {
 					Regex:        relabel.MustNewRegexp("bar"),
 				},
 			},
-			writeRequest: prompb.WriteRequest{
+			writeRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: []*labelpb.Label{
@@ -1656,7 +1655,7 @@ func TestRelabel(t *testing.T) {
 					},
 				},
 			},
-			expectedWriteRequest: prompb.WriteRequest{
+			expectedWriteRequest: &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{},
 			},
 		},
@@ -1666,7 +1665,7 @@ func TestRelabel(t *testing.T) {
 				RelabelConfigs: tcase.relabel,
 			})
 
-			h.relabel(&tcase.writeRequest)
+			h.relabel(tcase.writeRequest)
 			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
 		})
 	}

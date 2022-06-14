@@ -108,11 +108,11 @@ func (s *promSeriesSet) Warnings() storage.Warnings {
 // storeSeriesSet implements a storepb SeriesSet against a list of storepb.Series.
 type storeSeriesSet struct {
 	// TODO(bwplotka): Don't buffer all, we have to buffer single series (to sort and dedup chunks), but nothing more.
-	series []storepb.Series
+	series []*storepb.Series
 	i      int
 }
 
-func newStoreSeriesSet(s []storepb.Series) *storeSeriesSet {
+func newStoreSeriesSet(s []*storepb.Series) *storeSeriesSet {
 	return &storeSeriesSet{series: s, i: -1}
 }
 

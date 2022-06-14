@@ -6,7 +6,6 @@ package thanos;
 
 import "store/storepb/types.proto";
 import "store/labelpb/types.proto";
-//import "gogoproto/gogo.proto";
 
 option go_package = "github.com/thanos-io/thanos/pkg/pkg/exemplars/exemplarspb";
 

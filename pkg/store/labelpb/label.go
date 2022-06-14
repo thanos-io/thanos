@@ -7,7 +7,6 @@
 package labelpb
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"unsafe"
@@ -18,10 +17,6 @@ import (
 )
 
 var sep = []byte{'\xff'}
-
-func noAllocString(buf []byte) string {
-	return *(*string)(unsafe.Pointer(&buf))
-}
 
 func noAllocBytes(buf string) []byte {
 	return *(*[]byte)(unsafe.Pointer(&buf))
@@ -149,9 +144,6 @@ func (m *ZLabelSet) MarshalJSON() ([]byte, error) {
 
 // PromLabels return Prometheus labels.Labels without extra allocation.
 func (m *ZLabelSet) PromLabels() labels.Labels {
-	if len(m.Labels) == 0 {
-		fmt.Println("nil")
-	}
 	return ProtobufLabelsToPromLabels(m.Labels)
 }
 

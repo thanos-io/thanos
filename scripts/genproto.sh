@@ -31,25 +31,20 @@ for dir in ${DIRS}; do
 
   LIST=$(find "${dir}" -type f -name "*.proto" | awk '{printf "%s ", $0}')
 
-
   ${PROTOC_BIN} --go_out=. --go_opt=paths=source_relative \
-  --go-grpc_out=. --go-grpc_opt=paths=source_relative -I=. -I=${INCLUDE_PATH} \
-  --go-vtproto_out=. --go-vtproto_opt=features=marshal+unmarshal+size,paths=source_relative \
-  --go_opt=Mstore/storepb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb \
-  --go_opt=Mrules/rulespb/rpc.proto=github.com/thanos-io/thanos/pkg/rules/rulespb \
-  --go_opt=Mstore/storepb/prompb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb/prompb \
-  ${LIST}
+    --go-grpc_out=. --go-grpc_opt=paths=source_relative -I=. -I=${INCLUDE_PATH} \
+    --go-vtproto_out=. --go-vtproto_opt=features=marshal+unmarshal+size,paths=source_relative \
+    --go_opt=Mstore/storepb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb \
+    --go_opt=Mrules/rulespb/rpc.proto=github.com/thanos-io/thanos/pkg/rules/rulespb \
+    --go_opt=Mstore/storepb/prompb/types.proto=github.com/thanos-io/thanos/pkg/store/storepb/prompb \
+    ${LIST}
 
   # query-frontend uses these methods with different types
   # so remove them.
   sed -i -e '/.*ThanosLabelsResponse.*GetHeaders.*/,+6d' ${dir}/*pb.go
   sed -i -e '/.*ThanosSeriesResponse.*GetHeaders.*/,+6d' ${dir}/*pb.go
 
-
-
-
   protoc-go-inject-tag -input=${dir}/*pb.go
-
 
   pushd ${dir}
 

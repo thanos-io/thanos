@@ -98,8 +98,8 @@ require (
 )
 
 require (
-	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
+	github.com/golang/protobuf v1.5.2
 	github.com/leanovate/gopter v0.2.4
 )
 
@@ -153,8 +153,8 @@ require (
 	github.com/gobwas/pool v0.2.0 // indirect
 	github.com/gobwas/ws v1.0.2 // indirect
 	github.com/gogo/googleapis v1.4.0 // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.0.0 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect

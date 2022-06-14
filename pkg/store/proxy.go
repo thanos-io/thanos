@@ -175,18 +175,17 @@ func (s *ProxyStore) LabelSet() []*labelpb.ZLabelSet {
 		return []*labelpb.ZLabelSet{}
 	}
 
-	mergedLabelSets := make(map[uint64]labelpb.ZLabelSet, len(stores))
+	mergedLabelSets := make(map[uint64]*labelpb.ZLabelSet, len(stores))
 	for _, st := range stores {
 		for _, lset := range st.LabelSets() {
 			mergedLabelSet := labelpb.ExtendSortedLabels(lset, s.selectorLabels)
-			mergedLabelSets[mergedLabelSet.Hash()] = labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(mergedLabelSet)}
+			mergedLabelSets[mergedLabelSet.Hash()] = &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(mergedLabelSet)}
 		}
 	}
 
 	labelSets := make([]*labelpb.ZLabelSet, 0, len(mergedLabelSets))
 	for _, v := range mergedLabelSets {
-		v := v
-		labelSets = append(labelSets, &v)
+		labelSets = append(labelSets, v)
 	}
 
 	// We always want to enforce announcing the subset of data that

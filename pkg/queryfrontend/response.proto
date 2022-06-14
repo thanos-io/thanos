@@ -5,7 +5,6 @@ syntax = "proto3";
 
 package queryfrontend;
 
-//import "gogoproto/gogo.proto";
 import "store/labelpb/types.proto";
 
 option go_package = "github.com/thanos-io/thanos/pkg/queryfrontend";
@@ -13,33 +12,33 @@ option go_package = "github.com/thanos-io/thanos/pkg/queryfrontend";
 
 message ThanosLabelsResponse {
   // @gotags: json:"status"
-  string Status = 1;
+  string status = 1;
   // @gotags: json:"data"
-  repeated string Data = 2;
+  repeated string data = 2;
   // @gotags: json:"errorType,omitempty"
-  string ErrorType = 3;
+  string errorType = 3;
   // @gotags: json:"error,omitempty"
-  string Error = 4;
+  string error = 4;
   // @gotags: json:"-"
-  repeated ResponseHeader Headers = 5;
+  repeated ResponseHeader headers = 5;
 }
 
 message ThanosSeriesResponse {
   // @gotags: json:"status"
-  string Status = 1;
+  string status = 1;
   // @gotags: json:"data"
-  repeated thanos.ZLabelSet Data = 2;
+  repeated thanos.ZLabelSet data = 2;
   // @gotags: json:"errorType,omitempty"
-  string ErrorType = 3;
+  string errorType = 3;
   // @gotags: json:"error,omitempty"
-  string Error = 4;
+  string error = 4;
   // @gotags: json:"-"
-  repeated ResponseHeader Headers = 5;
+  repeated ResponseHeader headers = 5;
 }
 
 message ResponseHeader {
   // @gotags: json:"-"
-  string Name = 1;
+  string name = 1;
   // @gotags: json:"-"
-  repeated string Values = 2;
+  repeated string values = 2;
 }

@@ -13,8 +13,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-
-
 func TestDedupTargets(t *testing.T) {
 	for _, tc := range []struct {
 		name          string

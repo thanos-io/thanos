@@ -882,7 +882,11 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 
 			testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
 			testutil.Equals(t, []*labelpb.Label(nil), resp.Labels)
-			testutil.Equals(t, sc.expectedAdvLabels, resp.LabelSets)
+
+			testutil.Equals(t, len(sc.expectedAdvLabels), len(resp.LabelSets))
+			for i := range sc.expectedAdvLabels {
+				testutil.Equals(t, true, proto.Equal(sc.expectedAdvLabels[i], resp.LabelSets[i]))
+			}
 
 			// Make sure we don't download files we did not expect to.
 			// Regression test: https://github.com/thanos-io/thanos/issues/1664
@@ -1575,7 +1579,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 				},
 			},
 			ExpectedSeries: seriesSet1,
-			ExpectedHints: []hintspb.SeriesResponseHints{
+			ExpectedHints: []*hintspb.SeriesResponseHints{
 				{
 					QueriedBlocks: []*hintspb.Block{
 						{Id: block1.String()},
@@ -1592,7 +1596,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 				},
 			},
 			ExpectedSeries: append(append([]*storepb.Series{}, seriesSet1...), seriesSet2...),
-			ExpectedHints: []hintspb.SeriesResponseHints{
+			ExpectedHints: []*hintspb.SeriesResponseHints{
 				{
 					QueriedBlocks: []*hintspb.Block{
 						{Id: block1.String()},
@@ -1615,7 +1619,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 				}),
 			},
 			ExpectedSeries: seriesSet1,
-			ExpectedHints: []hintspb.SeriesResponseHints{
+			ExpectedHints: []*hintspb.SeriesResponseHints{
 				{
 					QueriedBlocks: []*hintspb.Block{
 						{Id: block1.String()},
@@ -1965,14 +1969,14 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 
 		labelNamesReq      *storepb.LabelNamesRequest
 		expectedNames      []string
-		expectedNamesHints hintspb.LabelNamesResponseHints
+		expectedNamesHints *hintspb.LabelNamesResponseHints
 
 		labelValuesReq      *storepb.LabelValuesRequest
 		expectedValues      []string
-		expectedValuesHints hintspb.LabelValuesResponseHints
+		expectedValuesHints *hintspb.LabelValuesResponseHints
 	}
 
-	testCases := []labelNamesValuesCase{
+	testCases := []*labelNamesValuesCase{
 		{
 			name: "querying a range containing 1 block should return 1 block in the labels hints",
 
@@ -1981,7 +1985,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				End:   1,
 			},
 			expectedNames: labelNamesFromSeriesSet(seriesSet1),
-			expectedNamesHints: hintspb.LabelNamesResponseHints{
+			expectedNamesHints: &hintspb.LabelNamesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
@@ -1993,7 +1997,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				End:   1,
 			},
 			expectedValues: []string{"1"},
-			expectedValuesHints: hintspb.LabelValuesResponseHints{
+			expectedValuesHints: &hintspb.LabelValuesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
@@ -2009,7 +2013,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			expectedNames: labelNamesFromSeriesSet(
 				append(append([]*storepb.Series{}, seriesSet1...), seriesSet2...),
 			),
-			expectedNamesHints: hintspb.LabelNamesResponseHints{
+			expectedNamesHints: &hintspb.LabelNamesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 					{Id: block2.String()},
@@ -2022,7 +2026,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				End:   3,
 			},
 			expectedValues: []string{"1"},
-			expectedValuesHints: hintspb.LabelValuesResponseHints{
+			expectedValuesHints: &hintspb.LabelValuesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 					{Id: block2.String()},
@@ -2041,7 +2045,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				}),
 			},
 			expectedNames: labelNamesFromSeriesSet(seriesSet1),
-			expectedNamesHints: hintspb.LabelNamesResponseHints{
+			expectedNamesHints: &hintspb.LabelNamesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
@@ -2058,7 +2062,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 				}),
 			},
 			expectedValues: []string{"1"},
-			expectedValuesHints: hintspb.LabelValuesResponseHints{
+			expectedValuesHints: &hintspb.LabelValuesResponseHints{
 				QueriedBlocks: []*hintspb.Block{
 					{Id: block1.String()},
 				},
@@ -2078,7 +2082,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			sort.Slice(namesHints.QueriedBlocks, func(i, j int) bool {
 				return namesHints.QueriedBlocks[i].Id < namesHints.QueriedBlocks[j].Id
 			})
-			testutil.Equals(t, tc.expectedNamesHints, namesHints)
+			testutil.Equals(t, true, proto.Equal(tc.expectedNamesHints, &namesHints))
 
 			valuesResp, err := store.LabelValues(context.Background(), tc.labelValuesReq)
 			testutil.Ok(t, err)
@@ -2090,7 +2094,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			sort.Slice(valuesHints.QueriedBlocks, func(i, j int) bool {
 				return valuesHints.QueriedBlocks[i].Id < valuesHints.QueriedBlocks[j].Id
 			})
-			testutil.Equals(t, tc.expectedValuesHints, valuesHints)
+			testutil.Equals(t, true, proto.Equal(tc.expectedValuesHints, &valuesHints))
 		})
 	}
 }

@@ -5,7 +5,6 @@ syntax = "proto3";
 package thanos;
 
 import "store/storepb/types.proto";
-//import "gogoproto/gogo.proto";
 
 option go_package = "github.com/thanos-io/thanos/pkg/pkg/metadata/metadatapb";
 

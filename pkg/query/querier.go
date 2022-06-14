@@ -152,7 +152,7 @@ type seriesServer struct {
 	storepb.Store_SeriesServer
 	ctx context.Context
 
-	seriesSet []storepb.Series
+	seriesSet []*storepb.Series
 	warnings  []string
 }
 
@@ -163,7 +163,7 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 	}
 
 	if r.GetSeries() != nil {
-		s.seriesSet = append(s.seriesSet, *r.GetSeries())
+		s.seriesSet = append(s.seriesSet, r.GetSeries())
 		return nil
 	}
 
@@ -355,7 +355,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 
 // sortDedupLabels re-sorts the set so that the same series with different replica
 // labels are coming right after each other.
-func sortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
+func sortDedupLabels(set []*storepb.Series, replicaLabels map[string]struct{}) {
 	for _, s := range set {
 		// Move the replica labels to the very end.
 		sort.Slice(s.Labels, func(i, j int) bool {

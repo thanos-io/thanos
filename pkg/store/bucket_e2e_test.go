@@ -469,9 +469,9 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 			testutil.Ok(t, s.store.Series(tcase.req, srv))
 			testutil.Equals(t, len(tcase.expected), len(srv.SeriesSet))
 
-			for i, s := range srv.SeriesSet {
-				testutil.Equals(t, tcase.expected[i], s.Labels)
-				testutil.Equals(t, tcase.expectedChunkLen, len(s.Chunks))
+			for i := range srv.SeriesSet {
+				testutil.Equals(t, tcase.expected[i], srv.SeriesSet[i].Labels)
+				testutil.Equals(t, tcase.expectedChunkLen, len(srv.SeriesSet[i].Chunks))
 			}
 		}); !ok {
 			return
@@ -602,12 +602,12 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 	testutil.Ok(t, s.store.Series(req, srv))
 	testutil.Equals(t, len(expectedLabels), len(srv.SeriesSet))
 
-	for i, s := range srv.SeriesSet {
-		testutil.Equals(t, expectedLabels[i], s.Labels)
+	for i := range srv.SeriesSet {
+		testutil.Equals(t, expectedLabels[i], srv.SeriesSet[i].Labels)
 
 		// prepareTestBlocks makes 3 chunks containing 2 hour data,
 		// we should only get 1, as we are filtering by time.
-		testutil.Equals(t, 1, len(s.Chunks))
+		testutil.Equals(t, 1, len(srv.SeriesSet[i].Chunks))
 	}
 }
 

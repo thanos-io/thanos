@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -24,6 +23,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -1166,6 +1166,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 	}
 	resp, err := q.LabelValues(ctx, req)
 	testutil.Ok(t, err)
+
 	testutil.Assert(t, proto.Equal(req, m1.LastLabelValuesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelValuesReq)
 
 	testutil.Equals(t, []string{"1", "2", "3", "4", "5", "6"}, resp.Values)
@@ -1382,18 +1383,20 @@ type rawSeries struct {
 func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 	testutil.Equals(t, len(expected), len(got), "got unexpected number of series: \n %v", got)
 
-	for i, series := range got {
-		testutil.Equals(t, expected[i].lset, labelpb.ProtobufLabelsToPromLabels(series.Labels))
-		testutil.Equals(t, len(expected[i].chunks), len(series.Chunks), "unexpected number of chunks for series %v", series.Labels)
+	for i := range got {
 
-		for k, chk := range series.Chunks {
+		s := &got[i]
+		testutil.Equals(t, expected[i].lset, labelpb.ProtobufLabelsToPromLabels(s.Labels))
+		testutil.Equals(t, len(expected[i].chunks), len(s.Chunks), "unexpected number of chunks for series %v", s.Labels)
+
+		for k, chk := range s.Chunks {
 			c, err := chunkenc.FromData(chunkenc.EncXOR, chk.Raw.Data)
 			testutil.Ok(t, err)
 
 			j := 0
 			iter := c.Iterator(nil)
 			for iter.Next() {
-				testutil.Assert(t, j < len(expected[i].chunks[k]), "more samples than expected for %v chunk %d", series.Labels, k)
+				testutil.Assert(t, j < len(expected[i].chunks[k]), "more samples than expected for %v chunk %d", s.Labels, k)
 
 				tv, v := iter.At()
 				testutil.Equals(t, expected[i].chunks[k][j], sample{tv, v})
@@ -1750,7 +1753,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 
 	var allResps []*storepb.SeriesResponse
 	var expected []*storepb.Series
-	lastLabels := storepb.Series{}
+	lastLabels := &storepb.Series{}
 	for _, c := range clients {
 		m := c.(*testClient).StoreClient.(*mockedStoreAPI)
 
@@ -1763,7 +1766,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 				expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, r.GetSeries().Chunks...)
 				continue
 			}
-			lastLabels = x
+			lastLabels = &x
 			expected = append(expected, r.GetSeries())
 		}
 

@@ -19,7 +19,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/proto"
 	"github.com/jpillora/backoff"
 	"github.com/klauspost/compress/s2"
 	"github.com/mwitkow/go-conntrack"
@@ -331,7 +330,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	// from the whole request. Ensure that we always copy those when we want to
 	// store them for longer time.
 	var wreq prompb.WriteRequest
-	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
+	if err := wreq.UnmarshalVT(reqBuf); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

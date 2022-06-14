@@ -15,10 +15,10 @@ import (
 
 	"github.com/efficientgo/e2e"
 	"github.com/go-kit/log"
-	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/rules"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 
@@ -31,7 +31,7 @@ import (
 )
 
 func timeToRulespbTimestamp(t time.Time) *rulespb.Timestamp {
-	timestamp, _ := types.TimestampProto(t)
+	timestamp := timestamppb.New(t)
 
 	ret := &rulespb.Timestamp{}
 
