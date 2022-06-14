@@ -28,6 +28,7 @@ type testStoreServer struct {
 	labelValuesLastReq *LabelValuesRequest
 
 	err error
+	UnimplementedStoreServer
 }
 
 func (t *testStoreServer) Info(_ context.Context, r *InfoRequest) (*InfoResponse, error) {

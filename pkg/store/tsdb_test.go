@@ -830,14 +830,14 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 					Name:  l.Name,
 					Value: l.Value,
 				})
-				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
+				bytesLeftForChunks -= lbls[len(lbls)-1].SizeVT()
 			}
 			for _, l := range extLabels {
 				lbls = append(lbls, &labelpb.Label{
 					Name:  l.Name,
 					Value: l.Value,
 				})
-				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
+				bytesLeftForChunks -= lbls[len(lbls)-1].SizeVT()
 			}
 			sort.Slice(lbls, func(i, j int) bool {
 				return lbls[i].Name < lbls[j].Name
@@ -847,7 +847,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			frame := &storepb.Series{Labels: lbls}
 			for i, c := range s.Chunks {
 				frame.Chunks = append(frame.Chunks, c)
-				frameBytesLeft -= c.Size()
+				frameBytesLeft -= c.SizeVT()
 
 				if i == len(s.Chunks)-1 {
 					break

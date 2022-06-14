@@ -17,7 +17,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -25,6 +24,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -1546,7 +1546,7 @@ type storeSeriesServer struct {
 
 	SeriesSet []storepb.Series
 	Warnings  []string
-	HintsSet  []*types.Any
+	HintsSet  []*anypb.Any
 
 	Size int64
 }
@@ -1556,7 +1556,7 @@ func newStoreSeriesServer(ctx context.Context) *storeSeriesServer {
 }
 
 func (s *storeSeriesServer) Send(r *storepb.SeriesResponse) error {
-	s.Size += int64(r.Size())
+	s.Size += int64(r.SizeVT())
 
 	if r.GetWarning() != "" {
 		s.Warnings = append(s.Warnings, r.GetWarning())

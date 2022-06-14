@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/exemplar"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -245,7 +245,7 @@ type storeSeriesServer struct {
 
 	SeriesSet []storepb.Series
 	Warnings  []string
-	HintsSet  []*types.Any
+	HintsSet  []*anypb.Any
 
 	Size int64
 }
@@ -255,7 +255,7 @@ func newStoreSeriesServer(ctx context.Context) *storeSeriesServer {
 }
 
 func (s *storeSeriesServer) Send(r *storepb.SeriesResponse) error {
-	s.Size += int64(r.Size())
+	s.Size += int64(r.SizeVT())
 
 	if r.GetWarning() != "" {
 		s.Warnings = append(s.Warnings, r.GetWarning())
@@ -380,7 +380,7 @@ func newExemplarsServer(ctx context.Context) *exemplarsServer {
 }
 
 func (e *exemplarsServer) Send(r *exemplarspb.ExemplarsResponse) error {
-	e.Size += int64(r.Size())
+	e.Size += int64(r.SizeVT())
 
 	if r.GetWarning() != "" {
 		e.Warnings = append(e.Warnings, r.GetWarning())

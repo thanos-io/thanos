@@ -23,8 +23,6 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
@@ -37,6 +35,9 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"go.uber.org/atomic"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -1792,8 +1793,9 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	}
 }
 
-func mustMarshalAny(pb proto.Message) *types.Any {
-	out, err := types.MarshalAny(pb)
+func mustMarshalAny(pb protoreflect.ProtoMessage) *anypb.Any {
+	out, err := anypb.New(pb)
+
 	if err != nil {
 		panic(err)
 	}
@@ -2045,7 +2047,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			testutil.Equals(t, tc.expectedNames, namesResp.Names)
 
 			var namesHints hintspb.LabelNamesResponseHints
-			testutil.Ok(t, types.UnmarshalAny(namesResp.Hints, &namesHints))
+			testutil.Ok(t, anypb.UnmarshalTo(namesResp.Hints, &namesHints, proto.UnmarshalOptions{}))
 			// The order is not determinate, so we are sorting them.
 			sort.Slice(namesHints.QueriedBlocks, func(i, j int) bool {
 				return namesHints.QueriedBlocks[i].Id < namesHints.QueriedBlocks[j].Id
@@ -2057,7 +2059,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			testutil.Equals(t, tc.expectedValues, valuesResp.Values)
 
 			var valuesHints hintspb.LabelValuesResponseHints
-			testutil.Ok(t, types.UnmarshalAny(valuesResp.Hints, &valuesHints))
+			testutil.Ok(t, anypb.UnmarshalTo(valuesResp.Hints, &valuesHints, proto.UnmarshalOptions{}))
 			// The order is not determinate, so we are sorting them.
 			sort.Slice(valuesHints.QueriedBlocks, func(i, j int) bool {
 				return valuesHints.QueriedBlocks[i].Id < valuesHints.QueriedBlocks[j].Id

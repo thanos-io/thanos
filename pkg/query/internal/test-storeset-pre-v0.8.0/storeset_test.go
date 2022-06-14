@@ -34,6 +34,8 @@ var testGRPCOpts = []grpc.DialOption{
 
 type testStore struct {
 	info storepb.InfoResponse
+
+	storepb.UnimplementedStoreServer
 }
 
 func (s *testStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
