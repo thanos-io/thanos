@@ -352,8 +352,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
-	rawTenant := r.Context().Value(extpromhttp.TenantCtxKey)
-	tenant := rawTenant.(string)
+	tenant := r.Header.Get(h.options.TenantHeader)
 	if tenant == "" {
 		tenant = h.options.DefaultTenantID
 	}
