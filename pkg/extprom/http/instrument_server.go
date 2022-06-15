@@ -4,7 +4,6 @@
 package http
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -167,26 +166,11 @@ func (wd *responseWriterDelegator) Status() string {
 	return fmt.Sprintf("%d", wd.StatusCode())
 }
 
-// TenantCtxKey is the context key to hold the tenant's identifier.
-var TenantCtxKey struct{}
-
-// NewTenantParserMiddleware parses the tenant from the request given the tenant header and default tenant.
-// The tenant is then put in the request's context under the key TenantCtxKey.
-func NewTenantParserMiddleware(tenantHeader string, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tenant := r.Header.Get(tenantHeader)
-		ctxWithTenant := context.WithValue(r.Context(), TenantCtxKey, tenant)
-		next.ServeHTTP(w, r.WithContext(ctxWithTenant))
-	}
-}
-
 // NewInstrumentHandlerInflightTenant creates a middleware used to export the current amount of concurrent requests
 // being handled. It has an optional tenant label whenever a tenant is present in the context.
-// For more information about how to have the tenant in the context check NewTenantParserMiddleware.
-func NewInstrumentHandlerInflightTenant(gaugeVec *prometheus.GaugeVec, next http.HandlerFunc) http.HandlerFunc {
+func NewInstrumentHandlerInflightTenant(gaugeVec *prometheus.GaugeVec, tenantHeader string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rawTenant := r.Context().Value(TenantCtxKey)
-		tenant := rawTenant.(string)
+		tenant := r.Header.Get(tenantHeader)
 		promhttp.InstrumentHandlerInFlight(gaugeVec.With(prometheus.Labels{"tenant": tenant}), next).ServeHTTP(w, r)
 	}
 }

@@ -202,12 +202,10 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-		next = extpromhttp.NewTenantParserMiddleware(
+		next = extpromhttp.NewInstrumentHandlerInflightTenant(
+			h.writeInflightHTTPRequests,
 			h.options.TenantHeader,
-			extpromhttp.NewInstrumentHandlerInflightTenant(
-				h.writeInflightHTTPRequests,
-				ins.NewHandler(name, http.HandlerFunc(next)),
-			),
+			ins.NewHandler(name, http.HandlerFunc(next)),
 		)
 
 		if o.Tracer != nil {
