@@ -106,7 +106,7 @@ type Handler struct {
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
 
-	writeBytesTotal           *prometheus.CounterVec
+	writeBytesTotal           *prometheus.SummaryVec
 	writeSamplesTotal         *prometheus.CounterVec
 	writeTimeseriesTotal      *prometheus.CounterVec
 	writeInflightHTTPRequests *prometheus.GaugeVec
@@ -150,26 +150,34 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 		writeTimeseriesTotal: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "thanos_receive_write_timeseries_total",
-				Help: "The number of timeseries received in the incoming write requests.",
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_timeseries_total",
+				Help:      "The number of timeseries received in the incoming write requests.",
 			}, []string{"code", "method", "tenant"},
 		),
 		writeSamplesTotal: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "thanos_receive_write_samples_total",
-				Help: "The number of sampled received in the incoming write requests.",
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_samples_total",
+				Help:      "The number of sampled received in the incoming write requests.",
 			}, []string{"code", "method", "tenant"},
 		),
-		writeBytesTotal: promauto.With(o.Registry).NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "thanos_receive_write_bytes_total",
-				Help: "The number of bytes received in the body of incoming write requests.",
+		writeBytesTotal: promauto.With(o.Registry).NewSummaryVec(
+			prometheus.SummaryOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_bytes",
+				Help:      "The number of bytes received in the body of incoming write requests.",
 			}, []string{"code", "method", "tenant"},
 		),
 		writeInflightHTTPRequests: promauto.With(o.Registry).NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "thanos_receive_write_requests_inflight",
-				Help: "The number of inflight write HTTP requests being handled at the same time.",
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_requests_inflight",
+				Help:      "The number of inflight write HTTP requests being handled at the same time.",
 			}, []string{"tenant"},
 		),
 	}
@@ -434,7 +442,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), responseStatusCode)
 		}
 	}
-	h.writeBytesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Add(float64(binary.Size(reqBuf)))
+	h.writeBytesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Observe(float64(binary.Size(reqBuf)))
 	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Add(float64(len(wreq.Timeseries)))
 	for _, timeseries := range wreq.Timeseries {
 		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Add(float64(len(timeseries.Samples)))
