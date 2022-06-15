@@ -118,18 +118,18 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h := &Handler{
-		logger:  logger,
-		writer:  o.Writer,
-		router:  route.New(),
-		options: o,
-		peers:   newPeerGroup(o.DialOpts...),
+		logger:       logger,
+		writer:       o.Writer,
+		router:       route.New(),
+		options:      o,
+		peers:        newPeerGroup(o.DialOpts...),
+		receiverMode: o.ReceiverMode,
 		expBackoff: backoff.Backoff{
 			Factor: 2,
 			Min:    100 * time.Millisecond,
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
-		receiverMode: o.ReceiverMode,
 		forwardRequests: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
