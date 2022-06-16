@@ -125,7 +125,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("32").IntVar(&sc.blockMetaFetchConcurrency)
 
 	cmd.Flag("sync-tombstone-duration", "Repeat interval for syncing the tombstones between local and remote view.").
-		Default("3m").DurationVar(&sc.syncInterval)
+		Default("3m").DurationVar(&sc.syncTombstonesInterval)
 
 	sc.filterConf = &store.FilterConfig{}
 
@@ -407,7 +407,7 @@ func runStore(
 
 	{
 		g.Add(func() error {
-			return runutil.Repeat(time.Minute*3, ctx.Done(), func() error {
+			return runutil.Repeat(conf.syncTombstonesInterval, ctx.Done(), func() error {
 				return bs.SyncTombstones(ctx)
 			})
 		}, func(error) {

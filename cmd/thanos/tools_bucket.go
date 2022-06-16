@@ -9,7 +9,8 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/block/tombstone"
+	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/thanos-io/thanos/pkg/tombstone"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -1419,7 +1420,8 @@ func registerBucketDelete(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			return err
 		}
 
-		ts := tombstone.NewTombstone(m, minTime.PrometheusTimestamp(), maxTime.PrometheusTimestamp(), tbc.author, tbc.reason)
+		ts := tombstone.NewTombstone(m, minTime.PrometheusTimestamp(), maxTime.PrometheusTimestamp(),
+			timestamp.FromTime(time.Now()), tbc.author, tbc.reason)
 
 		ctx, cancel := context.WithTimeout(context.Background(), tbc.timeout)
 		defer cancel()

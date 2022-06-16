@@ -12,10 +12,8 @@ import (
 	"path"
 	"time"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
-	"github.com/prometheus/prometheus/model/timestamp"
-
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -23,7 +21,7 @@ import (
 
 const (
 	// TombstoneDir is the name of directory to upload tombstones.
-	TombstoneDir = "thanos/tombstones"
+	TombstoneDir = "tombstones"
 )
 
 // Tombstone represents a tombstone.
@@ -37,12 +35,12 @@ type Tombstone struct {
 }
 
 // NewTombstone returns a new instance of Tombstone.
-func NewTombstone(matchers metadata.Matchers, minTime, maxTime int64, author string, reason string) *Tombstone {
+func NewTombstone(matchers metadata.Matchers, minTime, maxTime, creationTime int64, author, reason string) *Tombstone {
 	return &Tombstone{
 		Matchers:     matchers,
 		MinTime:      minTime,
 		MaxTime:      maxTime,
-		CreationTime: timestamp.FromTime(time.Now()),
+		CreationTime: creationTime,
 		Author:       author,
 		Reason:       reason,
 	}
