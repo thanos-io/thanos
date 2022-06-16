@@ -180,6 +180,9 @@ Flags:
                                  this limit is exceeded. 0 means no limit.
       --sync-block-duration=3m   Repeat interval for syncing the blocks between
                                  local and remote view.
+      --sync-tombstone-duration=3m
+                                 Repeat interval for syncing the tombstones
+                                 between local and remote view.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file with

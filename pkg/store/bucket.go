@@ -838,12 +838,13 @@ PostingsLoop:
 		for _, ts := range tombstones {
 			for _, matcher := range ts.Matchers {
 				if val := lset.Get(matcher.Name); val != "" {
-					if matcher.Matches(val) {
-						if skipChunks {
-							continue PostingsLoop
-						}
-						tombstoneIntervals.Add(promtombstones.Interval{Mint: ts.MinTime, Maxt: ts.MaxTime})
+					if !matcher.Matches(val) {
+						continue
 					}
+					if skipChunks {
+						continue PostingsLoop
+					}
+					tombstoneIntervals.Add(promtombstones.Interval{Mint: ts.MinTime, Maxt: ts.MaxTime})
 				}
 			}
 		}

@@ -62,6 +62,7 @@ type storeConfig struct {
 	component                   component.StoreAPI
 	debugLogging                bool
 	syncInterval                time.Duration
+	syncTombstonesInterval      time.Duration
 	blockSyncConcurrency        int
 	blockMetaFetchConcurrency   int
 	filterConf                  *store.FilterConfig
@@ -122,6 +123,9 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
 		Default("32").IntVar(&sc.blockMetaFetchConcurrency)
+
+	cmd.Flag("sync-tombstone-duration", "Repeat interval for syncing the tombstones between local and remote view.").
+		Default("3m").DurationVar(&sc.syncInterval)
 
 	sc.filterConf = &store.FilterConfig{}
 
