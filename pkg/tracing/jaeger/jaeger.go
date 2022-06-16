@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 
@@ -18,15 +17,12 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/version"
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
 	jaeger_prometheus "github.com/uber/jaeger-lib/metrics/prometheus"
-	"go.opentelemetry.io/otel/attribute"
 	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"gopkg.in/yaml.v2"
 )
 
@@ -99,7 +95,7 @@ func newTraceProvider(ctx context.Context, logger log.Logger, processor tracesdk
 		fraction = 1 / float64(samplingFactor)
 	}
 
-	resource, err := resource.New(ctx, resource.WithAttributes(collectAttributes(serviceName)...))
+	resource, err := resource.New(ctx, resource.WithAttributes(tracing.CollectAttributes(serviceName)...))
 	if err != nil {
 		level.Warn(logger).Log("msg", "jaeger: detecting resources for tracing provider failed", "err", err)
 	}
@@ -116,19 +112,6 @@ func newTraceProvider(ctx context.Context, logger log.Logger, processor tracesdk
 	)
 
 	return tp
-}
-
-func collectAttributes(serviceName string) []attribute.KeyValue {
-	attr := []attribute.KeyValue{
-		semconv.ServiceNameKey.String(serviceName),
-		attribute.String("binary_revision", version.Revision),
-	}
-
-	if len(os.Args) > 1 {
-		attr = append(attr, attribute.String("binary_cmd", os.Args[1]))
-	}
-
-	return attr
 }
 
 // NewTracer create tracer from YAML.
@@ -150,7 +133,6 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 		return nil, nil, err
 	}
 
-	level.Info(logger).Log("msg", "getting tracing config", cfg)
 	cfg.Headers = &jaeger.HeadersConfig{
 		JaegerDebugHeader: strings.ToLower(tracing.ForceTracingBaggageKey),
 	}
@@ -164,12 +146,6 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 	if err != nil {
 		return nil, nil, err
 	}
-
-	exp, err := otel_jaeger.New(otel_jaeger.WithCollectorEndpoint())
-	if err != nil {
-		return nil, nil, err
-	}
-	_ = exp
 
 	t := &Tracer{
 		jaegerTracer,

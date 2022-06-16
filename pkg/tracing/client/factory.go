@@ -34,12 +34,12 @@ import (
 type TracingProvider string
 
 const (
-	Stackdriver TracingProvider = "STACKDRIVER"
-	GoogleCloud TracingProvider = "GOOGLE_CLOUD"
-	Jaeger      TracingProvider = "JAEGER"
-	ElasticAPM  TracingProvider = "ELASTIC_APM"
-	Lightstep   TracingProvider = "LIGHTSTEP"
-	name                        = "thanos"
+	Stackdriver           TracingProvider = "STACKDRIVER"
+	GoogleCloud           TracingProvider = "GOOGLE_CLOUD"
+	Jaeger                TracingProvider = "JAEGER"
+	ElasticAPM            TracingProvider = "ELASTIC_APM"
+	Lightstep             TracingProvider = "LIGHTSTEP"
+	OpenTelemetryProtocol TracingProvider = "OTLP"
 )
 
 type TracingConfig struct {
@@ -65,7 +65,7 @@ func NewOTELTracer(ctx context.Context, logger log.Logger) trace.Tracer {
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	tracer := otel.GetTracerProvider().Tracer(
-		name,
+		"thanos-tracer",
 		trace.WithSchemaURL(semconv.SchemaURL),
 	)
 	return tracer

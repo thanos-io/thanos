@@ -1,3 +1,5 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
 package e2e_test
 
 import (
@@ -13,7 +15,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// test to check if the trace provider works as expected
+// Test to check if the trace provider works as expected.
 func TestJaegerTracing(t *testing.T) {
 	env, err := e2e.NewDockerEnvironment("e2e-tracing-test")
 	testutil.Ok(t, err)
