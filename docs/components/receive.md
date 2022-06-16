@@ -127,6 +127,9 @@ Flags:
                                  Alternative to 'receive.hashrings-file' flag
                                  (lower priority). Content of file that contains
                                  the hashring configuration.
+      --receive.hashrings-algorithm=hashmod
+                                 The algorithm used when distributing series in
+                                 the hashrings. Must be one of hashmod, ketama
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
                                  configuration. A watcher is initialized to

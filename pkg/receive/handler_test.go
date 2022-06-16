@@ -324,7 +324,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		cfg[0].Endpoints = append(cfg[0].Endpoints, h.options.Endpoint)
 		peers.cache[addr] = &fakeRemoteWriteGRPCServer{h: h}
 	}
-	hashring := newMultiHashring(cfg)
+	hashring := newMultiHashring(AlgorithmHashmod, cfg)
 	for _, h := range handlers {
 		h.Hashring(hashring)
 	}
