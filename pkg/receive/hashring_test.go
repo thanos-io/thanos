@@ -226,7 +226,7 @@ func TestConsistentHashringGet(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			hashRing := newConsistentHashring(test.nodes, 10)
+			hashRing := newKetamaHashring(test.nodes, 10)
 			result, err := hashRing.GetN("tenant", test.ts, test.n)
 			require.NoError(t, err)
 			require.Equal(t, test.expectedNode, result)
@@ -322,7 +322,7 @@ func findSeries(initialAssignments map[string][]*prompb.TimeSeries, node string,
 }
 
 func assignSeries(series []*prompb.TimeSeries, nodes []string) (map[string][]*prompb.TimeSeries, error) {
-	hashRing := newConsistentHashring(nodes, SectionsPerNode)
+	hashRing := newKetamaHashring(nodes, SectionsPerNode)
 	assignments := make(map[string][]*prompb.TimeSeries)
 	for _, ts := range series {
 		result, err := hashRing.Get("tenant", ts)

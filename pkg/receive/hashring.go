@@ -22,11 +22,11 @@ import (
 type HashringAlgorithm string
 
 const (
-	AlgorithmHashmod    HashringAlgorithm = "hashmod"
-	AlgorithmConsistent HashringAlgorithm = "consistent"
+	AlgorithmHashmod HashringAlgorithm = "hashmod"
+	AlgorithmKetama  HashringAlgorithm = "ketama"
 
 	// SectionsPerNode is the number of sections in the ring assigned to each node
-	// when using consistent hashing. A higher number yields a better series distribution,
+	// in the ketama hashring. A higher number yields a better series distribution,
 	// but also comes with a higher memory cost.
 	SectionsPerNode = 1000
 )
@@ -98,21 +98,21 @@ func (p sections) Less(i, j int) bool { return p[i].hash < p[j].hash }
 func (p sections) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p sections) Sort()              { sort.Sort(p) }
 
-// consistentHashring represents a group of nodes handling write requests with consistent hashing.
-type consistentHashring struct {
+// ketamaHashring represents a group of nodes handling write requests with consistent hashing.
+type ketamaHashring struct {
 	endpoints    []string
 	sections     sections
 	numEndpoints uint64
 }
 
-func newConsistentHashring(endpoints []string, sectionsPerNode int) *consistentHashring {
+func newKetamaHashring(endpoints []string, sectionsPerNode int) *ketamaHashring {
 	// Replication works by choosing subsequent nodes in the ring.
 	// In order to improve consistency, we avoid relying on the ordering of the endpoints
 	// and sort them lexicographically.
 	sort.Strings(endpoints)
 
 	numSections := len(endpoints) * sectionsPerNode
-	ring := consistentHashring{
+	ring := ketamaHashring{
 		endpoints:    endpoints,
 		sections:     make(sections, 0, numSections),
 		numEndpoints: uint64(len(endpoints)),
@@ -135,11 +135,11 @@ func newConsistentHashring(endpoints []string, sectionsPerNode int) *consistentH
 	return &ring
 }
 
-func (c consistentHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+func (c ketamaHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
 	return c.GetN(tenant, ts, 0)
 }
 
-func (c consistentHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
 	if n >= c.numEndpoints {
 		return "", &insufficientNodesError{have: c.numEndpoints, want: n + 1}
 	}
@@ -222,8 +222,8 @@ func newMultiHashring(algorithm HashringAlgorithm, cfg []HashringConfig) Hashrin
 		switch algorithm {
 		case AlgorithmHashmod:
 			return simpleHashring(endpoints)
-		case AlgorithmConsistent:
-			return newConsistentHashring(endpoints, SectionsPerNode)
+		case AlgorithmKetama:
+			return newKetamaHashring(endpoints, SectionsPerNode)
 		default:
 			return simpleHashring(endpoints)
 		}
