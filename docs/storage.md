@@ -89,7 +89,7 @@ config:
   trace:
     enable: false
   list_objects_version: ""
-  dns_style: false
+  bucket_lookup_type: auto
   part_size: 67108864
   sse_config:
     type: ""
@@ -120,7 +120,7 @@ Set `list_objects_version: "v1"` for S3 compatible APIs that don't support ListO
 
 `http_config.tls_config` allows configuring TLS connections. Please refer to the document of [tls_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#tls_config) for detailed information on what each option does.
 
-`dns_style` can be set to enforce the DNS style lookup.
+`bucket_lookup_type` can be `auto`, `virtual-hosted` or `path`. Read more about it [here](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html).
 
 For debug and testing purposes you can set
 
