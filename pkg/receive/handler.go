@@ -115,6 +115,11 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		logger = log.NewNopLogger()
 	}
 
+	var registerer prometheus.Registerer = nil
+	if o.Registry != nil {
+		registerer = o.Registry
+	}
+
 	h := &Handler{
 		logger:       logger,
 		writer:       o.Writer,
@@ -128,19 +133,19 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
-		forwardRequests: promauto.With(o.Registry).NewCounterVec(
+		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
 				Help: "The number of forward requests.",
 			}, []string{"result"},
 		),
-		replications: promauto.With(o.Registry).NewCounterVec(
+		replications: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_replications_total",
 				Help: "The number of replication operations done by the receiver. The success of replication is fulfilled when a quorum is met.",
 			}, []string{"result"},
 		),
-		replicationFactor: promauto.With(o.Registry).NewGauge(
+		replicationFactor: promauto.With(registerer).NewGauge(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_replication_factor",
 				Help: "The number of times to replicate incoming write requests.",
