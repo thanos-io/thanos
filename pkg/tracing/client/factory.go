@@ -20,15 +20,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/pkg/tracing/lightstep"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
-
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
-	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
-	"go.opentelemetry.io/otel/trace"
+	"github.com/thanos-io/thanos/pkg/tracing/otlp"
 )
 
 type TracingProvider string
@@ -45,30 +37,6 @@ const (
 type TracingConfig struct {
 	Type   TracingProvider `yaml:"type"`
 	Config interface{}     `yaml:"config"`
-}
-
-// NewOTELTracer returns an OTLP exporter based tracer.
-func NewOTELTracer(ctx context.Context, logger log.Logger) trace.Tracer {
-	client := otlptracehttp.NewClient()
-	exporter, err := otlptrace.New(ctx, client)
-	if err != nil {
-		level.Error(logger).Log("err with new client", err.Error())
-	}
-
-	tp := tracesdk.NewTracerProvider(
-		tracesdk.WithBatcher(exporter),
-		tracesdk.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-		)),
-	)
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-
-	tracer := otel.GetTracerProvider().Tracer(
-		"thanos-tracer",
-		trace.WithSchemaURL(semconv.SchemaURL),
-	)
-	return tracer
 }
 
 func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Registry, confContentYaml []byte) (opentracing.Tracer, io.Closer, error) {
@@ -107,6 +75,13 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 		return elasticapm.NewTracer(config)
 	case string(Lightstep):
 		return lightstep.NewTracer(ctx, config)
+	case string(OpenTelemetryProtocol):
+		tracerProvider, err := otlp.NewTracerProvider(ctx, logger, config)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "new tracer provider err")
+		}
+		tracer, closerFunc := migration.Bridge(tracerProvider, logger)
+		return tracer, closerFunc, nil
 	default:
 		return nil, nil, errors.Errorf("tracing with type %s is not supported", tracingConf.Type)
 	}

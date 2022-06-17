@@ -23,7 +23,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/common/version"
-	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/automaxprocs/maxprocs"
 	"gopkg.in/alecthomas/kingpin.v2"
 
@@ -86,7 +85,6 @@ func main() {
 
 	var g run.Group
 	var tracer opentracing.Tracer
-	var otelTracer trace.Tracer
 
 	// Setup optional tracing.
 	{
@@ -110,9 +108,6 @@ func main() {
 				fmt.Fprintln(os.Stderr, errors.Wrapf(err, "tracing failed"))
 				os.Exit(1)
 			}
-
-			otelTracer = client.NewOTELTracer(ctx, logger)
-			_ = otelTracer // just a dummy
 		}
 
 		// This is bad, but Prometheus does not support any other tracer injections than just global one.
