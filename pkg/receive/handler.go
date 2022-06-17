@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/binary"
 	"fmt"
 	"io"
 	stdlog "log"
@@ -106,10 +105,8 @@ type Handler struct {
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
 
-	writeBytesTotal           *prometheus.SummaryVec
-	writeSamplesTotal         *prometheus.CounterVec
-	writeTimeseriesTotal      *prometheus.CounterVec
-	writeInflightHTTPRequests *prometheus.GaugeVec
+	writeSamplesTotal    *prometheus.CounterVec
+	writeTimeseriesTotal *prometheus.CounterVec
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -164,22 +161,6 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help:      "The number of sampled received in the incoming write requests.",
 			}, []string{"code", "method", "tenant"},
 		),
-		writeBytesTotal: promauto.With(o.Registry).NewSummaryVec(
-			prometheus.SummaryOpts{
-				Namespace: "thanos",
-				Subsystem: "receive",
-				Name:      "write_bytes",
-				Help:      "The number of bytes received in the body of incoming write requests.",
-			}, []string{"code", "method", "tenant"},
-		),
-		writeInflightHTTPRequests: promauto.With(o.Registry).NewGaugeVec(
-			prometheus.GaugeOpts{
-				Namespace: "thanos",
-				Subsystem: "receive",
-				Name:      "write_requests_inflight",
-				Help:      "The number of inflight write HTTP requests being handled at the same time.",
-			}, []string{"tenant"},
-		),
 	}
 
 	h.forwardRequests.WithLabelValues(labelSuccess)
@@ -195,18 +176,22 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
-		ins = extpromhttp.NewInstrumentationMiddleware(o.Registry,
+		// TODO(douglascamata): change to use the extpromhttp.NewTenantInstrumentationMiddleware.
+		// ins = extpromhttp.NewTenantInstrumentationMiddleware(
+		// 	o.TenantHeader,
+		// 	o.Registry,
+		// 	[]float64{0.001, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.25, 0.5, 0.75, 1, 2, 3, 4, 5},
+		// )
+		ins = extpromhttp.NewTenantInstrumentationMiddleware(
+			o.TenantHeader,
+			o.Registry,
 			[]float64{0.001, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.25, 0.5, 0.75, 1, 2, 3, 4, 5},
 		)
 	}
 
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-		next = extpromhttp.NewInstrumentHandlerInflightTenant(
-			h.writeInflightHTTPRequests,
-			h.options.TenantHeader,
-			ins.NewHandler(name, http.HandlerFunc(next)),
-		)
+		next = ins.NewHandler(name, http.HandlerFunc(next))
 
 		if o.Tracer != nil {
 			next = tracing.HTTPMiddleware(o.Tracer, name, logger, http.HandlerFunc(next))
@@ -439,7 +424,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), responseStatusCode)
 		}
 	}
-	h.writeBytesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Observe(float64(binary.Size(reqBuf)))
 	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Add(float64(len(wreq.Timeseries)))
 	for _, timeseries := range wreq.Timeseries {
 		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Add(float64(len(timeseries.Samples)))
