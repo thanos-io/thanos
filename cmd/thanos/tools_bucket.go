@@ -1425,6 +1425,6 @@ func registerBucketDelete(app extkingpin.AppClause, objStoreConfig *extflag.Path
 
 		ctx, cancel := context.WithTimeout(context.Background(), tbc.timeout)
 		defer cancel()
-		return tombstone.UploadTombstone(ctx, ts, bkt, logger)
+		return tombstone.UploadTombstone(ctx, ts, bkt)
 	})
 }

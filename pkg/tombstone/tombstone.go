@@ -4,11 +4,12 @@
 package tombstone
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/go-kit/log/level"
 	"io/ioutil"
-	"os"
 	"path"
 	"time"
 
@@ -26,18 +27,18 @@ const (
 
 // Tombstone represents a tombstone.
 type Tombstone struct {
-	Matchers     metadata.Matchers `json:"matchers"`
-	MinTime      int64             `json:"minTime"`
-	MaxTime      int64             `json:"maxTime"`
-	CreationTime int64             `json:"creationTime"`
-	Author       string            `json:"author"`
-	Reason       string            `json:"reason"`
+	Matchers     *metadata.Matchers `json:"matchers"`
+	MinTime      int64              `json:"minTime"`
+	MaxTime      int64              `json:"maxTime"`
+	CreationTime int64              `json:"creationTime"`
+	Author       string             `json:"author"`
+	Reason       string             `json:"reason"`
 }
 
 // NewTombstone returns a new instance of Tombstone.
 func NewTombstone(matchers metadata.Matchers, minTime, maxTime, creationTime int64, author, reason string) *Tombstone {
 	return &Tombstone{
-		Matchers:     matchers,
+		Matchers:     &matchers,
 		MinTime:      minTime,
 		MaxTime:      maxTime,
 		CreationTime: creationTime,
@@ -52,21 +53,14 @@ func GenName() string {
 }
 
 // UploadTombstone uploads the given tombstone to object storage.
-func UploadTombstone(ctx context.Context, tombstone *Tombstone, bkt objstore.Bucket, logger log.Logger) error {
+func UploadTombstone(ctx context.Context, tombstone *Tombstone, bkt objstore.Bucket) error {
 	b, err := json.Marshal(tombstone)
 	if err != nil {
 		return err
 	}
 
-	tmpDir := os.TempDir()
-
-	tsPath := tmpDir + "/tombstone.json"
-	if err := ioutil.WriteFile(tsPath, b, 0644); err != nil {
-		return err
-	}
-
-	return objstore.UploadFile(ctx, logger, bkt, tsPath, path.Join(TombstoneDir, GenName()))
-
+	tsPath := path.Join(TombstoneDir, GenName())
+	return bkt.Upload(ctx, tsPath, bytes.NewBuffer(b))
 }
 
 // ReadTombstones returns all the tombstones present in the object storage.
@@ -81,15 +75,16 @@ func ReadTombstones(ctx context.Context, bkt objstore.InstrumentedBucketReader, 
 		}
 		defer runutil.CloseWithLogOnErr(logger, tombstoneFile, "close bkt tombstone reader")
 
-		var t *Tombstone
+		var t Tombstone
 		tombstone, err := ioutil.ReadAll(tombstoneFile)
 		if err != nil {
 			return nil
 		}
-		if err := json.Unmarshal(tombstone, t); err != nil {
+		if err := json.Unmarshal(tombstone, &t); err != nil {
+			level.Error(logger).Log("msg", "failed to unmarshal tombstone", "file", tombstoneFilename, "err", err)
 			return nil
 		}
-		ts = append(ts, t)
+		ts = append(ts, &t)
 		return nil
 	}); err != nil {
 		return nil, err

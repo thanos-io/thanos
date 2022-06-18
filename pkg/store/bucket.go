@@ -836,7 +836,7 @@ PostingsLoop:
 		}
 		var tombstoneIntervals promtombstones.Intervals
 		for _, ts := range tombstones {
-			for _, matcher := range ts.Matchers {
+			for _, matcher := range *ts.Matchers {
 				if val := lset.Get(matcher.Name); val != "" {
 					if !matcher.Matches(val) {
 						continue
@@ -844,7 +844,7 @@ PostingsLoop:
 					if skipChunks {
 						continue PostingsLoop
 					}
-					tombstoneIntervals.Add(promtombstones.Interval{Mint: ts.MinTime, Maxt: ts.MaxTime})
+					tombstoneIntervals = tombstoneIntervals.Add(promtombstones.Interval{Mint: ts.MinTime, Maxt: ts.MaxTime})
 				}
 			}
 		}
@@ -871,6 +871,11 @@ PostingsLoop:
 					MaxTime: meta.MaxTime,
 				})
 				s.refs = append(s.refs, meta.Ref)
+			}
+
+			// If all chunks are matched by the tombstone then check next posting.
+			if len(s.chks) == 0 {
+				continue PostingsLoop
 			}
 
 			// Ensure sample limit through chunksLimiter if we return chunks.
