@@ -33,7 +33,6 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
-	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -161,6 +160,7 @@ type bucketDeleteConfig struct {
 	matchers string
 	author   string
 	reason   string
+	labels   []string
 }
 
 func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *bucketVerifyConfig {
@@ -279,6 +279,8 @@ func (tbc *bucketDeleteConfig) registerBucketDeleteFlag(cmd extkingpin.FlagClaus
 	cmd.Flag("matchers", "The string representing label matchers").Default("").StringVar(&tbc.matchers)
 	cmd.Flag("author", "Author of the deletion request").Default("not specified").StringVar(&tbc.author)
 	cmd.Flag("reason", "Reason to perform the deletion request").Default("not specified").StringVar(&tbc.reason)
+	cmd.Flag("label", "Tombstone external labels. Only blocks that contain the matching external labels will be considered.").
+		PlaceHolder("<name>=\"<value>\"").StringsVar(&tbc.labels)
 
 	return tbc
 }
@@ -1415,13 +1417,19 @@ func registerBucketDelete(app extkingpin.AppClause, objStoreConfig *extflag.Path
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 
+		labels, err := parseFlagLabels(tbc.labels)
+		if err != nil {
+			return err
+		}
+
 		m, err := parser.ParseMetricSelector(tbc.matchers)
 		if err != nil {
 			return err
 		}
 
-		ts := tombstone.NewTombstone(m, minTime.PrometheusTimestamp(), maxTime.PrometheusTimestamp(),
-			timestamp.FromTime(time.Now()), tbc.author, tbc.reason)
+		newID := ulid.MustNew(ulid.Now(), rand.Reader)
+		ts := tombstone.NewTombstone(newID, m, minTime.PrometheusTimestamp(), maxTime.PrometheusTimestamp(),
+			tbc.author, tbc.reason, labels)
 
 		ctx, cancel := context.WithTimeout(context.Background(), tbc.timeout)
 		defer cancel()

@@ -552,6 +552,10 @@ func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labe
 		return false, nil, err
 	}
 
+	return promMatchesExternalLabels(tms, externalLabels)
+}
+
+func promMatchesExternalLabels(tms []*labels.Matcher, externalLabels labels.Labels) (bool, []*labels.Matcher, error) {
 	if len(externalLabels) == 0 {
 		return true, tms, nil
 	}

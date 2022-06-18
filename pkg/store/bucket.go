@@ -272,15 +272,16 @@ type FilterConfig struct {
 // This makes them smaller, but takes extra CPU and memory.
 // When used with in-memory cache, memory usage should decrease overall, thanks to postings being smaller.
 type BucketStore struct {
-	logger          log.Logger
-	reg             prometheus.Registerer // TODO(metalmatze) remove and add via BucketStoreOption
-	metrics         *bucketStoreMetrics
-	bkt             objstore.InstrumentedBucketReader
-	fetcher         block.MetadataFetcher
-	dir             string
-	indexCache      storecache.IndexCache
-	indexReaderPool *indexheader.ReaderPool
-	chunkPool       pool.Bytes
+	logger           log.Logger
+	reg              prometheus.Registerer // TODO(metalmatze) remove and add via BucketStoreOption
+	metrics          *bucketStoreMetrics
+	bkt              objstore.InstrumentedBucketReader
+	fetcher          block.MetadataFetcher
+	tombstoneFetcher tombstone.TombstoneFetcher
+	dir              string
+	indexCache       storecache.IndexCache
+	indexReaderPool  *indexheader.ReaderPool
+	chunkPool        pool.Bytes
 
 	// Sets of blocks that have the same labels. They are indexed by a hash over their label set.
 	mtx       sync.RWMutex
@@ -307,7 +308,7 @@ type BucketStore struct {
 	enableCompatibilityLabel bool
 
 	tombstonesMtx sync.RWMutex
-	tombstones    []*tombstone.Tombstone
+	tombstones    map[ulid.ULID]*tombstone.Tombstone
 
 	// Every how many posting offset entry we pool in heap memory. Default in Prometheus is 32.
 	postingOffsetsInMemSampling int
@@ -392,6 +393,7 @@ func WithDebugLogging() BucketStoreOption {
 func NewBucketStore(
 	bkt objstore.InstrumentedBucketReader,
 	fetcher block.MetadataFetcher,
+	tombstoneFetcher tombstone.TombstoneFetcher,
 	dir string,
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,
@@ -408,6 +410,7 @@ func NewBucketStore(
 		logger:                      log.NewNopLogger(),
 		bkt:                         bkt,
 		fetcher:                     fetcher,
+		tombstoneFetcher:            tombstoneFetcher,
 		dir:                         dir,
 		indexCache:                  noopCache{},
 		chunkPool:                   pool.NoopBytes{},
@@ -1059,6 +1062,17 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		if !ok {
 			continue
 		}
+		matchedTombstones := make([]*tombstone.Tombstone, 0, len(tombstones))
+		for _, ts := range tombstones {
+			ok, _, err := promMatchesExternalLabels(blockMatchers, ts.Labels)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				continue
+			}
+			matchedTombstones = append(matchedTombstones, ts)
+		}
 
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow, reqBlockMatchers)
 
@@ -1106,7 +1120,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					req.SkipChunks,
 					req.MinTime, req.MaxTime,
 					req.Aggregates,
-					tombstones,
+					matchedTombstones,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
@@ -1494,7 +1508,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 }
 
 func (s *BucketStore) SyncTombstones(ctx context.Context) error {
-	tombstones, err := tombstone.ReadTombstones(ctx, s.bkt, s.logger)
+	tombstones, _, err := s.tombstoneFetcher.Fetch(ctx)
 	if err != nil {
 		return err
 	}

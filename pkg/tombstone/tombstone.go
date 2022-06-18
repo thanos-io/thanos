@@ -7,17 +7,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"github.com/go-kit/log/level"
-	"io/ioutil"
-	"path"
-	"time"
-
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"io/ioutil"
+	"path"
 )
 
 const (
@@ -27,29 +25,28 @@ const (
 
 // Tombstone represents a tombstone.
 type Tombstone struct {
-	Matchers     *metadata.Matchers `json:"matchers"`
-	MinTime      int64              `json:"minTime"`
-	MaxTime      int64              `json:"maxTime"`
-	CreationTime int64              `json:"creationTime"`
-	Author       string             `json:"author"`
-	Reason       string             `json:"reason"`
+	ULID     ulid.ULID          `json:"ulid"`
+	Matchers *metadata.Matchers `json:"matchers"`
+	MinTime  int64              `json:"minTime"`
+	MaxTime  int64              `json:"maxTime"`
+	Author   string             `json:"author"`
+	Reason   string             `json:"reason"`
+	// Labels are the external labels identifying the producer as well as tenant.
+	// See https://thanos.io/tip/thanos/storage.md#external-labels for details.
+	Labels labels.Labels `json:"labels"`
 }
 
 // NewTombstone returns a new instance of Tombstone.
-func NewTombstone(matchers metadata.Matchers, minTime, maxTime, creationTime int64, author, reason string) *Tombstone {
+func NewTombstone(ulid ulid.ULID, matchers metadata.Matchers, minTime, maxTime int64, author, reason string, labels labels.Labels) *Tombstone {
 	return &Tombstone{
-		Matchers:     &matchers,
-		MinTime:      minTime,
-		MaxTime:      maxTime,
-		CreationTime: creationTime,
-		Author:       author,
-		Reason:       reason,
+		ULID:     ulid,
+		Matchers: &matchers,
+		MinTime:  minTime,
+		MaxTime:  maxTime,
+		Author:   author,
+		Reason:   reason,
+		Labels:   labels,
 	}
-}
-
-// GenName generates file name based on Matchers, MinTime and MaxTime of a tombstone.
-func GenName() string {
-	return fmt.Sprintf("tombstones-%s.json", ulid.MustNew(uint64(time.Now().Unix()), nil))
 }
 
 // UploadTombstone uploads the given tombstone to object storage.
@@ -59,7 +56,7 @@ func UploadTombstone(ctx context.Context, tombstone *Tombstone, bkt objstore.Buc
 		return err
 	}
 
-	tsPath := path.Join(TombstoneDir, GenName())
+	tsPath := path.Join(TombstoneDir, tombstone.ULID.String())
 	return bkt.Upload(ctx, tsPath, bytes.NewBuffer(b))
 }
 

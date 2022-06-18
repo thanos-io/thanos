@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/tombstone"
 	"time"
 
 	"github.com/alecthomas/units"
@@ -314,6 +315,11 @@ func runStore(
 		return errors.Wrap(err, "meta fetcher")
 	}
 
+	tombstoneFetcher, err := tombstone.NewTombstoneFetcher(logger, conf.blockMetaFetchConcurrency, bkt, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg), []tombstone.TombstoneFilter{})
+	if err != nil {
+		return errors.Wrap(err, "tombstone fetcher")
+	}
+
 	// Limit the concurrency on queries against the Thanos store.
 	if conf.maxConcurrency < 0 {
 		return errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", conf.maxConcurrency)
@@ -342,6 +348,7 @@ func runStore(
 	bs, err := store.NewBucketStore(
 		bkt,
 		metaFetcher,
+		tombstoneFetcher,
 		conf.dataDir,
 		store.NewChunksLimiterFactory(conf.maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		store.NewSeriesLimiterFactory(conf.maxTouchedSeriesCount),

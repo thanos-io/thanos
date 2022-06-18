@@ -144,7 +144,7 @@ type MetadataFetcher interface {
 	UpdateOnChange(func([]metadata.Meta, error))
 }
 
-// Filter allows filtering or modifying metas from the provided map or returns error.
+// MetadataFilter allows filtering or modifying metas from the provided map or returns error.
 type MetadataFilter interface {
 	Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, modified *extprom.TxGaugeVec) error
 }
