@@ -1488,11 +1488,15 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	}, nil
 }
 
-func (s *BucketStore) SyncTombstones(ctx context.Context) (err error) {
+func (s *BucketStore) SyncTombstones(ctx context.Context) error {
+	tombstones, err := tombstone.ReadTombstones(ctx, s.bkt, s.logger)
+	if err != nil {
+		return err
+	}
 	s.tombstonesMtx.Lock()
-	s.tombstones, err = tombstone.ReadTombstones(ctx, s.bkt, s.logger)
+	s.tombstones = tombstones
 	s.tombstonesMtx.Unlock()
-	return
+	return nil
 }
 
 // bucketBlockSet holds all blocks of an equal label set. It internally splits
