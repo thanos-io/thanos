@@ -277,7 +277,7 @@ type BucketStore struct {
 	metrics          *bucketStoreMetrics
 	bkt              objstore.InstrumentedBucketReader
 	fetcher          block.MetadataFetcher
-	tombstoneFetcher tombstone.TombstoneFetcher
+	tombstoneFetcher tombstone.Fetcher
 	dir              string
 	indexCache       storecache.IndexCache
 	indexReaderPool  *indexheader.ReaderPool
@@ -393,7 +393,7 @@ func WithDebugLogging() BucketStoreOption {
 func NewBucketStore(
 	bkt objstore.InstrumentedBucketReader,
 	fetcher block.MetadataFetcher,
-	tombstoneFetcher tombstone.TombstoneFetcher,
+	tombstoneFetcher tombstone.Fetcher,
 	dir string,
 	chunksLimiterFactory ChunksLimiterFactory,
 	seriesLimiterFactory SeriesLimiterFactory,

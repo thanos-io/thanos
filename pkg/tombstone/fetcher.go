@@ -6,7 +6,6 @@ package tombstone
 import (
 	"context"
 	"encoding/json"
-	"github.com/golang/groupcache/singleflight"
 	"io/ioutil"
 	"os"
 	"path"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/golang/groupcache/singleflight"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -39,12 +39,12 @@ var (
 	ErrorSyncTombstoneCorrupted = errors.New("tombstone corrupted")
 )
 
-type TombstoneFetcher interface {
+type Fetcher interface {
 	Fetch(ctx context.Context) (tombstones map[ulid.ULID]*Tombstone, partial map[ulid.ULID]error, err error)
 }
 
-// TombstoneFilter allows filtering or modifying metas from the provided map or returns error.
-type TombstoneFilter interface {
+// Filter allows filtering or modifying metas from the provided map or returns error.
+type Filter interface {
 	Filter(ctx context.Context, tombstones map[ulid.ULID]*Tombstone, synced *extprom.TxGaugeVec) error
 }
 
@@ -91,22 +91,22 @@ func newFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 	return &m
 }
 
-type Fetcher struct {
+type fetcher struct {
 	bkt    objstore.InstrumentedBucketReader
 	logger log.Logger
 
 	metrics *block.FetcherMetrics
 	wrapped *BaseFetcher
-	filters []TombstoneFilter
+	filters []Filter
 }
 
-// NewTombstoneFetcher returns Fetcher.
-func NewTombstoneFetcher(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, dir string, reg prometheus.Registerer, filters []TombstoneFilter) (*Fetcher, error) {
+// NewFetcher returns Fetcher.
+func NewFetcher(logger log.Logger, concurrency int, bkt objstore.InstrumentedBucketReader, dir string, reg prometheus.Registerer, filters []Filter) (Fetcher, error) {
 	b, err := NewBaseFetcher(logger, concurrency, bkt, dir, reg)
 	if err != nil {
 		return nil, err
 	}
-	return &Fetcher{metrics: newFetcherMetrics(reg, nil, nil), wrapped: b, filters: filters, logger: b.logger}, nil
+	return &fetcher{metrics: newFetcherMetrics(reg, nil, nil), wrapped: b, filters: filters, logger: b.logger}, nil
 }
 
 //func (f *Fetcher) Fetch(ctx context.Context) (tombstones map[ulid.ULID]*Tombstone, partial map[ulid.ULID]error, err error) {
@@ -143,7 +143,7 @@ func NewTombstoneFetcher(logger log.Logger, concurrency int, bkt objstore.Instru
 // It's caller responsibility to not change the returned metadata files. Maps can be modified.
 //
 // Returned error indicates a failure in fetching metadata. Returned meta can be assumed as correct, with some blocks missing.
-func (f *Fetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*Tombstone, partial map[ulid.ULID]error, err error) {
+func (f *fetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*Tombstone, partial map[ulid.ULID]error, err error) {
 	return f.wrapped.fetch(ctx, f.metrics, f.filters)
 }
 
@@ -378,7 +378,7 @@ func (f *BaseFetcher) fetchTombstone(ctx context.Context) (interface{}, error) {
 	return resp, nil
 }
 
-func (f *BaseFetcher) fetch(ctx context.Context, metrics *block.FetcherMetrics, filters []TombstoneFilter) (_ map[ulid.ULID]*Tombstone, _ map[ulid.ULID]error, err error) {
+func (f *BaseFetcher) fetch(ctx context.Context, metrics *block.FetcherMetrics, filters []Filter) (_ map[ulid.ULID]*Tombstone, _ map[ulid.ULID]error, err error) {
 	start := time.Now()
 	defer func() {
 		metrics.SyncDuration.Observe(time.Since(start).Seconds())

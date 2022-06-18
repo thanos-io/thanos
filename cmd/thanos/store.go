@@ -6,10 +6,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/tombstone"
 	"time"
 
 	"github.com/alecthomas/units"
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpclogging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -18,11 +18,8 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/route"
-
 	commonmodel "github.com/prometheus/common/model"
-
-	extflag "github.com/efficientgo/tools/extkingpin"
+	"github.com/prometheus/common/route"
 
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -46,6 +43,7 @@ import (
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tls"
+	"github.com/thanos-io/thanos/pkg/tombstone"
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
@@ -315,7 +313,7 @@ func runStore(
 		return errors.Wrap(err, "meta fetcher")
 	}
 
-	tombstoneFetcher, err := tombstone.NewTombstoneFetcher(logger, conf.blockMetaFetchConcurrency, bkt, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg), []tombstone.TombstoneFilter{})
+	tombstoneFetcher, err := tombstone.NewFetcher(logger, conf.blockMetaFetchConcurrency, bkt, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg), []tombstone.Filter{})
 	if err != nil {
 		return errors.Wrap(err, "tombstone fetcher")
 	}
