@@ -1057,21 +1057,33 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	s.tombstonesMtx.RLock()
 	tombstones := s.tombstones
 	s.tombstonesMtx.RUnlock()
+
+	// Filter tombstones by request time range.
+	matchedTombstones := filterTombstonesByTimeRange(tombstones, req.MinTime, req.MaxTime)
+
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
 			continue
 		}
-		matchedTombstones := make([]*tombstone.Tombstone, 0, len(tombstones))
-		for _, ts := range tombstones {
-			ok, _, err := promMatchesExternalLabels(blockMatchers, ts.Labels)
-			if err != nil {
-				return err
-			}
+		// Filter tombstones by block set external labels.
+		blockSetTombstones := make([]*tombstone.Tombstone, 0, len(matchedTombstones))
+		for _, ts := range matchedTombstones {
+			matchers, ok := ts.MatchLabels(bs.labels)
 			if !ok {
 				continue
 			}
-			matchedTombstones = append(matchedTombstones, ts)
+			// If no matchers are left after removing external label matchers,
+			// we drop the tombstone.
+			if matchers == nil || len(*matchers) == 0 {
+				continue
+			}
+			blockSetTombstones = append(blockSetTombstones, &tombstone.Tombstone{
+				Matchers: matchers,
+				MinTime:  ts.MinTime,
+				MaxTime:  ts.MaxTime,
+				ULID:     ts.ULID,
+			})
 		}
 
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow, reqBlockMatchers)
@@ -1083,6 +1095,26 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		for _, b := range blocks {
 			b := b
 			gctx := gctx
+
+			// Filter tombstones at block level by block metadata.
+			blockTombstones := make([]*tombstone.Tombstone, 0, len(blockSetTombstones))
+			for _, ts := range blockSetTombstones {
+				matchers, ok := ts.MatchMeta(b.meta)
+				if !ok {
+					continue
+				}
+				// If no matchers are left after removing external label matchers,
+				// we drop the tombstone.
+				if matchers == nil || len(*matchers) == 0 {
+					continue
+				}
+				blockTombstones = append(blockTombstones, &tombstone.Tombstone{
+					Matchers: matchers,
+					MinTime:  ts.MinTime,
+					MaxTime:  ts.MaxTime,
+					ULID:     ts.ULID,
+				})
+			}
 
 			if s.enableSeriesResponseHints {
 				// Keep track of queried blocks.
@@ -1120,7 +1152,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					req.SkipChunks,
 					req.MinTime, req.MaxTime,
 					req.Aggregates,
-					matchedTombstones,
+					blockTombstones,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
@@ -2807,4 +2839,20 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 // NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
 func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Bytes, error) {
 	return pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, maxChunkPoolBytes)
+}
+
+// filterTombstonesByTimeRange filters tombstones map by time range and returns a
+// list of tomebstones sorted by min time.
+func filterTombstonesByTimeRange(tombstones map[ulid.ULID]*tombstone.Tombstone, mint, maxt int64) []*tombstone.Tombstone {
+	matchedTombstones := make([]*tombstone.Tombstone, 0, len(tombstones))
+	for _, ts := range tombstones {
+		if !ts.OverlapsClosedInterval(mint, maxt) {
+			continue
+		}
+		matchedTombstones = append(matchedTombstones, ts)
+	}
+	sort.Slice(matchedTombstones, func(i, j int) bool {
+		return matchedTombstones[i].MinTime < matchedTombstones[j].MinTime
+	})
+	return matchedTombstones
 }

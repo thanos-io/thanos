@@ -32,10 +32,16 @@ import (
 
 const (
 	tombstoneSubSys = "tombstone"
+
+	CorruptedTombstone = "corrupted-tombstone"
+	LoadedTombstone    = "loaded"
+	FailedTombstone    = "failed"
+
+	// Synced label values.
+	tooFreshTombstone = "too-fresh"
 )
 
 var (
-	ErrorSyncTombstoneNotFound  = errors.New("tombstone not found")
 	ErrorSyncTombstoneCorrupted = errors.New("tombstone corrupted")
 )
 
@@ -48,7 +54,7 @@ type Filter interface {
 	Filter(ctx context.Context, tombstones map[ulid.ULID]*Tombstone, synced *extprom.TxGaugeVec) error
 }
 
-func newFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExtraLabels [][]string) *block.FetcherMetrics {
+func newFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels [][]string) *block.FetcherMetrics {
 	var m block.FetcherMetrics
 
 	m.Syncs = promauto.With(reg).NewCounter(prometheus.CounterOpts{
@@ -67,34 +73,26 @@ func newFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 		Help:      "Duration of the tombstone synchronization in seconds",
 		Buckets:   []float64{0.01, 1, 10, 100, 300, 600, 1000},
 	})
-	//m.Synced = extprom.NewTxGaugeVec(
-	//	reg,
-	//	prometheus.GaugeOpts{
-	//		Subsystem: tombstoneSubSys,
-	//		Name:      "synced",
-	//		Help:      "Number of tombstone synced",
-	//	},
-	//	[]string{"state"},
-	//	append([][]string{
-	//		{CorruptedMeta},
-	//		{NoMeta},
-	//		{LoadedMeta},
-	//		{tooFreshMeta},
-	//		{FailedMeta},
-	//		{labelExcludedMeta},
-	//		{timeExcludedMeta},
-	//		{duplicateMeta},
-	//		{MarkedForDeletionMeta},
-	//		{MarkedForNoCompactionMeta},
-	//	}, syncedExtraLabels...)...,
-	//)
+	m.Synced = extprom.NewTxGaugeVec(
+		reg,
+		prometheus.GaugeOpts{
+			Subsystem: tombstoneSubSys,
+			Name:      "synced",
+			Help:      "Number of tombstone synced",
+		},
+		[]string{"state"},
+		append([][]string{
+			{CorruptedTombstone},
+			{LoadedTombstone},
+			{tooFreshTombstone},
+			{FailedTombstone},
+		}, syncedExtraLabels...)...,
+	)
 	return &m
 }
 
 type fetcher struct {
-	bkt    objstore.InstrumentedBucketReader
-	logger log.Logger
-
+	logger  log.Logger
 	metrics *block.FetcherMetrics
 	wrapped *BaseFetcher
 	filters []Filter
@@ -106,38 +104,8 @@ func NewFetcher(logger log.Logger, concurrency int, bkt objstore.InstrumentedBuc
 	if err != nil {
 		return nil, err
 	}
-	return &fetcher{metrics: newFetcherMetrics(reg, nil, nil), wrapped: b, filters: filters, logger: b.logger}, nil
+	return &fetcher{metrics: newFetcherMetrics(reg, nil), wrapped: b, filters: filters, logger: b.logger}, nil
 }
-
-//func (f *Fetcher) Fetch(ctx context.Context) (tombstones map[ulid.ULID]*Tombstone, partial map[ulid.ULID]error, err error) {
-//	var (
-//		ts map[ulid.ULID]*Tombstone
-//	)
-//
-//	if err := f.bkt.Iter(ctx, TombstoneDir, func(name string) error {
-//		tombstoneFilename := path.Join("", name)
-//		tombstoneFile, err := f.bkt.Get(ctx, tombstoneFilename)
-//		if err != nil {
-//			return nil
-//		}
-//		defer runutil.CloseWithLogOnErr(f.logger, tombstoneFile, "close bkt tombstone reader")
-//
-//		var t Tombstone
-//		tombstone, err := ioutil.ReadAll(tombstoneFile)
-//		if err != nil {
-//			return nil
-//		}
-//		if err := json.Unmarshal(tombstone, &t); err != nil {
-//			level.Error(f.logger).Log("msg", "failed to unmarshal tombstone", "file", tombstoneFilename, "err", err)
-//			return nil
-//		}
-//		ts = append(ts, &t)
-//		return nil
-//	}); err != nil {
-//		return nil, err
-//	}
-//	return ts, nil
-//}
 
 // Fetch returns all block metas as well as partial blocks (blocks without or with corrupted meta file) from the bucket.
 // It's caller responsibility to not change the returned metadata files. Maps can be modified.
@@ -154,7 +122,7 @@ type BaseFetcher struct {
 	concurrency int
 	bkt         objstore.InstrumentedBucketReader
 
-	// Optional local directory to cache meta.json files.
+	// Optional local directory to cache tombstone files.
 	cacheDir string
 	syncs    prometheus.Counter
 	g        singleflight.Group
@@ -171,7 +139,7 @@ func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.Instrumente
 
 	cacheDir := ""
 	if dir != "" {
-		cacheDir = filepath.Join(dir, "meta-syncer")
+		cacheDir = filepath.Join(dir, "tombstone")
 		if err := os.MkdirAll(cacheDir, os.ModePerm); err != nil {
 			return nil, err
 		}
@@ -183,11 +151,11 @@ func NewBaseFetcher(logger log.Logger, concurrency int, bkt objstore.Instrumente
 		bkt:         bkt,
 		cacheDir:    cacheDir,
 		cached:      map[ulid.ULID]*Tombstone{},
-		//syncs: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		//	Subsystem: fetcherSubSys,
-		//	Name:      "base_syncs_total",
-		//	Help:      "Total tombstone synchronization attempts by base Fetcher",
-		//}),
+		syncs: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Subsystem: tombstoneSubSys,
+			Name:      "base_syncs_total",
+			Help:      "Total tombstone synchronization attempts by base Fetcher",
+		}),
 	}, nil
 }
 
@@ -203,65 +171,63 @@ type response struct {
 // loadMeta returns metadata from object storage or error.
 // It returns `ErrorSyncMetaNotFound` and `ErrorSyncMetaCorrupted` sentinel errors in those cases.
 func (f *BaseFetcher) loadTombstone(ctx context.Context, id ulid.ULID) (*Tombstone, error) {
-	tombstoneFile := path.Join(TombstoneDir, id.String()+".json")
-	ok, err := f.bkt.Exists(ctx, tombstoneFile)
+	fileName := id.String() + ".json"
+	tombstonePath := path.Join(TombstoneDir, fileName)
+	ok, err := f.bkt.Exists(ctx, tombstonePath)
 	if err != nil {
-		return nil, errors.Wrapf(err, "%s file doesn't exist", tombstoneFile)
+		return nil, errors.Wrapf(err, "%s file exists", tombstonePath)
 	}
+	// If the tombstone file is missing, we ignored it.
 	if !ok {
-		return nil, ErrorSyncTombstoneNotFound
+		return nil, nil
 	}
 
 	if m, seen := f.cached[id]; seen {
 		return m, nil
 	}
 
-	//// Best effort load from local dir.
-	//if f.cacheDir != "" {
-	//	m, err := metadata.ReadFromDir(cachedBlockDir)
-	//	if err == nil {
-	//		return m, nil
-	//	}
-	//
-	//	if !errors.Is(err, os.ErrNotExist) {
-	//		level.Warn(f.logger).Log("msg", "best effort read of the local meta.json failed; removing cached block dir", "dir", cachedBlockDir, "err", err)
-	//		if err := os.RemoveAll(cachedBlockDir); err != nil {
-	//			level.Warn(f.logger).Log("msg", "best effort remove of cached dir failed; ignoring", "dir", cachedBlockDir, "err", err)
-	//		}
-	//	}
-	//}
+	// Best effort load from local dir.
+	if f.cacheDir != "" {
+		t, err := ReadFromPath(path.Join(f.cacheDir, fileName))
+		if err == nil {
+			return t, nil
+		}
 
-	r, err := f.bkt.ReaderWithExpectedErrs(f.bkt.IsObjNotFoundErr).Get(ctx, tombstoneFile)
+		if !errors.Is(err, os.ErrNotExist) {
+			level.Warn(f.logger).Log("msg", "best effort read of the local tombstone failed; removing cached tombstone", "tombstone", fileName, "err", err)
+			if err := os.Remove(fileName); err != nil {
+				level.Warn(f.logger).Log("msg", "best effort remove of cached tombstone failed; ignoring", "tombstone", fileName, "err", err)
+			}
+		}
+	}
+
+	r, err := f.bkt.ReaderWithExpectedErrs(f.bkt.IsObjNotFoundErr).Get(ctx, tombstonePath)
 	if f.bkt.IsObjNotFoundErr(err) {
-		// Meta.json was deleted between bkt.Exists and here.
-		return nil, errors.Wrapf(ErrorSyncTombstoneNotFound, "%v", err)
+		// tombstone was deleted between bkt.Exists and here.
+		return nil, nil
 	}
 	if err != nil {
-		return nil, errors.Wrapf(err, "get tombstone file: %v", tombstoneFile)
+		return nil, errors.Wrapf(err, "get tombstone file: %v", tombstonePath)
 	}
 
 	defer runutil.CloseWithLogOnErr(f.logger, r, "close bkt meta get")
 
 	content, err := ioutil.ReadAll(r)
 	if err != nil {
-		return nil, errors.Wrapf(err, "read meta file: %v", tombstoneFile)
+		return nil, errors.Wrapf(err, "read meta file: %v", tombstonePath)
 	}
 
 	var t Tombstone
 	if err := json.Unmarshal(content, &t); err != nil {
-		return nil, errors.Wrapf(ErrorSyncTombstoneCorrupted, "tombstone %v unmarshal: %v", tombstoneFile, err)
+		return nil, errors.Wrapf(ErrorSyncTombstoneCorrupted, "tombstone %v unmarshal: %v", tombstonePath, err)
 	}
 
-	//// Best effort cache in local dir.
-	//if f.cacheDir != "" {
-	//	if err := os.MkdirAll(cachedBlockDir, os.ModePerm); err != nil {
-	//		level.Warn(f.logger).Log("msg", "best effort mkdir of the meta.json block dir failed; ignoring", "dir", cachedBlockDir, "err", err)
-	//	}
-	//
-	//	if err := m.WriteToDir(f.logger, cachedBlockDir); err != nil {
-	//		level.Warn(f.logger).Log("msg", "best effort save of the meta.json to local dir failed; ignoring", "dir", cachedBlockDir, "err", err)
-	//	}
-	//}
+	// Best effort cache in local dir.
+	if f.cacheDir != "" {
+		if err := t.WriteToDir(f.logger, f.cacheDir); err != nil {
+			level.Warn(f.logger).Log("msg", "best effort save of the tombstone to local dir failed; ignoring", "tombstone", fileName, "err", err)
+		}
+	}
 	return &t, nil
 }
 
@@ -309,11 +275,15 @@ func (f *BaseFetcher) fetchTombstone(ctx context.Context) (interface{}, error) {
 		})
 	}
 
-	// Workers scheduled, distribute blocks.
+	// Workers scheduled, distribute tombstones.
 	eg.Go(func() error {
 		defer close(ch)
 		return f.bkt.Iter(ctx, TombstoneDir, func(name string) error {
-			id, err := ulid.Parse(strings.TrimSuffix(filepath.Base(name), ".json"))
+			base := filepath.Base(name)
+			if !strings.HasSuffix(base, ".json") {
+				return nil
+			}
+			id, err := ulid.Parse(strings.TrimSuffix(base, ".json"))
 			if err != nil {
 				return nil
 			}
@@ -335,46 +305,6 @@ func (f *BaseFetcher) fetchTombstone(ctx context.Context) (interface{}, error) {
 	if len(resp.tombstoneErrs) > 0 {
 		return resp, nil
 	}
-
-	//// Only for complete view of blocks update the cache.
-	//cached := make(map[ulid.ULID]*metadata.Meta, len(resp.metas))
-	//for id, m := range resp.metas {
-	//	cached[id] = m
-	//}
-
-	//f.mtx.Lock()
-	//f.cached = cached
-	//f.mtx.Unlock()
-
-	//// Best effort cleanup of disk-cached metas.
-	//if f.cacheDir != "" {
-	//	fis, err := ioutil.ReadDir(f.cacheDir)
-	//	names := make([]string, 0, len(fis))
-	//	for _, fi := range fis {
-	//		names = append(names, fi.Name())
-	//	}
-	//	if err != nil {
-	//		level.Warn(f.logger).Log("msg", "best effort remove of not needed cached dirs failed; ignoring", "err", err)
-	//	} else {
-	//		for _, n := range names {
-	//			id, ok := IsBlockDir(n)
-	//			if !ok {
-	//				continue
-	//			}
-	//
-	//			if _, ok := resp.metas[id]; ok {
-	//				continue
-	//			}
-	//
-	//			cachedBlockDir := filepath.Join(f.cacheDir, id.String())
-	//
-	//			// No such block loaded, remove the local dir.
-	//			if err := os.RemoveAll(cachedBlockDir); err != nil {
-	//				level.Warn(f.logger).Log("msg", "best effort remove of not needed cached dir failed; ignoring", "dir", cachedBlockDir, "err", err)
-	//			}
-	//		}
-	//	}
-	//}
 	return resp, nil
 }
 
@@ -387,7 +317,7 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *block.FetcherMetrics, 
 		}
 	}()
 	metrics.Syncs.Inc()
-	metrics.ResetTx()
+	metrics.Synced.ResetTx()
 
 	// Run this in thread safe run group.
 	v, err := f.g.Do("", func() (i interface{}, err error) {
@@ -405,9 +335,8 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *block.FetcherMetrics, 
 		tombstones[id] = m
 	}
 
-	//metrics.Synced.WithLabelValues(FailedMeta).Set(float64(len(resp.metaErrs)))
-	//metrics.Synced.WithLabelValues(NoMeta).Set(resp.noMetas)
-	//metrics.Synced.WithLabelValues(CorruptedMeta).Set(resp.corruptedMetas)
+	metrics.Synced.WithLabelValues(FailedTombstone).Set(float64(len(resp.tombstoneErrs)))
+	metrics.Synced.WithLabelValues(CorruptedTombstone).Set(resp.corruptedTombstones)
 
 	for _, filter := range filters {
 		// NOTE: filter can update synced metric accordingly to the reason of the exclude.
@@ -416,8 +345,8 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *block.FetcherMetrics, 
 		}
 	}
 
-	//metrics.Synced.WithLabelValues(LoadedMeta).Set(float64(len(metas)))
-	metrics.Submit()
+	metrics.Synced.WithLabelValues(LoadedTombstone).Set(float64(len(tombstones)))
+	metrics.Synced.Submit()
 
 	if len(resp.tombstoneErrs) > 0 {
 		return tombstones, resp.partial, errors.Wrap(resp.tombstoneErrs.Err(), "incomplete view")
@@ -427,16 +356,36 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *block.FetcherMetrics, 
 	return tombstones, resp.partial, nil
 }
 
-// TombstoneDelayFilter considers the tombstone file only after it exists longer than the delay period.
-type TombstoneDelayFilter struct {
+// DelayTombstoneFilter considers the tombstone file only after it exists longer than the delay period.
+type DelayTombstoneFilter struct {
 	delay  time.Duration
 	logger log.Logger
 }
 
-func (f *TombstoneDelayFilter) Filter(_ context.Context, tombstones map[ulid.ULID]*Tombstone, synced *extprom.TxGaugeVec) error {
+// ConsistencyDelayMetaFilter is a BaseFetcher filter that filters out blocks that are created before a specified consistency delay.
+// Not go-routine safe.
+type ConsistencyDelayMetaFilter struct {
+	logger           log.Logger
+	consistencyDelay time.Duration
+}
+
+// NewDelayTombstoneFilter creates DelayTombstoneFilter.
+func NewDelayTombstoneFilter(logger log.Logger, delay time.Duration) *DelayTombstoneFilter {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+
+	return &DelayTombstoneFilter{
+		logger: logger,
+		delay:  delay,
+	}
+}
+
+func (f *DelayTombstoneFilter) Filter(_ context.Context, tombstones map[ulid.ULID]*Tombstone, synced *extprom.TxGaugeVec) error {
 	for id := range tombstones {
 		if ulid.Now()-id.Time() < uint64(f.delay/time.Millisecond) {
 			level.Debug(f.logger).Log("msg", "tombstone is too fresh for now", "tombstone", id)
+			synced.WithLabelValues(tooFreshTombstone).Inc()
 			delete(tombstones, id)
 		}
 	}

@@ -183,6 +183,9 @@ Flags:
       --sync-tombstone-duration=3m
                                  Repeat interval for syncing the tombstones
                                  between local and remote view.
+      --tombstone-fetch-concurrency=4
+                                 Number of goroutines to use when fetching
+                                 tombstones from object storage.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file with

@@ -163,7 +163,7 @@ func (m Meta) WriteToDir(logger log.Logger, dir string) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return renameFile(logger, tmp, path)
+	return RenameFile(logger, tmp, path)
 }
 
 // Write writes the given encoded meta to writer.
@@ -173,7 +173,7 @@ func (m Meta) Write(w io.Writer) error {
 	return enc.Encode(&m)
 }
 
-func renameFile(logger log.Logger, from, to string) error {
+func RenameFile(logger log.Logger, from, to string) error {
 	if err := os.RemoveAll(to); err != nil {
 		return err
 	}

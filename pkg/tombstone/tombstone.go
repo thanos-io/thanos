@@ -7,15 +7,19 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"os"
+	"path"
+	"path/filepath"
+
 	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/labels"
+
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"io/ioutil"
-	"path"
 )
 
 const (
@@ -31,13 +35,10 @@ type Tombstone struct {
 	MaxTime  int64              `json:"maxTime"`
 	Author   string             `json:"author"`
 	Reason   string             `json:"reason"`
-	// Labels are the external labels identifying the producer as well as tenant.
-	// See https://thanos.io/tip/thanos/storage.md#external-labels for details.
-	Labels labels.Labels `json:"labels"`
 }
 
 // NewTombstone returns a new instance of Tombstone.
-func NewTombstone(ulid ulid.ULID, matchers metadata.Matchers, minTime, maxTime int64, author, reason string, labels labels.Labels) *Tombstone {
+func NewTombstone(ulid ulid.ULID, matchers metadata.Matchers, minTime, maxTime int64, author, reason string) *Tombstone {
 	return &Tombstone{
 		ULID:     ulid,
 		Matchers: &matchers,
@@ -45,8 +46,49 @@ func NewTombstone(ulid ulid.ULID, matchers metadata.Matchers, minTime, maxTime i
 		MaxTime:  maxTime,
 		Author:   author,
 		Reason:   reason,
-		Labels:   labels,
 	}
+}
+
+// ReadFromPath the tombstone from filesystem path.
+func ReadFromPath(path string) (_ *Tombstone, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer runutil.ExhaustCloseWithErrCapture(&err, f, "close tombstone")
+
+	var t Tombstone
+	if err = json.NewDecoder(f).Decode(&t); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// WriteToDir writes the encoded meta into <dir>/meta.json.
+func (t *Tombstone) WriteToDir(logger log.Logger, dir string) error {
+	// Make any changes to the file appear atomic.
+	path := filepath.Join(dir, t.ULID.String()+".json")
+	tmp := path + ".tmp"
+
+	f, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+
+	if err := t.Write(f); err != nil {
+		runutil.CloseWithLogOnErr(logger, f, "close tombstone")
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return metadata.RenameFile(logger, tmp, path)
+}
+
+func (t *Tombstone) Write(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "\t")
+	return enc.Encode(&t)
 }
 
 // UploadTombstone uploads the given tombstone to object storage.
@@ -56,35 +98,36 @@ func UploadTombstone(ctx context.Context, tombstone *Tombstone, bkt objstore.Buc
 		return err
 	}
 
-	tsPath := path.Join(TombstoneDir, tombstone.ULID.String())
+	tsPath := path.Join(TombstoneDir, tombstone.ULID.String()+".json")
 	return bkt.Upload(ctx, tsPath, bytes.NewBuffer(b))
 }
 
-// ReadTombstones returns all the tombstones present in the object storage.
-func ReadTombstones(ctx context.Context, bkt objstore.InstrumentedBucketReader, logger log.Logger) ([]*Tombstone, error) {
-	var ts []*Tombstone
+// OverlapsClosedInterval Returns true if the chunk overlaps [mint, maxt].
+func (t *Tombstone) OverlapsClosedInterval(mint, maxt int64) bool {
+	return t.MinTime <= maxt && mint <= t.MaxTime
+}
 
-	if err := bkt.Iter(ctx, TombstoneDir, func(name string) error {
-		tombstoneFilename := path.Join("", name)
-		tombstoneFile, err := bkt.Get(ctx, tombstoneFilename)
-		if err != nil {
-			return nil
-		}
-		defer runutil.CloseWithLogOnErr(logger, tombstoneFile, "close bkt tombstone reader")
-
-		var t Tombstone
-		tombstone, err := ioutil.ReadAll(tombstoneFile)
-		if err != nil {
-			return nil
-		}
-		if err := json.Unmarshal(tombstone, &t); err != nil {
-			level.Error(logger).Log("msg", "failed to unmarshal tombstone", "file", tombstoneFilename, "err", err)
-			return nil
-		}
-		ts = append(ts, &t)
-		return nil
-	}); err != nil {
-		return nil, err
+func (t *Tombstone) MatchMeta(meta *metadata.Meta) (*metadata.Matchers, bool) {
+	if !t.OverlapsClosedInterval(meta.MinTime, meta.MaxTime-1) {
+		return nil, false
 	}
-	return ts, nil
+	// We add the special __block_id label to support matching by block ID.
+	lbls := labels.FromMap(meta.Thanos.Labels)
+	lbls = append(lbls, labels.Label{Name: block.BlockIDLabel, Value: meta.ULID.String()})
+	return t.MatchLabels(lbls)
+}
+
+func (t *Tombstone) MatchLabels(lbls labels.Labels) (*metadata.Matchers, bool) {
+	matchers := make(metadata.Matchers, 0, len(*t.Matchers))
+	for _, m := range *t.Matchers {
+		v := lbls.Get(m.Name)
+		if v == "" {
+			matchers = append(matchers, m)
+			continue
+		}
+		if !m.Matches(v) {
+			return nil, false
+		}
+	}
+	return &matchers, true
 }

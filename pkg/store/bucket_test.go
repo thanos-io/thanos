@@ -54,6 +54,7 @@ import (
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
+	"github.com/thanos-io/thanos/pkg/tombstone"
 )
 
 var emptyRelabelConfig = make([]*relabel.Config, 0)
@@ -599,6 +600,7 @@ func TestBucketStore_Info(t *testing.T) {
 	bucketStore, err := NewBucketStore(
 		nil,
 		nil,
+		nil,
 		dir,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
@@ -844,9 +846,13 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			})
 			testutil.Ok(t, err)
 
+			tombstoneFetcher, err := tombstone.NewFetcher(logger, 20, objstore.WithNoopInstr(bkt), dir, nil, []tombstone.Filter{})
+			testutil.Ok(t, err)
+
 			bucketStore, err := NewBucketStore(
 				objstore.WithNoopInstr(rec),
 				metaFetcher,
+				tombstoneFetcher,
 				dir,
 				NewChunksLimiterFactory(0),
 				NewSeriesLimiterFactory(0),
@@ -1281,6 +1287,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 	st, err := NewBucketStore(
 		ibkt,
 		f,
+		nil,
 		tmpDir,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
@@ -1654,6 +1661,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	store, err := NewBucketStore(
 		instrBkt,
 		fetcher,
+		nil,
 		tmpDir,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
@@ -1746,6 +1754,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	store, err := NewBucketStore(
 		instrBkt,
 		fetcher,
+		nil,
 		tmpDir,
 		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
@@ -1929,6 +1938,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 	store, err := NewBucketStore(
 		instrBkt,
 		fetcher,
+		nil,
 		tmpDir,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
@@ -2315,5 +2325,25 @@ func BenchmarkDownsampledBlockSeries(b *testing.B) {
 				benchmarkBlockSeriesWithConcurrency(b, concurrency, blockMeta, blk, aggrs)
 			})
 		}
+	}
+}
+
+// TODO: finish tests.
+func TestFilterTombstonesByTimeRange(t *testing.T) {
+	for _, tcase := range []struct {
+		name       string
+		tombstones map[ulid.ULID]*tombstone.Tombstone
+		mint       int64
+		maxt       int64
+		expected   []*tombstone.Tombstone
+	}{
+		{
+			name: "",
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			got := filterTombstonesByTimeRange(tcase.tombstones, tcase.mint, tcase.maxt)
+			testutil.Equals(t, tcase.expected, got)
+		})
 	}
 }

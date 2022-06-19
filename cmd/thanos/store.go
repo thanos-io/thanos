@@ -64,6 +64,7 @@ type storeConfig struct {
 	syncTombstonesInterval      time.Duration
 	blockSyncConcurrency        int
 	blockMetaFetchConcurrency   int
+	tombstoneFetchConcurrency   int
 	filterConf                  *store.FilterConfig
 	selectorRelabelConf         extflag.PathOrContent
 	advertiseCompatibilityLabel bool
@@ -125,6 +126,9 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("sync-tombstone-duration", "Repeat interval for syncing the tombstones between local and remote view.").
 		Default("3m").DurationVar(&sc.syncTombstonesInterval)
+
+	cmd.Flag("tombstone-fetch-concurrency", "Number of goroutines to use when fetching tombstones from object storage.").
+		Default("4").IntVar(&sc.tombstoneFetchConcurrency)
 
 	sc.filterConf = &store.FilterConfig{}
 
@@ -313,7 +317,7 @@ func runStore(
 		return errors.Wrap(err, "meta fetcher")
 	}
 
-	tombstoneFetcher, err := tombstone.NewFetcher(logger, conf.blockMetaFetchConcurrency, bkt, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg), []tombstone.Filter{})
+	tombstoneFetcher, err := tombstone.NewFetcher(logger, conf.tombstoneFetchConcurrency, bkt, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg), []tombstone.Filter{})
 	if err != nil {
 		return errors.Wrap(err, "tombstone fetcher")
 	}
