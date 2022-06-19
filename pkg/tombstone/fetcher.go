@@ -305,6 +305,17 @@ func (f *BaseFetcher) fetchTombstone(ctx context.Context) (interface{}, error) {
 	if len(resp.tombstoneErrs) > 0 {
 		return resp, nil
 	}
+
+	// Only for complete view update the cache.
+	cached := make(map[ulid.ULID]*Tombstone, len(resp.tombstones))
+	for id, m := range resp.tombstones {
+		cached[id] = m
+	}
+
+	f.mtx.Lock()
+	f.cached = cached
+	f.mtx.Unlock()
+
 	return resp, nil
 }
 
@@ -360,13 +371,6 @@ func (f *BaseFetcher) fetch(ctx context.Context, metrics *block.FetcherMetrics, 
 type DelayTombstoneFilter struct {
 	delay  time.Duration
 	logger log.Logger
-}
-
-// ConsistencyDelayMetaFilter is a BaseFetcher filter that filters out blocks that are created before a specified consistency delay.
-// Not go-routine safe.
-type ConsistencyDelayMetaFilter struct {
-	logger           log.Logger
-	consistencyDelay time.Duration
 }
 
 // NewDelayTombstoneFilter creates DelayTombstoneFilter.

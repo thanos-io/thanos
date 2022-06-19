@@ -876,7 +876,8 @@ PostingsLoop:
 				s.refs = append(s.refs, meta.Ref)
 			}
 
-			// If all chunks are matched by the tombstone then check next posting.
+			// If all chunks are matched by the tombstone then
+			// we don't need to add current series entry, check next posting.
 			if len(s.chks) == 0 {
 				continue PostingsLoop
 			}
