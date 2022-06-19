@@ -50,23 +50,14 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 	var err error
 
 	if config.Endpoint != "" {
-		var jaegerCollectorEndpointOptions []otel_jaeger.CollectorEndpointOption
-		if config.User != "" {
-			jaegerCollectorEndpointOptions = append(jaegerCollectorEndpointOptions, otel_jaeger.WithUsername(config.User))
-		}
-		if config.Password != "" {
-			jaegerCollectorEndpointOptions = append(jaegerCollectorEndpointOptions, otel_jaeger.WithPassword(config.Password))
-		}
-		jaegerCollectorEndpointOptions = append(jaegerCollectorEndpointOptions, otel_jaeger.WithEndpoint(config.Endpoint))
+		jaegerCollectorEndpointOptions := getCollectorEndpoints(config)
 
 		exporter, err = otel_jaeger.New(otel_jaeger.WithCollectorEndpoint(jaegerCollectorEndpointOptions...))
 		if err != nil {
 			return nil, err
 		}
 	} else if config.AgentHost != "" && config.AgentPort != 0 {
-		var jaegerAgentEndpointOptions []otel_jaeger.AgentEndpointOption
-		jaegerAgentEndpointOptions = append(jaegerAgentEndpointOptions, otel_jaeger.WithAgentHost(config.AgentHost))
-		jaegerAgentEndpointOptions = append(jaegerAgentEndpointOptions, otel_jaeger.WithAgentPort(strconv.Itoa(config.AgentPort)))
+		jaegerAgentEndpointOptions := getAgentEndpointOptions(config)
 
 		exporter, err = otel_jaeger.New(otel_jaeger.WithAgentEndpoint(jaegerAgentEndpointOptions...))
 		if err != nil {
@@ -83,6 +74,27 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 	tp := newTraceProvider(ctx, logger, processor, config.SamplerParam, config.ServiceName)
 
 	return tp, nil
+}
+
+func getCollectorEndpoints(config Config) []otel_jaeger.CollectorEndpointOption {
+	var jaegerCollectorEndpointOptions []otel_jaeger.CollectorEndpointOption
+	if config.User != "" {
+		jaegerCollectorEndpointOptions = append(jaegerCollectorEndpointOptions, otel_jaeger.WithUsername(config.User))
+	}
+	if config.Password != "" {
+		jaegerCollectorEndpointOptions = append(jaegerCollectorEndpointOptions, otel_jaeger.WithPassword(config.Password))
+	}
+	jaegerCollectorEndpointOptions = append(jaegerCollectorEndpointOptions, otel_jaeger.WithEndpoint(config.Endpoint))
+
+	return jaegerCollectorEndpointOptions
+}
+
+func getAgentEndpointOptions(config Config) []otel_jaeger.AgentEndpointOption {
+	var jaegerAgentEndpointOptions []otel_jaeger.AgentEndpointOption
+	jaegerAgentEndpointOptions = append(jaegerAgentEndpointOptions, otel_jaeger.WithAgentHost(config.AgentHost))
+	jaegerAgentEndpointOptions = append(jaegerAgentEndpointOptions, otel_jaeger.WithAgentPort(strconv.Itoa(config.AgentPort)))
+
+	return jaegerAgentEndpointOptions
 }
 
 func newTraceProvider(ctx context.Context, logger log.Logger, processor tracesdk.SpanProcessor,

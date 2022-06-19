@@ -35,6 +35,28 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 		return nil, err
 	}
 
+	options := traceOptions(config)
+
+	client := otlptracehttp.NewClient(options...)
+	exporter, err := otlptrace.New(ctx, client)
+	if err != nil {
+		level.Error(logger).Log("err with new client", err.Error())
+		return nil, err
+	}
+
+	tp := tracesdk.NewTracerProvider(
+		tracesdk.WithBatcher(exporter),
+		tracesdk.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+		)),
+	)
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	return tp, nil
+}
+
+func traceOptions(config Config) []otlptracehttp.Option {
 	var options []otlptracehttp.Option
 	if config.Endpoint != "" {
 		options = append(options, otlptracehttp.WithEndpoint(config.Endpoint))
@@ -60,21 +82,5 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 		options = append(options, otlptracehttp.WithTimeout(config.Timeout))
 	}
 
-	client := otlptracehttp.NewClient(options...)
-	exporter, err := otlptrace.New(ctx, client)
-	if err != nil {
-		level.Error(logger).Log("err with new client", err.Error())
-		return nil, err
-	}
-
-	tp := tracesdk.NewTracerProvider(
-		tracesdk.WithBatcher(exporter),
-		tracesdk.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-		)),
-	)
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-
-	return tp, nil
+	return options
 }
