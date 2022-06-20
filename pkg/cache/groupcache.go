@@ -150,7 +150,7 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 	galaxyhttp.RegisterHTTPHandler(universe, &galaxyhttp.HTTPOptions{
 		BasePath: basepath,
 	}, mux)
-	r.Get(filepath.Join(basepath, conf.GroupcacheGroup, ":key"), mux.ServeHTTP)
+	r.Get(filepath.Join(basepath, conf.GroupcacheGroup, "*key"), mux.ServeHTTP)
 
 	galaxy := universe.NewGalaxy(conf.GroupcacheGroup, int64(conf.MaxSize), galaxycache.GetterFunc(
 		func(ctx context.Context, id string, dest galaxycache.Codec) error {
@@ -254,7 +254,7 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 		},
 	))
 
-	RegisterCacheStatsCollector(galaxy, reg)
+	RegisterCacheStatsCollector(galaxy, &conf, reg)
 
 	return &Groupcache{
 		logger:   logger,
@@ -262,6 +262,30 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 		universe: universe,
 		timeout:  conf.Timeout,
 	}, nil
+}
+
+// unsafeByteCodec is a byte slice type that implements Codec.
+type unsafeByteCodec struct {
+	bytes  []byte
+	expire time.Time
+}
+
+// MarshalBinary returns the contained byte-slice.
+func (c *unsafeByteCodec) MarshalBinary() ([]byte, time.Time, error) {
+	return c.bytes, c.expire, nil
+}
+
+// UnmarshalBinary to provided data so they share the same backing array
+// this is a generally unsafe performance optimization, but safe in our
+// case because we always use ioutil.ReadAll(). That is fine though
+// because later that slice remains in our local cache.
+// Used https://github.com/vimeo/galaxycache/pull/23/files as inspiration.
+// TODO(GiedriusS): figure out if pooling could be used somehow by hooking into
+// eviction.
+func (c *unsafeByteCodec) UnmarshalBinary(data []byte, expire time.Time) error {
+	c.bytes = data
+	c.expire = expire
+	return nil
 }
 
 func (c *Groupcache) Store(ctx context.Context, data map[string][]byte, ttl time.Duration) {
@@ -278,16 +302,16 @@ func (c *Groupcache) Fetch(ctx context.Context, keys []string) map[string][]byte
 	}
 
 	for _, k := range keys {
-		codec := galaxycache.ByteCodec{}
+		codec := unsafeByteCodec{}
 
 		if err := c.galaxy.Get(ctx, k, &codec); err != nil {
-			level.Error(c.logger).Log("msg", "failed fetching data from groupcache", "err", err, "key", k)
+			level.Debug(c.logger).Log("msg", "failed fetching data from groupcache", "err", err, "key", k)
 			continue
 		}
 
 		retrievedData, _, err := codec.MarshalBinary()
 		if err != nil {
-			level.Error(c.logger).Log("msg", "failed retrieving data", "err", err, "key", k)
+			level.Debug(c.logger).Log("msg", "failed retrieving data", "err", err, "key", k)
 			continue
 		}
 
@@ -305,8 +329,13 @@ func (c *Groupcache) Name() string {
 
 type CacheStatsCollector struct {
 	galaxy *galaxycache.Galaxy
+	conf   *GroupcacheConfig
 
 	// GalaxyCache Metric descriptions.
+	bytes             *prometheus.Desc
+	evictions         *prometheus.Desc
+	items             *prometheus.Desc
+	maxBytes          *prometheus.Desc
 	gets              *prometheus.Desc
 	loads             *prometheus.Desc
 	peerLoads         *prometheus.Desc
@@ -317,7 +346,16 @@ type CacheStatsCollector struct {
 }
 
 // RegisterCacheStatsCollector registers a groupcache metrics collector.
-func RegisterCacheStatsCollector(galaxy *galaxycache.Galaxy, reg prometheus.Registerer) {
+func RegisterCacheStatsCollector(galaxy *galaxycache.Galaxy, conf *GroupcacheConfig, reg prometheus.Registerer) {
+	// Cache metrics.
+	bytes := prometheus.NewDesc("thanos_cache_groupcache_bytes", "The number of bytes in the main cache.", []string{"cache"}, nil)
+	evictions := prometheus.NewDesc("thanos_cache_groupcache_evictions_total", "The number items evicted from the cache.", []string{"cache"}, nil)
+	items := prometheus.NewDesc("thanos_cache_groupcache_items", "The number of items in the cache.", []string{"cache"}, nil)
+
+	// Configuration Metrics.
+	maxBytes := prometheus.NewDesc("thanos_cache_groupcache_max_bytes", "The max number of bytes in the cache.", nil, nil)
+
+	// GroupCache metrics.
 	gets := prometheus.NewDesc("thanos_cache_groupcache_get_requests_total", "Total number of get requests, including from peers.", nil, nil)
 	loads := prometheus.NewDesc("thanos_cache_groupcache_loads_total", "Total number of loads from backend (gets - cacheHits).", nil, nil)
 	peerLoads := prometheus.NewDesc("thanos_cache_groupcache_peer_loads_total", "Total number of loads from peers (remote load or remote cache hit).", nil, nil)
@@ -328,6 +366,11 @@ func RegisterCacheStatsCollector(galaxy *galaxycache.Galaxy, reg prometheus.Regi
 
 	collector := &CacheStatsCollector{
 		galaxy:            galaxy,
+		conf:              conf,
+		bytes:             bytes,
+		evictions:         evictions,
+		items:             items,
+		maxBytes:          maxBytes,
 		gets:              gets,
 		loads:             loads,
 		peerLoads:         peerLoads,
@@ -340,6 +383,14 @@ func RegisterCacheStatsCollector(galaxy *galaxycache.Galaxy, reg prometheus.Regi
 }
 
 func (s *CacheStatsCollector) Collect(ch chan<- prometheus.Metric) {
+	for _, cache := range []galaxycache.CacheType{galaxycache.MainCache, galaxycache.HotCache} {
+		cacheStats := s.galaxy.CacheStats(cache)
+		ch <- prometheus.MustNewConstMetric(s.bytes, prometheus.GaugeValue, float64(cacheStats.Bytes), cache.String())
+		ch <- prometheus.MustNewConstMetric(s.evictions, prometheus.GaugeValue, float64(cacheStats.Evictions), cache.String())
+		ch <- prometheus.MustNewConstMetric(s.items, prometheus.GaugeValue, float64(cacheStats.Items), cache.String())
+	}
+
+	ch <- prometheus.MustNewConstMetric(s.maxBytes, prometheus.GaugeValue, float64(s.conf.MaxSize))
 	ch <- prometheus.MustNewConstMetric(s.gets, prometheus.CounterValue, float64(s.galaxy.Stats.Gets.Get()))
 	ch <- prometheus.MustNewConstMetric(s.loads, prometheus.CounterValue, float64(s.galaxy.Stats.Loads.Get()))
 	ch <- prometheus.MustNewConstMetric(s.peerLoads, prometheus.CounterValue, float64(s.galaxy.Stats.PeerLoads.Get()))

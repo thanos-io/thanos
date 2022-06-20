@@ -167,8 +167,6 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, we
 }
 
 type QuerierBuilder struct {
-	environment    e2e.Environment
-	sharedDir      string
 	name           string
 	routePrefix    string
 	externalPrefix string
@@ -186,15 +184,20 @@ type QuerierBuilder struct {
 	replicaLabels []string
 	tracingConfig string
 
+	e2e.Linkable
 	f e2e.FutureInstrumentedRunnable
 }
 
 func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string) *QuerierBuilder {
-	const replicaLabel = "replica"
-
+	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("querier-%v", name)).
+		WithPorts(map[string]int{
+			"http": 8080,
+			"grpc": 9091,
+		}, "http").
+		Future()
 	return &QuerierBuilder{
-		environment:    e,
-		sharedDir:      e.SharedDir(),
+		Linkable:       f,
+		f:              f,
 		name:           name,
 		storeAddresses: storeAddresses,
 		image:          DefaultImage(),
@@ -268,21 +271,8 @@ func (q *QuerierBuilder) WithReplicaLabels(labels ...string) *QuerierBuilder {
 	return q
 }
 
-func (q *QuerierBuilder) Future() e2e.FutureInstrumentedRunnable {
-	if q.f != nil {
-		return q.f
-	}
-	q.f = e2e.NewInstrumentedRunnable(q.environment, fmt.Sprintf("querier-%v", q.name)).
-		WithPorts(map[string]int{
-			"http": 8080,
-			"grpc": 9091,
-		}, "http").
-		Future()
-	return q.f
-}
-
 func (q *QuerierBuilder) Init() e2e.InstrumentedRunnable {
-	args, err := q.collectArgs(q.Future())
+	args, err := q.collectArgs()
 	if err != nil {
 		return e2e.NewErrInstrumentedRunnable(q.name, err)
 	}
@@ -294,7 +284,9 @@ func (q *QuerierBuilder) Init() e2e.InstrumentedRunnable {
 	}))
 }
 
-func (q *QuerierBuilder) collectArgs(f e2e.FutureInstrumentedRunnable) ([]string, error) {
+const replicaLabel = "replica"
+
+func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	args := e2e.BuildArgs(map[string]string{
 		"--debug.name":            fmt.Sprintf("querier-%v", q.name),
 		"--grpc-address":          ":9091",
@@ -331,7 +323,7 @@ func (q *QuerierBuilder) collectArgs(f e2e.FutureInstrumentedRunnable) ([]string
 		args = append(args, "--endpoint="+addr)
 	}
 	if len(q.fileSDStoreAddresses) > 0 {
-		if err := os.MkdirAll(f.Dir(), 0750); err != nil {
+		if err := os.MkdirAll(q.Dir(), 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
 		}
 
@@ -345,11 +337,11 @@ func (q *QuerierBuilder) collectArgs(f e2e.FutureInstrumentedRunnable) ([]string
 			return nil, err
 		}
 
-		if err := ioutil.WriteFile(f.Dir()+"/filesd.yaml", b, 0600); err != nil {
+		if err := ioutil.WriteFile(q.Dir()+"/filesd.yaml", b, 0600); err != nil {
 			return nil, errors.Wrap(err, "creating query SD config failed")
 		}
 
-		args = append(args, "--store.sd-files="+filepath.Join(f.InternalDir(), "filesd.yaml"))
+		args = append(args, "--store.sd-files="+filepath.Join(q.InternalDir(), "filesd.yaml"))
 	}
 	if q.routePrefix != "" {
 		args = append(args, "--web.route-prefix="+q.routePrefix)
@@ -365,152 +357,188 @@ func (q *QuerierBuilder) collectArgs(f e2e.FutureInstrumentedRunnable) ([]string
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
 
-// NewFutureReceiver returns a future receiver that can be initiated. It is useful
-// for obtaining a receiver address for hashring before the receiver is started.
-func NewFutureReceiver(e e2e.Environment, name string) e2e.FutureInstrumentedRunnable {
-	return e2e.NewInstrumentedRunnable(e, fmt.Sprintf("receive-%v", name)).
+type ReceiveBuilder struct {
+	e2e.Linkable
+
+	f e2e.FutureInstrumentedRunnable
+
+	maxExemplars    int
+	ingestion       bool
+	hashringConfigs []receive.HashringConfig
+	relabelConfigs  []*relabel.Config
+	replication     int
+	image           string
+}
+
+func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
+	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("receive-%v", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091, "remote-write": 8081}, "http").
 		Future()
+	return &ReceiveBuilder{
+		Linkable:    f,
+		f:           f,
+		replication: 1,
+		image:       DefaultImage(),
+	}
 }
 
-// NewRoutingAndIngestingReceiverFromFuture creates a Thanos Receive instances from a future service.
-// It is configured both for ingesting samples and routing samples to other receivers.
-func NewRoutingAndIngestingReceiverFromFuture(f e2e.FutureInstrumentedRunnable, replicationFactor int, hashring ...receive.HashringConfig) e2e.InstrumentedRunnable {
-	var localEndpoint string
-	if len(hashring) == 0 {
-		localEndpoint = "0.0.0.0:9091"
-		hashring = []receive.HashringConfig{{Endpoints: []string{localEndpoint}}}
-	} else {
-		localEndpoint = f.InternalEndpoint("grpc")
+func (r *ReceiveBuilder) WithImage(image string) *ReceiveBuilder {
+	r.image = image
+	return r
+}
+
+func (r *ReceiveBuilder) WithExemplarsInMemStorage(maxExemplars int) *ReceiveBuilder {
+	r.maxExemplars = maxExemplars
+	r.ingestion = true
+	return r
+}
+
+func (r *ReceiveBuilder) WithIngestionEnabled() *ReceiveBuilder {
+	r.ingestion = true
+	return r
+}
+
+func (r *ReceiveBuilder) WithRouting(replication int, hashringConfigs ...receive.HashringConfig) *ReceiveBuilder {
+	r.hashringConfigs = hashringConfigs
+	r.replication = replication
+	return r
+}
+
+func (r *ReceiveBuilder) WithRelabelConfigs(relabelConfigs []*relabel.Config) *ReceiveBuilder {
+	r.relabelConfigs = relabelConfigs
+	return r
+}
+
+// Init creates a Thanos Receive instance.
+// If ingestion is enabled it will be configured for ingesting samples.
+// If routing is configured (i.e. hashring configuration is provided) it routes samples to other receivers.
+// If none, it errors out.
+func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
+	if !r.ingestion && len(r.hashringConfigs) == 0 {
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.New("enable ingestion or configure routing for this receiver"))
 	}
 
-	if err := os.MkdirAll(filepath.Join(f.Dir(), "data"), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(f.Name(), errors.Wrap(err, "create receive dir"))
-	}
-	b, err := json.Marshal(hashring)
-	if err != nil {
-		return e2e.NewErrInstrumentedRunnable(f.Name(), errors.Wrapf(err, "generate hashring file: %v", hashring))
+	args := map[string]string{
+		"--debug.name":           r.Name(),
+		"--grpc-address":         ":9091",
+		"--grpc-grace-period":    "0s",
+		"--http-address":         ":8080",
+		"--remote-write.address": ":8081",
+		"--label":                fmt.Sprintf(`receive="%s"`, r.Name()),
+		"--tsdb.path":            filepath.Join(r.InternalDir(), "data"),
+		"--log.level":            infoLogLevel,
+		"--tsdb.max-exemplars":   fmt.Sprintf("%v", r.maxExemplars),
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "hashrings.json"), b, 0600); err != nil {
-		return e2e.NewErrInstrumentedRunnable(f.Name(), errors.Wrap(err, "creating receive config"))
+	hashring := r.hashringConfigs
+	if len(hashring) > 0 && r.ingestion {
+		args["--receive.local-endpoint"] = r.InternalEndpoint("grpc")
 	}
 
-	return f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image: DefaultImage(),
-		Command: // TODO(bwplotka): BuildArgs should be interface.
-		e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
-			"--debug.name":                              f.Name(),
-			"--grpc-address":                            ":9091",
-			"--grpc-grace-period":                       "0s",
-			"--http-address":                            ":8080",
-			"--remote-write.address":                    ":8081",
-			"--label":                                   fmt.Sprintf(`receive="%s"`, f.Name()),
-			"--tsdb.path":                               filepath.Join(f.InternalDir(), "data"),
-			"--log.level":                               infoLogLevel,
-			"--receive.replication-factor":              strconv.Itoa(replicationFactor),
-			"--receive.local-endpoint":                  localEndpoint,
-			"--receive.hashrings-file":                  filepath.Join(f.InternalDir(), "hashrings.json"),
-			"--receive.hashrings-file-refresh-interval": "5s",
-		})...),
+	if err := os.MkdirAll(filepath.Join(r.Dir(), "data"), 0750); err != nil {
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "create receive dir"))
+	}
+
+	if len(hashring) > 0 {
+		b, err := json.Marshal(hashring)
+		if err != nil {
+			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate hashring file: %v", hashring))
+		}
+
+		if err := ioutil.WriteFile(filepath.Join(r.Dir(), "hashrings.json"), b, 0600); err != nil {
+			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "creating receive config"))
+		}
+
+		args["--receive.hashrings-file"] = filepath.Join(r.InternalDir(), "hashrings.json")
+		args["--receive.hashrings-file-refresh-interval"] = "5s"
+		args["--receive.replication-factor"] = strconv.Itoa(r.replication)
+	}
+
+	if len(r.relabelConfigs) > 0 {
+		relabelConfigBytes, err := yaml.Marshal(r.relabelConfigs)
+		if err != nil {
+			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate relabel configs: %v", relabelConfigBytes))
+		}
+		args["--receive.relabel-config"] = string(relabelConfigBytes)
+	}
+
+	return r.f.Init(wrapWithDefaults(e2e.StartOptions{
+		Image:     r.image,
+		Command:   e2e.NewCommand("receive", e2e.BuildArgs(args)...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	}))
 }
 
-// NewRoutingReceiver creates a Thanos Receive instance that is only configured to route to other receive instances. It has no local storage.
-func NewRoutingReceiver(e e2e.Environment, name string, replicationFactor int, hashring ...receive.HashringConfig) e2e.InstrumentedRunnable {
-	if len(hashring) == 0 {
-		return e2e.NewErrInstrumentedRunnable(name, errors.New("hashring should not be empty for receive-distributor mode"))
-	}
+type RulerBuilder struct {
+	e2e.Linkable
 
-	f := NewFutureReceiver(e, name)
-	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create receive dir"))
-	}
-	b, err := json.Marshal(hashring)
-	if err != nil {
-		e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate hashring file: %v", hashring))
-	}
+	f e2e.FutureInstrumentedRunnable
 
-	return f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image: DefaultImage(),
-		// TODO(bwplotka): BuildArgs should be interface.
-		Command: e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
-			"--debug.name":                 fmt.Sprintf("receive-%v", name),
-			"--grpc-address":               ":9091",
-			"--grpc-grace-period":          "0s",
-			"--http-address":               ":8080",
-			"--remote-write.address":       ":8081",
-			"--label":                      fmt.Sprintf(`receive="%s"`, name),
-			"--tsdb.path":                  filepath.Join(f.InternalDir(), "data"),
-			"--log.level":                  infoLogLevel,
-			"--receive.replication-factor": strconv.Itoa(replicationFactor),
-			"--receive.hashrings":          string(b),
-		})...),
-		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-	}))
+	amCfg        []alert.AlertmanagerConfig
+	replicaLabel string
+	image        string
 }
 
-// NewIngestingReceiver creates a Thanos Receive instance that is only configured to ingest, not route to other receivers.
-func NewIngestingReceiver(e e2e.Environment, name string) e2e.InstrumentedRunnable {
-	f := NewFutureReceiver(e, name)
-	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create receive dir"))
-	}
-
-	return f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image: DefaultImage(),
-		// TODO(bwplotka): BuildArgs should be interface.
-		Command: e2e.NewCommand("receive", e2e.BuildArgs(map[string]string{
-			"--debug.name":           fmt.Sprintf("receive-%v", name),
-			"--grpc-address":         ":9091",
-			"--grpc-grace-period":    "0s",
-			"--http-address":         ":8080",
-			"--remote-write.address": ":8081",
-			"--label":                fmt.Sprintf(`receive="%s"`, name),
-			"--tsdb.path":            filepath.Join(f.InternalDir(), "data"),
-			"--log.level":            infoLogLevel,
-		})...),
-		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-	}))
-}
-
-func NewTSDBRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config) e2e.InstrumentedRunnable {
-	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, nil, true)
-}
-
-func NewStatelessRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig, withReplicaLabel bool) e2e.InstrumentedRunnable {
-	return newRuler(e, name, ruleSubDir, amCfg, queryCfg, remoteWriteCfg, withReplicaLabel)
-}
-
-func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.AlertmanagerConfig, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig, withReplicaLabel bool) e2e.InstrumentedRunnable {
-	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("rule-%v", name)).
+// NewRulerBuilder is a Ruler future that allows extra configuration before initialization.
+func NewRulerBuilder(e e2e.Environment, name string) *RulerBuilder {
+	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("rule-%s", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}, "http").
 		Future()
+	return &RulerBuilder{
+		replicaLabel: name,
+		Linkable:     f,
+		f:            f,
+		image:        DefaultImage(),
+	}
+}
 
-	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create rule dir"))
+func (r *RulerBuilder) WithImage(image string) *RulerBuilder {
+	r.image = image
+	return r
+}
+
+func (r *RulerBuilder) WithAlertManagerConfig(amCfg []alert.AlertmanagerConfig) *RulerBuilder {
+	r.amCfg = amCfg
+	return r
+}
+
+func (r *RulerBuilder) WithReplicaLabel(replicaLabel string) *RulerBuilder {
+	r.replicaLabel = replicaLabel
+	return r
+}
+
+func (r *RulerBuilder) InitTSDB(internalRuleDir string, queryCfg []httpconfig.Config) e2e.InstrumentedRunnable {
+	return r.initRule(internalRuleDir, queryCfg, nil)
+}
+
+func (r *RulerBuilder) InitStateless(internalRuleDir string, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) e2e.InstrumentedRunnable {
+	return r.initRule(internalRuleDir, queryCfg, remoteWriteCfg)
+}
+
+func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Config, remoteWriteCfg []*config.RemoteWriteConfig) e2e.InstrumentedRunnable {
+	if err := os.MkdirAll(r.f.Dir(), 0750); err != nil {
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "create rule dir"))
 	}
 
 	amCfgBytes, err := yaml.Marshal(alert.AlertingConfig{
-		Alertmanagers: amCfg,
+		Alertmanagers: r.amCfg,
 	})
 	if err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate am file: %v", amCfg))
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate am file: %v", r.amCfg))
 	}
 
 	queryCfgBytes, err := yaml.Marshal(queryCfg)
 	if err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate query file: %v", queryCfg))
+		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate query file: %v", queryCfg))
 	}
 
 	ruleArgs := map[string]string{
-		"--debug.name":                    fmt.Sprintf("rule-%v", name),
+		"--debug.name":                    r.Name(),
 		"--grpc-address":                  ":9091",
 		"--grpc-grace-period":             "0s",
 		"--http-address":                  ":8080",
-		"--data-dir":                      f.InternalDir(),
-		"--rule-file":                     filepath.Join(f.InternalDir(), ruleSubDir, "*.yaml"),
+		"--data-dir":                      r.InternalDir(),
+		"--rule-file":                     filepath.Join(internalRuleDir, "*.yaml"),
 		"--eval-interval":                 "1s",
 		"--alertmanagers.config":          string(amCfgBytes),
 		"--alertmanagers.sd-dns-interval": "1s",
@@ -519,23 +547,21 @@ func newRuler(e e2e.Environment, name, ruleSubDir string, amCfg []alert.Alertman
 		"--query.sd-dns-interval":         "1s",
 		"--resend-delay":                  "5s",
 	}
-
-	if withReplicaLabel {
-		ruleArgs["--label"] = fmt.Sprintf("replica=%s", name)
+	if r.replicaLabel != "" {
+		ruleArgs["--label"] = fmt.Sprintf(`%s="%s"`, replicaLabel, r.replicaLabel)
 	}
-
 	if remoteWriteCfg != nil {
 		rwCfgBytes, err := yaml.Marshal(struct {
 			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
 		}{remoteWriteCfg})
 		if err != nil {
-			return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate remote write config: %v", remoteWriteCfg))
+			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate remote write config: %v", remoteWriteCfg))
 		}
 		ruleArgs["--remote-write.config"] = string(rwCfgBytes)
 	}
 
-	return f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image:     DefaultImage(),
+	return r.f.Init(wrapWithDefaults(e2e.StartOptions{
+		Image:     r.image,
 		Command:   e2e.NewCommand("rule", e2e.BuildArgs(ruleArgs)...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	}))
@@ -583,7 +609,7 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}, "http").
 		Future()
 
-	if err := os.MkdirAll(f.InternalDir(), 0750); err != nil {
+	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create store dir"))
 	}
 
@@ -624,31 +650,42 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 	}))
 }
 
-func NewCompactor(e e2e.Environment, name string, bucketConfig client.BucketConfig, relabelConfig []relabel.Config, extArgs ...string) e2e.InstrumentedRunnable {
+type CompactorBuilder struct {
+	e2e.Linkable
+	f e2e.FutureInstrumentedRunnable
+}
+
+func NewCompactorBuilder(e e2e.Environment, name string) *CompactorBuilder {
 	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("compact-%s", name)).
 		WithPorts(map[string]int{"http": 8080}, "http").
 		Future()
+	return &CompactorBuilder{
+		Linkable: f,
+		f:        f,
+	}
+}
 
-	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create compact dir"))
+func (c *CompactorBuilder) Init(bucketConfig client.BucketConfig, relabelConfig []relabel.Config, extArgs ...string) e2e.InstrumentedRunnable {
+	if err := os.MkdirAll(c.Dir(), 0750); err != nil {
+		return e2e.NewErrInstrumentedRunnable(c.Name(), errors.Wrap(err, "create compact dir"))
 	}
 
 	bktConfigBytes, err := yaml.Marshal(bucketConfig)
 	if err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate compact config file: %v", bucketConfig))
+		return e2e.NewErrInstrumentedRunnable(c.Name(), errors.Wrapf(err, "generate compact config file: %v", bucketConfig))
 	}
 
 	relabelConfigBytes, err := yaml.Marshal(relabelConfig)
 	if err != nil {
-		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "generate compact relabel file: %v", relabelConfig))
+		return e2e.NewErrInstrumentedRunnable(c.Name(), errors.Wrapf(err, "generate compact relabel file: %v", relabelConfig))
 	}
 
-	return f.Init(wrapWithDefaults(e2e.StartOptions{
+	return c.f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image: DefaultImage(),
 		Command: e2e.NewCommand("compact", append(e2e.BuildArgs(map[string]string{
-			"--debug.name":               fmt.Sprintf("compact-%s", name),
+			"--debug.name":               c.Name(),
 			"--log.level":                infoLogLevel,
-			"--data-dir":                 f.InternalDir(),
+			"--data-dir":                 c.InternalDir(),
 			"--objstore.config":          string(bktConfigBytes),
 			"--http-address":             ":8080",
 			"--block-sync-concurrency":   "50",
@@ -718,7 +755,7 @@ http {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating nginx config file failed"))
 	}
 
-	return e2e.NewInstrumentedRunnable(e, fmt.Sprintf("nginx-%s", name)).WithPorts(map[string]int{"http": 80}, "http").Init(
+	return f.Init(
 		e2e.StartOptions{
 			Image:            "docker.io/nginx:1.21.1-alpine",
 			Volumes:          []string{filepath.Join(f.Dir(), "/nginx.conf") + ":/etc/nginx/nginx.conf:ro"},
@@ -733,12 +770,8 @@ http {
 func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable {
 	image := "minio/minio:RELEASE.2019-12-30T05-45-39Z"
 	minioKESGithubContent := "https://raw.githubusercontent.com/minio/kes/master"
-	commands := []string{
-		"curl -sSL --tlsv1.2 -O '%s/root.key'	-O '%s/root.cert'",
-		"mkdir -p /data/%s && minio server --certs-dir /shared/data/certs --address :%v --quiet /data",
-	}
 
-	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("minio-", name)).
+	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("minio-%s", name)).
 		WithPorts(map[string]int{"https": 8090}, "https").
 		Future()
 
@@ -750,30 +783,33 @@ func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable 
 		filepath.Join(f.Dir(), "certs", "public.crt"),
 		filepath.Join(f.Dir(), "certs", "private.key"),
 		filepath.Join(f.Dir(), "certs", "CAs", "ca.crt"),
-		e.Name()+"-"+name,
+		fmt.Sprintf("%s-minio-%s", e.Name(), name),
 	); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "fail to generate certs"))
 	}
 
-	return f.Init(
-		e2e.StartOptions{
-			Image: image,
-			// Create the required bucket before starting minio.
-			Command:   e2e.NewCommandWithoutEntrypoint("sh", "-c", fmt.Sprintf(strings.Join(commands, " && "), minioKESGithubContent, minioKESGithubContent, bktName, 8090)),
-			Readiness: e2e.NewHTTPSReadinessProbe("https", "/minio/health/ready", 200, 200),
-			EnvVars: map[string]string{
-				"MINIO_ACCESS_KEY": e2edb.MinioAccessKey,
-				"MINIO_SECRET_KEY": e2edb.MinioSecretKey,
-				"MINIO_BROWSER":    "off",
-				"ENABLE_HTTPS":     "1",
-				// https://docs.min.io/docs/minio-kms-quickstart-guide.html
-				"MINIO_KMS_KES_ENDPOINT":  "https://play.min.io:7373",
-				"MINIO_KMS_KES_KEY_FILE":  "root.key",
-				"MINIO_KMS_KES_CERT_FILE": "root.cert",
-				"MINIO_KMS_KES_KEY_NAME":  "my-minio-key",
-			},
+	commands := []string{
+		fmt.Sprintf("curl -sSL --tlsv1.2 -O '%s/root.key' -O '%s/root.cert'", minioKESGithubContent, minioKESGithubContent),
+		fmt.Sprintf("mkdir -p /data/%s && minio server --certs-dir %s/certs --address :%v --quiet /data", bktName, f.InternalDir(), 8090),
+	}
+
+	return f.Init(e2e.StartOptions{
+		Image: image,
+		// Create the required bucket before starting minio.
+		Command:   e2e.NewCommandWithoutEntrypoint("sh", "-c", strings.Join(commands, " && ")),
+		Readiness: e2e.NewHTTPSReadinessProbe("https", "/minio/health/ready", 200, 200),
+		EnvVars: map[string]string{
+			"MINIO_ACCESS_KEY": e2edb.MinioAccessKey,
+			"MINIO_SECRET_KEY": e2edb.MinioSecretKey,
+			"MINIO_BROWSER":    "off",
+			"ENABLE_HTTPS":     "1",
+			// https://docs.min.io/docs/minio-kms-quickstart-guide.html
+			"MINIO_KMS_KES_ENDPOINT":  "https://play.min.io:7373",
+			"MINIO_KMS_KES_KEY_FILE":  "root.key",
+			"MINIO_KMS_KES_CERT_FILE": "root.cert",
+			"MINIO_KMS_KES_KEY_NAME":  "my-minio-key",
 		},
-	)
+	})
 }
 
 func NewMemcached(e e2e.Environment, name string) e2e.InstrumentedRunnable {
@@ -923,6 +959,7 @@ func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 				KeyFile:  filepath.Join(basePath, "certs", "private.key"),
 			},
 		},
+		BucketLookupType: s3.AutoLookup,
 	}
 }
 

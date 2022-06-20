@@ -96,6 +96,7 @@ type Reloader struct {
 
 	lastCfgHash         []byte
 	lastWatchedDirsHash []byte
+	forceReload         bool
 
 	reloads                    prometheus.Counter
 	reloadErrors               prometheus.Counter
@@ -352,7 +353,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		watchedDirsHash = h.Sum(nil)
 	}
 
-	if bytes.Equal(r.lastCfgHash, cfgHash) && bytes.Equal(r.lastWatchedDirsHash, watchedDirsHash) {
+	if !r.forceReload && bytes.Equal(r.lastCfgHash, cfgHash) && bytes.Equal(r.lastWatchedDirsHash, watchedDirsHash) {
 		// Nothing to do.
 		return nil
 	}
@@ -368,6 +369,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			return errors.Wrap(err, "trigger reload")
 		}
 
+		r.forceReload = false
 		r.lastCfgHash = cfgHash
 		r.lastWatchedDirsHash = watchedDirsHash
 		level.Info(r.logger).Log(
@@ -379,6 +381,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		r.lastReloadSuccessTimestamp.SetToCurrentTime()
 		return nil
 	}); err != nil {
+		r.forceReload = true
 		level.Error(r.logger).Log("msg", "Failed to trigger reload. Retrying.", "err", err)
 	}
 

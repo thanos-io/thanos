@@ -26,8 +26,10 @@ import (
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"google.golang.org/grpc"
@@ -322,7 +324,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		cfg[0].Endpoints = append(cfg[0].Endpoints, h.options.Endpoint)
 		peers.cache[addr] = &fakeRemoteWriteGRPCServer{h: h}
 	}
-	hashring := newMultiHashring(cfg)
+	hashring := newMultiHashring(AlgorithmHashmod, cfg)
 	for _, h := range handlers {
 		h.Hashring(hashring)
 	}
@@ -1299,4 +1301,373 @@ func Heap(dir string) (err error) {
 	}
 	defer runutil.CloseWithErrCapture(&err, f, "close")
 	return pprof.WriteHeapProfile(f)
+}
+
+func TestRelabel(t *testing.T) {
+	for _, tcase := range []struct {
+		name                 string
+		relabel              []*relabel.Config
+		writeRequest         prompb.WriteRequest
+		expectedWriteRequest prompb.WriteRequest
+	}{
+		{
+			name: "empty relabel configs",
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "has relabel configs but no relabelling applied",
+			relabel: []*relabel.Config{
+				{
+					SourceLabels: model.LabelNames{"zoo"},
+					TargetLabel:  "bar",
+					Regex:        relabel.MustNewRegexp("bar"),
+					Action:       relabel.Replace,
+					Replacement:  "baz",
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "relabel rewrite existing labels",
+			relabel: []*relabel.Config{
+				{
+					TargetLabel: "foo",
+					Action:      relabel.Replace,
+					Regex:       relabel.MustNewRegexp(""),
+					Replacement: "test",
+				},
+				{
+					TargetLabel: "__name__",
+					Action:      relabel.Replace,
+					Regex:       relabel.MustNewRegexp(""),
+					Replacement: "foo",
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "foo",
+							},
+							{
+								Name:  "foo",
+								Value: "test",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "relabel drops label",
+			relabel: []*relabel.Config{
+				{
+					Action: relabel.LabelDrop,
+					Regex:  relabel.MustNewRegexp("foo"),
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "relabel drops time series",
+			relabel: []*relabel.Config{
+				{
+					SourceLabels: model.LabelNames{"foo"},
+					Action:       relabel.Drop,
+					Regex:        relabel.MustNewRegexp("bar"),
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{},
+			},
+		},
+		{
+			name: "relabel rewrite existing exemplar series labels",
+			relabel: []*relabel.Config{
+				{
+					Action: relabel.LabelDrop,
+					Regex:  relabel.MustNewRegexp("foo"),
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Exemplars: []prompb.Exemplar{
+							{
+								Labels: []labelpb.ZLabel{
+									{
+										Name:  "traceID",
+										Value: "foo",
+									},
+								},
+								Value:     1,
+								Timestamp: 1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+						},
+						Exemplars: []prompb.Exemplar{
+							{
+								Labels: []labelpb.ZLabel{
+									{
+										Name:  "traceID",
+										Value: "foo",
+									},
+								},
+								Value:     1,
+								Timestamp: 1,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "relabel drops exemplars",
+			relabel: []*relabel.Config{
+				{
+					SourceLabels: model.LabelNames{"foo"},
+					Action:       relabel.Drop,
+					Regex:        relabel.MustNewRegexp("bar"),
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Exemplars: []prompb.Exemplar{
+							{
+								Labels: []labelpb.ZLabel{
+									{
+										Name:  "traceID",
+										Value: "foo",
+									},
+								},
+								Value:     1,
+								Timestamp: 1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{},
+			},
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			h := NewHandler(nil, &Options{
+				RelabelConfigs: tcase.relabel,
+			})
+
+			h.relabel(&tcase.writeRequest)
+			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
+		})
+	}
 }

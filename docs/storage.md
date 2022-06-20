@@ -89,6 +89,7 @@ config:
   trace:
     enable: false
   list_objects_version: ""
+  bucket_lookup_type: auto
   part_size: 67108864
   sse_config:
     type: ""
@@ -96,11 +97,14 @@ config:
     kms_encryption_context: {}
     encryption_key: ""
   sts_endpoint: ""
+prefix: ""
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
 
 However if you set `aws_sdk_auth: true` Thanos will use the default authentication methods of the AWS SDK for go based on [known environment variables](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html) (`AWS_PROFILE`, `AWS_WEB_IDENTITY_TOKEN_FILE` ... etc) and known AWS config files (~/.aws/config). If you turn this on, then the `bucket` and `endpoint` are the required config keys.
+
+The field `prefix` can be used to transparently use prefixes in your S3 bucket. This allows you to separate blocks coming from different sources into paths with different prefixes, making it easier to understand what's going on (i.e. you don't have to use Thanos tooling to know from where which blocks came).
 
 The AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/s3.html).
 
@@ -115,6 +119,8 @@ Please refer to the documentation of [the Transport type](https://golang.org/pkg
 Set `list_objects_version: "v1"` for S3 compatible APIs that don't support ListObjectsV2 (e.g. some versions of Ceph). Default value (`""`) is equivalent to `"v2"`.
 
 `http_config.tls_config` allows configuring TLS connections. Please refer to the document of [tls_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#tls_config) for detailed information on what each option does.
+
+`bucket_lookup_type` can be `auto`, `virtual-hosted` or `path`. Read more about it [here](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html).
 
 For debug and testing purposes you can set
 
@@ -255,6 +261,7 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+prefix: ""
 ```
 
 ##### Using GOOGLE_APPLICATION_CREDENTIALS
@@ -356,6 +363,7 @@ config:
       key_file: ""
       server_name: ""
       insecure_skip_verify: false
+prefix: ""
 ```
 
 If `msi_resource` is used, authentication is done via system-assigned managed identity. The value for Azure should be `https://<storage-account-name>.blob.core.windows.net`.
@@ -396,6 +404,7 @@ config:
   connect_timeout: 10s
   timeout: 5m
   use_dynamic_large_objects: false
+prefix: ""
 ```
 
 #### Tencent COS
@@ -421,6 +430,7 @@ config:
     max_idle_conns: 100
     max_idle_conns_per_host: 100
     max_conns_per_host: 0
+prefix: ""
 ```
 
 The `secret_key` and `secret_id` field is required. The `http_config` field is optional for optimize HTTP transport settings. There are two ways to configure the required bucket information:
@@ -442,6 +452,7 @@ config:
   bucket: ""
   access_key_id: ""
   access_key_secret: ""
+prefix: ""
 ```
 
 Use --objstore.config-file to reference to this configuration file.
@@ -457,6 +468,7 @@ config:
   endpoint: ""
   access_key: ""
   secret_key: ""
+prefix: ""
 ```
 
 #### Filesystem
@@ -469,6 +481,7 @@ NOTE: This storage type is experimental and might be inefficient. It is NOT advi
 type: FILESYSTEM
 config:
   directory: ""
+prefix: ""
 ```
 
 ### How to add a new client to Thanos?

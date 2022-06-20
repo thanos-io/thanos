@@ -39,28 +39,29 @@ func TestRulesAPI_Fanout(t *testing.T) {
 
 	// Use querier work dir for shared resources (easiest to obtain).
 	promRulesSubDir := filepath.Join("rules")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Future().Dir(), promRulesSubDir), os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Dir(), promRulesSubDir), os.ModePerm))
 	// Create the abort_on_partial_response alert for Prometheus.
 	// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.
-	createRuleFile(t, filepath.Join(qBuilder.Future().Dir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
+	createRuleFile(t, filepath.Join(qBuilder.Dir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
 
 	thanosRulesSubDir := filepath.Join("thanos-rules")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Future().Dir(), thanosRulesSubDir), os.ModePerm))
-	createRuleFiles(t, filepath.Join(qBuilder.Future().Dir(), thanosRulesSubDir))
+	testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Dir(), thanosRulesSubDir), os.ModePerm))
+	createRuleFiles(t, filepath.Join(qBuilder.Dir(), thanosRulesSubDir))
 	// We create a rule group with limit.
-	createRuleFile(t, filepath.Join(qBuilder.Future().Dir(), thanosRulesSubDir, "rules-with-limit.yaml"), testAlertRuleWithLimit)
+	createRuleFile(t, filepath.Join(qBuilder.Dir(), thanosRulesSubDir, "rules-with-limit.yaml"), testAlertRuleWithLimit)
+
 	// 2x Prometheus.
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
-		e2ethanos.DefaultPromConfig("ha", 0, "", filepath.Join(qBuilder.Future().InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 0, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
 	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
-		e2ethanos.DefaultPromConfig("ha", 1, "", filepath.Join(qBuilder.Future().InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 1, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
@@ -69,15 +70,15 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	queryCfg := []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
-				StaticAddresses: []string{qBuilder.Future().InternalEndpoint("http")},
+				StaticAddresses: []string{qBuilder.InternalEndpoint("http")},
 				Scheme:          "http",
 			},
 		},
 	}
 
 	// Recreate rulers with the corresponding query config.
-	r1 := e2ethanos.NewTSDBRuler(e, "rule1", thanosRulesSubDir, nil, queryCfg)
-	r2 := e2ethanos.NewTSDBRuler(e, "rule2", thanosRulesSubDir, nil, queryCfg)
+	r1 := e2ethanos.NewRulerBuilder(e, "rule1").InitTSDB(filepath.Join(qBuilder.InternalDir(), thanosRulesSubDir), queryCfg)
+	r2 := e2ethanos.NewRulerBuilder(e, "rule2").InitTSDB(filepath.Join(qBuilder.InternalDir(), thanosRulesSubDir), queryCfg)
 	testutil.Ok(t, e2e.StartAndWaitReady(r1, r2))
 
 	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")}
@@ -95,7 +96,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	ruleAndAssert(t, ctx, q.Endpoint("http"), "", []*rulespb.RuleGroup{
 		{
 			Name: "example_abort",
-			File: "/shared/rules/rules.yaml",
+			File: "/shared/data/querier-query/rules/rules.yaml",
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
@@ -111,7 +112,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		},
 		{
 			Name: "example_abort",
-			File: "/shared/thanos-rules/rules-0.yaml",
+			File: "/shared/data/querier-query/thanos-rules/rules-0.yaml",
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
@@ -126,7 +127,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		},
 		{
 			Name: "example_warn",
-			File: "/shared/thanos-rules/rules-1.yaml",
+			File: "/shared/data/querier-query/thanos-rules/rules-1.yaml",
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_WarnOnPartialResponse",
@@ -141,7 +142,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		},
 		{
 			Name:  "example_with_limit",
-			File:  "/shared/thanos-rules/rules-with-limit.yaml",
+			File:  "/shared/data/querier-query/thanos-rules/rules-with-limit.yaml",
 			Limit: 1,
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{

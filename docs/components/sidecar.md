@@ -56,6 +56,7 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+prefix: ""
 ```
 
 ## Upload compacted blocks

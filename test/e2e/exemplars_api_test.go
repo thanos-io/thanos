@@ -41,7 +41,7 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 	prom1, sidecar1 = e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
-		e2ethanos.DefaultPromConfig("ha", 0, "", "", "localhost:9090", qBuilder.Future().InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 0, "", "", "localhost:9090", qBuilder.InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(),
 		"",
@@ -50,7 +50,7 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 	prom2, sidecar2 = e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
-		e2ethanos.DefaultPromConfig("ha", 1, "", "", "localhost:9090", qBuilder.Future().InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 1, "", "", "localhost:9090", qBuilder.InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(),
 		"",
@@ -61,7 +61,7 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 config:
   sampler_type: const
   sampler_param: 1
-  service_name: %s`, qBuilder.Future().Name())
+  service_name: %s`, qBuilder.Name())
 
 	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")}
 

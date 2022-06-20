@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"google.golang.org/grpc"
@@ -38,6 +39,7 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -81,6 +83,7 @@ type Options struct {
 	TLSConfig         *tls.Config
 	DialOpts          []grpc.DialOption
 	ForwardTimeout    time.Duration
+	RelabelConfigs    []*relabel.Config
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -350,6 +353,13 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		level.Debug(tLogger).Log("msg", "empty remote write request; client bug or newer remote write protocol used?; skipping")
+		return
+	}
+
+	// Apply relabeling configs.
+	h.relabel(&wreq)
+	if len(wreq.Timeseries) == 0 {
+		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
 		return
 	}
 
@@ -680,6 +690,23 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	default:
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+}
+
+// relabel relabels the time series labels in the remote write request.
+func (h *Handler) relabel(wreq *prompb.WriteRequest) {
+	if len(h.options.RelabelConfigs) == 0 {
+		return
+	}
+	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
+	for _, ts := range wreq.Timeseries {
+		lbls := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		if lbls == nil {
+			continue
+		}
+		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+		timeSeries = append(timeSeries, ts)
+	}
+	wreq.Timeseries = timeSeries
 }
 
 // isConflict returns whether or not the given error represents a conflict.

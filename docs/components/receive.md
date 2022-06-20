@@ -44,6 +44,7 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+prefix: ""
 ```
 
 The example content of `hashring.json`:
@@ -126,6 +127,9 @@ Flags:
                                  Alternative to 'receive.hashrings-file' flag
                                  (lower priority). Content of file that contains
                                  the hashring configuration.
+      --receive.hashrings-algorithm=hashmod
+                                 The algorithm used when distributing series in
+                                 the hashrings. Must be one of hashmod, ketama
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
                                  configuration. A watcher is initialized to
@@ -137,6 +141,15 @@ Flags:
       --receive.local-endpoint=RECEIVE.LOCAL-ENDPOINT
                                  Endpoint of local receive node. Used to
                                  identify the local node in the hashring
+                                 configuration. If it's empty AND hashring
+                                 configuration was provided, it means that
+                                 receive will run in RoutingOnly mode.
+      --receive.relabel-config=<content>
+                                 Alternative to 'receive.relabel-config-file'
+                                 flag (mutually exclusive). Content of YAML file
+                                 that contains relabeling configuration.
+      --receive.relabel-config-file=<file-path>
+                                 Path to YAML file that contains relabeling
                                  configuration.
       --receive.replica-header="THANOS-REPLICA"
                                  HTTP header specifying the replica number of a

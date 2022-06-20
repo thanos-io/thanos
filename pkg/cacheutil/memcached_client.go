@@ -88,6 +88,21 @@ type memcachedClientBackend interface {
 	Set(item *memcache.Item) error
 }
 
+// updatableServerSelector extends the interface used for picking a memcached server
+// for a key to allow servers to be updated at runtime. It allows the selector used
+// by the client to be mocked in tests.
+type updatableServerSelector interface {
+	memcache.ServerSelector
+
+	// SetServers changes a ServerSelector's set of servers at runtime
+	// and is safe for concurrent use by multiple goroutines.
+	//
+	// SetServers returns an error if any of the server names fail to
+	// resolve. No attempt is made to connect to the server. If any
+	// error occurs, no changes are made to the internal server list.
+	SetServers(servers ...string) error
+}
+
 // MemcachedClientConfig is the config accepted by RemoteCacheClient.
 type MemcachedClientConfig struct {
 	// Addresses specifies the list of memcached addresses. The addresses get
@@ -162,7 +177,7 @@ type memcachedClient struct {
 	logger   log.Logger
 	config   MemcachedClientConfig
 	client   memcachedClientBackend
-	selector *MemcachedJumpHashSelector
+	selector updatableServerSelector
 
 	// Name provides an identifier for the instantiated Client
 	name string
@@ -238,7 +253,7 @@ func NewMemcachedClientWithConfig(logger log.Logger, name string, config Memcach
 func newMemcachedClient(
 	logger log.Logger,
 	client memcachedClientBackend,
-	selector *MemcachedJumpHashSelector,
+	selector updatableServerSelector,
 	config MemcachedClientConfig,
 	reg prometheus.Registerer,
 	name string,
@@ -442,7 +457,17 @@ func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[strin
 func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([]map[string]*memcache.Item, error) {
 	// Do not batch if the input keys are less than the max batch size.
 	if (c.config.MaxGetMultiBatchSize <= 0) || (len(keys) <= c.config.MaxGetMultiBatchSize) {
-		items, err := c.getMultiSingle(keys)
+		// Even if we're not splitting the input into batches, make sure that our single request
+		// still counts against the concurrency limit.
+		if c.config.MaxGetMultiConcurrency > 0 {
+			if err := c.getMultiGate.Start(ctx); err != nil {
+				return nil, errors.Wrapf(err, "failed to wait for turn. Instance: %s", c.name)
+			}
+
+			defer c.getMultiGate.Done()
+		}
+
+		items, err := c.getMultiSingle(ctx, keys)
 		if err != nil {
 			return nil, err
 		}
@@ -464,18 +489,27 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 		getMultiGate = c.getMultiGate
 	}
 
+	// Sort keys based on which memcached server they will be sharded to. Sorting keys that
+	// are on the same server together before splitting into batches reduces the number of
+	// connections required and increases the number of "gets" per connection.
+	sortedKeys := c.sortKeysByServer(keys)
+
 	// Allocate a channel to store results for each batch request. The max concurrency will be
 	// enforced by doWithBatch.
 	results := make(chan *memcachedGetMultiResult, numResults)
 	defer close(results)
 
 	// Ignore the error here since it can only be returned by our provided function which
-	// always returns nil.
-	_ = doWithBatch(ctx, len(keys), c.config.MaxGetMultiBatchSize, getMultiGate, func(startIndex, endIndex int) error {
-		batchKeys := keys[startIndex:endIndex]
+	// always returns nil. NOTE also we are using a background context here for the doWithBatch
+	// method. This is to ensure that it runs the expected number of batches _even if_ our
+	// context (`ctx`) is canceled since we expect a certain number of batches to be read
+	// from `results` below. The wrapped `getMultiSingle` method will still check our context
+	// and short-circuit if it has been canceled.
+	_ = doWithBatch(context.Background(), len(keys), c.config.MaxGetMultiBatchSize, getMultiGate, func(startIndex, endIndex int) error {
+		batchKeys := sortedKeys[startIndex:endIndex]
 
 		res := &memcachedGetMultiResult{}
-		res.items, res.err = c.getMultiSingle(batchKeys)
+		res.items, res.err = c.getMultiSingle(ctx, batchKeys)
 
 		results <- res
 		return nil
@@ -499,10 +533,19 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 	return items, lastErr
 }
 
-func (c *memcachedClient) getMultiSingle(keys []string) (items map[string]*memcache.Item, err error) {
+func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (items map[string]*memcache.Item, err error) {
 	start := time.Now()
 	c.operations.WithLabelValues(opGetMulti).Inc()
-	items, err = c.client.GetMulti(keys)
+
+	select {
+	case <-ctx.Done():
+		// Make sure our context hasn't been canceled before fetching cache items using
+		// cache client backend.
+		return nil, ctx.Err()
+	default:
+		items, err = c.client.GetMulti(keys)
+	}
+
 	if err != nil {
 		level.Debug(c.logger).Log("msg", "failed to get multiple items from memcached", "err", err)
 		c.trackError(opGetMulti, err)
@@ -516,6 +559,35 @@ func (c *memcachedClient) getMultiSingle(keys []string) (items map[string]*memca
 	}
 
 	return items, err
+}
+
+// sortKeysByServer sorts cache keys within a slice based on which server they are
+// sharded to using a memcache.ServerSelector instance. The keys are ordered so keys
+// on the same server are next to each other. Any errors encountered determining which
+// server a key should be on will result in returning keys unsorted (in the same order
+// they were supplied in). Note that output is not guaranteed to be any particular order
+// *except* that keys sharded to the same server will be together. The order of keys
+// returned may change from call to call.
+func (c *memcachedClient) sortKeysByServer(keys []string) []string {
+	bucketed := make(map[string][]string)
+
+	for _, key := range keys {
+		addr, err := c.selector.PickServer(key)
+		// If we couldn't determine the correct server, return keys in existing order
+		if err != nil {
+			return keys
+		}
+
+		addrString := addr.String()
+		bucketed[addrString] = append(bucketed[addrString], key)
+	}
+
+	var out []string
+	for srv := range bucketed {
+		out = append(out, bucketed[srv]...)
+	}
+
+	return out
 }
 
 func (c *memcachedClient) trackError(op string, err error) {

@@ -153,7 +153,7 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 	// Create bucket.
 	logger := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(logger,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), e.SharedDir()), "tools")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "tools")
 	testutil.Ok(t, err)
 
 	// Create share dir for upload.

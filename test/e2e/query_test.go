@@ -108,7 +108,7 @@ func TestQuery(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	receiver := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(e2ethanos.NewFutureReceiver(e, "1"), 1)
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
@@ -253,7 +253,7 @@ func TestQueryLabelNames(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	receiver := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(e2ethanos.NewFutureReceiver(e, "1"), 1)
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
@@ -300,7 +300,7 @@ func TestQueryLabelValues(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	receiver := e2ethanos.NewRoutingAndIngestingReceiverFromFuture(e2ethanos.NewFutureReceiver(e, "1"), 1)
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
@@ -391,15 +391,15 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 
 			// Use qBuilder work dir to share rules.
 			promRulesSubDir := "rules"
-			testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Future().Dir(), promRulesSubDir), os.ModePerm))
+			testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Dir(), promRulesSubDir), os.ModePerm))
 			// Create the abort_on_partial_response alert for Prometheus.
 			// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.
-			createRuleFile(t, filepath.Join(qBuilder.Future().Dir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
+			createRuleFile(t, filepath.Join(qBuilder.Dir(), promRulesSubDir, "rules.yaml"), testAlertRuleAbortOnPartialResponse)
 
 			p1, s1 := e2ethanos.NewPrometheusWithSidecarCustomImage(
 				e,
 				"p1",
-				e2ethanos.DefaultPromConfig("p1", 0, "", filepath.Join(qBuilder.Future().InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget, qBuilder.Future().InternalEndpoint("http")),
+				e2ethanos.DefaultPromConfig("p1", 0, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget, qBuilder.InternalEndpoint("http")),
 				"",
 				e2ethanos.DefaultPrometheusImage(),
 				"",
@@ -419,7 +419,7 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 config:
   sampler_type: const
   sampler_param: 1
-  service_name: %s`, qBuilder.Future().Name())). // Use fake tracing config to trigger exemplar.
+  service_name: %s`, qBuilder.Name())). // Use fake tracing config to trigger exemplar.
 				WithImage(tcase.queryImage).
 				Init()
 			testutil.Ok(t, e2e.StartAndWaitReady(q))
@@ -531,7 +531,7 @@ config:
 				ruleAndAssert(t, ctx, q.Endpoint("http"), "", []*rulespb.RuleGroup{
 					{
 						Name: "example_abort",
-						File: "/shared/rules/rules.yaml",
+						File: "/shared/data/querier-1/rules/rules.yaml",
 						Rules: []*rulespb.Rule{
 							rulespb.NewAlertingRule(&rulespb.Alert{
 								Name:  "TestAlert_AbortOnPartialResponse",
@@ -601,7 +601,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("https"), e.SharedDir()), "test")
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "test")
 	testutil.Ok(t, err)
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
 
@@ -615,7 +615,6 @@ func TestSidecarStorePushdown(t *testing.T) {
 		"",
 		nil,
 	)
-	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc"), sidecar1.InternalEndpoint("grpc")).WithEnabledFeatures([]string{"query-pushdown"}).Init()

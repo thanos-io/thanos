@@ -27,6 +27,8 @@ const (
 	seriesOp       = "series"
 )
 
+var labelValuesPattern = regexp.MustCompile("/api/v1/label/.+/values$")
+
 // NewTripperware returns a Tripperware which sends requests to different sub tripperwares based on the query type.
 func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger) (queryrange.Tripperware, error) {
 	var (
@@ -120,8 +122,7 @@ func getOperation(r *http.Request) string {
 		case strings.HasSuffix(r.URL.Path, "/api/v1/series"):
 			return seriesOp
 		default:
-			matched, err := regexp.MatchString("/api/v1/label/.+/values$", r.URL.Path)
-			if err == nil && matched {
+			if labelValuesPattern.MatchString(r.URL.Path) {
 				return labelValuesOp
 			}
 		}

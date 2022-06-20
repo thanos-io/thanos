@@ -170,7 +170,8 @@ func (q *Queue) Push(alerts []*notifier.Alert) {
 
 	q.pushed.Add(float64(len(alerts)))
 
-	// Attach external labels and drop excluded labels before sending.
+	// Attach external labels, drop excluded labels and process relabeling before sending.
+	var relabeledAlerts []*notifier.Alert
 	for _, a := range alerts {
 		lb := labels.NewBuilder(labels.Labels{})
 		for _, l := range a.Labels {
@@ -183,8 +184,15 @@ func (q *Queue) Push(alerts []*notifier.Alert) {
 			lb.Set(l.Name, l.Value)
 		}
 		a.Labels = relabel.Process(lb.Labels(), q.alertRelabelConfigs...)
+		if a.Labels != nil {
+			relabeledAlerts = append(relabeledAlerts, a)
+		}
 	}
 
+	alerts = relabeledAlerts
+	if len(alerts) == 0 {
+		return
+	}
 	// Queue capacity should be significantly larger than a single alert
 	// batch could be.
 	if d := len(alerts) - q.capacity; d > 0 {

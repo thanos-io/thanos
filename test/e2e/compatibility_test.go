@@ -16,8 +16,6 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
-	common_cfg "github.com/prometheus/common/config"
-	"github.com/prometheus/prometheus/config"
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -35,7 +33,7 @@ func TestPromQLCompliance(t *testing.T) {
 	t.Cleanup(e.Close)
 
 	// Start receive + Querier.
-	receiverRunnable := e2ethanos.NewIngestingReceiver(e, "receive")
+	receiverRunnable := e2ethanos.NewReceiveBuilder(e, "receive").WithIngestionEnabled().Init()
 	queryReceive := e2edb.NewThanosQuerier(e, "query_receive", []string{receiverRunnable.InternalEndpoint("grpc")})
 	testutil.Ok(t, e2e.StartAndWaitReady(receiverRunnable, queryReceive))
 
@@ -130,14 +128,16 @@ func TestAlertCompliance(t *testing.T) {
 		t.Cleanup(e.Close)
 
 		// Start receive + Querier.
-		receive := e2ethanos.NewIngestingReceiver(e, "receive")
+		receive := e2ethanos.NewReceiveBuilder(e, "receive").WithIngestionEnabled().Init()
 		querierBuilder := e2ethanos.NewQuerierBuilder(e, "query")
 
 		compliance := e.Runnable("alert_generator_compliance_tester").WithPorts(map[string]int{"http": 8080}).Init(e2e.StartOptions{
 			Image:   "alert_generator_compliance_tester:latest",
 			Command: e2e.NewCommandRunUntilStop(),
 		})
-		ruler := e2ethanos.NewStatelessRuler(e, "1", "rules", []alert.AlertmanagerConfig{
+
+		rFuture := e2ethanos.NewRulerBuilder(e, "1")
+		ruler := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 			{
 				EndpointsConfig: httpconfig.EndpointsConfig{
 					StaticAddresses: []string{compliance.InternalEndpoint("http")},
@@ -146,18 +146,17 @@ func TestAlertCompliance(t *testing.T) {
 				Timeout:    amTimeout,
 				APIVersion: alert.APIv1,
 			},
-		}, []httpconfig.Config{
+		}).InitTSDB(filepath.Join(rFuture.InternalDir(), "rulesSubDir"), []httpconfig.Config{
 			{
 				EndpointsConfig: httpconfig.EndpointsConfig{
 					StaticAddresses: []string{
-						querierBuilder.Future().InternalEndpoint("http"),
+						querierBuilder.InternalEndpoint("http"),
 					},
 					Scheme: "http",
 				},
 			},
-		}, []*config.RemoteWriteConfig{
-			{URL: &common_cfg.URL{URL: urlParse(t, e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("remote-write")))}, Name: "thanos-receiver"},
-		}, false)
+		})
+
 		query := querierBuilder.
 			WithStoreAddresses(receive.InternalEndpoint("grpc")).
 			WithRuleAddresses(ruler.InternalEndpoint("grpc")).
