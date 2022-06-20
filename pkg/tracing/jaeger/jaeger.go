@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
 	jaeger_prometheus "github.com/uber/jaeger-lib/metrics/prometheus"
+	"go.opentelemetry.io/otel/attribute"
 	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
@@ -70,12 +72,43 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 		}
 	}
 
-	processor := tracesdk.NewBatchSpanProcessor(exporter)
-	tp := newTraceProvider(ctx, logger, processor, config.SamplerParam, config.ServiceName)
+	tags := getAttributesFromTags(config)
+	samplingFraction := getSamplingFraction(config.SamplerType, config.SamplerParam)
+	var queueSize tracesdk.BatchSpanProcessorOption
+	if config.ReporterMaxQueueSize != 0 {
+		queueSize = tracesdk.WithMaxQueueSize(config.ReporterMaxQueueSize)
+	}
+	processor := tracesdk.NewBatchSpanProcessor(exporter, queueSize)
+	tp := newTraceProvider(ctx, logger, processor, samplingFraction, tags, config.ServiceName)
 
 	return tp, nil
 }
 
+// getSamplingFraction returns the sampling fraction based on the sampler type.
+// Ref: https://www.jaegertracing.io/docs/1.35/sampling/#client-sampling-configuration
+func getSamplingFraction(samplerType string, samplingFactor float64) float64 {
+	if samplerType == "const" {
+		if samplingFactor > 1 {
+			return 1.0
+		} else if samplingFactor < 0 {
+			return 0.0
+		}
+		return math.Round(samplingFactor) // Returns either 0 or 1 for values [0,1].
+	} else if samplerType == "probabilistic" {
+		return samplingFactor
+	} else if samplerType == "ratelimiting" {
+		return math.Round(samplingFactor) // Needs to be an integer.
+	}
+	return samplingFactor
+}
+
+// getAttributesFromTags returns tags as OTel attributes.
+func getAttributesFromTags(config Config) []attribute.KeyValue {
+	opentracingTags := parseTags(config.Tags)
+	return migration.ConvertOTTagsToOTelAttrs(opentracingTags)
+}
+
+// getCollectorEndpoints returns Jaeger options populated with collector related options.
 func getCollectorEndpoints(config Config) []otel_jaeger.CollectorEndpointOption {
 	var jaegerCollectorEndpointOptions []otel_jaeger.CollectorEndpointOption
 	if config.User != "" {
@@ -89,6 +122,7 @@ func getCollectorEndpoints(config Config) []otel_jaeger.CollectorEndpointOption 
 	return jaegerCollectorEndpointOptions
 }
 
+// getAgentEndpointOptions returns Jaeger options populated with agent related options.
 func getAgentEndpointOptions(config Config) []otel_jaeger.AgentEndpointOption {
 	var jaegerAgentEndpointOptions []otel_jaeger.AgentEndpointOption
 	jaegerAgentEndpointOptions = append(jaegerAgentEndpointOptions, otel_jaeger.WithAgentHost(config.AgentHost))
@@ -98,16 +132,11 @@ func getAgentEndpointOptions(config Config) []otel_jaeger.AgentEndpointOption {
 }
 
 func newTraceProvider(ctx context.Context, logger log.Logger, processor tracesdk.SpanProcessor,
-	samplingFactor float64, serviceName string) *tracesdk.TracerProvider {
+	samplingFraction float64, tags []attribute.KeyValue, serviceName string) *tracesdk.TracerProvider {
 
-	var fraction float64
-	if samplingFactor == 0 {
-		fraction = 0
-	} else {
-		fraction = 1 / float64(samplingFactor)
-	}
-
-	resource, err := resource.New(ctx, resource.WithAttributes(tracing.CollectAttributes(serviceName)...))
+	attributes := tracing.CollectAttributes(serviceName)
+	attributes = append(attributes, tags...)
+	resource, err := resource.New(ctx, resource.WithAttributes(attributes...))
 	if err != nil {
 		level.Warn(logger).Log("msg", "jaeger: detecting resources for tracing provider failed", "err", err)
 	}
@@ -116,7 +145,7 @@ func newTraceProvider(ctx context.Context, logger log.Logger, processor tracesdk
 		tracesdk.WithSpanProcessor(processor),
 		tracesdk.WithSampler(
 			migration.SamplerWithOverride(
-				tracesdk.ParentBased(tracesdk.TraceIDRatioBased(fraction)),
+				tracesdk.ParentBased(tracesdk.TraceIDRatioBased(samplingFraction)),
 				migration.ForceTracingAttributeKey,
 			),
 		),
