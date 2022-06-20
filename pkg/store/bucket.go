@@ -1492,65 +1492,59 @@ func (s *BucketStore) SyncTombstones(ctx context.Context) error {
 				block.tombstoneCache.Delete(id)
 			}
 		}
-	}
-	for _, bs := range s.blockSets {
 		for tid, t := range tombstones {
-			if _, ok := t.MatchLabels(bs.labels); !ok {
+			matchers, ok := t.MatchMeta(block.meta)
+			// Impossible as we get matches blocks already.
+			if !ok {
 				continue
 			}
-			blocks := bs.getFor(t.MinTime, t.MaxTime, downsample.ResLevel2, nil)
-			for _, block := range blocks {
-				matchers, ok := t.MatchMeta(block.meta)
-				// Impossible as we get matches blocks already.
-				if !ok {
-					continue
-				}
-				if _, ok := block.tombstoneCache.Get(tid); ok {
-					continue
-				}
-
-				memTombstone := promtombstones.NewMemTombstones()
-				indexr := block.indexReader()
-				ps, err := indexr.ExpandedPostings(ctx, *matchers)
-				if err != nil {
-					continue
-				}
-				if len(ps) == 0 {
-					block.tombstoneCache.Set(tid, memTombstone)
-					continue
-				}
-				// Preload all series index data.
-				if err := indexr.PreloadSeries(ctx, ps); err != nil {
-					continue
-				}
-
-				// Transform all series into the response types and mark their relevant chunks
-				// for preloading.
-				var (
-					symbolizedLset []symbolizedLabel
-					chks           []chunks.Meta
-				)
-			PostingsLoop:
-				for _, id := range ps {
-					ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, false, t.MinTime, t.MaxTime)
-					if err != nil {
-						continue
-					}
-					if !ok {
-						// No matching chunks for this time duration, skip series.
-						continue
-					}
-					for _, chk := range chks {
-						if chk.OverlapsClosedInterval(t.MinTime, t.MaxTime) {
-							// Delete only until the current values and not beyond.
-							tmin, tmax := tombstone.ClampInterval(t.MinTime, t.MaxTime, chks[0].MinTime, chks[len(chks)-1].MaxTime)
-							memTombstone.AddInterval(id, promtombstones.Interval{Mint: tmin, Maxt: tmax})
-							continue PostingsLoop
-						}
-					}
-				}
-				block.tombstoneCache.Set(tid, memTombstone)
+			if _, ok := block.tombstoneCache.Get(tid); ok {
+				continue
 			}
+			memTombstone := promtombstones.NewMemTombstones()
+			indexr := block.indexReader()
+			ps, err := indexr.ExpandedPostings(ctx, *matchers)
+			if err != nil {
+				level.Error(s.logger).Log("msg", "failed to expand matching posting", "block", block.meta.ULID.String(), "tombstone", tid)
+				continue
+			}
+			if len(ps) == 0 {
+				block.tombstoneCache.Set(tid, memTombstone)
+				continue
+			}
+			// Preload all series index data.
+			if err := indexr.PreloadSeries(ctx, ps); err != nil {
+				level.Error(s.logger).Log("msg", "failed to preload series", "block", block.meta.ULID.String(), "tombstone", tid)
+				continue
+			}
+
+			// Transform all series into the response types and mark their relevant chunks
+			// for preloading.
+			var (
+				symbolizedLset []symbolizedLabel
+				chks           []chunks.Meta
+			)
+		PostingsLoop:
+			for _, id := range ps {
+				ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, false, t.MinTime, t.MaxTime)
+				if err != nil {
+					level.Error(s.logger).Log("msg", "failed to load series for posting", "block", block.meta.ULID.String(), "tombstone", tid, "posting", id)
+					continue
+				}
+				if !ok {
+					// No matching chunks for this time duration, skip series.
+					continue
+				}
+				for _, chk := range chks {
+					if chk.OverlapsClosedInterval(t.MinTime, t.MaxTime) {
+						// Delete only until the current values and not beyond.
+						tmin, tmax := tombstone.ClampInterval(t.MinTime, t.MaxTime, chks[0].MinTime, chks[len(chks)-1].MaxTime)
+						memTombstone.AddInterval(id, promtombstones.Interval{Mint: tmin, Maxt: tmax})
+						continue PostingsLoop
+					}
+				}
+			}
+			block.tombstoneCache.Set(tid, memTombstone)
 		}
 	}
 	return nil
