@@ -959,6 +959,7 @@ func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 				KeyFile:  filepath.Join(basePath, "certs", "private.key"),
 			},
 		},
+		BucketLookupType: s3.AutoLookup,
 	}
 }
 

@@ -17,8 +17,11 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#5337](https://github.com/thanos-io/thanos/pull/5337) Thanos Object Store: Add the `prefix` option to buckets
+- [#5409](https://github.com/thanos-io/thanos/pull/5409) S3: Add option to force DNS style lookup.
 - [#5352](https://github.com/thanos-io/thanos/pull/5352) Cache: Add cache metrics to groupcache.
 - [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Add relabeling support.
+- [#5408](https://github.com/thanos-io/thanos/pull/5391) Receive: Add support for consistent hashrings.
+- [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Implement api/v1/status/tsdb.
 
 ### Changed
 
