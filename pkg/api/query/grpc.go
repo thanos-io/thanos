@@ -83,6 +83,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	if err != nil {
 		return err
 	}
+	defer qry.Close()
 
 	result := qry.Exec(ctx)
 	if err := server.Send(querypb.NewQueryWarningsResponse(result.Warnings)); err != nil {
@@ -155,6 +156,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	if err != nil {
 		return err
 	}
+	defer qry.Close()
 
 	result := qry.Exec(ctx)
 	if err := srv.Send(querypb.NewQueryRangeWarningsResponse(result.Warnings)); err != nil {

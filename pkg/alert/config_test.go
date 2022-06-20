@@ -132,6 +132,14 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 			address: "://user:pass@localhost:9093",
 			err:     true,
 		},
+		{
+			address: "http://user:pass@",
+			err:     true,
+		},
+		{
+			address: "dnssrv+_http._tcp.example.com",
+			err:     true,
+		},
 	} {
 		t.Run(tc.address, func(t *testing.T) {
 			cfg, err := BuildAlertmanagerConfig(tc.address, time.Duration(0))
