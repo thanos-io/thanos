@@ -7,14 +7,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/go-kit/log"
+	"github.com/oklog/ulid"
+	"github.com/prometheus/prometheus/model/labels"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
-
-	"github.com/go-kit/log"
-	"github.com/oklog/ulid"
-	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -130,4 +129,14 @@ func (t *Tombstone) MatchLabels(lbls labels.Labels) (*metadata.Matchers, bool) {
 		}
 	}
 	return &matchers, true
+}
+
+func ClampInterval(a, b, mint, maxt int64) (int64, int64) {
+	if a < mint {
+		a = mint
+	}
+	if b > maxt {
+		b = maxt
+	}
+	return a, b
 }

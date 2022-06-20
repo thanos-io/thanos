@@ -307,9 +307,6 @@ type BucketStore struct {
 	advLabelSets             []labelpb.ZLabelSet
 	enableCompatibilityLabel bool
 
-	tombstonesMtx sync.RWMutex
-	tombstones    map[ulid.ULID]*tombstone.Tombstone
-
 	// Every how many posting offset entry we pool in heap memory. Default in Prometheus is 32.
 	postingOffsetsInMemSampling int
 
@@ -558,6 +555,10 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 		}
 	}
 
+	if err := s.SyncTombstones(ctx); err != nil {
+		return errors.Wrap(err, "sync tombstones")
+	}
+
 	return nil
 }
 
@@ -791,7 +792,7 @@ func blockSeries(
 	skipChunks bool, // If true, chunks are not loaded.
 	minTime, maxTime int64, // Series must have data in this time range to be returned.
 	loadAggregates []storepb.Aggr, // List of aggregates to load when loading chunks.
-	tombstones []*tombstone.Tombstone,
+	tombstoneCache *tombstone.MemTombstonesCache,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(ctx, matchers)
 	if err != nil {
@@ -824,6 +825,7 @@ func blockSeries(
 	)
 PostingsLoop:
 	for _, id := range ps {
+		intervals := tombstoneCache.GetIntervalsByRef(id)
 		ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, skipChunks, minTime, maxTime)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "read series")
@@ -834,34 +836,13 @@ PostingsLoop:
 		}
 
 		s := seriesEntry{}
-		if err := indexr.LookupLabelsSymbols(symbolizedLset, &lset); err != nil {
-			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
-		}
-		var tombstoneIntervals promtombstones.Intervals
-		for _, ts := range tombstones {
-			for _, matcher := range *ts.Matchers {
-				if val := lset.Get(matcher.Name); val != "" {
-					if !matcher.Matches(val) {
-						continue
-					}
-					if skipChunks {
-						continue PostingsLoop
-					}
-					tombstoneIntervals = tombstoneIntervals.Add(promtombstones.Interval{Mint: ts.MinTime, Maxt: ts.MaxTime})
-				}
-			}
-		}
-
 		if !skipChunks {
 			// Schedule loading chunks.
 			s.refs = make([]chunks.ChunkRef, 0, len(chks))
 			s.chks = make([]storepb.AggrChunk, 0, len(chks))
-		ChunkMetasLoop:
 			for j, meta := range chks {
-				for _, it := range tombstoneIntervals {
-					if meta.OverlapsClosedInterval(it.Mint, it.Maxt) {
-						continue ChunkMetasLoop
-					}
+				if (promtombstones.Interval{Mint: meta.MinTime, Maxt: meta.MaxTime}.IsSubrange(intervals)) {
+					continue
 				}
 
 				// seriesEntry s is appended to res, but not at every outer loop iteration,
@@ -886,6 +867,9 @@ PostingsLoop:
 			if err := chunksLimiter.Reserve(uint64(len(s.chks))); err != nil {
 				return nil, nil, errors.Wrap(err, "exceeded chunks limit")
 			}
+		}
+		if err := indexr.LookupLabelsSymbols(symbolizedLset, &lset); err != nil {
+			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
 		}
 
 		s.lset = labelpb.ExtendSortedLabels(lset, extLset)
@@ -1055,36 +1039,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	}
 
 	s.mtx.RLock()
-	s.tombstonesMtx.RLock()
-	tombstones := s.tombstones
-	s.tombstonesMtx.RUnlock()
-
-	// Filter tombstones by request time range.
-	matchedTombstones := filterTombstonesByTimeRange(tombstones, req.MinTime, req.MaxTime)
-
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
 			continue
-		}
-		// Filter tombstones by block set external labels.
-		blockSetTombstones := make([]*tombstone.Tombstone, 0, len(matchedTombstones))
-		for _, ts := range matchedTombstones {
-			matchers, ok := ts.MatchLabels(bs.labels)
-			if !ok {
-				continue
-			}
-			// If no matchers are left after removing external label matchers,
-			// we drop the tombstone.
-			if matchers == nil || len(*matchers) == 0 {
-				continue
-			}
-			blockSetTombstones = append(blockSetTombstones, &tombstone.Tombstone{
-				Matchers: matchers,
-				MinTime:  ts.MinTime,
-				MaxTime:  ts.MaxTime,
-				ULID:     ts.ULID,
-			})
 		}
 
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow, reqBlockMatchers)
@@ -1096,26 +1054,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		for _, b := range blocks {
 			b := b
 			gctx := gctx
-
-			// Filter tombstones at block level by block metadata.
-			blockTombstones := make([]*tombstone.Tombstone, 0, len(blockSetTombstones))
-			for _, ts := range blockSetTombstones {
-				matchers, ok := ts.MatchMeta(b.meta)
-				if !ok {
-					continue
-				}
-				// If no matchers are left after removing external label matchers,
-				// we drop the tombstone.
-				if matchers == nil || len(*matchers) == 0 {
-					continue
-				}
-				blockTombstones = append(blockTombstones, &tombstone.Tombstone{
-					Matchers: matchers,
-					MinTime:  ts.MinTime,
-					MaxTime:  ts.MaxTime,
-					ULID:     ts.ULID,
-				})
-			}
 
 			if s.enableSeriesResponseHints {
 				// Keep track of queried blocks.
@@ -1153,7 +1091,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					req.SkipChunks,
 					req.MinTime, req.MaxTime,
 					req.Aggregates,
-					blockTombstones,
+					b.tombstoneCache,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
@@ -1356,7 +1294,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 				result = strutil.MergeSlices(res, extRes)
 			} else {
-				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
+				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, b.tombstoneCache)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
@@ -1487,7 +1425,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				}
 				result = res
 			} else {
-				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
+				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, b.tombstoneCache)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
@@ -1545,9 +1483,76 @@ func (s *BucketStore) SyncTombstones(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	s.tombstonesMtx.Lock()
-	s.tombstones = tombstones
-	s.tombstonesMtx.Unlock()
+
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	for _, block := range s.blocks {
+		for _, id := range block.tombstoneCache.GetTombstoneIDs() {
+			if _, ok := tombstones[id]; !ok {
+				block.tombstoneCache.Delete(id)
+			}
+		}
+	}
+	for _, bs := range s.blockSets {
+		for tid, t := range tombstones {
+			if _, ok := t.MatchLabels(bs.labels); !ok {
+				continue
+			}
+			blocks := bs.getFor(t.MinTime, t.MaxTime, downsample.ResLevel2, nil)
+			for _, block := range blocks {
+				matchers, ok := t.MatchMeta(block.meta)
+				// Impossible as we get matches blocks already.
+				if !ok {
+					continue
+				}
+				if _, ok := block.tombstoneCache.Get(tid); ok {
+					continue
+				}
+
+				memTombstone := promtombstones.NewMemTombstones()
+				indexr := block.indexReader()
+				ps, err := indexr.ExpandedPostings(ctx, *matchers)
+				if err != nil {
+					continue
+				}
+				if len(ps) == 0 {
+					block.tombstoneCache.Set(tid, memTombstone)
+					continue
+				}
+				// Preload all series index data.
+				if err := indexr.PreloadSeries(ctx, ps); err != nil {
+					continue
+				}
+
+				// Transform all series into the response types and mark their relevant chunks
+				// for preloading.
+				var (
+					symbolizedLset []symbolizedLabel
+					chks           []chunks.Meta
+				)
+			PostingsLoop:
+				for _, id := range ps {
+					ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, false, t.MinTime, t.MaxTime)
+					if err != nil {
+						continue
+					}
+					if !ok {
+						// No matching chunks for this time duration, skip series.
+						continue
+					}
+					for _, chk := range chks {
+						if chk.OverlapsClosedInterval(t.MinTime, t.MaxTime) {
+							// Delete only until the current values and not beyond.
+							tmin, tmax := tombstone.ClampInterval(t.MinTime, t.MaxTime, chks[0].MinTime, chks[len(chks)-1].MaxTime)
+							memTombstone.AddInterval(id, promtombstones.Interval{Mint: tmin, Maxt: tmax})
+							continue PostingsLoop
+						}
+					}
+				}
+				block.tombstoneCache.Set(tid, memTombstone)
+			}
+		}
+	}
 	return nil
 }
 
@@ -1709,6 +1714,8 @@ type bucketBlock struct {
 	// Block's labels used by block-level matchers to filter blocks to query. These are used to select blocks using
 	// request hints' BlockMatchers.
 	relabelLabels labels.Labels
+
+	tombstoneCache *tombstone.MemTombstonesCache
 }
 
 func newBucketBlock(
@@ -1740,6 +1747,7 @@ func newBucketBlock(
 			Name:  block.BlockIDLabel,
 			Value: meta.ULID.String(),
 		}),
+		tombstoneCache: tombstone.NewMemTombstoneCache(),
 	}
 	sort.Sort(b.extLset)
 	sort.Sort(b.relabelLabels)
@@ -2840,23 +2848,4 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 // NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
 func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Bytes, error) {
 	return pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, maxChunkPoolBytes)
-}
-
-// filterTombstonesByTimeRange filters tombstones map by time range and returns a
-// list of tomebstones sorted by min time.
-func filterTombstonesByTimeRange(tombstones map[ulid.ULID]*tombstone.Tombstone, mint, maxt int64) []*tombstone.Tombstone {
-	matchedTombstones := make([]*tombstone.Tombstone, 0, len(tombstones))
-	for _, ts := range tombstones {
-		if !ts.OverlapsClosedInterval(mint, maxt) {
-			continue
-		}
-		matchedTombstones = append(matchedTombstones, ts)
-	}
-	sort.Slice(matchedTombstones, func(i, j int) bool {
-		if matchedTombstones[i].MinTime == matchedTombstones[j].MinTime {
-			return matchedTombstones[i].MaxTime < matchedTombstones[j].MaxTime
-		}
-		return matchedTombstones[i].MinTime < matchedTombstones[j].MinTime
-	})
-	return matchedTombstones
 }
