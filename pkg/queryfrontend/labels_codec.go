@@ -6,7 +6,6 @@ package queryfrontend
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -252,13 +251,13 @@ func (c labelsCodec) EncodeResponse(ctx context.Context, res queryrange.Response
 	switch resp := res.(type) {
 	case *ThanosLabelsResponse:
 		sp.LogFields(otlog.Int("labels", len(resp.Data)))
-		b, err = json.Marshal(resp)
+		b, err = protojson.Marshal(resp)
 		if err != nil {
 			return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error encoding response: %v", err)
 		}
 	case *ThanosSeriesResponse:
 		sp.LogFields(otlog.Int("series", len(resp.Data)))
-		b, err = json.Marshal(resp)
+		b, err = protojson.Marshal(resp)
 		if err != nil {
 			return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error encoding response: %v", err)
 		}

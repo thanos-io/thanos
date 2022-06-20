@@ -156,7 +156,7 @@ func TestHashringGet(t *testing.T) {
 
 func TestConsistentHashringGet(t *testing.T) {
 	baseTS := &prompb.TimeSeries{
-		Labels: []labelpb.ZLabel{
+		Labels: []*labelpb.Label{
 			{
 				Name:  "pod",
 				Value: "nginx",
@@ -213,7 +213,7 @@ func TestConsistentHashringGet(t *testing.T) {
 			name:  "base case with different timeseries",
 			nodes: []string{"node-1", "node-2", "node-3"},
 			ts: &prompb.TimeSeries{
-				Labels: []labelpb.ZLabel{
+				Labels: []*labelpb.Label{
 					{
 						Name:  "pod",
 						Value: "thanos",
@@ -298,7 +298,7 @@ func makeSeries(numSeries int) []*prompb.TimeSeries {
 	series := make([]*prompb.TimeSeries, numSeries)
 	for i := 0; i < numSeries; i++ {
 		series[i] = &prompb.TimeSeries{
-			Labels: []labelpb.ZLabel{
+			Labels: []*labelpb.Label{
 				{
 					Name:  "pod",
 					Value: fmt.Sprintf("nginx-%d", i),
@@ -311,8 +311,8 @@ func makeSeries(numSeries int) []*prompb.TimeSeries {
 
 func findSeries(initialAssignments map[string][]*prompb.TimeSeries, node string, newSeries *prompb.TimeSeries) bool {
 	for _, oldSeries := range initialAssignments[node] {
-		l1 := labelpb.ZLabelsToPromLabels(newSeries.Labels)
-		l2 := labelpb.ZLabelsToPromLabels(oldSeries.Labels)
+		l1 := labelpb.ProtobufLabelsToPromLabels(newSeries.Labels)
+		l2 := labelpb.ProtobufLabelsToPromLabels(oldSeries.Labels)
 		if labels.Equal(l1, l2) {
 			return true
 		}
