@@ -56,7 +56,7 @@ func (m *MemTombstonesCache) Delete(id ulid.ULID) {
 	delete(m.tombstones, id)
 }
 
-// GetIntervalsByRef returns a list of merged tombstone intervals by given series refID.
+// GetIntervalsByRef returns a list of merged tombstone intervals by given series ref.
 func (m *MemTombstonesCache) GetIntervalsByRef(ref storage.SeriesRef) tombstones.Intervals {
 	m.mtx.RLock()
 	defer m.mtx.RUnlock()
@@ -69,4 +69,28 @@ func (m *MemTombstonesCache) GetIntervalsByRef(ref storage.SeriesRef) tombstones
 		}
 	}
 	return intervals
+}
+
+// MergeTombstones merges multiple in-memory tombstones into one in-memory tombstone.
+func (m *MemTombstonesCache) MergeTombstones() *tombstones.MemTombstones {
+	stones := tombstones.NewMemTombstones()
+	m.mtx.RLock()
+	defer m.mtx.RUnlock()
+	if len(m.tombstones) == 0 {
+		return stones
+	}
+	if len(m.tombstones) == 1 {
+		for _, t := range m.tombstones {
+			return t
+		}
+	}
+	for _, ts := range m.tombstones {
+		ts.Iter(func(id storage.SeriesRef, ivs tombstones.Intervals) error {
+			for _, iv := range ivs {
+				stones.AddInterval(id, iv)
+			}
+			return nil
+		})
+	}
+	return stones
 }

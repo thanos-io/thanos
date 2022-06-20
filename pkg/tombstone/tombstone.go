@@ -10,6 +10,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"io"
 	"os"
 	"path"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -90,17 +90,6 @@ func (t *Tombstone) Write(w io.Writer) error {
 	return enc.Encode(&t)
 }
 
-// UploadTombstone uploads the given tombstone to object storage.
-func UploadTombstone(ctx context.Context, tombstone *Tombstone, bkt objstore.Bucket) error {
-	b, err := json.Marshal(tombstone)
-	if err != nil {
-		return err
-	}
-
-	tsPath := path.Join(TombstoneDir, tombstone.ULID.String()+".json")
-	return bkt.Upload(ctx, tsPath, bytes.NewBuffer(b))
-}
-
 // OverlapsClosedInterval Returns true if the chunk overlaps [mint, maxt].
 func (t *Tombstone) OverlapsClosedInterval(mint, maxt int64) bool {
 	return t.MinTime <= maxt && mint <= t.MaxTime
@@ -129,6 +118,23 @@ func (t *Tombstone) MatchLabels(lbls labels.Labels) (*metadata.Matchers, bool) {
 		}
 	}
 	return &matchers, true
+}
+
+// UploadTombstone uploads the given tombstone to object storage.
+func UploadTombstone(ctx context.Context, tombstone *Tombstone, bkt objstore.Bucket) error {
+	b, err := json.Marshal(tombstone)
+	if err != nil {
+		return err
+	}
+
+	tsPath := path.Join(TombstoneDir, tombstone.ULID.String()+".json")
+	return bkt.Upload(ctx, tsPath, bytes.NewBuffer(b))
+}
+
+// RemoveTombstone removes the tombstone from object storage
+func RemoveTombstone(ctx context.Context, ulid ulid.ULID, bkt objstore.Bucket) error {
+	tsPath := path.Join(TombstoneDir, ulid.String()+".json")
+	return bkt.Delete(ctx, tsPath)
 }
 
 func ClampInterval(a, b, mint, maxt int64) (int64, int64) {
