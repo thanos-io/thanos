@@ -688,7 +688,6 @@ func (c *CompactorBuilder) Init(bucketConfig client.BucketConfig, relabelConfig 
 			"--data-dir":                 c.InternalDir(),
 			"--objstore.config":          string(bktConfigBytes),
 			"--http-address":             ":8080",
-			"--block-sync-concurrency":   "50",
 			"--compact.cleanup-interval": "15s",
 			"--selector.relabel-config":  string(relabelConfigBytes),
 			"--wait":                     "",
