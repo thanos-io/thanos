@@ -252,7 +252,7 @@ func TestMatchMeta(t *testing.T) {
 		{
 			name: "tombstone matchers match block ID, external labels and additional matchers",
 			tombstone: &Tombstone{
-				Matchers: &metadata.Matchers{labels.MustNewMatcher(labels.MatchEqual, block.BlockIDLabel, ulid2.String()),
+				Matchers: &metadata.Matchers{labels.MustNewMatcher(labels.MatchEqual, block.BlockIDLabel, ulid1.String()),
 					labels.MustNewMatcher(labels.MatchEqual, "cluster", "one"),
 					labels.MustNewMatcher(labels.MatchEqual, "__name__", "up"),
 				},

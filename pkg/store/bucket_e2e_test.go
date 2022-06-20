@@ -184,6 +184,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	store, err := NewBucketStore(
 		objstore.WithNoopInstr(bkt),
 		metaFetcher,
+		nil,
 		dir,
 		chunksLimiterFactory,
 		seriesLimiterFactory,

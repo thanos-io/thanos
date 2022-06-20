@@ -2328,8 +2328,31 @@ func BenchmarkDownsampledBlockSeries(b *testing.B) {
 	}
 }
 
-// TODO: finish tests.
 func TestFilterTombstonesByTimeRange(t *testing.T) {
+	ulid1 := ulid.MustNew(0, nil)
+	ulid2 := ulid.MustNew(5, nil)
+	ulid3 := ulid.MustNew(10, nil)
+	ulid4 := ulid.MustNew(15, nil)
+	ts1 := &tombstone.Tombstone{
+		ULID:    ulid1,
+		MinTime: 0,
+		MaxTime: 1,
+	}
+	ts2 := &tombstone.Tombstone{
+		ULID:    ulid2,
+		MinTime: 5,
+		MaxTime: 10,
+	}
+	ts3 := &tombstone.Tombstone{
+		ULID:    ulid3,
+		MinTime: 8,
+		MaxTime: 20,
+	}
+	ts4 := &tombstone.Tombstone{
+		ULID:    ulid4,
+		MinTime: 11,
+		MaxTime: 20,
+	}
 	for _, tcase := range []struct {
 		name       string
 		tombstones map[ulid.ULID]*tombstone.Tombstone
@@ -2338,7 +2361,53 @@ func TestFilterTombstonesByTimeRange(t *testing.T) {
 		expected   []*tombstone.Tombstone
 	}{
 		{
-			name: "",
+			name:       "empty tombstones",
+			tombstones: map[ulid.ULID]*tombstone.Tombstone{},
+			mint:       0,
+			maxt:       10,
+			expected:   []*tombstone.Tombstone{},
+		},
+		{
+			name: "one tombstone in timeperiod",
+			tombstones: map[ulid.ULID]*tombstone.Tombstone{
+				ulid1: ts1,
+			},
+			mint:     0,
+			maxt:     10,
+			expected: []*tombstone.Tombstone{ts1},
+		},
+		{
+			name: "multiple tombstones in timeperiod",
+			tombstones: map[ulid.ULID]*tombstone.Tombstone{
+				ulid1: ts1,
+				ulid2: ts2,
+			},
+			mint:     0,
+			maxt:     10,
+			expected: []*tombstone.Tombstone{ts1, ts2},
+		},
+		{
+			name: "multiple tombstones overlapped in timeperiod",
+			tombstones: map[ulid.ULID]*tombstone.Tombstone{
+				ulid1: ts1,
+				ulid2: ts2,
+				ulid3: ts3,
+			},
+			mint:     0,
+			maxt:     10,
+			expected: []*tombstone.Tombstone{ts1, ts2, ts3},
+		},
+		{
+			name: "ulid4 not in period",
+			tombstones: map[ulid.ULID]*tombstone.Tombstone{
+				ulid1: ts1,
+				ulid2: ts2,
+				ulid3: ts3,
+				ulid4: ts4,
+			},
+			mint:     0,
+			maxt:     10,
+			expected: []*tombstone.Tombstone{ts1, ts2, ts3},
 		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {

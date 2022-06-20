@@ -2853,6 +2853,9 @@ func filterTombstonesByTimeRange(tombstones map[ulid.ULID]*tombstone.Tombstone, 
 		matchedTombstones = append(matchedTombstones, ts)
 	}
 	sort.Slice(matchedTombstones, func(i, j int) bool {
+		if matchedTombstones[i].MinTime == matchedTombstones[j].MinTime {
+			return matchedTombstones[i].MaxTime < matchedTombstones[j].MaxTime
+		}
 		return matchedTombstones[i].MinTime < matchedTombstones[j].MinTime
 	})
 	return matchedTombstones
