@@ -16,6 +16,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestMetadataAPI_Fanout(t *testing.T) {
@@ -111,6 +112,9 @@ func metadataEqual(t *testing.T, meta1, meta2 map[string][]*metadatapb.Meta) {
 		sort.Slice(meta2MetricMeta, func(i, j int) bool {
 			return meta2MetricMeta[i].Help < meta2MetricMeta[j].Help
 		})
-		testutil.Equals(t, meta1MetricMeta, meta2MetricMeta)
+		testutil.Equals(t, len(meta1MetricMeta), len(meta2MetricMeta))
+		for i := range meta1MetricMeta {
+			testutil.Equals(t, true, proto.Equal(meta1MetricMeta[i], meta2MetricMeta[i]))
+		}
 	}
 }
