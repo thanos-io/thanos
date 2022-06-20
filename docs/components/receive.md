@@ -12,6 +12,12 @@ For more information please check out [initial design proposal](../proposals-don
 
 > NOTE: As the block producer it's important to set correct "external labels" that will identify data block across Thanos clusters. See [external labels](../storage.md#external-labels) docs for details.
 
+## TSDB stats
+
+Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
+
+Note that each Thanos Receive will only expose local stats and replicated series will not be included in the response.
+
 ## Example
 
 ```bash
