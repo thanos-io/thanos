@@ -34,7 +34,50 @@ import (
 
 type ctxKey int
 
+type BucketLookupType int
+
+func (blt BucketLookupType) String() string {
+	return []string{"auto", "virtual-hosted", "path"}[blt]
+}
+
+func (blt BucketLookupType) MinioType() minio.BucketLookupType {
+	return []minio.BucketLookupType{
+		minio.BucketLookupAuto,
+		minio.BucketLookupDNS,
+		minio.BucketLookupPath,
+	}[blt]
+}
+
+func (blt BucketLookupType) MarshalYAML() (interface{}, error) {
+	return blt.String(), nil
+}
+
+func (blt *BucketLookupType) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var lookupType string
+	if err := unmarshal(&lookupType); err != nil {
+		return err
+	}
+
+	switch lookupType {
+	case "auto":
+		*blt = AutoLookup
+		return nil
+	case "virtual-hosted":
+		*blt = VirtualHostLookup
+		return nil
+	case "path":
+		*blt = PathLookup
+		return nil
+	}
+
+	return fmt.Errorf("unsupported bucket lookup type: %s", lookupType)
+}
+
 const (
+	AutoLookup BucketLookupType = iota
+	VirtualHostLookup
+	PathLookup
+
 	// DirDelim is the delimiter used to model a directory structure in an object store bucket.
 	DirDelim = "/"
 
@@ -66,7 +109,8 @@ var DefaultConfig = Config{
 		MaxIdleConnsPerHost:   100,
 		MaxConnsPerHost:       0,
 	},
-	PartSize: 1024 * 1024 * 64, // 64MB.
+	PartSize:         1024 * 1024 * 64, // 64MB.
+	BucketLookupType: AutoLookup,
 }
 
 // Config stores the configuration for s3 bucket.
@@ -83,6 +127,7 @@ type Config struct {
 	HTTPConfig         HTTPConfig        `yaml:"http_config"`
 	TraceConfig        TraceConfig       `yaml:"trace"`
 	ListObjectsVersion string            `yaml:"list_objects_version"`
+	BucketLookupType   BucketLookupType  `yaml:"bucket_lookup_type"`
 	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
 	// NOTE we need to make sure this number does not produce more parts than 10 000.
 	PartSize    uint64    `yaml:"part_size"`
@@ -265,10 +310,11 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	}
 
 	client, err := minio.New(config.Endpoint, &minio.Options{
-		Creds:     credentials.NewChainCredentials(chain),
-		Secure:    !config.Insecure,
-		Region:    config.Region,
-		Transport: rt,
+		Creds:        credentials.NewChainCredentials(chain),
+		Secure:       !config.Insecure,
+		Region:       config.Region,
+		Transport:    rt,
+		BucketLookup: config.BucketLookupType.MinioType(),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
