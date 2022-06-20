@@ -122,7 +122,7 @@ query_tweaks:
 func TestAlertCompliance(t *testing.T) {
 	t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator. This tool is not optimized for CI runs (e.g. it infinitely retries, takes 38 minutes)")
 
-	t.Run("staleness ruler", func(t *testing.T) {
+	t.Run("stateful ruler", func(t *testing.T) {
 		e, err := e2e.NewDockerEnvironment("alert_compatibility")
 		testutil.Ok(t, err)
 		t.Cleanup(e.Close)
@@ -146,16 +146,20 @@ func TestAlertCompliance(t *testing.T) {
 				Timeout:    amTimeout,
 				APIVersion: alert.APIv1,
 			},
-		}).InitTSDB(filepath.Join(rFuture.InternalDir(), "rulesSubDir"), []httpconfig.Config{
-			{
-				EndpointsConfig: httpconfig.EndpointsConfig{
-					StaticAddresses: []string{
-						querierBuilder.InternalEndpoint("http"),
+		}).
+			// Use default resend delay and eval interval, as the compliance spec requires this.
+			WithResendDelay("1m").
+			WithEvalInterval("1m").
+			InitTSDB(filepath.Join(rFuture.InternalDir(), "rules"), []httpconfig.Config{
+				{
+					EndpointsConfig: httpconfig.EndpointsConfig{
+						StaticAddresses: []string{
+							querierBuilder.InternalEndpoint("http"),
+						},
+						Scheme: "http",
 					},
-					Scheme: "http",
 				},
-			},
-		})
+			})
 
 		query := querierBuilder.
 			WithStoreAddresses(receive.InternalEndpoint("grpc")).

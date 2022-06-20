@@ -477,6 +477,8 @@ type RulerBuilder struct {
 	amCfg        []alert.AlertmanagerConfig
 	replicaLabel string
 	image        string
+	resendDelay  string
+	evalInterval string
 }
 
 // NewRulerBuilder is a Ruler future that allows extra configuration before initialization.
@@ -504,6 +506,16 @@ func (r *RulerBuilder) WithAlertManagerConfig(amCfg []alert.AlertmanagerConfig) 
 
 func (r *RulerBuilder) WithReplicaLabel(replicaLabel string) *RulerBuilder {
 	r.replicaLabel = replicaLabel
+	return r
+}
+
+func (r *RulerBuilder) WithResendDelay(resendDelay string) *RulerBuilder {
+	r.resendDelay = resendDelay
+	return r
+}
+
+func (r *RulerBuilder) WithEvalInterval(evalInterval string) *RulerBuilder {
+	r.evalInterval = evalInterval
 	return r
 }
 
@@ -550,6 +562,15 @@ func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Co
 	if r.replicaLabel != "" {
 		ruleArgs["--label"] = fmt.Sprintf(`%s="%s"`, replicaLabel, r.replicaLabel)
 	}
+
+	if r.resendDelay != "" {
+		ruleArgs["--resend-delay"] = r.resendDelay
+	}
+
+	if r.evalInterval != "" {
+		ruleArgs["--eval-interval"] = r.evalInterval
+	}
+
 	if remoteWriteCfg != nil {
 		rwCfgBytes, err := yaml.Marshal(struct {
 			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
