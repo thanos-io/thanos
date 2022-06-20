@@ -59,7 +59,6 @@ type Syncer struct {
 	mtx                      sync.Mutex
 	blocks                   map[ulid.ULID]*metadata.Meta
 	partial                  map[ulid.ULID]error
-	blockSyncConcurrency     int
 	metrics                  *syncerMetrics
 	duplicateBlocksFilter    *block.DeduplicateFilter
 	ignoreDeletionMarkFilter *block.IgnoreDeletionMarkFilter
