@@ -414,9 +414,11 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), responseStatusCode)
 	}
 	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Add(float64(len(wreq.Timeseries)))
+	totalSamples := 0
 	for _, timeseries := range wreq.Timeseries {
-		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Add(float64(len(timeseries.Samples)))
+		totalSamples += len(timeseries.Samples)
 	}
+	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Add(float64(totalSamples))
 }
 
 // forward accepts a write request, batches its time series by
