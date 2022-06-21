@@ -22,7 +22,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Add relabeling support.
 - [#5408](https://github.com/thanos-io/thanos/pull/5391) Receive: Add support for consistent hashrings.
 - [#5424](https://github.com/thanos-io/thanos/pull/5424) Receive: export metrics regarding size of remote write requests
-- [#5424](https://github.com/thanos-io/thanos/pull/5424) HTTP metrics: export number of in-flight HTTP requests
 
 ### Changed
 
