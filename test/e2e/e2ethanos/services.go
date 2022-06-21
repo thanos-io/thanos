@@ -181,6 +181,7 @@ type QuerierBuilder struct {
 	enableFeatures       []string
 	endpoints            []string
 
+	replicaLabels []string
 	tracingConfig string
 
 	e2e.Linkable
@@ -200,6 +201,7 @@ func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string)
 		name:           name,
 		storeAddresses: storeAddresses,
 		image:          DefaultImage(),
+		replicaLabels:  []string{replicaLabel},
 	}
 }
 
@@ -263,6 +265,12 @@ func (q *QuerierBuilder) WithTracingConfig(tracingConfig string) *QuerierBuilder
 	return q
 }
 
+// WithReplicaLabels replaces default [replica] replica label configuration for the querier.
+func (q *QuerierBuilder) WithReplicaLabels(labels ...string) *QuerierBuilder {
+	q.replicaLabels = labels
+	return q
+}
+
 func (q *QuerierBuilder) Init() e2e.InstrumentedRunnable {
 	args, err := q.collectArgs()
 	if err != nil {
@@ -284,40 +292,36 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 		"--grpc-address":          ":9091",
 		"--grpc-grace-period":     "0s",
 		"--http-address":          ":8080",
-		"--query.replica-label":   replicaLabel,
 		"--store.sd-dns-interval": "5s",
 		"--log.level":             infoLogLevel,
 		"--query.max-concurrent":  "1",
 		"--store.sd-interval":     "5s",
 	})
+
+	for _, repl := range q.replicaLabels {
+		args = append(args, "--query.replica-label="+repl)
+	}
 	for _, addr := range q.storeAddresses {
 		args = append(args, "--store="+addr)
 	}
-
 	for _, addr := range q.ruleAddresses {
 		args = append(args, "--rule="+addr)
 	}
-
 	for _, addr := range q.targetAddresses {
 		args = append(args, "--target="+addr)
 	}
-
 	for _, addr := range q.metadataAddresses {
 		args = append(args, "--metadata="+addr)
 	}
-
 	for _, addr := range q.exemplarAddresses {
 		args = append(args, "--exemplar="+addr)
 	}
-
 	for _, feature := range q.enableFeatures {
 		args = append(args, "--enable-feature="+feature)
 	}
-
 	for _, addr := range q.endpoints {
 		args = append(args, "--endpoint="+addr)
 	}
-
 	if len(q.fileSDStoreAddresses) > 0 {
 		if err := os.MkdirAll(q.Dir(), 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
@@ -339,19 +343,15 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 
 		args = append(args, "--store.sd-files="+filepath.Join(q.InternalDir(), "filesd.yaml"))
 	}
-
 	if q.routePrefix != "" {
 		args = append(args, "--web.route-prefix="+q.routePrefix)
 	}
-
 	if q.externalPrefix != "" {
 		args = append(args, "--web.external-prefix="+q.externalPrefix)
 	}
-
 	if q.tracingConfig != "" {
 		args = append(args, "--tracing.config="+q.tracingConfig)
 	}
-
 	return args, nil
 }
 
@@ -477,6 +477,8 @@ type RulerBuilder struct {
 	amCfg        []alert.AlertmanagerConfig
 	replicaLabel string
 	image        string
+	resendDelay  string
+	evalInterval string
 }
 
 // NewRulerBuilder is a Ruler future that allows extra configuration before initialization.
@@ -504,6 +506,16 @@ func (r *RulerBuilder) WithAlertManagerConfig(amCfg []alert.AlertmanagerConfig) 
 
 func (r *RulerBuilder) WithReplicaLabel(replicaLabel string) *RulerBuilder {
 	r.replicaLabel = replicaLabel
+	return r
+}
+
+func (r *RulerBuilder) WithResendDelay(resendDelay string) *RulerBuilder {
+	r.resendDelay = resendDelay
+	return r
+}
+
+func (r *RulerBuilder) WithEvalInterval(evalInterval string) *RulerBuilder {
+	r.evalInterval = evalInterval
 	return r
 }
 
@@ -550,6 +562,15 @@ func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []httpconfig.Co
 	if r.replicaLabel != "" {
 		ruleArgs["--label"] = fmt.Sprintf(`%s="%s"`, replicaLabel, r.replicaLabel)
 	}
+
+	if r.resendDelay != "" {
+		ruleArgs["--resend-delay"] = r.resendDelay
+	}
+
+	if r.evalInterval != "" {
+		ruleArgs["--eval-interval"] = r.evalInterval
+	}
+
 	if remoteWriteCfg != nil {
 		rwCfgBytes, err := yaml.Marshal(struct {
 			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
