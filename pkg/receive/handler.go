@@ -396,8 +396,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responseStatusCode := http.StatusOK
-	err = h.handleRequest(ctx, rep, tenant, &wreq)
-	if err != nil {
+	if err = h.handleRequest(ctx, rep, tenant, &wreq); err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
 		switch determineWriteErrorCause(err, 1) {
 		case errNotReady:
