@@ -85,7 +85,7 @@ func DefaultImage() string {
 		return os.Getenv("THANOS_IMAGE")
 	}
 
-	return "thanos"
+	return "thanosio/thanos:main-2022-06-16-0d15bc0d"
 }
 
 func defaultPromHttpConfig() string {
@@ -203,6 +203,36 @@ func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) *e2emon.In
 		Image:   "quay.io/prometheuscommunity/avalanche:main",
 		Command: e2e.NewCommandWithoutEntrypoint("avalanche", args...),
 	})), "http")
+}
+
+func NewPrometheusWithJaegerTracingSidecarCustomImage(e e2e.Environment, name, promConfig, webConfig,
+	promImage, minTime, sidecarImage, jaegerConfig string, enableFeatures ...string) (e2e.InstrumentedRunnable, e2e.InstrumentedRunnable) {
+	prom := NewPrometheus(e, name, promConfig, webConfig, promImage, enableFeatures...)
+
+	args := map[string]string{
+		"--debug.name":        fmt.Sprintf("sidecar-%v", name),
+		"--grpc-address":      ":9091",
+		"--grpc-grace-period": "0s",
+		"--http-address":      ":8080",
+		"--prometheus.url":    "http://" + prom.InternalEndpoint("http"),
+		"--tsdb.path":         prom.InternalDir(),
+		"--log.level":         "debug",
+		"--tracing.config":    jaegerConfig,
+	}
+	if len(webConfig) > 0 {
+		args["--prometheus.http-client"] = defaultPromHttpConfig()
+	}
+	if minTime != "" {
+		args["--min-time"] = minTime
+	}
+	sidecar := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("sidecar-%s", name)).
+		WithPorts(map[string]int{"http": 8080, "grpc": 9091}, "http").
+		Init(wrapWithDefaults(e2e.StartOptions{
+			Image:     sidecarImage,
+			Command:   e2e.NewCommand("sidecar", e2e.BuildArgs(args)...),
+			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		}))
+	return prom, sidecar
 }
 
 type QuerierBuilder struct {
