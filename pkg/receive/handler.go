@@ -105,8 +105,8 @@ type Handler struct {
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
 
-	writeSamplesTotal    *prometheus.CounterVec
-	writeTimeseriesTotal *prometheus.CounterVec
+	writeSamplesTotal    *prometheus.HistogramVec
+	writeTimeseriesTotal *prometheus.HistogramVec
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -145,20 +145,22 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help: "The number of times to replicate incoming write requests.",
 			},
 		),
-		writeTimeseriesTotal: promauto.With(o.Registry).NewCounterVec(
-			prometheus.CounterOpts{
+		writeTimeseriesTotal: promauto.With(o.Registry).NewHistogramVec(
+			prometheus.HistogramOpts{
 				Namespace: "thanos",
 				Subsystem: "receive",
-				Name:      "write_timeseries_total",
+				Name:      "write_timeseries",
 				Help:      "The number of timeseries received in the incoming write requests.",
+				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
 		),
-		writeSamplesTotal: promauto.With(o.Registry).NewCounterVec(
-			prometheus.CounterOpts{
+		writeSamplesTotal: promauto.With(o.Registry).NewHistogramVec(
+			prometheus.HistogramOpts{
 				Namespace: "thanos",
 				Subsystem: "receive",
-				Name:      "write_samples_total",
+				Name:      "write_samples",
 				Help:      "The number of sampled received in the incoming write requests.",
+				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
 		),
 	}
@@ -413,12 +415,12 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, err.Error(), responseStatusCode)
 	}
-	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Add(float64(len(wreq.Timeseries)))
+	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(len(wreq.Timeseries)))
 	totalSamples := 0
 	for _, timeseries := range wreq.Timeseries {
 		totalSamples += len(timeseries.Samples)
 	}
-	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Add(float64(totalSamples))
+	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
 }
 
 // forward accepts a write request, batches its time series by
