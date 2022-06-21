@@ -162,7 +162,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help: "The number of times to replicate incoming write requests.",
 			},
 		),
-		writeTimeseriesTotal: promauto.With(o.Registry).NewHistogramVec(
+		writeTimeseriesTotal: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: "thanos",
 				Subsystem: "receive",
@@ -171,7 +171,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
 		),
-		writeSamplesTotal: promauto.With(o.Registry).NewHistogramVec(
+		writeSamplesTotal: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: "thanos",
 				Subsystem: "receive",
