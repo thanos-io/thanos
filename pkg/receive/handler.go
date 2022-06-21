@@ -401,21 +401,17 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		switch determineWriteErrorCause(err, 1) {
 		case errNotReady:
 			responseStatusCode = http.StatusServiceUnavailable
-			http.Error(w, err.Error(), responseStatusCode)
 		case errUnavailable:
 			responseStatusCode = http.StatusServiceUnavailable
-			http.Error(w, err.Error(), responseStatusCode)
 		case errConflict:
 			responseStatusCode = http.StatusConflict
-			http.Error(w, err.Error(), responseStatusCode)
 		case errBadReplica:
 			responseStatusCode = http.StatusBadRequest
-			http.Error(w, err.Error(), responseStatusCode)
 		default:
 			level.Error(tLogger).Log("err", err, "msg", "internal server error")
 			responseStatusCode = http.StatusInternalServerError
-			http.Error(w, err.Error(), responseStatusCode)
 		}
+		http.Error(w, err.Error(), responseStatusCode)
 	}
 	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Add(float64(len(wreq.Timeseries)))
 	for _, timeseries := range wreq.Timeseries {
