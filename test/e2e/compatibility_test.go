@@ -150,6 +150,7 @@ func TestAlertCompliance(t *testing.T) {
 			// Use default resend delay and eval interval, as the compliance spec requires this.
 			WithResendDelay("1m").
 			WithEvalInterval("1m").
+			WithoutReplicaLabel().
 			InitTSDB(filepath.Join(rFuture.InternalDir(), "rules"), []httpconfig.Config{
 				{
 					EndpointsConfig: httpconfig.EndpointsConfig{
