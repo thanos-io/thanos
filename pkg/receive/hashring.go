@@ -106,11 +106,6 @@ type ketamaHashring struct {
 }
 
 func newKetamaHashring(endpoints []string, sectionsPerNode int) *ketamaHashring {
-	// Replication works by choosing subsequent nodes in the ring.
-	// In order to improve consistency, we avoid relying on the ordering of the endpoints
-	// and sort them lexicographically.
-	sort.Strings(endpoints)
-
 	numSections := len(endpoints) * sectionsPerNode
 	ring := ketamaHashring{
 		endpoints:    endpoints,
@@ -156,8 +151,8 @@ func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 		i = 0
 	}
 
-	nodeIndex := (c.sections[i].endpointIndex + n) % c.numEndpoints
-
+	i = (i + n) % numSections
+	nodeIndex := c.sections[i].endpointIndex
 	return c.endpoints[nodeIndex], nil
 }
 

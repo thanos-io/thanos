@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 - [#5339](https://github.com/thanos-io/thanos/pull/5339) Receive: Fix deadlock on interrupt in routerOnly mode
 - [#5357](https://github.com/thanos-io/thanos/pull/5357) Store: fix groupcache handling of slashes
+- [#5427](https://github.com/thanos-io/thanos/pull/5427) Receive: Fix Ketama hashring replication consistency
 
 ### Added
 
