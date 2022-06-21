@@ -151,7 +151,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Subsystem: "receive",
 				Name:      "write_timeseries_total",
 				Help:      "The number of timeseries received in the incoming write requests.",
-			}, []string{"code", "method", "tenant"},
+			}, []string{"code", "tenant"},
 		),
 		writeSamplesTotal: promauto.With(o.Registry).NewCounterVec(
 			prometheus.CounterOpts{
@@ -159,7 +159,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Subsystem: "receive",
 				Name:      "write_samples_total",
 				Help:      "The number of sampled received in the incoming write requests.",
-			}, []string{"code", "method", "tenant"},
+			}, []string{"code", "tenant"},
 		),
 	}
 
@@ -413,9 +413,9 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, err.Error(), responseStatusCode)
 	}
-	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Add(float64(len(wreq.Timeseries)))
+	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Add(float64(len(wreq.Timeseries)))
 	for _, timeseries := range wreq.Timeseries {
-		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), r.Method, tenant).Add(float64(len(timeseries.Samples)))
+		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Add(float64(len(timeseries.Samples)))
 	}
 }
 
