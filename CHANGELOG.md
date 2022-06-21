@@ -14,9 +14,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5339](https://github.com/thanos-io/thanos/pull/5339) Receive: When running in routerOnly mode, an interupt (SIGINT) will now exit the process.
 - [#5357](https://github.com/thanos-io/thanos/pull/5357) Store: Fix groupcache handling by making sure slashes in the cache's key are not getting
 interpreted by the router anymore.
-- [#5427](https://github.com/thanos-io/thanos/pull/5427) Receive: Fix Ketama hashring replication consistency. With the Ketama hashring, replication is currently handled by choosing subsequent nodes in the list of endpoints. This can lead to existing nodes
-getting more series when the hashring is scaled. This change makes replication to choose subsequent nodes from the hashring
-which should not create new series in old nodes when the hashring is scaled. Ketama hasring can be used by setting `--receive.hashrings-algorithm=ketama`
+- [#5427](https://github.com/thanos-io/thanos/pull/5427) Receive: Fix Ketama hashring replication consistency. With the Ketama hashring, replication is currently handled by choosing subsequent nodes in the list of endpoints. This can lead to existing nodes getting more series when the hashring is scaled. This change makes replication to choose subsequent nodes from the hashring which should not create new series in old nodes when the hashring is scaled. Ketama hasring can be used by setting `--receive.hashrings-algorithm=ketama`
 
 ### Added
 
