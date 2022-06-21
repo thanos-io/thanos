@@ -31,6 +31,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
+type GetStatsFunc func(tenantID, statsByLabelName string) *tsdb.Stats
+
 type MultiTSDB struct {
 	dataDir         string
 	logger          log.Logger
@@ -287,6 +289,18 @@ func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 		}
 	}
 	return res
+}
+
+func (t *MultiTSDB) Stats(tenantID, statsByLabelName string) *tsdb.Stats {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+
+	tenant, ok := t.tenants[tenantID]
+	if !ok {
+		return nil
+	}
+
+	return tenant.readyS.get().db.Head().Stats(statsByLabelName)
 }
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {

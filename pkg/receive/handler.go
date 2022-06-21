@@ -17,6 +17,9 @@ import (
 	"sync"
 	"time"
 
+	statusapi "github.com/thanos-io/thanos/pkg/api/status"
+	"github.com/thanos-io/thanos/pkg/logging"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -59,6 +62,13 @@ const (
 	labelError   = "error"
 )
 
+// Allowed fields in client certificates.
+const (
+	CertificateFieldOrganization       = "organization"
+	CertificateFieldOrganizationalUnit = "organizationalUnit"
+	CertificateFieldCommonName         = "commonName"
+)
+
 var (
 	// errConflict is returned whenever an operation fails due to any conflict-type error.
 	errConflict = errors.New("conflict")
@@ -72,8 +82,9 @@ var (
 type Options struct {
 	Writer            *Writer
 	ListenAddress     string
-	Registry          prometheus.Registerer
+	Registry          *prometheus.Registry
 	TenantHeader      string
+	TenantField       string
 	DefaultTenantID   string
 	ReplicaHeader     string
 	Endpoint          string
@@ -84,6 +95,7 @@ type Options struct {
 	DialOpts          []grpc.DialOption
 	ForwardTimeout    time.Duration
 	RelabelConfigs    []*relabel.Config
+	GetTSDBStats      GetStatsFunc
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -114,6 +126,11 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		logger = log.NewNopLogger()
 	}
 
+	var registerer prometheus.Registerer = nil
+	if o.Registry != nil {
+		registerer = o.Registry
+	}
+
 	h := &Handler{
 		logger:       logger,
 		writer:       o.Writer,
@@ -127,19 +144,19 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
-		forwardRequests: promauto.With(o.Registry).NewCounterVec(
+		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
 				Help: "The number of forward requests.",
 			}, []string{"result"},
 		),
-		replications: promauto.With(o.Registry).NewCounterVec(
+		replications: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_replications_total",
 				Help: "The number of replication operations done by the receiver. The success of replication is fulfilled when a quorum is met.",
 			}, []string{"result"},
 		),
-		replicationFactor: promauto.With(o.Registry).NewGauge(
+		replicationFactor: promauto.With(registerer).NewGauge(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_replication_factor",
 				Help: "The number of times to replicate incoming write requests.",
@@ -207,6 +224,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 	)
 
+	statusAPI := statusapi.New(statusapi.Options{
+		GetStats: h.getStats,
+		Registry: o.Registry,
+	})
+	statusAPI.Register(h.router, o.Tracer, logger, ins, logging.NewHTTPServerMiddleware(logger))
+
 	return h
 }
 
@@ -246,6 +269,19 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 			h.logger.Log("msg", "failed to write to response body", "err", err)
 		}
 	}
+}
+
+func (h *Handler) getStats(r *http.Request, statsByLabelName string) (*tsdb.Stats, error) {
+	if !h.isReady() {
+		return nil, fmt.Errorf("service unavailable")
+	}
+
+	tenantID := r.Header.Get(h.options.TenantHeader)
+	if tenantID == "" {
+		tenantID = h.options.DefaultTenantID
+	}
+
+	return h.options.GetTSDBStats(tenantID, statsByLabelName), nil
 }
 
 // Close stops the Handler.
@@ -328,12 +364,22 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
+	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
 	tenant := r.Header.Get(h.options.TenantHeader)
 	if tenant == "" {
 		tenant = h.options.DefaultTenantID
+	}
+
+	if h.options.TenantField != "" {
+		tenant, err = h.getTenantFromCertificate(r)
+		if err != nil {
+			// This must hard fail to ensure hard tenancy when feature is enabled.
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	tLogger := log.With(h.logger, "tenant", tenant)
@@ -346,7 +392,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		compressed.Grow(512)
 	}
-	_, err := io.Copy(&compressed, r.Body)
+	_, err = io.Copy(&compressed, r.Body)
 	if err != nil {
 		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
@@ -874,4 +920,43 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	client := storepb.NewWriteableStoreClient(conn)
 	p.cache[addr] = client
 	return client, nil
+}
+
+// getTenantFromCertificate extracts the tenant value from a client's presented certificate. The x509 field to use as
+// value can be configured with Options.TenantField. An error is returned when the extraction has not succeeded.
+func (h *Handler) getTenantFromCertificate(r *http.Request) (string, error) {
+	var tenant string
+
+	if len(r.TLS.PeerCertificates) == 0 {
+		return "", errors.New("could not get required certificate field from client cert")
+	}
+
+	// First cert is the leaf authenticated against.
+	cert := r.TLS.PeerCertificates[0]
+
+	switch h.options.TenantField {
+
+	case CertificateFieldOrganization:
+		if len(cert.Subject.Organization) == 0 {
+			return "", errors.New("could not get organization field from client cert")
+		}
+		tenant = cert.Subject.Organization[0]
+
+	case CertificateFieldOrganizationalUnit:
+		if len(cert.Subject.OrganizationalUnit) == 0 {
+			return "", errors.New("could not get organizationalUnit field from client cert")
+		}
+		tenant = cert.Subject.OrganizationalUnit[0]
+
+	case CertificateFieldCommonName:
+		if cert.Subject.CommonName == "" {
+			return "", errors.New("could not get commonName field from client cert")
+		}
+		tenant = cert.Subject.CommonName
+
+	default:
+		return "", errors.New("tls client cert field requested is not supported")
+	}
+
+	return tenant, nil
 }
