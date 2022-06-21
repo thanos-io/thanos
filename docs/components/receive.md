@@ -163,6 +163,12 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --receive.tenant-certificate-field=
+                                 Use TLS client's certificate field to determine
+                                 tenant for write requests. Must be one of
+                                 organization, organizationalUnit or commonName.
+                                 This setting will cause the
+                                 receive.tenant-header flag value to be ignored.
       --receive.tenant-header="THANOS-TENANT"
                                  HTTP header to determine tenant for write
                                  requests.

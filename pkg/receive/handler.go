@@ -62,6 +62,13 @@ const (
 	labelError   = "error"
 )
 
+// Allowed fields in client certificates.
+const (
+	CertificateFieldOrganization       = "organization"
+	CertificateFieldOrganizationalUnit = "organizationalUnit"
+	CertificateFieldCommonName         = "commonName"
+)
+
 var (
 	// errConflict is returned whenever an operation fails due to any conflict-type error.
 	errConflict = errors.New("conflict")
@@ -77,6 +84,7 @@ type Options struct {
 	ListenAddress     string
 	Registry          *prometheus.Registry
 	TenantHeader      string
+	TenantField       string
 	DefaultTenantID   string
 	ReplicaHeader     string
 	Endpoint          string
@@ -322,12 +330,22 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
+	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
 	tenant := r.Header.Get(h.options.TenantHeader)
 	if tenant == "" {
 		tenant = h.options.DefaultTenantID
+	}
+
+	if h.options.TenantField != "" {
+		tenant, err = h.getTenantFromCertificate(r)
+		if err != nil {
+			// This must hard fail to ensure hard tenancy when feature is enabled.
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	tLogger := log.With(h.logger, "tenant", tenant)
@@ -340,7 +358,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		compressed.Grow(512)
 	}
-	_, err := io.Copy(&compressed, r.Body)
+	_, err = io.Copy(&compressed, r.Body)
 	if err != nil {
 		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
@@ -864,4 +882,43 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	client := storepb.NewWriteableStoreClient(conn)
 	p.cache[addr] = client
 	return client, nil
+}
+
+// getTenantFromCertificate extracts the tenant value from a client's presented certificate. The x509 field to use as
+// value can be configured with Options.TenantField. An error is returned when the extraction has not succeeded.
+func (h *Handler) getTenantFromCertificate(r *http.Request) (string, error) {
+	var tenant string
+
+	if len(r.TLS.PeerCertificates) == 0 {
+		return "", errors.New("could not get required certificate field from client cert")
+	}
+
+	// First cert is the leaf authenticated against.
+	cert := r.TLS.PeerCertificates[0]
+
+	switch h.options.TenantField {
+
+	case CertificateFieldOrganization:
+		if len(cert.Subject.Organization) == 0 {
+			return "", errors.New("could not get organization field from client cert")
+		}
+		tenant = cert.Subject.Organization[0]
+
+	case CertificateFieldOrganizationalUnit:
+		if len(cert.Subject.OrganizationalUnit) == 0 {
+			return "", errors.New("could not get organizationalUnit field from client cert")
+		}
+		tenant = cert.Subject.OrganizationalUnit[0]
+
+	case CertificateFieldCommonName:
+		if cert.Subject.CommonName == "" {
+			return "", errors.New("could not get commonName field from client cert")
+		}
+		tenant = cert.Subject.CommonName
+
+	default:
+		return "", errors.New("tls client cert field requested is not supported")
+	}
+
+	return tenant, nil
 }
