@@ -48,12 +48,11 @@ func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64) 
 }
 
 // NewHandler wraps the given HTTP handler for instrumentation. It
-// registers five metric collectors (if not already done) and reports HTTP
+// registers four metric collectors (if not already done) and reports HTTP
 // metrics to the (newly or already) registered collectors: http_requests_total
 // (CounterVec), http_request_duration_seconds (Histogram),
-// http_request_size_bytes (Summary), http_response_size_bytes (Summary),
-// http_inflight_requests (Gauge). Each has a constant label named "handler"
-// with the provided handlerName as value.
+// http_request_size_bytes (Summary), http_response_size_bytes (Summary).
+// Each has a constant label named "handler" with the provided handlerName as value.
 func (ins *defaultInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler) http.HandlerFunc {
 	baseLabels := prometheus.Labels{"handler": handlerName}
 	return httpInstrumentationHandler(baseLabels, ins.metrics, handler)

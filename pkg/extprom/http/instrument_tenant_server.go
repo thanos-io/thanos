@@ -25,12 +25,11 @@ func NewTenantInstrumentationMiddleware(tenantHeaderName string, reg prometheus.
 }
 
 // NewHandler wraps the given HTTP handler for instrumentation. It
-// registers five metric collectors (if not already done) and reports HTTP
+// registers four metric collectors (if not already done) and reports HTTP
 // metrics to the (newly or already) registered collectors: http_requests_total
 // (CounterVec), http_request_duration_seconds (Histogram),
-// http_request_size_bytes (Summary), http_response_size_bytes (Summary),
-// http_inflight_requests (Gauge). Each has a constant label named "handler"
-// with the provided handlerName as value.
+// http_request_size_bytes (Summary), http_response_size_bytes (Summary).
+// Each has a constant label named "handler" with the provided handlerName as value.
 func (ins *tenantInstrumentationMiddleware) NewHandler(handlerName string, next http.Handler) http.HandlerFunc {
 	tenantWrapper := func(w http.ResponseWriter, r *http.Request) {
 		tenant := r.Header.Get(ins.tenantHeaderName)
