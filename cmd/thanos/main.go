@@ -85,7 +85,6 @@ func main() {
 
 	var g run.Group
 	var tracer opentracing.Tracer
-
 	// Setup optional tracing.
 	{
 		var (
