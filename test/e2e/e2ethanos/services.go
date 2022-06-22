@@ -494,12 +494,6 @@ func NewRulerBuilder(e e2e.Environment, name string) *RulerBuilder {
 	}
 }
 
-// Force no replica label; by default we use replica label in tests.
-func (r *RulerBuilder) WithoutReplicaLabel() *RulerBuilder {
-	r.replicaLabel = ""
-	return r
-}
-
 func (r *RulerBuilder) WithImage(image string) *RulerBuilder {
 	r.image = image
 	return r
