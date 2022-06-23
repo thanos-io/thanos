@@ -42,6 +42,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
+- [#5426](https://github.com/thanos-io/thanos/pull/5426) Compactor: Remove an unused flag `--block-sync-concurrency`.
+
 ## [v0.26.0](https://github.com/thanos-io/thanos/tree/release-0.26) - 2022.05.05
 
 ### Fixed

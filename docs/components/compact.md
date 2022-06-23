@@ -282,9 +282,6 @@ Flags:
       --block-meta-fetch-concurrency=32
                                 Number of goroutines to use when fetching block
                                 metadata from object storage.
-      --block-sync-concurrency=20
-                                Number of goroutines to use when syncing block
-                                metadata from object storage.
       --block-viewer.global.sync-block-interval=1m
                                 Repeat interval for syncing the blocks between
                                 local and remote view for /global Block Viewer
