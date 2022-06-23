@@ -61,34 +61,37 @@ func (ins *defaultInstrumentationMiddleware) NewHandler(handlerName string, hand
 func httpInstrumentationHandler(baseLabels prometheus.Labels, metrics *defaultMetrics, next http.Handler) http.HandlerFunc {
 	return promhttp.InstrumentHandlerRequestSize(
 		metrics.requestSize.MustCurryWith(baseLabels),
-		promhttp.InstrumentHandlerCounter(
-			metrics.requestsTotal.MustCurryWith(baseLabels),
-			promhttp.InstrumentHandlerResponseSize(
-				metrics.responseSize.MustCurryWith(baseLabels),
-				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					now := time.Now()
+		promhttp.InstrumentHandlerInFlight(
+			metrics.inflightHTTPRequests.With(baseLabels),
+			promhttp.InstrumentHandlerCounter(
+				metrics.requestsTotal.MustCurryWith(baseLabels),
+				promhttp.InstrumentHandlerResponseSize(
+					metrics.responseSize.MustCurryWith(baseLabels),
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						now := time.Now()
 
-					wd := &responseWriterDelegator{w: w}
-					next.ServeHTTP(wd, r)
+						wd := &responseWriterDelegator{w: w}
+						next.ServeHTTP(wd, r)
 
-					requestLabels := prometheus.Labels{"code": wd.Status(), "method": strings.ToLower(r.Method)}
-					observer := metrics.requestDuration.MustCurryWith(baseLabels).With(requestLabels)
-					observer.Observe(time.Since(now).Seconds())
+						requestLabels := prometheus.Labels{"code": wd.Status(), "method": strings.ToLower(r.Method)}
+						observer := metrics.requestDuration.MustCurryWith(baseLabels).With(requestLabels)
+						observer.Observe(time.Since(now).Seconds())
 
-					// If we find a tracingID we'll expose it as Exemplar.
-					span := opentracing.SpanFromContext(r.Context())
-					if span != nil {
-						spanCtx, ok := span.Context().(jaeger.SpanContext)
-						if ok && spanCtx.IsSampled() {
-							observer.(prometheus.ExemplarObserver).ObserveWithExemplar(
-								time.Since(now).Seconds(),
-								prometheus.Labels{
-									"traceID": spanCtx.TraceID().String(),
-								},
-							)
+						// If we find a tracingID we'll expose it as Exemplar.
+						span := opentracing.SpanFromContext(r.Context())
+						if span != nil {
+							spanCtx, ok := span.Context().(jaeger.SpanContext)
+							if ok && spanCtx.IsSampled() {
+								observer.(prometheus.ExemplarObserver).ObserveWithExemplar(
+									time.Since(now).Seconds(),
+									prometheus.Labels{
+										"traceID": spanCtx.TraceID().String(),
+									},
+								)
+							}
 						}
-					}
-				}),
+					}),
+				),
 			),
 		),
 	)
