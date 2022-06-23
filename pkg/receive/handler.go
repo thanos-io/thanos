@@ -116,6 +116,9 @@ type Handler struct {
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
+
+	writeSamplesTotal    *prometheus.HistogramVec
+	writeTimeseriesTotal *prometheus.HistogramVec
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -159,6 +162,24 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help: "The number of times to replicate incoming write requests.",
 			},
 		),
+		writeTimeseriesTotal: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_timeseries",
+				Help:      "The number of timeseries received in the incoming write requests.",
+				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+			}, []string{"code", "tenant"},
+		),
+		writeSamplesTotal: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_samples",
+				Help:      "The number of sampled received in the incoming write requests.",
+				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+			}, []string{"code", "tenant"},
+		),
 	}
 
 	h.forwardRequests.WithLabelValues(labelSuccess)
@@ -174,7 +195,9 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
-		ins = extpromhttp.NewInstrumentationMiddleware(o.Registry,
+		ins = extpromhttp.NewTenantInstrumentationMiddleware(
+			o.TenantHeader,
+			o.Registry,
 			[]float64{0.001, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.25, 0.5, 0.75, 1, 2, 3, 4, 5},
 		)
 	}
@@ -182,13 +205,24 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 		next = ins.NewHandler(name, http.HandlerFunc(next))
+
 		if o.Tracer != nil {
 			next = tracing.HTTPMiddleware(o.Tracer, name, logger, http.HandlerFunc(next))
 		}
 		return next
 	}
 
-	h.router.Post("/api/v1/receive", instrf("receive", readyf(middleware.RequestID(http.HandlerFunc(h.receiveHTTP)))))
+	h.router.Post(
+		"/api/v1/receive",
+		instrf(
+			"receive",
+			readyf(
+				middleware.RequestID(
+					http.HandlerFunc(h.receiveHTTP),
+				),
+			),
+		),
+	)
 
 	statusAPI := statusapi.New(statusapi.Options{
 		GetStats: h.getStats,
@@ -409,26 +443,30 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.handleRequest(ctx, rep, tenant, &wreq)
-	if err != nil {
+	responseStatusCode := http.StatusOK
+	if err = h.handleRequest(ctx, rep, tenant, &wreq); err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
+		switch determineWriteErrorCause(err, 1) {
+		case errNotReady:
+			responseStatusCode = http.StatusServiceUnavailable
+		case errUnavailable:
+			responseStatusCode = http.StatusServiceUnavailable
+		case errConflict:
+			responseStatusCode = http.StatusConflict
+		case errBadReplica:
+			responseStatusCode = http.StatusBadRequest
+		default:
+			level.Error(tLogger).Log("err", err, "msg", "internal server error")
+			responseStatusCode = http.StatusInternalServerError
+		}
+		http.Error(w, err.Error(), responseStatusCode)
 	}
-
-	switch determineWriteErrorCause(err, 1) {
-	case nil:
-		return
-	case errNotReady:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case errUnavailable:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case errConflict:
-		http.Error(w, err.Error(), http.StatusConflict)
-	case errBadReplica:
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	default:
-		level.Error(tLogger).Log("err", err, "msg", "internal server error")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(len(wreq.Timeseries)))
+	totalSamples := 0
+	for _, timeseries := range wreq.Timeseries {
+		totalSamples += len(timeseries.Samples)
 	}
+	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
 }
 
 // forward accepts a write request, batches its time series by
