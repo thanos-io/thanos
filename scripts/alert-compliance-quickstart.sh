@@ -25,16 +25,16 @@ export ALERT_COMPLIANCE_RULES
 curl -sNL -o "${ALERT_COMPLIANCE_RULES}" "https://raw.githubusercontent.com/prometheus/compliance/main/alert_generator/rules.yaml"
 
 ${THANOS_EXECUTABLE} receive \
-  --label 'receive_replica="0"' \
+  --label='receive_replica="0"' \
   --tsdb.path="${TMP_DATA}" &
 
 # We make sure to filter out the 'receive_replica' and 'tenant_id' labels,
 # which are added by the receiver (they cannot be present during the test).
 ${THANOS_EXECUTABLE} query \
-  --http-address 0.0.0.0:19192 \
-  --store 0.0.0.0:10901 \
-  --rule 0.0.0.0:20901 \
-  --grpc-address 0.0.0.0:19099 \
+  --http-address=0.0.0.0:19192 \
+  --store=0.0.0.0:10901 \
+  --rule=0.0.0.0:20901 \
+  --grpc-address=0.0.0.0:19099 \
   --query.replica-label="tenant_id" \
   --query.replica-label="receive_replica" &
 
