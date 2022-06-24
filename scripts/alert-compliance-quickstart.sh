@@ -21,28 +21,28 @@ export ALERT_COMPLIANCE_RULES=$(mktemp /tmp/rules-XXXX.yaml)
 
 curl -sNL -o ${ALERT_COMPLIANCE_RULES} "https://raw.githubusercontent.com/prometheus/compliance/main/alert_generator/rules.yaml"
 
- ${THANOS_EXECUTABLE} receive \
-    --label "receive_replica=\"0\"" \
-    --tsdb.path=${TMP_DATA} &
+${THANOS_EXECUTABLE} receive \
+  --label 'receive_replica="0"' \
+  --tsdb.path=${TMP_DATA} &
 
 # We make sure to filter out the 'receive_replica' and 'tenant_id' labels,
 # which are added by the receiver (they cannot be present during the test).
 ${THANOS_EXECUTABLE} query \
-    --http-address 0.0.0.0:19192 \
-    --store 0.0.0.0:10901 \
-    --rule 0.0.0.0:20901 \
-    --grpc-address 0.0.0.0:19099 \
-    --query.replica-label="tenant_id" \
-    --query.replica-label="receive_replica" &
+  --http-address 0.0.0.0:19192 \
+  --store 0.0.0.0:10901 \
+  --rule 0.0.0.0:20901 \
+  --grpc-address 0.0.0.0:19099 \
+  --query.replica-label="tenant_id" \
+  --query.replica-label="receive_replica" &
 
 # Script downloads the compliance test rules into a tmp file that `--rule-file` is pointing to.
 ${THANOS_EXECUTABLE} rule \
-    --rule-file=${ALERT_COMPLIANCE_RULES} \
-    --alertmanagers.url="http://0.0.0.0:8080" \
-    --query=0.0.0.0:19192 \
-    --http-address=0.0.0.0:20902 \
-    --grpc-address=0.0.0.0:20901 \
-    --data-dir=${TMP_DATA} &
+  --rule-file=${ALERT_COMPLIANCE_RULES} \
+  --alertmanagers.url="http://0.0.0.0:8080" \
+  --query=0.0.0.0:19192 \
+  --http-address=0.0.0.0:20902 \
+  --grpc-address=0.0.0.0:20901 \
+  --data-dir=${TMP_DATA} &
 
 sleep 0.5
 
