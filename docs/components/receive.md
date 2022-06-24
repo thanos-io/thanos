@@ -245,7 +245,8 @@ Flags:
                                  details on how retention is enforced for
                                  individual tenants, please refer to the Tenant
                                  lifecycle management section in the Receive
-                                 documentation.
+                                 documentation:
+                                 https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management
       --tsdb.wal-compression     Compress the tsdb WAL.
       --version                  Show application version.
 
