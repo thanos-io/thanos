@@ -46,8 +46,9 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 	}
 
 	var exporter *otlptrace.Exporter
-	if config.ClientType == TracingClientHTTP {
-		var err error
+	var err error
+	switch config.ClientType {
+	case TracingClientHTTP:
 		options := traceHTTPOptions(config)
 
 		client := otlptracehttp.NewClient(options...)
@@ -55,15 +56,16 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 		if err != nil {
 			return nil, err
 		}
-	} else if config.ClientType == TracingClientGRPC {
-		var err error
+
+	case TracingClientGRPC:
 		options := traceGRPCOptions(config)
 		client := otlptracegrpc.NewClient(options...)
 		exporter, err = otlptrace.New(ctx, client)
 		if err != nil {
 			return nil, err
 		}
-	} else {
+
+	default:
 		return nil, errors.New("otlp: invalid client type. Only 'http' and 'grpc' are accepted. ")
 	}
 

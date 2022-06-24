@@ -410,6 +410,7 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 				e2ethanos.DefaultPrometheusImage(),
 				"",
 				tcase.sidecarImage,
+				"",
 				e2ethanos.FeatureExemplarStorage,
 			)
 			testutil.Ok(t, e2e.StartAndWaitReady(p1, s1))

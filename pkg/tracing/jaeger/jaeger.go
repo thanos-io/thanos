@@ -52,9 +52,9 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 	var err error
 
 	if config.Endpoint != "" {
-		jaegerCollectorEndpointOptions := getCollectorEndpoints(config)
+		collectorOptions := getCollectorEndpoints(config)
 
-		exporter, err = otel_jaeger.New(otel_jaeger.WithCollectorEndpoint(jaegerCollectorEndpointOptions...))
+		exporter, err = otel_jaeger.New(otel_jaeger.WithCollectorEndpoint(collectorOptions...))
 		if err != nil {
 			return nil, err
 		}
@@ -72,13 +72,19 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 		}
 	}
 
-	tags := getAttributesFromTags(config)
+	var tags []attribute.KeyValue
+	if config.Tags != "" {
+		tags = getAttributesFromTags(config)
+	}
 	samplingFraction := getSamplingFraction(config.SamplerType, config.SamplerParam)
 	var queueSize tracesdk.BatchSpanProcessorOption
+	var processor tracesdk.SpanProcessor
 	if config.ReporterMaxQueueSize != 0 {
 		queueSize = tracesdk.WithMaxQueueSize(config.ReporterMaxQueueSize)
+		processor = tracesdk.NewBatchSpanProcessor(exporter, queueSize)
+	} else {
+		processor = tracesdk.NewBatchSpanProcessor(exporter)
 	}
-	processor := tracesdk.NewBatchSpanProcessor(exporter, queueSize)
 	tp := newTraceProvider(ctx, logger, processor, samplingFraction, tags, config.ServiceName)
 
 	return tp, nil
@@ -110,16 +116,16 @@ func getAttributesFromTags(config Config) []attribute.KeyValue {
 
 // getCollectorEndpoints returns Jaeger options populated with collector related options.
 func getCollectorEndpoints(config Config) []otel_jaeger.CollectorEndpointOption {
-	var jaegerCollectorEndpointOptions []otel_jaeger.CollectorEndpointOption
+	var collectorOptions []otel_jaeger.CollectorEndpointOption
 	if config.User != "" {
-		jaegerCollectorEndpointOptions = append(jaegerCollectorEndpointOptions, otel_jaeger.WithUsername(config.User))
+		collectorOptions = append(collectorOptions, otel_jaeger.WithUsername(config.User))
 	}
 	if config.Password != "" {
-		jaegerCollectorEndpointOptions = append(jaegerCollectorEndpointOptions, otel_jaeger.WithPassword(config.Password))
+		collectorOptions = append(collectorOptions, otel_jaeger.WithPassword(config.Password))
 	}
-	jaegerCollectorEndpointOptions = append(jaegerCollectorEndpointOptions, otel_jaeger.WithEndpoint(config.Endpoint))
+	collectorOptions = append(collectorOptions, otel_jaeger.WithEndpoint(config.Endpoint))
 
-	return jaegerCollectorEndpointOptions
+	return collectorOptions
 }
 
 // getAgentEndpointOptions returns Jaeger options populated with agent related options.

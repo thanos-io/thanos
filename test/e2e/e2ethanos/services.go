@@ -85,7 +85,7 @@ func DefaultImage() string {
 		return os.Getenv("THANOS_IMAGE")
 	}
 
-	return "thanosio/thanos:main-2022-06-16-0d15bc0d"
+	return "thanos"
 }
 
 func defaultPromHttpConfig() string {

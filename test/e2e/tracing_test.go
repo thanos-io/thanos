@@ -54,7 +54,7 @@ func TestJaegerTracing(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithJaegerTracingSidecarCustomImage(env, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "",
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecarCustomImage(env, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "",
 		e2ethanos.DefaultPrometheusImage(), "", e2ethanos.DefaultImage(), string(jaegerConfig), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
 
@@ -102,6 +102,7 @@ config:
 
 		// Jaeger might give a 404 or 500 before the trace is there.  Retry.
 		if response.StatusCode != http.StatusOK {
+			t.Logf("\n\n WAITING")
 			b.Wait()
 			continue
 		}

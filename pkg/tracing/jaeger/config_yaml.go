@@ -4,6 +4,7 @@
 package jaeger
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -162,7 +163,11 @@ func parseTags(sTags string) []opentracing.Tag {
 	pairs := strings.Split(sTags, ",")
 	tags := make([]opentracing.Tag, 0)
 	for _, p := range pairs {
+		fmt.Printf("\n\n p is: %s", p)
 		kv := strings.SplitN(p, "=", 2)
+		if len(kv) < 2 {
+			continue // to avoid panic
+		}
 		k, v := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
 
 		if strings.HasPrefix(v, "${") && strings.HasSuffix(v, "}") {
