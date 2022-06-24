@@ -6,10 +6,8 @@ package jaeger
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"strconv"
-	"strings"
 
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
@@ -17,10 +15,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber/jaeger-client-go"
-	"github.com/uber/jaeger-client-go/config"
-	jaeger_prometheus "github.com/uber/jaeger-lib/metrics/prometheus"
 	"go.opentelemetry.io/otel/attribute"
 	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -110,8 +105,7 @@ func getSamplingFraction(samplerType string, samplingFactor float64) float64 {
 
 // getAttributesFromTags returns tags as OTel attributes.
 func getAttributesFromTags(config Config) []attribute.KeyValue {
-	opentracingTags := parseTags(config.Tags)
-	return migration.ConvertOTTagsToOTelAttrs(opentracingTags)
+	return parseTags(config.Tags)
 }
 
 // getCollectorEndpoints returns Jaeger options populated with collector related options.
@@ -159,43 +153,4 @@ func newTraceProvider(ctx context.Context, logger log.Logger, processor tracesdk
 	)
 
 	return tp
-}
-
-// NewTracer create tracer from YAML.
-func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Registry, conf []byte) (opentracing.Tracer, io.Closer, error) {
-	var (
-		cfg          *config.Configuration
-		err          error
-		jaegerTracer opentracing.Tracer
-		closer       io.Closer
-	)
-	if conf != nil {
-		level.Info(logger).Log("msg", "loading Jaeger tracing configuration from YAML")
-		cfg, err = ParseConfigFromYaml(conf)
-	} else {
-		level.Info(logger).Log("msg", "loading Jaeger tracing configuration from ENV")
-		cfg, err = config.FromEnv()
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-
-	cfg.Headers = &jaeger.HeadersConfig{
-		JaegerDebugHeader: strings.ToLower(tracing.ForceTracingBaggageKey),
-	}
-	cfg.Headers.ApplyDefaults()
-	jaegerTracer, closer, err = cfg.NewTracer(
-		config.Metrics(jaeger_prometheus.New(jaeger_prometheus.WithRegisterer(metrics))),
-		config.Logger(&jaegerLogger{
-			logger: logger,
-		}),
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	t := &Tracer{
-		jaegerTracer,
-	}
-	return t, closer, err
 }

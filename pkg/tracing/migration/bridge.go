@@ -13,7 +13,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	ot_propagator "go.opentelemetry.io/contrib/propagators/ot"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	bridge "go.opentelemetry.io/otel/bridge/opentracing"
 	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
@@ -72,14 +71,6 @@ type shutdownAsCloser func() error
 
 func (s shutdownAsCloser) Close() error {
 	return s()
-}
-
-func ConvertOTTagsToOTelAttrs(tags []opentracing.Tag) []attribute.KeyValue {
-	var attrs []attribute.KeyValue
-	for _, tag := range tags {
-		attrs = append(attrs, attribute.String(tag.Key, tag.Value.(string)))
-	}
-	return attrs
 }
 
 // This wrapper is necessary to enable proper trace propagation for gRPC

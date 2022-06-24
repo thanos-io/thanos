@@ -4,7 +4,6 @@
 package jaeger
 
 import (
-	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -12,11 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
-	"gopkg.in/yaml.v2"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Config - YAML configuration. For details see to https://github.com/jaegertracing/jaeger-client-go#environment-variables.
@@ -39,47 +37,6 @@ type Config struct {
 	AgentHost              string        `yaml:"agent_host"`
 	AgentPort              int           `yaml:"agent_port"`
 	Gen128Bit              bool          `yaml:"traceid_128bit"`
-}
-
-// ParseConfigFromYaml uses config YAML to set the tracer's Configuration.
-func ParseConfigFromYaml(cfg []byte) (*config.Configuration, error) {
-	conf := &Config{}
-
-	if err := yaml.Unmarshal(cfg, &conf); err != nil {
-		return nil, err
-	}
-
-	c := &config.Configuration{}
-
-	if conf.ServiceName != "" {
-		c.ServiceName = conf.ServiceName
-	}
-
-	if conf.RPCMetrics {
-		c.RPCMetrics = conf.RPCMetrics
-	}
-
-	if conf.Gen128Bit {
-		c.Gen128Bit = conf.Gen128Bit
-	}
-
-	if conf.Disabled {
-		c.Disabled = conf.Disabled
-	}
-
-	if conf.Tags != "" {
-		c.Tags = parseTags(conf.Tags)
-	}
-
-	c.Sampler = samplerConfigFromConfig(*conf)
-
-	if r, err := reporterConfigFromConfig(*conf); err == nil {
-		c.Reporter = r
-	} else {
-		return nil, errors.Wrap(err, "cannot obtain reporter config from YAML")
-	}
-
-	return c, nil
 }
 
 // samplerConfigFromConfig creates a new SamplerConfig based on the YAML Config.
@@ -159,11 +116,10 @@ func reporterConfigFromConfig(cfg Config) (*config.ReporterConfig, error) {
 // - comma separated list of key=value
 // - value can be specified using the notation ${envVar:defaultValue}, where `envVar`
 // is an environment variable and `defaultValue` is the value to use in case the env var is not set.
-func parseTags(sTags string) []opentracing.Tag {
+func parseTags(sTags string) []attribute.KeyValue {
 	pairs := strings.Split(sTags, ",")
-	tags := make([]opentracing.Tag, 0)
+	tags := make([]attribute.KeyValue, 0)
 	for _, p := range pairs {
-		fmt.Printf("\n\n p is: %s", p)
 		kv := strings.SplitN(p, "=", 2)
 		if len(kv) < 2 {
 			continue // to avoid panic
@@ -179,7 +135,7 @@ func parseTags(sTags string) []opentracing.Tag {
 			}
 		}
 
-		tag := opentracing.Tag{Key: k, Value: v}
+		tag := attribute.String(k, v)
 		tags = append(tags, tag)
 	}
 
