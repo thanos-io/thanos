@@ -105,7 +105,6 @@ type HTTPConfig struct {
 	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
 }
 
-// DefaultTransport build http.Transport from config.
 func DefaultTransport(c HTTPConfig) *http.Transport {
 	transport := exthttp.NewTransport()
 	transport.IdleConnTimeout = time.Duration(c.IdleConnTimeout)
@@ -149,6 +148,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		bucketURL = cos.NewBucketURL(fmt.Sprintf("%s-%s", config.Bucket, config.AppId), config.Region, true)
 	}
 	b := &cos.BaseURL{BucketURL: bucketURL}
+
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
 			SecretID:  config.SecretId,
