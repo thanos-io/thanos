@@ -6,8 +6,6 @@ package jaeger
 import (
 	"context"
 	"fmt"
-	"math"
-	"strconv"
 
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
@@ -85,50 +83,9 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 	return tp, nil
 }
 
-// getSamplingFraction returns the sampling fraction based on the sampler type.
-// Ref: https://www.jaegertracing.io/docs/1.35/sampling/#client-sampling-configuration
-func getSamplingFraction(samplerType string, samplingFactor float64) float64 {
-	if samplerType == "const" {
-		if samplingFactor > 1 {
-			return 1.0
-		} else if samplingFactor < 0 {
-			return 0.0
-		}
-		return math.Round(samplingFactor) // Returns either 0 or 1 for values [0,1].
-	} else if samplerType == "probabilistic" {
-		return samplingFactor
-	} else if samplerType == "ratelimiting" {
-		return math.Round(samplingFactor) // Needs to be an integer.
-	}
-	return samplingFactor
-}
-
 // getAttributesFromTags returns tags as OTel attributes.
 func getAttributesFromTags(config Config) []attribute.KeyValue {
 	return parseTags(config.Tags)
-}
-
-// getCollectorEndpoints returns Jaeger options populated with collector related options.
-func getCollectorEndpoints(config Config) []otel_jaeger.CollectorEndpointOption {
-	var collectorOptions []otel_jaeger.CollectorEndpointOption
-	if config.User != "" {
-		collectorOptions = append(collectorOptions, otel_jaeger.WithUsername(config.User))
-	}
-	if config.Password != "" {
-		collectorOptions = append(collectorOptions, otel_jaeger.WithPassword(config.Password))
-	}
-	collectorOptions = append(collectorOptions, otel_jaeger.WithEndpoint(config.Endpoint))
-
-	return collectorOptions
-}
-
-// getAgentEndpointOptions returns Jaeger options populated with agent related options.
-func getAgentEndpointOptions(config Config) []otel_jaeger.AgentEndpointOption {
-	var jaegerAgentEndpointOptions []otel_jaeger.AgentEndpointOption
-	jaegerAgentEndpointOptions = append(jaegerAgentEndpointOptions, otel_jaeger.WithAgentHost(config.AgentHost))
-	jaegerAgentEndpointOptions = append(jaegerAgentEndpointOptions, otel_jaeger.WithAgentPort(strconv.Itoa(config.AgentPort)))
-
-	return jaegerAgentEndpointOptions
 }
 
 func newTraceProvider(ctx context.Context, logger log.Logger, processor tracesdk.SpanProcessor,

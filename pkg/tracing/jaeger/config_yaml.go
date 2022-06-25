@@ -4,17 +4,14 @@
 package jaeger
 
 import (
-	"net"
-	"net/url"
+	"math"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/uber/jaeger-client-go"
-	"github.com/uber/jaeger-client-go/config"
 	"go.opentelemetry.io/otel/attribute"
+	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
 )
 
 // Config - YAML configuration. For details see to https://github.com/jaegertracing/jaeger-client-go#environment-variables.
@@ -39,76 +36,45 @@ type Config struct {
 	Gen128Bit              bool          `yaml:"traceid_128bit"`
 }
 
-// samplerConfigFromConfig creates a new SamplerConfig based on the YAML Config.
-func samplerConfigFromConfig(cfg Config) *config.SamplerConfig {
-	sc := &config.SamplerConfig{}
-
-	if cfg.SamplerType != "" {
-		sc.Type = cfg.SamplerType
+// getCollectorEndpoints returns Jaeger options populated with collector related options.
+func getCollectorEndpoints(config Config) []otel_jaeger.CollectorEndpointOption {
+	var collectorOptions []otel_jaeger.CollectorEndpointOption
+	if config.User != "" {
+		collectorOptions = append(collectorOptions, otel_jaeger.WithUsername(config.User))
 	}
-
-	if cfg.SamplerParam != 0 {
-		sc.Param = cfg.SamplerParam
+	if config.Password != "" {
+		collectorOptions = append(collectorOptions, otel_jaeger.WithPassword(config.Password))
 	}
+	collectorOptions = append(collectorOptions, otel_jaeger.WithEndpoint(config.Endpoint))
 
-	if cfg.SamplerManagerHostPort != "" {
-		sc.SamplingServerURL = cfg.SamplerManagerHostPort
-	}
-
-	if cfg.SamplerMaxOperations != 0 {
-		sc.MaxOperations = cfg.SamplerMaxOperations
-	}
-
-	if cfg.SamplerRefreshInterval != 0 {
-		sc.SamplingRefreshInterval = cfg.SamplerRefreshInterval
-	}
-
-	return sc
+	return collectorOptions
 }
 
-// reporterConfigFromConfig creates a new ReporterConfig based on the YAML Config.
-func reporterConfigFromConfig(cfg Config) (*config.ReporterConfig, error) {
-	rc := &config.ReporterConfig{}
+// getAgentEndpointOptions returns Jaeger options populated with agent related options.
+func getAgentEndpointOptions(config Config) []otel_jaeger.AgentEndpointOption {
+	var jaegerAgentEndpointOptions []otel_jaeger.AgentEndpointOption
+	jaegerAgentEndpointOptions = append(jaegerAgentEndpointOptions, otel_jaeger.WithAgentHost(config.AgentHost))
+	jaegerAgentEndpointOptions = append(jaegerAgentEndpointOptions, otel_jaeger.WithAgentPort(strconv.Itoa(config.AgentPort)))
 
-	if cfg.ReporterMaxQueueSize != 0 {
-		rc.QueueSize = cfg.ReporterMaxQueueSize
-	}
+	return jaegerAgentEndpointOptions
+}
 
-	if cfg.ReporterFlushInterval != 0 {
-		rc.BufferFlushInterval = cfg.ReporterFlushInterval
-	}
-
-	if cfg.ReporterLogSpans {
-		rc.LogSpans = cfg.ReporterLogSpans
-	}
-
-	if cfg.Endpoint != "" {
-		u, err := url.ParseRequestURI(cfg.Endpoint)
-		if err != nil {
-			return nil, errors.Wrapf(err, "cannot parse endpoint=%s", cfg.Endpoint)
+// getSamplingFraction returns the sampling fraction based on the sampler type.
+// Ref: https://www.jaegertracing.io/docs/1.35/sampling/#client-sampling-configuration
+func getSamplingFraction(samplerType string, samplingFactor float64) float64 {
+	if samplerType == "const" {
+		if samplingFactor > 1 {
+			return 1.0
+		} else if samplingFactor < 0 {
+			return 0.0
 		}
-		rc.CollectorEndpoint = u.String()
-		user := cfg.User
-		pswd := cfg.Password
-		if user != "" && pswd == "" || user == "" && pswd != "" {
-			return nil, errors.Errorf("you must set %s and %s parameters together", cfg.User, cfg.Password)
-		}
-		rc.User = user
-		rc.Password = pswd
-	} else {
-		host := jaeger.DefaultUDPSpanServerHost
-		if cfg.AgentHost != "" {
-			host = cfg.AgentHost
-		}
-
-		port := jaeger.DefaultUDPSpanServerPort
-		if cfg.AgentPort != 0 {
-			port = cfg.AgentPort
-		}
-		rc.LocalAgentHostPort = net.JoinHostPort(host, strconv.Itoa(port))
+		return math.Round(samplingFactor) // Returns either 0 or 1 for values [0,1].
+	} else if samplerType == "probabilistic" {
+		return samplingFactor
+	} else if samplerType == "ratelimiting" {
+		return math.Round(samplingFactor) // Needs to be an integer.
 	}
-
-	return rc, nil
+	return samplingFactor
 }
 
 // parseTags parses the given string into a collection of Tags.
@@ -116,6 +82,7 @@ func reporterConfigFromConfig(cfg Config) (*config.ReporterConfig, error) {
 // - comma separated list of key=value
 // - value can be specified using the notation ${envVar:defaultValue}, where `envVar`
 // is an environment variable and `defaultValue` is the value to use in case the env var is not set.
+// TODO(aditi): when Lighstep and Elastic APM have been migrated, move 'parseTags()' to the common 'tracing' package.
 func parseTags(sTags string) []attribute.KeyValue {
 	pairs := strings.Split(sTags, ",")
 	tags := make([]attribute.KeyValue, 0)

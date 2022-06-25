@@ -72,7 +72,7 @@ require (
 	github.com/thanos-community/promql-engine v0.0.0-20220929065849-dbc95397ccf3
 	github.com/thanos-io/objstore v0.0.0-20220923084403-cec51c61948b
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
-	github.com/uber/jaeger-lib v2.4.1+incompatible
+	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
 	github.com/weaveworks/common v0.0.0-20220706100410-67d27ed40fae
 	go.elastic.co/apm v1.11.0
