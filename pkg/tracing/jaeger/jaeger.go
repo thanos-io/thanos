@@ -70,14 +70,19 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 		tags = getAttributesFromTags(config)
 	}
 	samplingFraction := getSamplingFraction(config.SamplerType, config.SamplerParam)
-	var queueSize tracesdk.BatchSpanProcessorOption
+	var processorOptions []tracesdk.BatchSpanProcessorOption
 	var processor tracesdk.SpanProcessor
 	if config.ReporterMaxQueueSize != 0 {
-		queueSize = tracesdk.WithMaxQueueSize(config.ReporterMaxQueueSize)
-		processor = tracesdk.NewBatchSpanProcessor(exporter, queueSize)
-	} else {
-		processor = tracesdk.NewBatchSpanProcessor(exporter)
+		processorOptions = append(processorOptions, tracesdk.WithMaxQueueSize(config.ReporterMaxQueueSize))
 	}
+
+	//Ref: https://epsagon.com/observability/opentelemetry-best-practices-overview-part-2-2/ .
+	if config.ReporterFlushInterval != 0 {
+		processorOptions = append(processorOptions, tracesdk.WithBatchTimeout(config.ReporterFlushInterval))
+	}
+
+	processor = tracesdk.NewBatchSpanProcessor(exporter, processorOptions...)
+
 	tp := newTraceProvider(ctx, logger, processor, samplingFraction, tags, config.ServiceName)
 
 	return tp, nil

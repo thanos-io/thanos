@@ -4,6 +4,7 @@
 package jaeger
 
 import (
+	"log"
 	"math"
 	"os"
 	"strconv"
@@ -16,24 +17,28 @@ import (
 
 // Config - YAML configuration. For details see to https://github.com/jaegertracing/jaeger-client-go#environment-variables.
 type Config struct {
-	ServiceName            string        `yaml:"service_name"`
-	Disabled               bool          `yaml:"disabled"`
-	RPCMetrics             bool          `yaml:"rpc_metrics"`
-	Tags                   string        `yaml:"tags"`
-	SamplerType            string        `yaml:"sampler_type"`
-	SamplerParam           float64       `yaml:"sampler_param"`
-	SamplerManagerHostPort string        `yaml:"sampler_manager_host_port"`
-	SamplerMaxOperations   int           `yaml:"sampler_max_operations"`
-	SamplerRefreshInterval time.Duration `yaml:"sampler_refresh_interval"`
-	ReporterMaxQueueSize   int           `yaml:"reporter_max_queue_size"`
-	ReporterFlushInterval  time.Duration `yaml:"reporter_flush_interval"`
-	ReporterLogSpans       bool          `yaml:"reporter_log_spans"`
-	Endpoint               string        `yaml:"endpoint"`
-	User                   string        `yaml:"user"`
-	Password               string        `yaml:"password"`
-	AgentHost              string        `yaml:"agent_host"`
-	AgentPort              int           `yaml:"agent_port"`
-	Gen128Bit              bool          `yaml:"traceid_128bit"`
+	ServiceName                        string        `yaml:"service_name"`
+	Disabled                           bool          `yaml:"disabled"`
+	RPCMetrics                         bool          `yaml:"rpc_metrics"`
+	Tags                               string        `yaml:"tags"`
+	SamplerType                        string        `yaml:"sampler_type"`
+	SamplerParam                       float64       `yaml:"sampler_param"`
+	SamplerManagerHostPort             string        `yaml:"sampler_manager_host_port"`
+	SamplerMaxOperations               int           `yaml:"sampler_max_operations"`
+	SamplerRefreshInterval             time.Duration `yaml:"sampler_refresh_interval"`
+	ReporterMaxQueueSize               int           `yaml:"reporter_max_queue_size"`
+	ReporterFlushInterval              time.Duration `yaml:"reporter_flush_interval"`
+	ReporterLogSpans                   bool          `yaml:"reporter_log_spans"`
+	ReporterDisableAttemptReconnecting bool          `yaml:"reporter_disable_attempt_reconnecting"`
+	ReporterAttemptReconnectInterval   time.Duration `yaml:"reporter_attempt_reconnect_interval"`
+	Endpoint                           string        `yaml:"endpoint"`
+	User                               string        `yaml:"user"`
+	Password                           string        `yaml:"password"`
+	AgentHost                          string        `yaml:"agent_host"`
+	AgentPort                          int           `yaml:"agent_port"`
+	Gen128Bit                          bool          `yaml:"traceid_128bit"`
+	// Remove the above field. Ref: https://github.com/open-telemetry/opentelemetry-specification/issues/525#issuecomment-605519217
+	// Ref: https://opentelemetry.io/docs/reference/specification/trace/api/#spancontext
 }
 
 // getCollectorEndpoints returns Jaeger options populated with collector related options.
@@ -52,11 +57,24 @@ func getCollectorEndpoints(config Config) []otel_jaeger.CollectorEndpointOption 
 
 // getAgentEndpointOptions returns Jaeger options populated with agent related options.
 func getAgentEndpointOptions(config Config) []otel_jaeger.AgentEndpointOption {
-	var jaegerAgentEndpointOptions []otel_jaeger.AgentEndpointOption
-	jaegerAgentEndpointOptions = append(jaegerAgentEndpointOptions, otel_jaeger.WithAgentHost(config.AgentHost))
-	jaegerAgentEndpointOptions = append(jaegerAgentEndpointOptions, otel_jaeger.WithAgentPort(strconv.Itoa(config.AgentPort)))
+	var endpointOptions []otel_jaeger.AgentEndpointOption
+	endpointOptions = append(endpointOptions, otel_jaeger.WithAgentHost(config.AgentHost))
+	endpointOptions = append(endpointOptions, otel_jaeger.WithAgentPort(strconv.Itoa(config.AgentPort)))
 
-	return jaegerAgentEndpointOptions
+	// This option was part of the Jaeger config was JAEGER_REPORTER_ATTEMPT_RECONNECTING_DISABLED.
+	if config.ReporterDisableAttemptReconnecting {
+		endpointOptions = append(endpointOptions, otel_jaeger.WithDisableAttemptReconnecting())
+		if config.ReporterAttemptReconnectInterval != 0 {
+			endpointOptions = append(endpointOptions, otel_jaeger.WithAttemptReconnectingInterval(config.ReporterAttemptReconnectInterval))
+		}
+	}
+
+	if config.ReporterLogSpans {
+		var logger *log.Logger
+		endpointOptions = append(endpointOptions, otel_jaeger.WithLogger(logger))
+	}
+
+	return endpointOptions
 }
 
 // getSamplingFraction returns the sampling fraction based on the sampler type.
@@ -77,7 +95,7 @@ func getSamplingFraction(samplerType string, samplingFactor float64) float64 {
 	return samplingFactor
 }
 
-// parseTags parses the given string into a collection of Tags.
+// parseTags parses the given string into a collection of attributes.
 // Spec for this value:
 // - comma separated list of key=value
 // - value can be specified using the notation ${envVar:defaultValue}, where `envVar`

@@ -5,10 +5,10 @@ package otlp
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
