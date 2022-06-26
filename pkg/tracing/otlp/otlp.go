@@ -21,17 +21,26 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type Config struct {
-	ClientType         string        `yaml:"client)type"`
-	ReconnectionPeriod time.Duration `yaml:"reconnection_period"`
-	Compression        string        `yaml:"compression"`
-	Insecure           bool          `yaml:"insecure"`
-	Endpoint           string        `yaml:"endpoint"`
-	URLPath            string        `yaml:"url_path"`
-	Timeout            time.Duration `yaml:"timeout"`
+type retryConfig struct {
+	RetryEnabled         bool          `yaml:"retry_enabled"`
+	RetryInitialInterval time.Duration `yaml:"retry_initial_interval"`
+	RetryMaxInterval     time.Duration `yaml:"retry_max_interval"`
+	RetryMaxElapsedTime  time.Duration `yaml:"retry_max_elapsed_time"`
 }
 
-// add TLS config and HTTP headers
+type Config struct {
+	ClientType         string            `yaml:"client_type"`
+	ReconnectionPeriod time.Duration     `yaml:"reconnection_period"`
+	Compression        string            `yaml:"compression"`
+	Insecure           bool              `yaml:"insecure"`
+	Endpoint           string            `yaml:"endpoint"`
+	URLPath            string            `yaml:"url_path"`
+	Timeout            time.Duration     `yaml:"timeout"`
+	RetryConfig        retryConfig       `yaml:"retry_config"`
+	Headers            map[string]string `yaml:"headers"`
+}
+
+// add TLS config
 
 var (
 	TracingClientGRPC string = "grpc"
@@ -105,6 +114,14 @@ func traceGRPCOptions(config Config) []otlptracegrpc.Option {
 		}
 	}
 
+	if config.RetryConfig.RetryEnabled {
+		options = append(options, otlptracegrpc.WithRetry(createGRPCRetryConfig(config)))
+	}
+
+	if config.Headers != nil {
+		options = append(options, otlptracegrpc.WithHeaders(config.Headers))
+	}
+
 	return options
 }
 
@@ -132,5 +149,49 @@ func traceHTTPOptions(config Config) []otlptracehttp.Option {
 		options = append(options, otlptracehttp.WithTimeout(config.Timeout))
 	}
 
+	if config.RetryConfig.RetryEnabled {
+		options = append(options, otlptracehttp.WithRetry(createHTTPRetryConfig(config)))
+	}
+
+	if config.Headers != nil {
+		options = append(options, otlptracehttp.WithHeaders(config.Headers))
+	}
+
 	return options
+}
+
+func createHTTPRetryConfig(config Config) otlptracehttp.RetryConfig {
+
+	var retryConfig otlptracehttp.RetryConfig
+	if config.RetryConfig.RetryInitialInterval != 0 {
+		retryConfig.InitialInterval = config.RetryConfig.RetryInitialInterval
+	}
+
+	if config.RetryConfig.RetryMaxInterval != 0 {
+		retryConfig.MaxInterval = config.RetryConfig.RetryMaxInterval
+	}
+
+	if config.RetryConfig.RetryMaxElapsedTime != 0 {
+		retryConfig.MaxElapsedTime = config.RetryConfig.RetryMaxElapsedTime
+	}
+
+	return retryConfig
+}
+
+func createGRPCRetryConfig(config Config) otlptracegrpc.RetryConfig {
+
+	var retryConfig otlptracegrpc.RetryConfig
+	if config.RetryConfig.RetryInitialInterval != 0 {
+		retryConfig.InitialInterval = config.RetryConfig.RetryInitialInterval
+	}
+
+	if config.RetryConfig.RetryMaxInterval != 0 {
+		retryConfig.MaxInterval = config.RetryConfig.RetryMaxInterval
+	}
+
+	if config.RetryConfig.RetryMaxElapsedTime != 0 {
+		retryConfig.MaxElapsedTime = config.RetryConfig.RetryMaxElapsedTime
+	}
+
+	return retryConfig
 }
