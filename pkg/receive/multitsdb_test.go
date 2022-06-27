@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/objstore"
+
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/client_golang/prometheus"
@@ -410,6 +412,94 @@ func checkExemplarsResponse(t *testing.T, name string, expected, data []exemplar
 			testutil.Equals(t, *expected[i].Exemplars[j], *data[i].Exemplars[j])
 		}
 	}
+}
+
+func TestMultiTSDBPrune(t *testing.T) {
+	tests := []struct {
+		name            string
+		bucket          objstore.Bucket
+		expectedTenants int
+		expectedUploads int
+	}{
+		{
+			name:            "prune tsdbs without object storage",
+			bucket:          nil,
+			expectedTenants: 1,
+			expectedUploads: 0,
+		},
+		{
+			name:            "prune tsdbs with object storage",
+			bucket:          objstore.NewInMemBucket(),
+			expectedTenants: 1,
+			expectedUploads: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir, err := ioutil.TempDir("", "multitsdb-prune")
+			testutil.Ok(t, err)
+			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				test.bucket,
+				false,
+				metadata.NoneFunc,
+			)
+			defer func() { testutil.Ok(t, m.Close()) }()
+
+			for i := 0; i < 100; i++ {
+				testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10+i))))
+				testutil.Ok(t, appendSample(m, "bar", time.UnixMilli(int64(10+i))))
+				testutil.Ok(t, appendSample(m, "baz", time.Now().Add(time.Duration(i)*time.Second)))
+			}
+			testutil.Equals(t, 3, len(m.TSDBStores()))
+
+			testutil.Ok(t, m.Prune(context.Background()))
+			testutil.Equals(t, test.expectedTenants, len(m.TSDBStores()))
+
+			var shippedBlocks int
+			if test.bucket != nil {
+				testutil.Ok(t, test.bucket.Iter(context.Background(), "", func(s string) error {
+					shippedBlocks++
+					return nil
+				}))
+			}
+			testutil.Equals(t, test.expectedUploads, shippedBlocks)
+		})
+	}
+}
+
+func appendSample(m *MultiTSDB, tenant string, timestamp time.Time) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	app, err := m.TenantAppendable(tenant)
+	if err != nil {
+		return err
+	}
+
+	var a storage.Appender
+	if err := runutil.Retry(1*time.Second, ctx.Done(), func() error {
+		a, err = app.Appender(ctx)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	_, err = a.Append(0, labels.FromStrings("foo", "bar"), timestamp.UnixMilli(), 10)
+	if err != nil {
+		return err
+	}
+
+	return a.Commit()
 }
 
 func BenchmarkMultiTSDB(b *testing.B) {
