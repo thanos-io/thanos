@@ -106,7 +106,7 @@ func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.
 		retryOptions.TryTimeout = time.Until(deadline)
 	}
 
-	dt, err := exthttp.DefaultTransport(conf.HTTPConfig)
+	dt, err := exthttp.DefaultTransport(exthttp.HTTPConfig)
 	if err != nil {
 		return blob.ContainerURL{}, err
 	}
