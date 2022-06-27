@@ -4,7 +4,7 @@ import { sampleApiResponse } from './__testdata__/testdata';
 import { groupTargets, Target, ScrapePools, getColor } from './target';
 
 describe('groupTargets', () => {
-  const targets: Target[] = sampleApiResponse.data.activeTargets as Target[];
+  const targets: Target[] = sampleApiResponse.data.activeTargets as unknown as Target[];
   const targetGroups: ScrapePools = groupTargets(targets);
 
   it('groups a list of targets by scrape job', () => {

@@ -37,42 +37,40 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	qBuilder := e2ethanos.NewQuerierBuilder(e, "query")
-	qUnitiated := qBuilder.BuildUninitiated()
 
-	prom1, sidecar1, err = e2ethanos.NewPrometheusWithSidecar(
+	prom1, sidecar1 = e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
-		e2ethanos.DefaultPromConfig("ha", 0, "", "", "localhost:9090", qUnitiated.Future().InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 0, "", "", "localhost:9090", qBuilder.InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(),
 		"",
 		e2ethanos.FeatureExemplarStorage,
 	)
-	testutil.Ok(t, err)
-	prom2, sidecar2, err = e2ethanos.NewPrometheusWithSidecar(
+	prom2, sidecar2 = e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
-		e2ethanos.DefaultPromConfig("ha", 1, "", "", "localhost:9090", qUnitiated.Future().InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 1, "", "", "localhost:9090", qBuilder.InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(),
 		"",
 		e2ethanos.FeatureExemplarStorage,
 	)
-	testutil.Ok(t, err)
 
 	tracingCfg := fmt.Sprintf(`type: JAEGER
 config:
   sampler_type: const
   sampler_param: 1
-  service_name: %s`, qUnitiated.Future().Name())
+  service_name: %s`, qBuilder.Name())
 
 	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")}
 
-	qBuilder = qBuilder.WithExemplarAddresses(stores...).
+	qBuilder = qBuilder.
+		WithStoreAddresses(stores...).
+		WithExemplarAddresses(stores...).
 		WithTracingConfig(tracingCfg)
 
-	q, err := qBuilder.Initiate(qUnitiated, stores...)
-	testutil.Ok(t, err)
+	q := qBuilder.Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	testutil.Ok(t, err)

@@ -11,6 +11,7 @@ exemptLabels:
   # issue is being reminded.
   - reminder
   - 'state: someone-working-on-it' 
+  - 'dont-go-stale' 
 
 # Set to true to ignore issues in a project (defaults to false)
 exemptProjects: false

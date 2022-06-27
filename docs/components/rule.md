@@ -310,7 +310,7 @@ Flags:
                                  record's value. The URL path is used as a
                                  prefix for the regular Alertmanager API path.
       --data-dir="data/"         data directory
-      --eval-interval=30s        The default evaluation interval to use.
+      --eval-interval=1m         The default evaluation interval to use.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -430,7 +430,10 @@ Flags:
       --resend-delay=1m          Minimum amount of time to wait before resending
                                  an alert to Alertmanager.
       --rule-file=rules/ ...     Rule files that should be used by rule manager.
-                                 Can be in glob format (repeated).
+                                 Can be in glob format (repeated). Note that
+                                 rules are not automatically detected, use
+                                 SIGHUP or do HTTP POST /-/reload to re-read
+                                 them.
       --shipper.upload-compacted
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.

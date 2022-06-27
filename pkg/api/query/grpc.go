@@ -17,14 +17,16 @@ import (
 
 type GRPCAPI struct {
 	now                         func() time.Time
+	replicaLabels               []string
 	queryableCreate             query.QueryableCreator
 	queryEngine                 func(int64) *promql.Engine
 	defaultMaxResolutionSeconds time.Duration
 }
 
-func NewGRPCAPI(now func() time.Time, creator query.QueryableCreator, queryEngine func(int64) *promql.Engine, defaultMaxResolutionSeconds time.Duration) *GRPCAPI {
+func NewGRPCAPI(now func() time.Time, replicaLabels []string, creator query.QueryableCreator, queryEngine func(int64) *promql.Engine, defaultMaxResolutionSeconds time.Duration) *GRPCAPI {
 	return &GRPCAPI{
 		now:                         now,
+		replicaLabels:               replicaLabels,
 		queryableCreate:             creator,
 		queryEngine:                 queryEngine,
 		defaultMaxResolutionSeconds: defaultMaxResolutionSeconds,
@@ -38,7 +40,7 @@ func RegisterQueryServer(queryServer querypb.QueryServer) func(*grpc.Server) {
 }
 
 func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_QueryServer) error {
-	ctx := context.Background()
+	ctx := server.Context()
 	var ts time.Time
 	if request.TimeSeconds == 0 {
 		ts = g.now()
@@ -63,10 +65,14 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		return err
 	}
 
+	replicaLabels := g.replicaLabels
+	if len(request.ReplicaLabels) != 0 {
+		replicaLabels = request.ReplicaLabels
+	}
 	qe := g.queryEngine(request.MaxResolutionSeconds)
 	queryable := g.queryableCreate(
 		request.EnableDedup,
-		request.ReplicaLabels,
+		replicaLabels,
 		storeMatchers,
 		maxResolution,
 		request.EnablePartialResponse,
@@ -77,6 +83,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	if err != nil {
 		return err
 	}
+	defer qry.Close()
 
 	result := qry.Exec(ctx)
 	if err := server.Send(querypb.NewQueryWarningsResponse(result.Warnings)); err != nil {
@@ -109,7 +116,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 }
 
 func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Query_QueryRangeServer) error {
-	ctx := context.Background()
+	ctx := srv.Context()
 	if request.TimeoutSeconds != 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(request.TimeoutSeconds))
@@ -126,10 +133,14 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		return err
 	}
 
+	replicaLabels := g.replicaLabels
+	if len(request.ReplicaLabels) != 0 {
+		replicaLabels = request.ReplicaLabels
+	}
 	qe := g.queryEngine(request.MaxResolutionSeconds)
 	queryable := g.queryableCreate(
 		request.EnableDedup,
-		request.ReplicaLabels,
+		replicaLabels,
 		storeMatchers,
 		maxResolution,
 		request.EnablePartialResponse,
@@ -145,6 +156,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	if err != nil {
 		return err
 	}
+	defer qry.Close()
 
 	result := qry.Exec(ctx)
 	if err := srv.Send(querypb.NewQueryRangeWarningsResponse(result.Warnings)); err != nil {

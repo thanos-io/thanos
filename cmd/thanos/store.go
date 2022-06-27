@@ -429,8 +429,8 @@ func runStore(
 	{
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
-		compactorView := ui.NewBucketUI(logger, "", conf.webConfig.externalPrefix, conf.webConfig.prefixHeaderName, "/loaded", conf.component)
-		compactorView.Register(r, true, ins)
+		compactorView := ui.NewBucketUI(logger, conf.webConfig.externalPrefix, conf.webConfig.prefixHeaderName, conf.component)
+		compactorView.Register(r, ins)
 
 		// Configure Request Logging for HTTP calls.
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
@@ -438,7 +438,6 @@ func runStore(
 		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 		metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
-			compactorView.Set(blocks, err)
 			api.SetLoaded(blocks, err)
 		})
 		srv.Handle("/", r)

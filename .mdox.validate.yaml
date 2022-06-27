@@ -20,3 +20,6 @@ validators:
   # couldn't reach even when curl-ed.
   - regex: 'cloud\.baidu\.com'
     type: 'ignore'
+  # 403 when curl-ed from GitHub actions, though not from a developer machine. Likely due to secondary rate limits.
+  - regex: 'docs\.github\.com'
+    type: 'ignore'

@@ -574,7 +574,7 @@ const filteredBlocks = [
   },
 ];
 
-const sorted = sortBlocks(overlapCaseData.blocks, overlapCaseData.label);
+const sorted = sortBlocks(overlapCaseData.blocks, overlapCaseData.label, true);
 const filteredBlockPools = getFilteredBlockPools(blockPools, filteredBlocks);
 const source = 'prometheus_one';
 

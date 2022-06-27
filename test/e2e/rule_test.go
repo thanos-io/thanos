@@ -154,8 +154,7 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 
 func reloadRulesSignal(t *testing.T, r e2e.InstrumentedRunnable) {
 	c := e2e.NewCommand("kill", "-1", "1")
-	_, _, err := r.Exec(c)
-	testutil.Ok(t, err)
+	testutil.Ok(t, r.Exec(c))
 }
 
 func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, expectedRulegroupCount int) {
@@ -229,29 +228,29 @@ func TestRule(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	t.Cleanup(cancel)
 
-	// Prepare work dirs.
-	rulesSubDir := filepath.Join("rules")
-	rulesPath := filepath.Join(e.SharedDir(), rulesSubDir)
-	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
-	createRuleFiles(t, rulesPath)
-	amTargetsSubDir := filepath.Join("rules_am_targets")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), amTargetsSubDir), os.ModePerm))
-	queryTargetsSubDir := filepath.Join("rules_query_targets")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), queryTargetsSubDir), os.ModePerm))
-
-	am1, err := e2ethanos.NewAlertmanager(e, "1")
-	testutil.Ok(t, err)
-	am2, err := e2ethanos.NewAlertmanager(e, "2")
-	testutil.Ok(t, err)
+	am1 := e2ethanos.NewAlertmanager(e, "1")
+	am2 := e2ethanos.NewAlertmanager(e, "2")
 	testutil.Ok(t, e2e.StartAndWaitReady(am1, am2))
 
-	r, err := e2ethanos.NewTSDBRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
+	rFuture := e2ethanos.NewRulerBuilder(e, "1")
+
+	amTargetsSubDir := filepath.Join("rules_am_targets")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(rFuture.Dir(), amTargetsSubDir), os.ModePerm))
+	queryTargetsSubDir := filepath.Join("rules_query_targets")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(rFuture.Dir(), queryTargetsSubDir), os.ModePerm))
+
+	rulesSubDir := filepath.Join("rules")
+	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+	createRuleFiles(t, rulesPath)
+
+	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				FileSDConfigs: []httpconfig.FileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically am1.
-						Files:           []string{filepath.Join(e2ethanos.ContainerSharedDir, amTargetsSubDir, "*.yaml")},
+						Files:           []string{filepath.Join(rFuture.InternalDir(), amTargetsSubDir, "*.yaml")},
 						RefreshInterval: model.Duration(time.Second),
 					},
 				},
@@ -263,14 +262,14 @@ func TestRule(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}, []httpconfig.Config{
+	}).InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				// We test Statically Addressed queries in other tests. Focus on FileSD here.
 				FileSDConfigs: []httpconfig.FileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically q.
-						Files:           []string{filepath.Join(e2ethanos.ContainerSharedDir, queryTargetsSubDir, "*.yaml")},
+						Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
 						RefreshInterval: model.Duration(time.Second),
 					},
 				},
@@ -278,11 +277,9 @@ func TestRule(t *testing.T) {
 			},
 		},
 	})
-	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", r.InternalEndpoint("grpc")).Build()
-	testutil.Ok(t, err)
+	q := e2ethanos.NewQuerierBuilder(e, "1", r.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	t.Run("no query configured", func(t *testing.T) {
@@ -297,7 +294,7 @@ func TestRule(t *testing.T) {
 	var currentFailures float64
 	t.Run("attach query", func(t *testing.T) {
 		// Attach querier to target files.
-		writeTargets(t, filepath.Join(e.SharedDir(), queryTargetsSubDir, "targets.yaml"), q.InternalEndpoint("http"))
+		writeTargets(t, filepath.Join(rFuture.Dir(), queryTargetsSubDir, "targets.yaml"), q.InternalEndpoint("http"))
 
 		testutil.Ok(t, r.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_rule_query_apis_dns_provider_results"}, e2e.WaitMissingMetrics()))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
@@ -330,7 +327,7 @@ func TestRule(t *testing.T) {
 	})
 	t.Run("attach am1", func(t *testing.T) {
 		// Attach am1 to target files.
-		writeTargets(t, filepath.Join(e.SharedDir(), amTargetsSubDir, "targets.yaml"), am1.InternalEndpoint("http"))
+		writeTargets(t, filepath.Join(rFuture.Dir(), amTargetsSubDir, "targets.yaml"), am1.InternalEndpoint("http"))
 
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(2), "thanos_rule_alertmanagers_dns_provider_results"))
@@ -354,7 +351,7 @@ func TestRule(t *testing.T) {
 	})
 
 	t.Run("am1 drops again", func(t *testing.T) {
-		testutil.Ok(t, os.RemoveAll(filepath.Join(e.SharedDir(), amTargetsSubDir, "targets.yaml")))
+		testutil.Ok(t, os.RemoveAll(filepath.Join(rFuture.Dir(), amTargetsSubDir, "targets.yaml")))
 
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
@@ -383,7 +380,7 @@ func TestRule(t *testing.T) {
 
 	t.Run("duplicate am", func(t *testing.T) {
 		// am2 is already registered in static addresses.
-		writeTargets(t, filepath.Join(e.SharedDir(), amTargetsSubDir, "targets.yaml"), am2.InternalEndpoint("http"))
+		writeTargets(t, filepath.Join(rFuture.Dir(), amTargetsSubDir, "targets.yaml"), am2.InternalEndpoint("http"))
 
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
 		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
@@ -395,14 +392,14 @@ func TestRule(t *testing.T) {
 
 	t.Run("signal reload works", func(t *testing.T) {
 		// Add a new rule via sending sighup
-		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLaterSignal)
+		createRuleFile(t, filepath.Join(rulesPath, "newrule.yaml"), testAlertRuleAddedLaterSignal)
 		reloadRulesSignal(t, r)
 		checkReloadSuccessful(t, ctx, r.Endpoint("http"), 4)
 	})
 
 	t.Run("http reload works", func(t *testing.T) {
 		// Add a new rule via /-/reload.
-		createRuleFile(t, fmt.Sprintf("%s/newrule.yaml", rulesPath), testAlertRuleAddedLaterWebHandler)
+		createRuleFile(t, filepath.Join(rulesPath, "newrule.yaml"), testAlertRuleAddedLaterWebHandler)
 		reloadRulesHTTP(t, ctx, r.Endpoint("http"))
 		checkReloadSuccessful(t, ctx, r.Endpoint("http"), 3)
 	})
@@ -452,7 +449,7 @@ func TestRule(t *testing.T) {
 			},
 		}
 
-		alrts, err := promclient.NewDefaultClient().AlertmanagerAlerts(ctx, mustURLParse(t, "http://"+am2.Endpoint("http")))
+		alrts, err := promclient.NewDefaultClient().AlertmanagerAlerts(ctx, urlParse(t, "http://"+am2.Endpoint("http")))
 		testutil.Ok(t, err)
 
 		testutil.Equals(t, len(expAlertLabels), len(alrts))
@@ -475,32 +472,30 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	t.Cleanup(cancel)
 
+	rFuture := e2ethanos.NewRulerBuilder(e, "1")
 	rulesSubDir := "rules"
-	rulesPath := filepath.Join(e.SharedDir(), rulesSubDir)
+	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
 	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
 
 	for i, rule := range []string{testRuleRecordAbsentMetric, testAlertRuleWarnOnPartialResponse} {
 		createRuleFile(t, filepath.Join(rulesPath, fmt.Sprintf("rules-%d.yaml", i)), rule)
 	}
 
-	am, err := e2ethanos.NewAlertmanager(e, "1")
-	testutil.Ok(t, err)
+	am := e2ethanos.NewAlertmanager(e, "1")
 	testutil.Ok(t, e2e.StartAndWaitReady(am))
 
-	receiver, err := e2ethanos.NewIngestingReceiver(e, "1")
-	testutil.Ok(t, err)
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
-	rwURL := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")))
+	rwURL := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")))
 
-	receiver2, err := e2ethanos.NewIngestingReceiver(e, "2")
-	testutil.Ok(t, err)
+	receiver2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver2))
-	rwURL2 := mustURLParse(t, e2ethanos.RemoteWriteEndpoint(receiver2.InternalEndpoint("remote-write")))
+	rwURL2 := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver2.InternalEndpoint("remote-write")))
 
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).Build()
-	testutil.Ok(t, err)
+	q := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc"), receiver2.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
-	r, err := e2ethanos.NewStatelessRuler(e, "1", rulesSubDir, []alert.AlertmanagerConfig{
+
+	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{
@@ -511,7 +506,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}, []httpconfig.Config{
+	}).InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
 				StaticAddresses: []string{
@@ -524,7 +519,6 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 		{URL: &common_cfg.URL{URL: rwURL}, Name: "thanos-receiver"},
 		{URL: &common_cfg.URL{URL: rwURL2}, Name: "thanos-receiver2"},
 	})
-	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
 	// Wait until remote write samples are written to receivers successfully.
@@ -538,14 +532,14 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 			{
 				"__name__":  "test_absent_metric",
 				"job":       "thanos-receive",
-				"receive":   "1",
+				"receive":   model.LabelValue(receiver.Name()),
 				"replica":   "1",
 				"tenant_id": "default-tenant",
 			},
 			{
 				"__name__":  "test_absent_metric",
 				"job":       "thanos-receive",
-				"receive":   "2",
+				"receive":   model.LabelValue(receiver2.Name()),
 				"replica":   "1",
 				"tenant_id": "default-tenant",
 			},

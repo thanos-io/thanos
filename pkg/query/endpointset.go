@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/api/query/querypb"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
@@ -118,6 +120,7 @@ func (es *GRPCEndpointSpec) fillExpectedAPIs(componentType component.Component, 
 				Targets:        &infopb.TargetsInfo{},
 				MetricMetadata: &infopb.MetricMetadataInfo{},
 				Exemplars:      &infopb.ExemplarsInfo{},
+				Query:          &infopb.QueryAPIInfo{},
 			}
 		}
 	case component.Receive:
@@ -366,6 +369,20 @@ func (e *EndpointSet) GetStoreClients() []store.Client {
 	for _, er := range e.endpoints {
 		if er.HasStoreAPI() {
 			stores = append(stores, er)
+		}
+	}
+	return stores
+}
+
+// GetQueryAPIClients returns a list of all active query API clients.
+func (e *EndpointSet) GetQueryAPIClients() []querypb.QueryClient {
+	e.endpointsMtx.RLock()
+	defer e.endpointsMtx.RUnlock()
+
+	stores := make([]querypb.QueryClient, 0, len(e.endpoints))
+	for _, er := range e.endpoints {
+		if er.HasQueryAPI() {
+			stores = append(stores, er.clients.query)
 		}
 	}
 	return stores
@@ -648,6 +665,10 @@ func (er *endpointRef) Update(metadata *endpointMetadata) {
 		clients.exemplar = exemplarspb.NewExemplarsClient(er.cc)
 	}
 
+	if metadata.Query != nil {
+		clients.query = querypb.NewQueryClient(er.cc)
+	}
+
 	er.clients = clients
 	er.metadata = metadata
 }
@@ -668,6 +689,13 @@ func (er *endpointRef) HasStoreAPI() bool {
 	defer er.mtx.RUnlock()
 
 	return er.clients != nil && er.clients.store != nil
+}
+
+func (er *endpointRef) HasQueryAPI() bool {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	return er.clients != nil && er.clients.query != nil
 }
 
 func (er *endpointRef) HasRulesAPI() bool {
@@ -768,6 +796,10 @@ func (er *endpointRef) apisPresent() []string {
 		apisPresent = append(apisPresent, "MetricMetadataAPI")
 	}
 
+	if er.HasQueryAPI() {
+		apisPresent = append(apisPresent, "QueryAPI")
+	}
+
 	return apisPresent
 }
 
@@ -777,6 +809,7 @@ type endpointClients struct {
 	metricMetadata metadatapb.MetadataClient
 	exemplar       exemplarspb.ExemplarsClient
 	target         targetspb.TargetsClient
+	query          querypb.QueryClient
 	info           infopb.InfoClient
 }
 

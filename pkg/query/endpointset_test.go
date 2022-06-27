@@ -51,6 +51,7 @@ var (
 		Rules:          &infopb.RulesInfo{},
 		MetricMetadata: &infopb.MetricMetadataInfo{},
 		Targets:        &infopb.TargetsInfo{},
+		Query:          &infopb.QueryAPIInfo{},
 	}
 	ruleInfo = &infopb.InfoResponse{
 		ComponentType: component.Rule.String(),
@@ -189,6 +190,7 @@ func startTestEndpoints(testEndpointMeta []testEndpointMeta) (*testEndpoints, er
 				Rules:          meta.Rules,
 				Targets:        meta.Targets,
 				Exemplars:      meta.Exemplars,
+				Query:          meta.Query,
 				ComponentType:  meta.ComponentType,
 			},
 			infoDelay: meta.infoDelay,
@@ -880,6 +882,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 		expectedTarget         int
 		expectedMetricMetadata int
 		expectedExemplars      int
+		expectedQueryAPIs      int
 	}
 
 	for _, tc := range []struct {
@@ -907,6 +910,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 					expectedTarget:         2, // sidecar + querier
 					expectedMetricMetadata: 2, // sidecar + querier
 					expectedExemplars:      3, // sidecar + querier + receiver
+					expectedQueryAPIs:      1, // querier
 				},
 			},
 		},
@@ -980,6 +984,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 				gotTarget := 0
 				gotExemplars := 0
 				gotMetricMetadata := 0
+				gotQueryAPIs := 0
 
 				for _, er := range endpointSet.endpoints {
 					if er.HasStoreAPI() {
@@ -996,6 +1001,9 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 					}
 					if er.HasMetricMetadataAPI() {
 						gotMetricMetadata += 1
+					}
+					if er.HasQueryAPI() {
+						gotQueryAPIs += 1
 					}
 				}
 				testutil.Equals(
@@ -1029,6 +1037,13 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 					tc.states[currentState].expectedExemplars,
 					gotExemplars,
 					"unexepected discovered ExemplarsAPIs in state %q",
+					tc.states[currentState].name,
+				)
+				testutil.Equals(
+					t,
+					tc.states[currentState].expectedQueryAPIs,
+					gotQueryAPIs,
+					"unexepected discovered QueryAPIs in state %q",
 					tc.states[currentState].name,
 				)
 

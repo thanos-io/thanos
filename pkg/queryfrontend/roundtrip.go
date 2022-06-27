@@ -27,6 +27,8 @@ const (
 	seriesOp       = "series"
 )
 
+var labelValuesPattern = regexp.MustCompile("/api/v1/label/.+/values$")
+
 // NewTripperware returns a Tripperware which sends requests to different sub tripperwares based on the query type.
 func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger) (queryrange.Tripperware, error) {
 	var (
@@ -120,8 +122,7 @@ func getOperation(r *http.Request) string {
 		case strings.HasSuffix(r.URL.Path, "/api/v1/series"):
 			return seriesOp
 		default:
-			matched, err := regexp.MatchString("/api/v1/label/.+/values$", r.URL.Path)
-			if err == nil && matched {
+			if labelValuesPattern.MatchString(r.URL.Path) {
 				return labelValuesOp
 			}
 		}
@@ -274,10 +275,18 @@ func newLabelsTripperware(
 	}, nil
 }
 
-// Don't go to response cache if StoreMatchers are set.
+// shouldCache controls what kind of Thanos request should be cached.
+// For more information about requests that skip caching logic, please visit
+// the query-frontend documentation.
 func shouldCache(r queryrange.Request) bool {
-	if thanosReq, ok := r.(ThanosRequest); ok {
-		if len(thanosReq.GetStoreMatchers()) > 0 {
+	if thanosReqStoreMatcherGettable, ok := r.(ThanosRequestStoreMatcherGetter); ok {
+		if len(thanosReqStoreMatcherGettable.GetStoreMatchers()) > 0 {
+			return false
+		}
+	}
+
+	if thanosReqDedup, ok := r.(ThanosRequestDedup); ok {
+		if !thanosReqDedup.IsDedupEnabled() {
 			return false
 		}
 	}

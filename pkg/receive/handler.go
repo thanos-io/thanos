@@ -17,6 +17,9 @@ import (
 	"sync"
 	"time"
 
+	statusapi "github.com/thanos-io/thanos/pkg/api/status"
+	"github.com/thanos-io/thanos/pkg/logging"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -28,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"google.golang.org/grpc"
@@ -38,6 +42,7 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -77,7 +82,7 @@ var (
 type Options struct {
 	Writer            *Writer
 	ListenAddress     string
-	Registry          prometheus.Registerer
+	Registry          *prometheus.Registry
 	TenantHeader      string
 	TenantField       string
 	DefaultTenantID   string
@@ -89,6 +94,8 @@ type Options struct {
 	TLSConfig         *tls.Config
 	DialOpts          []grpc.DialOption
 	ForwardTimeout    time.Duration
+	RelabelConfigs    []*relabel.Config
+	GetTSDBStats      GetStatsFunc
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -109,11 +116,19 @@ type Handler struct {
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
+
+	writeSamplesTotal    *prometheus.HistogramVec
+	writeTimeseriesTotal *prometheus.HistogramVec
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
 	if logger == nil {
 		logger = log.NewNopLogger()
+	}
+
+	var registerer prometheus.Registerer = nil
+	if o.Registry != nil {
+		registerer = o.Registry
 	}
 
 	h := &Handler{
@@ -129,23 +144,41 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
-		forwardRequests: promauto.With(o.Registry).NewCounterVec(
+		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
 				Help: "The number of forward requests.",
 			}, []string{"result"},
 		),
-		replications: promauto.With(o.Registry).NewCounterVec(
+		replications: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_replications_total",
 				Help: "The number of replication operations done by the receiver. The success of replication is fulfilled when a quorum is met.",
 			}, []string{"result"},
 		),
-		replicationFactor: promauto.With(o.Registry).NewGauge(
+		replicationFactor: promauto.With(registerer).NewGauge(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_replication_factor",
 				Help: "The number of times to replicate incoming write requests.",
 			},
+		),
+		writeTimeseriesTotal: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_timeseries",
+				Help:      "The number of timeseries received in the incoming write requests.",
+				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+			}, []string{"code", "tenant"},
+		),
+		writeSamplesTotal: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_samples",
+				Help:      "The number of sampled received in the incoming write requests.",
+				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+			}, []string{"code", "tenant"},
 		),
 	}
 
@@ -162,7 +195,9 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
-		ins = extpromhttp.NewInstrumentationMiddleware(o.Registry,
+		ins = extpromhttp.NewTenantInstrumentationMiddleware(
+			o.TenantHeader,
+			o.Registry,
 			[]float64{0.001, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.25, 0.5, 0.75, 1, 2, 3, 4, 5},
 		)
 	}
@@ -170,13 +205,30 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 		next = ins.NewHandler(name, http.HandlerFunc(next))
+
 		if o.Tracer != nil {
 			next = tracing.HTTPMiddleware(o.Tracer, name, logger, http.HandlerFunc(next))
 		}
 		return next
 	}
 
-	h.router.Post("/api/v1/receive", instrf("receive", readyf(middleware.RequestID(http.HandlerFunc(h.receiveHTTP)))))
+	h.router.Post(
+		"/api/v1/receive",
+		instrf(
+			"receive",
+			readyf(
+				middleware.RequestID(
+					http.HandlerFunc(h.receiveHTTP),
+				),
+			),
+		),
+	)
+
+	statusAPI := statusapi.New(statusapi.Options{
+		GetStats: h.getStats,
+		Registry: o.Registry,
+	})
+	statusAPI.Register(h.router, o.Tracer, logger, ins, logging.NewHTTPServerMiddleware(logger))
 
 	return h
 }
@@ -217,6 +269,19 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 			h.logger.Log("msg", "failed to write to response body", "err", err)
 		}
 	}
+}
+
+func (h *Handler) getStats(r *http.Request, statsByLabelName string) (*tsdb.Stats, error) {
+	if !h.isReady() {
+		return nil, fmt.Errorf("service unavailable")
+	}
+
+	tenantID := r.Header.Get(h.options.TenantHeader)
+	if tenantID == "" {
+		tenantID = h.options.DefaultTenantID
+	}
+
+	return h.options.GetTSDBStats(tenantID, statsByLabelName), nil
 }
 
 // Close stops the Handler.
@@ -371,26 +436,37 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.handleRequest(ctx, rep, tenant, &wreq)
-	if err != nil {
-		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
+	// Apply relabeling configs.
+	h.relabel(&wreq)
+	if len(wreq.Timeseries) == 0 {
+		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
+		return
 	}
 
-	switch determineWriteErrorCause(err, 1) {
-	case nil:
-		return
-	case errNotReady:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case errUnavailable:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case errConflict:
-		http.Error(w, err.Error(), http.StatusConflict)
-	case errBadReplica:
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	default:
-		level.Error(tLogger).Log("err", err, "msg", "internal server error")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	responseStatusCode := http.StatusOK
+	if err = h.handleRequest(ctx, rep, tenant, &wreq); err != nil {
+		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
+		switch determineWriteErrorCause(err, 1) {
+		case errNotReady:
+			responseStatusCode = http.StatusServiceUnavailable
+		case errUnavailable:
+			responseStatusCode = http.StatusServiceUnavailable
+		case errConflict:
+			responseStatusCode = http.StatusConflict
+		case errBadReplica:
+			responseStatusCode = http.StatusBadRequest
+		default:
+			level.Error(tLogger).Log("err", err, "msg", "internal server error")
+			responseStatusCode = http.StatusInternalServerError
+		}
+		http.Error(w, err.Error(), responseStatusCode)
 	}
+	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(len(wreq.Timeseries)))
+	totalSamples := 0
+	for _, timeseries := range wreq.Timeseries {
+		totalSamples += len(timeseries.Samples)
+	}
+	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
 }
 
 // forward accepts a write request, batches its time series by
@@ -698,6 +774,23 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	default:
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+}
+
+// relabel relabels the time series labels in the remote write request.
+func (h *Handler) relabel(wreq *prompb.WriteRequest) {
+	if len(h.options.RelabelConfigs) == 0 {
+		return
+	}
+	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
+	for _, ts := range wreq.Timeseries {
+		lbls := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		if lbls == nil {
+			continue
+		}
+		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+		timeSeries = append(timeSeries, ts)
+	}
+	wreq.Timeseries = timeSeries
 }
 
 // isConflict returns whether or not the given error represents a conflict.

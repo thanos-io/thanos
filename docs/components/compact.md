@@ -190,7 +190,7 @@ This value has to be smaller than upload duration and [consistency delay](#consi
 
 ## Halting
 
-Because of the very specific nature of Compactor which is writing to object storage, potentially deleting sensitive data, and downloading GBs of data, by default we halt Compactor on certain data failures. This means that that Compactor does not crash on halt errors, but instead is kept running and does nothing with metric `thanos_compactor_halted` set to 1.
+Because of the very specific nature of Compactor which is writing to object storage, potentially deleting sensitive data, and downloading GBs of data, by default we halt Compactor on certain data failures. This means that that Compactor does not crash on halt errors, but instead is kept running and does nothing with metric `thanos_compact_halted` set to 1.
 
 Reason is that we don't want to retry compaction and all the computations if we know that, for example, there is already overlapped state in the object storage for some reason.
 
@@ -243,7 +243,7 @@ The only risk is that without compactor running for longer time (weeks) you migh
 
 The main and only `Service Level Indicator` for Compactor is how fast it can cope with uploaded TSDB blocks to the bucket.
 
-To understand that you can use mix `thanos_objstore_bucket_last_successful_upload_time` being quite fresh, `thanos_compactor_halted` being non 1 and `thanos_blocks_meta_synced{state="loaded"}` constantly increasing over days.
+To understand that you can use mix `thanos_objstore_bucket_last_successful_upload_time` being quite fresh, `thanos_compact_halted` being non 1 and `thanos_blocks_meta_synced{state="loaded"}` constantly increasing over days.
 
 <img src="compactor_no_coping_with_load.png" class="img-fluid" alt="Example view of compactor not coping with amount and size of incoming blocks"/>
 
@@ -281,9 +281,6 @@ Continuously compacts blocks in an object store bucket.
 Flags:
       --block-meta-fetch-concurrency=32
                                 Number of goroutines to use when fetching block
-                                metadata from object storage.
-      --block-sync-concurrency=20
-                                Number of goroutines to use when syncing block
                                 metadata from object storage.
       --block-viewer.global.sync-block-interval=1m
                                 Repeat interval for syncing the blocks between

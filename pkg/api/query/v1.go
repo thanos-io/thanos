@@ -185,6 +185,7 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 
 	r.Get("/stores", instr("stores", qapi.stores))
 
+	r.Get("/alerts", instr("alerts", NewAlertsHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
 	r.Get("/rules", instr("rules", NewRulesHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
 
 	r.Get("/targets", instr("targets", NewTargetsHandler(qapi.targets, qapi.enableTargetPartialResponse)))
@@ -348,6 +349,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
+	defer qry.Close()
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
 		err = qapi.gate.Start(ctx)
@@ -470,6 +472,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
+	defer qry.Close()
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
 		err = qapi.gate.Start(ctx)
@@ -757,6 +760,50 @@ func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) f
 		}
 
 		return t, warnings, nil
+	}
+}
+
+// NewAlertsHandler created handler compatible with HTTP /api/v1/alerts https://prometheus.io/docs/prometheus/latest/querying/api/#alerts
+// which uses gRPC Unary Rules API (Rules API works for both /alerts and /rules).
+func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
+	ps := storepb.PartialResponseStrategy_ABORT
+	if enablePartialResponse {
+		ps = storepb.PartialResponseStrategy_WARN
+	}
+
+	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
+		span, ctx := tracing.StartSpan(r.Context(), "receive_http_request")
+		defer span.Finish()
+
+		var (
+			groups   *rulespb.RuleGroups
+			warnings storage.Warnings
+			err      error
+		)
+
+		// TODO(bwplotka): Allow exactly the same functionality as query API: passing replica, dedup and partial response as HTTP params as well.
+		req := &rulespb.RulesRequest{
+			Type:                    rulespb.RulesRequest_ALERT,
+			PartialResponseStrategy: ps,
+		}
+		tracing.DoInSpan(ctx, "retrieve_rules", func(ctx context.Context) {
+			groups, warnings, err = client.Rules(ctx, req)
+		})
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error retrieving rules: %v", err)}
+		}
+
+		var resp struct{ Alerts []*rulespb.AlertInstance }
+		for _, g := range groups.Groups {
+			for _, r := range g.Rules {
+				a := r.GetAlert()
+				if a == nil {
+					continue
+				}
+				resp.Alerts = append(resp.Alerts, a.Alerts...)
+			}
+		}
+		return resp, warnings, nil
 	}
 }
 
