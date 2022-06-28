@@ -26,7 +26,8 @@ type HTTPConfig struct {
 	// Allow upstream callers to inject a round tripper
 	Transport http.RoundTripper `yaml:"-"`
 
-	TLSConfig objstore.TLSConfig `yaml:"tls_config"`
+	TLSConfig          objstore.TLSConfig `yaml:"tls_config"`
+	DisableCompression bool
 }
 
 // NewTransport creates a new http.Transport with default settings.

@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	//"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -20,7 +19,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/thanos-io/thanos/pkg/exthttp"
-	//"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -106,7 +104,7 @@ func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.
 		retryOptions.TryTimeout = time.Until(deadline)
 	}
 
-	dt, err := exthttp.DefaultTransport(exthttp.HTTPConfig)
+	dt, err := exthttp.DefaultTransport(conf.HTTPConfig)
 	if err != nil {
 		return blob.ContainerURL{}, err
 	}
