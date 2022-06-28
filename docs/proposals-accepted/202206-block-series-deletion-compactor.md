@@ -65,7 +65,7 @@ Like block metadata, the store gateway also fetches tombstones in a configurable
 
 There are different ways to mask series based on tombstones. We will discuss two options here:
 
-#### Mask Series At Query Time
+#### Option 1: Mask Series At Query Time
 
 During query time, the store gateway decides what blocks to query based on the request min, max time and label matchers. Meanwhile, it can also decide what tombstones are going to apply for the selected blocks based on tombstone time range and label matchers.
 
@@ -78,7 +78,7 @@ Pros:
 Cons:
 * Slower at query time
 
-#### Mask Series At Tombstone Sync Time
+#### Option 2: Mask Series At Tombstone Sync Time
 
 During the tombstone file sync, store gateway can also eagerly apply the tombstones to all blocks, calculate the matched postings and time range for each block. For each block, each tombstone's processed result will be stored in memory using the Prometheus `MemTombstone` [format](https://github.com/prometheus/prometheus/blob/main/tsdb/tombstones/tombstones.go#L230).
 
@@ -106,7 +106,9 @@ Cons:
 * More memory required.
 * If read is much less than write, it is inefficient as the pre-calculated result won't be used much.
 
-From my perspective, option 2 is better because data can be cached.
+#### Considerations
+
+Considering the infrequent change of tombstones, option 2 is preferred as all data can be cached and it is faster during query time. 
 
 ### Tombstone Deletion with Compactor
 
@@ -130,7 +132,7 @@ There are two approaches about how to scan block indexes:
 1. Download all the blocks locally and check against the tombstones.
 2. Use part of the store gateway code to scan the block index and chunks on the object storage to generate `MemTombstones` result.
 
-Approaches 2 should be better as only block indexes need to be downloaded, chunks data are reading from the object storage on the fly so disk space can be saved. As compactor is an offline component, it is acceptable to read from the object storage rather than downloading the whole data.
+Approach 2 should be better as only block indexes need to be downloaded, chunks data are reading from the object storage on the fly so disk space can be saved. As compactor is an offline component, it is acceptable to read from the object storage rather than downloading the whole data.
 
 The pitfall is that we need to expose part of the store gateway code like `BucketIndexReader`, `BucketChunkReader` as well as other internal code to be used by the compactor.
 
@@ -178,9 +180,11 @@ The previous two options do the series deletion at compaction time, this option 
 
 This is not so efficient as rewrite is a different process than compaction. We need to add this step and make sure rewrite can work together with compaction and no redundant work is done.
 
-Overall, among the 3 options, option 1 is better as it is easier to implement and straightforward.
+#### Considerations
 
-### Other Considerations
+Overall, among the 3 options, option 1 is better as it is easier to implement and straightforward. No additional API required or no additional logic change on the compaction side.
+
+### Other Design Considerations
 
 #### Compaction Planner for Tombstone
 
@@ -203,4 +207,4 @@ Unlike blocks, we cannot shard tombstones simply using its ULIDs because each to
 ## Conclusions
 
 * For store gateway, it masks series at tombstone sync time.
-* For compactor, it scans block indexes directly and caches the tombstones results. During compaction time, it generates the tombstone file and series deletion is done by the TSDB compactor.
+* For compactor, it scans block indexes directly and caches the tombstones results. During compaction time, it generates the tombstone file and series deletion is done by the TSDB compactor](#option 1:-compactor-scans-blocks.
