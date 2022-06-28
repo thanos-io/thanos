@@ -85,6 +85,7 @@ type Options struct {
 	Registry          *prometheus.Registry
 	TenantHeader      string
 	TenantField       string
+	TenantWhitelist   []string
 	DefaultTenantID   string
 	ReplicaHeader     string
 	Endpoint          string
@@ -380,6 +381,12 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+	}
+
+	if !h.checkWhitelist(tenant) {
+		// This must hard fail to ensure hard tenancy when feature is enabled.
+		http.Error(w, "tenant value not white listed", http.StatusBadRequest)
+		return
 	}
 
 	tLogger := log.With(h.logger, "tenant", tenant)
@@ -959,4 +966,23 @@ func (h *Handler) getTenantFromCertificate(r *http.Request) (string, error) {
 	}
 
 	return tenant, nil
+}
+
+// checkWhitelist validates a given tenant is part of a pre-defined whitelist. If no whitelist has been defined, all
+// tenants are accepted. False is returned when a whitelist exists but the tenant is not listed in it.
+func (h *Handler) checkWhitelist(tenant string) bool {
+
+	if h.options.TenantWhitelist == nil || len(h.options.TenantWhitelist) == 0 {
+		// Allow all tenants when no whitelist is defined.
+		return true
+	}
+
+	for i := range h.options.TenantWhitelist {
+		if h.options.TenantWhitelist[i] == tenant {
+			// Tenant value is part of whitelist.
+			return true
+		}
+	}
+
+	return false
 }
