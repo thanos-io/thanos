@@ -57,9 +57,7 @@ func DefaultTransport(config HTTPConfig) (*http.Transport, error) {
 		return nil, err
 	}
 
-	if config.InsecureSkipVerify {
-		tlsConfig.InsecureSkipVerify = true
-	}
+config.InsecureSkipVerify = tlsConfig.InsecureSkipVerify
 
 	return &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
