@@ -34,6 +34,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5408](https://github.com/thanos-io/thanos/pull/5408) Receive: Add support for consistent hashrings.
 - [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Implement api/v1/status/tsdb.
 - [#5424](https://github.com/thanos-io/thanos/pull/5424) Receive: export metrics regarding size of remote write requests.
+- [#5420](https://github.com/thanos-io/thanos/pull/5420) Receive: Automatically remove stale tenants.
 - [#5440](https://github.com/thanos-io/thanos/pull/5440) HTTP metrics: export number of in-flight HTTP requests.
 
 ### Changed
@@ -42,6 +43,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5417](https://github.com/thanos-io/thanos/pull/5417) Ruler: Change default evaluation interval to 1 minute.
 
 ### Removed
+
+- [#5426](https://github.com/thanos-io/thanos/pull/5426) Compactor: Remove an unused flag `--block-sync-concurrency`.
 
 ## [v0.26.0](https://github.com/thanos-io/thanos/tree/release-0.26) - 2022.05.05
 

@@ -293,6 +293,21 @@ func runReceive(
 		)
 	}
 
+	level.Debug(logger).Log("msg", "setting up periodic tenant pruning")
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			return runutil.Repeat(2*time.Hour, ctx.Done(), func() error {
+				if err := dbs.Prune(ctx); err != nil {
+					level.Error(logger).Log("err", err)
+				}
+				return nil
+			})
+		}, func(err error) {
+			cancel()
+		})
+	}
+
 	level.Info(logger).Log("msg", "starting receiver")
 	return nil
 }
@@ -778,7 +793,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
-	rc.retention = extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention.").Default("15d"))
+	rc.retention = extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention. For more details on how retention is enforced for individual tenants, please refer to the Tenant lifecycle management section in the Receive documentation: https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management").Default("15d"))
 
 	cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration. A watcher is initialized to watch changes and update the hashring dynamically.").PlaceHolder("<path>").StringVar(&rc.hashringsFilePath)
 
