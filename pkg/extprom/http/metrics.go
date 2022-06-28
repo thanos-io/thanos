@@ -58,7 +58,7 @@ func newDefaultMetrics(reg prometheus.Registerer, buckets []float64, extraLabels
 		inflightHTTPRequests: promauto.With(reg).NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "http_inflight_requests",
-				Help: "Current number of active requests.",
+				Help: "Current number of HTTP requests the handler is responding to.",
 			},
 			append([]string{"handler"}, extraLabels...),
 		),
