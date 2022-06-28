@@ -23,7 +23,7 @@ type HTTPConfig struct {
 	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
 	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
 
-	// Allow upstream callers to inject a round tripper
+	// Transport field allows upstream callers to inject a custom round tripper.
 	Transport http.RoundTripper `yaml:"-"`
 
 	TLSConfig          objstore.TLSConfig `yaml:"tls_config"`
