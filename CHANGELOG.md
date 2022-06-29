@@ -11,15 +11,30 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Fixed
+
+### Added
+
+### Changed
+
+### Removed
+
+## [v0.27.0-rc0](https://github.com/thanos-io/thanos/tree/release-0.27) - Release in progress
+
+### Fixed
 - [#5339](https://github.com/thanos-io/thanos/pull/5339) Receive: Fix deadlock on interrupt in routerOnly mode
 - [#5357](https://github.com/thanos-io/thanos/pull/5357) Store: fix groupcache handling of slashes
+- [#5427](https://github.com/thanos-io/thanos/pull/5427) Receive: Fix Ketama hashring replication consistency
 
 ### Added
 
 - [#5337](https://github.com/thanos-io/thanos/pull/5337) Thanos Object Store: Add the `prefix` option to buckets
+- [#5409](https://github.com/thanos-io/thanos/pull/5409) S3: Add option to force DNS style lookup.
 - [#5352](https://github.com/thanos-io/thanos/pull/5352) Cache: Add cache metrics to groupcache.
 - [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Add relabeling support.
 - [#5408](https://github.com/thanos-io/thanos/pull/5391) Receive: Add support for consistent hashrings.
+- [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Implement api/v1/status/tsdb.
+- [#5424](https://github.com/thanos-io/thanos/pull/5424) Receive: export metrics regarding size of remote write requests
+- [#5420](https://github.com/thanos-io/thanos/pull/5420) Receive: Automatically remove stale tenants.
 
 ### Changed
 
@@ -27,6 +42,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5417](https://github.com/thanos-io/thanos/pull/5417) Ruler: Change default evaluation interval to 1 minute.
 
 ### Removed
+
+- [#5426](https://github.com/thanos-io/thanos/pull/5426) Compactor: Remove an unused flag `--block-sync-concurrency`.
 
 ## [v0.26.0](https://github.com/thanos-io/thanos/tree/release-0.26) - 2022.05.05
 
@@ -78,6 +95,7 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 
 ### Added
 
+- [#5153](https://github.com/thanos-io/thanos/pull/5153) Receive: option to extract tenant from client certificate
 - [#5110](https://github.com/thanos-io/thanos/pull/5110) Block: Do not upload DebugMeta files to obj store.
 - [#4963](https://github.com/thanos-io/thanos/pull/4963) Compactor, Store, Tools: Loading block metadata now only filters out duplicates within a source (or compaction group if replica labels are configured), and does so in parallel over sources.
 - [#5089](https://github.com/thanos-io/thanos/pull/5089) S3: Create an empty map in the case SSE-KMS is used and no KMSEncryptionContext is passed.

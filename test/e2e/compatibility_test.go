@@ -4,7 +4,11 @@
 package e2e_test
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +16,8 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
+	"github.com/thanos-io/thanos/pkg/alert"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -109,4 +115,95 @@ query_tweaks:
 		}
 		return ret
 	}()
+}
+
+// TestAlertCompliance tests Alert compatibility against https://github.com/prometheus/compliance/blob/main/alert_generator.
+// NOTE: This requires a dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
+func TestAlertCompliance(t *testing.T) {
+	t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator. This tool is not optimized for CI runs (e.g. it infinitely retries, takes 38 minutes)")
+
+	t.Run("stateful ruler", func(t *testing.T) {
+		e, err := e2e.NewDockerEnvironment("alert_compatibility")
+		testutil.Ok(t, err)
+		t.Cleanup(e.Close)
+
+		// Start receive + Querier.
+		receive := e2ethanos.NewReceiveBuilder(e, "receive").WithIngestionEnabled().Init()
+		querierBuilder := e2ethanos.NewQuerierBuilder(e, "query")
+
+		compliance := e.Runnable("alert_generator_compliance_tester").WithPorts(map[string]int{"http": 8080}).Init(e2e.StartOptions{
+			Image:   "alert_generator_compliance_tester:latest",
+			Command: e2e.NewCommandRunUntilStop(),
+		})
+
+		rFuture := e2ethanos.NewRulerBuilder(e, "1")
+		ruler := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
+			{
+				EndpointsConfig: httpconfig.EndpointsConfig{
+					StaticAddresses: []string{compliance.InternalEndpoint("http")},
+					Scheme:          "http",
+				},
+				Timeout:    amTimeout,
+				APIVersion: alert.APIv1,
+			},
+		}).
+			// Use default resend delay and eval interval, as the compliance spec requires this.
+			WithResendDelay("1m").
+			WithEvalInterval("1m").
+			WithReplicaLabel("").
+			InitTSDB(filepath.Join(rFuture.InternalDir(), "rules"), []httpconfig.Config{
+				{
+					EndpointsConfig: httpconfig.EndpointsConfig{
+						StaticAddresses: []string{
+							querierBuilder.InternalEndpoint("http"),
+						},
+						Scheme: "http",
+					},
+				},
+			})
+
+		query := querierBuilder.
+			WithStoreAddresses(receive.InternalEndpoint("grpc")).
+			WithRuleAddresses(ruler.InternalEndpoint("grpc")).
+			// We deduplicate by this, since alert compatibility tool requires clean metric without labels
+			// attached by receivers.
+			WithReplicaLabels("receive", "tenant_id").
+			Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(receive, query, ruler, compliance))
+
+		// Pull rules.yaml:
+		{
+			var stdout bytes.Buffer
+			testutil.Ok(t, compliance.Exec(e2e.NewCommand("cat", "/rules.yaml"), e2e.WithExecOptionStdout(&stdout)))
+			testutil.Ok(t, os.MkdirAll(filepath.Join(ruler.Dir(), "rules"), os.ModePerm))
+			testutil.Ok(t, os.WriteFile(filepath.Join(ruler.Dir(), "rules", "rules.yaml"), stdout.Bytes(), os.ModePerm))
+
+			// Reload ruler.
+			resp, err := http.Post("http://"+ruler.Endpoint("http")+"/-/reload", "", nil)
+			testutil.Ok(t, err)
+			defer func() {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+			}()
+			testutil.Equals(t, http.StatusOK, resp.StatusCode)
+		}
+		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "test-thanos.yaml"), []byte(alertCompatConfig(receive, query)), os.ModePerm))
+
+		fmt.Println(alertCompatConfig(receive, query))
+
+		testutil.Ok(t, compliance.Exec(e2e.NewCommand(
+			"/alert_generator_compliance_tester", "-config-file", filepath.Join(compliance.InternalDir(), "test-thanos.yaml")),
+		))
+	})
+}
+
+// nolint (it's still used in skipped test).
+func alertCompatConfig(receive e2e.Runnable, query e2e.Runnable) string {
+	return fmt.Sprintf(`settings:
+  remote_write_url: '%s'
+  query_base_url: 'http://%s'
+  rules_and_alerts_api_base_url: 'http://%s'
+  alert_reception_server_port: 8080
+  alert_message_parser: default
+`, e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("remote-write")), query.InternalEndpoint("http"), query.InternalEndpoint("http"))
 }
