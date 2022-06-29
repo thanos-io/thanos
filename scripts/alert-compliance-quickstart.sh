@@ -11,8 +11,8 @@
 # branch or with version >= 0.27.0.
 #
 # After all components are running, you can start the alert generator compliance tester
-# with `thanos-example.yaml`` configuration provided in here:
-# https://github.com/prometheus/compliance/blob/main/alert_generator/test-prometheus.yaml
+# with `test-thanos.yaml` configuration provided in here:
+# https://github.com/prometheus/compliance/blob/main/alert_generator/test-thanos.yaml
 set -euo pipefail
 
 trap 'kill 0' SIGTERM
