@@ -8,6 +8,7 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -39,7 +40,7 @@ var DefaultConfig = Config{
 	ReaderConfig: ReaderConfig{
 		MaxRetryRequests: 0,
 	},
-	HTTPConfig: exthttp.HTTPConfig{
+	HTTPConfig: HTTPConfig{
 		IdleConnTimeout:       model.Duration(90 * time.Second),
 		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
 		TLSHandshakeTimeout:   model.Duration(10 * time.Second),
@@ -53,16 +54,16 @@ var DefaultConfig = Config{
 
 // Config Azure storage configuration.
 type Config struct {
-	StorageAccountName string             `yaml:"storage_account"`
-	StorageAccountKey  string             `yaml:"storage_account_key"`
-	ContainerName      string             `yaml:"container"`
-	Endpoint           string             `yaml:"endpoint"`
-	MaxRetries         int                `yaml:"max_retries"`
-	MSIResource        string             `yaml:"msi_resource"`
-	UserAssignedID     string             `yaml:"user_assigned_id"`
-	PipelineConfig     PipelineConfig     `yaml:"pipeline_config"`
-	ReaderConfig       ReaderConfig       `yaml:"reader_config"`
-	HTTPConfig         exthttp.HTTPConfig `yaml:"http_config"`
+	StorageAccountName string         `yaml:"storage_account"`
+	StorageAccountKey  string         `yaml:"storage_account_key"`
+	ContainerName      string         `yaml:"container"`
+	Endpoint           string         `yaml:"endpoint"`
+	MaxRetries         int            `yaml:"max_retries"`
+	MSIResource        string         `yaml:"msi_resource"`
+	UserAssignedID     string         `yaml:"user_assigned_id"`
+	PipelineConfig     PipelineConfig `yaml:"pipeline_config"`
+	ReaderConfig       ReaderConfig   `yaml:"reader_config"`
+	HTTPConfig         HTTPConfig     `yaml:"http_config"`
 }
 
 type ReaderConfig struct {
@@ -136,6 +137,24 @@ func (conf *Config) validate() error {
 	}
 
 	return nil
+}
+
+type HTTPConfig struct {
+	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
+	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
+	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
+
+	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
+	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
+	MaxIdleConns          int            `yaml:"max_idle_conns"`
+	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
+	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
+
+	// Transport field allows upstream callers to inject a custom round tripper.
+	Transport http.RoundTripper `yaml:"-"`
+
+	TLSConfig          exthttp.TLSConfig `yaml:"tls_config"`
+	DisableCompression bool
 }
 
 // parseConfig unmarshals a buffer into a Config with default values.

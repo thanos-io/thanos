@@ -17,7 +17,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/minio/minio-go/v7/pkg/encrypt"
 
-	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -199,7 +198,7 @@ http_config:
   `)
 	cfg, err := parseConfig(input)
 	testutil.Ok(t, err)
-	transport, err := exthttp.DefaultTransport(cfg.HTTPConfig)
+	transport, err := DefaultTransport(cfg.HTTPConfig)
 	testutil.Ok(t, err)
 	testutil.Equals(t, true, transport.TLSClientConfig.InsecureSkipVerify)
 }
