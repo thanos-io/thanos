@@ -7,6 +7,9 @@
 # The script will start all necessary components (receive, ruler, querier)
 # with appropriate confguration.
 #
+# For the test you will need to run Thanos binary built with the latest 'main'
+# branch or with version >= 0.27.0.
+#
 # After all comopnents are running, you can start the alert generator compliance tester
 # with `thanos-example.yaml`` configuration provided in here:
 # https://github.com/prometheus/compliance/blob/main/alert_generator/test-prometheus.yaml
@@ -16,7 +19,8 @@ trap 'kill 0' SIGTERM
 
 THANOS_EXECUTABLE=${THANOS_EXECUTABLE:-"thanos"}
 
-TMP_DATA=$(mktemp -d /tmp/data-XXXX)
+TMP_DATA_RECEIVER=$(mktemp -d /tmp/data-receive-XXXX)
+TMP_DATA_RULER=$(mktemp -d /tmp/data-ruler-XXXX)
 ALERT_COMPLIANCE_RULES=$(mktemp /tmp/rules-XXXX.yaml)
 
 export TMP_DATA
@@ -26,7 +30,7 @@ curl -sNL -o "${ALERT_COMPLIANCE_RULES}" "https://raw.githubusercontent.com/prom
 
 ${THANOS_EXECUTABLE} receive \
   --label='receive_replica="0"' \
-  --tsdb.path="${TMP_DATA}" &
+  --tsdb.path="${TMP_DATA_RECEIVER}" &
 
 # We make sure to filter out the 'receive_replica' and 'tenant_id' labels,
 # which are added by the receiver (they cannot be present during the test).
@@ -45,7 +49,7 @@ ${THANOS_EXECUTABLE} rule \
   --query=0.0.0.0:19192 \
   --http-address=0.0.0.0:20902 \
   --grpc-address=0.0.0.0:20901 \
-  --data-dir="${TMP_DATA}" &
+  --data-dir="${TMP_DATA_RULER}" &
 
 sleep 0.5
 
