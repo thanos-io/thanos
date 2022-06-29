@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -214,6 +215,10 @@ func runReceive(
 		DialOpts:                     dialOpts,
 		ForwardTimeout:               time.Duration(*conf.forwardTimeout),
 		TSDBStats:                    dbs,
+		MaxPerTenantLimit:            conf.maxPerTenantLimit,
+		MetaMonitoringUrl:            conf.metaMonitoringUrl,
+		MetaMonitoringHttpClient:     conf.metaMonitoringHttpClient,
+		MetaMonitoringLimitQuery:     conf.metaMonitoringLimitQuery,
 		WriteSeriesLimit:             conf.writeSeriesLimit,
 		WriteSamplesLimit:            conf.writeSamplesLimit,
 		WriteRequestSizeLimit:        conf.writeRequestSizeLimit,
@@ -733,6 +738,11 @@ type receiveConfig struct {
 	rwClientServerCA   string
 	rwClientServerName string
 
+	maxPerTenantLimit        uint64
+	metaMonitoringLimitQuery string
+	metaMonitoringUrl        *url.URL
+	metaMonitoringHttpClient *extflag.PathOrContent
+
 	dataDir   string
 	labelStrs []string
 
@@ -830,6 +840,18 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.replica-header", "HTTP header specifying the replica number of a write request.").Default(receive.DefaultReplicaHeader).StringVar(&rc.replicaHeader)
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
+
+	cmd.Flag("receive.per-tenant-limit", "The total number of active series that a tenant is allowed to have within a hashring topology.").Uint64Var(&rc.maxPerTenantLimit)
+
+	cmd.Flag("receive.limit-meta-monitoring.url", "Meta-monitoring URL which is compatible with Prometheus Query API for active series limiting.").Default("http://localhost:9090").URLVar(&rc.metaMonitoringUrl)
+
+	cmd.Flag("receive.limit-meta-monitoring.query", "PromQL Query to execute against meta-monitoring, to get the current number of active series for each tenant, across Receive replicas.").Default("sum(prometheus_tsdb_head_series) by (tenant)").StringVar(&rc.metaMonitoringLimitQuery)
+
+	rc.metaMonitoringHttpClient = extflag.RegisterPathOrContent(
+		cmd,
+		"receive.limit-meta-monitoring.http-client",
+		"YAML file or string with http client configs for meta-monitoring.",
+	)
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 

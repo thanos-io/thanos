@@ -12,16 +12,20 @@ import (
 	stdlog "log"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"sync"
 	"time"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/promclient"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -101,6 +105,10 @@ type Options struct {
 	ForwardTimeout               time.Duration
 	RelabelConfigs               []*relabel.Config
 	TSDBStats                    TSDBStats
+	MaxPerTenantLimit            uint64
+	MetaMonitoringUrl            *url.URL
+	MetaMonitoringHttpClient     *extflag.PathOrContent
+	MetaMonitoringLimitQuery     string
 	WriteSeriesLimit             int64
 	WriteSamplesLimit            int64
 	WriteRequestSizeLimit        int64
@@ -512,6 +520,18 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor {
+		under, err := h.isUnderLimit(ctx, tenant, tLogger)
+		if err != nil {
+			level.Debug(tLogger).Log("msg", "error while limiting", "err", err.Error())
+
+		}
+		if !under {
+			http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
+			return
+		}
+	}
+
 	responseStatusCode := http.StatusOK
 	if err = h.handleRequest(ctx, rep, tenant, &wreq); err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
@@ -532,6 +552,47 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(len(wreq.Timeseries)))
 	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
+}
+
+func (h *Handler) isUnderLimit(ctx context.Context, tenant string, logger log.Logger) (bool, error) {
+	if h.options.MaxPerTenantLimit == 0 || h.options.MetaMonitoringUrl.Host == "" {
+		return true, nil
+	}
+
+	httpConfContentYaml, err := h.options.MetaMonitoringHttpClient.Content()
+	if err != nil {
+		return true, errors.Wrap(err, "getting http client config")
+	}
+
+	httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
+	if err != nil {
+		return true, errors.Wrap(err, "parsing http config YAML")
+	}
+
+	httpClient, err := httpconfig.NewHTTPClient(*httpClientConfig, "thanos-receive")
+	if err != nil {
+		return true, errors.Wrap(err, "Improper http client config")
+	}
+
+	c := promclient.NewWithTracingClient(logger, httpClient, httpconfig.ThanosUserAgent)
+
+	vectorRes, _, err := c.QueryInstant(ctx, h.options.MetaMonitoringUrl, h.options.MetaMonitoringLimitQuery, time.Now(), promclient.QueryOptions{})
+	if err != nil {
+		return true, errors.Wrap(err, "querying meta-monitoring solution")
+	}
+
+	for _, e := range vectorRes {
+		for _, v := range e.Metric {
+			if string(v) == tenant {
+				if float64(e.Value) >= float64(h.options.MaxPerTenantLimit) {
+					level.Error(logger).Log("msg", "tenant above limit", "tenant", tenant, "currentSeries", float64(e.Value))
+					return false, nil
+				}
+			}
+		}
+	}
+
+	return true, nil
 }
 
 // forward accepts a write request, batches its time series by
