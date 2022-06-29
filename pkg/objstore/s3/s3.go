@@ -70,6 +70,24 @@ var DefaultConfig = Config{
 	PartSize: 1024 * 1024 * 64, // 64MB.
 }
 
+type HTTPConfig struct {
+	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
+	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
+	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
+
+	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
+	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
+	MaxIdleConns          int            `yaml:"max_idle_conns"`
+	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
+	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
+
+	// Transport field allows upstream callers to inject a custom round tripper.
+	Transport http.RoundTripper `yaml:"-"`
+
+	TLSConfig          exthttp.TLSConfig `yaml:"tls_config"`
+	DisableCompression bool
+}
+
 // Config stores the configuration for s3 bucket.
 type Config struct {
 	Bucket             string             `yaml:"bucket"`
