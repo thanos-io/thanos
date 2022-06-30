@@ -6,8 +6,6 @@ package azure
 import (
 	"context"
 	"fmt"
-
-	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -87,42 +85,6 @@ func getServicePrincipalToken(logger log.Logger, conf Config) (*adal.ServicePrin
 	return msiConfig.ServicePrincipalToken()
 }
 
-func DefaultTransport(config HTTPConfig) (*http.Transport, error) {
-	tlsConfig, err := exthttp.NewTLSConfig(&config.TLSConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	config.InsecureSkipVerify = tlsConfig.InsecureSkipVerify
-
-	return &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-
-		MaxIdleConns:          config.MaxIdleConns,
-		MaxIdleConnsPerHost:   config.MaxIdleConnsPerHost,
-		IdleConnTimeout:       time.Duration(config.IdleConnTimeout),
-		MaxConnsPerHost:       config.MaxConnsPerHost,
-		TLSHandshakeTimeout:   time.Duration(config.TLSHandshakeTimeout),
-		ExpectContinueTimeout: time.Duration(config.ExpectContinueTimeout),
-		// A custom ResponseHeaderTimeout was introduced
-		// to cover cases where the tcp connection works but
-		// the server never answers. Defaults to 2 minutes.
-		ResponseHeaderTimeout: time.Duration(config.ResponseHeaderTimeout),
-		// Set this value so that the underlying transport round-tripper
-		// doesn't try to auto decode the body of objects with
-		// content-encoding set to `gzip`.
-		//
-		// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
-		DisableCompression: true,
-		TLSClientConfig:    tlsConfig,
-	}, nil
-}
-
 func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.ContainerURL, error) {
 	credentials, err := getAzureStorageCredentials(logger, conf)
 
@@ -141,7 +103,7 @@ func getContainerURL(ctx context.Context, logger log.Logger, conf Config) (blob.
 		retryOptions.TryTimeout = time.Until(deadline)
 	}
 
-	dt, err := DefaultTransport(conf.HTTPConfig)
+	dt, err := exthttp.DefaultTransport(conf.HTTPConfig)
 	if err != nil {
 		return blob.ContainerURL{}, err
 	}

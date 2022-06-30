@@ -973,7 +973,7 @@ func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 		SecretKey: e2edb.MinioSecretKey,
 		Endpoint:  endpoint,
 		Insecure:  false,
-		HTTPConfig: s3.HTTPConfig{
+		HTTPConfig: exthttp.HTTPConfig{
 			TLSConfig: exthttp.TLSConfig{
 				CAFile:   filepath.Join(basePath, "certs", "CAs", "ca.crt"),
 				CertFile: filepath.Join(basePath, "certs", "public.crt"),

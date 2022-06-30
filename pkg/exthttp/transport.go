@@ -29,6 +29,7 @@ type TLSConfig struct {
 	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
 }
 
+// TODO(bwplotka): Comment.
 type HTTPConfig struct {
 	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
 	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
@@ -47,23 +48,6 @@ type HTTPConfig struct {
 	DisableCompression bool
 }
 
-// NewTransport creates a new http.Transport with default settings.
-func NewTransport() *http.Transport {
-	return &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-}
-
 // DefaultTransport - this default transport is based on the Minio
 // DefaultTransport up until the following commit:
 // https://github.com/minio/minio-go/commit/008c7aa71fc17e11bf980c209a4f8c4d687fc884
@@ -73,8 +57,7 @@ func DefaultTransport(config HTTPConfig) (*http.Transport, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	config.InsecureSkipVerify = tlsConfig.InsecureSkipVerify
+	tlsConfig.InsecureSkipVerify = config.InsecureSkipVerify
 
 	return &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -122,12 +105,17 @@ func NewTLSConfig(cfg *TLSConfig) (*tls.Config, error) {
 	if len(cfg.ServerName) > 0 {
 		tlsConfig.ServerName = cfg.ServerName
 	}
+
 	// If a client cert & key is provided then configure TLS config accordingly.
 	if len(cfg.CertFile) > 0 && len(cfg.KeyFile) == 0 {
 		return nil, fmt.Errorf("client cert file %q specified without client key file", cfg.CertFile)
-	} else if len(cfg.KeyFile) > 0 && len(cfg.CertFile) == 0 {
+	}
+
+	if len(cfg.KeyFile) > 0 && len(cfg.CertFile) == 0 {
 		return nil, fmt.Errorf("client key file %q specified without client cert file", cfg.KeyFile)
-	} else if len(cfg.CertFile) > 0 && len(cfg.KeyFile) > 0 {
+	}
+
+	if len(cfg.CertFile) > 0 && len(cfg.KeyFile) > 0 {
 		// Verify that client cert and key are valid.
 		if _, err := cfg.getClientCertificate(nil); err != nil {
 			return nil, err

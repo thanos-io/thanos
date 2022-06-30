@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -26,12 +25,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
-	"gopkg.in/yaml.v2"
-
 	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/objstore"
-
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"gopkg.in/yaml.v2"
 )
 
 type ctxKey int
@@ -102,7 +99,7 @@ const (
 
 var DefaultConfig = Config{
 	PutUserMetadata: map[string]string{},
-	HTTPConfig: HTTPConfig{
+	HTTPConfig: exthttp.HTTPConfig{
 		IdleConnTimeout:       model.Duration(90 * time.Second),
 		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
 		TLSHandshakeTimeout:   model.Duration(10 * time.Second),
@@ -115,39 +112,26 @@ var DefaultConfig = Config{
 	BucketLookupType: AutoLookup,
 }
 
-type HTTPConfig struct {
-	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
-	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
-	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
-
-	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
-	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
-	MaxIdleConns          int            `yaml:"max_idle_conns"`
-	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
-	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
-
-	// Transport field allows upstream callers to inject a custom round tripper.
-	Transport http.RoundTripper `yaml:"-"`
-
-	TLSConfig          exthttp.TLSConfig `yaml:"tls_config"`
-	DisableCompression bool
-}
+// HTTPConfig exists here only because Cortex depends on it, and we depend on Cortex.
+// Deprecated.
+// TODO(bwplotka): Remove it, once we remove Cortex cycle dep, or Cortex stops using this.
+type HTTPConfig = exthttp.HTTPConfig
 
 // Config stores the configuration for s3 bucket.
 type Config struct {
-	Bucket             string            `yaml:"bucket"`
-	Endpoint           string            `yaml:"endpoint"`
-	Region             string            `yaml:"region"`
-	AWSSDKAuth         bool              `yaml:"aws_sdk_auth"`
-	AccessKey          string            `yaml:"access_key"`
-	Insecure           bool              `yaml:"insecure"`
-	SignatureV2        bool              `yaml:"signature_version2"`
-	SecretKey          string            `yaml:"secret_key"`
-	PutUserMetadata    map[string]string `yaml:"put_user_metadata"`
-	HTTPConfig         HTTPConfig        `yaml:"http_config"`
-	TraceConfig        TraceConfig       `yaml:"trace"`
-	ListObjectsVersion string            `yaml:"list_objects_version"`
-	BucketLookupType   BucketLookupType  `yaml:"bucket_lookup_type"`
+	Bucket             string             `yaml:"bucket"`
+	Endpoint           string             `yaml:"endpoint"`
+	Region             string             `yaml:"region"`
+	AWSSDKAuth         bool               `yaml:"aws_sdk_auth"`
+	AccessKey          string             `yaml:"access_key"`
+	Insecure           bool               `yaml:"insecure"`
+	SignatureV2        bool               `yaml:"signature_version2"`
+	SecretKey          string             `yaml:"secret_key"`
+	PutUserMetadata    map[string]string  `yaml:"put_user_metadata"`
+	HTTPConfig         exthttp.HTTPConfig `yaml:"http_config"`
+	TraceConfig        TraceConfig        `yaml:"trace"`
+	ListObjectsVersion string             `yaml:"list_objects_version"`
+	BucketLookupType   BucketLookupType   `yaml:"bucket_lookup_type"`
 	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
 	// NOTE we need to make sure this number does not produce more parts than 10 000.
 	PartSize    uint64    `yaml:"part_size"`
@@ -179,43 +163,7 @@ type Bucket struct {
 	listObjectsV1   bool
 }
 
-func DefaultTransport(config HTTPConfig) (*http.Transport, error) {
-	tlsConfig, err := exthttp.NewTLSConfig(&config.TLSConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	config.InsecureSkipVerify = tlsConfig.InsecureSkipVerify
-
-	return &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-
-		MaxIdleConns:          config.MaxIdleConns,
-		MaxIdleConnsPerHost:   config.MaxIdleConnsPerHost,
-		IdleConnTimeout:       time.Duration(config.IdleConnTimeout),
-		MaxConnsPerHost:       config.MaxConnsPerHost,
-		TLSHandshakeTimeout:   time.Duration(config.TLSHandshakeTimeout),
-		ExpectContinueTimeout: time.Duration(config.ExpectContinueTimeout),
-		// A custom ResponseHeaderTimeout was introduced
-		// to cover cases where the tcp connection works but
-		// the server never answers. Defaults to 2 minutes.
-		ResponseHeaderTimeout: time.Duration(config.ResponseHeaderTimeout),
-		// Set this value so that the underlying transport round-tripper
-		// doesn't try to auto decode the body of objects with
-		// content-encoding set to `gzip`.
-		//
-		// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
-		DisableCompression: true,
-		TLSClientConfig:    tlsConfig,
-	}, nil
-}
-
-// parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
+// parseConfig unmarshals a buffer into a Config with default values.
 func parseConfig(conf []byte) (Config, error) {
 	config := DefaultConfig
 	if err := yaml.UnmarshalStrict(conf, &config); err != nil {
@@ -299,7 +247,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		rt = config.HTTPConfig.Transport
 	} else {
 		var err error
-		rt, err = DefaultTransport(config.HTTPConfig)
+		rt, err = exthttp.DefaultTransport(config.HTTPConfig)
 		if err != nil {
 			return nil, err
 		}
