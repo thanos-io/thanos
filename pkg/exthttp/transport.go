@@ -41,7 +41,7 @@ type HTTPConfig struct {
 	Transport http.RoundTripper `yaml:"-"`
 
 	TLSConfig          TLSConfig `yaml:"tls_config"`
-	DisableCompression bool
+	DisableCompression bool      `yaml:"disable_compression"`
 }
 
 // DefaultTransport - this default transport is based on the Minio

@@ -86,6 +86,7 @@ config:
       key_file: ""
       server_name: ""
       insecure_skip_verify: false
+    disable_compression: false
   trace:
     enable: false
   list_objects_version: ""
@@ -356,13 +357,13 @@ config:
     max_idle_conns: 0
     max_idle_conns_per_host: 0
     max_conns_per_host: 0
-    disable_compression: false
     tls_config:
       ca_file: ""
       cert_file: ""
       key_file: ""
       server_name: ""
       insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -425,11 +426,19 @@ config:
   http_config:
     idle_conn_timeout: 1m30s
     response_header_timeout: 2m
+    insecure_skip_verify: false
     tls_handshake_timeout: 10s
     expect_continue_timeout: 1s
     max_idle_conns: 100
     max_idle_conns_per_host: 100
     max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
