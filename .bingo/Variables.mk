@@ -113,15 +113,11 @@ $(PROMDOC): $(BINGO_DIR)/promdoc.mod
 	@echo "(re)installing $(GOBIN)/promdoc-v0.8.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=promdoc.mod -o=$(GOBIN)/promdoc-v0.8.0 "github.com/plexsystems/promdoc"
 
-PROMETHEUS_ARRAY := $(GOBIN)/prometheus-v2.4.3+incompatible $(GOBIN)/prometheus-v1.8.2-0.20200724121523-657ba532e42f $(GOBIN)/prometheus-v1.8.2-0.20210331101223-3cafc58827d1
-$(PROMETHEUS_ARRAY): $(BINGO_DIR)/prometheus.mod $(BINGO_DIR)/prometheus.1.mod $(BINGO_DIR)/prometheus.2.mod
+PROMETHEUS_ARRAY := $(GOBIN)/prometheus-v2.36.2
+$(PROMETHEUS_ARRAY): $(BINGO_DIR)/prometheus.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/prometheus-v2.4.3+incompatible"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=prometheus.mod -o=$(GOBIN)/prometheus-v2.4.3+incompatible "github.com/prometheus/prometheus/cmd/prometheus"
-	@echo "(re)installing $(GOBIN)/prometheus-v1.8.2-0.20200724121523-657ba532e42f"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=prometheus.1.mod -o=$(GOBIN)/prometheus-v1.8.2-0.20200724121523-657ba532e42f "github.com/prometheus/prometheus/cmd/prometheus"
-	@echo "(re)installing $(GOBIN)/prometheus-v1.8.2-0.20210331101223-3cafc58827d1"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=prometheus.2.mod -o=$(GOBIN)/prometheus-v1.8.2-0.20210331101223-3cafc58827d1 "github.com/prometheus/prometheus/cmd/prometheus"
+	@echo "(re)installing $(GOBIN)/prometheus-v2.36.2"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=prometheus.mod -o=$(GOBIN)/prometheus-v2.36.2 "github.com/prometheus/prometheus/cmd/prometheus"
 
 PROMTOOL := $(GOBIN)/promtool-v1.8.2-0.20200522113006-f4dd45609a05
 $(PROMTOOL): $(BINGO_DIR)/promtool.mod
