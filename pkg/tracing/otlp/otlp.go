@@ -67,5 +67,3 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 
 	return tp, nil
 }
-
-
