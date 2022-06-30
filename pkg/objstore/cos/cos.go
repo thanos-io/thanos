@@ -136,7 +136,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		bucketURL = cos.NewBucketURL(fmt.Sprintf("%s-%s", config.Bucket, config.AppId), config.Region, true)
 	}
 	b := &cos.BaseURL{BucketURL: bucketURL}
-	tpt, err := exthttp.DefaultTransport(config.HTTPConfig)
+	tpt, _ := exthttp.DefaultTransport(config.HTTPConfig)
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
 			SecretID:  config.SecretId,
