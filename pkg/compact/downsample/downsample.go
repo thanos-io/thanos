@@ -4,6 +4,7 @@
 package downsample
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -153,9 +155,12 @@ func Downsample(
 			for _, c := range chks {
 				ac, ok := c.Chunk.(*AggrChunk)
 				if !ok {
-					return id, errors.Errorf("expected downsampled chunk (*downsample.AggrChunk) got %T instead for series: %d", c.Chunk, postings.At())
+					// Downsampled block can erroneously contain XOR chunks, skip those
+					// https://github.com/thanos-io/thanos/issues/5272
+					level.Warn(logger).Log("msg", fmt.Sprintf("expected downsampled chunk (*downsample.AggrChunk) got %T instead for series: %d", c.Chunk, postings.At()))
+				} else {
+					aggrChunks = append(aggrChunks, ac)
 				}
-				aggrChunks = append(aggrChunks, ac)
 			}
 			downsampledChunks, err := downsampleAggr(
 				aggrChunks,
