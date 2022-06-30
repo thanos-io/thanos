@@ -60,7 +60,7 @@ func newDefaultMetrics(reg prometheus.Registerer, buckets []float64, extraLabels
 				Name: "http_inflight_requests",
 				Help: "Current number of HTTP requests the handler is responding to.",
 			},
-			append([]string{"handler"}, extraLabels...),
+			append([]string{"handler", "method"}, extraLabels...),
 		),
 	}
 }
