@@ -25,7 +25,7 @@ type TLSConfig struct {
 	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
 }
 
-// TODO(bwplotka): Comment.
+// TODO(bwplotka): HTTPConfig stores the http.Transport configuration for the cos and s3 minio client.
 type HTTPConfig struct {
 	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
 	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
