@@ -59,7 +59,7 @@ func queryTmplFuncs() template.FuncMap {
 		"formatTimestamp": func(timestamp int64) string {
 			return time.Unix(timestamp/1000, 0).Format(time.RFC3339)
 		},
-		"title": strings.Title,
+		"title": strings.Title, // nolint TODO(bwplotka): Find replacement.
 	}
 }
 
