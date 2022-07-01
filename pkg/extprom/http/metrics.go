@@ -9,10 +9,11 @@ import (
 )
 
 type defaultMetrics struct {
-	requestDuration *prometheus.HistogramVec
-	requestSize     *prometheus.SummaryVec
-	requestsTotal   *prometheus.CounterVec
-	responseSize    *prometheus.SummaryVec
+	requestDuration      *prometheus.HistogramVec
+	requestSize          *prometheus.SummaryVec
+	requestsTotal        *prometheus.CounterVec
+	responseSize         *prometheus.SummaryVec
+	inflightHTTPRequests *prometheus.GaugeVec
 }
 
 func newDefaultMetrics(reg prometheus.Registerer, buckets []float64, extraLabels []string) *defaultMetrics {
@@ -29,6 +30,7 @@ func newDefaultMetrics(reg prometheus.Registerer, buckets []float64, extraLabels
 			},
 			append([]string{"code", "handler", "method"}, extraLabels...),
 		),
+
 		requestSize: promauto.With(reg).NewSummaryVec(
 			prometheus.SummaryOpts{
 				Name: "http_request_size_bytes",
@@ -36,6 +38,7 @@ func newDefaultMetrics(reg prometheus.Registerer, buckets []float64, extraLabels
 			},
 			append([]string{"code", "handler", "method"}, extraLabels...),
 		),
+
 		requestsTotal: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "http_requests_total",
@@ -43,12 +46,21 @@ func newDefaultMetrics(reg prometheus.Registerer, buckets []float64, extraLabels
 			},
 			append([]string{"code", "handler", "method"}, extraLabels...),
 		),
+
 		responseSize: promauto.With(reg).NewSummaryVec(
 			prometheus.SummaryOpts{
 				Name: "http_response_size_bytes",
 				Help: "Tracks the size of HTTP responses.",
 			},
 			append([]string{"code", "handler", "method"}, extraLabels...),
+		),
+
+		inflightHTTPRequests: promauto.With(reg).NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "http_inflight_requests",
+				Help: "Current number of HTTP requests the handler is responding to.",
+			},
+			append([]string{"handler", "method"}, extraLabels...),
 		),
 	}
 }
