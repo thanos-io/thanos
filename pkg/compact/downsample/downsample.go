@@ -155,9 +155,13 @@ func Downsample(
 			for _, c := range chks {
 				ac, ok := c.Chunk.(*AggrChunk)
 				if !ok {
-					// Downsampled block can erroneously contain XOR chunks, skip those
-					// https://github.com/thanos-io/thanos/issues/5272
-					level.Warn(logger).Log("msg", fmt.Sprintf("expected downsampled chunk (*downsample.AggrChunk) got %T instead for series: %d", c.Chunk, postings.At()))
+					if c.Chunk.NumSamples() == 0 {
+						// Downsampled block can erroneously contain empty XOR chunks, skip those
+						// https://github.com/thanos-io/thanos/issues/5272
+						level.Warn(logger).Log("msg", fmt.Sprintf("expected downsampled chunk (*downsample.AggrChunk) got an empty %T instead for series: %d", c.Chunk, postings.At()))
+					} else {
+						return id, errors.Errorf("expected downsampled chunk (*downsample.AggrChunk) got a non-empty %T instead for series: %d", c.Chunk, postings.At())
+					}
 				} else {
 					aggrChunks = append(aggrChunks, ac)
 				}
