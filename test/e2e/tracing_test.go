@@ -49,7 +49,7 @@ func TestJaegerTracing(t *testing.T) {
 			ServiceName:  "thanos",
 			SamplerType:  "const",
 			SamplerParam: 1,
-			Endpoint:     "http://" + newJaeger.InternalEndpoint("jaeger.thrift") + "/api/traces", // which endpoint to use here?
+			Endpoint:     "http://" + newJaeger.InternalEndpoint("jaeger.thrift") + "/api/traces", // make this a var
 		},
 	})
 	testutil.Ok(t, err)
