@@ -10,7 +10,7 @@ Thanos is a set of components that can be composed into a highly available metri
 
 Thanos is a [CNCF](https://www.cncf.io/) Incubating project.
 
-Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric data in any object storage while retaining fast query latencies. Additionally, it provides a global query view across all Prometheus installations and can merge data from Prometheus HA pairs on the fly.
+Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric data in any object storage while retaining fast query latencies. Additionally, it provides a global query view across all Prometheus installations and can merge data from the Prometheus HA pairs on the fly.
 
 Concretely the aims of the project are:
 
@@ -51,7 +51,7 @@ Deployment with Receive:
 
 ## Thanos Philosophy
 
-The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the golang programming language.
+The philosophy behind the Thanos project by CNCF and our great community is borrowing much more from the UNIX philosophy and the golang programming language.
 
 * Each subcommand should do one thing and do it well
   * eg. thanos query proxies incoming calls to known store API endpoints merging the result
@@ -76,14 +76,17 @@ Contributions are very welcome! See our [CONTRIBUTING.md](CONTRIBUTING.md) for m
 
 ## Community
 
+We love contributors!
 Thanos is an open source project and we value and welcome new contributors and members of the community. Here are ways to get in touch with the community:
 
 * Slack: [#thanos](https://slack.cncf.io/)
 * Issue Tracker: [GitHub Issues](https://github.com/thanos-io/thanos/issues)
 
+If you have any issue, never hesitate to interact with others! Happy contributing!
+
 ## Adopters
 
-See [`Adopters List`](website/data/adopters.yml).
+See [`Adopters List`](website/data/adopters.yml)
 
 ## Maintainers
 
