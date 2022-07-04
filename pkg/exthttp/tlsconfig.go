@@ -10,6 +10,20 @@ import (
 	"io/ioutil"
 )
 
+// TLSConfig configures the options for TLS connections.
+type TLSConfig struct {
+	// The CA cert to use for the targets.
+	CAFile string `yaml:"ca_file"`
+	// The client cert file for the targets.
+	CertFile string `yaml:"cert_file"`
+	// The client key file for the targets.
+	KeyFile string `yaml:"key_file"`
+	// Used to verify the hostname for the targets.
+	ServerName string `yaml:"server_name"`
+	// Disable target certificate validation.
+	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
+}
+
 // NewTLSConfig creates a new tls.Config from the given TLSConfig.
 func NewTLSConfig(cfg *TLSConfig) (*tls.Config, error) {
 	tlsConfig := &tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify}

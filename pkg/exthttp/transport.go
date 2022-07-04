@@ -11,20 +11,6 @@ import (
 	"github.com/prometheus/common/model"
 )
 
-// TLSConfig configures the options for TLS connections.
-type TLSConfig struct {
-	// The CA cert to use for the targets.
-	CAFile string `yaml:"ca_file"`
-	// The client cert file for the targets.
-	CertFile string `yaml:"cert_file"`
-	// The client key file for the targets.
-	KeyFile string `yaml:"key_file"`
-	// Used to verify the hostname for the targets.
-	ServerName string `yaml:"server_name"`
-	// Disable target certificate validation.
-	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
-}
-
 // TODO(bwplotka): HTTPConfig stores the http.Transport configuration for the cos and s3 minio client.
 type HTTPConfig struct {
 	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
