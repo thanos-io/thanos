@@ -94,17 +94,6 @@ func parseConfig(conf []byte) (Config, error) {
 	return config, nil
 }
 
-// HTTPConfig stores the http.Transport configuration for the cos client.
-type HTTPConfig struct {
-	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
-	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
-	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
-	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
-	MaxIdleConns          int            `yaml:"max_idle_conns"`
-	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
-	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
-}
-
 // NewBucket returns a new Bucket using the provided cos configuration.
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	if logger == nil {
