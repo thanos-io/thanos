@@ -350,7 +350,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tenant) (rate(http_requests_total{job=~\"$job\", tenant=~\"$tenant\"}[$interval]))",
+                     "expr": "sum by (job, tenant, code) (rate(http_requests_total{job=~\"$job\", tenant=~\"$tenant\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{code}} - {{tenant}}",
@@ -552,7 +552,7 @@
          "repeatIteration": null,
          "repeatRowId": null,
          "showTitle": true,
-         "title": "WRITE - Incoming Request focus per tenant",
+         "title": "WRITE - Incoming Request (tenant focus)",
          "titleSize": "h6"
       },
       {
@@ -591,7 +591,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tenant) (rate(http_request_size_bytes_sum{job=~\"$job\", tenant=~\"$tenant\"}[$interval]))/ sum by (job, tenant) (rate(http_request_size_bytes_count{job=~\"$job\", tenant=~\"$tenant\"}[$interval]))",
+                     "expr": "sum by (job, tenant) (rate(http_request_size_bytes_sum{job=~\"$job\", tenant=~\"$tenant\", code=~\"2..\"}[$interval]))/ sum by (job, tenant) (rate(http_request_size_bytes_count{job=~\"$job\", tenant=~\"$tenant\", code=~\"2..\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{tenant}}",
@@ -667,7 +667,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tenant) (rate(http_request_size_bytes_sum{job=~\"$job\", tenant=~\"$tenant\"}[$interval]))/ sum by (job, tenant) (rate(http_request_size_bytes_count{job=~\"$job\", tenant=~\"$tenant\"}[$interval]))",
+                     "expr": "sum by (job, tenant) (rate(http_request_size_bytes_sum{job=~\"$job\", tenant=~\"$tenant\", code!~\"2..\"}[$interval]))/ sum by (job, tenant) (rate(http_request_size_bytes_count{job=~\"$job\", tenant=~\"$tenant\", code!~\"2..\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{tenant}}",
@@ -792,7 +792,7 @@
          "repeatIteration": null,
          "repeatRowId": null,
          "showTitle": true,
-         "title": "HTTP requests",
+         "title": "HTTP requests (tenant focus)",
          "titleSize": "h6"
       },
       {
@@ -831,7 +831,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_receive_write_timeseries_bucket{job=~\"$job\", tenant=~\"$tenant\"}[$interval])) by (job, tenant) ",
+                     "expr": "sum(rate(thanos_receive_write_timeseries_bucket{job=~\"$job\", tenant=~\"$tenant\", code=~\"2..\"}[$interval])) by (job, tenant) ",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{tenant}}",
@@ -907,7 +907,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_receive_write_timeseries_bucket{job=~\"$job\", tenant=~\"$tenant\"}[$interval])) by (job, tenant, code) ",
+                     "expr": "sum(rate(thanos_receive_write_timeseries_bucket{job=~\"$job\", tenant=~\"$tenant\", code!~\"2..\"}[$interval])) by (job, tenant, code) ",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{code}} - {{tenant}}",
@@ -956,7 +956,7 @@
          "repeatIteration": null,
          "repeatRowId": null,
          "showTitle": true,
-         "title": "Series & Samples",
+         "title": "Series & Samples (tenant focus)",
          "titleSize": "h6"
       },
       {

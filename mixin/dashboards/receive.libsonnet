@@ -22,6 +22,8 @@ local utils = import '../lib/utils.libsonnet';
       local grpcUnaryWriteSelector = utils.joinLabels([thanos.receive.dashboard.selector, 'grpc_type="unary"', 'grpc_method="RemoteWrite"']);
       local grpcUnaryReadSelector = utils.joinLabels([thanos.receive.dashboard.selector, 'grpc_type="unary"', 'grpc_method!="RemoteWrite"']);
       local grpcServerStreamSelector = utils.joinLabels([thanos.receive.dashboard.selector, 'grpc_type="server_stream"']);
+      local tenantHttpCode2XXSelector = std.join(', ', [thanos.receive.dashboard.tenantSelector, 'code=~"2.."']);
+      local tenantHttpCodeNot2XXSelector = std.join(', ', [thanos.receive.dashboard.tenantSelector, 'code!~"2.."']);
       g.dashboard(thanos.receive.title) {
         templating+: {
           list+: [
@@ -59,11 +61,11 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate of write requests (per code and tenant)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_requests_total{%s}[$interval]))' % [thanos.receive.dashboard.tenantDimensions, thanos.receive.dashboard.tenantSelector],
+            'sum by (%s) (rate(http_requests_total{%s}[$interval]))' % [thanos.receive.dashboard.tenantDimensions + ', code', thanos.receive.dashboard.tenantSelector],
             '{{code}} - {{tenant}}'
           )
         )
-        // TODO: fix error panel label
+        // TODO: change this to a query panel
         .addPanel(
           g.panel('Number of errors (by tenant and code)') +
           g.httpErrPanel('http_requests_total', thanos.receive.dashboard.tenantSelector, thanos.receive.dashboard.tenantDimensions)
@@ -78,19 +80,17 @@ local utils = import '../lib/utils.libsonnet';
       )
       .addRow(
         g.row('HTTP requests (tenant focus)')
-        // TODO: filter HTTP codes
         .addPanel(
           g.panel('Average successful HTTP request size (per tenant and code, only 2XX)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$interval]))/ sum by (%s) (rate(http_request_size_bytes_count{%s}[$interval]))' % [thanos.receive.dashboard.tenantDimensions, thanos.receive.dashboard.tenantSelector, thanos.receive.dashboard.tenantDimensions, thanos.receive.dashboard.tenantSelector],
+            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$interval]))/ sum by (%s) (rate(http_request_size_bytes_count{%s}[$interval]))' % [thanos.receive.dashboard.tenantDimensions, tenantHttpCode2XXSelector, thanos.receive.dashboard.tenantDimensions, tenantHttpCode2XXSelector],
             '{{tenant}}'
           )
         )
-        // TODO: filter HTTP codes
         .addPanel(
           g.panel('Average failed HTTP request size (per tenant and code, non 2XX)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$interval]))/ sum by (%s) (rate(http_request_size_bytes_count{%s}[$interval]))' % [thanos.receive.dashboard.tenantDimensions, thanos.receive.dashboard.tenantSelector, thanos.receive.dashboard.tenantDimensions, thanos.receive.dashboard.tenantSelector],
+            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$interval]))/ sum by (%s) (rate(http_request_size_bytes_count{%s}[$interval]))' % [thanos.receive.dashboard.tenantDimensions, tenantHttpCodeNot2XXSelector, thanos.receive.dashboard.tenantDimensions, tenantHttpCodeNot2XXSelector],
             '{{tenant}}'
           )
         )
@@ -104,19 +104,17 @@ local utils = import '../lib/utils.libsonnet';
       )
       .addRow(
         g.row('Series & Samples (tenant focus)')
-        // TODO: filter HTTP codes
         .addPanel(
           g.panel('Rate of series received (per tenant, only 2XX)') +
           g.queryPanel(
-            'sum(rate(thanos_receive_write_timeseries_bucket{%s}[$interval])) by (%s) ' % [thanos.receive.dashboard.tenantSelector, thanos.receive.dashboard.tenantDimensions],
+            'sum(rate(thanos_receive_write_timeseries_bucket{%s}[$interval])) by (%s) ' % [tenantHttpCode2XXSelector, thanos.receive.dashboard.tenantDimensions],
             '{{tenant}}'
           )
         )
-        // TODO: filter HTTP codes
         .addPanel(
           g.panel('Rate of series not written (per tenant and code, non 2XX)') +
           g.queryPanel(
-            'sum(rate(thanos_receive_write_timeseries_bucket{%s}[$interval])) by (%s) ' % [thanos.receive.dashboard.tenantSelector, thanos.receive.dashboard.tenantDimensions + ', code'],
+            'sum(rate(thanos_receive_write_timeseries_bucket{%s}[$interval])) by (%s) ' % [tenantHttpCodeNot2XXSelector, thanos.receive.dashboard.tenantDimensions + ', code'],
             '{{code}} - {{tenant}}'
           )
         )
