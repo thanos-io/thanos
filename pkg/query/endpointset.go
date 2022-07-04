@@ -61,17 +61,17 @@ func (es *GRPCEndpointSpec) Addr() string {
 
 // Metadata method for gRPC endpoint tries to call InfoAPI exposed by Thanos components until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (es *GRPCEndpointSpec) Metadata(ctx context.Context, client *endpointClients) (*endpointMetadata, error) {
-	if client.info != nil {
-		resp, err := client.info.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
+func (es *GRPCEndpointSpec) Metadata(ctx context.Context, infoClient infopb.InfoClient, storeClient storepb.StoreClient) (*endpointMetadata, error) {
+	if infoClient != nil {
+		resp, err := infoClient.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
 		if err == nil {
 			return &endpointMetadata{resp}, nil
 		}
 	}
 
 	// Call Info method of StoreAPI, this way querier will be able to discovery old components not exposing InfoAPI.
-	if client.store != nil {
-		metadata, err := es.getMetadataUsingStoreAPI(ctx, client.store)
+	if storeClient != nil {
+		metadata, err := es.getMetadataUsingStoreAPI(ctx, storeClient)
 		if err != nil {
 			return nil, errors.Wrapf(err, "fallback fetching info from %s", es.addr)
 		}
@@ -368,7 +368,12 @@ func (e *EndpointSet) GetStoreClients() []store.Client {
 	stores := make([]store.Client, 0, len(e.endpoints))
 	for _, er := range e.endpoints {
 		if er.HasStoreAPI() {
-			stores = append(stores, er)
+			// Make a new endpointRef with store client.
+			stores = append(stores, &endpointRef{
+				StoreClient: storepb.NewStoreClient(er.cc),
+				addr:        er.addr,
+				metadata:    er.metadata,
+			})
 		}
 	}
 	return stores
@@ -382,7 +387,7 @@ func (e *EndpointSet) GetQueryAPIClients() []querypb.QueryClient {
 	stores := make([]querypb.QueryClient, 0, len(e.endpoints))
 	for _, er := range e.endpoints {
 		if er.HasQueryAPI() {
-			stores = append(stores, er.clients.query)
+			stores = append(stores, querypb.NewQueryClient(er.cc))
 		}
 	}
 	return stores
@@ -396,7 +401,7 @@ func (e *EndpointSet) GetRulesClients() []rulespb.RulesClient {
 	rules := make([]rulespb.RulesClient, 0, len(e.endpoints))
 	for _, er := range e.endpoints {
 		if er.HasRulesAPI() {
-			rules = append(rules, er.clients.rule)
+			rules = append(rules, rulespb.NewRulesClient(er.cc))
 		}
 	}
 	return rules
@@ -410,7 +415,7 @@ func (e *EndpointSet) GetTargetsClients() []targetspb.TargetsClient {
 	targets := make([]targetspb.TargetsClient, 0, len(e.endpoints))
 	for _, er := range e.endpoints {
 		if er.HasTargetsAPI() {
-			targets = append(targets, er.clients.target)
+			targets = append(targets, targetspb.NewTargetsClient(er.cc))
 		}
 	}
 	return targets
@@ -424,7 +429,7 @@ func (e *EndpointSet) GetMetricMetadataClients() []metadatapb.MetadataClient {
 	metadataClients := make([]metadatapb.MetadataClient, 0, len(e.endpoints))
 	for _, er := range e.endpoints {
 		if er.HasMetricMetadataAPI() {
-			metadataClients = append(metadataClients, er.clients.metricMetadata)
+			metadataClients = append(metadataClients, metadatapb.NewMetadataClient(er.cc))
 		}
 	}
 	return metadataClients
@@ -439,7 +444,7 @@ func (e *EndpointSet) GetExemplarsStores() []*exemplarspb.ExemplarStore {
 	for _, er := range e.endpoints {
 		if er.HasExemplarsAPI() {
 			exemplarStores = append(exemplarStores, &exemplarspb.ExemplarStore{
-				ExemplarsClient: er.clients.exemplar,
+				ExemplarsClient: exemplarspb.NewExemplarsClient(er.cc),
 				LabelSets:       labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...),
 			})
 		}
@@ -498,14 +503,10 @@ func (e *EndpointSet) getActiveEndpoints(ctx context.Context, endpoints map[stri
 					cc:     conn,
 					addr:   addr,
 					logger: e.logger,
-					clients: &endpointClients{
-						info:  infopb.NewInfoClient(conn),
-						store: storepb.NewStoreClient(conn),
-					},
 				}
 			}
 
-			metadata, err := spec.Metadata(ctx, er.clients)
+			metadata, err := spec.Metadata(ctx, infopb.NewInfoClient(er.cc), storepb.NewStoreClient(er.cc))
 			if err != nil {
 				if !seenAlready && !spec.IsStrictStatic() {
 					// Close only if new and not a strict static node.
@@ -622,8 +623,6 @@ type endpointRef struct {
 	cc   *grpc.ClientConn
 	addr string
 
-	clients *endpointClients
-
 	// Metadata can change during runtime.
 	metadata *endpointMetadata
 
@@ -634,42 +633,6 @@ func (er *endpointRef) Update(metadata *endpointMetadata) {
 	er.mtx.Lock()
 	defer er.mtx.Unlock()
 
-	clients := er.clients
-
-	if metadata.Store != nil {
-		clients.store = storepb.NewStoreClient(er.cc)
-		er.StoreClient = clients.store
-	} else {
-		// When we see the endpoint for the first time we assume the StoreAPI is exposed by that endpoint (which may not be true for some component, e.g. ruler)
-		// and we create a store API client because as a fallback we might have to call info method of storeAPI.
-		// In this step, we are setting it to null when we find out that the store API is not exposed.
-		er.clients.store = nil
-		er.StoreClient = nil
-	}
-
-	if metadata.Rules != nil {
-		clients.rule = rulespb.NewRulesClient(er.cc)
-	}
-
-	if metadata.Targets != nil {
-		clients.target = targetspb.NewTargetsClient(er.cc)
-	}
-
-	if metadata.MetricMetadata != nil {
-		clients.metricMetadata = metadatapb.NewMetadataClient(er.cc)
-	}
-
-	if metadata.Exemplars != nil {
-		// min/max range is also provided by in the response of Info rpc call
-		// but we are not using this metadata anywhere right now so ignoring.
-		clients.exemplar = exemplarspb.NewExemplarsClient(er.cc)
-	}
-
-	if metadata.Query != nil {
-		clients.query = querypb.NewQueryClient(er.cc)
-	}
-
-	er.clients = clients
 	er.metadata = metadata
 }
 
@@ -688,42 +651,42 @@ func (er *endpointRef) HasStoreAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.clients != nil && er.clients.store != nil
+	return er.metadata != nil && er.metadata.Store != nil
 }
 
 func (er *endpointRef) HasQueryAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.clients != nil && er.clients.query != nil
+	return er.metadata != nil && er.metadata.Query != nil
 }
 
 func (er *endpointRef) HasRulesAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.clients != nil && er.clients.rule != nil
+	return er.metadata != nil && er.metadata.Rules != nil
 }
 
 func (er *endpointRef) HasTargetsAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.clients != nil && er.clients.target != nil
+	return er.metadata != nil && er.metadata.Targets != nil
 }
 
 func (er *endpointRef) HasMetricMetadataAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.clients != nil && er.clients.metricMetadata != nil
+	return er.metadata != nil && er.metadata.MetricMetadata != nil
 }
 
 func (er *endpointRef) HasExemplarsAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.clients != nil && er.clients.exemplar != nil
+	return er.metadata != nil && er.metadata.Exemplars != nil
 }
 
 func (er *endpointRef) LabelSets() []labels.Labels {
@@ -801,16 +764,6 @@ func (er *endpointRef) apisPresent() []string {
 	}
 
 	return apisPresent
-}
-
-type endpointClients struct {
-	store          storepb.StoreClient
-	rule           rulespb.RulesClient
-	metricMetadata metadatapb.MetadataClient
-	exemplar       exemplarspb.ExemplarsClient
-	target         targetspb.TargetsClient
-	query          querypb.QueryClient
-	info           infopb.InfoClient
 }
 
 type endpointMetadata struct {
