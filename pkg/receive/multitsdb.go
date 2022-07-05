@@ -215,6 +215,9 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 	var (
 		wg   sync.WaitGroup
 		merr errutil.SyncMultiError
+
+		prunedTenants []string
+		pmtx          sync.Mutex
 	)
 
 	for tenantID, tenantInstance := range t.tenants {
@@ -229,12 +232,18 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 			}
 
 			if pruned {
-				level.Info(t.logger).Log("msg", "Pruned tenant", "tenant", tenantID)
-				delete(t.tenants, tenantID)
+				pmtx.Lock()
+				defer pmtx.Unlock()
+				prunedTenants = append(prunedTenants, tenantID)
 			}
 		}(tenantID, tenantInstance)
 	}
 	wg.Wait()
+
+	for _, tenantID := range prunedTenants {
+		level.Info(t.logger).Log("msg", "Pruned tenant", "tenant", tenantID)
+		delete(t.tenants, tenantID)
+	}
 
 	return merr.Err()
 }
