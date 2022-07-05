@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -263,6 +264,8 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 	g, ctx := errgroup.WithContext(ctx)
 
 	var downloadedFiles []string
+	var m sync.Mutex
+
 	err := bkt.Iter(ctx, src, func(name string) error {
 		g.Go(func() error {
 			dst := filepath.Join(dst, filepath.Base(name))
@@ -270,6 +273,8 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 				if err := DownloadDir(ctx, logger, bkt, originalSrc, name, dst, ignoredPaths...); err != nil {
 					return err
 				}
+				m.Lock()
+				defer m.Unlock()
 				downloadedFiles = append(downloadedFiles, dst)
 				return nil
 			}
@@ -279,7 +284,15 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 					return nil
 				}
 			}
-			return DownloadFile(ctx, logger, bkt, name, dst)
+			if err := DownloadFile(ctx, logger, bkt, name, dst); err != nil {
+				return err
+			}
+
+			m.Lock()
+			defer m.Unlock()
+			downloadedFiles = append(downloadedFiles, dst)
+
+			return nil
 		})
 		downloadedFiles = append(downloadedFiles, dst)
 		return nil
