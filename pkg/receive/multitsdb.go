@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/api/status"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
@@ -32,7 +34,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
-type GetStatsFunc func(tenantID, statsByLabelName string) *tsdb.Stats
+type TSDBStats interface {
+	SingleTenantStats(tenantID, statsByLabelName string) *status.TenantStats
+	AllTenantStats(statsByLabelName string) []status.TenantStats
+}
 
 type MultiTSDB struct {
 	dataDir         string
@@ -384,7 +389,7 @@ func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 	return res
 }
 
-func (t *MultiTSDB) Stats(tenantID, statsByLabelName string) *tsdb.Stats {
+func (t *MultiTSDB) SingleTenantStats(tenantID, statsByLabelName string) *status.TenantStats {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -393,7 +398,39 @@ func (t *MultiTSDB) Stats(tenantID, statsByLabelName string) *tsdb.Stats {
 		return nil
 	}
 
-	return tenant.readyS.get().db.Head().Stats(statsByLabelName)
+	stats := tenant.readyS.get().db.Head().Stats(statsByLabelName)
+	return &status.TenantStats{
+		Tenant: tenantID,
+		Stats:  stats,
+	}
+}
+
+func (t *MultiTSDB) AllTenantStats(statsByLabelName string) []status.TenantStats {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+
+	var (
+		mu     sync.Mutex
+		wg     sync.WaitGroup
+		result = make([]status.TenantStats, 0, len(t.tenants))
+	)
+	for tenantID, tenantInstance := range t.tenants {
+		wg.Add(1)
+		go func(tenantID string, tenantInstance *tenant) {
+			defer wg.Done()
+			stats := tenantInstance.readyS.get().db.Head().Stats(statsByLabelName)
+
+			mu.Lock()
+			defer mu.Unlock()
+			result = append(result, status.TenantStats{
+				Tenant: tenantID,
+				Stats:  stats,
+			})
+		}(tenantID, tenantInstance)
+	}
+	wg.Wait()
+
+	return result
 }
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {

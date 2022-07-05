@@ -213,7 +213,7 @@ func runReceive(
 		TLSConfig:         rwTLSConfig,
 		DialOpts:          dialOpts,
 		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
-		GetTSDBStats:      dbs.Stats,
+		TSDBStats:         dbs,
 	})
 
 	grpcProbe := prober.NewGRPC()
