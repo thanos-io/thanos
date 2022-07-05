@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
@@ -259,29 +260,36 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 		return errors.Wrap(err, "create dir")
 	}
 
+	g, ctx := errgroup.WithContext(ctx)
+
 	var downloadedFiles []string
-	if err := bkt.Iter(ctx, src, func(name string) error {
-		dst := filepath.Join(dst, filepath.Base(name))
-		if strings.HasSuffix(name, DirDelim) {
-			if err := DownloadDir(ctx, logger, bkt, originalSrc, name, dst, ignoredPaths...); err != nil {
-				return err
-			}
-			downloadedFiles = append(downloadedFiles, dst)
-			return nil
-		}
-		for _, ignoredPath := range ignoredPaths {
-			if ignoredPath == strings.TrimPrefix(name, string(originalSrc)+DirDelim) {
-				level.Debug(logger).Log("msg", "not downloading again because a provided path matches this one", "file", name)
+	err := bkt.Iter(ctx, src, func(name string) error {
+		g.Go(func() error {
+			dst := filepath.Join(dst, filepath.Base(name))
+			if strings.HasSuffix(name, DirDelim) {
+				if err := DownloadDir(ctx, logger, bkt, originalSrc, name, dst, ignoredPaths...); err != nil {
+					return err
+				}
+				downloadedFiles = append(downloadedFiles, dst)
 				return nil
 			}
-		}
-		if err := DownloadFile(ctx, logger, bkt, name, dst); err != nil {
-			return err
-		}
-
+			for _, ignoredPath := range ignoredPaths {
+				if ignoredPath == strings.TrimPrefix(name, string(originalSrc)+DirDelim) {
+					level.Debug(logger).Log("msg", "not downloading again because a provided path matches this one", "file", name)
+					return nil
+				}
+			}
+			return DownloadFile(ctx, logger, bkt, name, dst)
+		})
 		downloadedFiles = append(downloadedFiles, dst)
 		return nil
-	}); err != nil {
+	})
+
+	if err == nil {
+		err = g.Wait()
+	}
+
+	if err != nil {
 		downloadedFiles = append(downloadedFiles, dst) // Last, clean up the root dst directory.
 		// Best-effort cleanup if the download failed.
 		for _, f := range downloadedFiles {
