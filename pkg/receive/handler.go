@@ -230,6 +230,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	statusAPI := statusapi.New(statusapi.Options{
 		GetStats: h.getStats,
+		Registry: h.options.Registry,
 	})
 	statusAPI.Register(h.router, o.Tracer, logger, ins, logging.NewHTTPServerMiddleware(logger))
 

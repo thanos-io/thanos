@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/go-kit/log"
@@ -68,15 +70,18 @@ type GetStatsFunc func(r *http.Request, statsByLabelName string) ([]TenantStats,
 
 type Options struct {
 	GetStats GetStatsFunc
+	Registry *prometheus.Registry
 }
 
 type StatusAPI struct {
 	getTSDBStats GetStatsFunc
+	registry     *prometheus.Registry
 }
 
 func New(opts Options) *StatusAPI {
 	return &StatusAPI{
 		getTSDBStats: opts.GetStats,
+		registry:     opts.Registry,
 	}
 }
 
@@ -86,21 +91,46 @@ func (sapi *StatusAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 }
 
 func (sapi *StatusAPI) httpServeStats(r *http.Request) (interface{}, []error, *api.ApiError) {
-	stats, err := sapi.getTSDBStats(r, labels.MetricName)
-	if err != nil {
-		return nil, nil, err
+	stats, sterr := sapi.getTSDBStats(r, labels.MetricName)
+	if sterr != nil {
+		return nil, nil, sterr
 	}
 
 	if stats == nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: fmt.Errorf("unknown tenant")}
 	}
 
+	metrics, err := sapi.registry.Gather()
+	if err != nil {
+		return nil, []error{err}, nil
+	}
+
+	tenantChunks := make(map[string]int64)
+	for _, mF := range metrics {
+		if *mF.Name != "prometheus_tsdb_head_chunks" {
+			continue
+		}
+
+		for _, metric := range mF.Metric {
+			for _, lbl := range metric.Label {
+				if *lbl.Name == "tenant" {
+					tenantChunks[*lbl.Value] = int64(metric.Gauge.GetValue())
+				}
+			}
+		}
+	}
+
 	result := make([]TSDBStatus, 0, len(stats))
 	for _, s := range stats {
+		var chunkCount int64
+		if c, ok := tenantChunks[s.Tenant]; ok {
+			chunkCount = c
+		}
 		result = append(result, TSDBStatus{
 			Tenant: s.Tenant,
 			HeadStats: v1.HeadStats{
 				NumSeries:     s.Stats.NumSeries,
+				ChunkCount:    chunkCount,
 				MinTime:       s.Stats.MinTime,
 				MaxTime:       s.Stats.MaxTime,
 				NumLabelPairs: s.Stats.IndexPostingStats.NumLabelPairs,
