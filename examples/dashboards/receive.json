@@ -590,7 +590,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tenant) (rate(http_request_size_bytes_sum{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code=~\"2..\"}[$interval]))/ sum by (job, tenant) (rate(http_request_size_bytes_count{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code=~\"2..\"}[$interval]))",
+                     "expr": "sum by (job, tenant) (rate(http_request_size_bytes_sum{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code=~\"2..\"}[$interval])) / sum by (job, tenant) (rate(http_request_size_bytes_count{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code=~\"2..\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{tenant}}",
@@ -666,7 +666,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tenant) (rate(http_request_size_bytes_sum{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code!~\"2..\"}[$interval]))/ sum by (job, tenant) (rate(http_request_size_bytes_count{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code!~\"2..\"}[$interval]))",
+                     "expr": "sum by (job, tenant) (rate(http_request_size_bytes_sum{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code!~\"2..\"}[$interval])) / sum by (job, tenant) (rate(http_request_size_bytes_count{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code!~\"2..\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{tenant}}",

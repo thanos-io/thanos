@@ -97,7 +97,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Average successful HTTP request size (per tenant and code, only 2XX)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$interval]))/ sum by (%s) (rate(http_request_size_bytes_count{%s}[$interval]))' % [
+            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$interval])) / sum by (%s) (rate(http_request_size_bytes_count{%s}[$interval]))' % [
               thanos.receive.dashboard.tenantDimensions,
               tenantHttpCode2XXSelector,
               thanos.receive.dashboard.tenantDimensions,
@@ -109,7 +109,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Average failed HTTP request size (per tenant and code, non 2XX)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$interval]))/ sum by (%s) (rate(http_request_size_bytes_count{%s}[$interval]))' % [
+            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$interval])) / sum by (%s) (rate(http_request_size_bytes_count{%s}[$interval]))' % [
               thanos.receive.dashboard.tenantDimensions,
               tenantHttpCodeNot2XXSelector,
               thanos.receive.dashboard.tenantDimensions,
