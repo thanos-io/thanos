@@ -350,7 +350,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tenant, code) (rate(http_requests_total{job=~\"$job\", tenant=~\"$tenant\"}[$interval]))",
+                     "expr": "sum by (tenant, code) (rate(http_requests_total{job=~\"$job\", tenant=~\"$tenant\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{code}} - {{tenant}}",
@@ -361,7 +361,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "Rate of write requests (per code and tenant)",
+               "title": "Rate of write requests (by tenant and code)",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
@@ -426,7 +426,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tenant, code) (rate(http_requests_total{job=~\"$job\", tenant=~\"$tenant\", code!~\"2..\"}[$interval]))",
+                     "expr": "sum by (tenant, code) (rate(http_requests_total{job=~\"$job\", tenant=~\"$tenant\", code!~\"2..\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{code}} - {{tenant}}",
@@ -742,7 +742,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(http_inflight_requests{job=~\"$job\", tenant=~\"$tenant\"}) by (job, tenant, code)",
+                     "expr": "sum by (job, tenant ,method) (http_inflight_requests{job=~\"$job\", tenant=~\"$tenant\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{method}} - {{tenant}}",

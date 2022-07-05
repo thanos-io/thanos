@@ -22,6 +22,7 @@ local utils = import '../lib/utils.libsonnet';
       local grpcUnaryWriteSelector = utils.joinLabels([thanos.receive.dashboard.selector, 'grpc_type="unary"', 'grpc_method="RemoteWrite"']);
       local grpcUnaryReadSelector = utils.joinLabels([thanos.receive.dashboard.selector, 'grpc_type="unary"', 'grpc_method!="RemoteWrite"']);
       local grpcServerStreamSelector = utils.joinLabels([thanos.receive.dashboard.selector, 'grpc_type="server_stream"']);
+      local tenantWithHttpCodeSelector = std.join(', ', ['tenant', 'code']);
       local tenantHttpCode2XXSelector = std.join(', ', [thanos.receive.dashboard.tenantSelector, 'code=~"2.."']);
       local tenantHttpCodeNot2XXSelector = std.join(', ', [thanos.receive.dashboard.tenantSelector, 'code!~"2.."']);
       g.dashboard(thanos.receive.title) {
@@ -59,9 +60,9 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('WRITE - Incoming Request (tenant focus)')
         .addPanel(
-          g.panel('Rate of write requests (per code and tenant)') +
+          g.panel('Rate of write requests (by tenant and code)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_requests_total{%s}[$interval]))' % [thanos.receive.dashboard.tenantDimensions + ', code', thanos.receive.dashboard.tenantSelector],
+            'sum by (%s) (rate(http_requests_total{%s}[$interval]))' % [tenantWithHttpCodeSelector, thanos.receive.dashboard.tenantSelector],
             '{{code}} - {{tenant}}'
           )
         )
@@ -69,7 +70,7 @@ local utils = import '../lib/utils.libsonnet';
           g.panel('Number of errors (by tenant and code)') +
           g.queryPanel(
             'sum by (%s) (rate(http_requests_total{%s}[$interval]))' % [
-              thanos.receive.dashboard.tenantDimensions + ', code',
+              tenantWithHttpCodeSelector,
               tenantHttpCodeNot2XXSelector,
             ],
             '{{code}} - {{tenant}}'
@@ -117,9 +118,9 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Inflight requests (per tenant and method)') +
           g.queryPanel(
-            'sum(http_inflight_requests{%s}) by (%s)' % [
+            'sum by (%s) (http_inflight_requests{%s})' % [
+              std.join(' ,', [thanos.receive.dashboard.tenantDimensions, 'method']),
               thanos.receive.dashboard.tenantSelector,
-              thanos.receive.dashboard.tenantDimensions + ', code',
             ],
             '{{method}} - {{tenant}}'
           )
