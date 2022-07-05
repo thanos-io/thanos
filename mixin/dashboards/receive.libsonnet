@@ -143,7 +143,7 @@ local utils = import '../lib/utils.libsonnet';
           g.queryPanel(
             'sum(rate(thanos_receive_write_timeseries_bucket{%s}[$interval])) by (%s) ' % [
               tenantHttpCodeNot2XXSelector,
-              thanos.receive.dashboard.tenantDimensions + ', code',
+              tenantWithHttpCodeSelector,
             ],
             '{{code}} - {{tenant}}'
           )

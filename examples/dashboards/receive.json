@@ -906,7 +906,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_receive_write_timeseries_bucket{job=~\"$job\", tenant=~\"$tenant\", code!~\"2..\"}[$interval])) by (job, tenant, code) ",
+                     "expr": "sum(rate(thanos_receive_write_timeseries_bucket{job=~\"$job\", tenant=~\"$tenant\", code!~\"2..\"}[$interval])) by (tenant, code) ",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{code}} - {{tenant}}",
