@@ -825,7 +825,7 @@
                "renderer": "flot",
                "seriesOverrides": [ ],
                "spaceLength": 10,
-               "span": 6,
+               "span": 3,
                "stack": false,
                "steppedLine": false,
                "targets": [
@@ -901,7 +901,7 @@
                "renderer": "flot",
                "seriesOverrides": [ ],
                "spaceLength": 10,
-               "span": 6,
+               "span": 3,
                "stack": false,
                "steppedLine": false,
                "targets": [
@@ -918,6 +918,158 @@
                "timeFrom": null,
                "timeShift": null,
                "title": "Rate of series not written (per tenant and code, non 2XX)",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "fill": 1,
+               "id": 12,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 3,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "sum(rate(thanos_receive_write_samples_bucket{job=~\"$job\", tenant=~\"$tenant\", code=~\"2..\"}[$interval])) by (job, tenant) ",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "{{tenant}}",
+                     "legendLink": null,
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Rate of samples received (per tenant, only 2XX)",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "fill": 1,
+               "id": 13,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 3,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "sum(rate(thanos_receive_write_samples_bucket{job=~\"$job\", tenant=~\"$tenant\", code!~\"2..\"}[$interval])) by (tenant, code) ",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "{{code}} - {{tenant}}",
+                     "legendLink": null,
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Rate of samples not written (per tenant and code, non 2XX)",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
@@ -970,7 +1122,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of replications to other receive nodes.",
                "fill": 1,
-               "id": 12,
+               "id": 14,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1049,7 +1201,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of replications to other receive nodes.",
                "fill": 10,
-               "id": 13,
+               "id": 15,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1137,7 +1289,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of forwarded requests to other receive nodes.",
                "fill": 1,
-               "id": 14,
+               "id": 16,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1216,7 +1368,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of forwareded requests to other receive nodes.",
                "fill": 10,
-               "id": 15,
+               "id": 17,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1304,7 +1456,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of handled Unary gRPC requests from queriers.",
                "fill": 10,
-               "id": 16,
+               "id": 18,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1455,7 +1607,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests from queriers.",
                "fill": 10,
-               "id": 17,
+               "id": 19,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1531,7 +1683,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests from queriers, in quantiles.",
                "fill": 1,
-               "id": 18,
+               "id": 20,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1661,7 +1813,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of handled Unary gRPC requests from queriers.",
                "fill": 10,
-               "id": 19,
+               "id": 21,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1812,7 +1964,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests from queriers.",
                "fill": 10,
-               "id": 20,
+               "id": 22,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1888,7 +2040,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests from queriers, in quantiles.",
                "fill": 1,
-               "id": 21,
+               "id": 23,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2018,7 +2170,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of handled Streamed gRPC requests from queriers.",
                "fill": 10,
-               "id": 22,
+               "id": 24,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2169,7 +2321,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests from queriers.",
                "fill": 10,
-               "id": 23,
+               "id": 25,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2245,7 +2397,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests from queriers, in quantiles.",
                "fill": 1,
-               "id": 24,
+               "id": 26,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2375,7 +2527,7 @@
                "datasource": "$datasource",
                "description": "Shows the relative time of last successful upload to the object-store bucket.",
                "fill": 1,
-               "id": 25,
+               "id": 27,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2499,7 +2651,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 26,
+               "id": 28,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2615,7 +2767,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 27,
+               "id": 29,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2691,7 +2843,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 28,
+               "id": 30,
                "legend": {
                   "avg": false,
                   "current": false,
