@@ -395,14 +395,12 @@
                ]
             },
             {
-               "aliasColors": {
-                  "error": "#E24D42"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
-               "fill": 10,
+               "fill": 1,
                "id": 5,
                "legend": {
                   "avg": false,
@@ -414,7 +412,7 @@
                   "values": false
                },
                "lines": true,
-               "linewidth": 0,
+               "linewidth": 1,
                "links": [ ],
                "nullPointMode": "null as zero",
                "percentage": false,
@@ -424,14 +422,15 @@
                "seriesOverrides": [ ],
                "spaceLength": 10,
                "span": 4,
-               "stack": true,
+               "stack": false,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tenant) (rate(http_requests_total{job=~\"$job\", tenant=~\"$tenant\",code=~\"5..\"}[$interval])) / sum by (job, tenant) (rate(http_requests_total{job=~\"$job\", tenant=~\"$tenant\"}[$interval]))",
+                     "expr": "sum by (job, tenant, code) (rate(http_requests_total{job=~\"$job\", tenant=~\"$tenant\", code!~\"2..\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "error",
+                     "legendFormat": "{{code}} - {{tenant}}",
+                     "legendLink": null,
                      "step": 10
                   }
                ],
@@ -454,7 +453,7 @@
                },
                "yaxes": [
                   {
-                     "format": "percentunit",
+                     "format": "short",
                      "label": null,
                      "logBase": 1,
                      "max": null,
