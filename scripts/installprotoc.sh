@@ -21,6 +21,7 @@ is_supported_platform() {
     linux/amd64) found=0 ;;
     linux/i386) found=0 ;;
     linux/arm64) found=0 ;;
+    linux/ppc64le) found=0 ;;
   esac
   return $found
 }
@@ -37,6 +38,7 @@ adjust_arch() {
     amd64) ARCH=x86_64 ;;
     i386) ARCH=x86_32 ;;
     arm64) ARCH=aarch_64 ;;
+    ppc64le) ARCH=ppcle_64 ;;
   esac
   true
 }

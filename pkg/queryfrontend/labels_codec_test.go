@@ -28,7 +28,7 @@ func TestLabelsCodec_DecodeRequest(t *testing.T) {
 		url             string
 		partialResponse bool
 		expectedError   error
-		expectedRequest ThanosRequest
+		expectedRequest ThanosRequestStoreMatcherGetter
 	}{
 		{
 			name:            "label_names cannot parse start",

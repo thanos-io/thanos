@@ -23,6 +23,7 @@
   "include": [
     "src",
     "test",
-    "react-app-env.d.ts"
+    "react-app-env.d.ts",
+    "globals.d.ts"
   ]
 }

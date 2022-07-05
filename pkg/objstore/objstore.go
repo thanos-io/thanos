@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -178,15 +180,19 @@ func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdi
 	if !df.IsDir() {
 		return errors.Errorf("%s is not a directory", srcdir)
 	}
-	return filepath.Walk(srcdir, func(src string, fi os.FileInfo, err error) error {
+	return filepath.WalkDir(srcdir, func(src string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if fi.IsDir() {
+		if d.IsDir() {
 			return nil
 		}
-		dst := filepath.Join(dstdir, strings.TrimPrefix(src, srcdir))
+		srcRel, err := filepath.Rel(srcdir, src)
+		if err != nil {
+			return errors.Wrap(err, "getting relative path")
+		}
 
+		dst := path.Join(dstdir, filepath.ToSlash(srcRel))
 		return UploadFile(ctx, logger, bkt, src, dst)
 	})
 }
@@ -255,8 +261,13 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 
 	var downloadedFiles []string
 	if err := bkt.Iter(ctx, src, func(name string) error {
+		dst := filepath.Join(dst, filepath.Base(name))
 		if strings.HasSuffix(name, DirDelim) {
-			return DownloadDir(ctx, logger, bkt, originalSrc, name, filepath.Join(dst, filepath.Base(name)), ignoredPaths...)
+			if err := DownloadDir(ctx, logger, bkt, originalSrc, name, dst, ignoredPaths...); err != nil {
+				return err
+			}
+			downloadedFiles = append(downloadedFiles, dst)
+			return nil
 		}
 		for _, ignoredPath := range ignoredPaths {
 			if ignoredPath == strings.TrimPrefix(name, string(originalSrc)+DirDelim) {
@@ -271,6 +282,7 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 		downloadedFiles = append(downloadedFiles, dst)
 		return nil
 	}); err != nil {
+		downloadedFiles = append(downloadedFiles, dst) // Last, clean up the root dst directory.
 		// Best-effort cleanup if the download failed.
 		for _, f := range downloadedFiles {
 			if rerr := os.Remove(f); rerr != nil {

@@ -1713,7 +1713,7 @@ func TestRulesHandler(t *testing.T) {
 			Type:           "alerting",
 		},
 	}
-	var tests = []test{
+	for _, test := range []test{
 		{
 			response: &testpromcompatibility.RuleDiscovery{
 				RuleGroups: []*testpromcompatibility.RuleGroup{
@@ -1770,9 +1770,7 @@ func TestRulesHandler(t *testing.T) {
 				},
 			},
 		},
-	}
-
-	for _, test := range tests {
+	} {
 		t.Run(fmt.Sprintf("endpoint=%s/method=%s/query=%q", "rules", http.MethodGet, test.query.Encode()), func(t *testing.T) {
 			// Build a context with the correct request params.
 			ctx := context.Background()

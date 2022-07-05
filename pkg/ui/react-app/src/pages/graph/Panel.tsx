@@ -17,7 +17,7 @@ import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 import { parseDuration } from '../../utils';
 
-interface PanelProps {
+export interface PanelProps {
   id: string;
   options: PanelOptions;
   onOptionsChanged: (opts: PanelOptions) => void;

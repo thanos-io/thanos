@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -30,6 +31,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
+
+type GetStatsFunc func(tenantID, statsByLabelName string) *tsdb.Stats
 
 type MultiTSDB struct {
 	dataDir         string
@@ -198,6 +201,98 @@ func (t *MultiTSDB) Close() error {
 	return merr.Err()
 }
 
+// Prune flushes and closes the TSDB for tenants that haven't received
+// any new samples for longer than the TSDB retention period.
+func (t *MultiTSDB) Prune(ctx context.Context) error {
+	// Retention of 0 means infinite retention.
+	if t.tsdbOpts.RetentionDuration == 0 {
+		return nil
+	}
+
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	var (
+		wg   sync.WaitGroup
+		merr errutil.SyncMultiError
+
+		prunedTenants []string
+		pmtx          sync.Mutex
+	)
+
+	for tenantID, tenantInstance := range t.tenants {
+		wg.Add(1)
+		go func(tenantID string, tenantInstance *tenant) {
+			defer wg.Done()
+			tlog := log.With(t.logger, "tenant", tenantID)
+			pruned, err := t.pruneTSDB(ctx, tlog, tenantInstance)
+			if err != nil {
+				merr.Add(err)
+				return
+			}
+
+			if pruned {
+				pmtx.Lock()
+				defer pmtx.Unlock()
+				prunedTenants = append(prunedTenants, tenantID)
+			}
+		}(tenantID, tenantInstance)
+	}
+	wg.Wait()
+
+	for _, tenantID := range prunedTenants {
+		level.Info(t.logger).Log("msg", "Pruned tenant", "tenant", tenantID)
+		delete(t.tenants, tenantID)
+	}
+
+	return merr.Err()
+}
+
+// pruneTSDB removes a TSDB if its past the retention period.
+// It compacts the TSDB head, sends all remaining blocks to S3 and removes the TSDB from disk.
+func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInstance *tenant) (bool, error) {
+	tenantTSDB := tenantInstance.readyStorage().get()
+	if tenantTSDB == nil {
+		return false, nil
+	}
+	tdb := tenantTSDB.db
+	head := tdb.Head()
+	if head.MaxTime() < 0 {
+		return false, nil
+	}
+
+	sinceLastAppend := time.Since(time.UnixMilli(head.MaxTime()))
+	if sinceLastAppend.Milliseconds() <= t.tsdbOpts.RetentionDuration {
+		return false, nil
+	}
+
+	level.Info(logger).Log("msg", "Pruning tenant")
+	if err := tdb.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
+		return false, err
+	}
+
+	if tenantInstance.shipper() != nil {
+		uploaded, err := tenantInstance.shipper().Sync(ctx)
+		if err != nil {
+			return false, err
+		}
+
+		if uploaded > 0 {
+			level.Info(logger).Log("msg", "Uploaded head block")
+		}
+	}
+
+	if err := tdb.Close(); err != nil {
+		return false, err
+	}
+
+	if err := os.RemoveAll(tenantTSDB.db.Dir()); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 	if t.bucket == nil {
 		return 0, errors.New("bucket is not specified, Sync should not be invoked")
@@ -287,6 +382,18 @@ func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 		}
 	}
 	return res
+}
+
+func (t *MultiTSDB) Stats(tenantID, statsByLabelName string) *tsdb.Stats {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+
+	tenant, ok := t.tenants[tenantID]
+	if !ok {
+		return nil
+	}
+
+	return tenant.readyS.get().db.Head().Stats(statsByLabelName)
 }
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {

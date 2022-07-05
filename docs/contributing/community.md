@@ -6,22 +6,18 @@ Thanos is an open source project from the very first commit. We always value and
 
 Follow and interact with us on Twitter: [@ThanosMetrics](https://twitter.com/ThanosMetrics)
 
-### Thanos Community Meetings
+### Thanos Community Office Hours
 
-Thanos Community Meeting is a **public** and **recorded** monthly meeting every second Wednesday 13:00 UTC ([Time zone converter](https://www.thetimezoneconverter.com/?t=13%3A00%20pm&tz=UTC%20(Coordinated%20Universal%20Time)&)).
+Thanos Community Office Hour (previously Contributor Office Hour) is a public weekly meeting focused on Thanos community, development and contributions. It’s meant for users, developers and maintainers to meet and get unblocked, pair review, and discuss development aspects of Thanos and related projects. **Everyone is welcome to join & add items to the agenda**. [CoC applies](../../CODE_OF_CONDUCT.md).
 
-Thanos maintainers & the community meet to discuss open issues, features and other Thanos related things. Everyone is welcome to join & add items to the agenda. The meeting happens in Zoom. Right now meeting is in a Webinar format, where only small amount of people will have ability to speak and video share, due to recent [Zoombombing](https://en.wikipedia.org/wiki/Zoombombing) issues.
+* When: Alternating weekly on Thursday:
+  * One week EU friendly time: 11:00-12:00 UTC
+  * One week US friendly time: 17:00-18:00 UTC
+* Calendar Event: https://www.cncf.io/calendar/
+* Agenda: [Google Doc](https://docs.google.com/document/d/137XnxfOT2p1NcNUq6NWZjwmtlSdA6Wyti86Pd6cyQhs)
+* Link to join zoom webinar: [https://zoom.us/j/96037860612](https://zoom.us/j/96037860612)
 
-* When: Monthly, every second Wednesday 12:00 UTC ([Time zone converter](https://www.thetimezoneconverter.com/?t=12%3A00%20pm&tz=UTC%20(Coordinated%20Universal%20Time)&)).
-* Google Calendar: [Google Calendar](https://calendar.google.com/calendar/embed?src=go39q7eu71vvu3gfrkbup6b254%40group.calendar.google.com)
-* Agenda: [https://bit.ly/thanos-community-agenda](https://bit.ly/thanos-community-agenda)
-* Link to join zoom webinar: [https://zoom.us/j/96476403386](https://zoom.us/j/96476403386)
-
-If you have any suggestions, how we can run the meeting better, please let `@povilasv` or `@metalmatze` know in the CNCF slack.
-
-### Thanos Contributor Office Hours
-
-Thanos Contributor Office Hours are public weekly meetings focused on Thanos development and contributions. It’s meant for developers and maintainers to meet, get unblocked, pair review, and discuss development aspects of Thanos and related projects. Read more [here](https://docs.google.com/document/d/137XnxfOT2p1NcNUq6NWZjwmtlSdA6Wyti86Pd6cyQhs/edit#heading=h.oy8b2jtupl8m).
+> NOTE: If no agenda items will be added 1h before the meeting, the meeting will be cancelled.
 
 ### Slack
 

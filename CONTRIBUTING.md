@@ -74,7 +74,7 @@ The following section explains various suggestions and procedures to note during
 
 It's key to get familiarized with the style guide and mechanics of Thanos, especially if your contribution touches more than one component of the Thanos distributed system. We recommend:
 
-* Reading the [getting started docs](docs/getting-started.md) and working through them, or alternatively working through the [Thanos tutorial](https://katacoda.com/thanos).
+* Reading the [getting started docs](docs/getting-started.md) and working through them.
 * Familiarizing yourself with our [coding style guidelines.](docs/contributing/coding-style-guide.md).
 * Familiarizing yourself with the [Makefile](Makefile) commands, for example `format`, `build`, `proto`, `docker` and `test`. `make help` will print most of available commands with relevant details.
 * Spin up a prebuilt dev environment using Gitpod.io [![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos)
@@ -155,6 +155,16 @@ $ git push origin <your_branch_for_new_pr>
 ```
 
 **Tests your changes**
+
+**Formatting**
+
+First of all, fall back to `make help` to see all availible commands. There are a few checks that happen when making a PR and these need to pass. We can make sure locally before making the PR by using commands that are related to your changes:
+- `make docs` generates, formats and cleans up white noise.
+- `make changed-docs` does same as above, but just for changed docs by checking `git diff` on which files are changed.
+- `make check-docs` generates, formats, cleans up white noise and checks links. Since it can be annoying to wait on link check results - it takes forever - to skip the check, you can use `make docs`).
+- `make format` formats code
+
+If you only made documentation changes, which do not include a link, you will be fine by using `make docs`. If you also changed some code, run `make format` as well.
 
 **Updating your branch**
 

@@ -91,6 +91,27 @@ func TestQueue_Push_Relabelled_Alerts(t *testing.T) {
 	)
 }
 
+func TestQueue_Push_RelabelDropAlerts(t *testing.T) {
+	q := NewQueue(nil, nil, 10, 10, nil, nil,
+		[]*relabel.Config{
+			{
+				SourceLabels: model.LabelNames{"a"},
+				Regex:        relabel.MustNewRegexp("1"),
+				Action:       relabel.Drop,
+			},
+		})
+
+	q.Push([]*notifier.Alert{
+		{Labels: labels.FromStrings("a", "1")},
+		{Labels: labels.FromStrings("a", "2")},
+		{Labels: labels.FromStrings("b", "3")},
+	})
+
+	testutil.Equals(t, 2, len(q.queue))
+	testutil.Equals(t, labels.FromStrings("a", "2"), q.queue[0].Labels)
+	testutil.Equals(t, labels.FromStrings("b", "3"), q.queue[1].Labels)
+}
+
 func assertSameHosts(t *testing.T, expected, found []*url.URL) {
 	testutil.Equals(t, len(expected), len(found))
 

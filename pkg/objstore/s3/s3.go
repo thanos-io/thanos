@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -26,15 +25,58 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
-	"gopkg.in/yaml.v2"
-
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"gopkg.in/yaml.v2"
 )
 
 type ctxKey int
 
+type BucketLookupType int
+
+func (blt BucketLookupType) String() string {
+	return []string{"auto", "virtual-hosted", "path"}[blt]
+}
+
+func (blt BucketLookupType) MinioType() minio.BucketLookupType {
+	return []minio.BucketLookupType{
+		minio.BucketLookupAuto,
+		minio.BucketLookupDNS,
+		minio.BucketLookupPath,
+	}[blt]
+}
+
+func (blt BucketLookupType) MarshalYAML() (interface{}, error) {
+	return blt.String(), nil
+}
+
+func (blt *BucketLookupType) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var lookupType string
+	if err := unmarshal(&lookupType); err != nil {
+		return err
+	}
+
+	switch lookupType {
+	case "auto":
+		*blt = AutoLookup
+		return nil
+	case "virtual-hosted":
+		*blt = VirtualHostLookup
+		return nil
+	case "path":
+		*blt = PathLookup
+		return nil
+	}
+
+	return fmt.Errorf("unsupported bucket lookup type: %s", lookupType)
+}
+
 const (
+	AutoLookup BucketLookupType = iota
+	VirtualHostLookup
+	PathLookup
+
 	// DirDelim is the delimiter used to model a directory structure in an object store bucket.
 	DirDelim = "/"
 
@@ -57,7 +99,7 @@ const (
 
 var DefaultConfig = Config{
 	PutUserMetadata: map[string]string{},
-	HTTPConfig: HTTPConfig{
+	HTTPConfig: exthttp.HTTPConfig{
 		IdleConnTimeout:       model.Duration(90 * time.Second),
 		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
 		TLSHandshakeTimeout:   model.Duration(10 * time.Second),
@@ -66,23 +108,30 @@ var DefaultConfig = Config{
 		MaxIdleConnsPerHost:   100,
 		MaxConnsPerHost:       0,
 	},
-	PartSize: 1024 * 1024 * 64, // 64MB.
+	PartSize:         1024 * 1024 * 64, // 64MB.
+	BucketLookupType: AutoLookup,
 }
+
+// HTTPConfig exists here only because Cortex depends on it, and we depend on Cortex.
+// Deprecated.
+// TODO(bwplotka): Remove it, once we remove Cortex cycle dep, or Cortex stops using this.
+type HTTPConfig = exthttp.HTTPConfig
 
 // Config stores the configuration for s3 bucket.
 type Config struct {
-	Bucket             string            `yaml:"bucket"`
-	Endpoint           string            `yaml:"endpoint"`
-	Region             string            `yaml:"region"`
-	AWSSDKAuth         bool              `yaml:"aws_sdk_auth"`
-	AccessKey          string            `yaml:"access_key"`
-	Insecure           bool              `yaml:"insecure"`
-	SignatureV2        bool              `yaml:"signature_version2"`
-	SecretKey          string            `yaml:"secret_key"`
-	PutUserMetadata    map[string]string `yaml:"put_user_metadata"`
-	HTTPConfig         HTTPConfig        `yaml:"http_config"`
-	TraceConfig        TraceConfig       `yaml:"trace"`
-	ListObjectsVersion string            `yaml:"list_objects_version"`
+	Bucket             string             `yaml:"bucket"`
+	Endpoint           string             `yaml:"endpoint"`
+	Region             string             `yaml:"region"`
+	AWSSDKAuth         bool               `yaml:"aws_sdk_auth"`
+	AccessKey          string             `yaml:"access_key"`
+	Insecure           bool               `yaml:"insecure"`
+	SignatureV2        bool               `yaml:"signature_version2"`
+	SecretKey          string             `yaml:"secret_key"`
+	PutUserMetadata    map[string]string  `yaml:"put_user_metadata"`
+	HTTPConfig         exthttp.HTTPConfig `yaml:"http_config"`
+	TraceConfig        TraceConfig        `yaml:"trace"`
+	ListObjectsVersion string             `yaml:"list_objects_version"`
+	BucketLookupType   BucketLookupType   `yaml:"bucket_lookup_type"`
 	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
 	// NOTE we need to make sure this number does not produce more parts than 10 000.
 	PartSize    uint64    `yaml:"part_size"`
@@ -103,66 +152,6 @@ type TraceConfig struct {
 	Enable bool `yaml:"enable"`
 }
 
-// HTTPConfig stores the http.Transport configuration for the s3 minio client.
-type HTTPConfig struct {
-	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
-	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
-	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
-
-	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
-	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
-	MaxIdleConns          int            `yaml:"max_idle_conns"`
-	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
-	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
-
-	// Allow upstream callers to inject a round tripper
-	Transport http.RoundTripper `yaml:"-"`
-
-	TLSConfig objstore.TLSConfig `yaml:"tls_config"`
-}
-
-// DefaultTransport - this default transport is based on the Minio
-// DefaultTransport up until the following commit:
-// https://github.com/minio/minio-go/commit/008c7aa71fc17e11bf980c209a4f8c4d687fc884
-// The values have since diverged.
-func DefaultTransport(config Config) (*http.Transport, error) {
-	tlsConfig, err := objstore.NewTLSConfig(&config.HTTPConfig.TLSConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	if config.HTTPConfig.InsecureSkipVerify {
-		tlsConfig.InsecureSkipVerify = true
-	}
-
-	return &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-
-		MaxIdleConns:          config.HTTPConfig.MaxIdleConns,
-		MaxIdleConnsPerHost:   config.HTTPConfig.MaxIdleConnsPerHost,
-		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
-		MaxConnsPerHost:       config.HTTPConfig.MaxConnsPerHost,
-		TLSHandshakeTimeout:   time.Duration(config.HTTPConfig.TLSHandshakeTimeout),
-		ExpectContinueTimeout: time.Duration(config.HTTPConfig.ExpectContinueTimeout),
-		// A custom ResponseHeaderTimeout was introduced
-		// to cover cases where the tcp connection works but
-		// the server never answers. Defaults to 2 minutes.
-		ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
-		// Set this value so that the underlying transport round-tripper
-		// doesn't try to auto decode the body of objects with
-		// content-encoding set to `gzip`.
-		//
-		// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
-		DisableCompression: true,
-		TLSClientConfig:    tlsConfig,
-	}, nil
-}
-
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
 	logger          log.Logger
@@ -174,7 +163,7 @@ type Bucket struct {
 	listObjectsV1   bool
 }
 
-// parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
+// parseConfig unmarshals a buffer into a Config with default values.
 func parseConfig(conf []byte) (Config, error) {
 	config := DefaultConfig
 	if err := yaml.UnmarshalStrict(conf, &config); err != nil {
@@ -258,17 +247,18 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		rt = config.HTTPConfig.Transport
 	} else {
 		var err error
-		rt, err = DefaultTransport(config)
+		rt, err = exthttp.DefaultTransport(config.HTTPConfig)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	client, err := minio.New(config.Endpoint, &minio.Options{
-		Creds:     credentials.NewChainCredentials(chain),
-		Secure:    !config.Insecure,
-		Region:    config.Region,
-		Transport: rt,
+		Creds:        credentials.NewChainCredentials(chain),
+		Secure:       !config.Insecure,
+		Region:       config.Region,
+		Transport:    rt,
+		BucketLookup: config.BucketLookupType.MinioType(),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")

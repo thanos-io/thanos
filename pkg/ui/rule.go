@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"html/template"
 	"math"
-	"net/http"
-	"path"
 	"regexp"
 	"time"
 
@@ -39,10 +37,9 @@ func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManager *thanos
 	}
 
 	tmplFuncs := ruleTmplFuncs(queryURL)
-	tmplFuncs["uiPrefix"] = func() string { return "/classic" }
 
 	return &Rule{
-		BaseUI:         NewBaseUI(logger, "rule_menu.html", tmplFuncs, tmplVariables, externalPrefix, prefixHeader, component.Rule),
+		BaseUI:         NewBaseUI(logger, tmplFuncs, tmplVariables, externalPrefix, prefixHeader, component.Rule),
 		externalPrefix: externalPrefix,
 		prefixHeader:   prefixHeader,
 		ruleManager:    ruleManager,
@@ -126,81 +123,6 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 	}
 }
 
-func (ru *Rule) alerts(w http.ResponseWriter, r *http.Request) {
-	var groups []thanosrules.Group
-	for _, group := range ru.ruleManager.RuleGroups() {
-		if group.HasAlertingRules() {
-			groups = append(groups, group)
-		}
-	}
-
-	alertStatus := AlertStatus{
-		Groups: groups,
-		AlertStateToRowClass: map[rules.AlertState]string{
-			rules.StateInactive: "success",
-			rules.StatePending:  "warning",
-			rules.StateFiring:   "danger",
-		},
-		Counts: alertCounts(groups),
-	}
-
-	prefix := GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r)
-
-	// TODO(bwplotka): Update HTML to include partial response.
-	ru.executeTemplate(w, "alerts.html", prefix, alertStatus)
-}
-
-func (ru *Rule) rules(w http.ResponseWriter, r *http.Request) {
-	prefix := GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r)
-
-	// TODO(bwplotka): Update HTML to include partial response.
-	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManager)
-}
-
 func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
-	r.Get("/classic/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, path.Join("/", GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r), "/classic/alerts"), http.StatusFound)
-	})
-
-	// Redirect the original React UI's path (under "/new") to its new path at the root.
-	r.Get("/new/*path", func(w http.ResponseWriter, r *http.Request) {
-		p := route.Param(r.Context(), "path")
-		http.Redirect(w, r, path.Join("/", GetWebPrefix(ru.logger, ru.externalPrefix, ru.prefixHeader, r), p)+"?"+r.URL.RawQuery, http.StatusFound)
-	})
-
-	r.Get("/classic/alerts", instrf("alerts", ins, ru.alerts))
-	r.Get("/classic/rules", instrf("rules", ins, ru.rules))
-
-	r.Get("/classic/static/*filepath", instrf("static", ins, ru.serveStaticAsset))
 	registerReactApp(r, ins, ru.BaseUI)
-}
-
-// AlertStatus bundles alerting rules and the mapping of alert states to row classes.
-type AlertStatus struct {
-	Groups               []thanosrules.Group
-	AlertStateToRowClass map[rules.AlertState]string
-	Counts               AlertByStateCount
-}
-
-type AlertByStateCount struct {
-	Inactive int32
-	Pending  int32
-	Firing   int32
-}
-
-func alertCounts(groups []thanosrules.Group) AlertByStateCount {
-	result := AlertByStateCount{}
-	for _, group := range groups {
-		for _, alert := range group.AlertingRules() {
-			switch alert.State() {
-			case rules.StateInactive:
-				result.Inactive++
-			case rules.StatePending:
-				result.Pending++
-			case rules.StateFiring:
-				result.Firing++
-			}
-		}
-	}
-	return result
 }

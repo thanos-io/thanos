@@ -79,7 +79,6 @@ If you want to add yourself to this list, let us know!
 
 ## Deploying Thanos
 
-* [WIP] Detailed, free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/thanos/courses/thanos/1-globalview)
 * [Quick Tutorial](quick-tutorial.md) on Thanos website.
 
 ## Operating
@@ -100,6 +99,10 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 * 2019: [Prometheus in Practice: HA with Thanos](https://www.slideshare.net/ThomasRiley45/prometheus-in-practice-high-availability-with-thanos-devopsdays-edinburgh-2019)
 
 ## Blog posts
+
+* 2022:
+
+  * [Leveraging Consul for Thanos Query Discovery](https://nicolastakashi.medium.com/leveraging-consul-for-thanos-query-discovery-34212d496c88)
 
 * 2021:
 
@@ -122,7 +125,7 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 
 * 2018:
 
-  * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
+  * [Introduction blog post](https://improbable.io/blog/thanos-prometheus-at-scale)
   * [Monzo user story](https://monzo.com/blog/2018/07/27/how-we-monitor-monzo)
   * [Banzai Cloud hand's on](https://banzaicloud.com/blog/hands-on-thanos/)
   * [uSwitch user story](https://medium.com/uswitch-labs/making-prometheus-more-awesome-with-thanos-fbec8c6c28ad)

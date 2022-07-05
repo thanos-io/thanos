@@ -13,15 +13,20 @@ import (
 	"github.com/prometheus/prometheus/model/timestamp"
 )
 
-// TODO(yeya24): add partial result when needed.
-// ThanosRequest is a common interface defined for specific thanos requests.
-type ThanosRequest interface {
+// ThanosRequestStoreMatcherGetter is a an interface for store matching that all request share.
+// TODO(yeya24): Add partial result when needed.
+type ThanosRequestStoreMatcherGetter interface {
 	GetStoreMatchers() [][]*labels.Matcher
 }
 
 type RequestHeader struct {
 	Name   string
 	Values []string
+}
+
+// ThanosRequestDedup is a an interface for all requests that share setting deduplication.
+type ThanosRequestDedup interface {
+	IsDedupEnabled() bool
 }
 
 type ThanosQueryRangeRequest struct {
@@ -40,6 +45,12 @@ type ThanosQueryRangeRequest struct {
 	CachingOptions      queryrange.CachingOptions
 	Headers             []*RequestHeader
 }
+
+// IsDedupEnabled returns true if deduplication is enabled.
+func (r *ThanosQueryRangeRequest) IsDedupEnabled() bool { return r.Dedup }
+
+// GetStoreMatchers returns store matches.
+func (r *ThanosQueryRangeRequest) GetStoreMatchers() [][]*labels.Matcher { return r.StoreMatchers }
 
 // GetStart returns the start timestamp of the request in milliseconds.
 func (r *ThanosQueryRangeRequest) GetStart() int64 { return r.Start }
@@ -102,8 +113,6 @@ func (r *ThanosQueryRangeRequest) String() string { return "" }
 // which is not used in thanos.
 func (r *ThanosQueryRangeRequest) ProtoMessage() {}
 
-func (r *ThanosQueryRangeRequest) GetStoreMatchers() [][]*labels.Matcher { return r.StoreMatchers }
-
 type ThanosLabelsRequest struct {
 	Start           int64
 	End             int64
@@ -115,6 +124,9 @@ type ThanosLabelsRequest struct {
 	CachingOptions  queryrange.CachingOptions
 	Headers         []*RequestHeader
 }
+
+// GetStoreMatchers returns store matches.
+func (r *ThanosLabelsRequest) GetStoreMatchers() [][]*labels.Matcher { return r.StoreMatchers }
 
 // GetStart returns the start timestamp of the request in milliseconds.
 func (r *ThanosLabelsRequest) GetStart() int64 { return r.Start }
@@ -173,8 +185,6 @@ func (r *ThanosLabelsRequest) String() string { return "" }
 // which is not used in thanos.
 func (r *ThanosLabelsRequest) ProtoMessage() {}
 
-func (r *ThanosLabelsRequest) GetStoreMatchers() [][]*labels.Matcher { return r.StoreMatchers }
-
 type ThanosSeriesRequest struct {
 	Path            string
 	Start           int64
@@ -187,6 +197,12 @@ type ThanosSeriesRequest struct {
 	CachingOptions  queryrange.CachingOptions
 	Headers         []*RequestHeader
 }
+
+// IsDedupEnabled returns true if deduplication is enabled.
+func (r *ThanosSeriesRequest) IsDedupEnabled() bool { return r.Dedup }
+
+// GetStoreMatchers returns store matches.
+func (r *ThanosSeriesRequest) GetStoreMatchers() [][]*labels.Matcher { return r.StoreMatchers }
 
 // GetStart returns the start timestamp of the request in milliseconds.
 func (r *ThanosSeriesRequest) GetStart() int64 { return r.Start }
@@ -243,5 +259,3 @@ func (r *ThanosSeriesRequest) String() string { return "" }
 // ProtoMessage implements proto.Message interface required by queryrange.Request,
 // which is not used in thanos.
 func (r *ThanosSeriesRequest) ProtoMessage() {}
-
-func (r *ThanosSeriesRequest) GetStoreMatchers() [][]*labels.Matcher { return r.StoreMatchers }

@@ -15,7 +15,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
 
@@ -42,26 +41,17 @@ var reactRouterPaths = []string{
 
 type BaseUI struct {
 	logger                       log.Logger
-	menuTmpl                     string
 	tmplFuncs                    template.FuncMap
 	tmplVariables                map[string]string
 	externalPrefix, prefixHeader string
 	component                    component.Component
 }
 
-func NewBaseUI(logger log.Logger, menuTmpl string, funcMap template.FuncMap, tmplVariables map[string]string, externalPrefix, prefixHeader string, component component.Component) *BaseUI {
+func NewBaseUI(logger log.Logger, funcMap template.FuncMap, tmplVariables map[string]string, externalPrefix, prefixHeader string, component component.Component) *BaseUI {
 	funcMap["pathPrefix"] = func() string { return "" }
 	funcMap["buildVersion"] = func() string { return version.Revision }
 
-	return &BaseUI{logger: logger, menuTmpl: menuTmpl, tmplFuncs: funcMap, tmplVariables: tmplVariables, externalPrefix: externalPrefix, prefixHeader: prefixHeader, component: component}
-}
-func (bu *BaseUI) serveStaticAsset(w http.ResponseWriter, req *http.Request) {
-	fp := route.Param(req.Context(), "filepath")
-	fp = filepath.Join("pkg/ui/static", fp)
-	if err := bu.serveAsset(fp, w, req); err != nil {
-		level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
-		w.WriteHeader(http.StatusNotFound)
-	}
+	return &BaseUI{logger: logger, tmplFuncs: funcMap, tmplVariables: tmplVariables, externalPrefix: externalPrefix, prefixHeader: prefixHeader, component: component}
 }
 
 func (bu *BaseUI) serveReactUI(w http.ResponseWriter, req *http.Request) {
@@ -109,41 +99,6 @@ func (bu *BaseUI) serveAsset(fp string, w http.ResponseWriter, req *http.Request
 	}
 	http.ServeContent(w, req, info.Name(), info.ModTime(), bytes.NewReader(file))
 	return nil
-}
-
-func (bu *BaseUI) getTemplate(name string) (string, error) {
-	baseTmpl, err := Asset("pkg/ui/templates/_base.html")
-	if err != nil {
-		return "", errors.Errorf("error reading base template: %s", err)
-	}
-	menuTmpl, err := Asset(filepath.Join("pkg/ui/templates", bu.menuTmpl))
-	if err != nil {
-		return "", errors.Errorf("error reading menu template %s: %s", bu.menuTmpl, err)
-	}
-	pageTmpl, err := Asset(filepath.Join("pkg/ui/templates", name))
-	if err != nil {
-		return "", errors.Errorf("error reading page template %s: %s", name, err)
-	}
-	return string(baseTmpl) + string(menuTmpl) + string(pageTmpl), nil
-}
-
-func (bu *BaseUI) executeTemplate(w http.ResponseWriter, name, prefix string, data interface{}) {
-	text, err := bu.getTemplate(name)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	t, err := template.New("").Funcs(bu.tmplFuncs).
-		Funcs(template.FuncMap{"pathPrefix": absolutePrefix(prefix)}).
-		Parse(text)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := t.Execute(w, data); err != nil {
-		level.Warn(bu.logger).Log("msg", "template expansion failed", "err", err)
-	}
 }
 
 func absolutePrefix(prefix string) func() string {

@@ -84,14 +84,6 @@ const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
   ],
 };
 
-const defaultClassicUIRoute: { [component: string]: string } = {
-  query: '/classic/graph',
-  rule: '/classic/alerts',
-  bucket: '/classic',
-  compact: '/classic/loaded',
-  store: '/classic/loaded',
-};
-
 interface NavigationProps {
   thanosComponent: string;
   defaultRoute: string;
@@ -136,11 +128,6 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
           })}
           <NavItem>
             <NavLink href="https://thanos.io/tip/thanos/getting-started.md/">Help</NavLink>
-          </NavItem>
-          <NavItem>
-            <NavLink href={`${pathPrefix}${defaultClassicUIRoute[thanosComponent]}${window.location.search}`}>
-              Classic UI
-            </NavLink>
           </NavItem>
         </Nav>
       </Collapse>

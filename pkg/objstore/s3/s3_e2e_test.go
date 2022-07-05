@@ -28,12 +28,11 @@ func BenchmarkUpload(b *testing.B) {
 	b.Cleanup(e2ethanos.CleanScenario(b, e))
 
 	const bucket = "benchmark"
-	m, err := e2ethanos.NewMinio(e, "benchmark", bucket)
-	testutil.Ok(b, err)
+	m := e2ethanos.NewMinio(e, "benchmark", bucket)
 	testutil.Ok(b, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(log.NewNopLogger(),
-		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), e.SharedDir()), "test-feed")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "test-feed")
 	testutil.Ok(b, err)
 
 	buf := bytes.Buffer{}

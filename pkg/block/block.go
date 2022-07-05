@@ -136,7 +136,7 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 	}
 
 	metaEncoded := strings.Builder{}
-	meta.Thanos.Files, err = gatherFileStats(bdir, hf, logger)
+	meta.Thanos.Files, err = GatherFileStats(bdir, hf, logger)
 	if err != nil {
 		return errors.Wrap(err, "gather meta file stats")
 	}
@@ -145,11 +145,11 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.Wrap(err, "encode meta file")
 	}
 
-	if err := objstore.UploadDir(ctx, logger, bkt, path.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
+	if err := objstore.UploadDir(ctx, logger, bkt, filepath.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload chunks"))
 	}
 
-	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
+	if err := objstore.UploadFile(ctx, logger, bkt, filepath.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index"))
 	}
 
@@ -316,8 +316,8 @@ func GetSegmentFiles(blockDir string) []string {
 	return result
 }
 
-// TODO(bwplotka): Gather stats when dirctly uploading files.
-func gatherFileStats(blockDir string, hf metadata.HashFunc, logger log.Logger) (res []metadata.File, _ error) {
+// GatherFileStats returns metadata.File entry for files inside TSDB block (index, chunks, meta.json).
+func GatherFileStats(blockDir string, hf metadata.HashFunc, logger log.Logger) (res []metadata.File, _ error) {
 	files, err := ioutil.ReadDir(filepath.Join(blockDir, ChunksDirname))
 	if err != nil {
 		return nil, errors.Wrapf(err, "read dir %v", filepath.Join(blockDir, ChunksDirname))
@@ -363,7 +363,6 @@ func gatherFileStats(blockDir string, hf metadata.HashFunc, logger log.Logger) (
 	sort.Slice(res, func(i, j int) bool {
 		return strings.Compare(res[i].RelPath, res[j].RelPath) < 0
 	})
-	// TODO(bwplotka): Add optional files like tombstones?
 	return res, err
 }
 
