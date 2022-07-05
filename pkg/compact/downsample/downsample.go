@@ -159,12 +159,11 @@ func Downsample(
 						// Downsampled block can erroneously contain empty XOR chunks, skip those
 						// https://github.com/thanos-io/thanos/issues/5272
 						level.Warn(logger).Log("msg", fmt.Sprintf("expected downsampled chunk (*downsample.AggrChunk) got an empty %T instead for series: %d", c.Chunk, postings.At()))
-					} else {
-						return id, errors.Errorf("expected downsampled chunk (*downsample.AggrChunk) got a non-empty %T instead for series: %d", c.Chunk, postings.At())
+						continue
 					}
-				} else {
-					aggrChunks = append(aggrChunks, ac)
+					return id, errors.Errorf("expected downsampled chunk (*downsample.AggrChunk) got a non-empty %T instead for series: %d", c.Chunk, postings.At())
 				}
+				aggrChunks = append(aggrChunks, ac)
 			}
 			downsampledChunks, err := downsampleAggr(
 				aggrChunks,
