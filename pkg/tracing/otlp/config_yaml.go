@@ -6,7 +6,7 @@ package otlp
 import (
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -20,16 +20,16 @@ type retryConfig struct {
 }
 
 type Config struct {
-	ClientType         string             `yaml:"client_type"`
-	ReconnectionPeriod time.Duration      `yaml:"reconnection_period"`
-	Compression        string             `yaml:"compression"`
-	Insecure           bool               `yaml:"insecure"`
-	Endpoint           string             `yaml:"endpoint"`
-	URLPath            string             `yaml:"url_path"`
-	Timeout            time.Duration      `yaml:"timeout"`
-	RetryConfig        retryConfig        `yaml:"retry_config"`
-	Headers            map[string]string  `yaml:"headers"`
-	TLSConfig          objstore.TLSConfig `yaml:"tls_config"`
+	ClientType         string            `yaml:"client_type"`
+	ReconnectionPeriod time.Duration     `yaml:"reconnection_period"`
+	Compression        string            `yaml:"compression"`
+	Insecure           bool              `yaml:"insecure"`
+	Endpoint           string            `yaml:"endpoint"`
+	URLPath            string            `yaml:"url_path"`
+	Timeout            time.Duration     `yaml:"timeout"`
+	RetryConfig        retryConfig       `yaml:"retry_config"`
+	Headers            map[string]string `yaml:"headers"`
+	TLSConfig          exthttp.TLSConfig `yaml:"tls_config"`
 }
 
 func traceGRPCOptions(config Config) []otlptracegrpc.Option {
@@ -76,7 +76,7 @@ func traceHTTPOptions(config Config) []otlptracehttp.Option {
 	if config.Insecure {
 		options = append(options, otlptracehttp.WithInsecure())
 	} else {
-		tlsConfig, _ := objstore.NewTLSConfig(&config.TLSConfig)
+		tlsConfig, _ := exthttp.NewTLSConfig(&config.TLSConfig)
 		options = append(options, otlptracehttp.WithTLSClientConfig(tlsConfig))
 	}
 
