@@ -9,6 +9,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
+- [#5453](https://github.com/thanos-io/thanos/pull/5453) Compact: Skip erroneous empty non `*AggrChunk` chunks during 1h downsampling of 5m resolution blocks.
 
 ### Fixed
 
@@ -21,7 +22,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## [v0.27.0-rc0](https://github.com/thanos-io/thanos/tree/release-0.27) - Release in progress
 
 ### Fixed
-- [#5453](https://github.com/thanos-io/thanos/pull/5453) Compact: Skip erroneous empty non `*AggrChunk` chunks during 1h downsampling of 5m resolution blocks.
 - [#5339](https://github.com/thanos-io/thanos/pull/5339) Receive: Fix deadlock on interrupt in routerOnly mode
 - [#5357](https://github.com/thanos-io/thanos/pull/5357) Store: fix groupcache handling of slashes
 - [#5427](https://github.com/thanos-io/thanos/pull/5427) Receive: Fix Ketama hashring replication consistency
