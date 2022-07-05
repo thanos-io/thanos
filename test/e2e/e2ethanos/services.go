@@ -30,10 +30,11 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
+
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
 )
@@ -972,8 +973,8 @@ func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 		SecretKey: e2edb.MinioSecretKey,
 		Endpoint:  endpoint,
 		Insecure:  false,
-		HTTPConfig: s3.HTTPConfig{
-			TLSConfig: objstore.TLSConfig{
+		HTTPConfig: exthttp.HTTPConfig{
+			TLSConfig: exthttp.TLSConfig{
 				CAFile:   filepath.Join(basePath, "certs", "CAs", "ca.crt"),
 				CertFile: filepath.Join(basePath, "certs", "public.crt"),
 				KeyFile:  filepath.Join(basePath, "certs", "private.key"),
