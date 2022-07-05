@@ -349,6 +349,7 @@ func runCompact(
 		compactMetrics.garbageCollectedBlocks,
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
 		metadata.HashFunc(conf.hashFunc),
+		conf.blockFetchConcurrency,
 	)
 	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
 	planner := compact.WithLargeTotalIndexSizeFilter(
@@ -630,6 +631,7 @@ type compactConfig struct {
 	waitInterval                                   time.Duration
 	disableDownsampling                            bool
 	blockMetaFetchConcurrency                      int
+	blockFetchConcurrency                          int
 	blockViewerSyncBlockInterval                   time.Duration
 	blockViewerSyncBlockTimeout                    time.Duration
 	cleanupBlocksInterval                          time.Duration
@@ -688,6 +690,8 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
 		Default("32").IntVar(&cc.blockMetaFetchConcurrency)
+	cmd.Flag("block-fetch-concurrency", "Number of goroutines to use when fetching block files from object storage.").
+		Default("1").IntVar(&cc.blockFetchConcurrency)
 	cmd.Flag("block-viewer.global.sync-block-interval", "Repeat interval for syncing the blocks between local and remote view for /global Block Viewer UI.").
 		Default("1m").DurationVar(&cc.blockViewerSyncBlockInterval)
 	cmd.Flag("block-viewer.global.sync-block-timeout", "Maximum time for syncing the blocks between local and remote view for /global Block Viewer UI.").

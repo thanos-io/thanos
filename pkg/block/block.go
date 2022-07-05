@@ -45,7 +45,7 @@ const (
 // Download downloads directory that is mean to be block directory. If any of the files
 // have a hash calculated in the meta file and it matches with what is in the destination path then
 // we do not download it. We always re-download the meta file.
-func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID, dst string) error {
+func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID, dst string, options ...objstore.DownloadDirOption) error {
 	if err := os.MkdirAll(dst, 0750); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
@@ -74,7 +74,7 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 		}
 	}
 
-	if err := objstore.DownloadDir(ctx, logger, bucket, id.String(), id.String(), dst, ignoredPaths...); err != nil {
+	if err := objstore.DownloadDir(ctx, logger, bucket, id.String(), id.String(), dst, append(options, objstore.WithDownloadIgnoredPaths(ignoredPaths...))...); err != nil {
 		return err
 	}
 

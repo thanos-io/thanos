@@ -232,6 +232,7 @@ type DefaultGrouper struct {
 	blocksMarkedForDeletion  prometheus.Counter
 	blocksMarkedForNoCompact prometheus.Counter
 	hashFunc                 metadata.HashFunc
+	blockFetchConcurrency    int
 }
 
 // NewDefaultGrouper makes a new DefaultGrouper.
@@ -245,6 +246,7 @@ func NewDefaultGrouper(
 	garbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
+	blockFetchConcurrency int,
 ) *DefaultGrouper {
 	return &DefaultGrouper{
 		bkt:                      bkt,
@@ -275,6 +277,7 @@ func NewDefaultGrouper(
 		garbageCollectedBlocks:   garbageCollectedBlocks,
 		blocksMarkedForDeletion:  blocksMarkedForDeletion,
 		hashFunc:                 hashFunc,
+		blockFetchConcurrency:    blockFetchConcurrency,
 	}
 }
 
@@ -304,6 +307,7 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.blocksMarkedForDeletion,
 				g.blocksMarkedForNoCompact,
 				g.hashFunc,
+				g.blockFetchConcurrency,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
@@ -342,6 +346,7 @@ type Group struct {
 	blocksMarkedForDeletion     prometheus.Counter
 	blocksMarkedForNoCompact    prometheus.Counter
 	hashFunc                    metadata.HashFunc
+	blockFetchConcurrency       int
 }
 
 // NewGroup returns a new compaction group.
@@ -362,10 +367,16 @@ func NewGroup(
 	blocksMarkedForDeletion prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
+	blockFetchConcurrency int,
 ) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+
+	if blockFetchConcurrency <= 0 {
+		return nil, errors.Errorf("invalid concurrency level (%d), blockFetchConcurrency level must be > 0", blockFetchConcurrency)
+	}
+
 	g := &Group{
 		logger:                      logger,
 		bkt:                         bkt,
@@ -383,6 +394,7 @@ func NewGroup(
 		blocksMarkedForDeletion:     blocksMarkedForDeletion,
 		blocksMarkedForNoCompact:    blocksMarkedForNoCompact,
 		hashFunc:                    hashFunc,
+		blockFetchConcurrency:       blockFetchConcurrency,
 	}
 	return g, nil
 }
@@ -1007,7 +1019,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 
 		tracing.DoInSpanWithErr(ctx, "compaction_block_download", func(ctx context.Context) error {
-			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir)
+			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir, objstore.WithFetchConcurrency(cg.blockFetchConcurrency))
 			return err
 		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {

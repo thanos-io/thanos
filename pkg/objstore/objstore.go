@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -19,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
@@ -113,6 +115,39 @@ type IterParams struct {
 
 func ApplyIterOptions(options ...IterOption) IterParams {
 	out := IterParams{}
+	for _, opt := range options {
+		opt(&out)
+	}
+	return out
+}
+
+// DownloadOption configures the provided params.
+type DownloadDirOption func(params *DownloadDirParams)
+
+// DownloadParams holds the Download() parameters and is used by objstore clients implementations.
+type DownloadDirParams struct {
+	concurrency  int
+	ignoredPaths []string
+}
+
+// WithDownloadIgnoredPaths is an option to set the paths to not be downloaded.
+func WithDownloadIgnoredPaths(ignoredPaths ...string) DownloadDirOption {
+	return func(params *DownloadDirParams) {
+		params.ignoredPaths = ignoredPaths
+	}
+}
+
+// WithFetchConcurrency is an option to set the concurrency of the download operation.
+func WithFetchConcurrency(concurrency int) DownloadDirOption {
+	return func(params *DownloadDirParams) {
+		params.concurrency = concurrency
+	}
+}
+
+func ApplyDownloadOptions(options ...DownloadDirOption) DownloadDirParams {
+	out := DownloadDirParams{
+		concurrency: 1,
+	}
 	for _, opt := range options {
 		opt(&out)
 	}
@@ -254,34 +289,55 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 }
 
 // DownloadDir downloads all object found in the directory into the local directory.
-func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, originalSrc, src, dst string, ignoredPaths ...string) error {
+func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, originalSrc, src, dst string, options ...DownloadDirOption) error {
 	if err := os.MkdirAll(dst, 0750); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
+	opts := ApplyDownloadOptions(options...)
+
+	g, ctx := errgroup.WithContext(ctx)
+	guard := make(chan struct{}, opts.concurrency)
 
 	var downloadedFiles []string
-	if err := bkt.Iter(ctx, src, func(name string) error {
-		dst := filepath.Join(dst, filepath.Base(name))
-		if strings.HasSuffix(name, DirDelim) {
-			if err := DownloadDir(ctx, logger, bkt, originalSrc, name, dst, ignoredPaths...); err != nil {
-				return err
-			}
-			downloadedFiles = append(downloadedFiles, dst)
-			return nil
-		}
-		for _, ignoredPath := range ignoredPaths {
-			if ignoredPath == strings.TrimPrefix(name, string(originalSrc)+DirDelim) {
-				level.Debug(logger).Log("msg", "not downloading again because a provided path matches this one", "file", name)
+	var m sync.Mutex
+
+	err := bkt.Iter(ctx, src, func(name string) error {
+		guard <- struct{}{}
+		g.Go(func() error {
+			defer func() { <-guard }()
+			dst := filepath.Join(dst, filepath.Base(name))
+			if strings.HasSuffix(name, DirDelim) {
+				if err := DownloadDir(ctx, logger, bkt, originalSrc, name, dst, options...); err != nil {
+					return err
+				}
+				m.Lock()
+				defer m.Unlock()
+				downloadedFiles = append(downloadedFiles, dst)
 				return nil
 			}
-		}
-		if err := DownloadFile(ctx, logger, bkt, name, dst); err != nil {
-			return err
-		}
+			for _, ignoredPath := range opts.ignoredPaths {
+				if ignoredPath == strings.TrimPrefix(name, string(originalSrc)+DirDelim) {
+					level.Debug(logger).Log("msg", "not downloading again because a provided path matches this one", "file", name)
+					return nil
+				}
+			}
+			if err := DownloadFile(ctx, logger, bkt, name, dst); err != nil {
+				return err
+			}
 
-		downloadedFiles = append(downloadedFiles, dst)
+			m.Lock()
+			defer m.Unlock()
+			downloadedFiles = append(downloadedFiles, dst)
+			return nil
+		})
 		return nil
-	}); err != nil {
+	})
+
+	if err == nil {
+		err = g.Wait()
+	}
+
+	if err != nil {
 		downloadedFiles = append(downloadedFiles, dst) // Last, clean up the root dst directory.
 		// Best-effort cleanup if the download failed.
 		for _, f := range downloadedFiles {
