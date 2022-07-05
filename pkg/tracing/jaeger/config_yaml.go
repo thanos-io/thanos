@@ -13,30 +13,37 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 )
+
+type ParentBasedSamplerConfig struct {
+	LocalParentSampled  bool `json:"local_parent_sampled"`
+	RemoteParentSampled bool `json:"remote_parent_sampled"`
+}
 
 // Config - YAML configuration. For details see to https://github.com/jaegertracing/jaeger-client-go#environment-variables.
 type Config struct {
-	ServiceName                        string        `yaml:"service_name"`
-	Disabled                           bool          `yaml:"disabled"`
-	RPCMetrics                         bool          `yaml:"rpc_metrics"`
-	Tags                               string        `yaml:"tags"`
-	SamplerType                        string        `yaml:"sampler_type"`
-	SamplerParam                       float64       `yaml:"sampler_param"`
-	SamplerManagerHostPort             string        `yaml:"sampler_manager_host_port"`
-	SamplerMaxOperations               int           `yaml:"sampler_max_operations"`
-	SamplerRefreshInterval             time.Duration `yaml:"sampler_refresh_interval"`
-	ReporterMaxQueueSize               int           `yaml:"reporter_max_queue_size"`
-	ReporterFlushInterval              time.Duration `yaml:"reporter_flush_interval"`
-	ReporterLogSpans                   bool          `yaml:"reporter_log_spans"`
-	ReporterDisableAttemptReconnecting bool          `yaml:"reporter_disable_attempt_reconnecting"`
-	ReporterAttemptReconnectInterval   time.Duration `yaml:"reporter_attempt_reconnect_interval"`
-	Endpoint                           string        `yaml:"endpoint"`
-	User                               string        `yaml:"user"`
-	Password                           string        `yaml:"password"`
-	AgentHost                          string        `yaml:"agent_host"`
-	AgentPort                          int           `yaml:"agent_port"`
-	Gen128Bit                          bool          `yaml:"traceid_128bit"`
+	ServiceName                        string                   `yaml:"service_name"`
+	Disabled                           bool                     `yaml:"disabled"`
+	RPCMetrics                         bool                     `yaml:"rpc_metrics"`
+	Tags                               string                   `yaml:"tags"`
+	SamplerType                        string                   `yaml:"sampler_type"`
+	SamplerParam                       float64                  `yaml:"sampler_param"`
+	SamplerManagerHostPort             string                   `yaml:"sampler_manager_host_port"`
+	SamplerMaxOperations               int                      `yaml:"sampler_max_operations"`
+	SamplerRefreshInterval             time.Duration            `yaml:"sampler_refresh_interval"`
+	SamplerParentConfig                ParentBasedSamplerConfig `yaml:"sampled_parent_config"`
+	ReporterMaxQueueSize               int                      `yaml:"reporter_max_queue_size"`
+	ReporterFlushInterval              time.Duration            `yaml:"reporter_flush_interval"`
+	ReporterLogSpans                   bool                     `yaml:"reporter_log_spans"`
+	ReporterDisableAttemptReconnecting bool                     `yaml:"reporter_disable_attempt_reconnecting"`
+	ReporterAttemptReconnectInterval   time.Duration            `yaml:"reporter_attempt_reconnect_interval"`
+	Endpoint                           string                   `yaml:"endpoint"`
+	User                               string                   `yaml:"user"`
+	Password                           string                   `yaml:"password"`
+	AgentHost                          string                   `yaml:"agent_host"`
+	AgentPort                          int                      `yaml:"agent_port"`
+	Gen128Bit                          bool                     `yaml:"traceid_128bit"`
 	// Remove the above field. Ref: https://github.com/open-telemetry/opentelemetry-specification/issues/525#issuecomment-605519217
 	// Ref: https://opentelemetry.io/docs/reference/specification/trace/api/#spancontext
 }
@@ -93,6 +100,28 @@ func getSamplingFraction(samplerType string, samplingFactor float64) float64 {
 		return math.Round(samplingFactor) // Needs to be an integer.
 	}
 	return samplingFactor
+}
+
+func getSampler(samplerType string, samplingFraction float64, parentConfig ParentBasedSamplerConfig) tracesdk.Sampler {
+	var sampler tracesdk.Sampler
+	if samplingFraction == 1.0 {
+		sampler = tracesdk.AlwaysSample()
+	} else if samplingFraction == 0.0 {
+		sampler = tracesdk.NeverSample()
+	} else if samplerType == "probabilistic" {
+		sampler = tracesdk.ParentBased(tracesdk.TraceIDRatioBased(samplingFraction))
+	} else { // Default sampler type is parent based.
+		var root tracesdk.Sampler
+		var parentOptions []tracesdk.ParentBasedSamplerOption
+		if parentConfig.LocalParentSampled {
+			parentOptions = append(parentOptions, tracesdk.WithLocalParentSampled(root))
+		}
+		if parentConfig.RemoteParentSampled {
+			parentOptions = append(parentOptions, tracesdk.WithRemoteParentSampled(root))
+		}
+		sampler = tracesdk.ParentBased(root, parentOptions...)
+	}
+	return sampler
 }
 
 // parseTags parses the given string into a collection of attributes.

@@ -71,6 +71,7 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 		tags = getAttributesFromTags(config)
 	}
 	samplingFraction := getSamplingFraction(config.SamplerType, config.SamplerParam)
+	sampler := getSampler(config.SamplerType, samplingFraction, config.SamplerParentConfig)
 	var processorOptions []tracesdk.BatchSpanProcessorOption
 	var processor tracesdk.SpanProcessor
 	if config.ReporterMaxQueueSize != 0 {
@@ -84,7 +85,7 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 
 	processor = tracesdk.NewBatchSpanProcessor(exporter, processorOptions...)
 
-	tp := newTraceProvider(ctx, logger, processor, samplingFraction, tags, config.ServiceName)
+	tp := newTraceProvider(ctx, logger, processor, sampler, tags, config.ServiceName)
 
 	return tp, nil
 }
@@ -95,7 +96,7 @@ func getAttributesFromTags(config Config) []attribute.KeyValue {
 }
 
 func newTraceProvider(ctx context.Context, logger log.Logger, processor tracesdk.SpanProcessor,
-	samplingFraction float64, tags []attribute.KeyValue, serviceName string) *tracesdk.TracerProvider {
+	sampler tracesdk.Sampler, tags []attribute.KeyValue, serviceName string) *tracesdk.TracerProvider {
 
 	attributes := tracing.CollectAttributes(serviceName)
 	attributes = append(attributes, tags...)
@@ -108,8 +109,7 @@ func newTraceProvider(ctx context.Context, logger log.Logger, processor tracesdk
 		tracesdk.WithSpanProcessor(processor),
 		tracesdk.WithSampler(
 			migration.SamplerWithOverride(
-				tracesdk.ParentBased(tracesdk.TraceIDRatioBased(samplingFraction)),
-				migration.ForceTracingAttributeKey,
+				sampler, migration.ForceTracingAttributeKey,
 			),
 		),
 		tracesdk.WithResource(resource),
