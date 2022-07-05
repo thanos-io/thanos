@@ -22,9 +22,12 @@ local utils = import '../lib/utils.libsonnet';
       local grpcUnaryWriteSelector = utils.joinLabels([thanos.receive.dashboard.selector, 'grpc_type="unary"', 'grpc_method="RemoteWrite"']);
       local grpcUnaryReadSelector = utils.joinLabels([thanos.receive.dashboard.selector, 'grpc_type="unary"', 'grpc_method!="RemoteWrite"']);
       local grpcServerStreamSelector = utils.joinLabels([thanos.receive.dashboard.selector, 'grpc_type="server_stream"']);
-      local tenantWithHttpCodeSelector = std.join(', ', ['tenant', 'code']);
-      local tenantHttpCode2XXSelector = std.join(', ', [thanos.receive.dashboard.tenantSelector, 'code=~"2.."']);
-      local tenantHttpCodeNot2XXSelector = std.join(', ', [thanos.receive.dashboard.tenantSelector, 'code!~"2.."']);
+
+      local tenantReceiveHandlerSeclector = utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'handler="receive"']);
+      local tenantHttpCode2XXSelector = std.join(', ', [tenantReceiveHandlerSeclector, 'code=~"2.."']);
+      local tenantHttpCodeNot2XXSelector = std.join(', ', [tenantReceiveHandlerSeclector, 'code!~"2.."']);
+
+      local tenantWithHttpCodeDimensions = std.join(', ', ['tenant', 'code']);
       g.dashboard(thanos.receive.title) {
         templating+: {
           list+: [
@@ -62,7 +65,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate of write requests (by tenant and code)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_requests_total{%s}[$interval]))' % [tenantWithHttpCodeSelector, thanos.receive.dashboard.tenantSelector],
+            'sum by (%s) (rate(http_requests_total{%s}[$interval]))' % [tenantWithHttpCodeDimensions, tenantReceiveHandlerSeclector],
             '{{code}} - {{tenant}}'
           )
         )
@@ -70,7 +73,7 @@ local utils = import '../lib/utils.libsonnet';
           g.panel('Number of errors (by tenant and code)') +
           g.queryPanel(
             'sum by (%s) (rate(http_requests_total{%s}[$interval]))' % [
-              tenantWithHttpCodeSelector,
+              tenantWithHttpCodeDimensions,
               tenantHttpCodeNot2XXSelector,
             ],
             '{{code}} - {{tenant}}'
@@ -81,9 +84,9 @@ local utils = import '../lib/utils.libsonnet';
           g.queryPanel(
             'sum by (%s) (rate(http_request_duration_seconds_sum{%s}[$interval])) / sum by (%s) (http_request_duration_seconds_count{%s})' % [
               thanos.receive.dashboard.tenantDimensions,
-              thanos.receive.dashboard.tenantSelector,
+              tenantReceiveHandlerSeclector,
               thanos.receive.dashboard.tenantDimensions,
-              thanos.receive.dashboard.tenantSelector,
+              tenantReceiveHandlerSeclector,
             ],
             '{{tenant}}'
           )
@@ -119,8 +122,8 @@ local utils = import '../lib/utils.libsonnet';
           g.panel('Inflight requests (per tenant and method)') +
           g.queryPanel(
             'sum by (%s) (http_inflight_requests{%s})' % [
-              std.join(' ,', [thanos.receive.dashboard.tenantDimensions, 'method']),
-              thanos.receive.dashboard.tenantSelector,
+              std.join(', ', [thanos.receive.dashboard.tenantDimensions, 'method']),
+              tenantReceiveHandlerSeclector,
             ],
             '{{method}} - {{tenant}}'
           )
@@ -132,7 +135,7 @@ local utils = import '../lib/utils.libsonnet';
           g.panel('Rate of series received (per tenant, only 2XX)') +
           g.queryPanel(
             'sum(rate(thanos_receive_write_timeseries_bucket{%s}[$interval])) by (%s) ' % [
-              tenantHttpCode2XXSelector,
+              utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code=~"2.."']),
               thanos.receive.dashboard.tenantDimensions,
             ],
             '{{tenant}}'
@@ -142,8 +145,8 @@ local utils = import '../lib/utils.libsonnet';
           g.panel('Rate of series not written (per tenant and code, non 2XX)') +
           g.queryPanel(
             'sum(rate(thanos_receive_write_timeseries_bucket{%s}[$interval])) by (%s) ' % [
-              tenantHttpCodeNot2XXSelector,
-              tenantWithHttpCodeSelector,
+              utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code!~"2.."']),
+              tenantWithHttpCodeDimensions,
             ],
             '{{code}} - {{tenant}}'
           )
