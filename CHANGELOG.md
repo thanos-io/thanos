@@ -18,6 +18,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#5447](https://github.com/thanos-io/thanos/pull/5447) promclient: ignore 405 status codes for Prometheus buildVersion requests
+
 ### Removed
 
 ## [v0.27.0-rc0](https://github.com/thanos-io/thanos/tree/release-0.27) - Release in progress
