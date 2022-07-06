@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"io/ioutil"
 	"os"
 	"testing"
 
@@ -90,6 +91,20 @@ func TestTracingReader(t *testing.T) {
 
 	testutil.Ok(t, err)
 	testutil.Equals(t, int64(11), size)
+}
+
+func TestDownloadDirConcurrency(t *testing.T) {
+	m := BucketWithMetrics("", NewInMemBucket(), nil)
+	tempDir := t.TempDir()
+
+	testutil.Ok(t, m.Upload(context.Background(), "dir/obj1", bytes.NewReader([]byte("1"))))
+	testutil.Ok(t, m.Upload(context.Background(), "dir/obj2", bytes.NewReader([]byte("2"))))
+	testutil.Ok(t, m.Upload(context.Background(), "dir/obj3", bytes.NewReader([]byte("3"))))
+
+	testutil.Ok(t, DownloadDir(context.Background(), log.NewNopLogger(), m, "dir/", "dir/", tempDir, WithFetchConcurrency(10)))
+	i, err := ioutil.ReadDir(tempDir)
+	testutil.Ok(t, err)
+	testutil.Assert(t, len(i) == 3)
 }
 
 func TestTimingTracingReader(t *testing.T) {
