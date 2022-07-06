@@ -144,7 +144,7 @@ func WithFetchConcurrency(concurrency int) DownloadDirOption {
 	}
 }
 
-func ApplyDownloadOptions(options ...DownloadDirOption) DownloadDirParams {
+func applyDownloadOptions(options ...DownloadDirOption) DownloadDirParams {
 	out := DownloadDirParams{
 		concurrency: 1,
 	}
@@ -293,7 +293,7 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 	if err := os.MkdirAll(dst, 0750); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
-	opts := ApplyDownloadOptions(options...)
+	opts := applyDownloadOptions(options...)
 
 	g, ctx := errgroup.WithContext(ctx)
 	guard := make(chan struct{}, opts.concurrency)
