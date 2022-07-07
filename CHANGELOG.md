@@ -20,6 +20,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5420](https://github.com/thanos-io/thanos/pull/5420) Receive: Automatically remove stale tenants.
 - [#5472](https://github.com/thanos-io/thanos/pull/5472) Receive: add new tenant metrics to example dashboard.
 - [#5475](https://github.com/thanos-io/thanos/pull/5475) Compact/Store: Added `--block-fetch-concurrency` allowing to configure number of go routines for download block files during compaction.
+- [#5475](https://github.com/thanos-io/thanos/pull/5475) Compact/Store: Added `--block-files-concurrency` allowing to configure number of go routines for download block files during compaction.
 
 ### Changed
 
