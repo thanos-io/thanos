@@ -6,12 +6,7 @@ package s3_test
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"fmt"
-	"io"
-	"os"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/efficientgo/e2e"
@@ -22,63 +17,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
-
-// TestUploadConcurrent tries to reproduce race; unsuccessful, no race detected for cases mentioned in
-// https://github.com/minio/mc/issues/3376#issuecomment-1158001018 .
-// $ go test -v -race ./pkg/objstore/s3 -run='TestUploadConcurrent$'.
-func TestUploadConcurrent(t *testing.T) {
-	t.Skip("// NOTE(bwplotka): Prerequsite: 'dd if=/dev/urandom of=./test-file bs=1024b count=1000'")
-	ctx := context.Background()
-
-	e, err := e2e.NewDockerEnvironment("e2e_bench_mino_client")
-	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, e))
-
-	const bucket = "benchmark"
-	m := e2ethanos.NewMinio(e, "benchmark", bucket)
-	testutil.Ok(t, e2e.StartAndWaitReady(m))
-
-	bkt, err := s3.NewBucketWithConfig(
-		log.NewLogfmtLogger(os.Stderr),
-		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()),
-		"test-feed",
-	)
-	testutil.Ok(t, err)
-
-	wg := sync.WaitGroup{}
-
-	// 500MB file created via `dd if=/dev/urandom of=./test-file bs=1024b count=1000`
-	f, err := os.Open("../../../test-file")
-	testutil.Ok(t, err)
-
-	h := sha256.New()
-	_, err = io.Copy(h, f)
-	testutil.Ok(t, err)
-	expectedHash := h.Sum(nil)
-
-	for i := 0; i < 6; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-
-			for k := 0; k < 6; k++ {
-				testutil.Ok(t, bkt.Upload(ctx, fmt.Sprintf("test-%v_%v", i, k), f))
-				fmt.Printf("uploaded\n")
-
-				// Verify if object is not malformed.
-				r, err := bkt.Get(ctx, fmt.Sprintf("test-%v_%v", i, k))
-				testutil.Ok(t, err)
-
-				h := sha256.New()
-				_, err = io.Copy(h, r)
-				testutil.Ok(t, err)
-				testutil.Equals(t, expectedHash, h.Sum(nil))
-			}
-		}(i)
-	}
-
-	wg.Wait()
-}
 
 // Regression benchmark for https://github.com/thanos-io/thanos/issues/3917 and https://github.com/thanos-io/thanos/issues/3967.
 // $ export ver=v1 && go test ./pkg/objstore/s3/... -run '^$' -bench '^BenchmarkUpload' -benchtime 5s -count 5 \
