@@ -253,7 +253,7 @@ Generally there two scalability directions:
 
 You should horizontally scale Compactor to cope with this using [label sharding](../sharding.md#compactor). This allows to assign multiple streams to each instance of compactor.
 
-1. TSDB blocks from single stream is too big, it takes too much time or resources.
+2. TSDB blocks from single stream is too big, it takes too much time or resources.
 
 This is rare as first you would need to ingest that amount of data into Prometheus and it's usually not recommended to have bigger than 10 millions series in the 2 hours blocks. However, with 2 weeks blocks, potential [Vertical Compaction](#vertical-compactions) enabled and other producers than Prometheus (e.g backfilling) this scalability concern can appear as well. See [Limit size of blocks](https://github.com/thanos-io/thanos/issues/3068) ticket to track progress of solution if you are hitting this.
 
