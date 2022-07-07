@@ -232,7 +232,7 @@ type DefaultGrouper struct {
 	blocksMarkedForDeletion  prometheus.Counter
 	blocksMarkedForNoCompact prometheus.Counter
 	hashFunc                 metadata.HashFunc
-	blockFetchConcurrency    int
+	blockFilesConcurrency    int
 }
 
 // NewDefaultGrouper makes a new DefaultGrouper.
@@ -246,7 +246,7 @@ func NewDefaultGrouper(
 	garbageCollectedBlocks prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
-	blockFetchConcurrency int,
+	blockFilesConcurrency int,
 ) *DefaultGrouper {
 	return &DefaultGrouper{
 		bkt:                      bkt,
@@ -277,7 +277,7 @@ func NewDefaultGrouper(
 		garbageCollectedBlocks:   garbageCollectedBlocks,
 		blocksMarkedForDeletion:  blocksMarkedForDeletion,
 		hashFunc:                 hashFunc,
-		blockFetchConcurrency:    blockFetchConcurrency,
+		blockFilesConcurrency:    blockFilesConcurrency,
 	}
 }
 
@@ -307,7 +307,7 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.blocksMarkedForDeletion,
 				g.blocksMarkedForNoCompact,
 				g.hashFunc,
-				g.blockFetchConcurrency,
+				g.blockFilesConcurrency,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
@@ -346,7 +346,7 @@ type Group struct {
 	blocksMarkedForDeletion     prometheus.Counter
 	blocksMarkedForNoCompact    prometheus.Counter
 	hashFunc                    metadata.HashFunc
-	blockFetchConcurrency       int
+	blockFilesConcurrency       int
 }
 
 // NewGroup returns a new compaction group.
@@ -367,14 +367,14 @@ func NewGroup(
 	blocksMarkedForDeletion prometheus.Counter,
 	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
-	blockFetchConcurrency int,
+	blockFilesConcurrency int,
 ) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
-	if blockFetchConcurrency <= 0 {
-		return nil, errors.Errorf("invalid concurrency level (%d), blockFetchConcurrency level must be > 0", blockFetchConcurrency)
+	if blockFilesConcurrency <= 0 {
+		return nil, errors.Errorf("invalid concurrency level (%d), blockFilesConcurrency level must be > 0", blockFilesConcurrency)
 	}
 
 	g := &Group{
@@ -394,7 +394,7 @@ func NewGroup(
 		blocksMarkedForDeletion:     blocksMarkedForDeletion,
 		blocksMarkedForNoCompact:    blocksMarkedForNoCompact,
 		hashFunc:                    hashFunc,
-		blockFetchConcurrency:       blockFetchConcurrency,
+		blockFilesConcurrency:       blockFilesConcurrency,
 	}
 	return g, nil
 }
@@ -913,7 +913,7 @@ func (cg *Group) areBlocksOverlapping(include *metadata.Meta, exclude ...*metada
 }
 
 // RepairIssue347 repairs the https://github.com/prometheus/tsdb/issues/347 issue when having issue347Error.
-func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket, blocksMarkedForDeletion prometheus.Counter, issue347Err error) error {
+func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket, blocksMarkedForDeletion prometheus.Counter, g *Group, issue347Err error) error {
 	ie, ok := errors.Cause(issue347Err).(Issue347Error)
 	if !ok {
 		return errors.Errorf("Given error is not an issue347 error: %v", issue347Err)
@@ -953,7 +953,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	}
 
 	level.Info(logger).Log("msg", "uploading repaired block", "newID", resid)
-	if err = block.Upload(ctx, logger, bkt, filepath.Join(tmpdir, resid.String()), metadata.NoneFunc); err != nil {
+	if err = block.Upload(ctx, logger, bkt, filepath.Join(tmpdir, resid.String()), metadata.NoneFunc, objstore.WithUploadConcurrency(g.blockFilesConcurrency)); err != nil {
 		return retry(errors.Wrapf(err, "upload of %s failed", resid))
 	}
 
@@ -1019,7 +1019,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 
 		tracing.DoInSpanWithErr(ctx, "compaction_block_download", func(ctx context.Context) error {
-			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir, objstore.WithFetchConcurrency(cg.blockFetchConcurrency))
+			err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir, objstore.WithFetchConcurrency(cg.blockFilesConcurrency))
 			return err
 		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
@@ -1121,7 +1121,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	begin = time.Now()
 
 	tracing.DoInSpanWithErr(ctx, "compaction_block_upload", func(ctx context.Context) error {
-		err = block.Upload(ctx, cg.logger, cg.bkt, bdir, cg.hashFunc)
+		err = block.Upload(ctx, cg.logger, cg.bkt, bdir, cg.hashFunc, objstore.WithUploadConcurrency(cg.blockFilesConcurrency))
 		return err
 	})
 	if err != nil {
@@ -1245,7 +1245,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 					}
 
 					if IsIssue347Error(err) {
-						if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err); err == nil {
+						if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, g, err); err == nil {
 							mtx.Lock()
 							finishedAllGroups = false
 							mtx.Unlock()

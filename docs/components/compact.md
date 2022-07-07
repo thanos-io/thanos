@@ -279,9 +279,10 @@ usage: thanos compact [<flags>]
 Continuously compacts blocks in an object store bucket.
 
 Flags:
-      --block-fetch-concurrency=1
-                                Number of goroutines to use when fetching block
-                                files from object storage.
+      --block-files-concurrency=1
+                                Number of goroutines to use when
+                                fetching/uploading block files from object
+                                storage.
       --block-meta-fetch-concurrency=32
                                 Number of goroutines to use when fetching block
                                 metadata from object storage.

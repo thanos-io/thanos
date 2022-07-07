@@ -144,8 +144,34 @@ func WithFetchConcurrency(concurrency int) DownloadDirOption {
 	}
 }
 
-func applyDownloadOptions(options ...DownloadDirOption) DownloadDirParams {
+func applyDownloadDirOptions(options ...DownloadDirOption) DownloadDirParams {
 	out := DownloadDirParams{
+		concurrency: 1,
+	}
+	for _, opt := range options {
+		opt(&out)
+	}
+	return out
+}
+
+// DownloadOption configures the provided params.
+type UploadDirOption func(params *UploadDirParams)
+
+// UploadDirParams holds the UploadDir() parameters and is used by objstore clients implementations.
+type UploadDirParams struct {
+	concurrency  int
+	ignoredPaths []string
+}
+
+// WithUploadConcurrency is an option to set the concurrency of the download operation.
+func WithUploadConcurrency(concurrency int) UploadDirOption {
+	return func(params *UploadDirParams) {
+		params.concurrency = concurrency
+	}
+}
+
+func applyUploadDirOptions(options ...UploadDirOption) UploadDirParams {
+	out := UploadDirParams{
 		concurrency: 1,
 	}
 	for _, opt := range options {
@@ -207,29 +233,45 @@ func NopCloserWithSize(r io.Reader) io.ReadCloser {
 
 // UploadDir uploads all files in srcdir to the bucket with into a top-level directory
 // named dstdir. It is a caller responsibility to clean partial upload in case of failure.
-func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdir string) error {
+func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdir string, options ...UploadDirOption) error {
 	df, err := os.Stat(srcdir)
+	opts := applyUploadDirOptions(options...)
+	g, ctx := errgroup.WithContext(ctx)
+	guard := make(chan struct{}, opts.concurrency)
+
 	if err != nil {
 		return errors.Wrap(err, "stat dir")
 	}
 	if !df.IsDir() {
 		return errors.Errorf("%s is not a directory", srcdir)
 	}
-	return filepath.WalkDir(srcdir, func(src string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		srcRel, err := filepath.Rel(srcdir, src)
-		if err != nil {
-			return errors.Wrap(err, "getting relative path")
-		}
+	err = filepath.WalkDir(srcdir, func(src string, d fs.DirEntry, err error) error {
+		guard <- struct{}{}
+		g.Go(func() error {
+			defer func() { <-guard }()
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			srcRel, err := filepath.Rel(srcdir, src)
+			if err != nil {
+				return errors.Wrap(err, "getting relative path")
+			}
 
-		dst := path.Join(dstdir, filepath.ToSlash(srcRel))
-		return UploadFile(ctx, logger, bkt, src, dst)
+			dst := path.Join(dstdir, filepath.ToSlash(srcRel))
+			return UploadFile(ctx, logger, bkt, src, dst)
+		})
+
+		return nil
 	})
+
+	if err == nil {
+		err = g.Wait()
+	}
+
+	return err
 }
 
 // UploadFile uploads the file with the given name to the bucket.
@@ -293,7 +335,7 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 	if err := os.MkdirAll(dst, 0750); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
-	opts := applyDownloadOptions(options...)
+	opts := applyDownloadDirOptions(options...)
 
 	g, ctx := errgroup.WithContext(ctx)
 	guard := make(chan struct{}, opts.concurrency)
