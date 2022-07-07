@@ -121,10 +121,10 @@ func ApplyIterOptions(options ...IterOption) IterParams {
 	return out
 }
 
-// DownloadOption configures the provided params.
+// DownloadDirOption configures the provided params.
 type DownloadDirOption func(params *DownloadDirParams)
 
-// DownloadParams holds the Download() parameters and is used by objstore clients implementations.
+// DownloadDirParams holds the DownloadDir() parameters and is used by objstore clients implementations.
 type DownloadDirParams struct {
 	concurrency  int
 	ignoredPaths []string
@@ -154,7 +154,7 @@ func applyDownloadDirOptions(options ...DownloadDirOption) DownloadDirParams {
 	return out
 }
 
-// DownloadOption configures the provided params.
+// UploadDirOption configures the provided params.
 type UploadDirOption func(params *UploadDirParams)
 
 // UploadDirParams holds the UploadDir() parameters and is used by objstore clients implementations.
@@ -162,7 +162,7 @@ type UploadDirParams struct {
 	concurrency int
 }
 
-// WithUploadConcurrency is an option to set the concurrency of the download operation.
+// WithUploadConcurrency is an option to set the concurrency of the upload operation.
 func WithUploadConcurrency(concurrency int) UploadDirOption {
 	return func(params *UploadDirParams) {
 		params.concurrency = concurrency
