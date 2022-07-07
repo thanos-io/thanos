@@ -159,8 +159,7 @@ type UploadDirOption func(params *UploadDirParams)
 
 // UploadDirParams holds the UploadDir() parameters and is used by objstore clients implementations.
 type UploadDirParams struct {
-	concurrency  int
-	ignoredPaths []string
+	concurrency int
 }
 
 // WithUploadConcurrency is an option to set the concurrency of the download operation.
