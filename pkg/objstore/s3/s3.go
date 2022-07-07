@@ -485,6 +485,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 			PartSize:             partSize,
 			ServerSideEncryption: sse,
 			UserMetadata:         b.putUserMetadata,
+			NumThreads:           4,
 		},
 	); err != nil {
 		return errors.Wrap(err, "upload s3 object")

@@ -229,11 +229,6 @@ replace (
 
 	// go 1.18
 	github.com/json-iterator/go => github.com/json-iterator/go v1.1.12
-
-	// TODO: Remove this: https://github.com/thanos-io/thanos/issues/3967.
-	github.com/minio/minio-go/v7 => github.com/bwplotka/minio-go/v7 v7.0.11-0.20210324165441-f9927e5255a6
-
-	// go 1.18
 	github.com/modern-go/reflect2 => github.com/modern-go/reflect2 v1.0.2
 
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
