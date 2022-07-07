@@ -16,14 +16,16 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#5440](https://github.com/thanos-io/thanos/pull/5440) HTTP metrics: export number of in-flight HTTP requests.
+- [#5424](https://github.com/thanos-io/thanos/pull/5424) Receive: Export metrics regarding size of remote write requests.
+- [#5420](https://github.com/thanos-io/thanos/pull/5420) Receive: Automatically remove stale tenants.
 
 ### Changed
 
-- [#5447](https://github.com/thanos-io/thanos/pull/5447) promclient: ignore 405 status codes for Prometheus buildVersion requests
+- [#5447](https://github.com/thanos-io/thanos/pull/5447) Promclient: Ignore 405 status codes for Prometheus buildVersion requests
 
 ### Removed
 
-## [v0.27.0-rc0](https://github.com/thanos-io/thanos/tree/release-0.27) - Release in progress
+## [v0.27.0](https://github.com/thanos-io/thanos/tree/release-0.27) - 2022.07.05
 
 ### Fixed
 - [#5339](https://github.com/thanos-io/thanos/pull/5339) Receive: Fix deadlock on interrupt in routerOnly mode.
@@ -38,13 +40,11 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Add relabeling support.
 - [#5408](https://github.com/thanos-io/thanos/pull/5408) Receive: Add support for consistent hashrings.
 - [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Implement api/v1/status/tsdb.
-- [#5424](https://github.com/thanos-io/thanos/pull/5424) Receive: export metrics regarding size of remote write requests.
-- [#5420](https://github.com/thanos-io/thanos/pull/5420) Receive: Automatically remove stale tenants.
 
 ### Changed
 
 - [#5410](https://github.com/thanos-io/thanos/pull/5410) Query: Close() after using query. This should reduce bumps in memory allocations.
-- [#5417](https://github.com/thanos-io/thanos/pull/5417) Ruler: Change default evaluation interval to 1 minute.
+- [#5417](https://github.com/thanos-io/thanos/pull/5417) Ruler: *Breaking if you have not set this value (`--eval-interval`) yourself and rely on that value. :warning:*. Change the default evaluation interval from 30s to 1 minute in order to be compliant with Prometheus alerting compliance specification: https://github.com/prometheus/compliance/blob/main/alert_generator/specification.md#executing-an-alerting-rule.
 
 ### Removed
 
