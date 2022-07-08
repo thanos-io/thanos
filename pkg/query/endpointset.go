@@ -246,9 +246,9 @@ type EndpointSet struct {
 
 	// Endpoint specifications can change dynamically. If some component is missing from the list, we assume it is no longer
 	// accessible and we close gRPC client for it, unless it is strict.
-	endpointSpec             func() map[string]*GRPCEndpointSpec
-	dialOpts                 []grpc.DialOption
-	gRPCInfoCallTimeout      time.Duration
+	endpointSpec        func() []*GRPCEndpointSpec
+	dialOpts            []grpc.DialOption
+	endpointInfoTimeout time.Duration
 	unhealthyEndpointTimeout time.Duration
 
 	updateMtx sync.Mutex
@@ -272,6 +272,7 @@ func NewEndpointSet(
 	endpointSpecs func() []*GRPCEndpointSpec,
 	dialOpts []grpc.DialOption,
 	unhealthyEndpointTimeout time.Duration,
+	endpointInfoTimeout time.Duration,
 ) *EndpointSet {
 	endpointsMetric := newEndpointSetNodeCollector()
 	if reg != nil {
@@ -292,7 +293,14 @@ func NewEndpointSet(
 		endpointsMetric: endpointsMetric,
 
 		dialOpts:                 dialOpts,
+<<<<<<< HEAD
 		gRPCInfoCallTimeout:      5 * time.Second,
+=======
+		endpointsMetric:          endpointsMetric,
+		endpointInfoTimeout:      endpointInfoTimeout,
+		endpoints:                make(map[string]*endpointRef),
+		endpointStatuses:         make(map[string]*EndpointStatus),
+>>>>>>> 899a0020 (Expose Endpoint Info timeout parameter)
 		unhealthyEndpointTimeout: unhealthyEndpointTimeout,
 
 		endpointSpec: func() map[string]*GRPCEndpointSpec {
