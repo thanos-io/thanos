@@ -4,10 +4,8 @@
 package azure
 
 import (
-	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -298,39 +296,15 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
 	}
-	var props *blob.BlobGetPropertiesResponse
-	props, err = blobURL.GetProperties(ctx, blob.BlobAccessConditions{}, blob.ClientProvidedKeyOptions{})
+
+	dl, err := blobURL.Download(ctx, offset, length, blob.BlobAccessConditions{}, false, blob.ClientProvidedKeyOptions{})
 	if err != nil {
-		return nil, errors.Wrapf(err, "cannot get properties for container: %s", name)
+		return nil, errors.Wrapf(err, "cannot download Azure blob, address: %s", name)
 	}
 
-	var size int64
-	// If a length is specified and it won't go past the end of the file,
-	// then set it as the size.
-	if length > 0 && length <= props.ContentLength()-offset {
-		size = length
-		level.Debug(b.logger).Log("msg", "set size to length", "size", size, "length", length, "offset", offset, "name", name)
-	} else {
-		size = props.ContentLength() - offset
-		level.Debug(b.logger).Log("msg", "set size to go to EOF", "contentlength", props.ContentLength(), "size", size, "length", length, "offset", offset, "name", name)
-	}
-
-	destBuffer := make([]byte, size)
-
-	if err := blob.DownloadBlobToBuffer(context.Background(), blobURL.BlobURL, offset, size,
-		destBuffer, blob.DownloadFromBlobOptions{
-			BlockSize:   blob.BlobDefaultDownloadBlockSize,
-			Parallelism: uint16(3),
-			Progress:    nil,
-			RetryReaderOptionsPerBlock: blob.RetryReaderOptions{
-				MaxRetryRequests: b.config.ReaderConfig.MaxRetryRequests,
-			},
-		},
-	); err != nil {
-		return nil, errors.Wrapf(err, "cannot download blob, address: %s", blobURL.BlobURL)
-	}
-
-	return ioutil.NopCloser(bytes.NewReader(destBuffer)), nil
+	return dl.Body(blob.RetryReaderOptions{
+		MaxRetryRequests: b.config.ReaderConfig.MaxRetryRequests,
+	}), nil
 }
 
 // Get returns a reader for the given object name.
