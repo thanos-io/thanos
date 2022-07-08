@@ -17,7 +17,6 @@
 package status
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -95,8 +94,9 @@ func (sapi *StatusAPI) httpServeStats(r *http.Request) (interface{}, []error, *a
 		return nil, nil, sterr
 	}
 
-	if stats == nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: fmt.Errorf("unknown tenant")}
+	result := make([]TSDBStatus, 0, len(stats))
+	if len(stats) == 0 {
+		return result, nil, nil
 	}
 
 	metrics, err := sapi.registry.Gather()
@@ -119,7 +119,6 @@ func (sapi *StatusAPI) httpServeStats(r *http.Request) (interface{}, []error, *a
 		}
 	}
 
-	result := make([]TSDBStatus, 0, len(stats))
 	for _, s := range stats {
 		var chunkCount int64
 		if c, ok := tenantChunks[s.Tenant]; ok {
