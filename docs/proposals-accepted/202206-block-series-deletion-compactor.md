@@ -7,7 +7,7 @@ menu: proposals-accepted
 ---
 
 * **Owners:**
-    * @yeya24
+  * @yeya24
 
 ## Summary
 
@@ -37,7 +37,7 @@ The design of the tombstone file mainly follows the previous proposal. Tombstone
 
 The file format is as follows:
 
-``` bash
+```bash
 cat 01G61GC0Q957TVZ2FC8S6Y2ZK7.json
 {
         "ulid": "01G61GC0Q957TVZ2FC8S6Y2ZK7",
@@ -88,7 +88,7 @@ There are two approaches about how to scan blocks:
 
 Approach 1 is simple and easy to implement. But it doesn't scale because it needs to download the block locally and then check the tombstone matchers. If there is no matching series then it is a waste of time and disk space to download the whole block.
 
-So we propose our solution with option 2. With this option, only block indexes need to be downloaded, chunks data are reading from the object storage on the fly so disk space can be saved.  As compactor is an offline component, it is acceptable to read from the object storage rather than downloading the whole data.
+So we propose our solution with option 2. With this option, only block indexes need to be downloaded, chunks data are reading from the object storage on the fly so disk space can be saved. As compactor is an offline component, it is acceptable to read from the object storage rather than downloading the whole data.
 
 Another change is that we need to expose part of the store gateway code like `BucketIndexReader`, `BucketChunkReader` as well as other internal code to be used by the compactor. Some refactorings are needed to make those code reusable.
 
@@ -170,8 +170,8 @@ During the tombstone file sync, store gateway can also eagerly apply the tombsto
 ```go
 // Result for the processed result for each tombstone, each block.
 type MemTombstones struct {
-    intvlGroups map[storage.SeriesRef]Intervals
-    mtx         sync.RWMutex
+	intvlGroups map[storage.SeriesRef]Intervals
+	mtx         sync.RWMutex
 }
 
 // Result for the processed result for each block.
