@@ -15,7 +15,7 @@ This design document continues the feature of series deletion for object storage
 
 ## Goals
 
-* Make it more clear about the main workflow of the series deletion process.
+* Make the main workflow of the series deletion process clearer.
 * Perform the actual series deletion using compactor in a scalable way.
 
 ## Non-Goals
@@ -36,6 +36,7 @@ The main workflow of the series deletion will look like this:
 The design of the tombstone file mainly follows the previous proposal. Tombstone file is immutable. It is using a custom JSON format, single file per request and global, which means it applies to all the blocks. For the detailed considerations and tradeoffs, please refer to the original proposal.
 
 The file format is as follows:
+
 ``` bash
 cat 01G61GC0Q957TVZ2FC8S6Y2ZK7.json
 {
@@ -67,7 +68,7 @@ There are different ways to mask series based on tombstones. We will discuss two
 
 #### Option 1: Mask Series At Query Time
 
-During query time, the store gateway decides what blocks to query based on the request min, max time and label matchers. Meanwhile, it can also decide what tombstones are going to apply for the selected blocks based on tombstone time range and label matchers.
+During query time, the store gateway decides what blocks to query based on the request min, max time and label matchers. Meanwhile, it can also decide what tombstones are going to be applied for the selected blocks based on tombstone time range and label matchers.
 
 Then during the query time, it checks the series label sets against the tombstone matchers, as well as the chunks and tombstone time range to mask the series data.
 
@@ -122,7 +123,7 @@ There are other questions about how we should perform the deletion along with co
 * Series are deleted at normal compaction. This might need to wait a long time and hard to apply for blocks at the max compaction level.
 * Rewrite blocks separately. This needs more coordination with compaction to avoid duplicate/unnecessary work.
 
-To overcome those challenges, we propose two options.
+To overcome those challenges, we propose three options.
 
 #### Option 1: Compactor Scans Blocks
 
@@ -174,11 +175,11 @@ After getting the query result, the compactor does almost the same thing as the 
 
 The drawback for this approach is that we are inventing a new API for this purpose only, which might be a bit of pain in the future.
 
-#### Option 3: Delete Series using Rewrite Logic
+#### Option 3: Delete Series using `thanos tools block rewrite` CLI
 
 The previous two options do the series deletion at compaction time, this option does actual series deletion using block rewrite. For the index scanning, it is still required to choose either option 1 or 2 to avoid unncessary rewrite even if the block doesn't have any matched series.
 
-This is not so efficient as rewrite is a different process than compaction. We need to add this step and make sure rewrite can work together with compaction and no redundant work is done.
+This is not efficient as rewrite is a different process from compaction. We need to add this step and make sure rewrite can work together with compaction and no redundant work is done.
 
 #### Considerations
 
@@ -188,7 +189,7 @@ Overall, among the 3 options, option 1 is better as it is easier to implement an
 
 #### Compaction Planner for Tombstone
 
-If series deletion is done at compaction time, then no much thing to change at the planner as we just need to delete series at compaction time. For the ratio calculation, as the tombstone results are pre-calculated it is easy to know the ratio as well. The threshold can be made configurable too.
+If series deletion is done at compaction time, then there's not much thing to change about the planner, as we just need to delete series at compaction time. For the ratio calculation, as the tombstone results are pre-calculated it is easy to know the ratio as well. The threshold can be made configurable too.
 
 The exception is for blocks that at max compaction level, no compaction will happen to it and the tombstones will remain forever if the ratio is lower than the deletion threshold. In this case the planner can check the block compaction level first, if it is max compaction level and the tombstone exists for some period of time, then do compaction for that block.
 
