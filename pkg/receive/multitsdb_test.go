@@ -477,6 +477,65 @@ func TestMultiTSDBPrune(t *testing.T) {
 	}
 }
 
+func TestMultiTSDBStats(t *testing.T) {
+	tests := []struct {
+		name          string
+		tenants       []string
+		expectedStats int
+	}{
+		{
+			name:          "single tenant",
+			tenants:       []string{"foo"},
+			expectedStats: 1,
+		},
+		{
+			name:          "missing tenant",
+			tenants:       []string{"missing-foo"},
+			expectedStats: 0,
+		},
+		{
+			name:          "multiple tenants with missing tenant",
+			tenants:       []string{"foo", "missing-foo"},
+			expectedStats: 1,
+		},
+		{
+			name:          "all tenants",
+			tenants:       []string{"foo", "bar", "baz"},
+			expectedStats: 3,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir, err := ioutil.TempDir("", "tsdb-stats")
+			testutil.Ok(t, err)
+			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				nil,
+				false,
+				metadata.NoneFunc,
+			)
+			defer func() { testutil.Ok(t, m.Close()) }()
+
+			testutil.Ok(t, appendSample(m, "foo", time.Now()))
+			testutil.Ok(t, appendSample(m, "bar", time.Now()))
+			testutil.Ok(t, appendSample(m, "baz", time.Now()))
+			testutil.Equals(t, 3, len(m.TSDBStores()))
+
+			stats := m.TenantStats(labels.MetricName, test.tenants...)
+			testutil.Equals(t, test.expectedStats, len(stats))
+		})
+	}
+}
+
 func appendSample(m *MultiTSDB, tenant string, timestamp time.Time) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

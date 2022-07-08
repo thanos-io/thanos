@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/api"
-
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/logging"
 
@@ -288,19 +287,14 @@ func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusap
 	}
 
 	if getAllTenantStats {
-		return h.options.TSDBStats.AllTenantStats(statsByLabelName), nil
+		return h.options.TSDBStats.TenantStats(statsByLabelName), nil
 	}
 
 	if tenantID == "" {
 		tenantID = h.options.DefaultTenantID
 	}
 
-	stats := h.options.TSDBStats.SingleTenantStats(tenantID, statsByLabelName)
-	if stats == nil {
-		return nil, nil
-	}
-
-	return []statusapi.TenantStats{*stats}, nil
+	return h.options.TSDBStats.TenantStats(statsByLabelName, tenantID), nil
 }
 
 // Close stops the Handler.
