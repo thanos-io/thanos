@@ -59,8 +59,7 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 			return nil, err
 		}
 	} else {
-		var option otel_jaeger.EndpointOption
-		exporter, err = otel_jaeger.New(option)
+		exporter, err = otel_jaeger.New(otel_jaeger.WithAgentEndpoint())
 		if err != nil {
 			return nil, err
 		}

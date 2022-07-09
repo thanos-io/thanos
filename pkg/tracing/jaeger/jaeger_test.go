@@ -20,28 +20,32 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
+var parentConfig = ParentBasedSamplerConfig{LocalParentSampled: true}
+
 // This test shows that if sample factor will enable tracing on client process, even when it would be disabled on server
 // it will be still enabled for all spans within this span.
 func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
+	sampler := getSampler("probabilistic", 1.0, parentConfig)
 
 	tracerOtel := newTraceProvider(
 		context.Background(),
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
-		1, // always sample
+		sampler,
 		[]attribute.KeyValue{},
 		"jaeger-test-client",
 	)
 	tracer, _ := migration.Bridge(tracerOtel, log.NewNopLogger())
 	clientRoot, clientCtx := tracing.StartSpan(tracing.ContextWithTracer(context.Background(), tracer), "a")
 
+	sampler2 := getSampler("probabilistic", 1.0, parentConfig)
 	// Simulate Server process with different tracer, but with client span in context.
 	srvTracerOtel := newTraceProvider(
 		context.Background(),
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
-		0, // never sample
+		sampler2, // never sample
 		[]attribute.KeyValue{},
 		"jaeger-test-server",
 	)
@@ -68,11 +72,12 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 // it will be still disabled for all spans within this span.
 func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
+	sampler := getSampler("const", 0, parentConfig)
 	tracerOtel := newTraceProvider(
 		context.Background(),
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
-		0, // never sample
+		sampler, // never sample
 		[]attribute.KeyValue{},
 		"jaeger-test-client",
 	)
@@ -85,7 +90,7 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 		context.Background(),
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
-		0, // never sample
+		sampler, // never sample
 		[]attribute.KeyValue{},
 		"jaeger-test-server",
 	)
@@ -110,11 +115,12 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 // factor will disable client & server tracing, it will be still enabled for all spans within this span.
 func TestContextTracing_ForceTracing(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
+	sampler := getSampler("probabilistic", 1.0, parentConfig)
 	tracerOtel := newTraceProvider(
 		context.Background(),
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
-		0, // never sample
+		sampler,
 		[]attribute.KeyValue{},
 		"jaeger-test-client",
 	)
@@ -132,7 +138,7 @@ func TestContextTracing_ForceTracing(t *testing.T) {
 		context.Background(),
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
-		0, // never sample
+		sampler,
 		[]attribute.KeyValue{},
 		"jaeger-test-server",
 	)
