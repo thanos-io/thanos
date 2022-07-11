@@ -235,6 +235,9 @@ func NopCloserWithSize(r io.Reader) io.ReadCloser {
 func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdir string, options ...UploadOption) error {
 	df, err := os.Stat(srcdir)
 	opts := applyUploadOptions(options...)
+
+	// The derived Context is canceled the first time a function passed to Go returns a non-nil error or the first
+	// time Wait returns, whichever occurs first.
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(opts.concurrency)
 
@@ -334,6 +337,8 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 	}
 	opts := applyDownloadOptions(options...)
 
+	// The derived Context is canceled the first time a function passed to Go returns a non-nil error or the first
+	// time Wait returns, whichever occurs first.
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(opts.concurrency)
 
