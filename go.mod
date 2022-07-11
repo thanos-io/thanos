@@ -251,4 +251,4 @@ replace (
 	k8s.io/klog/v2 => github.com/simonpasquier/klog-gokit/v2 v2.0.1
 )
 
-go 1.17
+go 1.18
