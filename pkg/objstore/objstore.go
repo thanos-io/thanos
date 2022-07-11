@@ -121,31 +121,31 @@ func ApplyIterOptions(options ...IterOption) IterParams {
 	return out
 }
 
-// DownloadDirOption configures the provided params.
-type DownloadDirOption func(params *DownloadDirParams)
+// DownloadOption configures the provided params.
+type DownloadOption func(params *downloadParams)
 
-// DownloadDirParams holds the DownloadDir() parameters and is used by objstore clients implementations.
-type DownloadDirParams struct {
+// downloadParams holds the DownloadDir() parameters and is used by objstore clients implementations.
+type downloadParams struct {
 	concurrency  int
 	ignoredPaths []string
 }
 
 // WithDownloadIgnoredPaths is an option to set the paths to not be downloaded.
-func WithDownloadIgnoredPaths(ignoredPaths ...string) DownloadDirOption {
-	return func(params *DownloadDirParams) {
+func WithDownloadIgnoredPaths(ignoredPaths ...string) DownloadOption {
+	return func(params *downloadParams) {
 		params.ignoredPaths = ignoredPaths
 	}
 }
 
 // WithFetchConcurrency is an option to set the concurrency of the download operation.
-func WithFetchConcurrency(concurrency int) DownloadDirOption {
-	return func(params *DownloadDirParams) {
+func WithFetchConcurrency(concurrency int) DownloadOption {
+	return func(params *downloadParams) {
 		params.concurrency = concurrency
 	}
 }
 
-func applyDownloadDirOptions(options ...DownloadDirOption) DownloadDirParams {
-	out := DownloadDirParams{
+func applyDownloadOptions(options ...DownloadOption) downloadParams {
+	out := downloadParams{
 		concurrency: 1,
 	}
 	for _, opt := range options {
@@ -154,23 +154,23 @@ func applyDownloadDirOptions(options ...DownloadDirOption) DownloadDirParams {
 	return out
 }
 
-// UploadDirOption configures the provided params.
-type UploadDirOption func(params *UploadDirParams)
+// UploadOption configures the provided params.
+type UploadOption func(params *uploadParams)
 
-// UploadDirParams holds the UploadDir() parameters and is used by objstore clients implementations.
-type UploadDirParams struct {
+// uploadParams holds the UploadDir() parameters and is used by objstore clients implementations.
+type uploadParams struct {
 	concurrency int
 }
 
 // WithUploadConcurrency is an option to set the concurrency of the upload operation.
-func WithUploadConcurrency(concurrency int) UploadDirOption {
-	return func(params *UploadDirParams) {
+func WithUploadConcurrency(concurrency int) UploadOption {
+	return func(params *uploadParams) {
 		params.concurrency = concurrency
 	}
 }
 
-func applyUploadDirOptions(options ...UploadDirOption) UploadDirParams {
-	out := UploadDirParams{
+func applyUploadOptions(options ...UploadOption) uploadParams {
+	out := uploadParams{
 		concurrency: 1,
 	}
 	for _, opt := range options {
@@ -232,11 +232,11 @@ func NopCloserWithSize(r io.Reader) io.ReadCloser {
 
 // UploadDir uploads all files in srcdir to the bucket with into a top-level directory
 // named dstdir. It is a caller responsibility to clean partial upload in case of failure.
-func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdir string, options ...UploadDirOption) error {
+func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdir string, options ...UploadOption) error {
 	df, err := os.Stat(srcdir)
-	opts := applyUploadDirOptions(options...)
+	opts := applyUploadOptions(options...)
 	g, ctx := errgroup.WithContext(ctx)
-	guard := make(chan struct{}, opts.concurrency)
+	g.SetLimit(opts.concurrency)
 
 	if err != nil {
 		return errors.Wrap(err, "stat dir")
@@ -245,9 +245,7 @@ func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdi
 		return errors.Errorf("%s is not a directory", srcdir)
 	}
 	err = filepath.WalkDir(srcdir, func(src string, d fs.DirEntry, err error) error {
-		guard <- struct{}{}
 		g.Go(func() error {
-			defer func() { <-guard }()
 			if err != nil {
 				return err
 			}
@@ -330,30 +328,28 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 }
 
 // DownloadDir downloads all object found in the directory into the local directory.
-func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, originalSrc, src, dst string, options ...DownloadDirOption) error {
+func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, originalSrc, src, dst string, options ...DownloadOption) error {
 	if err := os.MkdirAll(dst, 0750); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
-	opts := applyDownloadDirOptions(options...)
+	opts := applyDownloadOptions(options...)
 
 	g, ctx := errgroup.WithContext(ctx)
-	guard := make(chan struct{}, opts.concurrency)
+	g.SetLimit(opts.concurrency)
 
 	var downloadedFiles []string
 	var m sync.Mutex
 
 	err := bkt.Iter(ctx, src, func(name string) error {
-		guard <- struct{}{}
 		g.Go(func() error {
-			defer func() { <-guard }()
 			dst := filepath.Join(dst, filepath.Base(name))
 			if strings.HasSuffix(name, DirDelim) {
 				if err := DownloadDir(ctx, logger, bkt, originalSrc, name, dst, options...); err != nil {
 					return err
 				}
 				m.Lock()
-				defer m.Unlock()
 				downloadedFiles = append(downloadedFiles, dst)
+				m.Unlock()
 				return nil
 			}
 			for _, ignoredPath := range opts.ignoredPaths {
@@ -367,8 +363,8 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, origi
 			}
 
 			m.Lock()
-			defer m.Unlock()
 			downloadedFiles = append(downloadedFiles, dst)
+			m.Unlock()
 			return nil
 		})
 		return nil

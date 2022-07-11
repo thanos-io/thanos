@@ -45,7 +45,7 @@ const (
 // Download downloads directory that is mean to be block directory. If any of the files
 // have a hash calculated in the meta file and it matches with what is in the destination path then
 // we do not download it. We always re-download the meta file.
-func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID, dst string, options ...objstore.DownloadDirOption) error {
+func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID, dst string, options ...objstore.DownloadOption) error {
 	if err := os.MkdirAll(dst, 0750); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
@@ -94,13 +94,13 @@ func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id
 
 // Upload uploads a TSDB block to the object storage. It verifies basic
 // features of Thanos block.
-func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, options ...objstore.UploadDirOption) error {
+func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, options ...objstore.UploadOption) error {
 	return upload(ctx, logger, bkt, bdir, hf, true, options...)
 }
 
 // UploadPromBlock uploads a TSDB block to the object storage. It assumes
 // the block is used in Prometheus so it doesn't check Thanos external labels.
-func UploadPromBlock(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, options ...objstore.UploadDirOption) error {
+func UploadPromBlock(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, options ...objstore.UploadOption) error {
 	return upload(ctx, logger, bkt, bdir, hf, false, options...)
 }
 
@@ -108,7 +108,7 @@ func UploadPromBlock(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 // It makes sure cleanup is done on error to avoid partial block uploads.
 // TODO(bplotka): Ensure bucket operations have reasonable backoff retries.
 // NOTE: Upload updates `meta.Thanos.File` section.
-func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, checkExternalLabels bool, options ...objstore.UploadDirOption) error {
+func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, checkExternalLabels bool, options ...objstore.UploadOption) error {
 	df, err := os.Stat(bdir)
 	if err != nil {
 		return err
