@@ -23,6 +23,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#5447](https://github.com/thanos-io/thanos/pull/5447) Promclient: Ignore 405 status codes for Prometheus buildVersion requests
 - [#5451](https://github.com/thanos-io/thanos/pull/5451) Azure: Reduce memory usage by not buffering file downloads entirely in memory.
+- [#5487](https://github.com/thanos-io/thanos/pull/5487) Project fully built with Go 1.18 (including Github Actions).
 
 ### Removed
 
