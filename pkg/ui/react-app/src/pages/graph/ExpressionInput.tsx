@@ -2,20 +2,22 @@ import React, { FC, useEffect, useRef } from 'react';
 import { Button, InputGroup, InputGroupAddon, InputGroupText } from 'reactstrap';
 import { EditorView, highlightSpecialChars, keymap, ViewUpdate, placeholder } from '@codemirror/view';
 import { EditorState, Prec, Compartment } from '@codemirror/state';
-import { indentOnInput, syntaxTree } from '@codemirror/language';
-import { history, historyKeymap } from '@codemirror/history';
-import { defaultKeymap, insertNewlineAndIndent } from '@codemirror/commands';
-import { bracketMatching } from '@codemirror/matchbrackets';
-import { closeBrackets, closeBracketsKeymap } from '@codemirror/closebrackets';
+import { bracketMatching, indentOnInput, syntaxHighlighting, syntaxTree } from '@codemirror/language';
+import { defaultKeymap, historyKeymap, history, insertNewlineAndIndent } from '@codemirror/commands';
 import { highlightSelectionMatches } from '@codemirror/search';
-import { commentKeymap } from '@codemirror/comment';
 import { lintKeymap } from '@codemirror/lint';
-import { PromQLExtension, CompleteStrategy } from 'codemirror-promql';
-import { autocompletion, completionKeymap, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
+import { PromQLExtension, CompleteStrategy, newCompleteStrategy } from '@prometheus-io/codemirror-promql';
+import {
+  autocompletion,
+  completionKeymap,
+  CompletionContext,
+  CompletionResult,
+  closeBracketsKeymap,
+  closeBrackets,
+} from '@codemirror/autocomplete';
 import { baseTheme, lightTheme, darkTheme, promqlHighlighter } from './CMTheme';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSearch, faSpinner } from '@fortawesome/free-solid-svg-icons';
-import { newCompleteStrategy } from 'codemirror-promql/dist/esm/complete';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -64,7 +66,7 @@ export class HistoryCompleteStrategy implements CompleteStrategy {
           apply: q,
           info: q.length < 80 ? undefined : q,
         })),
-        span: /^[a-zA-Z0-9_:]+$/,
+        validFor: /^[a-zA-Z0-9_:]+$/,
       };
 
       if (res !== null) {
@@ -106,7 +108,7 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
         ),
       });
     const dynamicConfig = [
-      enableHighlighting ? promqlHighlighter : [],
+      enableHighlighting ? syntaxHighlighting(promqlHighlighter) : [],
       promqlExtension.asExtension(),
       theme === 'dark' ? darkTheme : lightTheme,
     ];
@@ -132,14 +134,7 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
           autocompletion(),
           highlightSelectionMatches(),
           EditorView.lineWrapping,
-          keymap.of([
-            ...closeBracketsKeymap,
-            ...defaultKeymap,
-            ...historyKeymap,
-            ...commentKeymap,
-            ...completionKeymap,
-            ...lintKeymap,
-          ]),
+          keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...completionKeymap, ...lintKeymap]),
           placeholder('Expression (press Shift+Enter for newlines)'),
           dynamicConfigCompartment.of(dynamicConfig),
           // This keymap is added without precedence so that closing the autocomplete dropdown
@@ -153,7 +148,7 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
               },
             },
           ]),
-          Prec.override(
+          Prec.highest(
             keymap.of([
               {
                 key: 'Enter',
