@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -19,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
@@ -119,6 +121,64 @@ func ApplyIterOptions(options ...IterOption) IterParams {
 	return out
 }
 
+// DownloadOption configures the provided params.
+type DownloadOption func(params *downloadParams)
+
+// downloadParams holds the DownloadDir() parameters and is used by objstore clients implementations.
+type downloadParams struct {
+	concurrency  int
+	ignoredPaths []string
+}
+
+// WithDownloadIgnoredPaths is an option to set the paths to not be downloaded.
+func WithDownloadIgnoredPaths(ignoredPaths ...string) DownloadOption {
+	return func(params *downloadParams) {
+		params.ignoredPaths = ignoredPaths
+	}
+}
+
+// WithFetchConcurrency is an option to set the concurrency of the download operation.
+func WithFetchConcurrency(concurrency int) DownloadOption {
+	return func(params *downloadParams) {
+		params.concurrency = concurrency
+	}
+}
+
+func applyDownloadOptions(options ...DownloadOption) downloadParams {
+	out := downloadParams{
+		concurrency: 1,
+	}
+	for _, opt := range options {
+		opt(&out)
+	}
+	return out
+}
+
+// UploadOption configures the provided params.
+type UploadOption func(params *uploadParams)
+
+// uploadParams holds the UploadDir() parameters and is used by objstore clients implementations.
+type uploadParams struct {
+	concurrency int
+}
+
+// WithUploadConcurrency is an option to set the concurrency of the upload operation.
+func WithUploadConcurrency(concurrency int) UploadOption {
+	return func(params *uploadParams) {
+		params.concurrency = concurrency
+	}
+}
+
+func applyUploadOptions(options ...UploadOption) uploadParams {
+	out := uploadParams{
+		concurrency: 1,
+	}
+	for _, opt := range options {
+		opt(&out)
+	}
+	return out
+}
+
 type ObjectAttributes struct {
 	// Size is the object size in bytes.
 	Size int64 `json:"size"`
@@ -172,29 +232,46 @@ func NopCloserWithSize(r io.Reader) io.ReadCloser {
 
 // UploadDir uploads all files in srcdir to the bucket with into a top-level directory
 // named dstdir. It is a caller responsibility to clean partial upload in case of failure.
-func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdir string) error {
+func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdir string, options ...UploadOption) error {
 	df, err := os.Stat(srcdir)
+	opts := applyUploadOptions(options...)
+
+	// The derived Context is canceled the first time a function passed to Go returns a non-nil error or the first
+	// time Wait returns, whichever occurs first.
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(opts.concurrency)
+
 	if err != nil {
 		return errors.Wrap(err, "stat dir")
 	}
 	if !df.IsDir() {
 		return errors.Errorf("%s is not a directory", srcdir)
 	}
-	return filepath.WalkDir(srcdir, func(src string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		srcRel, err := filepath.Rel(srcdir, src)
-		if err != nil {
-			return errors.Wrap(err, "getting relative path")
-		}
+	err = filepath.WalkDir(srcdir, func(src string, d fs.DirEntry, err error) error {
+		g.Go(func() error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			srcRel, err := filepath.Rel(srcdir, src)
+			if err != nil {
+				return errors.Wrap(err, "getting relative path")
+			}
 
-		dst := path.Join(dstdir, filepath.ToSlash(srcRel))
-		return UploadFile(ctx, logger, bkt, src, dst)
+			dst := path.Join(dstdir, filepath.ToSlash(srcRel))
+			return UploadFile(ctx, logger, bkt, src, dst)
+		})
+
+		return nil
 	})
+
+	if err == nil {
+		err = g.Wait()
+	}
+
+	return err
 }
 
 // UploadFile uploads the file with the given name to the bucket.
@@ -254,34 +331,55 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 }
 
 // DownloadDir downloads all object found in the directory into the local directory.
-func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, originalSrc, src, dst string, ignoredPaths ...string) error {
+func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, originalSrc, src, dst string, options ...DownloadOption) error {
 	if err := os.MkdirAll(dst, 0750); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
+	opts := applyDownloadOptions(options...)
+
+	// The derived Context is canceled the first time a function passed to Go returns a non-nil error or the first
+	// time Wait returns, whichever occurs first.
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(opts.concurrency)
 
 	var downloadedFiles []string
-	if err := bkt.Iter(ctx, src, func(name string) error {
-		dst := filepath.Join(dst, filepath.Base(name))
-		if strings.HasSuffix(name, DirDelim) {
-			if err := DownloadDir(ctx, logger, bkt, originalSrc, name, dst, ignoredPaths...); err != nil {
-				return err
-			}
-			downloadedFiles = append(downloadedFiles, dst)
-			return nil
-		}
-		for _, ignoredPath := range ignoredPaths {
-			if ignoredPath == strings.TrimPrefix(name, string(originalSrc)+DirDelim) {
-				level.Debug(logger).Log("msg", "not downloading again because a provided path matches this one", "file", name)
+	var m sync.Mutex
+
+	err := bkt.Iter(ctx, src, func(name string) error {
+		g.Go(func() error {
+			dst := filepath.Join(dst, filepath.Base(name))
+			if strings.HasSuffix(name, DirDelim) {
+				if err := DownloadDir(ctx, logger, bkt, originalSrc, name, dst, options...); err != nil {
+					return err
+				}
+				m.Lock()
+				downloadedFiles = append(downloadedFiles, dst)
+				m.Unlock()
 				return nil
 			}
-		}
-		if err := DownloadFile(ctx, logger, bkt, name, dst); err != nil {
-			return err
-		}
+			for _, ignoredPath := range opts.ignoredPaths {
+				if ignoredPath == strings.TrimPrefix(name, string(originalSrc)+DirDelim) {
+					level.Debug(logger).Log("msg", "not downloading again because a provided path matches this one", "file", name)
+					return nil
+				}
+			}
+			if err := DownloadFile(ctx, logger, bkt, name, dst); err != nil {
+				return err
+			}
 
-		downloadedFiles = append(downloadedFiles, dst)
+			m.Lock()
+			downloadedFiles = append(downloadedFiles, dst)
+			m.Unlock()
+			return nil
+		})
 		return nil
-	}); err != nil {
+	})
+
+	if err == nil {
+		err = g.Wait()
+	}
+
+	if err != nil {
 		downloadedFiles = append(downloadedFiles, dst) // Last, clean up the root dst directory.
 		// Best-effort cleanup if the download failed.
 		for _, f := range downloadedFiles {

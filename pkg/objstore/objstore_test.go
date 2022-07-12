@@ -7,11 +7,14 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"go.uber.org/atomic"
 
@@ -90,6 +93,58 @@ func TestTracingReader(t *testing.T) {
 
 	testutil.Ok(t, err)
 	testutil.Equals(t, int64(11), size)
+}
+
+func TestDownloadUploadDirConcurrency(t *testing.T) {
+	r := prometheus.NewRegistry()
+	m := BucketWithMetrics("", NewInMemBucket(), r)
+	tempDir := t.TempDir()
+
+	testutil.Ok(t, m.Upload(context.Background(), "dir/obj1", bytes.NewReader([]byte("1"))))
+	testutil.Ok(t, m.Upload(context.Background(), "dir/obj2", bytes.NewReader([]byte("2"))))
+	testutil.Ok(t, m.Upload(context.Background(), "dir/obj3", bytes.NewReader([]byte("3"))))
+
+	testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
+		# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+        # TYPE thanos_objstore_bucket_operations_total counter
+        thanos_objstore_bucket_operations_total{bucket="",operation="attributes"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="delete"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="exists"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="get"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="get_range"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="iter"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="upload"} 3
+		`), `thanos_objstore_bucket_operations_total`))
+
+	testutil.Ok(t, DownloadDir(context.Background(), log.NewNopLogger(), m, "dir/", "dir/", tempDir, WithFetchConcurrency(10)))
+	i, err := ioutil.ReadDir(tempDir)
+	testutil.Ok(t, err)
+	testutil.Assert(t, len(i) == 3)
+	testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
+		# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+        # TYPE thanos_objstore_bucket_operations_total counter
+        thanos_objstore_bucket_operations_total{bucket="",operation="attributes"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="delete"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="exists"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="get"} 3
+        thanos_objstore_bucket_operations_total{bucket="",operation="get_range"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="iter"} 1
+        thanos_objstore_bucket_operations_total{bucket="",operation="upload"} 3
+		`), `thanos_objstore_bucket_operations_total`))
+
+	testutil.Ok(t, UploadDir(context.Background(), log.NewNopLogger(), m, tempDir, "/dir-copy", WithUploadConcurrency(10)))
+
+	testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
+		# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+        # TYPE thanos_objstore_bucket_operations_total counter
+        thanos_objstore_bucket_operations_total{bucket="",operation="attributes"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="delete"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="exists"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="get"} 3
+        thanos_objstore_bucket_operations_total{bucket="",operation="get_range"} 0
+        thanos_objstore_bucket_operations_total{bucket="",operation="iter"} 1
+        thanos_objstore_bucket_operations_total{bucket="",operation="upload"} 6
+		`), `thanos_objstore_bucket_operations_total`))
 }
 
 func TestTimingTracingReader(t *testing.T) {
