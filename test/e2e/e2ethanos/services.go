@@ -967,19 +967,20 @@ func genCerts(certPath, privkeyPath, caPath, serverName string) error {
 }
 
 func NewS3Config(bucket, endpoint, basePath string) s3.Config {
+	httpDefaultConf := s3.DefaultConfig.HTTPConfig
+	httpDefaultConf.TLSConfig = exthttp.TLSConfig{
+		CAFile:   filepath.Join(basePath, "certs", "CAs", "ca.crt"),
+		CertFile: filepath.Join(basePath, "certs", "public.crt"),
+		KeyFile:  filepath.Join(basePath, "certs", "private.key"),
+	}
+
 	return s3.Config{
-		Bucket:    bucket,
-		AccessKey: e2edb.MinioAccessKey,
-		SecretKey: e2edb.MinioSecretKey,
-		Endpoint:  endpoint,
-		Insecure:  false,
-		HTTPConfig: exthttp.HTTPConfig{
-			TLSConfig: exthttp.TLSConfig{
-				CAFile:   filepath.Join(basePath, "certs", "CAs", "ca.crt"),
-				CertFile: filepath.Join(basePath, "certs", "public.crt"),
-				KeyFile:  filepath.Join(basePath, "certs", "private.key"),
-			},
-		},
+		Bucket:           bucket,
+		AccessKey:        e2edb.MinioAccessKey,
+		SecretKey:        e2edb.MinioSecretKey,
+		Endpoint:         endpoint,
+		Insecure:         false,
+		HTTPConfig:       httpDefaultConf,
 		BucketLookupType: s3.AutoLookup,
 	}
 }
