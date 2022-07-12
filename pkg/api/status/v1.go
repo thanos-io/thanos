@@ -17,16 +17,15 @@
 package status
 
 import (
-	"fmt"
-	"math"
 	"net/http"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/thanos-io/thanos/pkg/api"
@@ -49,8 +48,15 @@ func convertStats(stats []index.Stat) []Stat {
 	return result
 }
 
+type TenantStats struct {
+	Tenant string
+	Stats  *tsdb.Stats
+}
+
 // TSDBStatus has information of cardinality statistics from postings.
+// TODO(fpetkovski): replace with upstream struct after dependency update.
 type TSDBStatus struct {
+	Tenant                      string       `json:"tenant"`
 	HeadStats                   v1.HeadStats `json:"headStats"`
 	SeriesCountByMetricName     []Stat       `json:"seriesCountByMetricName"`
 	LabelValueCountByLabelName  []Stat       `json:"labelValueCountByLabelName"`
@@ -58,23 +64,22 @@ type TSDBStatus struct {
 	SeriesCountByLabelValuePair []Stat       `json:"seriesCountByLabelValuePair"`
 }
 
-type GetStatsFunc func(r *http.Request, statsByLabelName string) (*tsdb.Stats, error)
+type GetStatsFunc func(r *http.Request, statsByLabelName string) ([]TenantStats, *api.ApiError)
 
 type Options struct {
 	GetStats GetStatsFunc
 	Registry *prometheus.Registry
 }
 
-// TODO(fpetkovski): replace with upstream struct after dependency update.
 type StatusAPI struct {
 	getTSDBStats GetStatsFunc
-	options      Options
+	registry     *prometheus.Registry
 }
 
 func New(opts Options) *StatusAPI {
 	return &StatusAPI{
 		getTSDBStats: opts.GetStats,
-		options:      opts,
+		registry:     opts.Registry,
 	}
 }
 
@@ -84,43 +89,55 @@ func (sapi *StatusAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 }
 
 func (sapi *StatusAPI) httpServeStats(r *http.Request) (interface{}, []error, *api.ApiError) {
-	s, err := sapi.getTSDBStats(r, labels.MetricName)
-	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: err}
+	stats, sterr := sapi.getTSDBStats(r, labels.MetricName)
+	if sterr != nil {
+		return nil, nil, sterr
 	}
 
-	if s == nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: fmt.Errorf("unknown tenant")}
+	result := make([]TSDBStatus, 0, len(stats))
+	if len(stats) == 0 {
+		return result, nil, nil
 	}
 
-	metrics, err := sapi.options.Registry.Gather()
+	metrics, err := sapi.registry.Gather()
 	if err != nil {
 		return nil, []error{err}, nil
 	}
 
-	chunkCount := int64(math.NaN())
+	tenantChunks := make(map[string]int64)
 	for _, mF := range metrics {
-		if *mF.Name == "prometheus_tsdb_head_chunks" {
-			m := *mF.Metric[0]
-			if m.Gauge != nil {
-				chunkCount = int64(m.Gauge.GetValue())
-				break
+		if *mF.Name != "prometheus_tsdb_head_chunks" {
+			continue
+		}
+
+		for _, metric := range mF.Metric {
+			for _, lbl := range metric.Label {
+				if *lbl.Name == "tenant" {
+					tenantChunks[*lbl.Value] = int64(metric.Gauge.GetValue())
+				}
 			}
 		}
 	}
 
-	return TSDBStatus{
-		HeadStats: v1.HeadStats{
-			NumSeries:     s.NumSeries,
-			ChunkCount:    chunkCount,
-			MinTime:       s.MinTime,
-			MaxTime:       s.MaxTime,
-			NumLabelPairs: s.IndexPostingStats.NumLabelPairs,
-		},
-		SeriesCountByMetricName:     convertStats(s.IndexPostingStats.CardinalityMetricsStats),
-		LabelValueCountByLabelName:  convertStats(s.IndexPostingStats.CardinalityLabelStats),
-		MemoryInBytesByLabelName:    convertStats(s.IndexPostingStats.LabelValueStats),
-		SeriesCountByLabelValuePair: convertStats(s.IndexPostingStats.LabelValuePairsStats),
-	}, nil, nil
-
+	for _, s := range stats {
+		var chunkCount int64
+		if c, ok := tenantChunks[s.Tenant]; ok {
+			chunkCount = c
+		}
+		result = append(result, TSDBStatus{
+			Tenant: s.Tenant,
+			HeadStats: v1.HeadStats{
+				NumSeries:     s.Stats.NumSeries,
+				ChunkCount:    chunkCount,
+				MinTime:       s.Stats.MinTime,
+				MaxTime:       s.Stats.MaxTime,
+				NumLabelPairs: s.Stats.IndexPostingStats.NumLabelPairs,
+			},
+			SeriesCountByMetricName:     convertStats(s.Stats.IndexPostingStats.CardinalityMetricsStats),
+			LabelValueCountByLabelName:  convertStats(s.Stats.IndexPostingStats.CardinalityLabelStats),
+			MemoryInBytesByLabelName:    convertStats(s.Stats.IndexPostingStats.LabelValueStats),
+			SeriesCountByLabelValuePair: convertStats(s.Stats.IndexPostingStats.LabelValuePairsStats),
+		})
+	}
+	return result, nil, nil
 }

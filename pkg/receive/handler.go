@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/logging"
 
@@ -57,6 +58,8 @@ const (
 	DefaultTenantLabel = "tenant_id"
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
+	// AllTenantsQueryParam is the query parameter for getting TSDB stats for all tenants.
+	AllTenantsQueryParam = "all_tenants"
 	// Labels for metrics.
 	labelSuccess = "success"
 	labelError   = "error"
@@ -95,7 +98,7 @@ type Options struct {
 	DialOpts          []grpc.DialOption
 	ForwardTimeout    time.Duration
 	RelabelConfigs    []*relabel.Config
-	GetTSDBStats      GetStatsFunc
+	TSDBStats         TSDBStats
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -226,7 +229,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	statusAPI := statusapi.New(statusapi.Options{
 		GetStats: h.getStats,
-		Registry: o.Registry,
+		Registry: h.options.Registry,
 	})
 	statusAPI.Register(h.router, o.Tracer, logger, ins, logging.NewHTTPServerMiddleware(logger))
 
@@ -271,17 +274,27 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (h *Handler) getStats(r *http.Request, statsByLabelName string) (*tsdb.Stats, error) {
+func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusapi.TenantStats, *api.ApiError) {
 	if !h.isReady() {
-		return nil, fmt.Errorf("service unavailable")
+		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: fmt.Errorf("service unavailable")}
 	}
 
 	tenantID := r.Header.Get(h.options.TenantHeader)
+	getAllTenantStats := r.FormValue(AllTenantsQueryParam) == "true"
+	if getAllTenantStats && tenantID != "" {
+		err := fmt.Errorf("using both the %s parameter and the %s header is not supported", AllTenantsQueryParam, h.options.TenantHeader)
+		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+
+	if getAllTenantStats {
+		return h.options.TSDBStats.TenantStats(statsByLabelName), nil
+	}
+
 	if tenantID == "" {
 		tenantID = h.options.DefaultTenantID
 	}
 
-	return h.options.GetTSDBStats(tenantID, statsByLabelName), nil
+	return h.options.TSDBStats.TenantStats(statsByLabelName, tenantID), nil
 }
 
 // Close stops the Handler.

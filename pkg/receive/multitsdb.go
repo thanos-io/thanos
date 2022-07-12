@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/api/status"
 	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
 
@@ -32,7 +34,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
-type GetStatsFunc func(tenantID, statsByLabelName string) *tsdb.Stats
+type TSDBStats interface {
+	// TenantStats returns TSDB head stats for the given tenants.
+	// If no tenantIDs are provided, stats for all tenants are returned.
+	TenantStats(statsByLabelName string, tenantIDs ...string) []status.TenantStats
+}
 
 type MultiTSDB struct {
 	dataDir         string
@@ -384,16 +390,45 @@ func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 	return res
 }
 
-func (t *MultiTSDB) Stats(tenantID, statsByLabelName string) *tsdb.Stats {
+func (t *MultiTSDB) TenantStats(statsByLabelName string, tenantIDs ...string) []status.TenantStats {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
-
-	tenant, ok := t.tenants[tenantID]
-	if !ok {
-		return nil
+	if len(tenantIDs) == 0 {
+		for tenantID := range t.tenants {
+			tenantIDs = append(tenantIDs, tenantID)
+		}
 	}
 
-	return tenant.readyS.get().db.Head().Stats(statsByLabelName)
+	var (
+		mu     sync.Mutex
+		wg     sync.WaitGroup
+		result = make([]status.TenantStats, 0, len(t.tenants))
+	)
+	for _, tenantID := range tenantIDs {
+		tenantInstance, ok := t.tenants[tenantID]
+		if !ok {
+			continue
+		}
+
+		wg.Add(1)
+		go func(tenantID string, tenantInstance *tenant) {
+			defer wg.Done()
+			stats := tenantInstance.readyS.get().db.Head().Stats(statsByLabelName)
+
+			mu.Lock()
+			defer mu.Unlock()
+			result = append(result, status.TenantStats{
+				Tenant: tenantID,
+				Stats:  stats,
+			})
+		}(tenantID, tenantInstance)
+	}
+	wg.Wait()
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Tenant < result[j].Tenant
+	})
+	return result
 }
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
