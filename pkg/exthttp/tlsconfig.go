@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package objstore
+package exthttp
 
 import (
 	"crypto/tls"
@@ -9,6 +9,20 @@ import (
 	"fmt"
 	"io/ioutil"
 )
+
+// TLSConfig configures the options for TLS connections.
+type TLSConfig struct {
+	// The CA cert to use for the targets.
+	CAFile string `yaml:"ca_file"`
+	// The client cert file for the targets.
+	CertFile string `yaml:"cert_file"`
+	// The client key file for the targets.
+	KeyFile string `yaml:"key_file"`
+	// Used to verify the hostname for the targets.
+	ServerName string `yaml:"server_name"`
+	// Disable target certificate validation.
+	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
+}
 
 // NewTLSConfig creates a new tls.Config from the given TLSConfig.
 func NewTLSConfig(cfg *TLSConfig) (*tls.Config, error) {
@@ -70,18 +84,4 @@ func (c *TLSConfig) getClientCertificate(*tls.CertificateRequestInfo) (*tls.Cert
 		return nil, fmt.Errorf("unable to use specified client cert (%s) & key (%s): %s", c.CertFile, c.KeyFile, err)
 	}
 	return &cert, nil
-}
-
-// TLSConfig configures the options for TLS connections.
-type TLSConfig struct {
-	// The CA cert to use for the targets.
-	CAFile string `yaml:"ca_file"`
-	// The client cert file for the targets.
-	CertFile string `yaml:"cert_file"`
-	// The client key file for the targets.
-	KeyFile string `yaml:"key_file"`
-	// Used to verify the hostname for the targets.
-	ServerName string `yaml:"server_name"`
-	// Disable target certificate validation.
-	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
 }

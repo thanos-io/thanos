@@ -16,9 +16,9 @@ jobs:
       GOBIN: /tmp/.bin
     steps:
       - name: Install Go.
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.17.x
+          go-version: 1.18.x
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
@@ -42,7 +42,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17.x
+          go-version: 1.18.x
 
       - uses: actions/cache@v1
         with:
@@ -59,16 +59,16 @@ jobs:
       fail-fast: true
       matrix:
         parallelism: [4]
-        index: [0,1,2,3]  
+        index: [0, 1, 2, 3]
     runs-on: ubuntu-latest
     name: Thanos end-to-end tests
     env:
       GOBIN: /tmp/.bin
     steps:
       - name: Install Go.
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.17.x
+          go-version: 1.18.x
 
       - name: Check out code into the Go module directory.
         uses: actions/checkout@v2

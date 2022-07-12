@@ -40,7 +40,7 @@ type Bucket struct {
 
 // DefaultConfig is the default config for an cos client. default tune the `MaxIdleConnsPerHost`.
 var DefaultConfig = Config{
-	HTTPConfig: HTTPConfig{
+	HTTPConfig: exthttp.HTTPConfig{
 		IdleConnTimeout:       model.Duration(90 * time.Second),
 		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
 		TLSHandshakeTimeout:   model.Duration(10 * time.Second),
@@ -53,13 +53,13 @@ var DefaultConfig = Config{
 
 // Config encapsulates the necessary config values to instantiate an cos client.
 type Config struct {
-	Bucket     string     `yaml:"bucket"`
-	Region     string     `yaml:"region"`
-	AppId      string     `yaml:"app_id"`
-	Endpoint   string     `yaml:"endpoint"`
-	SecretKey  string     `yaml:"secret_key"`
-	SecretId   string     `yaml:"secret_id"`
-	HTTPConfig HTTPConfig `yaml:"http_config"`
+	Bucket     string             `yaml:"bucket"`
+	Region     string             `yaml:"region"`
+	AppId      string             `yaml:"app_id"`
+	Endpoint   string             `yaml:"endpoint"`
+	SecretKey  string             `yaml:"secret_key"`
+	SecretId   string             `yaml:"secret_id"`
+	HTTPConfig exthttp.HTTPConfig `yaml:"http_config"`
 }
 
 // Validate checks to see if mandatory cos config options are set.
@@ -94,30 +94,6 @@ func parseConfig(conf []byte) (Config, error) {
 	return config, nil
 }
 
-// HTTPConfig stores the http.Transport configuration for the cos client.
-type HTTPConfig struct {
-	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
-	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
-	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
-	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
-	MaxIdleConns          int            `yaml:"max_idle_conns"`
-	MaxIdleConnsPerHost   int            `yaml:"max_idle_conns_per_host"`
-	MaxConnsPerHost       int            `yaml:"max_conns_per_host"`
-}
-
-// DefaultTransport build http.Transport from config.
-func DefaultTransport(c HTTPConfig) *http.Transport {
-	transport := exthttp.NewTransport()
-	transport.IdleConnTimeout = time.Duration(c.IdleConnTimeout)
-	transport.ResponseHeaderTimeout = time.Duration(c.ResponseHeaderTimeout)
-	transport.TLSHandshakeTimeout = time.Duration(c.TLSHandshakeTimeout)
-	transport.ExpectContinueTimeout = time.Duration(c.ExpectContinueTimeout)
-	transport.MaxIdleConns = c.MaxIdleConns
-	transport.MaxIdleConnsPerHost = c.MaxIdleConnsPerHost
-	transport.MaxConnsPerHost = c.MaxConnsPerHost
-	return transport
-}
-
 // NewBucket returns a new Bucket using the provided cos configuration.
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	if logger == nil {
@@ -149,11 +125,12 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		bucketURL = cos.NewBucketURL(fmt.Sprintf("%s-%s", config.Bucket, config.AppId), config.Region, true)
 	}
 	b := &cos.BaseURL{BucketURL: bucketURL}
+	tpt, _ := exthttp.DefaultTransport(config.HTTPConfig)
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
 			SecretID:  config.SecretId,
 			SecretKey: config.SecretKey,
-			Transport: DefaultTransport(config.HTTPConfig),
+			Transport: tpt,
 		},
 	})
 

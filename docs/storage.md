@@ -86,6 +86,7 @@ config:
       key_file: ""
       server_name: ""
       insecure_skip_verify: false
+    disable_compression: false
   trace:
     enable: false
   list_objects_version: ""
@@ -248,7 +249,7 @@ Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/usin
 
 If you want to use IAM credential retrieved from an instance profile, Thanos needs to authenticate through AWS STS. For this purposes you can specify your own STS Endpoint.
 
-By default Thanos will use endpoint: https://sts.amazonaws.com and AWS region coresponding endpoints.
+By default Thanos will use endpoint: https://sts.amazonaws.com and AWS region corresponding endpoints.
 
 #### GCS
 
@@ -356,13 +357,13 @@ config:
     max_idle_conns: 0
     max_idle_conns_per_host: 0
     max_conns_per_host: 0
-    disable_compression: false
     tls_config:
       ca_file: ""
       cert_file: ""
       key_file: ""
       server_name: ""
       insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -425,11 +426,19 @@ config:
   http_config:
     idle_conn_timeout: 1m30s
     response_header_timeout: 2m
+    insecure_skip_verify: false
     tls_handshake_timeout: 10s
     expect_continue_timeout: 1s
     max_idle_conns: 100
     max_idle_conns_per_host: 100
     max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -817,7 +826,7 @@ Every series entry first holds its number of labels, followed by tuples of symbo
 
 ##### Label Index
 
-A label index section indexes the existing (combined) values for one or more label names. The `#names` field determines the number of indexed label names, followed by the total number of entries in the `#entries` field. The body holds #entries / #names tuples of symbol table references, each tuple being of #names length. The value tuples are sorted in lexicographically increasing order. This is no longer used.
+A label index section indexes the existing (combined) values for one or more label names. The `#names` field determines the number of indexed label names, followed by the total number of entries in the `#entries` field. The body holds #entries / #names tuples of symbol table references, each tuple being of `#names` length. The value tuples are sorted in lexicographically increasing order. This is no longer used.
 
 ```
 ┌───────────────┬────────────────┬────────────────┐

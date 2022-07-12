@@ -1,9 +1,5 @@
 # Quick Tutorial
 
-Feel free to check the free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/thanos/courses/thanos) We will be progressively updating our Katacoda Course with more scenarios.
-
-On top of this feel free to go through our tutorial presented here:
-
 ## Prometheus
 
 Thanos is based on Prometheus. With Thanos you use more or less Prometheus features depending on the deployment model, however Prometheus always stays as integral foundation for *collecting metrics* and alerting using local data.
