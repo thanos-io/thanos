@@ -77,8 +77,11 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
-			labelpb.ReAllocZLabelsStrings(&t.Labels)
-			lset = labelpb.ZLabelsToPromLabels(t.Labels)
+			//
+			// Nevertheless, we have to make a deep copy, to prevent manipulating the request
+			// labels (these are re-used among different requests and could trigger data race).
+			lsetCopy := labelpb.DeepCopy(t.Labels)
+			lset = labelpb.ZLabelsToPromLabels(lsetCopy)
 		}
 
 		// Append as many valid samples as possible, but keep track of the errors.
