@@ -413,7 +413,11 @@ func (t *MultiTSDB) TenantStats(statsByLabelName string, tenantIDs ...string) []
 		wg.Add(1)
 		go func(tenantID string, tenantInstance *tenant) {
 			defer wg.Done()
-			stats := tenantInstance.readyS.get().db.Head().Stats(statsByLabelName)
+			db := tenantInstance.readyS.Get()
+			if db == nil {
+				return
+			}
+			stats := db.Head().Stats(statsByLabelName)
 
 			mu.Lock()
 			defer mu.Unlock()
