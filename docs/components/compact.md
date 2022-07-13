@@ -298,8 +298,8 @@ Flags:
                                 Prometheus label to use as timeline title in the
                                 bucket web UI
       --compact.blocks-concurrency=1
-                                Number of goroutines to use when compacting
-                                groups.
+                                Number of goroutines to use when download block
+                                during compaction.
       --compact.cleanup-interval=5m
                                 How often we should clean up partially uploaded
                                 blocks and blocks with deletion mark in the
