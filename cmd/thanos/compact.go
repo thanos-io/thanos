@@ -705,7 +705,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").IntVar(&cc.compactionConcurrency)
-	cmd.Flag("compact.blocks-concurrency", "Number of goroutines to use when compacting groups.").
+	cmd.Flag("compact.blocks-concurrency", "Number of goroutines to use when download block during compaction.").
 		Default("1").IntVar(&cc.compactionBlocksConcurrency)
 	cmd.Flag("downsample.concurrency", "Number of goroutines to use when downsampling blocks.").
 		Default("1").IntVar(&cc.downsampleConcurrency)
