@@ -29,7 +29,7 @@ func newShardableByLabels(labels []string, by bool) QueryAnalysis {
 	}
 }
 
-func (q QueryAnalysis) scopeToLabels(labels []string, by bool) QueryAnalysis {
+func (q *QueryAnalysis) scopeToLabels(labels []string, by bool) QueryAnalysis {
 	labels = without(labels, excludedLabels)
 
 	if q.shardingLabels == nil {
@@ -52,11 +52,11 @@ func (q QueryAnalysis) scopeToLabels(labels []string, by bool) QueryAnalysis {
 	}
 }
 
-func (q QueryAnalysis) IsShardable() bool {
+func (q *QueryAnalysis) IsShardable() bool {
 	return len(q.shardingLabels) > 0
 }
 
-func (q QueryAnalysis) ShardingLabels() []string {
+func (q *QueryAnalysis) ShardingLabels() []string {
 	if len(q.shardingLabels) == 0 {
 		return nil
 	}
@@ -64,7 +64,7 @@ func (q QueryAnalysis) ShardingLabels() []string {
 	return q.shardingLabels
 }
 
-func (q QueryAnalysis) ShardBy() bool {
+func (q *QueryAnalysis) ShardBy() bool {
 	return q.shardBy
 }
 

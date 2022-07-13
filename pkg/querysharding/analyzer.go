@@ -27,7 +27,7 @@ func NewQueryAnalyzer() *QueryAnalyzer {
 
 // Analyze uses the following algorithm:
 // * if a query has subqueries, such as label_join or label_replace,
-//   then treat the query as non shardable.
+//   or has functions which cannot be sharded, then treat the query as non shardable.
 // * if the query's root expression has grouping labels,
 //   then treat the query as shardable by those labels.
 // * if the query's root expression has no grouping labels,
