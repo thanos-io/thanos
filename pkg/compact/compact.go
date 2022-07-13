@@ -1027,7 +1027,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			uniqueSources[s] = struct{}{}
 		}
 
-		go func(ctx context.Context, meta *metadata.Meta) {
+		func(ctx context.Context, meta *metadata.Meta) {
 			g.Go(func() error {
 				tracing.DoInSpanWithErr(ctx, "compaction_block_download", func(ctx context.Context) error {
 					err = block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir, objstore.WithFetchConcurrency(cg.blockFilesConcurrency))
