@@ -27,6 +27,13 @@ jobs:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
+      - uses: actions/cache@v1
+        with:
+          path: .mdoxcache
+          key: ${{ runner.os }}-mdox-${{ hashFiles('docs/**/*.md', 'examples/**/*.md', 'mixin/**/*.md', '*.md') }}
+          restore-keys: |
+            ${{ runner.os }}-mdox-
+
       - name: Check docs
         run: make check-docs
       - name: Check examples
