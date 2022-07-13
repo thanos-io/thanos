@@ -1,5 +1,4 @@
 import React, { FC } from 'react';
-import { RouteComponentProps } from '@reach/router';
 import { UncontrolledAlert } from 'reactstrap';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
@@ -28,7 +27,7 @@ export const StoreContent: FC<{ data: StoreListProps }> = ({ data }) => {
 
 const StoresWithStatusIndicator = withStatusIndicator(StoreContent);
 
-export const Stores: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' }) => {
+export const Stores: FC<PathPrefixProps> = ({ pathPrefix = '' }) => {
   const { response, error, isLoading } = useFetch<StoreListProps>(`${pathPrefix}/api/v1/stores`);
   const { status: responseStatus } = response;
   const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';

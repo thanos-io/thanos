@@ -3,8 +3,8 @@ import { shallow } from 'enzyme';
 import App from './App';
 import Navigation from './thanos/Navbar';
 import { Container } from 'reactstrap';
-import { Router } from '@reach/router';
 import { Alerts, Config, Flags, Rules, ServiceDiscovery, Status, Targets, TSDBStatus, PanelList } from './pages';
+import { BrowserRouter as Router } from 'react-router-dom';
 
 describe('App', () => {
   const app = shallow(<App pathPrefix="/path/prefix" thanosComponent="query" />);

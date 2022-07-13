@@ -1,5 +1,4 @@
 import React, { ChangeEvent, FC, useMemo, useState } from 'react';
-import { RouteComponentProps } from '@reach/router';
 import { UncontrolledAlert } from 'reactstrap';
 import { useQueryParams, withDefault, NumberParam, StringParam, BooleanParam } from 'use-query-params';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
@@ -196,7 +195,7 @@ interface BlocksProps {
   view?: string;
 }
 
-export const Blocks: FC<RouteComponentProps & PathPrefixProps & BlocksProps> = ({ pathPrefix = '', view = 'global' }) => {
+export const Blocks: FC<PathPrefixProps & BlocksProps> = ({ pathPrefix = '', view = 'global' }) => {
   const { response, error, isLoading } = useFetch<BlockListProps>(
     `${pathPrefix}/api/v1/blocks${view ? '?view=' + view : ''}`
   );

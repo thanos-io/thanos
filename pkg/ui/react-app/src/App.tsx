@@ -1,9 +1,7 @@
 import React, { FC } from 'react';
 import { Container } from 'reactstrap';
-import { Router, Redirect, globalHistory } from '@reach/router';
-import { QueryParamProvider } from 'use-query-params';
+import { BrowserRouter as Router, Redirect, Switch, Route } from 'react-router-dom';
 import useMedia from 'use-media';
-
 import { Alerts, Config, Flags, Rules, ServiceDiscovery, Status, Targets, TSDBStatus, PanelList, NotFound } from './pages';
 import PathPrefixProps from './types/PathPrefixProps';
 import ThanosComponentProps from './thanos/types/ThanosComponentProps';
@@ -12,6 +10,7 @@ import { Stores, ErrorBoundary, Blocks } from './thanos/pages';
 import { ThemeContext, themeName, themeSetting } from './contexts/ThemeContext';
 import { Theme, themeLocalStorageKey } from './Theme';
 import { useLocalStorage } from './hooks/useLocalStorage';
+import { QueryParamProvider } from 'use-query-params';
 
 const defaultRouteConfig: { [component: string]: string } = {
   query: '/graph',
@@ -39,32 +38,57 @@ const App: FC<PathPrefixProps & ThanosComponentProps> = ({ pathPrefix, thanosCom
     >
       <Theme />
       <ErrorBoundary>
-        <Navigation
-          pathPrefix={pathPrefix}
-          thanosComponent={thanosComponent}
-          defaultRoute={defaultRouteConfig[thanosComponent]}
-        />
-        <Container fluid style={{ paddingTop: 70 }}>
-          <QueryParamProvider reachHistory={globalHistory}>
-            <Router basepath={`${pathPrefix}`}>
-              <Redirect from="/" to={`${pathPrefix}${defaultRouteConfig[thanosComponent]}`} />
-
-              <PanelList path="/graph" pathPrefix={pathPrefix} />
-              <Alerts path="/alerts" pathPrefix={pathPrefix} />
-              <Config path="/config" pathPrefix={pathPrefix} />
-              <Flags path="/flags" pathPrefix={pathPrefix} />
-              <Rules path="/rules" pathPrefix={pathPrefix} />
-              <ServiceDiscovery path="/service-discovery" pathPrefix={pathPrefix} />
-              <Status path="/status" pathPrefix={pathPrefix} />
-              <TSDBStatus path="/tsdb-status" pathPrefix={pathPrefix} />
-              <Targets path="/targets" pathPrefix={pathPrefix} />
-              <Stores path="/stores" pathPrefix={pathPrefix} />
-              <Blocks path="/blocks" pathPrefix={pathPrefix} />
-              <Blocks path="/loaded" pathPrefix={pathPrefix} view="loaded" />
-              <NotFound pathPrefix={pathPrefix} default defaultRoute={defaultRouteConfig[thanosComponent]} />
-            </Router>
+        <Router basename={pathPrefix}>
+          <Navigation
+            pathPrefix={pathPrefix}
+            thanosComponent={thanosComponent}
+            defaultRoute={defaultRouteConfig[thanosComponent]}
+          />
+          <QueryParamProvider ReactRouterRoute={Route}>
+            <Container fluid style={{ paddingTop: 70 }}>
+              <Switch>
+                <Redirect from="/" to={`${pathPrefix}${defaultRouteConfig[thanosComponent]}`} />
+                <Route path="/graph">
+                  <PanelList pathPrefix={pathPrefix} />
+                </Route>
+                <Route path="/alerts">
+                  <Alerts pathPrefix={pathPrefix} />
+                </Route>
+                <Route path="/config">
+                  <Config pathPrefix={pathPrefix} />
+                </Route>
+                <Route path="/flags">
+                  <Flags pathPrefix={pathPrefix} />
+                </Route>
+                <Route path="/rules">
+                  <Rules pathPrefix={pathPrefix} />
+                </Route>
+                <Route path="/service-discovery">
+                  <ServiceDiscovery pathPrefix={pathPrefix} />
+                </Route>
+                <Route path="/status">
+                  <Status pathPrefix={pathPrefix} />
+                </Route>
+                <Route path="/tsdb-status">
+                  <TSDBStatus pathPrefix={pathPrefix} />
+                </Route>
+                <Route path="/targets">
+                  <Targets pathPrefix={pathPrefix} />
+                </Route>
+                <Route path="/stores">
+                  <Stores pathPrefix={pathPrefix} />
+                </Route>
+                <Route path="/blocks">
+                  <Blocks pathPrefix={pathPrefix} />
+                </Route>
+                <Route path="/loaded">
+                  <Blocks pathPrefix={pathPrefix} view="loaded" />
+                </Route>
+                <NotFound pathPrefix={pathPrefix} default defaultRoute={defaultRouteConfig[thanosComponent]} />
+              </Switch>
+            </Container>
           </QueryParamProvider>
-        </Container>
+        </Router>
       </ErrorBoundary>
     </ThemeContext.Provider>
   );

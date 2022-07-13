@@ -1,5 +1,4 @@
 import React, { FC, useState, useEffect } from 'react';
-import { RouteComponentProps } from '@reach/router';
 import { UncontrolledAlert, Button } from 'reactstrap';
 
 import Panel, { PanelOptions, PanelDefaultOptions } from './Panel';
@@ -20,7 +19,7 @@ export const updateURL = (nextPanels: PanelMeta[]) => {
   window.history.pushState({}, '', query);
 };
 
-interface PanelListProps extends PathPrefixProps, RouteComponentProps {
+interface PanelListProps extends PathPrefixProps {
   panels: PanelMeta[];
   metrics: string[];
   useLocalTime: boolean;
@@ -138,7 +137,7 @@ export const PanelListContent: FC<PanelListProps> = ({
 
 const PanelListContentWithIndicator = withStatusIndicator(PanelListContent);
 
-const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' }) => {
+const PanelList: FC<PathPrefixProps> = ({ pathPrefix = '' }) => {
   const [delta, setDelta] = useState(0);
   const [useLocalTime, setUseLocalTime] = useLocalStorage('use-local-time', false);
   const [enableQueryHistory, setEnableQueryHistory] = useLocalStorage('enable-query-history', false);

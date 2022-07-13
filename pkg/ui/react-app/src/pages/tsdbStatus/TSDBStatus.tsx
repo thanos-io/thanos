@@ -1,5 +1,4 @@
 import React, { FC } from 'react';
-import { RouteComponentProps } from '@reach/router';
 import { Table } from 'reactstrap';
 
 import { useFetch } from '../../hooks/useFetch';
@@ -65,7 +64,7 @@ TSDBStatusContent.displayName = 'TSDBStatusContent';
 
 const TSDBStatusContentWithStatusIndicator = withStatusIndicator(TSDBStatusContent);
 
-const TSDBStatus: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix }) => {
+const TSDBStatus: FC<PathPrefixProps> = ({ pathPrefix }) => {
   const { response, error, isLoading } = useFetch<TSDBMap>(`${pathPrefix}/api/v1/status/tsdb`);
 
   return (

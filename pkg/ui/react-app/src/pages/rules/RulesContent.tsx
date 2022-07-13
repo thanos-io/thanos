@@ -1,5 +1,4 @@
 import React, { FC } from 'react';
-import { RouteComponentProps } from '@reach/router';
 import { APIResponse } from '../../hooks/useFetch';
 import { UncontrolledAlert, Table, Badge } from 'reactstrap';
 import { formatRelative, createExternalExpressionLink, humanizeDuration, formatDuration } from '../../utils';
@@ -34,7 +33,7 @@ const GraphExpressionLink: FC<{ expr: string; title: string }> = (props) => {
   );
 };
 
-export const RulesContent: FC<RouteComponentProps & RulesContentProps> = ({ response }) => {
+export const RulesContent: FC<RulesContentProps> = ({ response }) => {
   const getBadgeColor = (state: string) => {
     switch (state) {
       case 'ok':
