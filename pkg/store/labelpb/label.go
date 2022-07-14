@@ -19,7 +19,13 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 )
 
-var sep = []byte{'\xff'}
+var (
+	ErrOutOfOrderLabels = errors.New("out of order labels")
+	ErrEmptyLabels      = errors.New("label set contains an empty label")
+	ErrDuplicateLabels  = errors.New("label set contains duplicate label names")
+
+	sep = []byte{'\xff'}
+)
 
 func noAllocString(buf []byte) string {
 	return *(*string)(unsafe.Pointer(&buf))
@@ -344,6 +350,41 @@ func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
 		b = append(b, sep[0])
 	}
 	return xxhash.Sum64(b)
+}
+
+// TODO
+func ValidateLabels(lbls []ZLabel) error {
+	if len(lbls) == 0 {
+		return ErrEmptyLabels
+	}
+
+	labelNames := map[string]struct{}{}
+
+	// Check first label.
+	l0 := lbls[0]
+	if l0.Name == "" {
+		return ErrEmptyLabels
+	}
+	labelNames[l0.Name] = struct{}{}
+
+	// Iterate over the rest, check each for empty / duplicates and check ordering.
+	for _, l := range lbls[1:] {
+		if l.Name == "" {
+			return ErrEmptyLabels
+		}
+
+		if _, ok := labelNames[l.Name]; ok {
+			return ErrDuplicateLabels
+		}
+		labelNames[l.Name] = struct{}{}
+
+		if l.Name < l0.Name {
+			return ErrOutOfOrderLabels
+		}
+		l0 = l
+	}
+
+	return nil
 }
 
 // ZLabelSets is a sortable list of ZLabelSet. It assumes the label pairs in each ZLabelSet element are already sorted.
