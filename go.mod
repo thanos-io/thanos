@@ -52,7 +52,7 @@ require (
 	github.com/lightstep/lightstep-tracer-go v0.18.1
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.48
-	github.com/minio/minio-go/v7 v7.0.30
+	github.com/minio/minio-go/v7 v7.0.32-0.20220706200439-ef3e45ed9cdb
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/ncw/swift v1.0.52
 	github.com/oklog/run v1.1.0
@@ -229,11 +229,6 @@ replace (
 
 	// go 1.18
 	github.com/json-iterator/go => github.com/json-iterator/go v1.1.12
-
-	// TODO: Remove this: https://github.com/thanos-io/thanos/issues/3967.
-	github.com/minio/minio-go/v7 => github.com/bwplotka/minio-go/v7 v7.0.11-0.20210324165441-f9927e5255a6
-
-	// go 1.18
 	github.com/modern-go/reflect2 => github.com/modern-go/reflect2 v1.0.2
 
 	// Make sure Prometheus version is pinned as Prometheus semver does not include Go APIs.
