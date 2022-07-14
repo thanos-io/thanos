@@ -1,31 +1,31 @@
 version: 1
-timeout: "1m"
+timeout: '1m'
 host_max_conns: 10
 cache:
-  type: "SQLite"
-  # 60h is 2.5 days, half the default cache validity (5 days).
-  jitter: "60h"
+  type: 'SQLite'
+  # # 60h is 2.5 days, half the default cache validity (5 days).
+  jitter: '60h'
 
 validators:
   # Validators to skip checking PR/issue links of Thanos, Prometheus and Cortex.
   - regex: '(^http[s]?:\/\/)(www\.)?(github\.com\/)thanos-io\/thanos(\/pull\/|\/issues\/)'
-    type: "githubPullsIssues"
+    type: 'githubPullsIssues'
   - regex: '(^http[s]?:\/\/)(www\.)?(github\.com\/)prometheus\/prometheus(\/pull\/|\/issues\/)'
-    type: "githubPullsIssues"
+    type: 'githubPullsIssues'
   - regex: '(^http[s]?:\/\/)(www\.)?(github\.com\/)cortexproject\/cortex(\/pull\/|\/issues\/)'
-    type: "githubPullsIssues"
+    type: 'githubPullsIssues'
   # Ignore Thanos release links.
   - regex: '(^http[s]?:\/\/)(www\.)?(github\.com\/)thanos-io\/thanos(\/releases\/)'
-    type: "ignore"
+    type: 'ignore'
   # Causes http stream errors with statuscode 0 sometimes. But is safe to skip.
   - regex: 'slack\.cncf\.io'
-    type: "ignore"
+    type: 'ignore'
   # 301 errors even when curl-ed.
   - regex: 'envoyproxy\.io'
-    type: "ignore"
+    type: 'ignore'
   # couldn't reach even when curl-ed.
   - regex: 'cloud\.baidu\.com'
-    type: "ignore"
+    type: 'ignore'
   # 403 when curl-ed from GitHub actions, though not from a developer machine. Likely due to secondary rate limits.
   - regex: 'docs\.github\.com'
-    type: "ignore"
+    type: 'ignore'
