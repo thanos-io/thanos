@@ -297,6 +297,9 @@ Flags:
       --bucket-web-label=BUCKET-WEB-LABEL
                                 Prometheus label to use as timeline title in the
                                 bucket web UI
+      --compact.blocks-fetch-concurrency=1
+                                Number of goroutines to use when download block
+                                during compaction.
       --compact.cleanup-interval=5m
                                 How often we should clean up partially uploaded
                                 blocks and blocks with deletion mark in the
