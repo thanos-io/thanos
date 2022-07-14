@@ -352,7 +352,9 @@ func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
 	return xxhash.Sum64(b)
 }
 
-// TODO
+// ValidateLabels validates label names (checks for empty names,
+// out of order labels and duplicate label names). Returns appropriate
+// error if validation fails on a label.
 func ValidateLabels(lbls []ZLabel) error {
 	if len(lbls) == 0 {
 		return ErrEmptyLabels
