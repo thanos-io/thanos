@@ -43,9 +43,14 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	tLogger := log.With(r.logger, "tenant", tenantID)
 
 	var (
-		numOutOfOrder           = 0
-		numDuplicates           = 0
-		numOutOfBounds          = 0
+		numLabelsOutOfOrder = 0
+		numLabelsDuplicates = 0
+		numLabelsEmpty      = 0
+
+		numSamplesOutOfOrder  = 0
+		numSamplesDuplicates  = 0
+		numSamplesOutOfBounds = 0
+
 		numExemplarsOutOfOrder  = 0
 		numExemplarsDuplicate   = 0
 		numExemplarsLabelLength = 0
@@ -70,6 +75,25 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		errs errutil.MultiError
 	)
 	for _, t := range wreq.Timeseries {
+		// Check if time series labels are valid. If not, skip the time series
+		// and report the error.
+		err := labelpb.ValidateLabels(t.Labels)
+		if err != nil {
+			switch err {
+			case labelpb.ErrOutOfOrderLabels:
+				numLabelsOutOfOrder++
+				level.Debug(tLogger).Log("msg", "Out of order labels in the label set", "lset", t.Labels)
+			case labelpb.ErrDuplicateLabels:
+				numLabelsDuplicates++
+				level.Debug(tLogger).Log("msg", "Duplicate labels in the label set", "lset", t.Labels)
+			case labelpb.ErrEmptyLabels:
+				numLabelsEmpty++
+				level.Debug(tLogger).Log("msg", "Labels with empty name in the label set", "lset", t.Labels)
+			}
+
+			continue
+		}
+
 		lset := labelpb.ZLabelsToPromLabels(t.Labels)
 
 		// Check if the TSDB has cached reference for those labels.
@@ -86,13 +110,13 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			ref, err = app.Append(ref, lset, s.Timestamp, s.Value)
 			switch err {
 			case storage.ErrOutOfOrderSample:
-				numOutOfOrder++
+				numSamplesOutOfOrder++
 				level.Debug(tLogger).Log("msg", "Out of order sample", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
 			case storage.ErrDuplicateSampleForTimestamp:
-				numDuplicates++
+				numSamplesDuplicates++
 				level.Debug(tLogger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
 			case storage.ErrOutOfBounds:
-				numOutOfBounds++
+				numSamplesOutOfBounds++
 				level.Debug(tLogger).Log("msg", "Out of bounds metric", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
 			}
 		}
@@ -129,18 +153,32 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		}
 	}
 
-	if numOutOfOrder > 0 {
-		level.Warn(tLogger).Log("msg", "Error on ingesting out-of-order samples", "numDropped", numOutOfOrder)
-		errs.Add(errors.Wrapf(storage.ErrOutOfOrderSample, "add %d samples", numOutOfOrder))
+	if numLabelsOutOfOrder > 0 {
+		level.Warn(tLogger).Log("msg", "Error on series with out-of-order labels", "numDropped", numLabelsOutOfOrder)
+		errs.Add(errors.Wrapf(labelpb.ErrOutOfOrderLabels, "add %d series", numLabelsOutOfOrder))
 	}
-	if numDuplicates > 0 {
-		level.Warn(tLogger).Log("msg", "Error on ingesting samples with different value but same timestamp", "numDropped", numDuplicates)
-		errs.Add(errors.Wrapf(storage.ErrDuplicateSampleForTimestamp, "add %d samples", numDuplicates))
+	if numLabelsDuplicates > 0 {
+		level.Warn(tLogger).Log("msg", "Error on series with duplicate labels", "numDropped", numLabelsDuplicates)
+		errs.Add(errors.Wrapf(labelpb.ErrDuplicateLabels, "add %d series", numLabelsDuplicates))
 	}
-	if numOutOfBounds > 0 {
-		level.Warn(tLogger).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "numDropped", numOutOfBounds)
-		errs.Add(errors.Wrapf(storage.ErrOutOfBounds, "add %d samples", numOutOfBounds))
+	if numLabelsEmpty > 0 {
+		level.Warn(tLogger).Log("msg", "Error on series with empty label(s)", "numDropped", numLabelsEmpty)
+		errs.Add(errors.Wrapf(labelpb.ErrEmptyLabels, "add %d series", numLabelsEmpty))
 	}
+
+	if numSamplesOutOfOrder > 0 {
+		level.Warn(tLogger).Log("msg", "Error on ingesting out-of-order samples", "numDropped", numSamplesOutOfOrder)
+		errs.Add(errors.Wrapf(storage.ErrOutOfOrderSample, "add %d samples", numSamplesOutOfOrder))
+	}
+	if numSamplesDuplicates > 0 {
+		level.Warn(tLogger).Log("msg", "Error on ingesting samples with different value but same timestamp", "numDropped", numSamplesDuplicates)
+		errs.Add(errors.Wrapf(storage.ErrDuplicateSampleForTimestamp, "add %d samples", numSamplesDuplicates))
+	}
+	if numSamplesOutOfBounds > 0 {
+		level.Warn(tLogger).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "numDropped", numSamplesOutOfBounds)
+		errs.Add(errors.Wrapf(storage.ErrOutOfBounds, "add %d samples", numSamplesOutOfBounds))
+	}
+
 	if numExemplarsOutOfOrder > 0 {
 		level.Warn(tLogger).Log("msg", "Error on ingesting out-of-order exemplars", "numDropped", numExemplarsOutOfOrder)
 		errs.Add(errors.Wrapf(storage.ErrOutOfOrderExemplar, "add %d exemplars", numExemplarsOutOfOrder))
