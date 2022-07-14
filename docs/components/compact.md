@@ -346,7 +346,7 @@ Flags:
                                 it via --deduplication.func.
       --delete-delay=48h        Time before a block marked for deletion is
                                 deleted from bucket. If delete-delay is non
-                                zero, blocks 0will be marked for deletion and
+                                zero, blocks will be marked for deletion and
                                 compactor component will delete blocks marked
                                 for deletion from the bucket. If delete-delay is
                                 0, blocks will be deleted straight away. Note

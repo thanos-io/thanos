@@ -711,7 +711,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("1").IntVar(&cc.downsampleConcurrency)
 
 	cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket. "+
-		"If delete-delay is non zero, blocks 0will be marked for deletion and compactor component will delete blocks marked for deletion from the bucket. "+
+		"If delete-delay is non zero, blocks will be marked for deletion and compactor component will delete blocks marked for deletion from the bucket. "+
 		"If delete-delay is 0, blocks will be deleted straight away. "+
 		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
