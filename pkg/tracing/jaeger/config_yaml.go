@@ -6,11 +6,13 @@ package jaeger
 import (
 	"log"
 	"math"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/samplers/jaegerremote"
 	"go.opentelemetry.io/otel/attribute"
 	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
@@ -43,6 +45,8 @@ type Config struct {
 	Password                           string                   `yaml:"password"`
 	AgentHost                          string                   `yaml:"agent_host"`
 	AgentPort                          int                      `yaml:"agent_port"`
+	SamplingServerURL                  bool                     `yaml:"sampling_server_url"`
+	OperationNameLateBinding           bool                     `json:"operation_name_late_binding"`
 	Gen128Bit                          bool                     `yaml:"traceid_128bit"`
 	// Remove the above field. Ref: https://github.com/open-telemetry/opentelemetry-specification/issues/525#issuecomment-605519217
 	// Ref: https://opentelemetry.io/docs/reference/specification/trace/api/#spancontext
@@ -102,7 +106,10 @@ func getSamplingFraction(samplerType string, samplingFactor float64) float64 {
 	return samplingFactor
 }
 
-func getSampler(samplerType string, samplingFraction float64, parentConfig ParentBasedSamplerConfig) tracesdk.Sampler {
+func getSampler(config Config) tracesdk.Sampler {
+	samplerType := config.SamplerType
+	samplingFraction := getSamplingFraction(samplerType, config.SamplerParam)
+
 	var sampler tracesdk.Sampler
 	if samplingFraction == 1.0 {
 		sampler = tracesdk.AlwaysSample()
@@ -110,13 +117,31 @@ func getSampler(samplerType string, samplingFraction float64, parentConfig Paren
 		sampler = tracesdk.NeverSample()
 	} else if samplerType == "probabilistic" {
 		sampler = tracesdk.ParentBased(tracesdk.TraceIDRatioBased(samplingFraction))
+	} else if samplerType == "remote" {
+		var remoteOptions []jaegerremote.Option
+		if config.SamplerRefreshInterval != 0 {
+			remoteOptions = append(remoteOptions, jaegerremote.WithSamplingRefreshInterval(config.SamplerRefreshInterval))
+		}
+		if config.SamplingServerURL && config.AgentHost != "" && config.AgentPort != 0 {
+			localAgentURL := &(url.URL{
+				Host: config.AgentHost + ":" + strconv.Itoa(config.AgentPort),
+			})
+			remoteOptions = append(remoteOptions, jaegerremote.WithSamplingServerURL(localAgentURL.String()))
+		}
+		if config.SamplerMaxOperations != 0 {
+			remoteOptions = append(remoteOptions, jaegerremote.WithMaxOperations(config.SamplerMaxOperations))
+		}
+		if config.OperationNameLateBinding {
+			remoteOptions = append(remoteOptions, jaegerremote.WithOperationNameLateBinding(true))
+		}
+		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
 	} else { // Default sampler type is parent based.
 		var root tracesdk.Sampler
 		var parentOptions []tracesdk.ParentBasedSamplerOption
-		if parentConfig.LocalParentSampled {
+		if config.SamplerParentConfig.LocalParentSampled {
 			parentOptions = append(parentOptions, tracesdk.WithLocalParentSampled(root))
 		}
-		if parentConfig.RemoteParentSampled {
+		if config.SamplerParentConfig.RemoteParentSampled {
 			parentOptions = append(parentOptions, tracesdk.WithRemoteParentSampled(root))
 		}
 		sampler = tracesdk.ParentBased(root, parentOptions...)

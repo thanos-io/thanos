@@ -26,7 +26,12 @@ var parentConfig = ParentBasedSamplerConfig{LocalParentSampled: true}
 // it will be still enabled for all spans within this span.
 func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
-	sampler := getSampler("probabilistic", 1.0, parentConfig)
+	config := Config{
+		SamplerType:         "probabilistic",
+		SamplerParam:        1.0,
+		SamplerParentConfig: parentConfig,
+	}
+	sampler := getSampler(config)
 
 	tracerOtel := newTraceProvider(
 		context.Background(),
@@ -39,7 +44,7 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 	tracer, _ := migration.Bridge(tracerOtel, log.NewNopLogger())
 	clientRoot, clientCtx := tracing.StartSpan(tracing.ContextWithTracer(context.Background(), tracer), "a")
 
-	sampler2 := getSampler("probabilistic", 1.0, parentConfig)
+	sampler2 := getSampler(config)
 	// Simulate Server process with different tracer, but with client span in context.
 	srvTracerOtel := newTraceProvider(
 		context.Background(),
@@ -72,7 +77,13 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 // it will be still disabled for all spans within this span.
 func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
-	sampler := getSampler("const", 0, parentConfig)
+
+	config := Config{
+		SamplerType:         "const",
+		SamplerParam:        0.0,
+		SamplerParentConfig: parentConfig,
+	}
+	sampler := getSampler(config)
 	tracerOtel := newTraceProvider(
 		context.Background(),
 		log.NewNopLogger(),
@@ -115,7 +126,12 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 // factor will disable client & server tracing, it will be still enabled for all spans within this span.
 func TestContextTracing_ForceTracing(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
-	sampler := getSampler("probabilistic", 1.0, parentConfig)
+	config := Config{
+		SamplerType:         "probabilistic",
+		SamplerParam:        1.0,
+		SamplerParentConfig: parentConfig,
+	}
+	sampler := getSampler(config)
 	tracerOtel := newTraceProvider(
 		context.Background(),
 		log.NewNopLogger(),
@@ -205,7 +221,7 @@ func TestParseTags(t *testing.T) {
 			envVar := ""
 			// Check if env vars are used.
 			if strings.Contains(tcase.input, "${") {
-				envVal, envVar, exists = extractValuOfEnvVar(tcase.input)
+				envVal, envVar, exists = extractValueOfEnvVar(tcase.input)
 				// Set a temporary value just for testing.
 				tempEnvVal := "temp_val"
 				os.Setenv(envVar, tempEnvVal)
@@ -224,7 +240,7 @@ func TestParseTags(t *testing.T) {
 	}
 }
 
-func extractValuOfEnvVar(input string) (string, string, bool) {
+func extractValueOfEnvVar(input string) (string, string, bool) {
 	kv := strings.SplitN(input, "=", 2)
 	_, v := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
 

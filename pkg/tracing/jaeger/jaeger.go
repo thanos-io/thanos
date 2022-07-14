@@ -69,8 +69,8 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 	if config.Tags != "" {
 		tags = getAttributesFromTags(config)
 	}
-	samplingFraction := getSamplingFraction(config.SamplerType, config.SamplerParam)
-	sampler := getSampler(config.SamplerType, samplingFraction, config.SamplerParentConfig)
+
+	sampler := getSampler(config)
 	var processorOptions []tracesdk.BatchSpanProcessorOption
 	var processor tracesdk.SpanProcessor
 	if config.ReporterMaxQueueSize != 0 {
