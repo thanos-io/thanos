@@ -219,21 +219,21 @@ type Grouper interface {
 // DefaultGrouper is the Thanos built-in grouper. It groups blocks based on downsample
 // resolution and block's labels.
 type DefaultGrouper struct {
-	bkt                         objstore.Bucket
-	logger                      log.Logger
-	acceptMalformedIndex        bool
-	enableVerticalCompaction    bool
-	compactions                 *prometheus.CounterVec
-	compactionRunsStarted       *prometheus.CounterVec
-	compactionRunsCompleted     *prometheus.CounterVec
-	compactionFailures          *prometheus.CounterVec
-	verticalCompactions         *prometheus.CounterVec
-	garbageCollectedBlocks      prometheus.Counter
-	blocksMarkedForDeletion     prometheus.Counter
-	blocksMarkedForNoCompact    prometheus.Counter
-	hashFunc                    metadata.HashFunc
-	blockFilesConcurrency       int
-	compactionBlocksConcurrency int
+	bkt                           objstore.Bucket
+	logger                        log.Logger
+	acceptMalformedIndex          bool
+	enableVerticalCompaction      bool
+	compactions                   *prometheus.CounterVec
+	compactionRunsStarted         *prometheus.CounterVec
+	compactionRunsCompleted       *prometheus.CounterVec
+	compactionFailures            *prometheus.CounterVec
+	verticalCompactions           *prometheus.CounterVec
+	garbageCollectedBlocks        prometheus.Counter
+	blocksMarkedForDeletion       prometheus.Counter
+	blocksMarkedForNoCompact      prometheus.Counter
+	hashFunc                      metadata.HashFunc
+	blockFilesConcurrency         int
+	compactBlocksFetchConcurrency int
 }
 
 // NewDefaultGrouper makes a new DefaultGrouper.
@@ -248,7 +248,7 @@ func NewDefaultGrouper(
 	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
 	blockFilesConcurrency int,
-	compactionBlocksConcurrency int,
+	compactBlocksFetchConcurrency int,
 ) *DefaultGrouper {
 	return &DefaultGrouper{
 		bkt:                      bkt,
@@ -275,12 +275,12 @@ func NewDefaultGrouper(
 			Name: "thanos_compact_group_vertical_compactions_total",
 			Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
 		}, []string{"group"}),
-		blocksMarkedForNoCompact:    blocksMarkedForNoCompact,
-		garbageCollectedBlocks:      garbageCollectedBlocks,
-		blocksMarkedForDeletion:     blocksMarkedForDeletion,
-		hashFunc:                    hashFunc,
-		blockFilesConcurrency:       blockFilesConcurrency,
-		compactionBlocksConcurrency: compactionBlocksConcurrency,
+		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
+		garbageCollectedBlocks:        garbageCollectedBlocks,
+		blocksMarkedForDeletion:       blocksMarkedForDeletion,
+		hashFunc:                      hashFunc,
+		blockFilesConcurrency:         blockFilesConcurrency,
+		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
 	}
 }
 
@@ -311,7 +311,7 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.blocksMarkedForNoCompact,
 				g.hashFunc,
 				g.blockFilesConcurrency,
-				g.compactionBlocksConcurrency,
+				g.compactBlocksFetchConcurrency,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
@@ -332,26 +332,26 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 // Group captures a set of blocks that have the same origin labels and downsampling resolution.
 // Those blocks generally contain the same series and can thus efficiently be compacted.
 type Group struct {
-	logger                      log.Logger
-	bkt                         objstore.Bucket
-	key                         string
-	labels                      labels.Labels
-	resolution                  int64
-	mtx                         sync.Mutex
-	metasByMinTime              []*metadata.Meta
-	acceptMalformedIndex        bool
-	enableVerticalCompaction    bool
-	compactions                 prometheus.Counter
-	compactionRunsStarted       prometheus.Counter
-	compactionRunsCompleted     prometheus.Counter
-	compactionFailures          prometheus.Counter
-	verticalCompactions         prometheus.Counter
-	groupGarbageCollectedBlocks prometheus.Counter
-	blocksMarkedForDeletion     prometheus.Counter
-	blocksMarkedForNoCompact    prometheus.Counter
-	hashFunc                    metadata.HashFunc
-	blockFilesConcurrency       int
-	compactionBlocksConcurrency int
+	logger                        log.Logger
+	bkt                           objstore.Bucket
+	key                           string
+	labels                        labels.Labels
+	resolution                    int64
+	mtx                           sync.Mutex
+	metasByMinTime                []*metadata.Meta
+	acceptMalformedIndex          bool
+	enableVerticalCompaction      bool
+	compactions                   prometheus.Counter
+	compactionRunsStarted         prometheus.Counter
+	compactionRunsCompleted       prometheus.Counter
+	compactionFailures            prometheus.Counter
+	verticalCompactions           prometheus.Counter
+	groupGarbageCollectedBlocks   prometheus.Counter
+	blocksMarkedForDeletion       prometheus.Counter
+	blocksMarkedForNoCompact      prometheus.Counter
+	hashFunc                      metadata.HashFunc
+	blockFilesConcurrency         int
+	compactBlocksFetchConcurrency int
 }
 
 // NewGroup returns a new compaction group.
@@ -373,7 +373,7 @@ func NewGroup(
 	blocksMarkedForNoCompact prometheus.Counter,
 	hashFunc metadata.HashFunc,
 	blockFilesConcurrency int,
-	compactionBlocksConcurrency int,
+	compactBlocksFetchConcurrency int,
 ) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -384,24 +384,24 @@ func NewGroup(
 	}
 
 	g := &Group{
-		logger:                      logger,
-		bkt:                         bkt,
-		key:                         key,
-		labels:                      lset,
-		resolution:                  resolution,
-		acceptMalformedIndex:        acceptMalformedIndex,
-		enableVerticalCompaction:    enableVerticalCompaction,
-		compactions:                 compactions,
-		compactionRunsStarted:       compactionRunsStarted,
-		compactionRunsCompleted:     compactionRunsCompleted,
-		compactionFailures:          compactionFailures,
-		verticalCompactions:         verticalCompactions,
-		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
-		blocksMarkedForDeletion:     blocksMarkedForDeletion,
-		blocksMarkedForNoCompact:    blocksMarkedForNoCompact,
-		hashFunc:                    hashFunc,
-		blockFilesConcurrency:       blockFilesConcurrency,
-		compactionBlocksConcurrency: compactionBlocksConcurrency,
+		logger:                        logger,
+		bkt:                           bkt,
+		key:                           key,
+		labels:                        lset,
+		resolution:                    resolution,
+		acceptMalformedIndex:          acceptMalformedIndex,
+		enableVerticalCompaction:      enableVerticalCompaction,
+		compactions:                   compactions,
+		compactionRunsStarted:         compactionRunsStarted,
+		compactionRunsCompleted:       compactionRunsCompleted,
+		compactionFailures:            compactionFailures,
+		verticalCompactions:           verticalCompactions,
+		groupGarbageCollectedBlocks:   groupGarbageCollectedBlocks,
+		blocksMarkedForDeletion:       blocksMarkedForDeletion,
+		blocksMarkedForNoCompact:      blocksMarkedForNoCompact,
+		hashFunc:                      hashFunc,
+		blockFilesConcurrency:         blockFilesConcurrency,
+		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
 	}
 	return g, nil
 }
@@ -1015,7 +1015,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	// Once we have a plan we need to download the actual data.
 	begin := time.Now()
 	g, errCtx := errgroup.WithContext(ctx)
-	g.SetLimit(cg.compactionBlocksConcurrency)
+	g.SetLimit(cg.compactBlocksFetchConcurrency)
 
 	toCompactDirs := make([]string, 0, len(toCompact))
 	for _, m := range toCompact {

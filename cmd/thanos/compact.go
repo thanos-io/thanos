@@ -350,7 +350,7 @@ func runCompact(
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
 		metadata.HashFunc(conf.hashFunc),
 		conf.blockFilesConcurrency,
-		conf.compactionBlocksConcurrency,
+		conf.compactBlocksFetchConcurrency,
 	)
 	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
 	planner := compact.WithLargeTotalIndexSizeFilter(
@@ -638,7 +638,7 @@ type compactConfig struct {
 	cleanupBlocksInterval                          time.Duration
 	compactionConcurrency                          int
 	downsampleConcurrency                          int
-	compactionBlocksConcurrency                    int
+	compactBlocksFetchConcurrency                  int
 	deleteDelay                                    model.Duration
 	dedupReplicaLabels                             []string
 	selectorRelabelConf                            extflag.PathOrContent
@@ -705,13 +705,13 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").IntVar(&cc.compactionConcurrency)
-	cmd.Flag("compact.blocks-concurrency", "Number of goroutines to use when download block during compaction.").
-		Default("1").IntVar(&cc.compactionBlocksConcurrency)
+	cmd.Flag("compact.blocks-fetch-concurrency", "Number of goroutines to use when download block during compaction.").
+		Default("1").IntVar(&cc.compactBlocksFetchConcurrency)
 	cmd.Flag("downsample.concurrency", "Number of goroutines to use when downsampling blocks.").
 		Default("1").IntVar(&cc.downsampleConcurrency)
 
 	cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket. "+
-		"If delete-delay is non zero, blocks will be marked for deletion and compactor component will delete blocks marked for deletion from the bucket. "+
+		"If delete-delay is non zero, blocks 0will be marked for deletion and compactor component will delete blocks marked for deletion from the bucket. "+
 		"If delete-delay is 0, blocks will be deleted straight away. "+
 		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
