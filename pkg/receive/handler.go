@@ -815,6 +815,9 @@ func isConflict(err error) bool {
 		err == storage.ErrDuplicateSampleForTimestamp ||
 		err == storage.ErrOutOfOrderSample ||
 		err == storage.ErrOutOfBounds ||
+		err == storage.ErrDuplicateExemplar ||
+		err == storage.ErrOutOfOrderExemplar ||
+		err == storage.ErrExemplarLabelLength ||
 		status.Code(err) == codes.AlreadyExists
 }
 
