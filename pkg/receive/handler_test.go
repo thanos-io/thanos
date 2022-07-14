@@ -105,6 +105,16 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			exp:       errConflict,
 		},
 		{
+			name: "matching multierror (exemplar error)",
+			err: errutil.NonNilMultiError([]error{
+				storage.ErrExemplarLabelLength,
+				errors.New("foo"),
+				errors.New("bar"),
+			}),
+			threshold: 1,
+			exp:       errConflict,
+		},
+		{
 			name: "matching but below threshold multierror",
 			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
@@ -138,6 +148,19 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			}),
 			threshold: 2,
 			exp:       errNotReady,
+		},
+		{
+			name: "matching multierror many, one above threshold (exemplar error)",
+			err: errutil.NonNilMultiError([]error{
+				tsdb.ErrNotReady,
+				tsdb.ErrNotReady,
+				storage.ErrDuplicateExemplar,
+				storage.ErrDuplicateSampleForTimestamp,
+				storage.ErrExemplarLabelLength,
+				errors.New("foo"),
+			}),
+			threshold: 2,
+			exp:       errConflict,
 		},
 		{
 			name: "matching multierror many, both above threshold, conflict have precedence",
