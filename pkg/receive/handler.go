@@ -812,13 +812,34 @@ func isConflict(err error) bool {
 		return false
 	}
 	return err == errConflict ||
-		err == storage.ErrDuplicateSampleForTimestamp ||
-		err == storage.ErrOutOfOrderSample ||
-		err == storage.ErrOutOfBounds ||
-		err == storage.ErrDuplicateExemplar ||
-		err == storage.ErrOutOfOrderExemplar ||
-		err == storage.ErrExemplarLabelLength ||
+		isSampleConflictErr(err) ||
+		isExemplarConflictErr(err) ||
+		isLabelsConflictErr(err) ||
 		status.Code(err) == codes.AlreadyExists
+}
+
+// isSampleConflictErr returns whether or not the given error represents
+// a sample-related conflict.
+func isSampleConflictErr(err error) bool {
+	return err == storage.ErrDuplicateSampleForTimestamp ||
+		err == storage.ErrOutOfOrderSample ||
+		err == storage.ErrOutOfBounds
+}
+
+// isExemplarConflictErr returns whether or not the given error represents
+// a exemplar-related conflict.
+func isExemplarConflictErr(err error) bool {
+	return err == storage.ErrDuplicateExemplar ||
+		err == storage.ErrOutOfOrderExemplar ||
+		err == storage.ErrExemplarLabelLength
+}
+
+// isLabelsConflictErr returns whether or not the given error represents
+// a labels-related conflict.
+func isLabelsConflictErr(err error) bool {
+	return err == labelpb.ErrDuplicateLabels ||
+		err == labelpb.ErrEmptyLabels ||
+		err == labelpb.ErrOutOfOrderLabels
 }
 
 // isNotReady returns whether or not the given error represents a not ready error.
