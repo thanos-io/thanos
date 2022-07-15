@@ -27,13 +27,14 @@ import (
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/thanos-io/objstore/exthttp"
+	"github.com/thanos-io/objstore/providers/s3"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/objstore/client"
+
 	"github.com/thanos-io/thanos/pkg/alert"
-	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
-	"github.com/thanos-io/thanos/pkg/objstore/s3"
 
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/objstore"
 )
 
 var errObjectDoesNotExist = errors.New("object does not exist")

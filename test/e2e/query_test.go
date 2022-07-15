@@ -24,9 +24,11 @@ import (
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
+	"github.com/thanos-io/objstore/providers/s3"
+	"google.golang.org/grpc"
+
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"google.golang.org/grpc"
 
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
@@ -38,12 +40,12 @@ import (
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/rules"
 
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
-	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"

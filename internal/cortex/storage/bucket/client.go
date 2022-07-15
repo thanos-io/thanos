@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/internal/cortex/storage/bucket/azure"
 	"github.com/thanos-io/thanos/internal/cortex/storage/bucket/filesystem"

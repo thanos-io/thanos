@@ -16,11 +16,12 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/cache"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 )
 

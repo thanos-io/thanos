@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/internal/cortex/storage/bucket"
 	"github.com/thanos-io/thanos/internal/cortex/util/runutil"

@@ -20,16 +20,17 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
-	"github.com/thanos-io/thanos/pkg/discovery/dns"
-	"github.com/thanos-io/thanos/pkg/extprom"
-	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/cache/cachekey"
+	"github.com/thanos-io/objstore"
 	"github.com/vimeo/galaxycache"
 	galaxyhttp "github.com/vimeo/galaxycache/http"
 	"golang.org/x/net/http2"
 	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/cache/cachekey"
 )
 
 type Groupcache struct {
