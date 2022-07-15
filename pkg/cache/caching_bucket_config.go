@@ -6,7 +6,7 @@ package cache
 import (
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/objstore"
 )
 
 // Codec for encoding and decoding results of Iter call.

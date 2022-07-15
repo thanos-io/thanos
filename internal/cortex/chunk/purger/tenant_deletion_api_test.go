@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/stretchr/testify/require"
-	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/objstore"
 	"github.com/weaveworks/common/user"
 
 	"github.com/thanos-io/thanos/internal/cortex/storage/tsdb"

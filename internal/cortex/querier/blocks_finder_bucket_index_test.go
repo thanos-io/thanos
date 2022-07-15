@@ -14,7 +14,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/internal/cortex/storage/tsdb/bucketindex"
 	cortex_testutil "github.com/thanos-io/thanos/internal/cortex/storage/tsdb/testutil"

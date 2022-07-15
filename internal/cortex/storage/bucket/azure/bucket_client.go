@@ -6,9 +6,9 @@ package azure
 import (
 	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/azure"
-	yaml "gopkg.in/yaml.v2"
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/providers/azure"
+	"gopkg.in/yaml.v2"
 )
 
 func NewBucketClient(cfg Config, name string, logger log.Logger) (objstore.Bucket, error) {

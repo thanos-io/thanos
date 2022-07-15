@@ -14,9 +14,10 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/objstore"
 
 	"github.com/thanos-io/thanos/internal/cortex/storage/bucket"
 	util_log "github.com/thanos-io/thanos/internal/cortex/util/log"

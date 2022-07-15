@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/internal/cortex/storage/bucket"
 	cortex_tsdb "github.com/thanos-io/thanos/internal/cortex/storage/tsdb"
@@ -91,7 +91,7 @@ func TestBucketScanBlocksFinder_InitialScanFailure(t *testing.T) {
 	s := NewBucketScanBlocksFinder(cfg, bucket, nil, log.NewNopLogger(), reg)
 	defer func() {
 		s.StopAsync()
-		s.AwaitTerminated(context.Background()) //nolint: errcheck
+		s.AwaitTerminated(context.Background()) // nolint: errcheck
 	}()
 
 	// Mock the storage to simulate a failure when reading objects.
