@@ -92,10 +92,10 @@ type HealthStats struct {
 	MetricLabelValuesCount int64
 }
 
-// PrometheusIssue5372Err returns an error if the HealthStats object indicates
+// OutOfOrderLabelsErr returns an error if the HealthStats object indicates
 // postings with out of order labels.  This is corrected by Prometheus Issue
 // #5372 and affects Prometheus versions 2.8.0 and below.
-func (i HealthStats) PrometheusIssue5372Err() error {
+func (i HealthStats) OutOfOrderLabelsErr() error {
 	if i.OutOfOrderLabels > 0 {
 		return errors.Errorf("index contains %d postings with out of order labels",
 			i.OutOfOrderLabels)
@@ -157,7 +157,7 @@ func (i HealthStats) AnyErr() error {
 		errMsg = append(errMsg, err.Error())
 	}
 
-	if err := i.PrometheusIssue5372Err(); err != nil {
+	if err := i.OutOfOrderLabelsErr(); err != nil {
 		errMsg = append(errMsg, err.Error())
 	}
 
