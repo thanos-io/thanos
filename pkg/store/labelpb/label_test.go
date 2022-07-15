@@ -105,6 +105,20 @@ func TestValidateLabels(t *testing.T) {
 			expectedErr: ErrEmptyLabels,
 		},
 		{
+			// Empty label (empty value).
+			labelSet: []ZLabel{
+				{
+					Name:  "foo",
+					Value: "bar",
+				},
+				{
+					Name:  "baz",
+					Value: "",
+				},
+			},
+			expectedErr: ErrEmptyLabels,
+		},
+		{
 			// Duplicate label.
 			labelSet: []ZLabel{
 				{

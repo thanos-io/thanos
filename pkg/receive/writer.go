@@ -162,7 +162,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		errs.Add(errors.Wrapf(labelpb.ErrDuplicateLabels, "add %d series", numLabelsDuplicates))
 	}
 	if numLabelsEmpty > 0 {
-		level.Warn(tLogger).Log("msg", "Error on series with empty label(s)", "numDropped", numLabelsEmpty)
+		level.Warn(tLogger).Log("msg", "Error on series with empty label name or value", "numDropped", numLabelsEmpty)
 		errs.Add(errors.Wrapf(labelpb.ErrEmptyLabels, "add %d series", numLabelsEmpty))
 	}
 

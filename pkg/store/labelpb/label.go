@@ -21,7 +21,7 @@ import (
 
 var (
 	ErrOutOfOrderLabels = errors.New("out of order labels")
-	ErrEmptyLabels      = errors.New("label set contains an empty label")
+	ErrEmptyLabels      = errors.New("label set contains a label with empty name or value")
 	ErrDuplicateLabels  = errors.New("label set contains duplicate label names")
 
 	sep = []byte{'\xff'}
@@ -352,9 +352,9 @@ func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
 	return xxhash.Sum64(b)
 }
 
-// ValidateLabels validates label names (checks for empty names,
-// out of order labels and duplicate label names). Returns appropriate
-// error if validation fails on a label.
+// ValidateLabels validates label names and values (checks for empty
+// names and values, out of order labels and duplicate label names)
+// Returns appropriate error if validation fails on a label.
 func ValidateLabels(lbls []ZLabel) error {
 	if len(lbls) == 0 {
 		return ErrEmptyLabels
@@ -364,14 +364,14 @@ func ValidateLabels(lbls []ZLabel) error {
 
 	// Check first label.
 	l0 := lbls[0]
-	if l0.Name == "" {
+	if l0.Name == "" || l0.Value == "" {
 		return ErrEmptyLabels
 	}
 	labelNames[l0.Name] = struct{}{}
 
 	// Iterate over the rest, check each for empty / duplicates and check ordering.
 	for _, l := range lbls[1:] {
-		if l.Name == "" {
+		if l.Name == "" || l.Value == "" {
 			return ErrEmptyLabels
 		}
 
