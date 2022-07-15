@@ -13,16 +13,16 @@ import (
 	"testing"
 	"time"
 
-	cortexcache "github.com/cortexproject/cortex/pkg/chunk/cache"
-	"github.com/cortexproject/cortex/pkg/cortexpb"
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
 
+	cortexcache "github.com/thanos-io/thanos/internal/cortex/chunk/cache"
+	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
+	cortexvalidation "github.com/thanos-io/thanos/internal/cortex/util/validation"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -767,7 +767,7 @@ func promqlResults(fail bool) (*int, http.Handler) {
 	})
 }
 
-//labelsResults is a mock handler used to test split and cache middleware for label names and label values requests.
+// labelsResults is a mock handler used to test split and cache middleware for label names and label values requests.
 func labelsResults(fail bool) (*int, http.Handler) {
 	count := 0
 	var lock sync.Mutex

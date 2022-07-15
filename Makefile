@@ -173,6 +173,24 @@ deps: ## Ensures fresh go.mod and go.sum.
 	@go mod tidy
 	@go mod verify
 
+# NOTICE: This is a temporary workaround for the cyclic dependency issue documented in:
+# https://github.com/thanos-io/thanos/issues/3832
+# The real solution is to have our own version of needed packages, or extract them out from a dedicated module.
+# vendor dependencies
+.PHONY: internal/cortex
+internal/cortex: ## Ensures the latest packages from 'cortex' are synced.
+	rm -rf internal/cortex
+	rm -rf tmp
+	git clone --depth 1 https://github.com/cortexproject/cortex tmp/cortex
+	mkdir -p internal/cortex
+	rsync -avur --delete tmp/cortex/pkg/* internal/cortex --include-from=.cortex-packages.txt
+	mkdir -p internal/cortex/integration
+	cp -R tmp/cortex/integration/ca internal/cortex/integration/ca
+	find internal/cortex -type f -exec sed -i 's/github.com\/cortexproject\/cortex\/pkg/github.com\/thanos-io\/thanos\/internal\/cortex/g' {} +
+	find internal/cortex -type f -exec sed -i 's/github.com\/cortexproject\/cortex\/integration/github.com\/thanos-io\/thanos\/internal\/cortex\/integration/g' {} +
+	rm -rf tmp
+
+
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
 ifeq ($(OS)_$(ARCH), linux_x86_64)
@@ -286,7 +304,7 @@ test: export GOCACHE= $(TMP_GOPATH)/gocache
 test: export THANOS_TEST_MINIO_PATH= $(MINIO)
 test: export THANOS_TEST_PROMETHEUS_PATHS= $(PROMETHEUS_ARRAY)
 test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
-test: check-git install-deps
+test: check-git install-tool-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
 	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
 	@go test $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
@@ -317,13 +335,13 @@ test-e2e-local:
 
 .PHONY: quickstart
 quickstart: ## Installs and runs a quickstart example of thanos.
-quickstart: build install-deps
+quickstart: build install-tool-deps
 quickstart:
 	scripts/quickstart.sh
 
-.PHONY: install-deps
-install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
-install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
+.PHONY: install-tool-deps
+install-tool-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
+install-tool-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
 	@echo ">>GOBIN=$(GOBIN)"
 
 .PHONY: check-git
