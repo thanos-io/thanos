@@ -1024,7 +1024,6 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			}
 			uniqueSources[s] = struct{}{}
 		}
-
 		func(ctx context.Context, meta *metadata.Meta) {
 			g.Go(func() error {
 				if err := tracing.DoInSpanWithErr(ctx, "compaction_block_download", func(ctx context.Context) error {
