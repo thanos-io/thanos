@@ -1,3 +1,6 @@
+// Copyright (c) The Cortex Authors.
+// Licensed under the Apache License 2.0.
+
 package grpcutil
 
 // Copied from https://github.com/grpc/grpc-go/tree/v1.29.x/naming.

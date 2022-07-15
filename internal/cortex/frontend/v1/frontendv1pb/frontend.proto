@@ -1,3 +1,6 @@
+// Copyright (c) The Cortex Authors.
+// Licensed under the Apache License 2.0.
+
 syntax = "proto3";
 
 // Protobuf package should not be changed when moving around go packages

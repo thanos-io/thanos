@@ -1,3 +1,6 @@
+// Copyright (c) The Cortex Authors.
+// Licensed under the Apache License 2.0.
+
 // This file was taken from Prometheus (https://github.com/prometheus/prometheus).
 // The original license header is included below:
 //

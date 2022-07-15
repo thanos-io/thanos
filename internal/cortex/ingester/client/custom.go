@@ -1,3 +1,6 @@
+// Copyright (c) The Cortex Authors.
+// Licensed under the Apache License 2.0.
+
 package client
 
 // ChunksCount returns the number of chunks in response.

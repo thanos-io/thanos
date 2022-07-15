@@ -189,6 +189,8 @@ internal/cortex: ## Ensures the latest packages from 'cortex' are synced.
 	find internal/cortex -type f -exec sed -i 's/github.com\/cortexproject\/cortex\/pkg/github.com\/thanos-io\/thanos\/internal\/cortex/g' {} +
 	find internal/cortex -type f -exec sed -i 's/github.com\/cortexproject\/cortex\/integration/github.com\/thanos-io\/thanos\/internal\/cortex\/integration/g' {} +
 	rm -rf tmp/cortex
+	@echo ">> ensuring Copyright headers"
+	@go run ./scripts/copyright
 
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
