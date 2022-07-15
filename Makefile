@@ -1,7 +1,7 @@
 include .bingo/Variables.mk
 include .busybox-versions
 
-FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
+FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -path ./internal/cortex -prune -o -name '*.go' -print)
 MD_FILES_TO_FORMAT = $(shell find docs -name "*.md") $(shell find examples -name "*.md") $(filter-out mixin/runbook.md, $(shell find mixin -name "*.md")) $(shell ls *.md)
 FAST_MD_FILES_TO_FORMAT = $(shell git diff --name-only | grep ".md")
 
@@ -180,7 +180,7 @@ deps: ## Ensures fresh go.mod and go.sum.
 .PHONY: internal/cortex
 internal/cortex: ## Ensures the latest packages from 'cortex' are synced.
 	rm -rf internal/cortex
-	rm -rf tmp
+	rm -rf tmp/cortex
 	git clone --depth 1 https://github.com/cortexproject/cortex tmp/cortex
 	mkdir -p internal/cortex
 	rsync -avur --delete tmp/cortex/pkg/* internal/cortex --include-from=.cortex-packages.txt
@@ -188,8 +188,7 @@ internal/cortex: ## Ensures the latest packages from 'cortex' are synced.
 	cp -R tmp/cortex/integration/ca internal/cortex/integration/ca
 	find internal/cortex -type f -exec sed -i 's/github.com\/cortexproject\/cortex\/pkg/github.com\/thanos-io\/thanos\/internal\/cortex/g' {} +
 	find internal/cortex -type f -exec sed -i 's/github.com\/cortexproject\/cortex\/integration/github.com\/thanos-io\/thanos\/internal\/cortex\/integration/g' {} +
-	rm -rf tmp
-
+	rm -rf tmp/cortex
 
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
@@ -394,7 +393,7 @@ github.com/prometheus/client_golang/prometheus.{DefaultGatherer,DefBuckets,NewUn
 github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,\
 NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}=github.com/prometheus/client_golang/prometheus/promauto.{NewCounter,\
 NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec},\
-sync/atomic=go.uber.org/atomic" ./...
+sync/atomic=go.uber.org/atomic,github.com/cortexproject/cortex=github.com/thanos-io/thanos/internal/cortex" $(shell go list ./... | grep -v "internal/cortex")
 	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
 	@$(GOLANGCI_LINT) run
