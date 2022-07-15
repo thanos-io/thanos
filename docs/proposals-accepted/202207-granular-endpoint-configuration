@@ -55,3 +55,4 @@ If the mode is strict (i.e. `mode: ”strict”`) then all the endpoints in that
 * Implement `--endpoint.config`.
 * Adding a new `endpoint.config` flag will deprecate the following flags: `store.sd-interval`, `store.sd-dns-interval`, `store.sd-dns-resolver`, `store.sd-files` and all `grpc-client-.*`.
 We can mark the current flags as deprecated, and after some time we can remove them.
+* Add e2e tests for the changes
