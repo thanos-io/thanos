@@ -29,6 +29,16 @@ func (ThanosResponseExtractor) ResponseWithoutHeaders(resp queryrange.Response) 
 	return resp
 }
 
+func (ThanosResponseExtractor) ResponseWithoutStats(resp queryrange.Response) queryrange.Response {
+	switch tr := resp.(type) {
+	case *ThanosLabelsResponse:
+		return &ThanosLabelsResponse{Status: queryrange.StatusSuccess, Data: tr.Data}
+	case *ThanosSeriesResponse:
+		return &ThanosSeriesResponse{Status: queryrange.StatusSuccess, Data: tr.Data}
+	}
+	return resp
+}
+
 // headersToQueryRangeHeaders convert slice of ResponseHeader to Cortex queryrange.PrometheusResponseHeader in an
 // unsafe manner. It reuses the same memory.
 func headersToQueryRangeHeaders(headers []*ResponseHeader) []*queryrange.PrometheusResponseHeader {
