@@ -6,9 +6,10 @@ package queryfrontend
 import (
 	"context"
 
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
 
