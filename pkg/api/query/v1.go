@@ -197,9 +197,9 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 }
 
 type queryData struct {
-	ResultType parser.ValueType  `json:"resultType"`
-	Result     parser.Value      `json:"result"`
-	Stats      *stats.QueryStats `json:"stats,omitempty"`
+	ResultType parser.ValueType `json:"resultType"`
+	Result     parser.Value     `json:"result"`
+	Stats      stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
 	Warnings []error `json:"warnings,omitempty"`
 }
@@ -380,7 +380,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-		Stats:      &qs,
+		Stats:      qs,
 	}, res.Warnings, nil
 }
 
@@ -502,7 +502,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-		Stats:      &qs,
+		Stats:      qs,
 	}, res.Warnings, nil
 }
 

@@ -611,7 +611,7 @@ func TestQueryEndpoints(t *testing.T) {
 		}
 	}
 
-	var qs stats.QueryStats
+	qs := &stats.BuiltinStats{}
 	tests = []endpointTestCase{
 		{
 			endpoint: api.query,
@@ -629,7 +629,7 @@ func TestQueryEndpoints(t *testing.T) {
 				"stats": []string{"true"},
 			},
 			response: &queryData{
-				Stats: &qs,
+				Stats: qs,
 			},
 		},
 	}
