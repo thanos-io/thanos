@@ -296,8 +296,9 @@ github.com/eapache/queue v1.1.0/go.mod h1:6eCeP0CKFpHLu8blIFXhExK/dRa7WDZfr6jVFP
 github.com/edsrzf/mmap-go v1.0.0/go.mod h1:YO35OhQPt3KJa3ryjFM5Bs14WD66h8eGKpfaBNrHW5M=
 github.com/edsrzf/mmap-go v1.1.0 h1:6EUwBLQ/Mcr1EYLE4Tn1VdW1A4ckqCQWZBw8Hr0kjpQ=
 github.com/edsrzf/mmap-go v1.1.0/go.mod h1:19H/e8pUPLicwkyNgOykDXkJ9F0MHE+Z52B8EIth78Q=
-github.com/efficientgo/e2e v0.12.1 h1:ZYNTf09ptlba0I3ZStYaF7gCbevWdalriiX7usOSiFM=
 github.com/efficientgo/e2e v0.12.1/go.mod h1:xDHUyIqAWyVWU29Lf+BaZoavW7xAbDEvTwHWWI/3bhk=
+github.com/efficientgo/e2e v0.12.2-0.20220707084214-498746fce0d5 h1:RcpjdU6Jw4B8iiKlNYY9kyHuWrJfrH/lOXT1pdfiCoU=
+github.com/efficientgo/e2e v0.12.2-0.20220707084214-498746fce0d5/go.mod h1:xDHUyIqAWyVWU29Lf+BaZoavW7xAbDEvTwHWWI/3bhk=
 github.com/efficientgo/tools/core v0.0.0-20210129205121-421d0828c9a6/go.mod h1:OmVcnJopJL8d3X3sSXTiypGoUSgFq1aDGmlrdi9dn/M=
 github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b h1:ZHiD4/yE4idlbqvAO6iYCOYRzOMRpxkW+FKasRA3tsQ=
 github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b/go.mod h1:OmVcnJopJL8d3X3sSXTiypGoUSgFq1aDGmlrdi9dn/M=

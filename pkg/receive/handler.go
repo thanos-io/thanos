@@ -130,9 +130,12 @@ type Handler struct {
 	peerStates   map[string]*retryState
 	receiverMode ReceiverMode
 
-	forwardRequests   *prometheus.CounterVec
-	replications      *prometheus.CounterVec
-	replicationFactor prometheus.Gauge
+	forwardRequests       *prometheus.CounterVec
+	replications          *prometheus.CounterVec
+	replicationFactor     prometheus.Gauge
+	configuredTenantLimit prometheus.Gauge
+	aboveLimit            *prometheus.GaugeVec
+	limitedRequests       *prometheus.CounterVec
 
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
@@ -189,6 +192,24 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help: "The number of times to replicate incoming write requests.",
 			},
 		),
+		configuredTenantLimit: promauto.With(registerer).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_tenant_active_series_limit",
+				Help: "The configured limit for active series of tenants.",
+			},
+		),
+		aboveLimit: promauto.With(registerer).NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_series_above_limit",
+				Help: "The difference between current number of active series and set limit.",
+			}, []string{"tenant"},
+		),
+		limitedRequests: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_limited_requests_total",
+				Help: "The total number of remote write requests that have been dropped due to limiting.",
+			}, []string{"tenant"},
+		),
 		writeTimeseriesTotal: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: "thanos",
@@ -226,6 +247,8 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	} else {
 		h.replicationFactor.Set(1)
 	}
+
+	h.configuredTenantLimit.Set(float64(o.MaxPerTenantLimit))
 
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
@@ -520,10 +543,10 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor {
+	if h.receiverMode == RouterOnly {
 		under, err := h.isUnderLimit(ctx, tenant, tLogger)
 		if err != nil {
-			level.Debug(tLogger).Log("msg", "error while limiting", "err", err.Error())
+			level.Info(tLogger).Log("msg", "error while limiting", "err", err.Error())
 
 		}
 		if !under {
@@ -554,6 +577,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
 }
 
+// isUnderLimit ensures that the current number of active series for a tenant does not exceed given limit.
+// It does so in a best-effort way, i.e, in case meta-monitoring is unreachable, it does not impose limits.
 func (h *Handler) isUnderLimit(ctx context.Context, tenant string, logger log.Logger) (bool, error) {
 	if h.options.MaxPerTenantLimit == 0 || h.options.MetaMonitoringUrl.Host == "" {
 		return true, nil
@@ -571,23 +596,30 @@ func (h *Handler) isUnderLimit(ctx context.Context, tenant string, logger log.Lo
 
 	httpClient, err := httpconfig.NewHTTPClient(*httpClientConfig, "thanos-receive")
 	if err != nil {
-		return true, errors.Wrap(err, "Improper http client config")
+		return true, errors.Wrap(err, "improper http client config")
 	}
 
 	c := promclient.NewWithTracingClient(logger, httpClient, httpconfig.ThanosUserAgent)
 
 	vectorRes, _, err := c.QueryInstant(ctx, h.options.MetaMonitoringUrl, h.options.MetaMonitoringLimitQuery, time.Now(), promclient.QueryOptions{})
 	if err != nil {
-		return true, errors.Wrap(err, "querying meta-monitoring solution")
+		return true, errors.Wrap(err, "failed to query meta-monitoring")
 	}
+
+	level.Debug(logger).Log("msg", "successfully queried meta-monitoring", "vectors", len(vectorRes))
 
 	for _, e := range vectorRes {
 		for _, v := range e.Metric {
+			// Search for value of metric which has a tenant label.
 			if string(v) == tenant {
+				h.aboveLimit.WithLabelValues(tenant).Set(float64(e.Value) - float64(h.options.MaxPerTenantLimit))
 				if float64(e.Value) >= float64(h.options.MaxPerTenantLimit) {
-					level.Error(logger).Log("msg", "tenant above limit", "tenant", tenant, "currentSeries", float64(e.Value))
+					level.Error(logger).Log("msg", "tenant above limit", "currentSeries", float64(e.Value))
+					h.limitedRequests.WithLabelValues(tenant).Inc()
 					return false, nil
 				}
+
+				level.Debug(logger).Log("msg", "tenant is under limit", "currentSeries", float64(e.Value))
 			}
 		}
 	}
