@@ -19,8 +19,8 @@ import (
 )
 
 type ParentBasedSamplerConfig struct {
-	LocalParentSampled  bool `json:"local_parent_sampled"`
-	RemoteParentSampled bool `json:"remote_parent_sampled"`
+	LocalParentSampled  bool `yaml:"local_parent_sampled"`
+	RemoteParentSampled bool `yaml:"remote_parent_sampled"`
 }
 
 // Config - YAML configuration. For details see to https://github.com/jaegertracing/jaeger-client-go#environment-variables.
@@ -34,7 +34,7 @@ type Config struct {
 	SamplerManagerHostPort             string                   `yaml:"sampler_manager_host_port"`
 	SamplerMaxOperations               int                      `yaml:"sampler_max_operations"`
 	SamplerRefreshInterval             time.Duration            `yaml:"sampler_refresh_interval"`
-	SamplerParentConfig                ParentBasedSamplerConfig `yaml:"sampled_parent_config"`
+	SamplerParentConfig                ParentBasedSamplerConfig `yaml:"sampler_parent_config"`
 	ReporterMaxQueueSize               int                      `yaml:"reporter_max_queue_size"`
 	ReporterFlushInterval              time.Duration            `yaml:"reporter_flush_interval"`
 	ReporterLogSpans                   bool                     `yaml:"reporter_log_spans"`
@@ -46,7 +46,7 @@ type Config struct {
 	AgentHost                          string                   `yaml:"agent_host"`
 	AgentPort                          int                      `yaml:"agent_port"`
 	SamplingServerURL                  bool                     `yaml:"sampling_server_url"`
-	OperationNameLateBinding           bool                     `json:"operation_name_late_binding"`
+	OperationNameLateBinding           bool                     `yaml:"operation_name_late_binding"`
 	Gen128Bit                          bool                     `yaml:"traceid_128bit"`
 	// Remove the above field. Ref: https://github.com/open-telemetry/opentelemetry-specification/issues/525#issuecomment-605519217
 	// Ref: https://opentelemetry.io/docs/reference/specification/trace/api/#spancontext

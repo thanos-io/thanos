@@ -86,14 +86,21 @@ config:
   sampler_manager_host_port: ""
   sampler_max_operations: 0
   sampler_refresh_interval: 0s
+  sampler_parent_config:
+    local_parent_sampled: false
+    remote_parent_sampled: false
   reporter_max_queue_size: 0
   reporter_flush_interval: 0s
   reporter_log_spans: false
+  reporter_disable_attempt_reconnecting: false
+  reporter_attempt_reconnect_interval: 0s
   endpoint: ""
   user: ""
   password: ""
   agent_host: ""
   agent_port: 0
+  sampling_server_url: false
+  operation_name_late_binding: false
   traceid_128bit: false
 ```
 
