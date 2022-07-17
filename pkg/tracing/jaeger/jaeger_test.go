@@ -44,6 +44,7 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 	tracer, _ := migration.Bridge(tracerOtel, log.NewNopLogger())
 	clientRoot, clientCtx := tracing.StartSpan(tracing.ContextWithTracer(context.Background(), tracer), "a")
 
+	config.SamplerParam = 0.0
 	sampler2 := getSampler(config)
 	// Simulate Server process with different tracer, but with client span in context.
 	srvTracerOtel := newTraceProvider(
@@ -79,7 +80,7 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
 
 	config := Config{
-		SamplerType:         "const",
+		SamplerType:         "probabilistic",
 		SamplerParam:        0.0,
 		SamplerParentConfig: parentConfig,
 	}
@@ -96,12 +97,14 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 
 	clientRoot, clientCtx := tracing.StartSpan(tracing.ContextWithTracer(context.Background(), tracer), "a")
 
+	config.SamplerParam = 1.0
+	sampler2 := getSampler(config)
 	// Simulate Server process with different tracer, but with client span in context.
 	srvTracerOtel := newTraceProvider(
 		context.Background(),
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
-		sampler, // never sample
+		sampler2, // never sample
 		[]attribute.KeyValue{},
 		"jaeger-test-server",
 	)
@@ -128,7 +131,7 @@ func TestContextTracing_ForceTracing(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
 	config := Config{
 		SamplerType:         "probabilistic",
-		SamplerParam:        1.0,
+		SamplerParam:        0.0,
 		SamplerParentConfig: parentConfig,
 	}
 	sampler := getSampler(config)

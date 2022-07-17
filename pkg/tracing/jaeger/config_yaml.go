@@ -111,12 +111,14 @@ func getSampler(config Config) tracesdk.Sampler {
 	samplingFraction := getSamplingFraction(samplerType, config.SamplerParam)
 
 	var sampler tracesdk.Sampler
-	if samplingFraction == 1.0 {
-		sampler = tracesdk.AlwaysSample()
-	} else if samplingFraction == 0.0 {
-		sampler = tracesdk.NeverSample()
-	} else if samplerType == "probabilistic" {
+	if samplerType == "probabilistic" {
 		sampler = tracesdk.ParentBased(tracesdk.TraceIDRatioBased(samplingFraction))
+	} else if samplerType == "const" {
+		if samplingFraction == 1.0 {
+			sampler = tracesdk.AlwaysSample()
+		} else {
+			sampler = tracesdk.NeverSample()
+		}
 	} else if samplerType == "remote" {
 		var remoteOptions []jaegerremote.Option
 		if config.SamplerRefreshInterval != 0 {
