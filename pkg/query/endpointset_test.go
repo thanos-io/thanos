@@ -1198,7 +1198,6 @@ func TestDeadlockLocking(t *testing.T) {
 		metadata: &endpointMetadata{
 			&infopb.InfoResponse{},
 		},
-		clients: &endpointClients{},
 	}
 
 	g := &errgroup.Group{}

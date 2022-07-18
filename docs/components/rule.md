@@ -430,7 +430,10 @@ Flags:
       --resend-delay=1m          Minimum amount of time to wait before resending
                                  an alert to Alertmanager.
       --rule-file=rules/ ...     Rule files that should be used by rule manager.
-                                 Can be in glob format (repeated).
+                                 Can be in glob format (repeated). Note that
+                                 rules are not automatically detected, use
+                                 SIGHUP or do HTTP POST /-/reload to re-read
+                                 them.
       --shipper.upload-compacted
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.

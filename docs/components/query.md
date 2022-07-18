@@ -229,7 +229,7 @@ Additionally, Thanos supports dynamic prefix configuration, which [is not yet im
 
 ## File SD
 
-`--store.sd-file` flag provides a path to a JSON or YAML formatted file, which contains a list of targets in [Prometheus target format](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config).
+`--store.sd-files` flag provides a path to a JSON or YAML formatted file, which contains a list of targets in [Prometheus target format](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#file_sd_config).
 
 Example file SD file in YAML:
 

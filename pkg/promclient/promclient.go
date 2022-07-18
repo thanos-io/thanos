@@ -625,10 +625,13 @@ func (c *Client) BuildVersion(ctx context.Context, base *url.URL) (string, error
 	span, ctx := tracing.StartSpan(ctx, "/prom_buildversion HTTP[client]")
 	defer span.Finish()
 
-	// We get status code 404 for prometheus versions lower than 2.14.0
+	// We get status code 404 or 405 for prometheus versions lower than 2.14.0
 	body, code, err := c.req2xx(ctx, &u, http.MethodGet)
 	if err != nil {
 		if code == http.StatusNotFound {
+			return "0", nil
+		}
+		if code == http.StatusMethodNotAllowed {
 			return "0", nil
 		}
 		return "", err

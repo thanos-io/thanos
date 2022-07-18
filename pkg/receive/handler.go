@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/logging"
 
@@ -56,9 +57,18 @@ const (
 	DefaultTenantLabel = "tenant_id"
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
+	// AllTenantsQueryParam is the query parameter for getting TSDB stats for all tenants.
+	AllTenantsQueryParam = "all_tenants"
 	// Labels for metrics.
 	labelSuccess = "success"
 	labelError   = "error"
+)
+
+// Allowed fields in client certificates.
+const (
+	CertificateFieldOrganization       = "organization"
+	CertificateFieldOrganizationalUnit = "organizationalUnit"
+	CertificateFieldCommonName         = "commonName"
 )
 
 var (
@@ -76,6 +86,7 @@ type Options struct {
 	ListenAddress     string
 	Registry          *prometheus.Registry
 	TenantHeader      string
+	TenantField       string
 	DefaultTenantID   string
 	ReplicaHeader     string
 	Endpoint          string
@@ -86,7 +97,7 @@ type Options struct {
 	DialOpts          []grpc.DialOption
 	ForwardTimeout    time.Duration
 	RelabelConfigs    []*relabel.Config
-	GetTSDBStats      GetStatsFunc
+	TSDBStats         TSDBStats
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -109,6 +120,8 @@ type Handler struct {
 	replicationFactor prometheus.Gauge
 
 	storepb.UnimplementedWriteableStoreServer
+	writeSamplesTotal    *prometheus.HistogramVec
+	writeTimeseriesTotal *prometheus.HistogramVec
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -152,6 +165,24 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help: "The number of times to replicate incoming write requests.",
 			},
 		),
+		writeTimeseriesTotal: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_timeseries",
+				Help:      "The number of timeseries received in the incoming write requests.",
+				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+			}, []string{"code", "tenant"},
+		),
+		writeSamplesTotal: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_samples",
+				Help:      "The number of sampled received in the incoming write requests.",
+				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+			}, []string{"code", "tenant"},
+		),
 	}
 
 	h.forwardRequests.WithLabelValues(labelSuccess)
@@ -167,7 +198,9 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
-		ins = extpromhttp.NewInstrumentationMiddleware(o.Registry,
+		ins = extpromhttp.NewTenantInstrumentationMiddleware(
+			o.TenantHeader,
+			o.Registry,
 			[]float64{0.001, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.25, 0.5, 0.75, 1, 2, 3, 4, 5},
 		)
 	}
@@ -175,17 +208,28 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 		next = ins.NewHandler(name, http.HandlerFunc(next))
+
 		if o.Tracer != nil {
 			next = tracing.HTTPMiddleware(o.Tracer, name, logger, http.HandlerFunc(next))
 		}
 		return next
 	}
 
-	h.router.Post("/api/v1/receive", instrf("receive", readyf(middleware.RequestID(http.HandlerFunc(h.receiveHTTP)))))
+	h.router.Post(
+		"/api/v1/receive",
+		instrf(
+			"receive",
+			readyf(
+				middleware.RequestID(
+					http.HandlerFunc(h.receiveHTTP),
+				),
+			),
+		),
+	)
 
 	statusAPI := statusapi.New(statusapi.Options{
 		GetStats: h.getStats,
-		Registry: o.Registry,
+		Registry: h.options.Registry,
 	})
 	statusAPI.Register(h.router, o.Tracer, logger, ins, logging.NewHTTPServerMiddleware(logger))
 
@@ -230,17 +274,27 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (h *Handler) getStats(r *http.Request, statsByLabelName string) (*tsdb.Stats, error) {
+func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusapi.TenantStats, *api.ApiError) {
 	if !h.isReady() {
-		return nil, fmt.Errorf("service unavailable")
+		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: fmt.Errorf("service unavailable")}
 	}
 
 	tenantID := r.Header.Get(h.options.TenantHeader)
+	getAllTenantStats := r.FormValue(AllTenantsQueryParam) == "true"
+	if getAllTenantStats && tenantID != "" {
+		err := fmt.Errorf("using both the %s parameter and the %s header is not supported", AllTenantsQueryParam, h.options.TenantHeader)
+		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+
+	if getAllTenantStats {
+		return h.options.TSDBStats.TenantStats(statsByLabelName), nil
+	}
+
 	if tenantID == "" {
 		tenantID = h.options.DefaultTenantID
 	}
 
-	return h.options.GetTSDBStats(tenantID, statsByLabelName), nil
+	return h.options.TSDBStats.TenantStats(statsByLabelName, tenantID), nil
 }
 
 // Close stops the Handler.
@@ -323,12 +377,22 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
+	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
 	tenant := r.Header.Get(h.options.TenantHeader)
 	if tenant == "" {
 		tenant = h.options.DefaultTenantID
+	}
+
+	if h.options.TenantField != "" {
+		tenant, err = h.getTenantFromCertificate(r)
+		if err != nil {
+			// This must hard fail to ensure hard tenancy when feature is enabled.
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	tLogger := log.With(h.logger, "tenant", tenant)
@@ -341,7 +405,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		compressed.Grow(512)
 	}
-	_, err := io.Copy(&compressed, r.Body)
+	_, err = io.Copy(&compressed, r.Body)
 	if err != nil {
 		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
@@ -392,26 +456,30 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.handleRequest(ctx, rep, tenant, &wreq)
-	if err != nil {
+	responseStatusCode := http.StatusOK
+	if err = h.handleRequest(ctx, rep, tenant, &wreq); err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
+		switch determineWriteErrorCause(err, 1) {
+		case errNotReady:
+			responseStatusCode = http.StatusServiceUnavailable
+		case errUnavailable:
+			responseStatusCode = http.StatusServiceUnavailable
+		case errConflict:
+			responseStatusCode = http.StatusConflict
+		case errBadReplica:
+			responseStatusCode = http.StatusBadRequest
+		default:
+			level.Error(tLogger).Log("err", err, "msg", "internal server error")
+			responseStatusCode = http.StatusInternalServerError
+		}
+		http.Error(w, err.Error(), responseStatusCode)
 	}
-
-	switch determineWriteErrorCause(err, 1) {
-	case nil:
-		return
-	case errNotReady:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case errUnavailable:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case errConflict:
-		http.Error(w, err.Error(), http.StatusConflict)
-	case errBadReplica:
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	default:
-		level.Error(tLogger).Log("err", err, "msg", "internal server error")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(len(wreq.Timeseries)))
+	totalSamples := 0
+	for _, timeseries := range wreq.Timeseries {
+		totalSamples += len(timeseries.Samples)
 	}
+	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
 }
 
 // forward accepts a write request, batches its time series by
@@ -747,6 +815,9 @@ func isConflict(err error) bool {
 		err == storage.ErrDuplicateSampleForTimestamp ||
 		err == storage.ErrOutOfOrderSample ||
 		err == storage.ErrOutOfBounds ||
+		err == storage.ErrDuplicateExemplar ||
+		err == storage.ErrOutOfOrderExemplar ||
+		err == storage.ErrExemplarLabelLength ||
 		status.Code(err) == codes.AlreadyExists
 }
 
@@ -865,4 +936,43 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	client := storepb.NewWriteableStoreClient(conn)
 	p.cache[addr] = client
 	return client, nil
+}
+
+// getTenantFromCertificate extracts the tenant value from a client's presented certificate. The x509 field to use as
+// value can be configured with Options.TenantField. An error is returned when the extraction has not succeeded.
+func (h *Handler) getTenantFromCertificate(r *http.Request) (string, error) {
+	var tenant string
+
+	if len(r.TLS.PeerCertificates) == 0 {
+		return "", errors.New("could not get required certificate field from client cert")
+	}
+
+	// First cert is the leaf authenticated against.
+	cert := r.TLS.PeerCertificates[0]
+
+	switch h.options.TenantField {
+
+	case CertificateFieldOrganization:
+		if len(cert.Subject.Organization) == 0 {
+			return "", errors.New("could not get organization field from client cert")
+		}
+		tenant = cert.Subject.Organization[0]
+
+	case CertificateFieldOrganizationalUnit:
+		if len(cert.Subject.OrganizationalUnit) == 0 {
+			return "", errors.New("could not get organizationalUnit field from client cert")
+		}
+		tenant = cert.Subject.OrganizationalUnit[0]
+
+	case CertificateFieldCommonName:
+		if cert.Subject.CommonName == "" {
+			return "", errors.New("could not get commonName field from client cert")
+		}
+		tenant = cert.Subject.CommonName
+
+	default:
+		return "", errors.New("tls client cert field requested is not supported")
+	}
+
+	return tenant, nil
 }

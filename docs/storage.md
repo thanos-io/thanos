@@ -4,7 +4,7 @@ Thanos uses object storage as primary storage for metrics and metadata related t
 
 ## Configuring Access to Object Storage
 
-Thanos supports any object stores that can be implemented against Thanos [objstore.Bucket interface](../pkg/objstore/objstore.go).
+Thanos supports any object stores that can be implemented against Thanos [objstore.Bucket interface](https://github.com/thanos-io/objstore/blob/main/objstore.go).
 
 All clients can be configured using `--objstore.config-file` to reference to the configuration file or `--objstore.config` to put yaml config directly.
 
@@ -86,6 +86,7 @@ config:
       key_file: ""
       server_name: ""
       insecure_skip_verify: false
+    disable_compression: false
   trace:
     enable: false
   list_objects_version: ""
@@ -248,7 +249,7 @@ Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/usin
 
 If you want to use IAM credential retrieved from an instance profile, Thanos needs to authenticate through AWS STS. For this purposes you can specify your own STS Endpoint.
 
-By default Thanos will use endpoint: https://sts.amazonaws.com and AWS region coresponding endpoints.
+By default Thanos will use endpoint: https://sts.amazonaws.com and AWS region corresponding endpoints.
 
 #### GCS
 
@@ -356,13 +357,13 @@ config:
     max_idle_conns: 0
     max_idle_conns_per_host: 0
     max_conns_per_host: 0
-    disable_compression: false
     tls_config:
       ca_file: ""
       cert_file: ""
       key_file: ""
       server_name: ""
       insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -425,11 +426,19 @@ config:
   http_config:
     idle_conn_timeout: 1m30s
     response_header_timeout: 2m
+    insecure_skip_verify: false
     tls_handshake_timeout: 10s
     expect_continue_timeout: 1s
     max_idle_conns: 100
     max_idle_conns_per_host: 100
     max_conns_per_host: 0
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+    disable_compression: false
 prefix: ""
 ```
 
@@ -486,17 +495,21 @@ prefix: ""
 
 ### How to add a new client to Thanos?
 
+objstore.go
+
 Following checklist allows adding new Go code client to supported providers:
 
 1. Create new directory under `pkg/objstore/<provider>`
-2. Implement [objstore.Bucket interface](../pkg/objstore/objstore.go)
+2. Implement [objstore.Bucket interface](https://github.com/thanos-io/objstore/blob/main//objstore.go)
 3. Add `NewTestBucket` constructor for testing purposes, that creates and deletes temporary bucket.
-4. Use created `NewTestBucket` in [ForeachStore method](../pkg/objstore/objtesting/foreach.go) to ensure we can run tests against new provider. (In PR)
-5. RUN the [TestObjStoreAcceptanceTest](../pkg/objstore/objtesting/acceptance_e2e_test.go) against your provider to ensure it fits. Fix any found error until test passes. (In PR)
-6. Add client implementation to the factory in [factory](../pkg/objstore/client/factory.go) code. (Using as small amount of flags as possible in every command)
+4. Use created `NewTestBucket` in [ForeachStore method](https://github.com/thanos-io/objstore/blob/main/objtesting/foreach.go) to ensure we can run tests against new provider. (In PR)
+5. RUN the [TestObjStoreAcceptanceTest](https://github.com/thanos-io/objstore/blob/main//objtesting/acceptance_e2e_test.go) against your provider to ensure it fits. Fix any found error until test passes. (In PR)
+6. Add client implementation to the factory in [factory](https://github.com/thanos-io/objstore/blob/main/client/factory.go) code. (Using as small amount of flags as possible in every command)
 7. Add client struct config to [bucketcfggen](../scripts/cfggen/main.go) to allow config auto generation.
 
 At that point, anyone can use your provider by spec.
+
+Check the checklist in [thanos-io/objstore](https://github.com/thanos-io/objstore#how-to-add-a-new-client-to-thanos) for more comprehensive information!
 
 ## Data in Object Storage
 
@@ -817,7 +830,7 @@ Every series entry first holds its number of labels, followed by tuples of symbo
 
 ##### Label Index
 
-A label index section indexes the existing (combined) values for one or more label names. The `#names` field determines the number of indexed label names, followed by the total number of entries in the `#entries` field. The body holds #entries / #names tuples of symbol table references, each tuple being of #names length. The value tuples are sorted in lexicographically increasing order. This is no longer used.
+A label index section indexes the existing (combined) values for one or more label names. The `#names` field determines the number of indexed label names, followed by the total number of entries in the `#entries` field. The body holds #entries / #names tuples of symbol table references, each tuple being of `#names` length. The value tuples are sorted in lexicographically increasing order. This is no longer used.
 
 ```
 ┌───────────────┬────────────────┬────────────────┐

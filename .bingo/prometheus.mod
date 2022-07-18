@@ -10,7 +10,9 @@ replace (
 	github.com/cockroachdb/cockroach => github.com/cockroachdb/cockroach v0.0.0-20170608034007-84bc9597164f
 	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.2.3-0.20180520015035-48a0ecefe2e4
 	github.com/gophercloud/gophercloud => github.com/gophercloud/gophercloud v0.18.0
+	github.com/json-iterator/go => github.com/json-iterator/go v1.1.12
 	github.com/miekg/dns => github.com/miekg/dns v1.0.4
+	github.com/modern-go/reflect2 => github.com/modern-go/reflect2 v1.0.2
 	github.com/prometheus/client_golang => github.com/prometheus/client_golang v0.9.0-pre1.0.20180607123607-faf4ec335fe0
 	github.com/prometheus/common => github.com/prometheus/common v0.0.0-20180518154759-7600349dcfe1
 	github.com/prometheus/tsdb => github.com/prometheus/tsdb v0.0.0-20180921053122-9c8ca47399a7
@@ -25,7 +27,7 @@ require (
 	github.com/Azure/go-autorest v0.0.0-00010101000000-000000000000 // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
-	github.com/aws/aws-sdk-go v1.44.33 // indirect
+	github.com/aws/aws-sdk-go v1.44.55 // indirect
 	github.com/cockroachdb/cmux v0.0.0-00010101000000-000000000000 // indirect
 	github.com/cockroachdb/cockroach v0.0.0-00010101000000-000000000000 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
@@ -34,7 +36,7 @@ require (
 	github.com/googleapis/gnostic v0.0.0-00010101000000-000000000000 // indirect
 	github.com/gophercloud/gophercloud v0.0.0-00010101000000-000000000000 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
-	github.com/hashicorp/consul/api v1.13.0 // indirect
+	github.com/hashicorp/consul/api v1.13.1 // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
@@ -48,10 +50,12 @@ require (
 	github.com/samuel/go-zookeeper v0.0.0-20201211165307-7117e9ea2414 // indirect
 	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749 // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
-	golang.org/x/oauth2 v0.0.0-20220608161450-d0670ef3b1eb // indirect
+	golang.org/x/net v0.0.0-20220708220712-1185a9018129 // indirect
+	golang.org/x/oauth2 v0.0.0-20220630143837-2104d58473e0 // indirect
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858 // indirect
-	google.golang.org/api v0.83.0 // indirect
-	google.golang.org/genproto v0.0.0-20220608133413-ed9918b62aac // indirect
+	google.golang.org/api v0.87.0 // indirect
+	google.golang.org/genproto v0.0.0-20220714211235-042d03aeabc9 // indirect
+	google.golang.org/grpc v1.48.0 // indirect
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6 // indirect
 	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

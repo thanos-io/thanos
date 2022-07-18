@@ -81,7 +81,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		request.EnableQueryPushdown,
 		false,
 	)
-	qry, err := qe.NewInstantQuery(queryable, request.Query, ts)
+	qry, err := qe.NewInstantQuery(queryable, &promql.QueryOpts{}, request.Query, ts)
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	endTime := time.Unix(request.EndTimeSeconds, 0)
 	interval := time.Duration(request.IntervalSeconds) * time.Second
 
-	qry, err := qe.NewRangeQuery(queryable, request.Query, startTime, endTime, interval)
+	qry, err := qe.NewRangeQuery(queryable, &promql.QueryOpts{}, request.Query, startTime, endTime, interval)
 	if err != nil {
 		return err
 	}

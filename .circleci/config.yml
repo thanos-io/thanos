@@ -2,15 +2,15 @@
 version: 2.1
 
 orbs:
-  go: circleci/go@1.5.0
+  go: circleci/go@1.7.1
 
 executors:
   golang:
     docker:
-      - image: cimg/go:1.17-node
+      - image: cimg/go:1.18-node
   golang-test:
     docker:
-      - image: cimg/go:1.17-node
+      - image: cimg/go:1.18-node
       - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
       - checkout
       - go/mod-download-cached
       - setup_remote_docker:
-          version: 20.10.11
+          version: 20.10.12
       - run:
           name: Create Secret if PR is not forked
           # GCS integration tests are run only for author's PR that have write access, because these tests
@@ -74,7 +74,7 @@ jobs:
       - checkout
       - go/mod-download-cached
       - setup_remote_docker:
-          version: 20.10.11
+          version: 20.10.12
       - attach_workspace:
           at: .
       # Register qemu to support multi-arch.
@@ -96,7 +96,7 @@ jobs:
       - checkout
       - go/mod-download-cached
       - setup_remote_docker:
-          version: 20.10.11
+          version: 20.10.12
       - attach_workspace:
           at: .
       - run: make tarballs-release

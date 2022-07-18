@@ -154,7 +154,7 @@ func TestHashringGet(t *testing.T) {
 	}
 }
 
-func TestConsistentHashringGet(t *testing.T) {
+func TestKetamaHashringGet(t *testing.T) {
 	baseTS := &prompb.TimeSeries{
 		Labels: []*labelpb.Label{
 			{
@@ -181,21 +181,21 @@ func TestConsistentHashringGet(t *testing.T) {
 			nodes:        []string{"node-1", "node-2", "node-3"},
 			ts:           baseTS,
 			n:            1,
-			expectedNode: "node-3",
+			expectedNode: "node-1",
 		},
 		{
 			name:         "base case with replication",
 			nodes:        []string{"node-1", "node-2", "node-3"},
 			ts:           baseTS,
 			n:            2,
-			expectedNode: "node-1",
+			expectedNode: "node-2",
 		},
 		{
 			name:         "base case with replication and reordered nodes",
 			nodes:        []string{"node-1", "node-3", "node-2"},
 			ts:           baseTS,
 			n:            2,
-			expectedNode: "node-1",
+			expectedNode: "node-2",
 		},
 		{
 			name:         "base case with new node at beginning of ring",
@@ -234,8 +234,8 @@ func TestConsistentHashringGet(t *testing.T) {
 	}
 }
 
-func TestConsistentHashringConsistency(t *testing.T) {
-	series := makeSeries(10000)
+func TestKetamaHashringConsistency(t *testing.T) {
+	series := makeSeries()
 
 	ringA := []string{"node-1", "node-2", "node-3"}
 	a1, err := assignSeries(series, ringA)
@@ -254,8 +254,8 @@ func TestConsistentHashringConsistency(t *testing.T) {
 	}
 }
 
-func TestConsistentHashringIncreaseAtEnd(t *testing.T) {
-	series := makeSeries(10000)
+func TestKetamaHashringIncreaseAtEnd(t *testing.T) {
+	series := makeSeries()
 
 	initialRing := []string{"node-1", "node-2", "node-3"}
 	initialAssignments, err := assignSeries(series, initialRing)
@@ -274,8 +274,8 @@ func TestConsistentHashringIncreaseAtEnd(t *testing.T) {
 	}
 }
 
-func TestConsistentHashringIncreaseInMiddle(t *testing.T) {
-	series := makeSeries(10000)
+func TestKetamaHashringIncreaseInMiddle(t *testing.T) {
+	series := makeSeries()
 
 	initialRing := []string{"node-1", "node-3"}
 	initialAssignments, err := assignSeries(series, initialRing)
@@ -294,7 +294,28 @@ func TestConsistentHashringIncreaseInMiddle(t *testing.T) {
 	}
 }
 
-func makeSeries(numSeries int) []*prompb.TimeSeries {
+func TestKetamaHashringReplicationConsistency(t *testing.T) {
+	series := makeSeries()
+
+	initialRing := []string{"node-1", "node-4", "node-5"}
+	initialAssignments, err := assignReplicatedSeries(series, initialRing, 2)
+	require.NoError(t, err)
+
+	resizedRing := []string{"node-4", "node-3", "node-1", "node-2", "node-5"}
+	reassignments, err := assignReplicatedSeries(series, resizedRing, 2)
+	require.NoError(t, err)
+
+	// Assert that the initial nodes have no new keys after increasing the ring size
+	for _, node := range initialRing {
+		for _, ts := range reassignments[node] {
+			foundInInitialAssignment := findSeries(initialAssignments, node, ts)
+			require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
+		}
+	}
+}
+
+func makeSeries() []*prompb.TimeSeries {
+	numSeries := 10000
 	series := make([]*prompb.TimeSeries, numSeries)
 	for i := 0; i < numSeries; i++ {
 		series[i] = &prompb.TimeSeries{
@@ -322,15 +343,21 @@ func findSeries(initialAssignments map[string][]*prompb.TimeSeries, node string,
 }
 
 func assignSeries(series []*prompb.TimeSeries, nodes []string) (map[string][]*prompb.TimeSeries, error) {
+	return assignReplicatedSeries(series, nodes, 0)
+}
+
+func assignReplicatedSeries(series []*prompb.TimeSeries, nodes []string, replicas uint64) (map[string][]*prompb.TimeSeries, error) {
 	hashRing := newKetamaHashring(nodes, SectionsPerNode)
 	assignments := make(map[string][]*prompb.TimeSeries)
-	for _, ts := range series {
-		result, err := hashRing.Get("tenant", ts)
-		if err != nil {
-			return nil, err
-		}
-		assignments[result] = append(assignments[result], ts)
+	for i := uint64(0); i < replicas; i++ {
+		for _, ts := range series {
+			result, err := hashRing.GetN("tenant", ts, i)
+			if err != nil {
+				return nil, err
+			}
+			assignments[result] = append(assignments[result], ts)
 
+		}
 	}
 
 	return assignments, nil
