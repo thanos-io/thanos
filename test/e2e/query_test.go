@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/thanos-io/objstore/providers/s3"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -1310,7 +1311,7 @@ func TestGrpcInstantQuery(t *testing.T) {
 	ctx := context.Background()
 	testutil.Ok(t, synthesizeSamples(ctx, prom, samples))
 
-	grpcConn, err := grpc.Dial(querier.Endpoint("grpc"), grpc.WithInsecure())
+	grpcConn, err := grpc.Dial(querier.Endpoint("grpc"), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.Ok(t, err)
 	queryClient := querypb.NewQueryClient(grpcConn)
 
@@ -1432,7 +1433,7 @@ func TestGrpcQueryRange(t *testing.T) {
 	ctx := context.Background()
 	testutil.Ok(t, synthesizeSamples(ctx, prom, samples))
 
-	grpcConn, err := grpc.Dial(querier.Endpoint("grpc"), grpc.WithInsecure())
+	grpcConn, err := grpc.Dial(querier.Endpoint("grpc"), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.Ok(t, err)
 	queryClient := querypb.NewQueryClient(grpcConn)
 
