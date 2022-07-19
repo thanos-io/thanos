@@ -4,7 +4,8 @@
 package storepb
 
 import (
-	"github.com/alecthomas/units"
+	"sync"
+
 	"github.com/cespare/xxhash/v2"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -13,11 +14,11 @@ import (
 var sep = []byte{'\xff'}
 
 type ShardMatcher struct {
-	buf              []byte
+	buf              *[]byte
+	buffers          *sync.Pool
 	shardingLabelset map[string]struct{}
 
-	isSharded bool
-
+	isSharded   bool
 	by          bool
 	totalShards int64
 	shardIndex  int64
@@ -27,13 +28,19 @@ func (s *ShardMatcher) IsSharded() bool {
 	return s.isSharded
 }
 
+func (s *ShardMatcher) Close() {
+	if s.buffers != nil {
+		s.buffers.Put(s.buf)
+	}
+}
+
 func (s *ShardMatcher) MatchesZLabels(zLabels []labelpb.ZLabel) bool {
 	// Match all series when query is not sharded
 	if s == nil || !s.isSharded {
 		return true
 	}
 
-	s.buf = s.buf[:0]
+	*s.buf = (*s.buf)[:0]
 	for _, lbl := range zLabels {
 		// Exclude metric name and le label from sharding
 		if lbl.Name == "__name__" || lbl.Name == "le" {
@@ -41,14 +48,14 @@ func (s *ShardMatcher) MatchesZLabels(zLabels []labelpb.ZLabel) bool {
 		}
 
 		if shardByLabel(s.shardingLabelset, lbl, s.by) {
-			s.buf = append(s.buf, lbl.Name...)
-			s.buf = append(s.buf, sep[0])
-			s.buf = append(s.buf, lbl.Value...)
-			s.buf = append(s.buf, sep[0])
+			*s.buf = append(*s.buf, lbl.Name...)
+			*s.buf = append(*s.buf, sep[0])
+			*s.buf = append(*s.buf, lbl.Value...)
+			*s.buf = append(*s.buf, sep[0])
 		}
 	}
 
-	hash := xxhash.Sum64(s.buf)
+	hash := xxhash.Sum64(*s.buf)
 	return hash%uint64(s.totalShards) == uint64(s.shardIndex)
 }
 
@@ -70,7 +77,7 @@ func shardByLabel(labelSet map[string]struct{}, zlabel labelpb.ZLabel, groupingB
 	return false
 }
 
-func (m *ShardInfo) Matcher() *ShardMatcher {
+func (m *ShardInfo) Matcher(buffers *sync.Pool) *ShardMatcher {
 	if m == nil || m.TotalShards < 1 {
 		return &ShardMatcher{
 			isSharded: false,
@@ -79,7 +86,8 @@ func (m *ShardInfo) Matcher() *ShardMatcher {
 
 	return &ShardMatcher{
 		isSharded:        true,
-		buf:              make([]byte, 10*units.Kilobyte),
+		buf:              buffers.Get().(*[]byte),
+		buffers:          buffers,
 		shardingLabelset: m.labelSet(),
 		by:               m.By,
 		totalShards:      m.TotalShards,

@@ -4,7 +4,10 @@
 package storepb
 
 import (
+	"sync"
 	"testing"
+
+	"github.com/alecthomas/units"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -107,9 +110,14 @@ func TestShardInfo_MatchesSeries(t *testing.T) {
 		},
 	}
 
+	buffers := sync.Pool{New: func() interface{} {
+		b := make([]byte, 0, 10*units.Kilobyte)
+		return &b
+	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			matcher := test.shardInfo.Matcher()
+			matcher := test.shardInfo.Matcher(&buffers)
+			defer matcher.Close()
 			isMatch := matcher.MatchesZLabels(test.series)
 			if isMatch != test.matches {
 				t.Fatalf("invalid result, got %t, want %t", isMatch, test.matches)

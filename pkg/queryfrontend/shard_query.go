@@ -9,7 +9,8 @@ package queryfrontend
 import (
 	"context"
 
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
+
 	"github.com/thanos-io/thanos/pkg/querysharding"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )

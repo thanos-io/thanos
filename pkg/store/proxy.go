@@ -62,6 +62,7 @@ type ProxyStore struct {
 	stores         func() []Client
 	component      component.StoreAPI
 	selectorLabels labels.Labels
+	buffers        sync.Pool
 
 	responseTimeout time.Duration
 	metrics         *proxyStoreMetrics
@@ -104,10 +105,14 @@ func NewProxyStore(
 
 	metrics := newProxyStoreMetrics(reg)
 	s := &ProxyStore{
-		logger:          logger,
-		stores:          stores,
-		component:       component,
-		selectorLabels:  selectorLabels,
+		logger:         logger,
+		stores:         stores,
+		component:      component,
+		selectorLabels: selectorLabels,
+		buffers: sync.Pool{New: func() interface{} {
+			b := make([]byte, 0, initialBufSize)
+			return &b
+		}},
 		responseTimeout: responseTimeout,
 		metrics:         metrics,
 	}
@@ -344,6 +349,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 					s.responseTimeout,
 					s.metrics.emptyStreamResponses,
 					st.SupportsSharding(),
+					&s.buffers,
 					r.ShardInfo,
 				))
 		}
@@ -441,6 +447,7 @@ func startStreamSeriesSet(
 	responseTimeout time.Duration,
 	emptyStreamResponses prometheus.Counter,
 	storeSupportsSharding bool,
+	buffers *sync.Pool,
 	shardInfo *storepb.ShardInfo,
 ) *streamSeriesSet {
 	s := &streamSeriesSet{
@@ -491,7 +498,8 @@ func startStreamSeriesSet(
 			}
 		}()
 
-		shardMatcher := shardInfo.Matcher()
+		shardMatcher := shardInfo.Matcher(buffers)
+		defer shardMatcher.Close()
 		applySharding := shardInfo != nil && !storeSupportsSharding
 		if applySharding {
 			msg := "Applying series sharding in the proxy since there is not support in the underlying store"

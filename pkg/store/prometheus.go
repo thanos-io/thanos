@@ -195,7 +195,9 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		return nil
 	}
 
-	shardMatcher := r.ShardInfo.Matcher()
+	shardMatcher := r.ShardInfo.Matcher(&p.buffers)
+	defer shardMatcher.Close()
+
 	if r.QueryHints != nil && r.QueryHints.IsSafeToExecute() && !shardMatcher.IsSharded() {
 		return p.queryPrometheus(s, r)
 	}

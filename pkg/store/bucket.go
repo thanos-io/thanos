@@ -279,6 +279,7 @@ type BucketStore struct {
 	dir             string
 	indexCache      storecache.IndexCache
 	indexReaderPool *indexheader.ReaderPool
+	buffers         sync.Pool
 	chunkPool       pool.Bytes
 
 	// Sets of blocks that have the same labels. They are indexed by a hash over their label set.
@@ -401,11 +402,15 @@ func NewBucketStore(
 	options ...BucketStoreOption,
 ) (*BucketStore, error) {
 	s := &BucketStore{
-		logger:                      log.NewNopLogger(),
-		bkt:                         bkt,
-		fetcher:                     fetcher,
-		dir:                         dir,
-		indexCache:                  noopCache{},
+		logger:     log.NewNopLogger(),
+		bkt:        bkt,
+		fetcher:    fetcher,
+		dir:        dir,
+		indexCache: noopCache{},
+		buffers: sync.Pool{New: func() interface{} {
+			b := make([]byte, 0, initialBufSize)
+			return &b
+		}},
 		chunkPool:                   pool.NoopBytes{},
 		blocks:                      map[ulid.ULID]*bucketBlock{},
 		blockSets:                   map[uint64]*bucketBlockSet{},
@@ -1067,6 +1072,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				})
 				defer span.Finish()
 
+				shardMatcher := req.ShardInfo.Matcher(&s.buffers)
+				defer shardMatcher.Close()
 				part, pstats, err := blockSeries(
 					newCtx,
 					b.extLset,
@@ -1078,7 +1085,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					req.SkipChunks,
 					req.MinTime, req.MaxTime,
 					req.Aggregates,
-					req.ShardInfo.Matcher(),
+					shardMatcher,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
