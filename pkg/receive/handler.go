@@ -543,12 +543,15 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.receiverMode == RouterOnly {
+	// Impose limits only if Receive is in Router or RouterIngestor mode.
+	if h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor {
 		under, err := h.isUnderLimit(ctx, tenant, tLogger)
 		if err != nil {
 			level.Info(tLogger).Log("msg", "error while limiting", "err", err.Error())
 
 		}
+
+		// Fail request fully if tenant has exceeded set limit.
 		if !under {
 			http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
 			return
@@ -579,11 +582,13 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 // isUnderLimit ensures that the current number of active series for a tenant does not exceed given limit.
 // It does so in a best-effort way, i.e, in case meta-monitoring is unreachable, it does not impose limits.
+// TODO(saswatamcode): Add capability to configure diff limits for diff tenants.
 func (h *Handler) isUnderLimit(ctx context.Context, tenant string, logger log.Logger) (bool, error) {
 	if h.options.MaxPerTenantLimit == 0 || h.options.MetaMonitoringUrl.Host == "" {
 		return true, nil
 	}
 
+	// Use specified HTTPConfig to make requests to meta-monitoring.
 	httpConfContentYaml, err := h.options.MetaMonitoringHttpClient.Content()
 	if err != nil {
 		return true, errors.Wrap(err, "getting http client config")
@@ -608,10 +613,15 @@ func (h *Handler) isUnderLimit(ctx context.Context, tenant string, logger log.Lo
 
 	level.Debug(logger).Log("msg", "successfully queried meta-monitoring", "vectors", len(vectorRes))
 
+	// In such limiting flow, we ingest the first remote write request
+	// and then check meta-monitoring metric to ascertain current active
+	// series. As such metric is updated in intervals, it is possible
+	// that Receive ingests more series than the limit, before detecting that
+	// a tenant has exceeded the set limits.
 	for _, e := range vectorRes {
-		for _, v := range e.Metric {
-			// Search for value of metric which has a tenant label.
-			if string(v) == tenant {
+		for k, v := range e.Metric {
+			// Search for metric which has tenant label for a particular tenant.
+			if k == "tenant" && string(v) == tenant {
 				h.aboveLimit.WithLabelValues(tenant).Set(float64(e.Value) - float64(h.options.MaxPerTenantLimit))
 				if float64(e.Value) >= float64(h.options.MaxPerTenantLimit) {
 					level.Error(logger).Log("msg", "tenant above limit", "currentSeries", float64(e.Value))
