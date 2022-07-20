@@ -738,7 +738,7 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 	}
 
 	if config.NumShards > 0 {
-		flags["--query-frontend.num-shards"] = strconv.Itoa(config.NumShards)
+		flags["--query-frontend.vertical-shards"] = strconv.Itoa(config.NumShards)
 	}
 
 	return e2e.NewInstrumentedRunnable(

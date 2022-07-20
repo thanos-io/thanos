@@ -54,7 +54,9 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 				return fmt.Errorf("expressions with %s are not shardable", n.Func.Name)
 			}
 		case *parser.BinaryExpr:
-			analysis = analysis.scopeToLabels(n.VectorMatching.MatchingLabels, n.VectorMatching.On)
+			if n.VectorMatching != nil {
+				analysis = analysis.scopeToLabels(n.VectorMatching.MatchingLabels, n.VectorMatching.On)
+			}
 		case *parser.AggregateExpr:
 			labels := make([]string, 0)
 			if len(n.Grouping) > 0 {

@@ -43,6 +43,10 @@ func TestAnalyzeQuery(t *testing.T) {
 			expression: `http_requests_total{code="400"} / http_requests_total`,
 		},
 		{
+			name:       "binary expression with constant",
+			expression: `http_requests_total{code="400"} / 4`,
+		},
+		{
 			name:       "binary expression with empty vector matching",
 			expression: `http_requests_total{code="400"} / on () http_requests_total`,
 		},
