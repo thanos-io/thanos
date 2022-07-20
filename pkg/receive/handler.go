@@ -566,7 +566,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Impose limits only if Receive is in Router or RouterIngestor mode.
 	if h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor {
-		under, err := h.isUnderLimit(ctx, tenant, tLogger)
+		under, err := h.isUnderLimit(tenant, tLogger)
 		if err != nil {
 			level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
 		}
@@ -630,7 +630,7 @@ func (h *Handler) QueryMetaMonitoring(ctx context.Context) error {
 // isUnderLimit ensures that the current number of active series for a tenant does not exceed given limit.
 // It does so in a best-effort way, i.e, in case meta-monitoring is unreachable, it does not impose limits.
 // TODO(saswatamcode): Add capability to configure diff limits for diff tenants.
-func (h *Handler) isUnderLimit(ctx context.Context, tenant string, logger log.Logger) (bool, error) {
+func (h *Handler) isUnderLimit(tenant string, logger log.Logger) (bool, error) {
 	if h.options.MaxPerTenantLimit == 0 || h.options.MetaMonitoringUrl.Host == "" {
 		return true, nil
 	}
