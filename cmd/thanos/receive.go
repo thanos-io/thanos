@@ -841,15 +841,15 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
 
-	cmd.Flag("receive.per-tenant-limit", "The total number of active series that a tenant is allowed to have within a hashring topology.").Uint64Var(&rc.maxPerTenantLimit)
+	cmd.Flag("receive.tenant-limits.max-head-series", "The total number of active or HEAD series that a tenant is allowed to have within a Receive topology.").Uint64Var(&rc.maxPerTenantLimit)
 
-	cmd.Flag("receive.limit-meta-monitoring.url", "Meta-monitoring URL which is compatible with Prometheus Query API for active series limiting.").Default("http://localhost:9090").URLVar(&rc.metaMonitoringUrl)
+	cmd.Flag("receive.tenant-limits.meta-monitoring-url", "Meta-monitoring URL which is compatible with Prometheus Query API for active series limiting.").Default("http://localhost:9090").URLVar(&rc.metaMonitoringUrl)
 
-	cmd.Flag("receive.limit-meta-monitoring.query", "PromQL Query to execute against meta-monitoring, to get the current number of active series for each tenant, across Receive replicas.").Default("sum(prometheus_tsdb_head_series) by (tenant)").StringVar(&rc.metaMonitoringLimitQuery)
+	cmd.Flag("receive.tenant-limits.meta-monitoring-query", "PromQL Query to execute against meta-monitoring, to get the current number of active series for each tenant, across Receive replicas.").Default("sum(prometheus_tsdb_head_series) by (tenant)").StringVar(&rc.metaMonitoringLimitQuery)
 
 	rc.metaMonitoringHttpClient = extflag.RegisterPathOrContent(
 		cmd,
-		"receive.limit-meta-monitoring.http-client",
+		"receive.tenant-limits.meta-monitoring-client",
 		"YAML file or string with http client configs for meta-monitoring.",
 	)
 

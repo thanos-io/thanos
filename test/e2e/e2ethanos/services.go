@@ -489,10 +489,10 @@ func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
 	}
 
 	if r.limit != 0 && r.metamonitoring != "" {
-		args["--receive.per-tenant-limit"] = fmt.Sprintf("%v", r.limit)
-		args["--receive.limit-meta-monitoring.url"] = r.metamonitoring
+		args["--receive.tenant-limits.max-head-series"] = fmt.Sprintf("%v", r.limit)
+		args["--receive.tenant-limits.meta-monitoring-url"] = r.metamonitoring
 		if r.metamonitoringQuery != "" {
-			args["--receive.limit-meta-monitoring.query"] = r.metamonitoringQuery
+			args["--receive.tenant-limits.meta-monitoring-query"] = r.metamonitoringQuery
 		}
 	}
 

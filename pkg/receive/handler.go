@@ -134,8 +134,8 @@ type Handler struct {
 	replications          *prometheus.CounterVec
 	replicationFactor     prometheus.Gauge
 	configuredTenantLimit prometheus.Gauge
-	aboveLimit            *prometheus.GaugeVec
 	limitedRequests       *prometheus.CounterVec
+	metaMonitoringErr     *prometheus.CounterVec
 
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
@@ -194,20 +194,20 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 		configuredTenantLimit: promauto.With(registerer).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "thanos_receive_tenant_active_series_limit",
-				Help: "The configured limit for active series of tenants.",
+				Name: "thanos_receive_tenant_head_series_limit",
+				Help: "The configured limit for active or HEAD series of tenants.",
 			},
-		),
-		aboveLimit: promauto.With(registerer).NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "thanos_receive_series_above_limit",
-				Help: "The difference between current number of active series and set limit.",
-			}, []string{"tenant"},
 		),
 		limitedRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "thanos_receive_limited_requests_total",
-				Help: "The total number of remote write requests that have been dropped due to limiting.",
+				Name: "thanos_receive_head_series_limited_requests_total",
+				Help: "The total number of remote write requests that have been dropped due to head series limiting.",
+			}, []string{"tenant"},
+		),
+		metaMonitoringErr: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_metamonitoring_failed_queries_total",
+				Help: "The total number of meta-monitoring queries that failed while limiting.",
 			}, []string{"tenant"},
 		),
 		writeTimeseriesTotal: promauto.With(registerer).NewHistogramVec(
@@ -608,6 +608,7 @@ func (h *Handler) isUnderLimit(ctx context.Context, tenant string, logger log.Lo
 
 	vectorRes, _, err := c.QueryInstant(ctx, h.options.MetaMonitoringUrl, h.options.MetaMonitoringLimitQuery, time.Now(), promclient.QueryOptions{})
 	if err != nil {
+		h.metaMonitoringErr.WithLabelValues(tenant).Inc()
 		return true, errors.Wrap(err, "failed to query meta-monitoring")
 	}
 
@@ -622,9 +623,8 @@ func (h *Handler) isUnderLimit(ctx context.Context, tenant string, logger log.Lo
 		for k, v := range e.Metric {
 			// Search for metric which has tenant label for a particular tenant.
 			if k == "tenant" && string(v) == tenant {
-				h.aboveLimit.WithLabelValues(tenant).Set(float64(e.Value) - float64(h.options.MaxPerTenantLimit))
 				if float64(e.Value) >= float64(h.options.MaxPerTenantLimit) {
-					level.Error(logger).Log("msg", "tenant above limit", "currentSeries", float64(e.Value))
+					level.Error(logger).Log("msg", "tenant above limit", "currentSeries", float64(e.Value), "limit", h.options.MaxPerTenantLimit)
 					h.limitedRequests.WithLabelValues(tenant).Inc()
 					return false, nil
 				}

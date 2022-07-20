@@ -675,16 +675,25 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, e2e.StartAndWaitReady(avalanche))
 
 		// Here, 3/5 requests are failed due to limiting, as one request fails due to TSDB readiness and we ingest one request.
-		testutil.Ok(t, router.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_receive_limited_requests_total"}, e2e.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2e.WaitMissingMetrics()))
-
-		// Here, once we ingest 10 new series, we go above the limit by 5. After this, no other remote_write request is ingested.
-		testutil.Ok(t, router.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_receive_series_above_limit"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, router.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_receive_head_series_limited_requests_total"}, e2e.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2e.WaitMissingMetrics()))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
+		// Here, once we ingest 10 new series, we go above the limit by 5. After this, no other remote_write request is ingested.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+			return "sum(prometheus_tsdb_head_series{tenant=\"avalanche-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e_single_active_series_limiting-receive-r1:8080\", job=\"receive-r1\"}"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{},
+				Value:  model.SampleValue(5),
+			},
+		})
+
 		// Query meta-monitoring solution to assert that only 10 timeseries have been ingested.
-		queryAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"avalanche-tenant\"})" }, time.Now, promclient.QueryOptions{
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"avalanche-tenant\"})" }, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
 			&model.Sample{
@@ -780,16 +789,25 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, e2e.StartAndWaitReady(avalanche))
 
 		// Here, 3/5 requests are failed due to limiting, as one request fails due to TSDB readiness and we ingest one request.
-		testutil.Ok(t, router.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_receive_limited_requests_total"}, e2e.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2e.WaitMissingMetrics()))
-
-		// Here, once we ingest 10 new series, we go above the limit by 5. After this, no other remote_write request is ingested.
-		testutil.Ok(t, router.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_receive_series_above_limit"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, router.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_receive_head_series_limited_requests_total"}, e2e.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2e.WaitMissingMetrics()))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
+		// Here, once we ingest 10 new series, we go above the limit by 5. After this, no other remote_write request is ingested.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+			return "sum(prometheus_tsdb_head_series{tenant=\"avalanche-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e_router_active_series_limiting-receive-r1:8080\", job=\"receive-r1\"}"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{},
+				Value:  model.SampleValue(5),
+			},
+		})
+
 		// Query meta-monitoring solution to assert that only 10 timeseries have been ingested.
-		queryAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"avalanche-tenant\"})" }, time.Now, promclient.QueryOptions{
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"avalanche-tenant\"})" }, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
 			&model.Sample{
@@ -890,16 +908,25 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, e2e.StartAndWaitReady(avalanche))
 
 		// Here, 3/5 requests are failed due to limiting, as one request fails due to TSDB readiness and we ingest one initial request.
-		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_receive_limited_requests_total"}, e2e.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2e.WaitMissingMetrics()))
-
-		// Here, once we ingest 10 new series, we go above the limit by 5. After this, no other remote_write request is ingested.
-		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_receive_series_above_limit"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_receive_head_series_limited_requests_total"}, e2e.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2e.WaitMissingMetrics()))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
+		// Here, once we ingest 10 new series, we go above the limit by 5. After this, no other remote_write request is ingested.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+			return "sum(prometheus_tsdb_head_series{tenant=\"avalanche-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e_hashring_active_series_limiting-receive-i1:8080\", job=\"receive-i1\"}"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{},
+				Value:  model.SampleValue(5),
+			},
+		})
+
 		// Query meta-monitoring solution to assert that only 10 timeseries have been ingested.
-		queryAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"avalanche-tenant\"})" }, time.Now, promclient.QueryOptions{
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"avalanche-tenant\"})" }, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
 			&model.Sample{
@@ -1023,17 +1050,37 @@ func TestReceive(t *testing.T) {
 
 		// Here, 3/5 requests are failed due to limiting, as one request fails due to TSDB readiness and we ingest one initial request.
 		// 3 limited requests belong to the exceed-tenant.
-		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_receive_limited_requests_total"}, e2e.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2e.WaitMissingMetrics()))
-
-		// Here for exceed-tenant we go above limit by 10, which results in 0 value for this gauge, which starts at -10.
-		// For under-tenant we stay at -5, as we have only pushed 5 series.
-		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2e.Equals(-5), []string{"thanos_receive_series_above_limit"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_receive_head_series_limited_requests_total"}, e2e.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2e.WaitMissingMetrics()))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
+		// Here for exceed-tenant we go above limit by 10, which results in 0 value.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+			return "sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e_multitenant_active_series_limiting-receive-i1:8080\", job=\"receive-i1\"}"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{},
+				Value:  model.SampleValue(0),
+			},
+		})
+
+		// For under-tenant we stay at -5, as we have only pushed 5 series.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+			return "sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e_multitenant_active_series_limiting-receive-i1:8080\", job=\"receive-i1\"}"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{},
+				Value:  model.SampleValue(-5),
+			},
+		})
+
 		// Query meta-monitoring solution to assert that only 10 timeseries have been ingested for exceed-tenant.
-		queryAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"})" }, time.Now, promclient.QueryOptions{
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"})" }, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
 			&model.Sample{
@@ -1043,7 +1090,7 @@ func TestReceive(t *testing.T) {
 		})
 
 		// Query meta-monitoring solution to assert that only 5 timeseries have been ingested for under-tenant.
-		queryAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"})" }, time.Now, promclient.QueryOptions{
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"})" }, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
 			&model.Sample{
@@ -1053,12 +1100,12 @@ func TestReceive(t *testing.T) {
 		})
 
 		// Query meta-monitoring solution to assert that 3 requests were limited for exceed-tenant and none for under-tenant.
-		queryAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "thanos_receive_limited_requests_total" }, time.Now, promclient.QueryOptions{
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "thanos_receive_head_series_limited_requests_total" }, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
 			&model.Sample{
 				Metric: model.Metric{
-					"__name__": "thanos_receive_limited_requests_total",
+					"__name__": "thanos_receive_head_series_limited_requests_total",
 					"instance": "e2e_multitenant_active_series_limiting-receive-i1:8080",
 					"job":      "receive-i1",
 					"tenant":   "exceed-tenant",
