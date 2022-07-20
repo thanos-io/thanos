@@ -251,7 +251,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	h.configuredTenantLimit.Set(float64(o.MaxPerTenantLimit))
 
-	if h.options.MetaMonitoringUrl.Host != "" && (h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor) {
+	if h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor {
 		// Use specified HTTPConfig to make requests to meta-monitoring.
 		httpConfContentYaml, err := h.options.MetaMonitoringHttpClient.Content()
 		if err != nil {
