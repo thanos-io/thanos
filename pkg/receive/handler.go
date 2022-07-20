@@ -123,20 +123,21 @@ type Handler struct {
 	options  *Options
 	listener net.Listener
 
-	mtx                  sync.RWMutex
-	hashring             Hashring
-	peers                *peerGroup
-	expBackoff           backoff.Backoff
-	peerStates           map[string]*retryState
-	receiverMode         ReceiverMode
-	metaMonitoringClient *http.Client
+	mtx                    sync.RWMutex
+	hashring               Hashring
+	peers                  *peerGroup
+	expBackoff             backoff.Backoff
+	peerStates             map[string]*retryState
+	receiverMode           ReceiverMode
+	metaMonitoringClient   *http.Client
+	tenantCurrentSeriesMap map[string]float64
 
 	forwardRequests       *prometheus.CounterVec
 	replications          *prometheus.CounterVec
 	replicationFactor     prometheus.Gauge
 	configuredTenantLimit prometheus.Gauge
 	limitedRequests       *prometheus.CounterVec
-	metaMonitoringErr     *prometheus.CounterVec
+	metaMonitoringErr     prometheus.Counter
 
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
@@ -205,11 +206,11 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help: "The total number of remote write requests that have been dropped due to head series limiting.",
 			}, []string{"tenant"},
 		),
-		metaMonitoringErr: promauto.With(registerer).NewCounterVec(
+		metaMonitoringErr: promauto.With(registerer).NewCounter(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_metamonitoring_failed_queries_total",
 				Help: "The total number of meta-monitoring queries that failed while limiting.",
-			}, []string{"tenant"},
+			},
 		),
 		writeTimeseriesTotal: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -250,8 +251,9 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h.configuredTenantLimit.Set(float64(o.MaxPerTenantLimit))
+	h.tenantCurrentSeriesMap = map[string]float64{}
 
-	if h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor {
+	if (h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor) && h.options.MaxPerTenantLimit != 0 {
 		// Use specified HTTPConfig to make requests to meta-monitoring.
 		httpConfContentYaml, err := h.options.MetaMonitoringHttpClient.Content()
 		if err != nil {
@@ -598,6 +600,33 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
 }
 
+// QueryMetaMonitoring queries any Prometheus Query API compatible meta-monitoring
+// solution with the configured query for getting current HEAD series of all tenants.
+// It then populates tenantCurrentSeries map with result.
+func (h *Handler) QueryMetaMonitoring(ctx context.Context) error {
+	c := promclient.NewWithTracingClient(h.logger, h.metaMonitoringClient, httpconfig.ThanosUserAgent)
+
+	vectorRes, _, err := c.QueryInstant(ctx, h.options.MetaMonitoringUrl, h.options.MetaMonitoringLimitQuery, time.Now(), promclient.QueryOptions{})
+	if err != nil {
+		h.metaMonitoringErr.Inc()
+		return err
+	}
+
+	level.Debug(h.logger).Log("msg", "successfully queried meta-monitoring", "vectors", len(vectorRes))
+
+	// Construct map of tenant name and current HEAD series.
+	for _, e := range vectorRes {
+		for k, v := range e.Metric {
+			if k == "tenant" {
+				h.tenantCurrentSeriesMap[string(v)] = float64(e.Value)
+				level.Debug(h.logger).Log("msg", "tenant value queried", "tenant", string(v), "value", e.Value)
+			}
+		}
+	}
+
+	return nil
+}
+
 // isUnderLimit ensures that the current number of active series for a tenant does not exceed given limit.
 // It does so in a best-effort way, i.e, in case meta-monitoring is unreachable, it does not impose limits.
 // TODO(saswatamcode): Add capability to configure diff limits for diff tenants.
@@ -606,35 +635,23 @@ func (h *Handler) isUnderLimit(ctx context.Context, tenant string, logger log.Lo
 		return true, nil
 	}
 
-	c := promclient.NewWithTracingClient(logger, h.metaMonitoringClient, httpconfig.ThanosUserAgent)
-
-	vectorRes, _, err := c.QueryInstant(ctx, h.options.MetaMonitoringUrl, h.options.MetaMonitoringLimitQuery, time.Now(), promclient.QueryOptions{})
-	if err != nil {
-		h.metaMonitoringErr.WithLabelValues(tenant).Inc()
-		return true, errors.Wrap(err, "failed to query meta-monitoring")
-	}
-
-	level.Debug(logger).Log("msg", "successfully queried meta-monitoring", "vectors", len(vectorRes))
-
 	// In such limiting flow, we ingest the first remote write request
 	// and then check meta-monitoring metric to ascertain current active
 	// series. As such metric is updated in intervals, it is possible
 	// that Receive ingests more series than the limit, before detecting that
 	// a tenant has exceeded the set limits.
-	for _, e := range vectorRes {
-		for k, v := range e.Metric {
-			// Search for metric which has tenant label for a particular tenant.
-			if k == "tenant" && string(v) == tenant {
-				if float64(e.Value) >= float64(h.options.MaxPerTenantLimit) {
-					level.Error(logger).Log("msg", "tenant above limit", "currentSeries", float64(e.Value), "limit", h.options.MaxPerTenantLimit)
-					h.limitedRequests.WithLabelValues(tenant).Inc()
-					return false, nil
-				}
-
-				level.Debug(logger).Log("msg", "tenant is under limit", "currentSeries", float64(e.Value))
-			}
-		}
+	v, ok := h.tenantCurrentSeriesMap[tenant]
+	if !ok {
+		return true, errors.New("tenant not in current series map")
 	}
+
+	if v >= float64(h.options.MaxPerTenantLimit) {
+		level.Error(logger).Log("msg", "tenant above limit", "currentSeries", v, "limit", h.options.MaxPerTenantLimit)
+		h.limitedRequests.WithLabelValues(tenant).Inc()
+		return false, nil
+	}
+
+	level.Debug(logger).Log("msg", "tenant is under limit", "currentSeries", v)
 
 	return true, nil
 }

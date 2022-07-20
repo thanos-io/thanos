@@ -302,6 +302,23 @@ func runReceive(
 		)
 	}
 
+	if (receiveMode == receive.RouterOnly || receiveMode == receive.RouterIngestor) && conf.maxPerTenantLimit != 0 {
+		level.Debug(logger).Log("msg", "setting up periodic meta-monitoring query for limiting cache")
+		{
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				return runutil.Repeat(15*time.Second, ctx.Done(), func() error {
+					if err := webHandler.QueryMetaMonitoring(ctx); err != nil {
+						level.Error(logger).Log("msg", "failed to query meta-monitoring", "err", err.Error())
+					}
+					return nil
+				})
+			}, func(err error) {
+				cancel()
+			})
+		}
+	}
+
 	level.Debug(logger).Log("msg", "setting up periodic tenant pruning")
 	{
 		ctx, cancel := context.WithCancel(context.Background())
