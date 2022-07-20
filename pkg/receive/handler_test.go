@@ -690,7 +690,6 @@ func TestReceiveQuorum(t *testing.T) {
 	}
 }
 
-// TODO(dougalscamata): continue here
 func TestReceiveWriteRequestLimits(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
