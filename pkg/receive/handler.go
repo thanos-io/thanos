@@ -123,12 +123,13 @@ type Handler struct {
 	options  *Options
 	listener net.Listener
 
-	mtx          sync.RWMutex
-	hashring     Hashring
-	peers        *peerGroup
-	expBackoff   backoff.Backoff
-	peerStates   map[string]*retryState
-	receiverMode ReceiverMode
+	mtx                  sync.RWMutex
+	hashring             Hashring
+	peers                *peerGroup
+	expBackoff           backoff.Backoff
+	peerStates           map[string]*retryState
+	receiverMode         ReceiverMode
+	metaMonitoringClient *http.Client
 
 	forwardRequests       *prometheus.CounterVec
 	replications          *prometheus.CounterVec
@@ -249,6 +250,24 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h.configuredTenantLimit.Set(float64(o.MaxPerTenantLimit))
+
+	if h.options.MetaMonitoringUrl.Host != "" && (h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor) {
+		// Use specified HTTPConfig to make requests to meta-monitoring.
+		httpConfContentYaml, err := h.options.MetaMonitoringHttpClient.Content()
+		if err != nil {
+			level.Error(h.logger).Log("msg", "getting http client config", "err", err.Error())
+		}
+
+		httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
+		if err != nil {
+			level.Error(h.logger).Log("msg", "parsing http config YAML", "err", err.Error())
+		}
+
+		h.metaMonitoringClient, err = httpconfig.NewHTTPClient(*httpClientConfig, "thanos-receive")
+		if err != nil {
+			level.Error(h.logger).Log("msg", "improper http client config", "err", err.Error())
+		}
+	}
 
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
@@ -547,8 +566,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor {
 		under, err := h.isUnderLimit(ctx, tenant, tLogger)
 		if err != nil {
-			level.Info(tLogger).Log("msg", "error while limiting", "err", err.Error())
-
+			level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
 		}
 
 		// Fail request fully if tenant has exceeded set limit.
@@ -588,23 +606,7 @@ func (h *Handler) isUnderLimit(ctx context.Context, tenant string, logger log.Lo
 		return true, nil
 	}
 
-	// Use specified HTTPConfig to make requests to meta-monitoring.
-	httpConfContentYaml, err := h.options.MetaMonitoringHttpClient.Content()
-	if err != nil {
-		return true, errors.Wrap(err, "getting http client config")
-	}
-
-	httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
-	if err != nil {
-		return true, errors.Wrap(err, "parsing http config YAML")
-	}
-
-	httpClient, err := httpconfig.NewHTTPClient(*httpClientConfig, "thanos-receive")
-	if err != nil {
-		return true, errors.Wrap(err, "improper http client config")
-	}
-
-	c := promclient.NewWithTracingClient(logger, httpClient, httpconfig.ThanosUserAgent)
+	c := promclient.NewWithTracingClient(logger, h.metaMonitoringClient, httpconfig.ThanosUserAgent)
 
 	vectorRes, _, err := c.QueryInstant(ctx, h.options.MetaMonitoringUrl, h.options.MetaMonitoringLimitQuery, time.Now(), promclient.QueryOptions{})
 	if err != nil {
