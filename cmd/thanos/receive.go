@@ -198,22 +198,25 @@ func runReceive(
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:            writer,
-		ListenAddress:     conf.rwAddress,
-		Registry:          reg,
-		Endpoint:          conf.endpoint,
-		TenantHeader:      conf.tenantHeader,
-		TenantField:       conf.tenantField,
-		DefaultTenantID:   conf.defaultTenantID,
-		ReplicaHeader:     conf.replicaHeader,
-		ReplicationFactor: conf.replicationFactor,
-		RelabelConfigs:    relabelConfig,
-		ReceiverMode:      receiveMode,
-		Tracer:            tracer,
-		TLSConfig:         rwTLSConfig,
-		DialOpts:          dialOpts,
-		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
-		TSDBStats:         dbs,
+		Writer:                writer,
+		ListenAddress:         conf.rwAddress,
+		Registry:              reg,
+		Endpoint:              conf.endpoint,
+		TenantHeader:          conf.tenantHeader,
+		TenantField:           conf.tenantField,
+		DefaultTenantID:       conf.defaultTenantID,
+		ReplicaHeader:         conf.replicaHeader,
+		ReplicationFactor:     conf.replicationFactor,
+		RelabelConfigs:        relabelConfig,
+		ReceiverMode:          receiveMode,
+		Tracer:                tracer,
+		TLSConfig:             rwTLSConfig,
+		DialOpts:              dialOpts,
+		ForwardTimeout:        time.Duration(*conf.forwardTimeout),
+		TSDBStats:             dbs,
+		WriteSeriesLimit:      conf.writeSeriesLimit,
+		WriteSamplesLimit:     conf.writeSamplesLimit,
+		WriteRequestSizeLimit: conf.writeRequestSizeLimit,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -763,6 +766,10 @@ type receiveConfig struct {
 
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
+
+	writeSeriesLimit      int
+	writeSamplesLimit     int
+	writeRequestSizeLimit int
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -853,6 +860,18 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").Hidden().BoolVar(&rc.allowOutOfOrderUpload)
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
+
+	cmd.Flag("receive.request-limits.max-series",
+		"The maximum amount of series accepted in remote write requests.").
+		Default("0").IntVar(&rc.writeSeriesLimit)
+
+	cmd.Flag("receive.request-limits.max-samples",
+		"The maximum amount of samples accepted in remote write requests.").
+		Default("0").IntVar(&rc.writeSamplesLimit)
+
+	cmd.Flag("receive.request-limits.max-size-bytes",
+		"The maximum size (in bytes) of remote write requests.").
+		Default("0").IntVar(&rc.writeRequestSizeLimit)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

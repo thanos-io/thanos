@@ -83,22 +83,25 @@ var (
 
 // Options for the web Handler.
 type Options struct {
-	Writer            *Writer
-	ListenAddress     string
-	Registry          *prometheus.Registry
-	TenantHeader      string
-	TenantField       string
-	DefaultTenantID   string
-	ReplicaHeader     string
-	Endpoint          string
-	ReplicationFactor uint64
-	ReceiverMode      ReceiverMode
-	Tracer            opentracing.Tracer
-	TLSConfig         *tls.Config
-	DialOpts          []grpc.DialOption
-	ForwardTimeout    time.Duration
-	RelabelConfigs    []*relabel.Config
-	TSDBStats         TSDBStats
+	Writer                *Writer
+	ListenAddress         string
+	Registry              *prometheus.Registry
+	TenantHeader          string
+	TenantField           string
+	DefaultTenantID       string
+	ReplicaHeader         string
+	Endpoint              string
+	ReplicationFactor     uint64
+	ReceiverMode          ReceiverMode
+	Tracer                opentracing.Tracer
+	TLSConfig             *tls.Config
+	DialOpts              []grpc.DialOption
+	ForwardTimeout        time.Duration
+	RelabelConfigs        []*relabel.Config
+	TSDBStats             TSDBStats
+	WriteSeriesLimit      int
+	WriteSamplesLimit     int
+	WriteRequestSizeLimit int
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -120,8 +123,11 @@ type Handler struct {
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
 
-	writeSamplesTotal    *prometheus.HistogramVec
-	writeTimeseriesTotal *prometheus.HistogramVec
+	writeSamplesTotal        *prometheus.HistogramVec
+	writeTimeseriesTotal     *prometheus.HistogramVec
+	writeSamplesLimitHit     *prometheus.CounterVec
+	writeTimeseriesLimitHit  *prometheus.CounterVec
+	writeRequestSizeLimitHit *prometheus.CounterVec
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -182,6 +188,30 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help:      "The number of sampled received in the incoming write requests.",
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
+		),
+		writeSamplesLimitHit: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Help:      "The number of times a request was refused due ot hiting the samples limit.",
+				Name:      "write_samples_limit_hit_total",
+			}, []string{"tenant"},
+		),
+		writeTimeseriesLimitHit: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Help:      "The number of times a request was refused due ot hiting the series limit.",
+				Name:      "write_series_limit_hit_total",
+			}, []string{"tenant"},
+		),
+		writeRequestSizeLimitHit: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Help:      "The number of times a request was refused due ot hiting the request size limit.",
+				Name:      "write_request_size_limit_hit_total",
+			}, []string{"tenant"},
 		),
 	}
 
@@ -401,6 +431,14 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}
 	if r.ContentLength >= 0 {
+		// If the content length is known, we can block the request based on
+		// max size limit here already and avoid growing the buffer.
+		sizeLimit := int64(h.options.WriteRequestSizeLimit)
+		if sizeLimit > 0 && r.ContentLength > sizeLimit {
+			h.writeRequestSizeLimitHit.WithLabelValues(tenant)
+			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		compressed.Grow(int(r.ContentLength))
 	} else {
 		compressed.Grow(512)
@@ -410,11 +448,17 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
 	}
-
 	reqBuf, err := s2.Decode(nil, compressed.Bytes())
 	if err != nil {
 		level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
 		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
+		return
+	}
+
+	sizeLimit := int64(h.options.WriteRequestSizeLimit)
+	if sizeLimit > 0 && int64(len(reqBuf)) > sizeLimit {
+		h.writeRequestSizeLimitHit.WithLabelValues(tenant)
+		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
 		return
 	}
 
@@ -449,6 +493,23 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	seriesLimit := h.options.WriteSeriesLimit
+	if seriesLimit > 0 && len(wreq.Timeseries) > seriesLimit {
+		h.writeTimeseriesLimitHit.WithLabelValues(tenant)
+		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	totalSamples := 0
+	for _, timeseries := range wreq.Timeseries {
+		totalSamples += len(timeseries.Samples)
+	}
+	samplesLimit := h.options.WriteSamplesLimit
+	if samplesLimit > 0 && totalSamples > samplesLimit {
+		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
+		return
+	}
+
 	// Apply relabeling configs.
 	h.relabel(&wreq)
 	if len(wreq.Timeseries) == 0 {
@@ -475,10 +536,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), responseStatusCode)
 	}
 	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(len(wreq.Timeseries)))
-	totalSamples := 0
-	for _, timeseries := range wreq.Timeseries {
-		totalSamples += len(timeseries.Samples)
-	}
 	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
 }
 

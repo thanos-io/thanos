@@ -690,6 +690,108 @@ func TestReceiveQuorum(t *testing.T) {
 	}
 }
 
+// TODO(dougalscamata): continue here
+func TestReceiveWriteRequestLimits(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		status        int
+		amountSeries  int
+		amountSamples int
+		appendables   []*fakeAppendable
+	}{
+		{
+			name:         "Request above limit of series",
+			status:       http.StatusRequestEntityTooLarge,
+			amountSeries: 21,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:         "Request under the limit of series",
+			status:       http.StatusOK,
+			amountSeries: 20,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:          "Request above limit of samples (series * samples)",
+			status:        http.StatusRequestEntityTooLarge,
+			amountSeries:  30,
+			amountSamples: 15,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:          "Request under the limit of samples (series * samples)",
+			status:        http.StatusOK,
+			amountSeries:  10,
+			amountSamples: 2,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			name:          "Request above body size limit",
+			status:        http.StatusRequestEntityTooLarge,
+			amountSeries:  300,
+			amountSamples: 150,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.amountSamples == 0 {
+				tc.amountSamples = 1
+			}
+			handlers, _ := newTestHandlerHashring(tc.appendables, 1)
+			handler := handlers[0]
+			handler.options.WriteRequestSizeLimit = 1 * 1024 * 1024
+			handler.options.WriteSamplesLimit = 200
+			handler.options.WriteSeriesLimit = 20
+			tenant := "test"
+
+			wreq := &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{},
+			}
+
+			for i := 0; i < tc.amountSeries; i += 1 {
+				label := labelpb.ZLabel{Name: "foo", Value: "bar"}
+				series := prompb.TimeSeries{
+					Labels: []labelpb.ZLabel{label},
+				}
+				for j := 0; j < tc.amountSamples; j += 1 {
+					sample := prompb.Sample{Value: float64(j), Timestamp: int64(j)}
+					series.Samples = append(series.Samples, sample)
+				}
+				wreq.Timeseries = append(wreq.Timeseries, series)
+			}
+
+			// Test that the correct status is returned.
+			rec, err := makeRequest(handler, tenant, wreq)
+			if err != nil {
+				t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", tc.status, err)
+			}
+			if rec.Code != tc.status {
+				t.Errorf("handler: got unexpected HTTP status code: expected %d, got %d; body: %s", tc.status, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestReceiveWithConsistencyDelay(t *testing.T) {
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
