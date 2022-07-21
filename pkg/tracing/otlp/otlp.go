@@ -7,13 +7,13 @@ import (
 	"context"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	_ "google.golang.org/grpc/encoding/gzip"
 	"gopkg.in/yaml.v2"
 )
@@ -54,17 +54,20 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 		return nil, errors.New("otlp: invalid client type. Only 'http' and 'grpc' are accepted. ")
 	}
 
-	tp := newTraceProvider(exporter)
+	tp := newTraceProvider(ctx, exporter, logger)
 
 	return tp, nil
 }
 
-func newTraceProvider(exporter *otlptrace.Exporter) *tracesdk.TracerProvider {
+func newTraceProvider(ctx context.Context, exporter *otlptrace.Exporter, logger log.Logger) *tracesdk.TracerProvider {
+	resource, err := resource.New(ctx)
+	if err != nil {
+		level.Warn(logger).Log("msg", "jaeger: detecting resources for tracing provider failed", "err", err)
+	}
+
 	tp := tracesdk.NewTracerProvider(
 		tracesdk.WithBatcher(exporter),
-		tracesdk.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-		)),
+		tracesdk.WithResource(resource),
 	)
 	return tp
 }

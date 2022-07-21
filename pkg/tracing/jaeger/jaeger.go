@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
 
 	"github.com/go-kit/log"
@@ -40,6 +39,8 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return nil, err
 	}
+
+	printDeprecationWarnings(config, logger)
 
 	var exporter *otel_jaeger.Exporter
 	var err error
@@ -84,7 +85,7 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 
 	processor = tracesdk.NewBatchSpanProcessor(exporter, processorOptions...)
 
-	tp := newTraceProvider(ctx, logger, processor, sampler, tags, config.ServiceName)
+	tp := newTraceProvider(ctx, logger, processor, sampler, tags)
 
 	return tp, nil
 }
@@ -95,11 +96,9 @@ func getAttributesFromTags(config Config) []attribute.KeyValue {
 }
 
 func newTraceProvider(ctx context.Context, logger log.Logger, processor tracesdk.SpanProcessor,
-	sampler tracesdk.Sampler, tags []attribute.KeyValue, serviceName string) *tracesdk.TracerProvider {
+	sampler tracesdk.Sampler, tags []attribute.KeyValue) *tracesdk.TracerProvider {
 
-	attributes := tracing.CollectAttributes(serviceName)
-	attributes = append(attributes, tags...)
-	resource, err := resource.New(ctx, resource.WithAttributes(attributes...))
+	resource, err := resource.New(ctx, resource.WithAttributes(tags...))
 	if err != nil {
 		level.Warn(logger).Log("msg", "jaeger: detecting resources for tracing provider failed", "err", err)
 	}

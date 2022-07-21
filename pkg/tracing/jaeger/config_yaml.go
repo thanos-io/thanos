@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	glog "github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"go.opentelemetry.io/contrib/samplers/jaegerremote"
 	"go.opentelemetry.io/otel/attribute"
 	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
@@ -72,7 +74,7 @@ func getAgentEndpointOptions(config Config) []otel_jaeger.AgentEndpointOption {
 	endpointOptions = append(endpointOptions, otel_jaeger.WithAgentHost(config.AgentHost))
 	endpointOptions = append(endpointOptions, otel_jaeger.WithAgentPort(strconv.Itoa(config.AgentPort)))
 
-	// This option was part of the Jaeger config was JAEGER_REPORTER_ATTEMPT_RECONNECTING_DISABLED.
+	// This option, as part of the Jaeger config, was JAEGER_REPORTER_ATTEMPT_RECONNECTING_DISABLED.
 	if config.ReporterDisableAttemptReconnecting {
 		endpointOptions = append(endpointOptions, otel_jaeger.WithDisableAttemptReconnecting())
 		if config.ReporterAttemptReconnectInterval != 0 {
@@ -111,33 +113,23 @@ func getSampler(config Config) tracesdk.Sampler {
 	samplingFraction := getSamplingFraction(samplerType, config.SamplerParam)
 
 	var sampler tracesdk.Sampler
-	if samplerType == "probabilistic" {
+	switch samplerType {
+	case "probabilistic":
 		sampler = tracesdk.ParentBased(tracesdk.TraceIDRatioBased(samplingFraction))
-	} else if samplerType == "const" {
+	case "const":
 		if samplingFraction == 1.0 {
 			sampler = tracesdk.AlwaysSample()
 		} else {
 			sampler = tracesdk.NeverSample()
 		}
-	} else if samplerType == "remote" {
-		var remoteOptions []jaegerremote.Option
-		if config.SamplerRefreshInterval != 0 {
-			remoteOptions = append(remoteOptions, jaegerremote.WithSamplingRefreshInterval(config.SamplerRefreshInterval))
-		}
-		if config.SamplingServerURL && config.AgentHost != "" && config.AgentPort != 0 {
-			localAgentURL := &(url.URL{
-				Host: config.AgentHost + ":" + strconv.Itoa(config.AgentPort),
-			})
-			remoteOptions = append(remoteOptions, jaegerremote.WithSamplingServerURL(localAgentURL.String()))
-		}
-		if config.SamplerMaxOperations != 0 {
-			remoteOptions = append(remoteOptions, jaegerremote.WithMaxOperations(config.SamplerMaxOperations))
-		}
-		if config.OperationNameLateBinding {
-			remoteOptions = append(remoteOptions, jaegerremote.WithOperationNameLateBinding(true))
-		}
+	case "remote":
+		remoteOptions := getRemoteOptions(config)
 		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
-	} else { // Default sampler type is parent based.
+	case "ratelimiting":
+		// Placeholder for rate limiter.
+		sampler = jaegerremote.New(config.ServiceName)
+		// Update with rate limiting strategy.
+	default:
 		var root tracesdk.Sampler
 		var parentOptions []tracesdk.ParentBasedSamplerOption
 		if config.SamplerParentConfig.LocalParentSampled {
@@ -149,6 +141,27 @@ func getSampler(config Config) tracesdk.Sampler {
 		sampler = tracesdk.ParentBased(root, parentOptions...)
 	}
 	return sampler
+}
+
+func getRemoteOptions(config Config) []jaegerremote.Option {
+	var remoteOptions []jaegerremote.Option
+	if config.SamplerRefreshInterval != 0 {
+		remoteOptions = append(remoteOptions, jaegerremote.WithSamplingRefreshInterval(config.SamplerRefreshInterval))
+	}
+	if config.SamplingServerURL && config.AgentHost != "" && config.AgentPort != 0 {
+		localAgentURL := &(url.URL{
+			Host: config.AgentHost + ":" + strconv.Itoa(config.AgentPort),
+		})
+		remoteOptions = append(remoteOptions, jaegerremote.WithSamplingServerURL(localAgentURL.String()))
+	}
+	if config.SamplerMaxOperations != 0 {
+		remoteOptions = append(remoteOptions, jaegerremote.WithMaxOperations(config.SamplerMaxOperations))
+	}
+	if config.OperationNameLateBinding {
+		remoteOptions = append(remoteOptions, jaegerremote.WithOperationNameLateBinding(true))
+	}
+
+	return remoteOptions
 }
 
 // parseTags parses the given string into a collection of attributes.
@@ -181,4 +194,18 @@ func parseTags(sTags string) []attribute.KeyValue {
 	}
 
 	return tags
+}
+
+// can logger have a non-stdout writer passed to it? - for unit tests
+
+// printDeprecationWarnings logs deprecation warnings for config options that are no
+// longer supported.
+func printDeprecationWarnings(config Config, l glog.Logger) {
+	commonDeprecationMessage := " has been deprecated as a config option."
+	if config.RPCMetrics {
+		level.Info(l).Log("msg", "RPC Metrics"+commonDeprecationMessage)
+	}
+	if config.Gen128Bit {
+		level.Info(l).Log("msg", "Gen128Bit"+commonDeprecationMessage)
+	}
 }

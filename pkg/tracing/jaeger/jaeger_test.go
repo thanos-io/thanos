@@ -39,7 +39,6 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler,
 		[]attribute.KeyValue{},
-		"jaeger-test-client",
 	)
 	tracer, _ := migration.Bridge(tracerOtel, log.NewNopLogger())
 	clientRoot, clientCtx := tracing.StartSpan(tracing.ContextWithTracer(context.Background(), tracer), "a")
@@ -53,7 +52,6 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler2, // never sample
 		[]attribute.KeyValue{},
-		"jaeger-test-server",
 	)
 	srvTracer, _ := migration.Bridge(srvTracerOtel, log.NewNopLogger())
 
@@ -91,7 +89,6 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler, // never sample
 		[]attribute.KeyValue{},
-		"jaeger-test-client",
 	)
 	tracer, _ := migration.Bridge(tracerOtel, log.NewNopLogger())
 
@@ -106,7 +103,6 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler2, // never sample
 		[]attribute.KeyValue{},
-		"jaeger-test-server",
 	)
 	srvTracer, _ := migration.Bridge(srvTracerOtel, log.NewNopLogger())
 
@@ -141,7 +137,6 @@ func TestContextTracing_ForceTracing(t *testing.T) {
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler,
 		[]attribute.KeyValue{},
-		"jaeger-test-client",
 	)
 	tracer, _ := migration.Bridge(tracerOtel, log.NewNopLogger())
 
@@ -159,7 +154,6 @@ func TestContextTracing_ForceTracing(t *testing.T) {
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler,
 		[]attribute.KeyValue{},
-		"jaeger-test-server",
 	)
 	srvTracer, _ := migration.Bridge(srvTracerOtel, log.NewNopLogger())
 

@@ -5,15 +5,18 @@ package google_cloud
 
 import (
 	"context"
+	"os"
 
-	"github.com/thanos-io/thanos/pkg/tracing"
+	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
 
 	cloudtrace "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"gopkg.in/yaml.v2"
 )
 
@@ -45,7 +48,7 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 
 func newTracerProvider(ctx context.Context, logger log.Logger, processor tracesdk.SpanProcessor, sampleFactor uint64, serviceName string) *tracesdk.TracerProvider {
 	// Even if resource.New returns error, the resource will be valid - log the error and continue.
-	resource, err := resource.New(ctx, resource.WithAttributes(tracing.CollectAttributes(serviceName)...))
+	resource, err := resource.New(ctx, resource.WithAttributes(collectAttributes(serviceName)...))
 	if err != nil {
 		level.Warn(logger).Log("msg", "detecting resources for tracing provider failed", "err", err)
 	}
@@ -69,4 +72,17 @@ func newTracerProvider(ctx context.Context, logger log.Logger, processor tracesd
 	)
 
 	return tp
+}
+
+func collectAttributes(serviceName string) []attribute.KeyValue {
+	attr := []attribute.KeyValue{
+		semconv.ServiceNameKey.String(serviceName),
+		attribute.String("binary_revision", version.Revision),
+	}
+
+	if len(os.Args) > 1 {
+		attr = append(attr, attribute.String("binary_cmd", os.Args[1]))
+	}
+
+	return attr
 }

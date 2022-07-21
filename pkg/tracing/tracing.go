@@ -5,13 +5,9 @@ package tracing
 
 import (
 	"context"
-	"os"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
-	"github.com/prometheus/common/version"
-	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 )
 
 const (
@@ -105,17 +101,4 @@ func DoWithSpan(ctx context.Context, operationName string, doFn func(context.Con
 	span, newCtx := StartSpan(ctx, operationName, opts...)
 	defer span.Finish()
 	doFn(newCtx, span)
-}
-
-func CollectAttributes(serviceName string) []attribute.KeyValue {
-	attr := []attribute.KeyValue{
-		semconv.ServiceNameKey.String(serviceName),
-		attribute.String("binary_revision", version.Revision),
-	}
-
-	if len(os.Args) > 1 {
-		attr = append(attr, attribute.String("binary_cmd", os.Args[1]))
-	}
-
-	return attr
 }
