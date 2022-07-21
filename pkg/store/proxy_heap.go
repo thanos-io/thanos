@@ -442,20 +442,24 @@ const (
 )
 
 func newAsyncRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest, frameTimeout time.Duration, retrievalStrategy RetrievalStrategy) (respSet, error) {
+	var span opentracing.Span
+	var closeSeries context.CancelFunc
+
 	storeID := labelpb.PromLabelSetsToString(st.LabelSets())
 	if storeID == "" {
 		storeID = "Store Gateway"
 	}
 
-	seriesCtx, closeSeries := context.WithCancel(ctx)
-	seriesCtx = grpc_opentracing.ClientAddContextTags(seriesCtx, opentracing.Tags{
+	seriesCtx := grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
 		"target": st.Addr(),
 	})
 
-	span, seriesCtx := tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
+	span, seriesCtx = tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
 		"store.id":   storeID,
 		"store.addr": st.Addr(),
 	})
+
+	seriesCtx, closeSeries = context.WithCancel(seriesCtx)
 
 	cl, err := st.Series(seriesCtx, req)
 	if err != nil {
@@ -544,20 +548,16 @@ func newEagerRespSet(
 	go func(st Client, l *eagerRespSet) {
 		defer ret.wg.Done()
 
-		handleRecvResponse := func() bool {
-			frameTimeoutCtx, cancel := frameCtx(l.ctx, frameTimeout)
-			defer cancel()
+		handleRecvResponse := func(t *time.Timer) bool {
+			if t != nil {
+				defer t.Reset(frameTimeout)
+			}
 
 			select {
 			case <-l.ctx.Done():
 				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", st.String())
 				l.err = err
-				l.span.SetTag("err", err.Error())
-				l.span.Finish()
-				return false
-			case <-frameTimeoutCtx.Done():
-				err := errors.Wrapf(frameTimeoutCtx.Err(), "failed to receive any data in %v from %s", frameTimeout, st.String())
-				l.err = err
+				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
 				l.span.SetTag("err", err.Error())
 				l.span.Finish()
 				return false
@@ -567,10 +567,10 @@ func newEagerRespSet(
 					l.span.Finish()
 					return false
 				}
-
 				if err != nil {
 					err := errors.Wrapf(err, "receive series from %s", st.String())
 					l.err = err
+					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
 					l.span.SetTag("err", err.Error())
 					l.span.Finish()
 					return false
@@ -580,8 +580,14 @@ func newEagerRespSet(
 				return true
 			}
 		}
+		var t *time.Timer
+		if frameTimeout > 0 {
+			t = time.AfterFunc(frameTimeout, closeSeries)
+			defer t.Stop()
+		}
+
 		for {
-			if !handleRecvResponse() {
+			if !handleRecvResponse(t) {
 				return
 			}
 		}
