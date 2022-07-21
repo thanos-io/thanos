@@ -483,6 +483,20 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	defer h.writeGate.Done()
 
+	// Impose limits only if Receive is in Router or RouterIngestor mode.
+	if h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor {
+		under, err := h.isUnderLimit(tenant, tLogger)
+		if err != nil {
+			level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
+		}
+
+		// Fail request fully if tenant has exceeded set limit.
+		if !under {
+			http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
+			return
+		}
+	}
+
 	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}
@@ -562,20 +576,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
 		return
-	}
-
-	// Impose limits only if Receive is in Router or RouterIngestor mode.
-	if h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor {
-		under, err := h.isUnderLimit(tenant, tLogger)
-		if err != nil {
-			level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
-		}
-
-		// Fail request fully if tenant has exceeded set limit.
-		if !under {
-			http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
-			return
-		}
 	}
 
 	responseStatusCode := http.StatusOK
