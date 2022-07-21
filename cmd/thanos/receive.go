@@ -198,25 +198,26 @@ func runReceive(
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:                writer,
-		ListenAddress:         conf.rwAddress,
-		Registry:              reg,
-		Endpoint:              conf.endpoint,
-		TenantHeader:          conf.tenantHeader,
-		TenantField:           conf.tenantField,
-		DefaultTenantID:       conf.defaultTenantID,
-		ReplicaHeader:         conf.replicaHeader,
-		ReplicationFactor:     conf.replicationFactor,
-		RelabelConfigs:        relabelConfig,
-		ReceiverMode:          receiveMode,
-		Tracer:                tracer,
-		TLSConfig:             rwTLSConfig,
-		DialOpts:              dialOpts,
-		ForwardTimeout:        time.Duration(*conf.forwardTimeout),
-		TSDBStats:             dbs,
-		WriteSeriesLimit:      conf.writeSeriesLimit,
-		WriteSamplesLimit:     conf.writeSamplesLimit,
-		WriteRequestSizeLimit: conf.writeRequestSizeLimit,
+		Writer:                       writer,
+		ListenAddress:                conf.rwAddress,
+		Registry:                     reg,
+		Endpoint:                     conf.endpoint,
+		TenantHeader:                 conf.tenantHeader,
+		TenantField:                  conf.tenantField,
+		DefaultTenantID:              conf.defaultTenantID,
+		ReplicaHeader:                conf.replicaHeader,
+		ReplicationFactor:            conf.replicationFactor,
+		RelabelConfigs:               relabelConfig,
+		ReceiverMode:                 receiveMode,
+		Tracer:                       tracer,
+		TLSConfig:                    rwTLSConfig,
+		DialOpts:                     dialOpts,
+		ForwardTimeout:               time.Duration(*conf.forwardTimeout),
+		TSDBStats:                    dbs,
+		WriteSeriesLimit:             conf.writeSeriesLimit,
+		WriteSamplesLimit:            conf.writeSamplesLimit,
+		WriteRequestSizeLimit:        conf.writeRequestSizeLimit,
+		WriteRequestConcurrencyLimit: conf.writeRequestConcurrencyLimit,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -767,9 +768,10 @@ type receiveConfig struct {
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
 
-	writeSeriesLimit      int
-	writeSamplesLimit     int
-	writeRequestSizeLimit int
+	writeSeriesLimit             int
+	writeSamplesLimit            int
+	writeRequestSizeLimit        int
+	writeRequestConcurrencyLimit int
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -872,6 +874,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.request-limits.max-size-bytes",
 		"The maximum size (in bytes) of remote write requests.").
 		Default("0").IntVar(&rc.writeRequestSizeLimit)
+
+	cmd.Flag("receive.request-limits.max-concurrency",
+		"The maximum size (in bytes) of remote write requests.").
+		Default("0").IntVar(&rc.writeRequestConcurrencyLimit)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

@@ -19,6 +19,8 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/logging"
 
 	"github.com/go-kit/log"
@@ -83,25 +85,26 @@ var (
 
 // Options for the web Handler.
 type Options struct {
-	Writer                *Writer
-	ListenAddress         string
-	Registry              *prometheus.Registry
-	TenantHeader          string
-	TenantField           string
-	DefaultTenantID       string
-	ReplicaHeader         string
-	Endpoint              string
-	ReplicationFactor     uint64
-	ReceiverMode          ReceiverMode
-	Tracer                opentracing.Tracer
-	TLSConfig             *tls.Config
-	DialOpts              []grpc.DialOption
-	ForwardTimeout        time.Duration
-	RelabelConfigs        []*relabel.Config
-	TSDBStats             TSDBStats
-	WriteSeriesLimit      int
-	WriteSamplesLimit     int
-	WriteRequestSizeLimit int
+	Writer                       *Writer
+	ListenAddress                string
+	Registry                     *prometheus.Registry
+	TenantHeader                 string
+	TenantField                  string
+	DefaultTenantID              string
+	ReplicaHeader                string
+	Endpoint                     string
+	ReplicationFactor            uint64
+	ReceiverMode                 ReceiverMode
+	Tracer                       opentracing.Tracer
+	TLSConfig                    *tls.Config
+	DialOpts                     []grpc.DialOption
+	ForwardTimeout               time.Duration
+	RelabelConfigs               []*relabel.Config
+	TSDBStats                    TSDBStats
+	WriteSeriesLimit             int
+	WriteSamplesLimit            int
+	WriteRequestSizeLimit        int
+	WriteRequestConcurrencyLimit int
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -128,6 +131,7 @@ type Handler struct {
 	writeSamplesLimitHit     *prometheus.CounterVec
 	writeTimeseriesLimitHit  *prometheus.CounterVec
 	writeRequestSizeLimitHit *prometheus.CounterVec
+	writeGate                gate.Gate
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -153,6 +157,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
+		writeGate: gate.NewNoop(),
 		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -213,6 +218,13 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Name:      "write_request_size_limit_hit_total",
 			}, []string{"tenant"},
 		),
+	}
+
+	if o.WriteRequestConcurrencyLimit > 0 {
+		h.writeGate = gate.New(
+			extprom.WrapRegistererWithPrefix("thanos_receive_write_request_concurrent_", registerer),
+			o.WriteRequestConcurrencyLimit,
+		)
 	}
 
 	h.forwardRequests.WithLabelValues(labelSuccess)
@@ -410,8 +422,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
-
 	tenant := r.Header.Get(h.options.TenantHeader)
+
 	if tenant == "" {
 		tenant = h.options.DefaultTenantID
 	}
@@ -426,6 +438,19 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tLogger := log.With(h.logger, "tenant", tenant)
+
+	if h.writeGate != nil {
+		tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
+			err = h.writeGate.Start(r.Context())
+		})
+		if err != nil {
+			level.Error(tLogger).Log("err", err, "msg", "internal server error")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		defer h.writeGate.Done()
+	}
 
 	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
