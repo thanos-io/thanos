@@ -6,13 +6,13 @@ package store
 import (
 	"container/heap"
 	"context"
-	"crypto/md5"
 	"fmt"
 	"io"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -55,28 +55,34 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 		return d.responses[0]
 	}
 
-	chunkDedupMap := map[string]*storepb.AggrChunk{}
-
-	md5Hash := md5.New()
+	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
 
 	for _, resp := range d.responses {
+		if resp.GetSeries() == nil {
+			continue
+		}
 		for _, chk := range resp.GetSeries().Chunks {
-			h := chk.Hash(md5Hash)
+			for _, field := range []*storepb.Chunk{
+				chk.Raw, chk.Count, chk.Max, chk.Min, chk.Sum, chk.Counter,
+			} {
+				if field == nil {
+					continue
+				}
+				h := xxhash.Sum64(field.Data)
 
-			if _, ok := chunkDedupMap[h]; !ok {
-				chk := chk
+				if _, ok := chunkDedupMap[h]; !ok {
+					chk := chk
 
-				chunkDedupMap[h] = &chk
+					chunkDedupMap[h] = &chk
+				}
 			}
+
 		}
 	}
 
 	// If no chunks were requested.
 	if len(chunkDedupMap) == 0 {
-		return storepb.NewSeriesResponse(&storepb.Series{
-			Labels: d.responses[0].GetSeries().Labels,
-			Chunks: d.responses[0].GetSeries().Chunks,
-		})
+		return d.responses[0]
 	}
 
 	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
@@ -88,6 +94,8 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 		return finalChunks[i].Compare(finalChunks[j]) > 0
 	})
 
+	// Guaranteed to be a series because Next() only buffers one
+	// warning at a time that gets handled in the beginning.
 	lbls := d.responses[0].GetSeries().Labels
 
 	return storepb.NewSeriesResponse(&storepb.Series{
