@@ -101,9 +101,9 @@ type Options struct {
 	ForwardTimeout               time.Duration
 	RelabelConfigs               []*relabel.Config
 	TSDBStats                    TSDBStats
-	WriteSeriesLimit             int
-	WriteSamplesLimit            int
-	WriteRequestSizeLimit        int
+	WriteSeriesLimit             int64
+	WriteSamplesLimit            int64
+	WriteRequestSizeLimit        int64
 	WriteRequestConcurrencyLimit int
 }
 
@@ -126,12 +126,11 @@ type Handler struct {
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
 
-	writeSamplesTotal        *prometheus.HistogramVec
-	writeTimeseriesTotal     *prometheus.HistogramVec
-	writeSamplesLimitHit     *prometheus.CounterVec
-	writeTimeseriesLimitHit  *prometheus.CounterVec
-	writeRequestSizeLimitHit *prometheus.CounterVec
-	writeGate                gate.Gate
+	writeSamplesTotal    *prometheus.HistogramVec
+	writeTimeseriesTotal *prometheus.HistogramVec
+
+	writeGate      gate.Gate
+	requestLimiter requestLimiter
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -158,6 +157,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Jitter: true,
 		},
 		writeGate: gate.NewNoop(),
+		requestLimiter: newRequestLimiter(
+			o.WriteRequestSizeLimit,
+			o.WriteSeriesLimit,
+			o.WriteSamplesLimit,
+			registerer,
+		),
 		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -193,30 +198,6 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help:      "The number of sampled received in the incoming write requests.",
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
-		),
-		writeSamplesLimitHit: promauto.With(registerer).NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: "thanos",
-				Subsystem: "receive",
-				Help:      "The number of times a request was refused due ot hiting the samples limit.",
-				Name:      "write_samples_limit_hit_total",
-			}, []string{"tenant"},
-		),
-		writeTimeseriesLimitHit: promauto.With(registerer).NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: "thanos",
-				Subsystem: "receive",
-				Help:      "The number of times a request was refused due ot hiting the series limit.",
-				Name:      "write_series_limit_hit_total",
-			}, []string{"tenant"},
-		),
-		writeRequestSizeLimitHit: promauto.With(registerer).NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: "thanos",
-				Subsystem: "receive",
-				Help:      "The number of times a request was refused due ot hiting the request size limit.",
-				Name:      "write_request_size_limit_hit_total",
-			}, []string{"tenant"},
 		),
 	}
 
@@ -456,11 +437,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}
 	if r.ContentLength >= 0 {
-		// If the content length is known, we can block the request based on
-		// max size limit here already and avoid growing the buffer.
-		sizeLimit := int64(h.options.WriteRequestSizeLimit)
-		if sizeLimit > 0 && r.ContentLength > sizeLimit {
-			h.writeRequestSizeLimitHit.WithLabelValues(tenant)
+		if !h.requestLimiter.AllowSizeBytes(tenant, r.ContentLength) {
 			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
 			return
 		}
@@ -480,9 +457,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sizeLimit := int64(h.options.WriteRequestSizeLimit)
-	if sizeLimit > 0 && int64(len(reqBuf)) > sizeLimit {
-		h.writeRequestSizeLimitHit.WithLabelValues(tenant)
+	if !h.requestLimiter.AllowSizeBytes(tenant, int64(len(reqBuf))) {
 		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -518,9 +493,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	seriesLimit := h.options.WriteSeriesLimit
-	if seriesLimit > 0 && len(wreq.Timeseries) > seriesLimit {
-		h.writeTimeseriesLimitHit.WithLabelValues(tenant)
+	if !h.requestLimiter.AllowSeries(tenant, int64(len(wreq.Timeseries))) {
 		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -529,8 +502,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, timeseries := range wreq.Timeseries {
 		totalSamples += len(timeseries.Samples)
 	}
-	samplesLimit := h.options.WriteSamplesLimit
-	if samplesLimit > 0 && totalSamples > samplesLimit {
+	if !h.requestLimiter.AllowSamples(tenant, int64(totalSamples)) {
 		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
 		return
 	}

@@ -738,9 +738,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			}
 			handlers, _ := newTestHandlerHashring(appendables, 1)
 			handler := handlers[0]
-			handler.options.WriteRequestSizeLimit = 1 * 1024 * 1024
-			handler.options.WriteSamplesLimit = 200
-			handler.options.WriteSeriesLimit = 20
+			handler.requestLimiter = newRequestLimiter(1*1024*1024, 20, 200, nil)
 			tenant := "test"
 
 			wreq := &prompb.WriteRequest{

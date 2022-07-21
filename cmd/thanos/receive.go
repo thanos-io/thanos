@@ -768,9 +768,9 @@ type receiveConfig struct {
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
 
-	writeSeriesLimit             int
-	writeSamplesLimit            int
-	writeRequestSizeLimit        int
+	writeSeriesLimit             int64
+	writeSamplesLimit            int64
+	writeRequestSizeLimit        int64
 	writeRequestConcurrencyLimit int
 }
 
@@ -865,15 +865,15 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.write-request-limits.max-series",
 		"The maximum amount of series accepted in remote write requests.").
-		Default("0").IntVar(&rc.writeSeriesLimit)
+		Default("0").Int64Var(&rc.writeSeriesLimit)
 
 	cmd.Flag("receive.write-request-limits.max-samples",
 		"The maximum amount of samples accepted in remote write requests.").
-		Default("0").IntVar(&rc.writeSamplesLimit)
+		Default("0").Int64Var(&rc.writeSamplesLimit)
 
 	cmd.Flag("receive.write-request-limits.max-size-bytes",
 		"The maximum size (in bytes) of remote write requests.").
-		Default("0").IntVar(&rc.writeRequestSizeLimit)
+		Default("0").Int64Var(&rc.writeRequestSizeLimit)
 
 	cmd.Flag("receive.write-request-limits.max-concurrency",
 		"The maximum size (in bytes) of remote write requests.").
