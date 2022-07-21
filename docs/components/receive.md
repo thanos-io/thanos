@@ -81,24 +81,16 @@ With such configuration any receive listens for remote write on `<ip>10908/api/v
 
 ### Request limits
 
-Thanos Receive supports setting limits on the incoming remote write request sizes.
-These limits should help you to prevent a single tenant from being able to send
-big requests and possibly crash the Receive.
+Thanos Receive supports setting limits on the incoming remote write request sizes. These limits should help you to prevent a single tenant from being able to send big requests and possibly crash the Receive.
 
-These limits are applied per request and can be configured with the following
-command line arguments:
+These limits are applied per request and can be configured with the following command line arguments:
 
 - `--receive.write-request-limits.max-size-bytes`: the maximum body size.
-- `--receive.write-request-limits.max-concurrency`: the maximum amount remote write
-  requests that will be concurrently processed while others wait.
-- `--receive.write-request-limits.max-series`: the maximum amount of series in a
-  single remote write request.
-- `--receive.write-request-limits.max-samples`: the maximum amount of samples in a
-  single remote write request (summed from all series).
+- `--receive.write-request-limits.max-concurrency`: the maximum amount remote write requests that will be concurrently processed while others wait.
+- `--receive.write-request-limits.max-series`: the maximum amount of series in a single remote write request.
+- `--receive.write-request-limits.max-samples`: the maximum amount of samples in a single remote write request (summed from all series).
 
-Any request above these limits will cause an 413 HTTP response (_Entity Too Large_)
-and should not be retried without modifications. It's up to remote write clients to
-split up the data and retry or completely drop it.
+Any request above these limits will cause an 413 HTTP response (*Entity Too Large*) and should not be retried without modifications. It's up to remote write clients to split up the data and retry or completely drop it.
 
 By default all these limits are disabled.
 
@@ -208,6 +200,18 @@ Flags:
       --receive.tenant-label-name="tenant_id"
                                  Label name through which the tenant will be
                                  announced.
+      --receive.write-request-limits.max-concurrency=0
+                                 The maximum size (in bytes) of remote write
+                                 requests.
+      --receive.write-request-limits.max-samples=0
+                                 The maximum amount of samples accepted in
+                                 remote write requests.
+      --receive.write-request-limits.max-series=0
+                                 The maximum amount of series accepted in remote
+                                 write requests.
+      --receive.write-request-limits.max-size-bytes=0
+                                 The maximum size (in bytes) of remote write
+                                 requests.
       --remote-write.address="0.0.0.0:19291"
                                  Address to listen on for remote write requests.
       --remote-write.client-server-name=""
