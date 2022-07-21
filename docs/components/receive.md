@@ -88,11 +88,11 @@ big requests and possibly crash the Receive.
 These limits are applied per request and can be configured with the following
 command line arguments:
 
-- `--receive.request-limits.max-size-bytes`: the maximum body size.
-- `--receive.request-limits.max-series`: the maximum amount of series in a single
-  remote write request.
-- `--receive.request-limits.max-samples`: the maximum amount of samples in a single
-  remote write request (summed from all series).
+- `--receive.write-request-limits.max-size-bytes`: the maximum body size.
+- `--receive.write-request-limits.max-series`: the maximum amount of series in a
+  single remote write request.
+- `--receive.write-request-limits.max-samples`: the maximum amount of samples in a
+  single remote write request (summed from all series).
 
 Any request above these limits will cause an 413 HTTP response (_Entity Too Large_)
 and should not be retried without modifications. It's up to remote write clients to

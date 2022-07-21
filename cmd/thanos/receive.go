@@ -863,19 +863,19 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 
-	cmd.Flag("receive.request-limits.max-series",
+	cmd.Flag("receive.write-request-limits.max-series",
 		"The maximum amount of series accepted in remote write requests.").
 		Default("0").IntVar(&rc.writeSeriesLimit)
 
-	cmd.Flag("receive.request-limits.max-samples",
+	cmd.Flag("receive.write-request-limits.max-samples",
 		"The maximum amount of samples accepted in remote write requests.").
 		Default("0").IntVar(&rc.writeSamplesLimit)
 
-	cmd.Flag("receive.request-limits.max-size-bytes",
+	cmd.Flag("receive.write-request-limits.max-size-bytes",
 		"The maximum size (in bytes) of remote write requests.").
 		Default("0").IntVar(&rc.writeRequestSizeLimit)
 
-	cmd.Flag("receive.request-limits.max-concurrency",
+	cmd.Flag("receive.write-request-limits.max-concurrency",
 		"The maximum size (in bytes) of remote write requests.").
 		Default("0").IntVar(&rc.writeRequestConcurrencyLimit)
 }
