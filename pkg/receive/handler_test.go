@@ -696,67 +696,47 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 		status        int
 		amountSeries  int
 		amountSamples int
-		appendables   []*fakeAppendable
 	}{
 		{
 			name:         "Request above limit of series",
 			status:       http.StatusRequestEntityTooLarge,
 			amountSeries: 21,
-			appendables: []*fakeAppendable{
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-			},
 		},
 		{
 			name:         "Request under the limit of series",
 			status:       http.StatusOK,
 			amountSeries: 20,
-			appendables: []*fakeAppendable{
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-			},
 		},
 		{
 			name:          "Request above limit of samples (series * samples)",
 			status:        http.StatusRequestEntityTooLarge,
 			amountSeries:  30,
 			amountSamples: 15,
-			appendables: []*fakeAppendable{
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-			},
 		},
 		{
 			name:          "Request under the limit of samples (series * samples)",
 			status:        http.StatusOK,
 			amountSeries:  10,
 			amountSamples: 2,
-			appendables: []*fakeAppendable{
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-			},
 		},
 		{
 			name:          "Request above body size limit",
 			status:        http.StatusRequestEntityTooLarge,
 			amountSeries:  300,
 			amountSamples: 150,
-			appendables: []*fakeAppendable{
-				{
-					appender: newFakeAppender(nil, nil, nil),
-				},
-			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.amountSamples == 0 {
 				tc.amountSamples = 1
 			}
-			handlers, _ := newTestHandlerHashring(tc.appendables, 1)
+
+			appendables := []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			}
+			handlers, _ := newTestHandlerHashring(appendables, 1)
 			handler := handlers[0]
 			handler.options.WriteRequestSizeLimit = 1 * 1024 * 1024
 			handler.options.WriteSamplesLimit = 200
