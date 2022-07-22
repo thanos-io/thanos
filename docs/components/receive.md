@@ -200,18 +200,6 @@ Flags:
       --receive.tenant-label-name="tenant_id"
                                  Label name through which the tenant will be
                                  announced.
-      --receive.write-request-limits.max-concurrency=0
-                                 The maximum size (in bytes) of remote write
-                                 requests.
-      --receive.write-request-limits.max-samples=0
-                                 The maximum amount of samples accepted in
-                                 remote write requests.
-      --receive.write-request-limits.max-series=0
-                                 The maximum amount of series accepted in remote
-                                 write requests.
-      --receive.write-request-limits.max-size-bytes=0
-                                 The maximum size (in bytes) of remote write
-                                 requests.
       --remote-write.address="0.0.0.0:19291"
                                  Address to listen on for remote write requests.
       --remote-write.client-server-name=""
