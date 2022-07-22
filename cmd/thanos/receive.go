@@ -863,6 +863,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 
+	// TODO(douglascamata): allow all these limits to be configured per tenant
+	// and move the configuration to a file.
 	cmd.Flag("receive.write-request-limits.max-series",
 		"The maximum amount of series accepted in remote write requests.").
 		Default("0").Int64Var(&rc.writeSeriesLimit)
