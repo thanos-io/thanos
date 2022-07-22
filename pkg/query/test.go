@@ -560,7 +560,7 @@ func (ev *evalCmd) compareResult(result parser.Value) error {
 }
 
 func (ev *evalCmd) Eval(ctx context.Context, queryEngine *promql.Engine, queryable storage.Queryable) error {
-	q, err := queryEngine.NewInstantQuery(queryable, ev.expr, ev.start)
+	q, err := queryEngine.NewInstantQuery(queryable, &promql.QueryOpts{}, ev.expr, ev.start)
 	if err != nil {
 		return err
 	}
@@ -584,7 +584,7 @@ func (ev *evalCmd) Eval(ctx context.Context, queryEngine *promql.Engine, queryab
 
 	// Check query returns same result in range mode,
 	// by checking against the middle step.
-	q, err = queryEngine.NewRangeQuery(queryable, ev.expr, ev.start.Add(-time.Minute), ev.start.Add(time.Minute), time.Minute)
+	q, err = queryEngine.NewRangeQuery(queryable, &promql.QueryOpts{}, ev.expr, ev.start.Add(-time.Minute), ev.start.Add(time.Minute), time.Minute)
 	if err != nil {
 		return err
 	}

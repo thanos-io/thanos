@@ -6,11 +6,12 @@ package queryfrontend
 import (
 	"time"
 
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
+
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 )
 
 // ThanosRequestStoreMatcherGetter is a an interface for store matching that all request share.
@@ -44,6 +45,7 @@ type ThanosQueryRangeRequest struct {
 	StoreMatchers       [][]*labels.Matcher
 	CachingOptions      queryrange.CachingOptions
 	Headers             []*RequestHeader
+	Stats               string
 }
 
 // IsDedupEnabled returns true if deduplication is enabled.
@@ -66,6 +68,14 @@ func (r *ThanosQueryRangeRequest) GetQuery() string { return r.Query }
 
 func (r *ThanosQueryRangeRequest) GetCachingOptions() queryrange.CachingOptions {
 	return r.CachingOptions
+}
+
+func (r *ThanosQueryRangeRequest) GetStats() string { return r.Stats }
+
+func (r *ThanosQueryRangeRequest) WithStats(stats string) queryrange.Request {
+	q := *r
+	q.Stats = stats
+	return &q
 }
 
 // WithStartEnd clone the current request with different start and end timestamp.
@@ -123,6 +133,7 @@ type ThanosLabelsRequest struct {
 	PartialResponse bool
 	CachingOptions  queryrange.CachingOptions
 	Headers         []*RequestHeader
+	Stats           string
 }
 
 // GetStoreMatchers returns store matches.
@@ -142,6 +153,14 @@ func (r *ThanosLabelsRequest) GetStep() int64 { return 1 }
 func (r *ThanosLabelsRequest) GetQuery() string { return "" }
 
 func (r *ThanosLabelsRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
+
+func (r *ThanosLabelsRequest) GetStats() string { return r.Stats }
+
+func (r *ThanosLabelsRequest) WithStats(stats string) queryrange.Request {
+	q := *r
+	q.Stats = stats
+	return &q
+}
 
 // WithStartEnd clone the current request with different start and end timestamp.
 func (r *ThanosLabelsRequest) WithStartEnd(start, end int64) queryrange.Request {
@@ -196,6 +215,7 @@ type ThanosSeriesRequest struct {
 	StoreMatchers   [][]*labels.Matcher
 	CachingOptions  queryrange.CachingOptions
 	Headers         []*RequestHeader
+	Stats           string
 }
 
 // IsDedupEnabled returns true if deduplication is enabled.
@@ -218,6 +238,14 @@ func (r *ThanosSeriesRequest) GetStep() int64 { return 1 }
 func (r *ThanosSeriesRequest) GetQuery() string { return "" }
 
 func (r *ThanosSeriesRequest) GetCachingOptions() queryrange.CachingOptions { return r.CachingOptions }
+
+func (r *ThanosSeriesRequest) GetStats() string { return r.Stats }
+
+func (r *ThanosSeriesRequest) WithStats(stats string) queryrange.Request {
+	q := *r
+	q.Stats = stats
+	return &q
+}
 
 // WithStartEnd clone the current request with different start and end timestamp.
 func (r *ThanosSeriesRequest) WithStartEnd(start, end int64) queryrange.Request {

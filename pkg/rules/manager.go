@@ -382,7 +382,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 			continue
 		}
 		// We add external labels in `pkg/alert.Queue`.
-		if err := mgr.Update(evalInterval, fs, m.extLset, m.externalURL); err != nil {
+		if err := mgr.Update(evalInterval, fs, m.extLset, m.externalURL, nil); err != nil {
 			// TODO(bwplotka): Prometheus logs all error details. Fix it upstream to have consistent error handling.
 			errs.Add(errors.Wrapf(err, "strategy %s, update rules", s))
 			continue

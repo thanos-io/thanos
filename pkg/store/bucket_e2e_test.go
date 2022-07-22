@@ -25,11 +25,12 @@ import (
 	"github.com/weaveworks/common/httpgrpc"
 	"google.golang.org/grpc/codes"
 
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/objtesting"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"

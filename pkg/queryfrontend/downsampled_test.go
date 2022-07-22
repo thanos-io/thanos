@@ -6,8 +6,8 @@ package queryfrontend
 import (
 	"testing"
 
-	"github.com/cortexproject/cortex/pkg/cortexpb"
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
+	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 

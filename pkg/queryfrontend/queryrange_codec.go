@@ -13,12 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	cortexutil "github.com/cortexproject/cortex/pkg/util"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
+
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
+	cortexutil "github.com/thanos-io/thanos/internal/cortex/util"
 
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
