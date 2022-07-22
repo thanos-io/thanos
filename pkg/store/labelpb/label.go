@@ -367,7 +367,7 @@ func ValidateLabels(lbls []ZLabel) error {
 	}
 
 	// Iterate over the rest, check each for empty / duplicates and
-	// check lexographical ordering.
+	// check lexicographical (alphabetically) ordering.
 	for _, l := range lbls[1:] {
 		if l.Name == "" || l.Value == "" {
 			return ErrEmptyLabels
