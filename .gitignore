@@ -37,3 +37,6 @@ examples/tmp/
 
 # Ignore the MacOS Trash (DS-Store)
 .DS_Store
+
+# Ignore generated Cortex files
+internal/cortex/querier/active-query-tracker

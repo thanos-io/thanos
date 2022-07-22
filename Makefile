@@ -1,7 +1,7 @@
 include .bingo/Variables.mk
 include .busybox-versions
 
-FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
+FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -path ./internal/cortex -prune -o -name '*.go' -print)
 MD_FILES_TO_FORMAT = $(shell find docs -name "*.md") $(shell find examples -name "*.md") $(filter-out mixin/runbook.md, $(shell find mixin -name "*.md")) $(shell ls *.md)
 FAST_MD_FILES_TO_FORMAT = $(shell git diff --name-only | grep ".md")
 
@@ -173,6 +173,25 @@ deps: ## Ensures fresh go.mod and go.sum.
 	@go mod tidy
 	@go mod verify
 
+# NOTICE: This is a temporary workaround for the cyclic dependency issue documented in:
+# https://github.com/thanos-io/thanos/issues/3832
+# The real solution is to have our own version of needed packages, or extract them out from a dedicated module.
+# vendor dependencies
+.PHONY: internal/cortex
+internal/cortex: ## Ensures the latest packages from 'cortex' are synced.
+	rm -rf internal/cortex
+	rm -rf tmp/cortex
+	git clone --depth 1 https://github.com/cortexproject/cortex tmp/cortex
+	mkdir -p internal/cortex
+	rsync -avur --delete tmp/cortex/pkg/* internal/cortex --include-from=.cortex-packages.txt
+	mkdir -p internal/cortex/integration
+	cp -R tmp/cortex/integration/ca internal/cortex/integration/ca
+	find internal/cortex -type f -exec sed -i 's/github.com\/cortexproject\/cortex\/pkg/github.com\/thanos-io\/thanos\/internal\/cortex/g' {} +
+	find internal/cortex -type f -exec sed -i 's/github.com\/cortexproject\/cortex\/integration/github.com\/thanos-io\/thanos\/internal\/cortex\/integration/g' {} +
+	rm -rf tmp/cortex
+	@echo ">> ensuring Copyright headers"
+	@go run ./scripts/copyright
+
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
 ifeq ($(OS)_$(ARCH), linux_x86_64)
@@ -284,9 +303,9 @@ tarballs-release: $(PROMU)
 test: ## Runs all Thanos Go unit tests against each supported version of Prometheus. This excludes tests in ./test/e2e.
 test: export GOCACHE= $(TMP_GOPATH)/gocache
 test: export THANOS_TEST_MINIO_PATH= $(MINIO)
-test: export THANOS_TEST_PROMETHEUS_PATHS= $(PROMETHEUS_ARRAY)
+test: export THANOS_TEST_PROMETHEUS_PATHS= $(PROMETHEUS)
 test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
-test: check-git install-deps
+test: check-git install-tool-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
 	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
 	@go test $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
@@ -317,13 +336,13 @@ test-e2e-local:
 
 .PHONY: quickstart
 quickstart: ## Installs and runs a quickstart example of thanos.
-quickstart: build install-deps
+quickstart: build install-tool-deps
 quickstart:
 	scripts/quickstart.sh
 
-.PHONY: install-deps
-install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
-install-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS_ARRAY)
+.PHONY: install-tool-deps
+install-tool-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
+install-tool-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS)
 	@echo ">>GOBIN=$(GOBIN)"
 
 .PHONY: check-git
@@ -376,7 +395,7 @@ github.com/prometheus/client_golang/prometheus.{DefaultGatherer,DefBuckets,NewUn
 github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,\
 NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}=github.com/prometheus/client_golang/prometheus/promauto.{NewCounter,\
 NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec},\
-sync/atomic=go.uber.org/atomic" ./...
+sync/atomic=go.uber.org/atomic,github.com/cortexproject/cortex=github.com/thanos-io/thanos/internal/cortex" $(shell go list ./... | grep -v "internal/cortex")
 	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
 	@$(GOLANGCI_LINT) run

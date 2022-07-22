@@ -15,12 +15,13 @@ import (
 	e2einteractive "github.com/efficientgo/e2e/interactive"
 	e2emonitoring "github.com/efficientgo/e2e/monitoring"
 	"github.com/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
-	"github.com/thanos-io/thanos/pkg/objstore/s3"
+	"github.com/thanos-io/objstore/client"
+	"github.com/thanos-io/objstore/providers/s3"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/testutil"
 	tracingclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
-	"gopkg.in/yaml.v2"
 )
 
 const (

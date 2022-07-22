@@ -26,27 +26,11 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/tsdb/index"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/thanos-io/thanos/pkg/api"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 )
-
-// Stat holds the information about individual cardinality.
-type Stat struct {
-	Name  string `json:"name"`
-	Value uint64 `json:"value"`
-}
-
-func convertStats(stats []index.Stat) []Stat {
-	result := make([]Stat, 0, len(stats))
-	for _, item := range stats {
-		item := Stat{Name: item.Name, Value: item.Count}
-		result = append(result, item)
-	}
-	return result
-}
 
 type TenantStats struct {
 	Tenant string
@@ -56,12 +40,8 @@ type TenantStats struct {
 // TSDBStatus has information of cardinality statistics from postings.
 // TODO(fpetkovski): replace with upstream struct after dependency update.
 type TSDBStatus struct {
-	Tenant                      string       `json:"tenant"`
-	HeadStats                   v1.HeadStats `json:"headStats"`
-	SeriesCountByMetricName     []Stat       `json:"seriesCountByMetricName"`
-	LabelValueCountByLabelName  []Stat       `json:"labelValueCountByLabelName"`
-	MemoryInBytesByLabelName    []Stat       `json:"memoryInBytesByLabelName"`
-	SeriesCountByLabelValuePair []Stat       `json:"seriesCountByLabelValuePair"`
+	Tenant        string `json:"tenant"`
+	v1.TSDBStatus `json:","`
 }
 
 type GetStatsFunc func(r *http.Request, statsByLabelName string) ([]TenantStats, *api.ApiError)
@@ -126,17 +106,19 @@ func (sapi *StatusAPI) httpServeStats(r *http.Request) (interface{}, []error, *a
 		}
 		result = append(result, TSDBStatus{
 			Tenant: s.Tenant,
-			HeadStats: v1.HeadStats{
-				NumSeries:     s.Stats.NumSeries,
-				ChunkCount:    chunkCount,
-				MinTime:       s.Stats.MinTime,
-				MaxTime:       s.Stats.MaxTime,
-				NumLabelPairs: s.Stats.IndexPostingStats.NumLabelPairs,
+			TSDBStatus: v1.TSDBStatus{
+				HeadStats: v1.HeadStats{
+					NumSeries:     s.Stats.NumSeries,
+					ChunkCount:    chunkCount,
+					MinTime:       s.Stats.MinTime,
+					MaxTime:       s.Stats.MaxTime,
+					NumLabelPairs: s.Stats.IndexPostingStats.NumLabelPairs,
+				},
+				SeriesCountByMetricName:     v1.TSDBStatsFromIndexStats(s.Stats.IndexPostingStats.CardinalityMetricsStats),
+				LabelValueCountByLabelName:  v1.TSDBStatsFromIndexStats(s.Stats.IndexPostingStats.CardinalityLabelStats),
+				MemoryInBytesByLabelName:    v1.TSDBStatsFromIndexStats(s.Stats.IndexPostingStats.LabelValueStats),
+				SeriesCountByLabelValuePair: v1.TSDBStatsFromIndexStats(s.Stats.IndexPostingStats.LabelValuePairsStats),
 			},
-			SeriesCountByMetricName:     convertStats(s.Stats.IndexPostingStats.CardinalityMetricsStats),
-			LabelValueCountByLabelName:  convertStats(s.Stats.IndexPostingStats.CardinalityLabelStats),
-			MemoryInBytesByLabelName:    convertStats(s.Stats.IndexPostingStats.LabelValueStats),
-			SeriesCountByLabelValuePair: convertStats(s.Stats.IndexPostingStats.LabelValuePairsStats),
 		})
 	}
 	return result, nil, nil

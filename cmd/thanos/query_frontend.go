@@ -9,10 +9,7 @@ import (
 	"time"
 
 	"github.com/NYTimes/gziphandler"
-	cortexfrontend "github.com/cortexproject/cortex/pkg/frontend"
-	"github.com/cortexproject/cortex/pkg/frontend/transport"
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	cortexvalidation "github.com/cortexproject/cortex/pkg/util/validation"
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
@@ -22,8 +19,10 @@ import (
 	"github.com/weaveworks/common/user"
 	"gopkg.in/yaml.v2"
 
-	extflag "github.com/efficientgo/tools/extkingpin"
-
+	cortexfrontend "github.com/thanos-io/thanos/internal/cortex/frontend"
+	"github.com/thanos-io/thanos/internal/cortex/frontend/transport"
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
+	cortexvalidation "github.com/thanos-io/thanos/internal/cortex/util/validation"
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extkingpin"

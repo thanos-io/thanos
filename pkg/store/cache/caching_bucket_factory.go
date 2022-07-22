@@ -15,11 +15,12 @@ import (
 	"github.com/prometheus/common/route"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	cache "github.com/thanos-io/thanos/pkg/cache"
+	"github.com/thanos-io/thanos/pkg/cache"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 // BucketCacheProvider is a type used to evaluate all bucket cache providers.
