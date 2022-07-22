@@ -866,20 +866,24 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	// TODO(douglascamata): allow all these limits to be configured per tenant
 	// and move the configuration to a file.
 	cmd.Flag("receive.write-request-limits.max-series",
-		"The maximum amount of series accepted in remote write requests.").
-		Default("0").Int64Var(&rc.writeSeriesLimit)
+		"The maximum amount of series accepted in remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeSeriesLimit)
 
 	cmd.Flag("receive.write-request-limits.max-samples",
-		"The maximum amount of samples accepted in remote write requests.").
-		Default("0").Int64Var(&rc.writeSamplesLimit)
+		"The maximum amount of samples accepted in remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeSamplesLimit)
 
 	cmd.Flag("receive.write-request-limits.max-size-bytes",
-		"The maximum size (in bytes) of remote write requests.").
-		Default("0").Int64Var(&rc.writeRequestSizeLimit)
+		"The maximum size (in bytes) of remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeRequestSizeLimit)
 
 	cmd.Flag("receive.write-request-limits.max-concurrency",
-		"The maximum size (in bytes) of remote write requests.").
-		Default("0").IntVar(&rc.writeRequestConcurrencyLimit)
+		"The maximum size (in bytes) of remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().IntVar(&rc.writeRequestConcurrencyLimit)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
