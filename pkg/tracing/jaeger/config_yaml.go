@@ -49,6 +49,7 @@ type Config struct {
 	AgentPort                          int                      `yaml:"agent_port"`
 	SamplingServerURL                  bool                     `yaml:"sampling_server_url"`
 	OperationNameLateBinding           bool                     `yaml:"operation_name_late_binding"`
+	InitialSamplingRate                float64                  `yaml:"initial_sampler_rate"`
 	Gen128Bit                          bool                     `yaml:"traceid_128bit"`
 	// Remove the above field. Ref: https://github.com/open-telemetry/opentelemetry-specification/issues/525#issuecomment-605519217
 	// Ref: https://opentelemetry.io/docs/reference/specification/trace/api/#spancontext
@@ -126,9 +127,8 @@ func getSampler(config Config) tracesdk.Sampler {
 		remoteOptions := getRemoteOptions(config)
 		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
 	case "ratelimiting":
-		// Placeholder for rate limiter.
-		sampler = jaegerremote.New(config.ServiceName)
-		// Update with rate limiting strategy.
+		rateLimitingOptions := getRateLimitingOptions(config)
+		sampler = jaegerremote.New(config.ServiceName, rateLimitingOptions...)
 	default:
 		var root tracesdk.Sampler
 		var parentOptions []tracesdk.ParentBasedSamplerOption
@@ -162,6 +162,30 @@ func getRemoteOptions(config Config) []jaegerremote.Option {
 	}
 
 	return remoteOptions
+}
+
+func getRateLimitingOptions(config Config) []jaegerremote.Option {
+	var rateLimitingOptions []jaegerremote.Option
+
+	// The sampling server URL corresponds to the HTTP URL for agent that serves configs, the default being :5778.
+	// Ref: https://www.jaegertracing.io/docs/1.36/getting-started/#all-in-on.
+	if config.SamplingServerURL && config.AgentHost != "" && config.AgentPort != 0 {
+		localAgentURL := &(url.URL{
+			Host: config.AgentHost + ":" + strconv.Itoa(config.AgentPort),
+		})
+		rateLimitingOptions = append(rateLimitingOptions, jaegerremote.WithSamplingServerURL(localAgentURL.String()))
+	}
+
+	// SamplerRefreshInterval is the interval for polling the backend for sampling strategies.
+	// Ref: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md#general-sdk-configuration.
+	if config.SamplerRefreshInterval != 0 {
+		rateLimitingOptions = append(rateLimitingOptions, jaegerremote.WithSamplingRefreshInterval(config.SamplerRefreshInterval))
+	}
+	// InitialSamplingRate is the sampling probability when the backend is unreachable.
+	if config.InitialSamplingRate != 0.0 {
+		rateLimitingOptions = append(rateLimitingOptions, jaegerremote.WithInitialSampler(tracesdk.TraceIDRatioBased(config.InitialSamplingRate)))
+	}
+	return rateLimitingOptions
 }
 
 // parseTags parses the given string into a collection of attributes.

@@ -101,6 +101,7 @@ config:
   agent_port: 0
   sampling_server_url: false
   operation_name_late_binding: false
+  initial_sampler_rate: 0
   traceid_128bit: false
 ```
 
