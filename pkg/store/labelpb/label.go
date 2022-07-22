@@ -360,14 +360,11 @@ func ValidateLabels(lbls []ZLabel) error {
 		return ErrEmptyLabels
 	}
 
-	labelNames := map[string]struct{}{}
-
 	// Check first label.
 	l0 := lbls[0]
 	if l0.Name == "" || l0.Value == "" {
 		return ErrEmptyLabels
 	}
-	labelNames[l0.Name] = struct{}{}
 
 	// Iterate over the rest, check each for empty / duplicates and
 	// check lexographical ordering.
@@ -376,10 +373,9 @@ func ValidateLabels(lbls []ZLabel) error {
 			return ErrEmptyLabels
 		}
 
-		if _, ok := labelNames[l.Name]; ok {
+		if l.Name == l0.Name {
 			return ErrDuplicateLabels
 		}
-		labelNames[l.Name] = struct{}{}
 
 		if l.Name < l0.Name {
 			return ErrOutOfOrderLabels

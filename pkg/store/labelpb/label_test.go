@@ -119,7 +119,7 @@ func TestValidateLabels(t *testing.T) {
 			expectedErr: ErrEmptyLabels,
 		},
 		{
-			// Duplicate label.
+			// Out-of-order and duplicate label (out-of-order comes first).
 			labelSet: []ZLabel{
 				{
 					Name:  "foo",
@@ -132,6 +132,28 @@ func TestValidateLabels(t *testing.T) {
 				{
 					Name:  "foo",
 					Value: "bar",
+				},
+			},
+			expectedErr: ErrOutOfOrderLabels,
+		},
+		{
+			// Out-of-order and duplicate label (out-of-order comes first).
+			labelSet: []ZLabel{
+				{
+					Name:  "__test__",
+					Value: "baz",
+				},
+				{
+					Name:  "foo",
+					Value: "bar",
+				},
+				{
+					Name:  "foo",
+					Value: "bar",
+				},
+				{
+					Name:  "test",
+					Value: "baz",
 				},
 			},
 			expectedErr: ErrDuplicateLabels,
