@@ -835,12 +835,13 @@ func blockSeries(
 			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
 		}
 
-		if !shardMatcher.MatchesLabels(lset) {
+		completeLabelset := labelpb.ExtendSortedLabels(lset, extLset)
+		if !shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
 
 		s := seriesEntry{}
-		s.lset = labelpb.ExtendSortedLabels(lset, extLset)
+		s.lset = completeLabelset
 
 		if !skipChunks {
 			// Schedule loading chunks.

@@ -396,7 +396,8 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 
 		framesNum++
 		for _, series := range res.ChunkedSeries {
-			if !shardMatcher.MatchesZLabels(series.Labels) {
+			completeLabelset := labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(series.Labels), extLset)
+			if !shardMatcher.MatchesLabels(completeLabelset) {
 				continue
 			}
 
@@ -423,7 +424,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 
 			r := storepb.NewSeriesResponse(&storepb.Series{
 				Labels: labelpb.ZLabelsFromPromLabels(
-					labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(series.Labels), extLset),
+					completeLabelset,
 				),
 				Chunks: thanosChks,
 			})
