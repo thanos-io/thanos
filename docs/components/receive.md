@@ -79,7 +79,7 @@ With such configuration any receive listens for remote write on `<ip>10908/api/v
 
 ## Limiting
 
-### Request limits
+### Request limits (work in progress)
 
 Thanos Receive supports setting limits on the incoming remote write request sizes. These limits should help you to prevent a single tenant from being able to send big requests and possibly crash the Receive.
 
@@ -93,6 +93,8 @@ These limits are applied per request and can be configured with the following co
 Any request above these limits will cause an 413 HTTP response (*Entity Too Large*) and should not be retried without modifications. It's up to remote write clients to split up the data and retry or completely drop it.
 
 By default all these limits are disabled.
+
+**IMPORTANT**: this feature is a work-in-progress and it might change in the near future, i.e. configuration might move to a file to allow easy configuration of different request limits per tenant.
 
 ## Flags
 
