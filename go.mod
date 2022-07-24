@@ -246,6 +246,9 @@ replace (
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
 
+	// TODO(saswatamcode): Remove when https://github.com/efficientgo/tools/pull/14 is merged.
+	github.com/efficientgo/tools/extkingpin => github.com/saswatamcode/tools/extkingpin v0.0.0-20220723122803-67d37ea96343
+
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
 
 	// Override due to https://github.com/weaveworks/common/issues/239

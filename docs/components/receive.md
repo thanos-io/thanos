@@ -117,19 +117,20 @@ By default all gates are disabled.
 
 ## Active Series Limiting
 
-Thanos Receive, in Router or RouterIngestor mode, supports limiting tenant active or HEAD series, to maintain stability of the system. It uses any Prometheus Query API compatible meta-monitoring solution to get the current number of active series, and compares that with a configured limit, before ingesting any tenant's remote write request. In case a tenant has gone above the limit, their remote write requests are failed fully.
+Thanos Receive, in Router or RouterIngestor mode, supports limiting tenant active (head) series to maintain the system's stability. It uses any Prometheus Query API compatible meta-monitoring solution that consumes the metrics exposed by all receivers in the Thanos system. Such query endpoint allows getting the scrape time seconds old number of all active series per tenant, which is then compared with a configured limit before ingesting any tenant's remote write request. In case a tenant has gone above the limit, their remote write requests fail fully.
 
-Meta-monitoring in this context refers to an external monitoring system scraping all Thanos Receive instances and exposing them in an API compatible with the Prometheus Query API.
+Every Receive Router/RouterIngestor node, queries meta-monitoring for active series of all tenants, every 15 seconds, and caches the results in a map. This cached result is used to limit all incoming remote write requests.
 
-To use the feature, one should specify the following flags:
-- `--receive.tenant-limits.max-head-series`: Specifies the total number of active or HEAD series for any tenant, across all replicas (including data replication), allowed by Thanos Receive.
+To use the feature, one should specify the following (hidden) flags:
+- `--receive.tenant-limits.max-head-series`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive.
 - `--receive.tenant-limits.meta-monitoring-url`: Specifies Prometheus Query API compatible meta-monitoring endpoint.
 - `--receive.tenant-limits.meta-monitoring-query`: Optional flag to specify PromQL query to execute against meta-monitoring.
 - `--receive.tenant-limits.meta-monitoring-client`: Optional YAML file/string specifying HTTP client config for meta-monitoring.
 
 NOTE:
 - It is possible that Receive ingests more active series than the specified limit, as it relies on meta-monitoring, which may not have the latest data for current number of active series of a tenant at all times.
-- Thanos Receive performs best-effort limiting. In case meta-monitoring is down/unreachable, Thanos Receive will not impose limits.
+- Thanos Receive performs best-effort limiting. In case meta-monitoring is down/unreachable, Thanos Receive will not impose limits and only log errors for meta-monitoring being unreachable. Similaly to when one receiver cannot be scraped.
+- Support for different limit configuration for different tenants is planned for the future.
 
 ## Flags
 
@@ -237,28 +238,6 @@ Flags:
       --receive.tenant-label-name="tenant_id"
                                  Label name through which the tenant will be
                                  announced.
-      --receive.tenant-limits.max-head-series=RECEIVE.TENANT-LIMITS.MAX-HEAD-SERIES
-                                 The total number of active or HEAD series that
-                                 a tenant is allowed to have within a Receive
-                                 topology.
-      --receive.tenant-limits.meta-monitoring-client=<content>
-                                 Alternative to
-                                 'receive.tenant-limits.meta-monitoring-client-file'
-                                 flag (mutually exclusive). Content of YAML file
-                                 or string with http client configs for
-                                 meta-monitoring.
-      --receive.tenant-limits.meta-monitoring-client-file=<file-path>
-                                 Path to YAML file or string with http client
-                                 configs for meta-monitoring.
-      --receive.tenant-limits.meta-monitoring-query="sum(prometheus_tsdb_head_series) by (tenant)"
-                                 PromQL Query to execute against
-                                 meta-monitoring, to get the current number of
-                                 active series for each tenant, across Receive
-                                 replicas.
-      --receive.tenant-limits.meta-monitoring-url=http://localhost:9090
-                                 Meta-monitoring URL which is compatible with
-                                 Prometheus Query API for active series
-                                 limiting.
       --remote-write.address="0.0.0.0:19291"
                                  Address to listen on for remote write requests.
       --remote-write.client-server-name=""
