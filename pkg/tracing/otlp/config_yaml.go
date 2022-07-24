@@ -101,6 +101,7 @@ func traceHTTPOptions(config Config) []otlptracehttp.Option {
 	if config.Headers != nil {
 		options = append(options, otlptracehttp.WithHeaders(config.Headers))
 	}
+	// how to specify JSON/binary format here?
 
 	return options
 }

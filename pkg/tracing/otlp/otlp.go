@@ -6,6 +6,8 @@ package otlp
 import (
 	"context"
 
+	"github.com/thanos-io/thanos/pkg/tracing/migration"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
@@ -54,20 +56,28 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 		return nil, errors.New("otlp: invalid client type. Only 'http' and 'grpc' are accepted. ")
 	}
 
-	tp := newTraceProvider(ctx, exporter, logger)
+	processor := tracesdk.NewBatchSpanProcessor(exporter)
+	tp := newTraceProvider(ctx, processor, logger)
 
 	return tp, nil
 }
 
-func newTraceProvider(ctx context.Context, exporter *otlptrace.Exporter, logger log.Logger) *tracesdk.TracerProvider {
+func newTraceProvider(ctx context.Context, processor tracesdk.SpanProcessor, logger log.Logger) *tracesdk.TracerProvider {
 	resource, err := resource.New(ctx)
 	if err != nil {
 		level.Warn(logger).Log("msg", "jaeger: detecting resources for tracing provider failed", "err", err)
 	}
 
+	sampler := tracesdk.ParentBased(tracesdk.TraceIDRatioBased(1.0))
+
 	tp := tracesdk.NewTracerProvider(
-		tracesdk.WithBatcher(exporter),
+		tracesdk.WithSpanProcessor(processor),
 		tracesdk.WithResource(resource),
+		tracesdk.WithSampler(
+			migration.SamplerWithOverride(
+				sampler, migration.ForceTracingAttributeKey,
+			),
+		),
 	)
 	return tp
 }
