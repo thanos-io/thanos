@@ -86,26 +86,26 @@ func filterRules(ruleGroups []*rulespb.RuleGroup, matcherSets [][]*labels.Matche
 		return ruleGroups
 	}
 
-	gc := 0 // Group count.
+	groupCount := 0
 	for _, g := range ruleGroups {
-		rc := 0 // Rule count.
+		ruleCount := 0
 		for _, r := range g.Rules {
 			// Filter rules based on matcher.
 			rl := r.GetLabels()
 			if matches(matcherSets, rl) {
-				g.Rules[rc] = r
-				rc++
+				g.Rules[ruleCount] = r
+				ruleCount++
 			}
 		}
-		g.Rules = g.Rules[:rc]
+		g.Rules = g.Rules[:ruleCount]
 
 		// Filter groups based on number of rules.
 		if len(g.Rules) != 0 {
-			ruleGroups[gc] = g
-			gc++
+			ruleGroups[groupCount] = g
+			groupCount++
 		}
 	}
-	ruleGroups = ruleGroups[:gc]
+	ruleGroups = ruleGroups[:groupCount]
 
 	return ruleGroups
 }
