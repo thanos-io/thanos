@@ -1,3 +1,11 @@
+---
+type: proposal
+title: Automated, per-endpoint mTLS
+status: accepted
+owner: Namanl2001
+menu: proposals-accepted
+---
+
 ## Automated, per-endpoint mTLS
 
 * **Owners:**
