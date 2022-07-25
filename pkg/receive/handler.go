@@ -403,8 +403,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
-	tenant := r.Header.Get(h.options.TenantHeader)
 
+	tenant := r.Header.Get(h.options.TenantHeader)
 	if tenant == "" {
 		tenant = h.options.DefaultTenantID
 	}
