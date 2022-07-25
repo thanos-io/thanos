@@ -420,18 +420,16 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tLogger := log.With(h.logger, "tenant", tenant)
 
-	if h.writeGate != nil {
-		tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
-			err = h.writeGate.Start(r.Context())
-		})
-		if err != nil {
-			level.Error(tLogger).Log("err", err, "msg", "internal server error")
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		defer h.writeGate.Done()
+	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
+		err = h.writeGate.Start(r.Context())
+	})
+	if err != nil {
+		level.Error(tLogger).Log("err", err, "msg", "internal server error")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+
+	defer h.writeGate.Done()
 
 	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
