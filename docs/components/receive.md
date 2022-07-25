@@ -86,7 +86,7 @@ Thanos Receive supports setting limits on the incoming remote write request size
 These limits are applied per request and can be configured with the following command line arguments:
 
 - `--receive.write-request-limits.max-size-bytes`: the maximum body size.
-- `--receive.write-request-limits.max-concurrency`: the maximum amount remote write requests that will be concurrently processed while others wait.
+- `--receive.write-request-limits.max-concurrency`: the maximum amount of remote write requests that will be concurrently processed while others wait.
 - `--receive.write-request-limits.max-series`: the maximum amount of series in a single remote write request.
 - `--receive.write-request-limits.max-samples`: the maximum amount of samples in a single remote write request (summed from all series).
 
