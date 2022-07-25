@@ -882,7 +882,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("0").Hidden().Int64Var(&rc.writeRequestSizeLimit)
 
 	cmd.Flag("receive.write-request-limits.max-concurrency",
-		"The maximum size (in bytes) of remote write requests."+
+		"The maximum amount of remote write requests that will be concurrently processed while others wait."+
 			"The default is no limit, represented by 0.").
 		Default("0").Hidden().IntVar(&rc.writeRequestConcurrencyLimit)
 }
