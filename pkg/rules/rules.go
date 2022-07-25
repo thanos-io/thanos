@@ -86,15 +86,21 @@ func filterRules(ruleGroups []*rulespb.RuleGroup, matcherSets [][]*labels.Matche
 		return ruleGroups
 	}
 
-	for _, g := range ruleGroups {
-		filteredRules := g.Rules[:0]
-		for _, r := range g.Rules {
+	for i := 0; i < len(ruleGroups); i++ {
+		filteredRules := ruleGroups[i].Rules[:0]
+		for _, r := range ruleGroups[i].Rules {
 			rl := r.GetLabels()
 			if matches(matcherSets, rl) {
 				filteredRules = append(filteredRules, r)
 			}
 		}
-		g.Rules = filteredRules
+
+		ruleGroups[i].Rules = filteredRules
+		// Filter Groups which do not have any rules.
+		if len(ruleGroups[i].Rules) == 0 {
+			ruleGroups = append(ruleGroups[:i], ruleGroups[i+1:]...)
+			i-- // -1 as the slice just got shorter
+		}
 	}
 
 	return ruleGroups
