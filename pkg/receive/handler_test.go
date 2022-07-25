@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
@@ -738,7 +739,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			}
 			handlers, _ := newTestHandlerHashring(appendables, 1)
 			handler := handlers[0]
-			handler.requestLimiter = newRequestLimiter(1*1024*1024, 20, 200, nil)
+			handler.requestLimiter = newRequestLimiter(int64(1*units.Megabyte), 20, 200, nil)
 			tenant := "test"
 
 			wreq := &prompb.WriteRequest{
