@@ -1,12 +1,10 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-// Package httpconfig is a wrapper around github.com/prometheus/common/config.
 package httpconfig
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -16,14 +14,12 @@ import (
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 
-	"github.com/go-kit/log"
-	"github.com/mwitkow/go-conntrack"
+	"github.com/go-kit/kit/log"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
-	"golang.org/x/net/http2"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
@@ -43,9 +39,6 @@ type ClientConfig struct {
 	TLSConfig TLSConfig `yaml:"tls_config"`
 	// TransportConfig for Client transport properties
 	TransportConfig TransportConfig `yaml:"transport_config"`
-	// ClientMetrics contains metrics that will be used to instrument
-	// the client that will be created with this config.
-	ClientMetrics *extpromhttp.ClientMetrics `yaml:"-"`
 }
 
 // TLSConfig configures TLS connections.
@@ -74,106 +67,8 @@ func (b BasicAuth) IsZero() bool {
 	return b.Username == "" && b.Password == "" && b.PasswordFile == ""
 }
 
-// Transport configures client's transport properties.
-type TransportConfig struct {
-	MaxIdleConns          int   `yaml:"max_idle_conns"`
-	MaxIdleConnsPerHost   int   `yaml:"max_idle_conns_per_host"`
-	IdleConnTimeout       int64 `yaml:"idle_conn_timeout"`
-	ResponseHeaderTimeout int64 `yaml:"response_header_timeout"`
-	ExpectContinueTimeout int64 `yaml:"expect_continue_timeout"`
-	MaxConnsPerHost       int   `yaml:"max_conns_per_host"`
-	DisableCompression    bool  `yaml:"disable_compression"`
-	TLSHandshakeTimeout   int64 `yaml:"tls_handshake_timeout"`
-}
-
-var defaultTransportConfig TransportConfig = TransportConfig{
-	MaxIdleConns:          100,
-	MaxIdleConnsPerHost:   2,
-	ResponseHeaderTimeout: 0,
-	MaxConnsPerHost:       0,
-	IdleConnTimeout:       int64(90 * time.Second),
-	ExpectContinueTimeout: int64(10 * time.Second),
-	DisableCompression:    false,
-	TLSHandshakeTimeout:   int64(10 * time.Second),
-}
-
-func NewClientConfigFromYAML(cfg []byte) (*ClientConfig, error) {
-	conf := &ClientConfig{TransportConfig: defaultTransportConfig}
-	if err := yaml.Unmarshal(cfg, conf); err != nil {
-		return nil, err
-	}
-	return conf, nil
-}
-
-// NewRoundTripperFromConfig returns a new HTTP RoundTripper configured for the
-// given http.HTTPClientConfig and http.HTTPClientOption.
-func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig TransportConfig, name string) (http.RoundTripper, error) {
-	newRT := func(tlsConfig *tls.Config) (http.RoundTripper, error) {
-		var rt http.RoundTripper = &http.Transport{
-			Proxy:                 http.ProxyURL(cfg.ProxyURL.URL),
-			MaxIdleConns:          transportConfig.MaxIdleConns,
-			MaxIdleConnsPerHost:   transportConfig.MaxIdleConnsPerHost,
-			MaxConnsPerHost:       transportConfig.MaxConnsPerHost,
-			TLSClientConfig:       tlsConfig,
-			DisableCompression:    transportConfig.DisableCompression,
-			IdleConnTimeout:       time.Duration(transportConfig.IdleConnTimeout),
-			ResponseHeaderTimeout: time.Duration(transportConfig.ResponseHeaderTimeout),
-			ExpectContinueTimeout: time.Duration(transportConfig.ExpectContinueTimeout),
-			TLSHandshakeTimeout:   time.Duration(transportConfig.TLSHandshakeTimeout),
-			DialContext: conntrack.NewDialContextFunc(
-				conntrack.DialWithTracing(),
-				conntrack.DialWithName(name)),
-		}
-
-		// HTTP/2 support is golang has many problematic cornercases where
-		// dead connections would be kept and used in connection pools.
-		// https://github.com/golang/go/issues/32388
-		// https://github.com/golang/go/issues/39337
-		// https://github.com/golang/go/issues/39750
-		// TODO: Re-Enable HTTP/2 once upstream issue is fixed.
-		// TODO: use ForceAttemptHTTP2 when we move to Go 1.13+.
-		err := http2.ConfigureTransport(rt.(*http.Transport))
-		if err != nil {
-			return nil, err
-		}
-
-		// If a authorization_credentials is provided, create a round tripper that will set the
-		// Authorization header correctly on each request.
-		if cfg.Authorization != nil && len(cfg.Authorization.Credentials) > 0 {
-			rt = config_util.NewAuthorizationCredentialsRoundTripper(cfg.Authorization.Type, cfg.Authorization.Credentials, rt)
-		} else if cfg.Authorization != nil && len(cfg.Authorization.CredentialsFile) > 0 {
-			rt = config_util.NewAuthorizationCredentialsFileRoundTripper(cfg.Authorization.Type, cfg.Authorization.CredentialsFile, rt)
-		}
-		// Backwards compatibility, be nice with importers who would not have
-		// called Validate().
-		if len(cfg.BearerToken) > 0 {
-			rt = config_util.NewAuthorizationCredentialsRoundTripper("Bearer", cfg.BearerToken, rt)
-		} else if len(cfg.BearerTokenFile) > 0 {
-			rt = config_util.NewAuthorizationCredentialsFileRoundTripper("Bearer", cfg.BearerTokenFile, rt)
-		}
-
-		if cfg.BasicAuth != nil {
-			rt = config_util.NewBasicAuthRoundTripper(cfg.BasicAuth.Username, cfg.BasicAuth.Password, cfg.BasicAuth.PasswordFile, rt)
-		}
-		// Return a new configured RoundTripper.
-		return rt, nil
-	}
-
-	tlsConfig, err := config_util.NewTLSConfig(&cfg.TLSConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(cfg.TLSConfig.CAFile) == 0 {
-		// No need for a RoundTripper that reloads the CA file automatically.
-		return newRT(tlsConfig)
-	}
-
-	return config_util.NewTLSRoundTripper(tlsConfig, cfg.TLSConfig.CAFile, newRT)
-}
-
 // NewHTTPClient returns a new HTTP client.
-func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
+func NewHTTPClient(cfg ClientConfig, name string, metrics *extpromhttp.ClientMetrics) (*http.Client, error) {
 	httpClientConfig := config_util.HTTPClientConfig{
 		BearerToken:     config_util.Secret(cfg.BearerToken),
 		BearerTokenFile: cfg.BearerTokenFile,
@@ -200,34 +95,22 @@ func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 			PasswordFile: cfg.BasicAuth.PasswordFile,
 		}
 	}
-
-	if cfg.BearerToken != "" {
-		httpClientConfig.BearerToken = config_util.Secret(cfg.BearerToken)
-	}
-
-	if cfg.BearerTokenFile != "" {
-		httpClientConfig.BearerTokenFile = cfg.BearerTokenFile
-	}
-
 	if err := httpClientConfig.Validate(); err != nil {
 		return nil, err
 	}
 
-	rt, err := NewRoundTripperFromConfig(
-		httpClientConfig,
-		cfg.TransportConfig,
-		name,
-	)
+	client, err := config_util.NewClientFromConfig(httpClientConfig, name, config_util.WithHTTP2Disabled())
 	if err != nil {
 		return nil, err
 	}
 
-	if cfg.ClientMetrics != nil {
-		rt = extpromhttp.InstrumentedRoundTripper(rt, cfg.ClientMetrics)
+	tripper := client.Transport
+
+	if metrics != nil {
+		tripper = extpromhttp.InstrumentedRoundTripper(tripper, metrics)
 	}
 
-	rt = &userAgentRoundTripper{name: ThanosUserAgent, rt: rt}
-	client := &http.Client{Transport: rt}
+	client.Transport = &userAgentRoundTripper{name: ThanosUserAgent, rt: tripper}
 
 	return client, nil
 }
@@ -261,7 +144,7 @@ func (u userAgentRoundTripper) RoundTrip(r *http.Request) (*http.Response, error
 // file service discovery.
 type EndpointsConfig struct {
 	// List of addresses with DNS prefixes.
-	StaticAddresses []string `yaml:"static_configs"`
+	Addresses []string `yaml:"static_configs"`
 	// List of file  configurations (our FileSD supports different DNS lookups).
 	FileSDConfigs []FileSDConfig `yaml:"file_sd_configs"`
 
@@ -278,7 +161,7 @@ type FileSDConfig struct {
 	RefreshInterval model.Duration `yaml:"refresh_interval"`
 }
 
-func (c FileSDConfig) convert() (file.SDConfig, error) {
+func (c FileSDConfig) Convert() (file.SDConfig, error) {
 	var fileSDConfig file.SDConfig
 	b, err := yaml.Marshal(c)
 	if err != nil {
@@ -293,69 +176,93 @@ type AddressProvider interface {
 	Addresses() []string
 }
 
-// Client represents a client that can send requests to a cluster of HTTP-based endpoints.
-type Client struct {
-	logger log.Logger
-
-	httpClient *http.Client
-	scheme     string
-	prefix     string
-
+// Discoverer allows managing and discovering group of targets composed form static and dynamic (file SD) HTTP addresses. It works also for
+// gRPC addresses (which are HTTP on underlying protocol).
+type Discoverer struct {
 	staticAddresses []string
 	fileSDCache     *cache.Cache
 	fileDiscoverers []*file.Discovery
 
+	scheme string
+	prefix string
+
 	provider AddressProvider
 }
 
-// NewClient returns a new Client.
-func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider) (*Client, error) {
+// Transport configures client's transport properties.
+type TransportConfig struct {
+	MaxIdleConns          int   `yaml:"max_idle_conns"`
+	MaxIdleConnsPerHost   int   `yaml:"max_idle_conns_per_host"`
+	IdleConnTimeout       int64 `yaml:"idle_conn_timeout"`
+	ResponseHeaderTimeout int64 `yaml:"response_header_timeout"`
+	ExpectContinueTimeout int64 `yaml:"expect_continue_timeout"`
+	MaxConnsPerHost       int   `yaml:"max_conns_per_host"`
+	DisableCompression    bool  `yaml:"disable_compression"`
+	TLSHandshakeTimeout   int64 `yaml:"tls_handshake_timeout"`
+}
+
+var defaultTransportConfig TransportConfig = TransportConfig{
+	MaxIdleConns:          100,
+	MaxIdleConnsPerHost:   2,
+	ResponseHeaderTimeout: 0,
+	MaxConnsPerHost:       0,
+	IdleConnTimeout:       int64(90 * time.Second),
+	ExpectContinueTimeout: int64(10 * time.Second),
+	DisableCompression:    false,
+	TLSHandshakeTimeout:   int64(10 * time.Second),
+}
+
+func NewClientConfigFromYAML(cfg []byte) (*ClientConfig, error) {
+	conf := &ClientConfig{TransportConfig: defaultTransportConfig}
+	if err := yaml.Unmarshal(cfg, conf); err != nil {
+		return nil, err
+	}
+	return conf, nil
+}
+
+// NewDiscoverer returns a new Discoverer.
+func NewDiscoverer(logger log.Logger, cfg EndpointsConfig, provider AddressProvider) (*Discoverer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
 	var discoverers []*file.Discovery
 	for _, sdCfg := range cfg.FileSDConfigs {
-		fileSDCfg, err := sdCfg.convert()
+		fileSDCfg, err := sdCfg.Convert()
 		if err != nil {
 			return nil, err
 		}
 		discoverers = append(discoverers, file.NewDiscovery(&fileSDCfg, logger))
 	}
-	return &Client{
-		logger:          logger,
-		httpClient:      client,
+	return &Discoverer{
 		scheme:          cfg.Scheme,
 		prefix:          cfg.PathPrefix,
-		staticAddresses: cfg.StaticAddresses,
+		staticAddresses: cfg.Addresses,
 		fileSDCache:     cache.New(),
 		fileDiscoverers: discoverers,
 		provider:        provider,
 	}, nil
 }
 
-// Do executes an HTTP request with the underlying HTTP client.
-func (c *Client) Do(req *http.Request) (*http.Response, error) {
-	return c.httpClient.Do(req)
-}
-
 // Endpoints returns the list of known endpoints.
-func (c *Client) Endpoints() []*url.URL {
+func (c *Discoverer) Endpoints() []*url.URL {
 	var urls []*url.URL
 	for _, addr := range c.provider.Addresses() {
-		urls = append(urls,
-			&url.URL{
-				Scheme: c.scheme,
-				Host:   addr,
-				Path:   path.Join("/", c.prefix),
-			},
-		)
+		u := &url.URL{
+			Scheme: c.scheme,
+			Host:   addr,
+		}
+
+		if c.prefix != "" {
+			u.Path = path.Join("/", c.prefix)
+		}
+		urls = append(urls, u)
 	}
 	return urls
 }
 
-// Discover runs the service to discover endpoints until the given context is done.
-func (c *Client) Discover(ctx context.Context) {
+// Discover runs the service to discover endpoints from file SD until the given context is done.
+func (c *Discoverer) Discover(ctx context.Context) {
 	var wg sync.WaitGroup
 	ch := make(chan []*targetgroup.Group)
 
@@ -385,6 +292,30 @@ func (c *Client) Discover(ctx context.Context) {
 }
 
 // Resolve refreshes and resolves the list of targets.
-func (c *Client) Resolve(ctx context.Context) error {
+func (c *Discoverer) Resolve(ctx context.Context) error {
 	return c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...))
+}
+
+// Client represents a client that can send requests to a cluster of HTTP-based endpoints.
+type Client struct {
+	*Discoverer
+
+	httpClient *http.Client
+}
+
+// NewClient returns a new Client.
+func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider) (*Client, error) {
+	d, err := NewDiscoverer(logger, cfg, provider)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		httpClient: client,
+		Discoverer: d,
+	}, nil
+}
+
+// Do executes an HTTP request with the underlying HTTP client.
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	return c.httpClient.Do(req)
 }

@@ -21,8 +21,8 @@ func TestBuildConfig(t *testing.T) {
 			addresses: []string{"localhost:9093"},
 			expected: []Config{{
 				EndpointsConfig: EndpointsConfig{
-					StaticAddresses: []string{"localhost:9093"},
-					Scheme:          "http",
+					Addresses: []string{"localhost:9093"},
+					Scheme:    "http",
 				},
 			}},
 		},
@@ -32,15 +32,15 @@ func TestBuildConfig(t *testing.T) {
 			expected: []Config{
 				{
 					EndpointsConfig: EndpointsConfig{
-						StaticAddresses: []string{"localhost:9093"},
-						Scheme:          "http",
+						Addresses: []string{"localhost:9093"},
+						Scheme:    "http",
 					},
 				},
 				{
 					EndpointsConfig: EndpointsConfig{
-						StaticAddresses: []string{"localhost:9094"},
-						Scheme:          "http",
-						PathPrefix:      "/prefix",
+						Addresses:  []string{"localhost:9094"},
+						Scheme:     "http",
+						PathPrefix: "/prefix",
 					},
 				},
 			},
@@ -50,8 +50,8 @@ func TestBuildConfig(t *testing.T) {
 			addresses: []string{"http://localhost:9093"},
 			expected: []Config{{
 				EndpointsConfig: EndpointsConfig{
-					StaticAddresses: []string{"localhost:9093"},
-					Scheme:          "http",
+					Addresses: []string{"localhost:9093"},
+					Scheme:    "http",
 				},
 			}},
 		},
@@ -60,8 +60,8 @@ func TestBuildConfig(t *testing.T) {
 			addresses: []string{"https://localhost:9093"},
 			expected: []Config{{
 				EndpointsConfig: EndpointsConfig{
-					StaticAddresses: []string{"localhost:9093"},
-					Scheme:          "https",
+					Addresses: []string{"localhost:9093"},
+					Scheme:    "https",
 				},
 			}},
 		},

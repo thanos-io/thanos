@@ -55,8 +55,8 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 			address: "http://localhost:9093",
 			expected: AlertmanagerConfig{
 				EndpointsConfig: httpconfig.EndpointsConfig{
-					StaticAddresses: []string{"localhost:9093"},
-					Scheme:          "http",
+					Addresses: []string{"localhost:9093"},
+					Scheme:    "http",
 				},
 				APIVersion: APIv1,
 			},
@@ -65,8 +65,8 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 			address: "https://am.example.com",
 			expected: AlertmanagerConfig{
 				EndpointsConfig: httpconfig.EndpointsConfig{
-					StaticAddresses: []string{"am.example.com"},
-					Scheme:          "https",
+					Addresses: []string{"am.example.com"},
+					Scheme:    "https",
 				},
 				APIVersion: APIv1,
 			},
@@ -75,8 +75,8 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 			address: "dns+http://localhost:9093",
 			expected: AlertmanagerConfig{
 				EndpointsConfig: httpconfig.EndpointsConfig{
-					StaticAddresses: []string{"dns+localhost:9093"},
-					Scheme:          "http",
+					Addresses: []string{"dns+localhost:9093"},
+					Scheme:    "http",
 				},
 				APIVersion: APIv1,
 			},
@@ -85,8 +85,8 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 			address: "dnssrv+http://localhost",
 			expected: AlertmanagerConfig{
 				EndpointsConfig: httpconfig.EndpointsConfig{
-					StaticAddresses: []string{"dnssrv+localhost"},
-					Scheme:          "http",
+					Addresses: []string{"dnssrv+localhost"},
+					Scheme:    "http",
 				},
 				APIVersion: APIv1,
 			},
@@ -95,8 +95,8 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 			address: "ssh+http://localhost",
 			expected: AlertmanagerConfig{
 				EndpointsConfig: httpconfig.EndpointsConfig{
-					StaticAddresses: []string{"localhost"},
-					Scheme:          "ssh+http",
+					Addresses: []string{"localhost"},
+					Scheme:    "ssh+http",
 				},
 				APIVersion: APIv1,
 			},
@@ -105,9 +105,9 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 			address: "dns+https://localhost/path/prefix/",
 			expected: AlertmanagerConfig{
 				EndpointsConfig: httpconfig.EndpointsConfig{
-					StaticAddresses: []string{"dns+localhost:9093"},
-					Scheme:          "https",
-					PathPrefix:      "/path/prefix/",
+					Addresses:  []string{"dns+localhost:9093"},
+					Scheme:     "https",
+					PathPrefix: "/path/prefix/",
 				},
 				APIVersion: APIv1,
 			},
@@ -122,8 +122,8 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 					},
 				},
 				EndpointsConfig: httpconfig.EndpointsConfig{
-					StaticAddresses: []string{"localhost:9093"},
-					Scheme:          "http",
+					Addresses: []string{"localhost:9093"},
+					Scheme:    "http",
 				},
 				APIVersion: APIv1,
 			},

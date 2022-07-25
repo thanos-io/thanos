@@ -324,8 +324,7 @@ func runRule(
 	var queryClients []*httpconfig.Client
 	queryClientMetrics := extpromhttp.NewClientMetrics(extprom.WrapRegistererWith(prometheus.Labels{"client": "query"}, reg))
 	for _, cfg := range queryCfg {
-		cfg.HTTPClientConfig.ClientMetrics = queryClientMetrics
-		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "query")
+		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "query", queryClientMetrics)
 		if err != nil {
 			return err
 		}
@@ -336,7 +335,7 @@ func runRule(
 		}
 		queryClients = append(queryClients, queryClient)
 		// Discover and resolve query addresses.
-		addDiscoveryGroups(g, queryClient, conf.query.dnsSDInterval)
+		addDiscoveryGroups(g, queryClient.Discoverer, conf.query.dnsSDInterval)
 	}
 	var (
 		appendable storage.Appendable
@@ -442,8 +441,7 @@ func runRule(
 		extprom.WrapRegistererWith(prometheus.Labels{"client": "alertmanager"}, reg),
 	)
 	for _, cfg := range alertingCfg.Alertmanagers {
-		cfg.HTTPClientConfig.ClientMetrics = amClientMetrics
-		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
+		c, err := httpconfig.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager", amClientMetrics)
 		if err != nil {
 			return err
 		}
@@ -454,7 +452,7 @@ func runRule(
 			return err
 		}
 		// Discover and resolve Alertmanager addresses.
-		addDiscoveryGroups(g, amClient, conf.alertmgr.alertmgrsDNSSDInterval)
+		addDiscoveryGroups(g, amClient.Discoverer, conf.alertmgr.alertmgrsDNSSDInterval)
 
 		alertmgrs = append(alertmgrs, alert.NewAlertmanager(logger, amClient, time.Duration(cfg.Timeout), cfg.APIVersion))
 	}
@@ -845,10 +843,10 @@ func queryFuncCreator(
 	}
 }
 
-func addDiscoveryGroups(g *run.Group, c *httpconfig.Client, interval time.Duration) {
+func addDiscoveryGroups(g *run.Group, d *httpconfig.Discoverer, interval time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 	g.Add(func() error {
-		c.Discover(ctx)
+		d.Discover(ctx)
 		return nil
 	}, func(error) {
 		cancel()
@@ -856,7 +854,7 @@ func addDiscoveryGroups(g *run.Group, c *httpconfig.Client, interval time.Durati
 
 	g.Add(func() error {
 		return runutil.Repeat(interval, ctx.Done(), func() error {
-			return c.Resolve(ctx)
+			return d.Resolve(ctx)
 		})
 	}, func(error) {
 		cancel()

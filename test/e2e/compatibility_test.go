@@ -140,8 +140,8 @@ func TestAlertCompliance(t *testing.T) {
 		ruler := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 			{
 				EndpointsConfig: httpconfig.EndpointsConfig{
-					StaticAddresses: []string{compliance.InternalEndpoint("http")},
-					Scheme:          "http",
+					Addresses: []string{compliance.InternalEndpoint("http")},
+					Scheme:    "http",
 				},
 				Timeout:    amTimeout,
 				APIVersion: alert.APIv1,
@@ -154,7 +154,7 @@ func TestAlertCompliance(t *testing.T) {
 			InitTSDB(filepath.Join(rFuture.InternalDir(), "rules"), []httpconfig.Config{
 				{
 					EndpointsConfig: httpconfig.EndpointsConfig{
-						StaticAddresses: []string{
+						Addresses: []string{
 							querierBuilder.InternalEndpoint("http"),
 						},
 						Scheme: "http",

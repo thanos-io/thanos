@@ -7,23 +7,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/api/query/querypb"
-
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
-	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -36,42 +34,66 @@ import (
 const (
 	unhealthyEndpointMessage  = "removing endpoint because it's unhealthy or does not exist"
 	noMetadataEndpointMessage = "cannot obtain metadata: neither info nor store client found"
+
+	// MinTime is a default minimum time used by Prometheus when it's not passed as query parameter.
+	MinTime = -9223309901257974
+	// MaxTime is a default maximum time used by Prometheus when it's not passed as query parameter.
+	MaxTime = 9223309901257974
 )
 
-type GRPCEndpointSpec struct {
+type EndpointSpec interface {
+	// Addr returns host port address for the endpoint. It is used as ID for endpoint.
+	Addr() string
+
+	// Metadata returns current labels, component type and min, max ranges for store.
+	// It can change for every call for this method.
+	// If metadata call fails we assume that store is no longer accessible and we should not use it.
+	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
+	// given store connection.
+	Metadata(ctx context.Context, client *endpointClients) (*endpointMetadata, error)
+
+	// IsStrictStatic returns true if the endpoint has been statically defined and it is under a strict mode.
+	IsStrictStatic() bool
+}
+
+type grpcEndpointSpec struct {
 	addr           string
 	isStrictStatic bool
 }
 
 // NewGRPCEndpointSpec creates gRPC endpoint spec.
 // It uses InfoAPI to get Metadata.
-func NewGRPCEndpointSpec(addr string, isStrictStatic bool) *GRPCEndpointSpec {
-	return &GRPCEndpointSpec{addr: addr, isStrictStatic: isStrictStatic}
+func NewGRPCEndpointSpec(addr string, isStrictStatic bool) EndpointSpec {
+	return &grpcEndpointSpec{addr: addr, isStrictStatic: isStrictStatic}
 }
 
 // IsStrictStatic returns true if the endpoint has been statically defined and it is under a strict mode.
-func (es *GRPCEndpointSpec) IsStrictStatic() bool {
+func (es *grpcEndpointSpec) IsStrictStatic() bool {
 	return es.isStrictStatic
 }
 
-func (es *GRPCEndpointSpec) Addr() string {
+func (es *grpcEndpointSpec) Addr() string {
 	// API address should not change between state changes.
 	return es.addr
 }
 
 // Metadata method for gRPC endpoint tries to call InfoAPI exposed by Thanos components until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (es *GRPCEndpointSpec) Metadata(ctx context.Context, infoClient infopb.InfoClient, storeClient storepb.StoreClient) (*endpointMetadata, error) {
-	if infoClient != nil {
-		resp, err := infoClient.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
-		if err == nil {
-			return &endpointMetadata{resp}, nil
-		}
-	}
+func (es *grpcEndpointSpec) Metadata(ctx context.Context, client *endpointClients) (*endpointMetadata, error) {
+	// TODO(@matej-g): Info client should not be used due to https://github.com/thanos-io/thanos/issues/4699
+	// Uncomment this after it is implemented in https://github.com/thanos-io/thanos/pull/4282.
+	// if client.info != nil {
+	// 	resp, err := client.info.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
+	// 	if err != nil {
+	// 		return nil, errors.Wrapf(err, "fetching info from %s", es.addr)
+	// 	}
+
+	// 	return &endpointMetadata{resp}, nil
+	// }
 
 	// Call Info method of StoreAPI, this way querier will be able to discovery old components not exposing InfoAPI.
-	if storeClient != nil {
-		metadata, err := es.getMetadataUsingStoreAPI(ctx, storeClient)
+	if client.store != nil {
+		metadata, err := es.getMetadataUsingStoreAPI(ctx, client.store)
 		if err != nil {
 			return nil, errors.Wrapf(err, "fallback fetching info from %s", es.addr)
 		}
@@ -81,7 +103,7 @@ func (es *GRPCEndpointSpec) Metadata(ctx context.Context, infoClient infopb.Info
 	return nil, errors.New(noMetadataEndpointMessage)
 }
 
-func (es *GRPCEndpointSpec) getMetadataUsingStoreAPI(ctx context.Context, client storepb.StoreClient) (*endpointMetadata, error) {
+func (es *grpcEndpointSpec) getMetadataUsingStoreAPI(ctx context.Context, client storepb.StoreClient) (*endpointMetadata, error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{})
 	if err != nil {
 		return nil, err
@@ -96,7 +118,7 @@ func (es *GRPCEndpointSpec) getMetadataUsingStoreAPI(ctx context.Context, client
 	}, nil
 }
 
-func (es *GRPCEndpointSpec) fillExpectedAPIs(componentType component.Component, mintime, maxTime int64) infopb.InfoResponse {
+func (es *grpcEndpointSpec) fillExpectedAPIs(componentType component.Component, mintime, maxTime int64) infopb.InfoResponse {
 	switch componentType {
 	case component.Sidecar:
 		return infopb.InfoResponse{
@@ -120,7 +142,6 @@ func (es *GRPCEndpointSpec) fillExpectedAPIs(componentType component.Component, 
 				Targets:        &infopb.TargetsInfo{},
 				MetricMetadata: &infopb.MetricMetadataInfo{},
 				Exemplars:      &infopb.ExemplarsInfo{},
-				Query:          &infopb.QueryAPIInfo{},
 			}
 		}
 	case component.Receive:
@@ -149,7 +170,13 @@ func (es *GRPCEndpointSpec) fillExpectedAPIs(componentType component.Component, 
 			Rules: &infopb.RulesInfo{},
 		}
 	default:
-		return infopb.InfoResponse{}
+		// This might break non-native StoreAPI implementation, so assume Store API too.
+		return infopb.InfoResponse{
+			Store: &infopb.StoreInfo{
+				MinTime: mintime,
+				MaxTime: maxTime,
+			},
+		}
 	}
 }
 
@@ -238,15 +265,63 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-// EndpointSet maintains a set of active Thanos endpoints. It is backed up by Endpoint Specifications that are dynamically fetched on
-// every Update() call.
+// EndpointGroup groups common endpoints (having the same gRPC dial Opts and coming from the same DNS discovery) together.
+// It is backed up by set of *exthttp.Discoverer structs can give us addresses.
+type EndpointGroup struct {
+	d *httpconfig.Discoverer
+
+	dialOpts []grpc.DialOption
+}
+
+func NewEndpointGroup(d *httpconfig.Discoverer, dialOpts []grpc.DialOption) *EndpointGroup {
+	return &EndpointGroup{
+		d:        d,
+		dialOpts: dialOpts,
+	}
+}
+
+func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []EndpointSpec) []EndpointSpec {
+	set := make(map[string]EndpointSpec)
+	for _, spec := range specs {
+		addr := spec.Addr()
+		if _, ok := set[addr]; ok {
+			level.Warn(logger).Log("msg", "Duplicate store address is provided", "addr", addr)
+			duplicatedStores.Inc()
+		}
+		set[addr] = spec
+	}
+	deduplicated := make([]EndpointSpec, 0, len(set))
+	for _, value := range set {
+		deduplicated = append(deduplicated, value)
+	}
+	return deduplicated
+}
+
+// Spec returns current set of endpoint specs.
+// Note that endpoint specifications return  can change dynamically. If some component is missing from the list, we assume it is no longer
+// accessible and we close gRPC client for it, unless it is strict.
+func (g *EndpointGroup) Spec() []EndpointSpec {
+	g.d.Endpoints() // TODO: ...
+
+	/*
+		Something like..
+		for _, dnsProvider := range []*dns.Provider{dnsStoreProvider, dnsRuleProvider, dnsExemplarProvider, dnsMetadataProvider, dnsTargetProvider} {
+					var tmpSpecs []query.EndpointSpec
+
+					for _, addr := range dnsProvider.Addresses() {
+						tmpSpecs = append(tmpSpecs, query.NewGRPCEndpointSpec(addr, false))
+					}
+					tmpSpecs = removeDuplicateEndpointSpecs(logger, duplicatedStores, tmpSpecs)
+					specs = append(specs, tmpSpecs...)
+				}
+	*/
+}
+
+// EndpointSet maintains a set of active Thanos endpoints groups.
 type EndpointSet struct {
 	logger log.Logger
 
-	// Endpoint specifications can change dynamically. If some component is missing from the list, we assume it is no longer
-	// accessible and we close gRPC client for it, unless it is strict.
-	endpointSpec        func() []*GRPCEndpointSpec
-	dialOpts            []grpc.DialOption
+	groups              []*EndpointGroup
 	gRPCInfoCallTimeout time.Duration
 
 	updateMtx            sync.Mutex
@@ -266,10 +341,10 @@ type EndpointSet struct {
 func NewEndpointSet(
 	logger log.Logger,
 	reg *prometheus.Registry,
-	endpointSpecs func() []*GRPCEndpointSpec,
-	dialOpts []grpc.DialOption,
+	groups []*EndpointGroup,
 	unhealthyEndpointTimeout time.Duration,
 ) *EndpointSet {
+	// TODO(bwplotka): Consider adding provider per config name, for instrumentation purposes, but only if strongly requested.
 	endpointsMetric := newEndpointSetNodeCollector()
 	if reg != nil {
 		reg.MustRegister(endpointsMetric)
@@ -279,19 +354,14 @@ func NewEndpointSet(
 		logger = log.NewNopLogger()
 	}
 
-	if endpointSpecs == nil {
-		endpointSpecs = func() []*GRPCEndpointSpec { return nil }
-	}
-
 	es := &EndpointSet{
 		logger:                   log.With(logger, "component", "endpointset"),
-		dialOpts:                 dialOpts,
 		endpointsMetric:          endpointsMetric,
 		gRPCInfoCallTimeout:      5 * time.Second,
 		endpoints:                make(map[string]*endpointRef),
 		endpointStatuses:         make(map[string]*EndpointStatus),
 		unhealthyEndpointTimeout: unhealthyEndpointTimeout,
-		endpointSpec:             endpointSpecs,
+		groups:                   groups,
 	}
 	return es
 }
@@ -368,26 +438,7 @@ func (e *EndpointSet) GetStoreClients() []store.Client {
 	stores := make([]store.Client, 0, len(e.endpoints))
 	for _, er := range e.endpoints {
 		if er.HasStoreAPI() {
-			// Make a new endpointRef with store client.
-			stores = append(stores, &endpointRef{
-				StoreClient: storepb.NewStoreClient(er.cc),
-				addr:        er.addr,
-				metadata:    er.metadata,
-			})
-		}
-	}
-	return stores
-}
-
-// GetQueryAPIClients returns a list of all active query API clients.
-func (e *EndpointSet) GetQueryAPIClients() []querypb.QueryClient {
-	e.endpointsMtx.RLock()
-	defer e.endpointsMtx.RUnlock()
-
-	stores := make([]querypb.QueryClient, 0, len(e.endpoints))
-	for _, er := range e.endpoints {
-		if er.HasQueryAPI() {
-			stores = append(stores, querypb.NewQueryClient(er.cc))
+			stores = append(stores, er)
 		}
 	}
 	return stores
@@ -401,7 +452,7 @@ func (e *EndpointSet) GetRulesClients() []rulespb.RulesClient {
 	rules := make([]rulespb.RulesClient, 0, len(e.endpoints))
 	for _, er := range e.endpoints {
 		if er.HasRulesAPI() {
-			rules = append(rules, rulespb.NewRulesClient(er.cc))
+			rules = append(rules, er.clients.rule)
 		}
 	}
 	return rules
@@ -415,7 +466,7 @@ func (e *EndpointSet) GetTargetsClients() []targetspb.TargetsClient {
 	targets := make([]targetspb.TargetsClient, 0, len(e.endpoints))
 	for _, er := range e.endpoints {
 		if er.HasTargetsAPI() {
-			targets = append(targets, targetspb.NewTargetsClient(er.cc))
+			targets = append(targets, er.clients.target)
 		}
 	}
 	return targets
@@ -429,7 +480,7 @@ func (e *EndpointSet) GetMetricMetadataClients() []metadatapb.MetadataClient {
 	metadataClients := make([]metadatapb.MetadataClient, 0, len(e.endpoints))
 	for _, er := range e.endpoints {
 		if er.HasMetricMetadataAPI() {
-			metadataClients = append(metadataClients, metadatapb.NewMetadataClient(er.cc))
+			metadataClients = append(metadataClients, er.clients.metricMetadata)
 		}
 	}
 	return metadataClients
@@ -444,7 +495,7 @@ func (e *EndpointSet) GetExemplarsStores() []*exemplarspb.ExemplarStore {
 	for _, er := range e.endpoints {
 		if er.HasExemplarsAPI() {
 			exemplarStores = append(exemplarStores, &exemplarspb.ExemplarStore{
-				ExemplarsClient: exemplarspb.NewExemplarsClient(er.cc),
+				ExemplarsClient: er.clients.exemplar,
 				LabelSets:       labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...),
 			})
 		}
@@ -479,7 +530,7 @@ func (e *EndpointSet) getActiveEndpoints(ctx context.Context, endpoints map[stri
 		endpointAddrSet[es.Addr()] = struct{}{}
 
 		wg.Add(1)
-		go func(spec *GRPCEndpointSpec) {
+		go func(spec EndpointSpec) {
 			defer wg.Done()
 
 			addr := spec.Addr()
@@ -500,17 +551,24 @@ func (e *EndpointSet) getActiveEndpoints(ctx context.Context, endpoints map[stri
 				// Assume that StoreAPI is also exposed because if call to info service fails we will call info method of storeAPI.
 				// It will be overwritten to null if not present.
 				er = &endpointRef{
-					cc:     conn,
-					addr:   addr,
-					logger: e.logger,
+					cc:          conn,
+					addr:        addr,
+					logger:      e.logger,
+					StoreClient: storepb.NewStoreClient(conn),
+					clients: &endpointClients{
+						// TODO(@matej-g): Info client should not be used due to https://github.com/thanos-io/thanos/issues/4699
+						// Uncomment this after it is implemented in https://github.com/thanos-io/thanos/pull/4282.
+						// info:  infopb.NewInfoClient(conn),
+						store: storepb.NewStoreClient(conn),
+					},
 				}
 			}
 
-			metadata, err := spec.Metadata(ctx, infopb.NewInfoClient(er.cc), storepb.NewStoreClient(er.cc))
+			metadata, err := spec.Metadata(ctx, er.clients)
 			if err != nil {
 				if !seenAlready && !spec.IsStrictStatic() {
 					// Close only if new and not a strict static node.
-					// Inactive `e.endpoints` will be closed later on.
+					// Unactive `e.endpoints` will be closed later on.
 					er.Close()
 				}
 
@@ -527,8 +585,8 @@ func (e *EndpointSet) getActiveEndpoints(ctx context.Context, endpoints map[stri
 					metadata = &endpointMetadata{
 						&infopb.InfoResponse{
 							Store: &infopb.StoreInfo{
-								MinTime: math.MinInt64,
-								MaxTime: math.MaxInt64,
+								MinTime: MinTime,
+								MaxTime: MaxTime,
 							},
 						},
 					}
@@ -623,6 +681,8 @@ type endpointRef struct {
 	cc   *grpc.ClientConn
 	addr string
 
+	clients *endpointClients
+
 	// Metadata can change during runtime.
 	metadata *endpointMetadata
 
@@ -633,6 +693,38 @@ func (er *endpointRef) Update(metadata *endpointMetadata) {
 	er.mtx.Lock()
 	defer er.mtx.Unlock()
 
+	clients := er.clients
+
+	if metadata.Store != nil {
+		clients.store = storepb.NewStoreClient(er.cc)
+		er.StoreClient = clients.store
+	} else {
+		// When we see the endpoint for the first time we assume the StoreAPI is exposed by that endpoint (which may not be true for some component, e.g. ruler)
+		// and we create a store API client because as a fallback we might have to call info method of storeAPI.
+		// In this step, we are setting it to null when we find out that the store API is not exposed.
+		er.clients.store = nil
+		er.StoreClient = nil
+	}
+
+	if metadata.Rules != nil {
+		clients.rule = rulespb.NewRulesClient(er.cc)
+	}
+
+	if metadata.Targets != nil {
+		clients.target = targetspb.NewTargetsClient(er.cc)
+	}
+
+	if metadata.MetricMetadata != nil {
+		clients.metricMetadata = metadatapb.NewMetadataClient(er.cc)
+	}
+
+	if metadata.Exemplars != nil {
+		// min/max range is also provided by in the response of Info rpc call
+		// but we are not using this metadata anywhere right now so ignoring.
+		clients.exemplar = exemplarspb.NewExemplarsClient(er.cc)
+	}
+
+	er.clients = clients
 	er.metadata = metadata
 }
 
@@ -647,46 +739,46 @@ func (er *endpointRef) ComponentType() component.Component {
 	return component.FromString(er.metadata.ComponentType)
 }
 
+func (er *endpointRef) HasClients() bool {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	return er.clients != nil
+}
+
 func (er *endpointRef) HasStoreAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.metadata != nil && er.metadata.Store != nil
-}
-
-func (er *endpointRef) HasQueryAPI() bool {
-	er.mtx.RLock()
-	defer er.mtx.RUnlock()
-
-	return er.metadata != nil && er.metadata.Query != nil
+	return er.HasClients() && er.clients.store != nil
 }
 
 func (er *endpointRef) HasRulesAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.metadata != nil && er.metadata.Rules != nil
+	return er.HasClients() && er.clients.rule != nil
 }
 
 func (er *endpointRef) HasTargetsAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.metadata != nil && er.metadata.Targets != nil
+	return er.HasClients() && er.clients.target != nil
 }
 
 func (er *endpointRef) HasMetricMetadataAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.metadata != nil && er.metadata.MetricMetadata != nil
+	return er.HasClients() && er.clients.metricMetadata != nil
 }
 
 func (er *endpointRef) HasExemplarsAPI() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.metadata != nil && er.metadata.Exemplars != nil
+	return er.HasClients() && er.clients.exemplar != nil
 }
 
 func (er *endpointRef) LabelSets() []labels.Labels {
@@ -716,7 +808,7 @@ func (er *endpointRef) TimeRange() (mint, maxt int64) {
 	defer er.mtx.RUnlock()
 
 	if er.metadata == nil || er.metadata.Store == nil {
-		return math.MinInt64, math.MaxInt64
+		return MinTime, MaxTime
 	}
 
 	// Currently, min/max time of only StoreAPI is being updated by all components.
@@ -759,11 +851,18 @@ func (er *endpointRef) apisPresent() []string {
 		apisPresent = append(apisPresent, "MetricMetadataAPI")
 	}
 
-	if er.HasQueryAPI() {
-		apisPresent = append(apisPresent, "QueryAPI")
-	}
-
 	return apisPresent
+}
+
+// TODO(@matej-g): Info client should not be used due to https://github.com/thanos-io/thanos/issues/4699
+// Uncomment the nolint directive after https://github.com/thanos-io/thanos/pull/4282.
+type endpointClients struct {
+	store          storepb.StoreClient
+	rule           rulespb.RulesClient
+	metricMetadata metadatapb.MetadataClient
+	exemplar       exemplarspb.ExemplarsClient
+	target         targetspb.TargetsClient
+	info           infopb.InfoClient //nolint:structcheck,unused
 }
 
 type endpointMetadata struct {

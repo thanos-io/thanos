@@ -62,9 +62,9 @@ func (v *APIVersion) UnmarshalYAML(unmarshal func(interface{}) error) error {
 func DefaultAlertmanagerConfig() AlertmanagerConfig {
 	return AlertmanagerConfig{
 		EndpointsConfig: httpconfig.EndpointsConfig{
-			Scheme:          "http",
-			StaticAddresses: []string{},
-			FileSDConfigs:   []httpconfig.FileSDConfig{},
+			Scheme:        "http",
+			Addresses:     []string{},
+			FileSDConfigs: []httpconfig.FileSDConfig{},
 		},
 		Timeout:    model.Duration(time.Second * 10),
 		APIVersion: APIv1,
@@ -131,9 +131,9 @@ func BuildAlertmanagerConfig(address string, timeout time.Duration) (Alertmanage
 			BasicAuth: basicAuth,
 		},
 		EndpointsConfig: httpconfig.EndpointsConfig{
-			PathPrefix:      parsed.Path,
-			Scheme:          scheme,
-			StaticAddresses: []string{host},
+			PathPrefix: parsed.Path,
+			Scheme:     scheme,
+			Addresses:  []string{host},
 		},
 		Timeout:    model.Duration(timeout),
 		APIVersion: APIv1,

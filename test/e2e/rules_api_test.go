@@ -70,8 +70,8 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	queryCfg := []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
-				StaticAddresses: []string{qBuilder.InternalEndpoint("http")},
-				Scheme:          "http",
+				Addresses: []string{qBuilder.InternalEndpoint("http")},
+				Scheme:    "http",
 			},
 		},
 	}

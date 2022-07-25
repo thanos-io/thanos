@@ -12,9 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -27,7 +25,7 @@ import (
 
 var testGRPCOpts = []grpc.DialOption{
 	grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
-	grpc.WithTransportCredentials(insecure.NewCredentials()),
+	grpc.WithInsecure(),
 }
 
 var (
@@ -37,7 +35,10 @@ var (
 			MinTime: math.MinInt64,
 			MaxTime: math.MaxInt64,
 		},
-		Exemplars:      &infopb.ExemplarsInfo{},
+		Exemplars: &infopb.ExemplarsInfo{
+			MinTime: math.MinInt64,
+			MaxTime: math.MaxInt64,
+		},
 		Rules:          &infopb.RulesInfo{},
 		MetricMetadata: &infopb.MetricMetadataInfo{},
 		Targets:        &infopb.TargetsInfo{},
@@ -48,11 +49,13 @@ var (
 			MinTime: math.MinInt64,
 			MaxTime: math.MaxInt64,
 		},
-		Exemplars:      &infopb.ExemplarsInfo{},
+		Exemplars: &infopb.ExemplarsInfo{
+			MinTime: math.MinInt64,
+			MaxTime: math.MaxInt64,
+		},
 		Rules:          &infopb.RulesInfo{},
 		MetricMetadata: &infopb.MetricMetadataInfo{},
 		Targets:        &infopb.TargetsInfo{},
-		Query:          &infopb.QueryAPIInfo{},
 	}
 	ruleInfo = &infopb.InfoResponse{
 		ComponentType: component.Rule.String(),
@@ -75,7 +78,10 @@ var (
 			MinTime: math.MinInt64,
 			MaxTime: math.MaxInt64,
 		},
-		Exemplars: &infopb.ExemplarsInfo{},
+		Exemplars: &infopb.ExemplarsInfo{
+			MinTime: math.MinInt64,
+			MaxTime: math.MaxInt64,
+		},
 	}
 )
 
@@ -191,7 +197,6 @@ func startTestEndpoints(testEndpointMeta []testEndpointMeta) (*testEndpoints, er
 				Rules:          meta.Rules,
 				Targets:        meta.Targets,
 				Exemplars:      meta.Exemplars,
-				Query:          meta.Query,
 				ComponentType:  meta.ComponentType,
 			},
 			infoDelay: meta.infoDelay,
@@ -295,8 +300,8 @@ func TestEndpointSet_Update(t *testing.T) {
 
 	// Testing if duplicates can cause weird results.
 	discoveredEndpointAddr = append(discoveredEndpointAddr, discoveredEndpointAddr[0])
-	endpointSet := NewEndpointSet(nil, nil,
-		func() (specs []*GRPCEndpointSpec) {
+	endpointSet := NewEndpointSet(nil, nil, "",
+		func() (specs []EndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, false))
 			}
@@ -678,8 +683,8 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 	endpoints.CloseOne(initialEndpointAddr[0])
 	endpoints.CloseOne(initialEndpointAddr[1])
 
-	endpointSet := NewEndpointSet(nil, nil,
-		func() (specs []*GRPCEndpointSpec) {
+	endpointSet := NewEndpointSet(nil, nil, "",
+		func() (specs []EndpointSpec) {
 			for _, addr := range initialEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, false))
 			}
@@ -708,7 +713,10 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 					MinTime: 12345,
 					MaxTime: 54321,
 				},
-				Exemplars:      &infopb.ExemplarsInfo{},
+				Exemplars: &infopb.ExemplarsInfo{
+					MinTime: math.MinInt64,
+					MaxTime: math.MaxInt64,
+				},
 				Rules:          &infopb.RulesInfo{},
 				MetricMetadata: &infopb.MetricMetadataInfo{},
 				Targets:        &infopb.TargetsInfo{},
@@ -733,7 +741,10 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 					MinTime: 66666,
 					MaxTime: 77777,
 				},
-				Exemplars:      &infopb.ExemplarsInfo{},
+				Exemplars: &infopb.ExemplarsInfo{
+					MinTime: math.MinInt64,
+					MaxTime: math.MaxInt64,
+				},
 				Rules:          &infopb.RulesInfo{},
 				MetricMetadata: &infopb.MetricMetadataInfo{},
 				Targets:        &infopb.TargetsInfo{},
@@ -759,7 +770,10 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 					MinTime: 65644,
 					MaxTime: 77777,
 				},
-				Exemplars:      &infopb.ExemplarsInfo{},
+				Exemplars: &infopb.ExemplarsInfo{
+					MinTime: math.MinInt64,
+					MaxTime: math.MaxInt64,
+				},
 				Rules:          &infopb.RulesInfo{},
 				MetricMetadata: &infopb.MetricMetadataInfo{},
 				Targets:        &infopb.TargetsInfo{},
@@ -787,8 +801,8 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 
 	staticEndpointAddr := discoveredEndpointAddr[0]
 	slowStaticEndpointAddr := discoveredEndpointAddr[2]
-	endpointSet := NewEndpointSet(nil, nil, func() (specs []*GRPCEndpointSpec) {
-		return []*GRPCEndpointSpec{
+	endpointSet := NewEndpointSet(nil, nil, "", func() (specs []EndpointSpec) {
+		return []EndpointSpec{
 			NewGRPCEndpointSpec(discoveredEndpointAddr[0], true),
 			NewGRPCEndpointSpec(discoveredEndpointAddr[1], false),
 			NewGRPCEndpointSpec(discoveredEndpointAddr[2], true),
@@ -804,8 +818,8 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 	// The endpoint has not responded to the info call and is assumed to cover everything.
 	curMin, curMax := endpointSet.endpoints[slowStaticEndpointAddr].metadata.Store.MinTime, endpointSet.endpoints[slowStaticEndpointAddr].metadata.Store.MaxTime
 	testutil.Assert(t, endpointSet.endpoints[slowStaticEndpointAddr].cc.GetState().String() != "SHUTDOWN", "slow store's connection should not be closed")
-	testutil.Equals(t, int64(math.MinInt64), curMin)
-	testutil.Equals(t, int64(math.MaxInt64), curMax)
+	testutil.Equals(t, int64(MinTime), curMin)
+	testutil.Equals(t, int64(MaxTime), curMax)
 
 	// The endpoint is statically defined + strict mode is enabled
 	// so its client + information must be retained.
@@ -877,13 +891,12 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 
 	type discoveryState struct {
 		name                   string
-		endpointSpec           func() []*GRPCEndpointSpec
+		endpointSpec           func() []EndpointSpec
 		expectedStores         int
 		expectedRules          int
 		expectedTarget         int
 		expectedMetricMetadata int
 		expectedExemplars      int
-		expectedQueryAPIs      int
 	}
 
 	for _, tc := range []struct {
@@ -899,8 +912,8 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 				},
 				{
 					name: "Sidecar, Ruler, Querier, Receiver and StoreGW discovered",
-					endpointSpec: func() []*GRPCEndpointSpec {
-						endpointSpec := make([]*GRPCEndpointSpec, 0, len(endpoints.orderAddrs))
+					endpointSpec: func() []EndpointSpec {
+						endpointSpec := make([]EndpointSpec, 0, len(endpoints.orderAddrs))
 						for _, addr := range endpoints.orderAddrs {
 							endpointSpec = append(endpointSpec, NewGRPCEndpointSpec(addr, false))
 						}
@@ -911,7 +924,6 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 					expectedTarget:         2, // sidecar + querier
 					expectedMetricMetadata: 2, // sidecar + querier
 					expectedExemplars:      3, // sidecar + querier + receiver
-					expectedQueryAPIs:      1, // querier
 				},
 			},
 		},
@@ -924,8 +936,8 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 				},
 				{
 					name: "Sidecar discovered, no Ruler discovered",
-					endpointSpec: func() []*GRPCEndpointSpec {
-						return []*GRPCEndpointSpec{
+					endpointSpec: func() []EndpointSpec {
+						return []EndpointSpec{
 							NewGRPCEndpointSpec(endpoints.orderAddrs[0], false),
 						}
 					},
@@ -937,8 +949,8 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 				},
 				{
 					name: "Ruler discovered",
-					endpointSpec: func() []*GRPCEndpointSpec {
-						return []*GRPCEndpointSpec{
+					endpointSpec: func() []EndpointSpec {
+						return []EndpointSpec{
 							NewGRPCEndpointSpec(endpoints.orderAddrs[0], false),
 							NewGRPCEndpointSpec(endpoints.orderAddrs[1], false),
 						}
@@ -951,8 +963,8 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 				},
 				{
 					name: "Sidecar removed",
-					endpointSpec: func() []*GRPCEndpointSpec {
-						return []*GRPCEndpointSpec{
+					endpointSpec: func() []EndpointSpec {
+						return []EndpointSpec{
 							NewGRPCEndpointSpec(endpoints.orderAddrs[1], false),
 						}
 					},
@@ -965,8 +977,8 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			currentState := 0
 
-			endpointSet := NewEndpointSet(nil, nil,
-				func() []*GRPCEndpointSpec {
+			endpointSet := NewEndpointSet(nil, nil, "",
+				func() []EndpointSpec {
 					if tc.states[currentState].endpointSpec == nil {
 						return nil
 					}
@@ -985,7 +997,6 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 				gotTarget := 0
 				gotExemplars := 0
 				gotMetricMetadata := 0
-				gotQueryAPIs := 0
 
 				for _, er := range endpointSet.endpoints {
 					if er.HasStoreAPI() {
@@ -1002,9 +1013,6 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 					}
 					if er.HasMetricMetadataAPI() {
 						gotMetricMetadata += 1
-					}
-					if er.HasQueryAPI() {
-						gotQueryAPIs += 1
 					}
 				}
 				testutil.Equals(
@@ -1038,13 +1046,6 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 					tc.states[currentState].expectedExemplars,
 					gotExemplars,
 					"unexepected discovered ExemplarsAPIs in state %q",
-					tc.states[currentState].name,
-				)
-				testutil.Equals(
-					t,
-					tc.states[currentState].expectedQueryAPIs,
-					gotQueryAPIs,
-					"unexepected discovered QueryAPIs in state %q",
 					tc.states[currentState].name,
 				)
 
@@ -1183,47 +1184,4 @@ func assertRegisteredAPIs(t *testing.T, expectedAPIs *APIs, er *endpointRef) {
 	testutil.Equals(t, expectedAPIs.target, er.HasTargetsAPI())
 	testutil.Equals(t, expectedAPIs.metricMetadata, er.HasMetricMetadataAPI())
 	testutil.Equals(t, expectedAPIs.exemplars, er.HasExemplarsAPI())
-}
-
-// Regression test for: https://github.com/thanos-io/thanos/issues/4766.
-func TestDeadlockLocking(t *testing.T) {
-	t.Parallel()
-
-	mockEndpointRef := &endpointRef{
-		addr: "mockedStore",
-		metadata: &endpointMetadata{
-			&infopb.InfoResponse{},
-		},
-	}
-
-	g := &errgroup.Group{}
-	deadline := time.Now().Add(3 * time.Second)
-
-	g.Go(func() error {
-		for {
-			if time.Now().After(deadline) {
-				break
-			}
-			mockEndpointRef.Update(&endpointMetadata{
-				InfoResponse: &infopb.InfoResponse{},
-			})
-		}
-		return nil
-	})
-
-	g.Go(func() error {
-		for {
-			if time.Now().After(deadline) {
-				break
-			}
-			mockEndpointRef.HasStoreAPI()
-			mockEndpointRef.HasExemplarsAPI()
-			mockEndpointRef.HasMetricMetadataAPI()
-			mockEndpointRef.HasRulesAPI()
-			mockEndpointRef.HasTargetsAPI()
-		}
-		return nil
-	})
-
-	testutil.Ok(t, g.Wait())
 }

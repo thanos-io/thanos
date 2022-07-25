@@ -254,7 +254,7 @@ func TestRule(t *testing.T) {
 						RefreshInterval: model.Duration(time.Second),
 					},
 				},
-				StaticAddresses: []string{
+				Addresses: []string{
 					am2.InternalEndpoint("http"),
 				},
 				Scheme: "http",
@@ -498,7 +498,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
-				StaticAddresses: []string{
+				Addresses: []string{
 					am.InternalEndpoint("http"),
 				},
 				Scheme: "http",
@@ -509,7 +509,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	}).InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
 		{
 			EndpointsConfig: httpconfig.EndpointsConfig{
-				StaticAddresses: []string{
+				Addresses: []string{
 					q.InternalEndpoint("http"),
 				},
 				Scheme: "http",
