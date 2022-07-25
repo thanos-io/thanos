@@ -1112,10 +1112,7 @@ func TestFilterRules(t *testing.T) {
 					},
 				},
 			},
-			want: []*rulespb.RuleGroup{{
-				Name:  "a",
-				Rules: []*rulespb.Rule{},
-			}},
+			want: []*rulespb.RuleGroup{},
 		},
 		{
 			name:        "single group with templated labels",
@@ -1140,10 +1137,7 @@ func TestFilterRules(t *testing.T) {
 					},
 				},
 			},
-			want: []*rulespb.RuleGroup{{
-				Name:  "a",
-				Rules: []*rulespb.Rule{},
-			}},
+			want: []*rulespb.RuleGroup{},
 		},
 		{
 			name:        "multiple group with labeled rules and matcher",
@@ -1258,16 +1252,7 @@ func TestFilterRules(t *testing.T) {
 					},
 				},
 			},
-			want: []*rulespb.RuleGroup{
-				{
-					Name:  "a",
-					Rules: []*rulespb.Rule{},
-				},
-				{
-					Name:  "b",
-					Rules: []*rulespb.Rule{},
-				},
-			},
+			want: []*rulespb.RuleGroup{},
 		},
 		{
 			name:        "multiple group with templated labels",
@@ -1296,16 +1281,7 @@ func TestFilterRules(t *testing.T) {
 					},
 				},
 			},
-			want: []*rulespb.RuleGroup{
-				{
-					Name:  "a",
-					Rules: []*rulespb.Rule{},
-				},
-				{
-					Name:  "b",
-					Rules: []*rulespb.Rule{},
-				},
-			},
+			want: []*rulespb.RuleGroup{},
 		},
 		{
 			name:        "multiple group with templated labels and non templated matcher",
@@ -1334,16 +1310,7 @@ func TestFilterRules(t *testing.T) {
 					},
 				},
 			},
-			want: []*rulespb.RuleGroup{
-				{
-					Name:  "a",
-					Rules: []*rulespb.Rule{},
-				},
-				{
-					Name:  "b",
-					Rules: []*rulespb.Rule{},
-				},
-			},
+			want: []*rulespb.RuleGroup{},
 		},
 		{
 			name:        "multiple group with regex matcher",
