@@ -82,7 +82,7 @@ var (
 )
 
 type mockedEndpoint struct {
-	infoDelay <-chan time.Time
+	infoDelay time.Duration
 	info      infopb.InfoResponse
 	err       error
 }
@@ -96,18 +96,17 @@ func (c *mockedEndpoint) Info(ctx context.Context, r *infopb.InfoRequest) (*info
 		return nil, c.err
 	}
 
-	if c.infoDelay != nil {
-		select {
-		case <-ctx.Done():
-		case <-c.infoDelay:
-		}
-
+	select {
+	case <-ctx.Done():
+		return nil, context.Canceled
+	case <-time.After(c.infoDelay):
 	}
+
 	return &c.info, nil
 }
 
 type mockedStoreSrv struct {
-	infoDelay <-chan time.Time
+	infoDelay time.Duration
 	info      storepb.InfoResponse
 	err       error
 }
@@ -121,13 +120,12 @@ func (s *mockedStoreSrv) Info(ctx context.Context, _ *storepb.InfoRequest) (*sto
 		return nil, s.err
 	}
 
-	if s.infoDelay != nil {
-		select {
-		case <-ctx.Done():
-		case <-s.infoDelay:
-		}
-
+	select {
+	case <-ctx.Done():
+		return nil, context.Canceled
+	case <-time.After(s.infoDelay):
 	}
+
 	return &s.info, nil
 }
 func (s *mockedStoreSrv) Series(*storepb.SeriesRequest, storepb.Store_SeriesServer) error {
@@ -151,7 +149,7 @@ type APIs struct {
 type testEndpointMeta struct {
 	*infopb.InfoResponse
 	extlsetFn func(addr string) []labelpb.ZLabelSet
-	infoDelay <-chan time.Time
+	infoDelay time.Duration
 	err       error
 }
 
@@ -309,7 +307,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 			name: "slow endpoint",
 			endpoints: []testEndpointMeta{
 				{
-					infoDelay:    time.After(5 * time.Second),
+					infoDelay:    5 * time.Second,
 					InfoResponse: sidecarInfo,
 					extlsetFn: func(addr string) []labelpb.ZLabelSet {
 						return labelpb.ZLabelSetsFromPromLabels(
@@ -1097,7 +1095,7 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 					},
 				}
 			},
-			infoDelay: time.After(2 * time.Second),
+			infoDelay: 2 * time.Second,
 		},
 	})
 

@@ -258,6 +258,10 @@ type EndpointSet struct {
 	endpointsMetric *endpointSetNodeCollector
 }
 
+// nowFunc is a function that returns time.Time.
+// Test code can inject a function through which
+// time can be modified before updating the EndpointSet.
+// Production code can use time.Time.
 type nowFunc func() time.Time
 
 // NewEndpointSet returns a new set of Thanos APIs.
@@ -365,7 +369,7 @@ func (e *EndpointSet) updateEndpoint(ctx context.Context, spec *GRPCEndpointSpec
 
 	if !exists {
 		var err error
-		er, err = e.newEndpointRef(ctx, e.logger, spec, e.dialOpts...)
+		er, err = e.newEndpointRef(ctx, spec)
 		if err != nil {
 			level.Warn(e.logger).Log("msg", "update of node failed", "err", err, "address", spec.Addr())
 			return
@@ -396,7 +400,7 @@ func (e *EndpointSet) pruneEndpoints(nextEndpoints map[string]*GRPCEndpointSpec)
 }
 
 // pruneTimedOutEndpoints removes unhealthy endpoints for which the last
-// successful health chech is older than the unhealthyEndpointTimeout.
+// successful health check is older than the unhealthyEndpointTimeout.
 // Strict endpoints are not removed.
 func (e *EndpointSet) pruneTimedOutEndpoints() {
 	endpoints := e.endpointRefs()
@@ -594,14 +598,14 @@ type endpointRef struct {
 
 // newEndpointRef creates a new endpointRef with a gRPC channel to the given the IP address.
 // The call to newEndpointRef will return an error if establishing the channel fails.
-func (e *EndpointSet) newEndpointRef(ctx context.Context, logger log.Logger, spec *GRPCEndpointSpec, dialOpts ...grpc.DialOption) (*endpointRef, error) {
-	conn, err := grpc.DialContext(ctx, spec.Addr(), dialOpts...)
+func (e *EndpointSet) newEndpointRef(ctx context.Context, spec *GRPCEndpointSpec) (*endpointRef, error) {
+	conn, err := grpc.DialContext(ctx, spec.Addr(), e.dialOpts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "dialing connection")
 	}
 
 	return &endpointRef{
-		logger:   logger,
+		logger:   e.logger,
 		created:  e.now(),
 		addr:     spec.Addr(),
 		isStrict: spec.IsStrictStatic(),
