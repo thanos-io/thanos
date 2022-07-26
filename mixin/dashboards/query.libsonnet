@@ -97,6 +97,16 @@ local utils = import '../lib/utils.libsonnet';
         )
       )
       .addRow(
+        g.row('Query Concurrency')
+        .addPanel(
+          g.panel('Concurrent Capacity', 'Shows available capacity of processing queries in parallel.') +
+          g.queryPanel(
+            'max_over_time(thanos_query_concurrent_gate_queries_max{%s}[$__rate_interval]) - avg_over_time(thanos_query_concurrent_gate_queries_in_flight{%s}[$__rate_interval])' % [thanos.query.dashboard.selector, thanos.query.dashboard.selector],
+            '{{job}} - {{pod}}'
+          )
+        )
+      )
+      .addRow(
         g.resourceUtilizationRow(thanos.query.dashboard.selector, thanos.query.dashboard.dimensions)
       ),
 
