@@ -9,8 +9,11 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -341,17 +344,10 @@ func TestEndpointSetUpdate(t *testing.T) {
 			testutil.Ok(t, err)
 			defer endpoints.Close()
 
-			updateTime := time.Now()
 			discoveredEndpointAddr := endpoints.EndpointAddresses()
-			endpointSet := makeEndpointSet(discoveredEndpointAddr, tc.strict, func() time.Time { return updateTime })
+			endpointSet := makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now)
 			defer endpointSet.Close()
 
-			// Initial update.
-			endpointSet.Update(context.Background())
-			testutil.Equals(t, 1, len(endpointSet.GetEndpointStatus()))
-			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetStoreClients()))
-
-			updateTime = updateTime.Add(2 * time.Minute)
 			endpointSet.Update(context.Background())
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetEndpointStatus()))
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetStoreClients()))
@@ -380,7 +376,6 @@ func TestEndpointSetUpdate_DuplicateSpecs(t *testing.T) {
 	endpointSet.gRPCInfoCallTimeout = 1 * time.Second
 	defer endpointSet.Close()
 
-	// Initial update.
 	endpointSet.Update(context.Background())
 	testutil.Equals(t, 1, len(endpointSet.endpoints))
 }
@@ -434,7 +429,7 @@ func TestEndpointSetUpdate_EndpointComingOnline(t *testing.T) {
 
 	// Initial update.
 	endpointSet.Update(context.Background())
-	testutil.Equals(t, 1, len(endpointSet.GetEndpointStatus()))
+	testutil.Equals(t, 0, len(endpointSet.GetEndpointStatus()))
 	testutil.Equals(t, 0, len(endpointSet.GetStoreClients()))
 
 	srvAddr := discoveredEndpointAddr[0]
@@ -552,6 +547,37 @@ func TestEndpointSetUpdate_PruneInactiveEndpoints(t *testing.T) {
 	}
 }
 
+func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
+	numResponses := 4
+	metas := makeInfoResponses(numResponses)
+	metas[1].infoDelay = 2 * time.Second
+
+	endpoints, err := startTestEndpoints(metas)
+	testutil.Ok(t, err)
+	defer endpoints.Close()
+
+	updateTime := time.Now()
+	discoveredEndpointAddr := endpoints.EndpointAddresses()
+	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, func() time.Time { return updateTime })
+	endpointSet.gRPCInfoCallTimeout = 3 * time.Second
+	defer endpointSet.Close()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.Never(t, func() bool {
+			numStatuses := len(endpointSet.GetStoreClients())
+			return numStatuses != numResponses && numStatuses != 0
+		}, 3*time.Second, 100*time.Millisecond)
+	}()
+
+	endpointSet.Update(context.Background())
+	testutil.Equals(t, numResponses, len(endpointSet.GetEndpointStatus()))
+	testutil.Equals(t, numResponses, len(endpointSet.GetStoreClients()))
+	wg.Wait()
+}
+
 func TestEndpointSet_Update(t *testing.T) {
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
 		{
@@ -611,9 +637,11 @@ func TestEndpointSet_Update(t *testing.T) {
 
 	discoveredEndpointAddr := endpoints.EndpointAddresses()
 
+	now := time.Now()
+	nowFunc := func() time.Time { return now }
 	// Testing if duplicates can cause weird results.
 	discoveredEndpointAddr = append(discoveredEndpointAddr, discoveredEndpointAddr[0])
-	endpointSet := NewEndpointSet(time.Now, nil, nil,
+	endpointSet := NewEndpointSet(nowFunc, nil, nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, false))
@@ -658,7 +686,7 @@ func TestEndpointSet_Update(t *testing.T) {
 	testutil.Equals(t, expected, endpointSet.endpointsMetric.storeNodes)
 
 	// Remove address from discovered and reset last check, which should ensure cleanup of status on next update.
-	endpointSet.endpoints[discoveredEndpointAddr[1]].status.LastCheck = time.Now().Add(-4 * time.Minute)
+	now = now.Add(3 * time.Minute)
 	discoveredEndpointAddr = discoveredEndpointAddr[:len(discoveredEndpointAddr)-2]
 	endpointSet.Update(context.Background())
 	testutil.Equals(t, 2, len(endpointSet.endpoints))
@@ -946,7 +974,7 @@ func TestEndpointSet_Update(t *testing.T) {
 	endpoints.CloseOne(discoveredEndpointAddr[1])
 	endpointSet.Update(context.Background())
 
-	for addr, e := range endpointSet.getQueryableEndpointRefs() {
+	for addr, e := range endpointSet.getQueryableRefs() {
 		testutil.Equals(t, addr, e.addr)
 		assertRegisteredAPIs(t, endpoint2.exposedAPIs[addr], e)
 	}
@@ -1374,6 +1402,22 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 			}
 		})
 	}
+}
+
+func makeInfoResponses(n int) []testEndpointMeta {
+	responses := make([]testEndpointMeta, 0, n)
+	for i := 0; i < n; i++ {
+		responses = append(responses, testEndpointMeta{
+			InfoResponse: sidecarInfo,
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return labelpb.ZLabelSetsFromPromLabels(
+					labels.FromStrings("addr", addr, "a", "b"),
+				)
+			},
+		})
+	}
+
+	return responses
 }
 
 type errThatMarshalsToEmptyDict struct {

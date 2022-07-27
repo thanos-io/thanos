@@ -61,7 +61,7 @@ func (es *GRPCEndpointSpec) Addr() string {
 
 // Metadata method for gRPC endpoint tries to call InfoAPI exposed by Thanos components until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (es *GRPCEndpointSpec) Metadata(ctx context.Context, infoClient infopb.InfoClient, storeClient storepb.StoreClient) (*endpointMetadata, error) {
+func (es *endpointRef) Metadata(ctx context.Context, infoClient infopb.InfoClient, storeClient storepb.StoreClient) (*endpointMetadata, error) {
 	if infoClient != nil {
 		resp, err := infoClient.Info(ctx, &infopb.InfoRequest{}, grpc.WaitForReady(true))
 		if err == nil {
@@ -81,13 +81,13 @@ func (es *GRPCEndpointSpec) Metadata(ctx context.Context, infoClient infopb.Info
 	return nil, errors.New(noMetadataEndpointMessage)
 }
 
-func (es *GRPCEndpointSpec) getMetadataUsingStoreAPI(ctx context.Context, client storepb.StoreClient) (*endpointMetadata, error) {
+func (es *endpointRef) getMetadataUsingStoreAPI(ctx context.Context, client storepb.StoreClient) (*endpointMetadata, error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{})
 	if err != nil {
 		return nil, err
 	}
 
-	infoResp := es.fillExpectedAPIs(component.FromProto(resp.StoreType), resp.MinTime, resp.MaxTime)
+	infoResp := fillExpectedAPIs(component.FromProto(resp.StoreType), resp.MinTime, resp.MaxTime)
 	infoResp.LabelSets = resp.LabelSets
 	infoResp.ComponentType = component.FromProto(resp.StoreType).String()
 
@@ -96,7 +96,7 @@ func (es *GRPCEndpointSpec) getMetadataUsingStoreAPI(ctx context.Context, client
 	}, nil
 }
 
-func (es *GRPCEndpointSpec) fillExpectedAPIs(componentType component.Component, mintime, maxTime int64) infopb.InfoResponse {
+func fillExpectedAPIs(componentType component.Component, mintime, maxTime int64) infopb.InfoResponse {
 	switch componentType {
 	case component.Sidecar:
 		return infopb.InfoResponse{
@@ -246,7 +246,7 @@ type EndpointSet struct {
 
 	// Endpoint specifications can change dynamically. If some component is missing from the list, we assume it is no longer
 	// accessible and we close gRPC client for it, unless it is strict.
-	endpointSpec             func() []*GRPCEndpointSpec
+	endpointSpec             func() map[string]*GRPCEndpointSpec
 	dialOpts                 []grpc.DialOption
 	gRPCInfoCallTimeout      time.Duration
 	unhealthyEndpointTimeout time.Duration
@@ -295,8 +295,14 @@ func NewEndpointSet(
 		gRPCInfoCallTimeout:      5 * time.Second,
 		unhealthyEndpointTimeout: unhealthyEndpointTimeout,
 
-		endpointSpec: endpointSpecs,
-		endpoints:    make(map[string]*endpointRef),
+		endpointSpec: func() map[string]*GRPCEndpointSpec {
+			specs := make(map[string]*GRPCEndpointSpec)
+			for _, s := range endpointSpecs() {
+				specs[s.addr] = s
+			}
+			return specs
+		},
+		endpoints: make(map[string]*endpointRef),
 	}
 }
 
@@ -305,45 +311,90 @@ func NewEndpointSet(
 func (e *EndpointSet) Update(ctx context.Context) {
 	e.updateMtx.Lock()
 	defer e.updateMtx.Unlock()
+	level.Debug(e.logger).Log("msg", "starting to update API endpoints", "cachedEndpoints", len(e.endpoints))
 
-	currentEndpoints := e.endpointRefs()
-	level.Debug(e.logger).Log("msg", "starting to update API endpoints", "cachedEndpoints", len(currentEndpoints))
+	var (
+		newRefs      = make(map[string]*endpointRef)
+		existingRefs = make(map[string]*endpointRef)
+		staleRefs    = make(map[string]*endpointRef)
 
-	endpointSpecs := make(map[string]*GRPCEndpointSpec)
+		wg sync.WaitGroup
+		mu sync.Mutex
+	)
+
 	for _, spec := range e.endpointSpec() {
-		if _, duplicate := endpointSpecs[spec.Addr()]; duplicate {
+		if er, existingRef := e.endpoints[spec.Addr()]; existingRef {
+			wg.Add(1)
+			go func(spec *GRPCEndpointSpec) {
+				defer wg.Done()
+				ctx, cancel := context.WithTimeout(ctx, e.gRPCInfoCallTimeout)
+				defer cancel()
+				e.updateEndpoint(ctx, spec, er)
+
+				mu.Lock()
+				defer mu.Unlock()
+				existingRefs[spec.Addr()] = er
+			}(spec)
+
 			continue
 		}
-		endpointSpecs[spec.Addr()] = spec
-	}
 
-	var wg sync.WaitGroup
-	for _, spec := range endpointSpecs {
 		wg.Add(1)
 		go func(spec *GRPCEndpointSpec) {
 			defer wg.Done()
-
 			ctx, cancel := context.WithTimeout(ctx, e.gRPCInfoCallTimeout)
 			defer cancel()
-			e.updateEndpoint(ctx, spec)
+
+			newRef, err := e.newEndpointRef(ctx, spec)
+			if err != nil {
+				level.Warn(e.logger).Log("msg", "new endpoint creation failed", "err", err, "address", spec.Addr())
+				return
+			}
+
+			e.updateEndpoint(ctx, spec, newRef)
+			if !newRef.isQueryable() {
+				newRef.Close()
+				return
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			newRefs[spec.Addr()] = newRef
 		}(spec)
 	}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		e.pruneEndpoints(endpointSpecs)
-	}()
 	wg.Wait()
 
-	e.pruneTimedOutEndpoints()
+	timedOutRefs := e.getTimedOutRefs()
+	for addr, er := range e.endpoints {
+		_, isNew := newRefs[addr]
+		_, isExisting := existingRefs[addr]
+		_, isTimedOut := timedOutRefs[addr]
+		if !isNew && !isExisting || isTimedOut {
+			staleRefs[addr] = er
+		}
+	}
 
-	newEndpoints := e.endpointRefs()
-	level.Debug(e.logger).Log("msg", "updated endpoints", "activeEndpoints", len(newEndpoints))
+	e.endpointsMtx.Lock()
+	defer e.endpointsMtx.Unlock()
+	for addr, er := range newRefs {
+		extLset := labelpb.PromLabelSetsToString(er.LabelSets())
+		level.Info(e.logger).Log("msg", fmt.Sprintf("adding new %v with %+v", er.ComponentType(), er.apisPresent()), "address", addr, "extLset", extLset)
+		e.endpoints[addr] = er
+	}
+	for addr, er := range staleRefs {
+		level.Info(er.logger).Log("msg", unhealthyEndpointMessage, "address", er.Addr(), "extLset", labelpb.PromLabelSetsToString(er.LabelSets()))
+		er.Close()
+		delete(e.endpoints, addr)
+	}
+	level.Debug(e.logger).Log("msg", "updated endpoints", "activeEndpoints", len(e.endpoints))
 
-	// Update stats
+	// Update stats.
 	stats := newEndpointAPIStats()
-	for addr, er := range e.getQueryableEndpointRefs() {
+	for addr, er := range e.endpoints {
+		if !er.isQueryable() {
+			continue
+		}
+
 		extLset := labelpb.PromLabelSetsToString(er.LabelSets())
 
 		// All producers that expose StoreAPI should have unique external labels. Check all which connect to our Querier.
@@ -354,57 +405,26 @@ func (e *EndpointSet) Update(ctx context.Context) {
 				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar][extLset]+stats[component.Rule][extLset]+1))
 		}
 		stats[er.ComponentType()][extLset]++
-		if _, ok := currentEndpoints[er.addr]; !ok {
-			level.Info(e.logger).Log("msg", fmt.Sprintf("adding new %v with %+v", er.ComponentType(), er.apisPresent()), "address", addr, "extLset", extLset)
-		}
 	}
 
 	e.endpointsMetric.Update(stats)
 }
 
-func (e *EndpointSet) updateEndpoint(ctx context.Context, spec *GRPCEndpointSpec) {
-	e.endpointsMtx.RLock()
-	er, exists := e.endpoints[spec.Addr()]
-	e.endpointsMtx.RUnlock()
-
-	if !exists {
-		var err error
-		er, err = e.newEndpointRef(ctx, spec)
-		if err != nil {
-			level.Warn(e.logger).Log("msg", "update of node failed", "err", err, "address", spec.Addr())
-			return
-		}
-	}
-
-	metadata, err := spec.Metadata(ctx, infopb.NewInfoClient(er.cc), storepb.NewStoreClient(er.cc))
+func (e *EndpointSet) updateEndpoint(ctx context.Context, spec *GRPCEndpointSpec, er *endpointRef) {
+	metadata, err := er.Metadata(ctx, infopb.NewInfoClient(er.cc), storepb.NewStoreClient(er.cc))
 	if err != nil {
-		level.Warn(e.logger).Log("msg", "update of node failed", "err", errors.Wrap(err, "getting metadata"), "address", spec.Addr())
+		level.Warn(e.logger).Log("msg", "update of endpoint failed", "err", errors.Wrap(err, "getting metadata"), "address", spec.Addr())
 	}
 	er.update(e.now, metadata, err)
-	if !exists {
-		e.addEndpoint(spec, er)
-	}
 }
 
-func (e *EndpointSet) pruneEndpoints(nextEndpoints map[string]*GRPCEndpointSpec) {
-	obsoleteEndpoints := make(map[string]*endpointRef)
-	for addr, er := range e.endpointRefs() {
-		if _, ok := nextEndpoints[addr]; !ok {
-			obsoleteEndpoints[addr] = er
-		}
-	}
-
-	for _, er := range obsoleteEndpoints {
-		e.removeEndpoint(er)
-	}
-}
-
-// pruneTimedOutEndpoints removes unhealthy endpoints for which the last
+// getTimedOutRefs returns unhealthy endpoints for which the last
 // successful health check is older than the unhealthyEndpointTimeout.
-// Strict endpoints are not removed.
-func (e *EndpointSet) pruneTimedOutEndpoints() {
-	endpoints := e.endpointRefs()
+// Strict endpoints are never considered as timed out.
+func (e *EndpointSet) getTimedOutRefs() map[string]*endpointRef {
+	result := make(map[string]*endpointRef)
 
+	endpoints := e.endpoints
 	now := e.now()
 	for _, er := range endpoints {
 		if er.isStrict {
@@ -417,43 +437,14 @@ func (e *EndpointSet) pruneTimedOutEndpoints() {
 
 		lastCheck := er.getStatus().LastCheck
 		if now.Sub(lastCheck) >= e.unhealthyEndpointTimeout {
-			e.removeEndpoint(er)
+			result[er.Addr()] = er
 		}
 	}
+
+	return result
 }
 
-func (e *EndpointSet) addEndpoint(spec *GRPCEndpointSpec, er *endpointRef) {
-	e.endpointsMtx.Lock()
-	defer e.endpointsMtx.Unlock()
-
-	e.endpoints[spec.Addr()] = er
-}
-
-func (e *EndpointSet) removeEndpoint(er *endpointRef) {
-	e.endpointsMtx.Lock()
-	defer e.endpointsMtx.Unlock()
-
-	if _, ok := e.endpoints[er.Addr()]; ok {
-		level.Info(er.logger).Log("msg", unhealthyEndpointMessage, "address", er.Addr(), "extLset", labelpb.PromLabelSetsToString(er.LabelSets()))
-		delete(e.endpoints, er.Addr())
-	}
-	er.Close()
-}
-
-// endpointsMap returns a map from endpoint address to *endpointRef.
-func (e *EndpointSet) endpointRefs() map[string]*endpointRef {
-	e.endpointsMtx.RLock()
-	defer e.endpointsMtx.RUnlock()
-
-	endpoints := make(map[string]*endpointRef, len(e.endpoints))
-	for addr, er := range e.endpoints {
-		endpoints[addr] = er
-	}
-
-	return endpoints
-}
-
-func (e *EndpointSet) getQueryableEndpointRefs() map[string]*endpointRef {
+func (e *EndpointSet) getQueryableRefs() map[string]*endpointRef {
 	e.endpointsMtx.RLock()
 	defer e.endpointsMtx.RUnlock()
 
@@ -469,7 +460,7 @@ func (e *EndpointSet) getQueryableEndpointRefs() map[string]*endpointRef {
 
 // GetStoreClients returns a list of all active stores.
 func (e *EndpointSet) GetStoreClients() []store.Client {
-	endpoints := e.getQueryableEndpointRefs()
+	endpoints := e.getQueryableRefs()
 
 	stores := make([]store.Client, 0, len(endpoints))
 	for _, er := range endpoints {
@@ -487,7 +478,7 @@ func (e *EndpointSet) GetStoreClients() []store.Client {
 
 // GetQueryAPIClients returns a list of all active query API clients.
 func (e *EndpointSet) GetQueryAPIClients() []querypb.QueryClient {
-	endpoints := e.getQueryableEndpointRefs()
+	endpoints := e.getQueryableRefs()
 
 	stores := make([]querypb.QueryClient, 0, len(endpoints))
 	for _, er := range endpoints {
@@ -500,7 +491,7 @@ func (e *EndpointSet) GetQueryAPIClients() []querypb.QueryClient {
 
 // GetRulesClients returns a list of all active rules clients.
 func (e *EndpointSet) GetRulesClients() []rulespb.RulesClient {
-	endpoints := e.getQueryableEndpointRefs()
+	endpoints := e.getQueryableRefs()
 
 	rules := make([]rulespb.RulesClient, 0, len(endpoints))
 	for _, er := range endpoints {
@@ -513,7 +504,7 @@ func (e *EndpointSet) GetRulesClients() []rulespb.RulesClient {
 
 // GetTargetsClients returns a list of all active targets clients.
 func (e *EndpointSet) GetTargetsClients() []targetspb.TargetsClient {
-	endpoints := e.getQueryableEndpointRefs()
+	endpoints := e.getQueryableRefs()
 
 	targets := make([]targetspb.TargetsClient, 0, len(endpoints))
 	for _, er := range endpoints {
@@ -526,7 +517,7 @@ func (e *EndpointSet) GetTargetsClients() []targetspb.TargetsClient {
 
 // GetMetricMetadataClients returns a list of all active metadata clients.
 func (e *EndpointSet) GetMetricMetadataClients() []metadatapb.MetadataClient {
-	endpoints := e.getQueryableEndpointRefs()
+	endpoints := e.getQueryableRefs()
 
 	metadataClients := make([]metadatapb.MetadataClient, 0, len(endpoints))
 	for _, er := range endpoints {
@@ -539,7 +530,7 @@ func (e *EndpointSet) GetMetricMetadataClients() []metadatapb.MetadataClient {
 
 // GetExemplarsStores returns a list of all active exemplars stores.
 func (e *EndpointSet) GetExemplarsStores() []*exemplarspb.ExemplarStore {
-	endpoints := e.getQueryableEndpointRefs()
+	endpoints := e.getQueryableRefs()
 
 	exemplarStores := make([]*exemplarspb.ExemplarStore, 0, len(endpoints))
 	for _, er := range endpoints {
