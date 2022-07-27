@@ -8,6 +8,7 @@ menu: proposals-accepted
 
 ## Related links/tickets
 
+* https://github.com/thanos-io/thanos/pull/5520
 * https://github.com/thanos-io/thanos/pull/5333
 * https://github.com/thanos-io/thanos/pull/5402
 * https://github.com/thanos-io/thanos/issues/5404
@@ -45,11 +46,11 @@ We could scale horizontally automatically during such increased load (once we im
 
 ## How
 
-Thanos Receive uses Prometheus TSDB and creates a separate TSDB database instance internally for each of its tenants. When a Receive replica gets a remote write request, it loops through the timeseries, hashes labels with tenant name as prefix and forwards remote write request to other Receive nodes. Upon receiving samples in a remote write request from a tenant, the Receive node appends the samples to the in-memory HEAD block of a tenant.
+Thanos Receive uses Prometheus TSDB and creates a separate TSDB database instance internally for each of its tenants. When a Receive replica gets a remote write request, it loops through the timeseries, hashes labels with tenant name as prefix and forwards remote write request to other Receive nodes. Upon receiving samples in a remote write request from a tenant, the Receive node appends the samples to the in-memory head block of a tenant.
 
-We can leverage this fact, and generate statistics from the HEAD block, which can give us an accurate idea of the active or HEAD series of a tenant. This can also be exposed as a metric.
+We can leverage this fact, and generate statistics from the TSDB head block, which can give us an accurate idea of the active (head) series of a tenant. This is also exposed as a metric.
 
-Thus, any remote write request can be failed completely, with a 429 status code and appropriate error message, if it increases the number of active series above the configured limit for a tenant. Partially accepting write requests might lead to confusing results and error semantics, so we propose to avoid this and focus on retries from client-side.
+Thus, any remote write request can be failed completely, with a 429 status code and appropriate error message. We can even check if it increases the number of active series above the configured limit for a tenant in certain approaches. Partially accepting write requests might lead to confusing results and error semantics, so we propose to avoid this and focus on retries from client-side.
 
 There are however a few challenges to this, as tenant metric data is distributed and replicated across multiple Thanos Receive replicas. Also, with a multi-replica setup, we have the concept of per-replica-tenant and per-tenant limits that can be defined as,
 
@@ -62,20 +63,20 @@ There are however a few challenges to this, as tenant metric data is distributed
 In general, we would need three measures to impose a limit,
 
 * The current count of active series for a tenant (across all replicas if it is a *per-tenant* limit)
-* The user configured limit (*per-tenant* and *per-replica-tenant* can be different). We can assume this would be available as a user flag and would be same for all tenants (initially)
+* The user configured limit (*per-tenant* and *per-replica-tenant* can be different). We can assume this would be available as a user flag and would be same for all tenants (in initial implementation)
 * The increase in the number of active series, when a new tenant [remote write request](https://github.com/prometheus/prometheus/blob/v2.36.1/prompb/remote.proto#L22) would be ingested (this can be optional as seen in [meta-monitoring approach](#meta-monitoring-based-validator)).
 
 There are a few ways in which we can achieve the outlined goals of this proposal and get the above measurements to impose a limit. The order of approaches is based on preference.
 
 ### Meta-monitoring-based Receive Router Validation
 
-We could leverage a meta-monitoring solution which scrapes metrics from all Receivers as and then programmatically query for metrics like `prometheus_tsdb_head_series` and sum across tenants and instances periodically and limit based on that value (`latestCurrentSeries`).
+We could leverage any meta-monitoring solution, that in the context of this proposal, would mean any Prometheus Query API compatible solution which is capable of consuming metrics exposes by all Thanos Receive instances. Such query endpoint would allows getting the scrape time seconds old number of all active series per tenant with TSDB metrics like `prometheus_tsdb_head_series`, and limit based on that value.
 
-This approach would add validation logic within Receive Router, which we can call as **“Validator”**. This can be optionally enabled via flags.
+This approach would add validation logic within Receive Router or RouterIngestor modes and can be optionally enabled via flags.
 
-Within Validator, we do not need to calculate an increase based on requests, as this will be handled by Receive instrumentation and meta-monitoring solution. We only need to query the latest HEAD series value for a tenant summed across all receives and limit remote write requests if the result of the instant query is greater than the configured limit.
+With such approach, we do not need to calculate an increase based on requests, as this will be handled by Receive instrumentation and meta-monitoring solution. We only need to query the latest HEAD series value for a tenant summed across all receives and limit remote write requests if the result of the instant query is greater than the configured limit.
 
-This value can also be cached, and the query for latest value can be executed periodically.
+The value of current active series for each tenant can be cached in a map which would be updated by meta-monitoring query which is executed periodically. This map will be referred to for `latestCurrentSeries`.
 
 So if a user configures a *per-tenant* limit, say `globalSeriesLimit`, the resultant limiting equation here would simply be `globalSeriesLimit >= latestCurrentSeries` which is checked on request.
 
@@ -102,19 +103,21 @@ So if a user configures a *per-tenant* limit, say `globalSeriesLimit`, the resul
 
 #### Why this is preferred?
 
-TBD // TODO(saswatamcode): Add in section after implementing PoC
+This is the simplest solution that can be implemented within Thanos Receive that can help us achieve best-effort limiting and stability. The fact that it does not rely on inter-Receive communication, which is very complex to implement, makes it a pragmatic solution.
+
+A full-fledged reference implementation of this can be found here: https://github.com/thanos-io/thanos/pull/5520.
 
 ## Alternatives
 
-There are a few alternative to what is proposed above,
+There are a few alternatives to what is proposed above,
 
 ### Receive Router Validation
 
 We can implement some new endpoints on Thanos Receive.
 
-Firstly, we can take advantage of the `api/v1/status/tsdb` endpoint that is exposed by [Prometheus TSDB](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats) but is yet to be implemented in Thanos Receive ([in-review PR](https://github.com/thanos-io/thanos/pull/5402) which utilizes tenant headers to get local tenant TSDB stats in Receive).
+Firstly, we can take advantage of the `api/v1/status/tsdb` endpoint that is exposed by [Prometheus TSDB](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats) but has been implemented in Thanos Receive ([PR](https://github.com/thanos-io/thanos/pull/5402) which utilizes tenant headers to get local tenant TSDB stats in Receive).
 
-In its current WIP implementation, it can provide us stats for each local TSDB of a tenant which contains a measure of HEAD series (so active series). We can merge this to get the total number of HEAD or active series a tenant has.
+In its current implementation, it can provide us stats for each local TSDB of a tenant which contains a measure of active series (head series). It can return stats for all tenants in a Receive instance as well ([PR](https://github.com/thanos-io/thanos/pull/5470)). We can merge this across replicas to get the total number of active series a tenant has.
 
 Furthermore, we also have each tenant’s [Appendable](https://pkg.go.dev/github.com/thanos-io/thanos/pkg/receive#Appendable) in multitsdb, which returns a Prometheus [storage.Appender](https://pkg.go.dev/github.com/prometheus/prometheus/storage#Appender), which can in turn give us a [storage.GetRef](https://pkg.go.dev/github.com/prometheus/prometheus/storage#GetRef.GetRef) interface. This helps us know if a TSDB has a cached reference for a particular set of labels in its HEAD.
 
@@ -125,7 +128,7 @@ This approach would add validation logic within Receive Router, which we can cal
 The implementation would be as follows,
 
 * Implement configuration option for global series limit (which would be the same for each tenant initially) i.e `globalSeriesLimit`
-* Implement validation logic in Receive Router mode, which can recognize other Receive replicas and call the `api/v1/status/tsdb` endpoint for a tenant on each replica and merge the count of HEAD series i.e `currentSeries`
+* Implement validation logic in Receive Router mode, which can recognize other Receive replicas and call the `api/v1/status/tsdb` endpoint on each replica with `all_tenants=true` query parameter and merge the count of active series i.e `currentSeries` of a tenant
 * Implement an endpoint in Receive, `api/v1/getrefmap`, which when provided with a tenant id and a remote write request returns a map of SeriesRef and labelsets
 * We can then merge this with maps from other replicas, and get the number of series for which `SeriesRef == 0` for all replicas. This is the increase in the number of active series if the remote write request is ingested i.e `increaseOnRequest`. For example,
 
