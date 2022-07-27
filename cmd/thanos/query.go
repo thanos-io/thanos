@@ -420,6 +420,7 @@ func runQuery(
 
 	var (
 		endpoints = query.NewEndpointSet(
+			time.Now,
 			logger,
 			reg,
 			func() (specs []*query.GRPCEndpointSpec) {

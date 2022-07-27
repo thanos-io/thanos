@@ -283,7 +283,7 @@ func BenchmarkWriterTimeSeriesWith10Labels_100(b *testing.B)  { benchmarkWriter(
 func BenchmarkWriterTimeSeriesWith10Labels_1000(b *testing.B) { benchmarkWriter(b, 10, 1000) }
 
 func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int) {
-	dir, err := ioutil.TempDir("", "test")
+	dir, err := ioutil.TempDir("", "bench-writer")
 	testutil.Ok(b, err)
 	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
 
@@ -335,16 +335,16 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int) {
 	}
 }
 
-func generateLabelsAndSeries(labelsNum int, seriesNum int) []prompb.TimeSeries {
+func generateLabelsAndSeries(numLabels int, numSeries int) []prompb.TimeSeries {
 	// Generate some labels first.
-	l := make([]labelpb.ZLabel, 0, labelsNum)
+	l := make([]labelpb.ZLabel, 0, numLabels)
 	l = append(l, labelpb.ZLabel{Name: "__name__", Value: "test"})
-	for i := 0; i < labelsNum; i++ {
+	for i := 0; i < numLabels; i++ {
 		l = append(l, labelpb.ZLabel{Name: fmt.Sprintf("label_%q", rune('a'-1+i)), Value: fmt.Sprintf("%d", i)})
 	}
 
-	ts := make([]prompb.TimeSeries, 0, seriesNum)
-	for j := 0; j < seriesNum; j++ {
+	ts := make([]prompb.TimeSeries, 0, numSeries)
+	for j := 0; j < numSeries; j++ {
 		ts = append(ts, prompb.TimeSeries{Labels: l, Samples: []prompb.Sample{{Value: 1, Timestamp: 10}}})
 	}
 
