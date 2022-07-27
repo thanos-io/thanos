@@ -6,7 +6,7 @@ owner: saswatamcode
 menu: proposals-accepted
 ---
 
-## Related links/tickets
+## 1 Related links/tickets
 
 * https://github.com/thanos-io/thanos/pull/5520
 * https://github.com/thanos-io/thanos/pull/5333
@@ -14,13 +14,13 @@ menu: proposals-accepted
 * https://github.com/thanos-io/thanos/issues/5404
 * https://github.com/thanos-io/thanos/issues/4972
 
-## Why
+## 2 Why
 
 Thanos is built to be a set of components that can be composed into a highly available metrics system with unlimited storage capacity. But for achieving true HA we need to ensure that tenants in our write path, cannot push too much data and cause issues. There need to be limits in place so that our ingestion systems maintain the level of Quality of Service (QoS) and only block the tenant that exceeds limits.
 
 With limiting, we also need tracking and configuration of those limits to reliably use them.
 
-## Pitfalls of the current solution
+## 3 Pitfalls of the current solution
 
 We run multiple Thanos Receive replicas in a hashring topology, to ingest metric data from multiple tenants via remote write requests and distribute the load evenly. This allows us to scalably process these requests and write tenant data into a local Receive TSDB for Thanos Querier to query. We also replicate write requests across multiple (usually three) Receive replicas, so that even during times where replicas are unavailable, we can still ingest the data.
 
@@ -28,23 +28,23 @@ While this composes a scalable and highly available system, sudden increased loa
 
 We could scale horizontally automatically during such increased load (once we implement [this](https://github.com/thanos-io/thanos/issues/4972)), but it is yet safe to do so, plus a full solution cannot have unbounded cost scaling. Thus, some form of limits must be put in place, to prevent such issues from occurring and causing incidents.
 
-## Audience
+## 4 Audience
 
 * Users who run Thanos at a large scale and would like to benefit from improved stability of the Thanos write path and get a grasp on the amount of data they ingest.
 
-## Goals
+## 5 Goals
 
 * Add a mechanism to get the number of active series per tenant in Thanos and be able to generate meta-monitoring metrics from that (which could even provide us with some “pseudo-billing”).
 * Use the same implementation to limit the number of active series per tenant within Thanos and fail remote write requests as they go above a configured limit for Hashring topologies with multiple Receive replicas.
 * Explain how such a limit will work for partial errors.
 
-## Non-Goals
+## 6 Non-Goals
 
 * [Request-based limiting](https://github.com/thanos-io/thanos/issues/5404), i.e, number of samples in a remote wite request
 * Per-replica-tenant limiting which is already being discussed in this [PR](https://github.com/thanos-io/thanos/pull/5333)
 * Using [consistent hashing](https://github.com/thanos-io/thanos/issues/4972) implementation in Receive to make it easily scalable
 
-## How
+## 7 How
 
 Thanos Receive uses Prometheus TSDB and creates a separate TSDB database instance internally for each of its tenants. When a Receive replica gets a remote write request, it loops through the timeseries, hashes labels with tenant name as prefix and forwards remote write request to other Receive nodes. Upon receiving samples in a remote write request from a tenant, the Receive node appends the samples to the in-memory head block of a tenant.
 
@@ -58,17 +58,17 @@ There are however a few challenges to this, as tenant metric data is distributed
 
 * **Per-tenant limit**: The overall limit imposed for active series per tenant across all replicas of Thanos Receive. This is essentially what this proposal is for.
 
-## Proposal
+## 8 Proposal
 
 In general, we would need three measures to impose a limit,
 
 * The current count of active series for a tenant (across all replicas if it is a *per-tenant* limit)
 * The user configured limit (*per-tenant* and *per-replica-tenant* can be different). We can assume this would be available as a user flag and would be same for all tenants (in initial implementation)
-* The increase in the number of active series, when a new tenant [remote write request](https://github.com/prometheus/prometheus/blob/v2.36.1/prompb/remote.proto#L22) would be ingested (this can be optional as seen in [meta-monitoring approach](#meta-monitoring-based-validator)).
+* The increase in the number of active series, when a new tenant [remote write request](https://github.com/prometheus/prometheus/blob/v2.36.1/prompb/remote.proto#L22) would be ingested (this can be optional as seen in [meta-monitoring approach](#81-meta-monitoring-based-receive-router-validation)).
 
 There are a few ways in which we can achieve the outlined goals of this proposal and get the above measurements to impose a limit. The order of approaches is based on preference.
 
-### Meta-monitoring-based Receive Router Validation
+### 8.1 Meta-monitoring-based Receive Router Validation
 
 We could leverage any meta-monitoring solution, that in the context of this proposal, would mean any Prometheus Query API compatible solution which is capable of consuming metrics exposes by all Thanos Receive instances. Such query endpoint would allows getting the scrape time seconds old number of all active series per tenant with TSDB metrics like `prometheus_tsdb_head_series`, and limit based on that value.
 
@@ -82,7 +82,7 @@ So if a user configures a *per-tenant* limit, say `globalSeriesLimit`, the resul
 
 <img src="../img/meta-monitoring-validator.png" alt="Meta-monitoring-based Validator" width="800"/>
 
-#### Pros:
+#### 8.1.1 Pros:
 
 * Simpler as compared to other solutions and easier to implement
 * Lesser endpoint calls, so improved latency
@@ -92,26 +92,27 @@ So if a user configures a *per-tenant* limit, say `globalSeriesLimit`, the resul
 * Additional request-based rate limiting can be done within same component
 * In case, external meta-monitoring solution is down, can fall back to per-replica-tenant limits
 * Growing our instrumentation to improve validator, improves our observability as well
+* Easy to iterate. We can move out of meta-monitoring to different standalone solution if needed later on.
 
-#### Cons:
+#### 8.1.2 Cons:
 
 * Not very accurate
   * We do not know exact state of each TSDB, only know view of meta-monitoring solution, which gets updated on every scrape
   * We do not account for how much a remote write request will increase the number of active series, only infer that from query result after the fact
 * Data replication (quorum-based) will likely cause inaccuracies in HEAD stat metrics
-* Dependence on external system, so best effort availability
+* Dependence on an external meta-monitoring system that is Prometheus API compatible. It's fairly easy and reliable with local Prometheus setup, but if the user uses 3rd party system like central remote monitoring, this might be less trivial to setup.
 
-#### Why this is preferred?
+#### 8.1.3 Why this is preferred?
 
 This is the simplest solution that can be implemented within Thanos Receive that can help us achieve best-effort limiting and stability. The fact that it does not rely on inter-Receive communication, which is very complex to implement, makes it a pragmatic solution.
 
 A full-fledged reference implementation of this can be found here: https://github.com/thanos-io/thanos/pull/5520.
 
-## Alternatives
+## 9 Alternatives
 
 There are a few alternatives to what is proposed above,
 
-### Receive Router Validation
+### 9.1 Receive Router Validation
 
 We can implement some new endpoints on Thanos Receive.
 
@@ -159,7 +160,7 @@ message SeriesRefMap {
 }
 ```
 
-#### Pros:
+#### 9.1.1 Pros:
 
 * Would result in more accurate measurements to limit on, however data replication would still make `api/v1/status/tsdb` [inaccurate](https://github.com/thanos-io/thanos/pull/5402#discussion_r893434246)
   * It considers the exact amount of current active series for a tenant as it calls status API each time
@@ -169,7 +170,7 @@ message SeriesRefMap {
 * Does not change existing way in which Receive nodes communicate with each other
 * Additional request-based rate limiting can be done within same component
 
-#### Cons:
+#### 9.1.2 Cons:
 
 * Adding a new component to manage.
 * Increased tenant complexity in Thanos due to new APIs in Receive which need to account for tenants
@@ -177,7 +178,7 @@ message SeriesRefMap {
 * Non-trivial increase in latency
 * Can scale due to new component being stateless, but this can lead to more endpoints calls on Receive nodes in hashring
 
-### Per-Receive Validation
+### 9.2 Per-Receive Validation
 
 We can implement the same new endpoints as mentioned in the previous approach, on Thanos Receive, but do merging and checking operations on each Receive node in the hashring, i.e change the existing Router and Ingestor modes to handle the same limting logic.
 
@@ -196,14 +197,14 @@ So, the limiting equation in this case is also the same as before, `globalSeries
 
 The option of using gRPC instead of two API calls each time is also valid here.
 
-#### Pros:
+#### 9.2.1 Pros:
 
 * Would result in more accurate measurements to limit on however data replication would still make `api/v1/status/tsdb` [inaccurate](https://github.com/thanos-io/thanos/pull/5402#discussion_r893434246)
   * It considers the exact amount of active series for a tenant as it calls status API each time
   * It considers how much the number of active series would increase after a remote write request
 * No new TSDB-related changes, it utilizes interfaces that are already present
 
-#### Cons:
+#### 9.2.2 Cons:
 
 * Increased tenant complexity in Thanos due to new APIs which need to account for tenants
 * Many endpoint calls on each remote write request received only for limiting
@@ -211,19 +212,19 @@ The option of using gRPC instead of two API calls each time is also valid here.
 * Difficult to scale up/down
 * Adds more complexity to how Receivers in hashring communicate with each other
 
-### Only local limits
+### 9.3 Only local limits
 
 An alternative could be just not to limit active series globally and make do with local limits only.
 
-### Make scaling-up non-disruptive
+### 9.4 Make scaling-up non-disruptive
 
 [Consistent hashing](https://github.com/thanos-io/thanos/issues/4972) might be implemented and problems with sharding can be sorted out, which would make adding Receive replicas to hashring a non-disruptive operation, so that solutions like HPA can be used and make scale up/down operations much easier to the point where limits are not needed.
 
-### Implement somewhere else (e.g Observatorium)
+### 9.5 Implement somewhere else (e.g Observatorium)
 
 Not implementing this within Thanos, but rather using some other API gateway-like component, which can parse remote write requests and maintain running counts of active series for all tenants and limit based on that. A particular example of such a project where this can be implemented is [Observatorium](https://github.com/observatorium/observatorium).
 
-## Open Questions
+## 10 Open Questions
 
 * Is there a particular way to get an accurate count of HEAD series across multiple replicas of Receive, when replication factor is greater than zero?
 * Any alternatives to GetRef which would be easier to merge across replicas?
