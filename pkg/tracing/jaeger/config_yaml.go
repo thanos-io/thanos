@@ -38,14 +38,21 @@ type Config struct {
 	AgentHost              string        `yaml:"agent_host"`
 	AgentPort              int           `yaml:"agent_port"`
 	Gen128Bit              bool          `yaml:"traceid_128bit"`
+
+	// In order to use B3 headers, we must construct B3 propagators
+	// and then directly pass them as an option to NewTracer (which
+	// happens in `jaeger.go`). There is no appropriate configuration
+	// toggle to declaratively use B3 headers, and also no environment
+	// variable support.
+	UseB3Headers bool `yaml:"use_b3_headers"`
 }
 
 // ParseConfigFromYaml uses config YAML to set the tracer's Configuration.
-func ParseConfigFromYaml(cfg []byte) (*config.Configuration, error) {
+func ParseConfigFromYaml(cfg []byte) (*config.Configuration, *Config, error) {
 	conf := &Config{}
 
 	if err := yaml.Unmarshal(cfg, &conf); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	c := &config.Configuration{}
@@ -75,10 +82,10 @@ func ParseConfigFromYaml(cfg []byte) (*config.Configuration, error) {
 	if r, err := reporterConfigFromConfig(*conf); err == nil {
 		c.Reporter = r
 	} else {
-		return nil, errors.Wrap(err, "cannot obtain reporter config from YAML")
+		return nil, nil, errors.Wrap(err, "cannot obtain reporter config from YAML")
 	}
 
-	return c, nil
+	return c, conf, nil
 }
 
 // samplerConfigFromConfig creates a new SamplerConfig based on the YAML Config.

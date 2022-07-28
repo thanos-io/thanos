@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
+	"github.com/uber/jaeger-client-go/zipkin"
 	jaeger_prometheus "github.com/uber/jaeger-lib/metrics/prometheus"
 )
 
@@ -37,13 +38,15 @@ func (t *Tracer) GetTraceIDFromSpanContext(ctx opentracing.SpanContext) (string,
 func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Registry, conf []byte) (opentracing.Tracer, io.Closer, error) {
 	var (
 		cfg          *config.Configuration
+		yamlCfg      *Config
 		err          error
 		jaegerTracer opentracing.Tracer
 		closer       io.Closer
+		jaegerOpts   []config.Option
 	)
 	if conf != nil {
 		level.Info(logger).Log("msg", "loading Jaeger tracing configuration from YAML")
-		cfg, err = ParseConfigFromYaml(conf)
+		cfg, yamlCfg, err = ParseConfigFromYaml(conf)
 	} else {
 		level.Info(logger).Log("msg", "loading Jaeger tracing configuration from ENV")
 		cfg, err = config.FromEnv()
@@ -56,12 +59,25 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 		JaegerDebugHeader: strings.ToLower(tracing.ForceTracingBaggageKey),
 	}
 	cfg.Headers.ApplyDefaults()
-	jaegerTracer, closer, err = cfg.NewTracer(
+
+	jaegerOpts = []config.Option{
 		config.Metrics(jaeger_prometheus.New(jaeger_prometheus.WithRegisterer(metrics))),
 		config.Logger(&jaegerLogger{
 			logger: logger,
 		}),
-	)
+	}
+
+	if yamlCfg != nil && yamlCfg.UseB3Headers {
+		zipkinPropagator := zipkin.NewZipkinB3HTTPHeaderPropagator()
+
+		jaegerOpts = append(
+			jaegerOpts,
+			config.Injector(opentracing.HTTPHeaders, zipkinPropagator),
+			config.Extractor(opentracing.HTTPHeaders, zipkinPropagator),
+		)
+	}
+
+	jaegerTracer, closer, err = cfg.NewTracer(jaegerOpts...)
 	t := &Tracer{
 		jaegerTracer,
 	}

@@ -95,6 +95,7 @@ config:
   agent_host: ""
   agent_port: 0
   traceid_128bit: false
+  use_b3_headers: false
 ```
 
 ### Google Cloud (formerly Stackdriver)
