@@ -1,7 +1,7 @@
 ---
 type: proposal
 title: Granular Endpoint Configuration
-status: approved
+status: Approved
 owner: SrushtiSapkale
 menu: proposals-accepted
 ---
@@ -20,7 +20,7 @@ The Thanos Querier component supports basic mTLS configuration for internal gRPC
 
 Let’s imagine we have an Observer Cluster that is hosting Thanos Querier along with Thanos Store Gateway. Within the same Observer Cluster, we would like to connect one or more Thanos Sidecars. Additionally, we also want to connect the Querier in the Observer Cluster to several remote instances of Thanos Sidecar in remote clusters.
 
-In this scenario we need to use a proxy server (e.g. envoy). But, it would probably be simpler to do away with the proxies and let Thanos speak directly and securely with the remote endpoints.
+In this scenario we can use a proxy server (e.g. envoy). In thanos as we have multiple queriers connected to a central querier, Envoy can efficiently loadbalance gRPC connections, something we currently don't support natively in Thanos. If we used the endpoints config to connect the global to the regional queriers, they will not be able to scale regional queriers due to the persistent nature of gRPC connections. We can use Envoy when we need to scale our regional queries but here having an endpoint configuration is a better option in distributed store architecture as Thanos can communicate securely and directly through remote endpoints.
 
 ## Pitfalls of the current solution
 
@@ -29,6 +29,8 @@ Ideally, we would want to use mTLS to encrypt the connection to the remote clust
 ## Goals
 
 * To add support for per-endpoint TLS configuration in Thanos Query Component for internal gRPC communication.
+* Adding a new `endpoint.config` flag will deprecate the following flags: `store.sd-interval`, `store.sd-dns-interval`, `store.sd-dns-resolver`, `store.sd-files` and all `grpc-client-.*`. We can mark the current flags as deprecated, and after some time we can remove them.
+* Enable token based auth for endpoints
 
 ## How
 
@@ -52,20 +54,14 @@ The endpoints in the list items with no TLS config would be considered insecure.
 
 If the mode is strict (i.e. `mode: ”strict”`) then all the endpoints in that list item will be considered as strict (statically configured store API servers that are always used, even if the health check fails, as supplied in `--endpoint.strict`). And if there is no mode specified (i.e `mode: “”`) then all endpoints in that item will be considered normal.
 
-## TODO
-
-* To update the filtering of APIs in the querier to return only the endpoints that are needed.
-
-For example:
-The user wants to connect to the store api only.But here, we notice that the store method indiscriminately returns all endpoints ie exemplar api, store api, etc, even if they do not expose store API.
-
-This is because the query exposes endpoints of all the apis. We can update the filtering logic where the querier endpoint knows which api endpoints it should expose for a particular component.
+Also we noticed that even if the user wants to connect to the store api only, the store method indiscriminately returns all endpoints ie exemplar api, store api, etc, even if they do not expose store API which is confusing. This is because the query exposes endpoints of all the apis. We can update the filtering logic where the querier endpoint knows which api endpoints it should expose for a particular component.
 
 ## Alternatives
+
+* Granular endpoint configuration is not a solution for federate querier loadbalncing and scalability. As an alternative can embed Envoy in thanos for loadbalancing. This would work efficiently because endpointset cannot configure federated queriers when they scale due to persistent nature of grpc connections.
 
 ## Action Plan
 
 * Implement `--endpoint.config`.
-* Adding a new `endpoint.config` flag will deprecate the following flags: `store.sd-interval`, `store.sd-dns-interval`, `store.sd-dns-resolver`, `store.sd-files` and all `grpc-client-.*`. We can also remove the hidden flags `ruleEndpoints`, `metadataEndpoints`, `exemplarEndpoints`.
-We can mark the current flags as deprecated, and after some time we can remove them.
 * Add e2e tests for the changes
+* Update the filtering of APIs in the querier to return only the endpoints that are needed.
