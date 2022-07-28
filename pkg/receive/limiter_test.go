@@ -3,9 +3,7 @@
 
 package receive
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestRequestLimiter_AllowRequestBodySizeBytes(t *testing.T) {
 	tests := []struct {
