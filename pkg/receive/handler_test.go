@@ -736,8 +736,14 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 				{
 					appender: newFakeAppender(nil, nil, nil),
 				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
 			}
-			handlers, _ := newTestHandlerHashring(appendables, 1)
+			handlers, _ := newTestHandlerHashring(appendables, 3)
 			handler := handlers[0]
 			handler.requestLimiter = newRequestLimiter(int64(1*units.Megabyte), 20, 200, nil)
 			tenant := "test"
