@@ -77,24 +77,43 @@ The example content of `hashring.json`:
 
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed for tenancy and replication.
 
-## Limiting
+## Limits & gates (experimental)
 
-### Request limits (work in progress)
+Thanos Receive has some limits and gates that can be configured to control resource usage. Here's the difference between limits and gates:
+
+- **Limits**: if a request hits any configured limit the client will receive an error response from the server.
+- **Gates**: if a request hits a gate without capacity it will wait until the gate's capacity is replenished to be processed. It doesn't trigger an error response from the server.
+
+**IMPORTANT**: this feature is experimental and a work-in-progres. It might change in the near future, i.e. configuration might move to a file (to allow easy configuration of different request limits per tenant) or its structure could change.
+
+### Request limits
 
 Thanos Receive supports setting limits on the incoming remote write request sizes. These limits should help you to prevent a single tenant from being able to send big requests and possibly crash the Receive.
 
 These limits are applied per request and can be configured with the following command line arguments:
 
 - `--receive.write-request-limits.max-size-bytes`: the maximum body size.
-- `--receive.write-request-limits.max-concurrency`: the maximum amount of remote write requests that will be concurrently processed while others wait.
 - `--receive.write-request-limits.max-series`: the maximum amount of series in a single remote write request.
 - `--receive.write-request-limits.max-samples`: the maximum amount of samples in a single remote write request (summed from all series).
 
-Any request above these limits will cause an 413 HTTP response (*Entity Too Large*) and should not be retried without modifications. It's up to remote write clients to split up the data and retry or completely drop it.
+Any request above these limits will cause an 413 HTTP response (*Entity Too Large*) and should not be retried without modifications.
+
+Currently a 413 HTTP response will cause data loss at the client, as none of them (Prometheus included) will break down 413 responses into smaller requests. The recommendation is to monitor these errors in the client and contact the owners of your Receive instance for more information on its configured limits.
+
+Future work that can improve this scenario:
+
+- Proper handling of 413 responses in clients, given Receive can somehow communicate which limit was reached.
+- Including in the 413 response which are the current limits that apply to the tenant.
 
 By default all these limits are disabled.
 
-**IMPORTANT**: this feature is a work-in-progress and it might change in the near future, i.e. configuration might move to a file to allow easy configuration of different request limits per tenant.
+## Request gates
+
+The available request gates in Thanos Receive can be configured with the following command line arguments:
+
+- `--receive.write-request-limits.max-concurrency`: the maximum amount of remote write requests that will be concurrently worked on. Any request request that would exceed this limit will be accepted, but wait until the gate allows it to be processed.
+
+By default all gates are disabled.
 
 ## Flags
 
