@@ -161,6 +161,8 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
+	activeQueryDir := cmd.Flag("query.active-query-path", "Directory to log currently active queries in the queries.active file.").Default(".").String()
+
 	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+queryPushdown+".").Default("").Strings()
 
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
@@ -271,6 +273,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
 			*enableExemplarPartialResponse,
+			*activeQueryDir,
 			fileSD,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
@@ -338,6 +341,7 @@ func runQuery(
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
+	activeQueryDir string,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
@@ -467,6 +471,9 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 		)
+
+		queryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
+
 		engineOpts = promql.EngineOpts{
 			Logger: logger,
 			Reg:    reg,
@@ -477,6 +484,7 @@ func runQuery(
 			NoStepSubqueryIntervalFn: func(int64) int64 {
 				return defaultEvaluationInterval.Milliseconds()
 			},
+			ActiveQueryTracker:   queryTracker,
 			EnableNegativeOffset: true,
 			EnableAtModifier:     true,
 		}
