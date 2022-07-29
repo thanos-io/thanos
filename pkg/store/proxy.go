@@ -37,6 +37,16 @@ type ctxKey int
 // StoreMatcherKey is the context key for the store's allow list.
 const StoreMatcherKey = ctxKey(0)
 
+// StoreType determines if the store for a given client is a local store
+// (i.e. using server-as-client with in-process stream) or a store to which
+// the client connects remotely over gRPC.
+type StoreType string
+
+const (
+	Remote StoreType = "remote"
+	Local  StoreType = "local"
+)
+
 // Client holds meta information about a store.
 type Client interface {
 	// StoreClient to access the store.
@@ -49,8 +59,9 @@ type Client interface {
 	TimeRange() (mint int64, maxt int64)
 
 	String() string
-	// Addr returns address of a Client.
-	Addr() string
+
+	// StoreInfo returns the store type and address (if it's a remote store).
+	StoreInfo() (clientType StoreType, addr string)
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -294,11 +305,12 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			}
 
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
+			storeClientType, storeAddr := st.StoreInfo()
 
 			// This is used to cancel this stream when one operation takes too long.
 			seriesCtx, closeSeries := context.WithCancel(gctx)
 			seriesCtx = grpc_opentracing.ClientAddContextTags(seriesCtx, opentracing.Tags{
-				"target": st.Addr(),
+				"target": storeAddr,
 			})
 			defer closeSeries()
 
@@ -307,8 +319,9 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 				storeID = "Store Gateway"
 			}
 			span, seriesCtx := tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
-				"store.id":   storeID,
-				"store.addr": st.Addr(),
+				"store.id":          storeID,
+				"store.addr":        storeAddr,
+				"store.client_type": storeClientType,
 			})
 
 			sc, err := st.Series(seriesCtx, r)
@@ -591,12 +604,17 @@ func storeMatchDebugMetadata(s Client, storeDebugMatchers [][]*labels.Matcher) (
 		return true, ""
 	}
 
+	clientType, addr := s.StoreInfo()
+	if clientType != Remote {
+		return false, "the store is not remote, cannot match __address__"
+	}
+
 	match := false
 	for _, sm := range storeDebugMatchers {
-		match = match || labelSetsMatch(sm, labels.FromStrings("__address__", s.Addr()))
+		match = match || labelSetsMatch(sm, labels.FromStrings("__address__", addr))
 	}
 	if !match {
-		return false, fmt.Sprintf("__address__ %v does not match debug store metadata matchers: %v", s.Addr(), storeDebugMatchers)
+		return false, fmt.Sprintf("__address__ %v does not match debug store metadata matchers: %v", addr, storeDebugMatchers)
 	}
 	return true, ""
 }
@@ -693,10 +711,23 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		mtx            sync.Mutex
 		g, gctx        = errgroup.WithContext(ctx)
 		storeDebugMsgs []string
+		span           opentracing.Span
 	)
 
 	for _, st := range s.stores() {
 		st := st
+
+		storeClientType, storeAddr := st.StoreInfo()
+		storeID := labelpb.PromLabelSetsToString(st.LabelSets())
+		if storeID == "" {
+			storeID = "Store Gateway"
+		}
+		span, gctx = tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
+			"store.id":          storeID,
+			"store.addr":        storeAddr,
+			"store.client_type": storeClientType,
+		})
+		defer span.Finish()
 
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(gctx, st, r.Start, r.End); !ok {
@@ -714,13 +745,14 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 				Matchers:                r.Matchers,
 			})
 			if err != nil {
-				err = errors.Wrapf(err, "fetch label values from store %s", st)
+				msg := "fetch label values from store %s"
+				err = errors.Wrapf(err, msg, st)
 				if r.PartialResponseDisabled {
 					return err
 				}
 
 				mtx.Lock()
-				warnings = append(warnings, errors.Wrap(err, "fetch label values").Error())
+				warnings = append(warnings, errors.Wrapf(err, msg, st).Error())
 				mtx.Unlock()
 				return nil
 			}

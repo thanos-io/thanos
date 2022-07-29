@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -40,6 +41,7 @@ type testClient struct {
 	labelSets []labels.Labels
 	minTime   int64
 	maxTime   int64
+	storeType StoreType
 }
 
 func (c testClient) LabelSets() []labels.Labels {
@@ -54,9 +56,32 @@ func (c testClient) String() string {
 	return "test"
 }
 
-func (c testClient) Addr() string {
-	return "testaddr"
+func (c testClient) StoreInfo() (StoreType, string) {
+	if c.storeType != "" {
+		return c.storeType, "testaddr"
+	}
+
+	return Local, "testaddr"
 }
+
+type mockedSeriesServer struct {
+	storepb.Store_SeriesServer
+	ctx context.Context
+
+	send func(*storepb.SeriesResponse) error
+}
+
+func (s *mockedSeriesServer) Send(r *storepb.SeriesResponse) error {
+	return s.send(r)
+}
+func (s *mockedSeriesServer) Context() context.Context { return s.ctx }
+
+type mockedStartTimeDB struct {
+	*tsdb.DBReadOnly
+	startTime int64
+}
+
+func (db *mockedStartTimeDB) StartTime() (int64, error) { return db.startTime, nil }
 
 func TestProxyStore_Info(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
@@ -430,6 +455,7 @@ func TestProxyStore_Series(t *testing.T) {
 					minTime:   1,
 					maxTime:   300,
 					labelSets: []labels.Labels{labels.FromStrings("ext", "1")},
+					storeType: Remote,
 				},
 			},
 			req: &storepb.SeriesRequest{
@@ -1332,6 +1358,7 @@ func TestProxyStore_LabelNames(t *testing.T) {
 							Names: []string{"a", "b"},
 						},
 					},
+					storeType: Remote,
 				},
 			},
 			req: &storepb.LabelNamesRequest{
@@ -1887,8 +1914,11 @@ func TestProxyStore_storeMatchMetadata(t *testing.T) {
 	c := testClient{}
 
 	ok, reason := storeMatchDebugMetadata(c, [][]*labels.Matcher{{}})
-	testutil.Assert(t, ok)
-	testutil.Equals(t, "", reason)
+	testutil.Assert(t, !ok)
+	testutil.Equals(t, "the store is not remote, cannot match __address__", reason)
+
+	// Change type to remote.
+	c.storeType = Remote
 
 	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "wrong")}})
 	testutil.Assert(t, !ok)
