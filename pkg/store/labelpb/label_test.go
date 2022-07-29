@@ -209,6 +209,18 @@ func BenchmarkTransformWithAndWithoutCopy(b *testing.B) {
 			ret = ZLabelsToPromLabels(lbls)
 		}
 	})
+	b.Run("ZLabelsToPromLabelsWithDeepCopy", func(b *testing.B) {
+		b.ReportAllocs()
+		lbls := make([]ZLabel, num)
+		for i := 0; i < num; i++ {
+			lbls[i] = ZLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)}
+		}
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			ret = ZLabelsToPromLabels(DeepCopy(lbls))
+		}
+	})
 }
 
 func TestSortZLabelSets(t *testing.T) {
