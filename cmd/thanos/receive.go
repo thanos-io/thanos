@@ -346,11 +346,13 @@ func setupAndRunGRPCServer(g *run.Group,
 				s.Shutdown(errors.New("reload hashrings"))
 			}
 
-			mts := store.NewMultiTSDBStore(
+			mts := store.NewProxyStore(
 				logger,
 				reg,
+				dbs.TSDBLocalClients,
 				comp,
-				dbs.TSDBStores,
+				labels.Labels{},
+				10*time.Second, // TODO: What to set if we have local client here?
 			)
 			rw := store.ReadWriteTSDBStore{
 				StoreServer:          mts,

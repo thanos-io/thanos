@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -34,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type TSDBStats interface {
@@ -89,6 +91,41 @@ func NewMultiTSDB(
 	}
 }
 
+type localClient struct {
+	storepb.StoreClient
+
+	labelSetFunc  func() []labelpb.ZLabelSet
+	timeRangeFunc func() (int64, int64)
+}
+
+func newLocalClient(
+	c storepb.StoreClient,
+	labelSetFunc func() []labelpb.ZLabelSet,
+	timeRangeFunc func() (int64, int64),
+) *localClient {
+	return &localClient{c, labelSetFunc, timeRangeFunc}
+}
+
+func (l *localClient) LabelSets() []labels.Labels {
+	return labelpb.ZLabelSetsToPromLabelSets(l.labelSetFunc()...)
+}
+
+func (l *localClient) TimeRange() (mint int64, maxt int64) {
+	return l.timeRangeFunc()
+}
+
+func (l *localClient) String() string {
+	mint, maxt := l.timeRangeFunc()
+	return fmt.Sprintf(
+		"StoreType: %s LabelSets: %v Mint: %d Maxt: %d",
+		store.Local, labelpb.PromLabelSetsToString(l.LabelSets()), mint, maxt,
+	)
+}
+
+func (l *localClient) StoreInfo() (store.StoreType, string) {
+	return store.Local, ""
+}
+
 type tenant struct {
 	readyS        *ReadyStorage
 	storeTSDB     *store.TSDBStore
@@ -113,6 +150,15 @@ func (t *tenant) store() *store.TSDBStore {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	return t.storeTSDB
+}
+
+func (t *tenant) client() store.Client {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+
+	store := t.store()
+	client := storepb.ServerAsClient(store, 0)
+	return newLocalClient(client, store.LabelSet, store.TimeRange)
 }
 
 func (t *tenant) exemplars() *exemplars.TSDB {
@@ -364,17 +410,15 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 	return merr.Err()
 }
 
-func (t *MultiTSDB) TSDBStores() map[string]store.InfoStoreServer {
+func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	res := make(map[string]store.InfoStoreServer, len(t.tenants))
-	for k, tenant := range t.tenants {
-		s := tenant.store()
-		if s != nil {
-			res[k] = s
-		}
+	res := make([]store.Client, 0, len(t.tenants))
+	for _, tenant := range t.tenants {
+		res = append(res, tenant.client())
 	}
+
 	return res
 }
 
