@@ -22,6 +22,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 	tracingclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
+	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -245,6 +247,8 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	sidecarHA1 := e2edb.NewThanosSidecar(e, "sidecar-prom-ha1", promHA1, e2edb.WithImage("thanos:latest"), e2edb.WithFlagOverride(map[string]string{"--tracing.config": string(jaegerConfig)}))
 	sidecar2 := e2edb.NewThanosSidecar(e, "sidecar2", prom2, e2edb.WithImage("thanos:latest"))
 
+	receive1 := e2ethanos.NewReceiveBuilder(e, "receiver-1").WithIngestionEnabled().Init()
+
 	testutil.Ok(t, exec("cp", "-r", prom1Data+"/.", promHA0.Dir()))
 	testutil.Ok(t, exec("sh", "-c", "find "+prom1Data+"/ -maxdepth 1 -type d | tail -5 | xargs -I {} cp -r {} "+promHA1.Dir())) // Copy only 5 blocks from 9 to mimic replica 1 with partial data set.
 	testutil.Ok(t, exec("cp", "-r", prom2Data+"/.", prom2.Dir()))
@@ -272,9 +276,9 @@ global:
 	))
 
 	testutil.Ok(t, e2e.StartAndWaitReady(m1))
-	testutil.Ok(t, e2e.StartAndWaitReady(promHA0, promHA1, prom2, sidecarHA0, sidecarHA1, sidecar2, store1, store2))
+	testutil.Ok(t, e2e.StartAndWaitReady(promHA0, promHA1, prom2, sidecarHA0, sidecarHA1, sidecar2, store1, store2, receive1))
 
-	// Let's start query on top of all those 5 store APIs (global query engine).
+	// Let's start query on top of all those 6 store APIs (global query engine).
 	//
 	//  ┌──────────────┐
 	//  │              │
@@ -325,14 +329,15 @@ global:
 			sidecarHA0.InternalEndpoint("grpc"),
 			sidecarHA1.InternalEndpoint("grpc"),
 			sidecar2.InternalEndpoint("grpc"),
+			receive1.InternalEndpoint("grpc"),
 		},
 		e2edb.WithImage("thanos:latest"),
 		e2edb.WithFlagOverride(map[string]string{"--tracing.config": string(jaegerConfig)}),
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(query1))
 
-	// Wait until we have 5 gRPC connections.
-	testutil.Ok(t, query1.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	// Wait until we have 6 gRPC connections.
+	testutil.Ok(t, query1.WaitSumMetricsWithOptions(e2e.Equals(6), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
 	const path = "graph?g0.expr=sum(continuous_app_metric0)%20by%20(cluster%2C%20replica)&g0.tab=0&g0.stacked=0&g0.range_input=2w&g0.max_source_resolution=0s&g0.deduplicate=0&g0.partial_response=0&g0.store_matches=%5B%5D&g0.end_input=2021-07-27%2000%3A00%3A00"
 	testutil.Ok(t, e2einteractive.OpenInBrowser(fmt.Sprintf("http://%s/%s", query1.Endpoint("http"), path)))
