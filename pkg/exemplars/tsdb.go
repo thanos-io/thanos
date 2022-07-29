@@ -4,6 +4,8 @@
 package exemplars
 
 import (
+	"context"
+
 	"github.com/gogo/status"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -29,7 +31,7 @@ func NewTSDB(db storage.ExemplarQueryable, extLabels labels.Labels) *TSDB {
 }
 
 // Exemplars returns all specified exemplars from a TSDB instance.
-func (t *TSDB) Exemplars(matchers [][]*labels.Matcher, start, end int64, s exemplarspb.Exemplars_ExemplarsServer) error {
+func (t *TSDB) Exemplars(ctx context.Context, matchers [][]*labels.Matcher, start, end int64, s exemplarspb.Exemplars_ExemplarsServer) error {
 	match, selectors := selectorsMatchesExternalLabels(matchers, t.extLabels)
 
 	if !match {
@@ -51,14 +53,19 @@ func (t *TSDB) Exemplars(matchers [][]*labels.Matcher, start, end int64, s exemp
 	}
 
 	for _, e := range exemplars {
-		exd := exemplarspb.ExemplarData{
-			SeriesLabels: labelpb.ZLabelSet{
-				Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendSortedLabels(e.SeriesLabels, t.extLabels)),
-			},
-			Exemplars: exemplarspb.ExemplarsFromPromExemplars(e.Exemplars),
-		}
-		if err := s.Send(exemplarspb.NewExemplarsResponse(&exd)); err != nil {
-			return status.Error(codes.Aborted, err.Error())
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			exd := exemplarspb.ExemplarData{
+				SeriesLabels: labelpb.ZLabelSet{
+					Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendSortedLabels(e.SeriesLabels, t.extLabels)),
+				},
+				Exemplars: exemplarspb.ExemplarsFromPromExemplars(e.Exemplars),
+			}
+			if err := s.Send(exemplarspb.NewExemplarsResponse(&exd)); err != nil {
+				return status.Error(codes.Aborted, err.Error())
+			}
 		}
 	}
 	return nil

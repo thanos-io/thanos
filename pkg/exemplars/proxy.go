@@ -49,7 +49,6 @@ func NewProxy(logger log.Logger, exemplars func() []*exemplarspb.ExemplarStore, 
 type exemplarsStream struct {
 	client  exemplarspb.ExemplarsClient
 	request *exemplarspb.ExemplarsRequest
-	channel chan<- *exemplarspb.ExemplarData
 	server  exemplarspb.Exemplars_ExemplarsServer
 }
 
@@ -74,9 +73,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	}
 
 	var (
-		g, gctx   = errgroup.WithContext(ctx)
-		respChan  = make(chan *exemplarspb.ExemplarData, 10)
-		exemplars []*exemplarspb.ExemplarData
+		g, gctx = errgroup.WithContext(ctx)
 	)
 
 	for _, st := range s.exemplars() {
@@ -125,22 +122,11 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 		}
 
 		es := &exemplarsStream{
-
 			client:  st.ExemplarsClient,
 			request: r,
-			channel: respChan,
 			server:  srv,
 		}
-		g.Go(func() error { return es.receive(gctx) })
-	}
-
-	go func() {
-		_ = g.Wait()
-		close(respChan)
-	}()
-
-	for resp := range respChan {
-		exemplars = append(exemplars, resp)
+		g.Go(func() error { return es.sendExemplars(gctx) })
 	}
 
 	if err := g.Wait(); err != nil {
@@ -148,19 +134,10 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 		return err
 	}
 
-	for _, e := range exemplars {
-		tracing.DoInSpan(srv.Context(), "send_exemplars_response", func(_ context.Context) {
-			err = srv.Send(exemplarspb.NewExemplarsResponse(e))
-		})
-		if err != nil {
-			return status.Error(codes.Unknown, errors.Wrap(err, "send exemplars response").Error())
-		}
-	}
-
 	return nil
 }
 
-func (stream *exemplarsStream) receive(ctx context.Context) error {
+func (stream *exemplarsStream) sendExemplars(ctx context.Context) error {
 	exemplars, err := stream.client.Exemplars(ctx, stream.request)
 	if err != nil {
 		err = errors.Wrapf(err, "fetching exemplars from exemplars client %v", stream.client)
@@ -204,9 +181,10 @@ func (stream *exemplarsStream) receive(ctx context.Context) error {
 		}
 
 		select {
-		case stream.channel <- exemplar.GetData():
 		case <-ctx.Done():
 			return ctx.Err()
+		default:
+			return stream.server.Send(exemplarspb.NewExemplarsResponse(exemplar.GetData()))
 		}
 	}
 }

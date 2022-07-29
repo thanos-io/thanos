@@ -6,6 +6,7 @@ package exemplars
 import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/promql/parser"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -32,10 +33,18 @@ func (m *MultiTSDB) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Exe
 	}
 	matchers := parser.ExtractSelectors(expr)
 
+	g, gctx := errgroup.WithContext(s.Context())
 	for tenant, es := range m.tsdbExemplarsServers() {
-		if err := es.Exemplars(matchers, r.Start, r.End, s); err != nil {
-			return status.Error(codes.Aborted, errors.Wrapf(err, "get exemplars for tenant %s", tenant).Error())
-		}
+		tenant := tenant
+		es := es
+		g.Go(func() error {
+			if err := es.Exemplars(gctx, matchers, r.Start, r.End, s); err != nil {
+				return status.Error(codes.Aborted, errors.Wrapf(err, "get exemplars for tenant %s", tenant).Error())
+			}
+
+			return nil
+		})
 	}
-	return nil
+
+	return g.Wait()
 }
