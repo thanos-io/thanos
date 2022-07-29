@@ -653,5 +653,5 @@ func (i inProcessClient) TimeRange() (mint, maxt int64) {
 	return r.MinTime, r.MaxTime
 }
 
-func (i inProcessClient) String() string { return i.name }
-func (i inProcessClient) Addr() string   { return i.name }
+func (i inProcessClient) String() string                       { return i.name }
+func (i inProcessClient) StoreInfo() (store.StoreType, string) { return store.Local, i.name }

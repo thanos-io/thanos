@@ -206,11 +206,14 @@ func (s *storeRef) TimeRange() (int64, int64) {
 
 func (s *storeRef) String() string {
 	mint, maxt := s.TimeRange()
-	return fmt.Sprintf("Addr: %s LabelSets: %v Mint: %d Maxt: %d", s.addr, labelpb.PromLabelSetsToString(s.LabelSets()), mint, maxt)
+	return fmt.Sprintf(
+		"StoreType: %s Addr: %s LabelSets: %v Mint: %d Maxt: %d",
+		store.Remote, s.addr, labelpb.PromLabelSetsToString(s.LabelSets()), mint, maxt,
+	)
 }
 
-func (s *storeRef) Addr() string {
-	return s.addr
+func (s *storeRef) StoreInfo() (store.StoreType, string) {
+	return store.Remote, s.addr
 }
 
 func (s *storeRef) close() {
