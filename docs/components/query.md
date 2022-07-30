@@ -271,8 +271,6 @@ Flags:
                                  API servers that are always used, even if the
                                  health check fails. Useful if you have a
                                  caching layer on top.
-      --endpoint.info-timeout=5s
-                                 Timeout of gRPC Info requests.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable

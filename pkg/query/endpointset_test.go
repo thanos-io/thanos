@@ -557,6 +557,7 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 	updateTime := time.Now()
 	discoveredEndpointAddr := endpoints.EndpointAddresses()
 	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, func() time.Time { return updateTime })
+	endpointSet.endpointInfoTimeout = 3 * time.Second
 	defer endpointSet.Close()
 
 	var wg sync.WaitGroup
