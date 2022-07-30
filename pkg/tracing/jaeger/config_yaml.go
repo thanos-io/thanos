@@ -6,7 +6,6 @@ package jaeger
 import (
 	"log"
 	"math"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -37,6 +36,9 @@ type Config struct {
 	SamplerMaxOperations               int                      `yaml:"sampler_max_operations"`
 	SamplerRefreshInterval             time.Duration            `yaml:"sampler_refresh_interval"`
 	SamplerParentConfig                ParentBasedSamplerConfig `yaml:"sampler_parent_config"`
+	SamplingServerURL                  string                   `yaml:"sampling_server_url"`
+	OperationNameLateBinding           bool                     `yaml:"operation_name_late_binding"`
+	InitialSamplingRate                float64                  `yaml:"initial_sampler_rate"`
 	ReporterMaxQueueSize               int                      `yaml:"reporter_max_queue_size"`
 	ReporterFlushInterval              time.Duration            `yaml:"reporter_flush_interval"`
 	ReporterLogSpans                   bool                     `yaml:"reporter_log_spans"`
@@ -47,9 +49,6 @@ type Config struct {
 	Password                           string                   `yaml:"password"`
 	AgentHost                          string                   `yaml:"agent_host"`
 	AgentPort                          int                      `yaml:"agent_port"`
-	SamplingServerURL                  bool                     `yaml:"sampling_server_url"`
-	OperationNameLateBinding           bool                     `yaml:"operation_name_late_binding"`
-	InitialSamplingRate                float64                  `yaml:"initial_sampler_rate"`
 	Gen128Bit                          bool                     `yaml:"traceid_128bit"`
 	// Remove the above field. Ref: https://github.com/open-telemetry/opentelemetry-specification/issues/525#issuecomment-605519217
 	// Ref: https://opentelemetry.io/docs/reference/specification/trace/api/#spancontext
@@ -94,18 +93,22 @@ func getAgentEndpointOptions(config Config) []otel_jaeger.AgentEndpointOption {
 // getSamplingFraction returns the sampling fraction based on the sampler type.
 // Ref: https://www.jaegertracing.io/docs/1.35/sampling/#client-sampling-configuration
 func getSamplingFraction(samplerType string, samplingFactor float64) float64 {
-	if samplerType == "const" {
+	switch samplerType {
+	case "const":
 		if samplingFactor > 1 {
 			return 1.0
 		} else if samplingFactor < 0 {
 			return 0.0
 		}
-		return math.Round(samplingFactor) // Returns either 0 or 1 for values [0,1].
-	} else if samplerType == "probabilistic" {
+		return math.Round(samplingFactor)
+
+	case "probabilistic":
 		return samplingFactor
-	} else if samplerType == "ratelimiting" {
-		return math.Round(samplingFactor) // Needs to be an integer.
+
+	case "ratelimiting":
+		return math.Round(samplingFactor) // Needs to be an integer
 	}
+
 	return samplingFactor
 }
 
@@ -148,17 +151,23 @@ func getRemoteOptions(config Config) []jaegerremote.Option {
 	if config.SamplerRefreshInterval != 0 {
 		remoteOptions = append(remoteOptions, jaegerremote.WithSamplingRefreshInterval(config.SamplerRefreshInterval))
 	}
-	if config.SamplingServerURL && config.AgentHost != "" && config.AgentPort != 0 {
-		localAgentURL := &(url.URL{
-			Host: config.AgentHost + ":" + strconv.Itoa(config.AgentPort),
-		})
-		remoteOptions = append(remoteOptions, jaegerremote.WithSamplingServerURL(localAgentURL.String()))
+	if config.SamplingServerURL != "" {
+		remoteOptions = append(remoteOptions, jaegerremote.WithSamplingServerURL(config.SamplingServerURL))
 	}
 	if config.SamplerMaxOperations != 0 {
 		remoteOptions = append(remoteOptions, jaegerremote.WithMaxOperations(config.SamplerMaxOperations))
 	}
 	if config.OperationNameLateBinding {
 		remoteOptions = append(remoteOptions, jaegerremote.WithOperationNameLateBinding(true))
+	}
+	// SamplerRefreshInterval is the interval for polling the backend for sampling strategies.
+	// Ref: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md#general-sdk-configuration.
+	if config.SamplerRefreshInterval != 0 {
+		remoteOptions = append(remoteOptions, jaegerremote.WithSamplingRefreshInterval(config.SamplerRefreshInterval))
+	}
+	// InitialSamplingRate is the sampling probability when the backend is unreachable.
+	if config.InitialSamplingRate != 0.0 {
+		remoteOptions = append(remoteOptions, jaegerremote.WithInitialSampler(tracesdk.TraceIDRatioBased(config.InitialSamplingRate)))
 	}
 
 	return remoteOptions
@@ -169,11 +178,8 @@ func getRateLimitingOptions(config Config) []jaegerremote.Option {
 
 	// The sampling server URL corresponds to the HTTP URL for agent that serves configs, the default being :5778.
 	// Ref: https://www.jaegertracing.io/docs/1.36/getting-started/#all-in-on.
-	if config.SamplingServerURL && config.AgentHost != "" && config.AgentPort != 0 {
-		localAgentURL := &(url.URL{
-			Host: config.AgentHost + ":" + strconv.Itoa(config.AgentPort),
-		})
-		rateLimitingOptions = append(rateLimitingOptions, jaegerremote.WithSamplingServerURL(localAgentURL.String()))
+	if config.SamplingServerURL != "" {
+		rateLimitingOptions = append(rateLimitingOptions, jaegerremote.WithSamplingServerURL(config.SamplingServerURL))
 	}
 
 	// SamplerRefreshInterval is the interval for polling the backend for sampling strategies.
@@ -231,5 +237,8 @@ func printDeprecationWarnings(config Config, l glog.Logger) {
 	}
 	if config.Gen128Bit {
 		level.Info(l).Log("msg", "Gen128Bit"+commonDeprecationMessage)
+	}
+	if config.Disabled {
+		level.Info(l).Log("msg", "Disabled"+commonDeprecationMessage)
 	}
 }

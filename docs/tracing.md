@@ -72,7 +72,7 @@ Currently supported tracing backends:
 
 ### Jaeger
 
-Client for https://github.com/jaegertracing/jaeger tracing.
+Client for https://github.com/jaegertracing/jaeger tracing. Parent config options are used with ParentBased samplers. This is a [link](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#parentbased) to the OTel specification which details the defaults.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=jaeger.Config"
 type: JAEGER
@@ -89,6 +89,9 @@ config:
   sampler_parent_config:
     local_parent_sampled: false
     remote_parent_sampled: false
+  sampling_server_url: ""
+  operation_name_late_binding: false
+  initial_sampler_rate: 0
   reporter_max_queue_size: 0
   reporter_flush_interval: 0s
   reporter_log_spans: false
@@ -99,9 +102,6 @@ config:
   password: ""
   agent_host: ""
   agent_port: 0
-  sampling_server_url: false
-  operation_name_late_binding: false
-  initial_sampler_rate: 0
   traceid_128bit: false
 ```
 
@@ -114,6 +114,8 @@ You will also need to ensure that the authentication with the API is working, fo
 *Note:* The `type` in the configuration below can have either value `GOOGLE_CLOUD` or `STACKDRIVER` - this is to ensure backwards compatibility.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=google_cloud.Config"
+# github.com/shirou/gopsutil/v3/cpu
+../../../go/pkg/mod/github.com/shirou/gopsutil/v3@v3.21.2/cpu/cpu_darwin_cgo.go:13:5: warning: 'TARGET_OS_MAC' is not defined, evaluates to 0 [-Wundef-prefix=TARGET_OS_]
 type: GOOGLE_CLOUD
 config:
   service_name: ""
@@ -126,6 +128,8 @@ config:
 Client for https://www.elastic.co/products/apm tracing.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=elasticapm.Config"
+# github.com/shirou/gopsutil/v3/cpu
+../../../go/pkg/mod/github.com/shirou/gopsutil/v3@v3.21.2/cpu/cpu_darwin_cgo.go:13:5: warning: 'TARGET_OS_MAC' is not defined, evaluates to 0 [-Wundef-prefix=TARGET_OS_]
 type: ELASTIC_APM
 config:
   service_name: ""
@@ -141,6 +145,8 @@ Client for [Lightstep](https://lightstep.com).
 In order to configure Thanos to interact with Lightstep you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-use-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=lightstep.Config"
+# github.com/shirou/gopsutil/v3/cpu
+../../../go/pkg/mod/github.com/shirou/gopsutil/v3@v3.21.2/cpu/cpu_darwin_cgo.go:13:5: warning: 'TARGET_OS_MAC' is not defined, evaluates to 0 [-Wundef-prefix=TARGET_OS_]
 type: LIGHTSTEP
 config:
   access_token: ""
