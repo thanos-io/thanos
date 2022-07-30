@@ -130,8 +130,13 @@ func getSampler(config Config) tracesdk.Sampler {
 		remoteOptions := getRemoteOptions(config)
 		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
 	case "ratelimiting":
-		rateLimitingOptions := getRateLimitingOptions(config)
-		sampler = jaegerremote.New(config.ServiceName, rateLimitingOptions...)
+		// The same config options are applicable to both remote and rate-limiting samplers.
+		remoteOptions := getRemoteOptions(config)
+		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
+		sampler, ok := sampler.(*rateLimitingSampler)
+		if ok {
+			sampler.Update(config.SamplerParam)
+		}
 	default:
 		var root tracesdk.Sampler
 		var parentOptions []tracesdk.ParentBasedSamplerOption
@@ -171,27 +176,6 @@ func getRemoteOptions(config Config) []jaegerremote.Option {
 	}
 
 	return remoteOptions
-}
-
-func getRateLimitingOptions(config Config) []jaegerremote.Option {
-	var rateLimitingOptions []jaegerremote.Option
-
-	// The sampling server URL corresponds to the HTTP URL for agent that serves configs, the default being :5778.
-	// Ref: https://www.jaegertracing.io/docs/1.36/getting-started/#all-in-on.
-	if config.SamplingServerURL != "" {
-		rateLimitingOptions = append(rateLimitingOptions, jaegerremote.WithSamplingServerURL(config.SamplingServerURL))
-	}
-
-	// SamplerRefreshInterval is the interval for polling the backend for sampling strategies.
-	// Ref: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md#general-sdk-configuration.
-	if config.SamplerRefreshInterval != 0 {
-		rateLimitingOptions = append(rateLimitingOptions, jaegerremote.WithSamplingRefreshInterval(config.SamplerRefreshInterval))
-	}
-	// InitialSamplingRate is the sampling probability when the backend is unreachable.
-	if config.InitialSamplingRate != 0.0 {
-		rateLimitingOptions = append(rateLimitingOptions, jaegerremote.WithInitialSampler(tracesdk.TraceIDRatioBased(config.InitialSamplingRate)))
-	}
-	return rateLimitingOptions
 }
 
 // parseTags parses the given string into a collection of attributes.
