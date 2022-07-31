@@ -161,7 +161,7 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
-	activeQueryDir := cmd.Flag("query.active-query-path", "Directory to log currently active queries in the queries.active file.").Default(".").String()
+	activeQueryDir := cmd.Flag("query.active-query-path", "Directory to log currently active queries in the queries.active file.").Default("").String()
 
 	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+queryPushdown+".").Default("").Strings()
 
@@ -472,8 +472,6 @@ func runQuery(
 			queryTimeout,
 		)
 
-		queryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
-
 		engineOpts = promql.EngineOpts{
 			Logger: logger,
 			Reg:    reg,
@@ -484,11 +482,15 @@ func runQuery(
 			NoStepSubqueryIntervalFn: func(int64) int64 {
 				return defaultEvaluationInterval.Milliseconds()
 			},
-			ActiveQueryTracker:   queryTracker,
 			EnableNegativeOffset: true,
 			EnableAtModifier:     true,
 		}
 	)
+
+	if activeQueryDir != "" {
+		queryTracker := promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
+		engineOpts.ActiveQueryTracker = queryTracker
+	}
 
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
