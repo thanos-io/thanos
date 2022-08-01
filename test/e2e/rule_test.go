@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	"github.com/pkg/errors"
 	common_cfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
