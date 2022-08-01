@@ -3,7 +3,7 @@ include .busybox-versions
 
 FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -path ./internal/cortex -prune -o -name '*.go' -print)
 MD_FILES_TO_FORMAT = $(shell find docs -name "*.md") $(shell find examples -name "*.md") $(filter-out mixin/runbook.md, $(shell find mixin -name "*.md")) $(shell ls *.md)
-FAST_MD_FILES_TO_FORMAT = $(shell git diff --name-only | grep ".md")
+FAST_MD_FILES_TO_FORMAT = $(shell git diff --name-only | grep "\.md")
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
