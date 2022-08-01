@@ -17,7 +17,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/efficientgo/e2e v0.12.2-0.20220714084440-2f5240d8c363
 	github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b
-	github.com/efficientgo/tools/extkingpin v0.0.0-20220225185207-fe763185946b
+	github.com/efficientgo/tools/extkingpin v0.0.0-20220801101838-3312908f6a9d
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.2.0
 	github.com/felixge/fgprof v0.9.2
@@ -245,9 +245,6 @@ replace (
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
-
-	// TODO(saswatamcode): Remove when https://github.com/efficientgo/tools/pull/14 is merged.
-	github.com/efficientgo/tools/extkingpin => github.com/saswatamcode/tools/extkingpin v0.0.0-20220723122803-67d37ea96343
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
 
