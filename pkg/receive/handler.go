@@ -105,6 +105,7 @@ type Options struct {
 	ForwardTimeout               time.Duration
 	RelabelConfigs               []*relabel.Config
 	TSDBStats                    TSDBStats
+	SeriesLimitSupported         bool
 	MaxPerTenantLimit            uint64
 	MetaMonitoringUrl            *url.URL
 	MetaMonitoringHttpClient     *extflag.PathOrContent
@@ -235,7 +236,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h.ActiveSeriesLimit = NewNopSeriesLimit()
-	if (h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor) && o.MaxPerTenantLimit != 0 {
+	if h.options.SeriesLimitSupported {
 		h.ActiveSeriesLimit = NewActiveSeriesLimit(h.options, registerer, h.receiverMode, logger)
 	}
 
@@ -451,18 +452,15 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	defer h.writeGate.Done()
 
-	// Impose limits only if Receive is in Router or RouterIngestor mode.
-	if h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor {
-		under, err := h.ActiveSeriesLimit.isUnderLimit(tenant, tLogger)
-		if err != nil {
-			level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
-		}
+	under, err := h.ActiveSeriesLimit.isUnderLimit(tenant, tLogger)
+	if err != nil {
+		level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
+	}
 
-		// Fail request fully if tenant has exceeded set limit.
-		if !under {
-			http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
-			return
-		}
+	// Fail request fully if tenant has exceeded set limit.
+	if !under {
+		http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
+		return
 	}
 
 	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.

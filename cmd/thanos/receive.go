@@ -186,6 +186,9 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
+	// Impose active series limit only if Receiver is in Router or RouterIngestor mode, and config is provided.
+	seriesLimitSupported := (receiveMode == receive.RouterOnly || receiveMode == receive.RouterIngestor) && conf.maxPerTenantLimit != 0
+
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
@@ -215,6 +218,7 @@ func runReceive(
 		DialOpts:                     dialOpts,
 		ForwardTimeout:               time.Duration(*conf.forwardTimeout),
 		TSDBStats:                    dbs,
+		SeriesLimitSupported:         seriesLimitSupported,
 		MaxPerTenantLimit:            conf.maxPerTenantLimit,
 		MetaMonitoringUrl:            conf.metaMonitoringUrl,
 		MetaMonitoringHttpClient:     conf.metaMonitoringHttpClient,
@@ -302,8 +306,7 @@ func runReceive(
 		)
 	}
 
-	seriesLimitSupported := receiveMode == receive.RouterOnly || receiveMode == receive.RouterIngestor
-	if seriesLimitSupported && conf.maxPerTenantLimit != 0 {
+	if seriesLimitSupported {
 		level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
 		{
 			ctx, cancel := context.WithCancel(context.Background())
@@ -865,12 +868,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.tenant-limits.meta-monitoring-query", "PromQL Query to execute against meta-monitoring, to get the current number of active series for each tenant, across Receive replicas.").Default("sum(prometheus_tsdb_head_series) by (tenant)").Hidden().StringVar(&rc.metaMonitoringLimitQuery)
 
-	rc.metaMonitoringHttpClient = extflag.RegisterPathOrContent(
-		cmd,
-		"receive.tenant-limits.meta-monitoring-client",
-		"YAML file or string with http client configs for meta-monitoring.",
-		extflag.WithHidden(),
-	)
+	rc.metaMonitoringHttpClient = extflag.RegisterPathOrContent(cmd, "receive.tenant-limits.meta-monitoring-client", "YAML file or string with http client configs for meta-monitoring.", extflag.WithHidden())
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
