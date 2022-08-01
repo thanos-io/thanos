@@ -794,7 +794,9 @@ func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error retrieving rules: %v", err)}
 		}
 
-		var resp struct{ Alerts []*rulespb.AlertInstance }
+		var resp struct {
+			Alerts []*rulespb.AlertInstance `json:"alerts"`
+		}
 		for _, g := range groups.Groups {
 			for _, r := range g.Rules {
 				a := r.GetAlert()

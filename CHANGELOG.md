@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 - [#5502](https://github.com/thanos-io/thanos/pull/5502) Receive: Handle exemplar storage errors as conflict error.
+- [#5534](https://github.com/thanos-io/thanos/pull/5534) Query: Set struct return by query api alerts same as prometheus api
 
 ### Added
 
