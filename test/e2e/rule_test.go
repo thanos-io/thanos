@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -158,19 +160,26 @@ func reloadRulesSignal(t *testing.T, r e2e.InstrumentedRunnable) {
 }
 
 func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, expectedRulegroupCount int) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
-	testutil.Ok(t, err)
-	resp, err := http.DefaultClient.Do(req)
-	testutil.Ok(t, err)
-	testutil.Equals(t, 200, resp.StatusCode)
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	testutil.Ok(t, resp.Body.Close())
-
 	var data = rulesResp{}
+	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
+		req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
+		testutil.Ok(t, err)
+		resp, err := http.DefaultClient.Do(req)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 200, resp.StatusCode)
 
-	testutil.Ok(t, json.Unmarshal(body, &data))
-	testutil.Equals(t, "success", data.Status)
+		body, _ := ioutil.ReadAll(resp.Body)
+		testutil.Ok(t, resp.Body.Close())
+
+		testutil.Ok(t, json.Unmarshal(body, &data))
+		testutil.Equals(t, "success", data.Status)
+
+		// Retry until count matches.
+		if len(data.Data.Groups) == expectedRulegroupCount {
+			return nil
+		}
+		return errors.New("different number of rulegroups")
+	}))
 
 	testutil.Assert(t, len(data.Data.Groups) == expectedRulegroupCount, fmt.Sprintf("expected there to be %d rule groups", expectedRulegroupCount))
 }
