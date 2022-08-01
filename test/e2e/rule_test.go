@@ -161,27 +161,56 @@ func reloadRulesSignal(t *testing.T, r e2e.InstrumentedRunnable) {
 
 func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, expectedRulegroupCount int) {
 	var data = rulesResp{}
+	errCount := 0
+
 	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
 		req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
-		testutil.Ok(t, err)
+		if err != nil {
+			errCount++
+			return err
+		}
+
 		resp, err := http.DefaultClient.Do(req)
-		testutil.Ok(t, err)
-		testutil.Equals(t, 200, resp.StatusCode)
+		if err != nil {
+			errCount++
+			return err
+		}
 
-		body, _ := ioutil.ReadAll(resp.Body)
-		testutil.Ok(t, resp.Body.Close())
+		if resp.StatusCode != 200 {
+			errCount++
+			return errors.Errorf("statuscode is not 200, got %d", resp.StatusCode)
+		}
 
-		testutil.Ok(t, json.Unmarshal(body, &data))
-		testutil.Equals(t, "success", data.Status)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			errCount++
+			return errors.Wrap(err, "error reading body")
+		}
 
-		// Retry until count matches.
+		if err := resp.Body.Close(); err != nil {
+			errCount++
+			return err
+		}
+
+		if err := json.Unmarshal(body, &data); err != nil {
+			errCount++
+			return errors.Wrap(err, "error unmarshaling body")
+		}
+
+		if data.Status != "success" {
+			errCount++
+			return errors.Errorf("response status is not success, got %s", data.Status)
+		}
+
 		if len(data.Data.Groups) == expectedRulegroupCount {
 			return nil
 		}
-		return errors.New("different number of rulegroups")
+
+		errCount++
+		return errors.Errorf("different number of rulegroups: expected %d, got %d", expectedRulegroupCount, len(data.Data.Groups))
 	}))
 
-	testutil.Assert(t, len(data.Data.Groups) == expectedRulegroupCount, fmt.Sprintf("expected there to be %d rule groups", expectedRulegroupCount))
+	testutil.Assert(t, len(data.Data.Groups) == expectedRulegroupCount, fmt.Sprintf("expected there to be %d rule groups but got %d. encountered %d errors", expectedRulegroupCount, len(data.Data.Groups), errCount))
 }
 
 func rulegroupCorrectData(t *testing.T, ctx context.Context, endpoint string) {
