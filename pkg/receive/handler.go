@@ -115,19 +115,10 @@ type Options struct {
 	WriteRequestConcurrencyLimit int
 }
 
-// activeSeriesLimit implements active series limiting for web Handler.
-type activeSeriesLimit struct {
-	mtx                    sync.Mutex
-	limit                  uint64
-	tenantCurrentSeriesMap map[string]float64
-
-	metaMonitoringURL    *url.URL
-	metaMonitoringClient *http.Client
-	metaMonitoringQuery  string
-
-	configuredTenantLimit prometheus.Gauge
-	limitedRequests       *prometheus.CounterVec
-	metaMonitoringErr     prometheus.Counter
+// activeSeriesLimiter encompasses active series limiting logic.
+type activeSeriesLimiter interface {
+	QueryMetaMonitoring(context.Context, log.Logger) error
+	isUnderLimit(string, log.Logger) (bool, error)
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -144,7 +135,7 @@ type Handler struct {
 	expBackoff        backoff.Backoff
 	peerStates        map[string]*retryState
 	receiverMode      ReceiverMode
-	ActiveSeriesLimit *activeSeriesLimit
+	ActiveSeriesLimit activeSeriesLimiter
 
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
@@ -205,29 +196,6 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help: "The number of times to replicate incoming write requests.",
 			},
 		),
-		ActiveSeriesLimit: &activeSeriesLimit{
-			limit:               o.MaxPerTenantLimit,
-			metaMonitoringURL:   o.MetaMonitoringUrl,
-			metaMonitoringQuery: o.MetaMonitoringLimitQuery,
-			configuredTenantLimit: promauto.With(registerer).NewGauge(
-				prometheus.GaugeOpts{
-					Name: "thanos_receive_tenant_head_series_limit",
-					Help: "The configured limit for active (head) series of tenants.",
-				},
-			),
-			limitedRequests: promauto.With(registerer).NewCounterVec(
-				prometheus.CounterOpts{
-					Name: "thanos_receive_head_series_limited_requests_total",
-					Help: "The total number of remote write requests that have been dropped due to active series limiting.",
-				}, []string{"tenant"},
-			),
-			metaMonitoringErr: promauto.With(registerer).NewCounter(
-				prometheus.CounterOpts{
-					Name: "thanos_receive_metamonitoring_failed_queries_total",
-					Help: "The total number of meta-monitoring queries that failed while limiting.",
-				},
-			),
-		},
 		writeTimeseriesTotal: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: "thanos",
@@ -266,25 +234,9 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		h.replicationFactor.Set(1)
 	}
 
-	h.ActiveSeriesLimit.configuredTenantLimit.Set(float64(o.MaxPerTenantLimit))
-	h.ActiveSeriesLimit.tenantCurrentSeriesMap = map[string]float64{}
-
-	if (h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor) && h.options.MaxPerTenantLimit != 0 {
-		// Use specified HTTPConfig to make requests to meta-monitoring.
-		httpConfContentYaml, err := h.options.MetaMonitoringHttpClient.Content()
-		if err != nil {
-			level.Error(h.logger).Log("msg", "getting http client config", "err", err.Error())
-		}
-
-		httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
-		if err != nil {
-			level.Error(h.logger).Log("msg", "parsing http config YAML", "err", err.Error())
-		}
-
-		h.ActiveSeriesLimit.metaMonitoringClient, err = httpconfig.NewHTTPClient(*httpClientConfig, "meta-mon-for-limit")
-		if err != nil {
-			level.Error(h.logger).Log("msg", "improper http client config", "err", err.Error())
-		}
+	h.ActiveSeriesLimit = NewNopSeriesLimit()
+	if (h.receiverMode == RouterOnly || h.receiverMode == RouterIngestor) && o.MaxPerTenantLimit != 0 {
+		h.ActiveSeriesLimit = NewActiveSeriesLimit(h.options, registerer, h.receiverMode, logger)
 	}
 
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
@@ -616,12 +568,72 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
 }
 
+// activeSeriesLimit implements activeSeriesLimiter interface.
+type activeSeriesLimit struct {
+	mtx                    sync.RWMutex
+	limit                  uint64
+	tenantCurrentSeriesMap map[string]float64
+
+	metaMonitoringURL    *url.URL
+	metaMonitoringClient *http.Client
+	metaMonitoringQuery  string
+
+	configuredTenantLimit prometheus.Gauge
+	limitedRequests       *prometheus.CounterVec
+	metaMonitoringErr     prometheus.Counter
+}
+
+func NewActiveSeriesLimit(o *Options, registerer prometheus.Registerer, r ReceiverMode, logger log.Logger) *activeSeriesLimit {
+	limit := &activeSeriesLimit{
+		limit:               o.MaxPerTenantLimit,
+		metaMonitoringURL:   o.MetaMonitoringUrl,
+		metaMonitoringQuery: o.MetaMonitoringLimitQuery,
+		configuredTenantLimit: promauto.With(registerer).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_tenant_head_series_limit",
+				Help: "The configured limit for active (head) series of tenants.",
+			},
+		),
+		limitedRequests: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_head_series_limited_requests_total",
+				Help: "The total number of remote write requests that have been dropped due to active series limiting.",
+			}, []string{"tenant"},
+		),
+		metaMonitoringErr: promauto.With(registerer).NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_metamonitoring_failed_queries_total",
+				Help: "The total number of meta-monitoring queries that failed while limiting.",
+			},
+		),
+	}
+
+	limit.configuredTenantLimit.Set(float64(o.MaxPerTenantLimit))
+	limit.tenantCurrentSeriesMap = map[string]float64{}
+
+	// Use specified HTTPConfig to make requests to meta-monitoring.
+	httpConfContentYaml, err := o.MetaMonitoringHttpClient.Content()
+	if err != nil {
+		level.Error(logger).Log("msg", "getting http client config", "err", err.Error())
+	}
+
+	httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
+	if err != nil {
+		level.Error(logger).Log("msg", "parsing http config YAML", "err", err.Error())
+	}
+
+	limit.metaMonitoringClient, err = httpconfig.NewHTTPClient(*httpClientConfig, "meta-mon-for-limit")
+	if err != nil {
+		level.Error(logger).Log("msg", "improper http client config", "err", err.Error())
+	}
+
+	return limit
+}
+
 // QueryMetaMonitoring queries any Prometheus Query API compatible meta-monitoring
 // solution with the configured query for getting current active (head) series of all tenants.
 // It then populates tenantCurrentSeries map with result.
 func (a *activeSeriesLimit) QueryMetaMonitoring(ctx context.Context, logger log.Logger) error {
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
 	c := promclient.NewWithTracingClient(logger, a.metaMonitoringClient, httpconfig.ThanosUserAgent)
 
 	vectorRes, _, err := c.QueryInstant(ctx, a.metaMonitoringURL, a.metaMonitoringQuery, time.Now(), promclient.QueryOptions{})
@@ -632,6 +644,8 @@ func (a *activeSeriesLimit) QueryMetaMonitoring(ctx context.Context, logger log.
 
 	level.Debug(logger).Log("msg", "successfully queried meta-monitoring", "vectors", len(vectorRes))
 
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
 	// Construct map of tenant name and current HEAD series.
 	for _, e := range vectorRes {
 		for k, v := range e.Metric {
@@ -649,8 +663,8 @@ func (a *activeSeriesLimit) QueryMetaMonitoring(ctx context.Context, logger log.
 // It does so in a best-effort way, i.e, in case meta-monitoring is unreachable, it does not impose limits.
 // TODO(saswatamcode): Add capability to configure different limits for different tenants.
 func (a *activeSeriesLimit) isUnderLimit(tenant string, logger log.Logger) (bool, error) {
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
+	a.mtx.RLock()
+	defer a.mtx.RUnlock()
 	if a.limit == 0 || a.metaMonitoringURL.Host == "" {
 		return true, nil
 	}
@@ -671,6 +685,21 @@ func (a *activeSeriesLimit) isUnderLimit(tenant string, logger log.Logger) (bool
 		return false, nil
 	}
 
+	return true, nil
+}
+
+// nopSeriesLimit implements activeSeriesLimiter interface as no-op.
+type nopSeriesLimit struct{}
+
+func NewNopSeriesLimit() *nopSeriesLimit {
+	return &nopSeriesLimit{}
+}
+
+func (a *nopSeriesLimit) QueryMetaMonitoring(_ context.Context, _ log.Logger) error {
+	return nil
+}
+
+func (a *nopSeriesLimit) isUnderLimit(_ string, _ log.Logger) (bool, error) {
 	return true, nil
 }
 

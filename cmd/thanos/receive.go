@@ -302,7 +302,8 @@ func runReceive(
 		)
 	}
 
-	if (receiveMode == receive.RouterOnly || receiveMode == receive.RouterIngestor) && conf.maxPerTenantLimit != 0 {
+	seriesLimitSupported := receiveMode == receive.RouterOnly || receiveMode == receive.RouterIngestor
+	if seriesLimitSupported && conf.maxPerTenantLimit != 0 {
 		level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
 		{
 			ctx, cancel := context.WithCancel(context.Background())
