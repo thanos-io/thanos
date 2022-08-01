@@ -80,8 +80,10 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 		exemplars []*exemplarspb.ExemplarData
 	)
 
+	queryParts := make([]string, 0)
+	labelMatchers := make([]string, 0)
 	for _, st := range s.exemplars() {
-		var queryParts []string
+		queryParts = queryParts[:0]
 
 	Matchers:
 		for _, matchers := range selectors {
@@ -102,12 +104,12 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 				}
 			}
 
-			matchers := make([]string, 0, len(matcherSet))
+			labelMatchers = labelMatchers[:0]
 			for m := range matcherSet {
-				matchers = append(matchers, m)
+				labelMatchers = append(labelMatchers, m)
 			}
 
-			queryParts = append(queryParts, "{"+strings.Join(matchers, ", ")+"}")
+			queryParts = append(queryParts, "{"+strings.Join(labelMatchers, ", ")+"}")
 		}
 
 		// No matchers match this store.
