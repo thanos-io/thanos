@@ -37,9 +37,10 @@ type testClient struct {
 	// Just to pass interface check.
 	storepb.StoreClient
 
-	labelSets []labels.Labels
-	minTime   int64
-	maxTime   int64
+	labelSets        []labels.Labels
+	minTime          int64
+	maxTime          int64
+	supportsSharding bool
 }
 
 func (c testClient) LabelSets() []labels.Labels {
@@ -48,6 +49,10 @@ func (c testClient) LabelSets() []labels.Labels {
 
 func (c testClient) TimeRange() (int64, int64) {
 	return c.minTime, c.maxTime
+}
+
+func (c testClient) SupportsSharding() bool {
+	return c.supportsSharding
 }
 
 func (c testClient) String() string {
@@ -467,6 +472,44 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 			storeDebugMatchers:  [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "foo")}},
 			expectedWarningsLen: 1, // No stores match.
+		},
+		{
+			title: "sharded series response",
+			storeAPIs: []Client{
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						},
+					},
+					minTime:   1,
+					maxTime:   300,
+					labelSets: []labels.Labels{labels.FromStrings("ext", "1")},
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:  1,
+				MaxTime:  300,
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				ShardInfo: &storepb.ShardInfo{
+					ShardIndex:  0,
+					TotalShards: 2,
+					By:          true,
+					Labels:      []string{"a"},
+				},
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset:   labels.FromStrings("a", "a"),
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
+				},
+				{
+					lset:   labels.FromStrings("a", "b"),
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
+				},
+			},
 		},
 	} {
 
