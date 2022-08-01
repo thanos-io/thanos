@@ -16,11 +16,11 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
-	"github.com/pkg/errors"
 	common_cfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -178,13 +178,13 @@ func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, e
 
 		if resp.StatusCode != 200 {
 			errCount++
-			return errors.Errorf("statuscode is not 200, got %d", resp.StatusCode)
+			return errors.Newf("statuscode is not 200, got %d", resp.StatusCode)
 		}
 
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			errCount++
-			return errors.Wrap(err, "error reading body")
+			return errors.Wrapf(err, "error reading body")
 		}
 
 		if err := resp.Body.Close(); err != nil {
@@ -194,12 +194,12 @@ func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, e
 
 		if err := json.Unmarshal(body, &data); err != nil {
 			errCount++
-			return errors.Wrap(err, "error unmarshaling body")
+			return errors.Wrapf(err, "error unmarshaling body")
 		}
 
 		if data.Status != "success" {
 			errCount++
-			return errors.Errorf("response status is not success, got %s", data.Status)
+			return errors.Newf("response status is not success, got %s", data.Status)
 		}
 
 		if len(data.Data.Groups) == expectedRulegroupCount {
@@ -207,7 +207,7 @@ func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, e
 		}
 
 		errCount++
-		return errors.Errorf("different number of rulegroups: expected %d, got %d", expectedRulegroupCount, len(data.Data.Groups))
+		return errors.Newf("different number of rulegroups: expected %d, got %d", expectedRulegroupCount, len(data.Data.Groups))
 	}))
 
 	testutil.Assert(t, len(data.Data.Groups) == expectedRulegroupCount, fmt.Sprintf("expected there to be %d rule groups but got %d. encountered %d errors", expectedRulegroupCount, len(data.Data.Groups), errCount))
