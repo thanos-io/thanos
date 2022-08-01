@@ -160,7 +160,7 @@ func reloadRulesSignal(t *testing.T, r e2e.InstrumentedRunnable) {
 }
 
 func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, expectedRulegroupCount int) {
-	var data = rulesResp{}
+	data := rulesResp{}
 	errCount := 0
 
 	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
