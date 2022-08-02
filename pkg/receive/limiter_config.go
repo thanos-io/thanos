@@ -61,9 +61,10 @@ func newEmptyRequestLimitsConfig() *requestLimitsConfig {
 	return &requestLimitsConfig{}
 }
 
-// MergeWith merges the current configuration with another one on limits that
-// are not set (have a nil value).
-func (rl *requestLimitsConfig) MergeWith(other *requestLimitsConfig) *requestLimitsConfig {
+// OverlayWith overlays the current configuration with another one. This means
+// that limit values that are not set (have a nil value) will be overwritten in
+// the caller.
+func (rl *requestLimitsConfig) OverlayWith(other *requestLimitsConfig) *requestLimitsConfig {
 	if rl.SamplesLimit == nil {
 		rl.SamplesLimit = other.SamplesLimit
 	}

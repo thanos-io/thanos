@@ -26,7 +26,7 @@ type configRequestLimiter struct {
 func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *writeLimitsConfig) *configRequestLimiter {
 	// Merge the default limits configuration with an unlimited configuration
 	// to ensure the nils are overwritten with zeroes.
-	defaultRequestLimits := writeLimits.DefaultLimits.RequestLimits.MergeWith(unlimitedRequestLimitsConfig)
+	defaultRequestLimits := writeLimits.DefaultLimits.RequestLimits.OverlayWith(unlimitedRequestLimitsConfig)
 
 	// Load up the request limits into a map with the tenant name as key and
 	// merge with the defaults to provide easy and fast access when checking
@@ -36,7 +36,7 @@ func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *writeLimits
 	tenantsLimits := writeLimits.TenantsLimits
 	tenantRequestLimits := make(map[string]*requestLimitsConfig)
 	for tenant, limitConfig := range tenantsLimits {
-		tenantRequestLimits[tenant] = limitConfig.RequestLimits.MergeWith(defaultRequestLimits)
+		tenantRequestLimits[tenant] = limitConfig.RequestLimits.OverlayWith(defaultRequestLimits)
 	}
 
 	limiter := configRequestLimiter{
