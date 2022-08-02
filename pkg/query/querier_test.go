@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"reflect"
@@ -678,7 +677,7 @@ func testSelectResponse(t *testing.T, expected []series, res storage.SeriesSet) 
 }
 
 func jsonToSeries(t *testing.T, filename string) []series {
-	file, err := ioutil.ReadFile(filename)
+	file, err := os.ReadFile(filename)
 	testutil.Ok(t, err)
 
 	data := Response{}

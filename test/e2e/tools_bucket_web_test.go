@@ -6,7 +6,7 @@ package e2e_test
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -234,7 +234,7 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 			return errors.Newf("statuscode is not 200, got %d", resp.StatusCode)
 		}
 
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return errors.Wrapf(err, "error reading body")
 		}

@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -333,7 +332,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	}
 
 	for _, fn := range files {
-		b, err := ioutil.ReadFile(filepath.Clean(fn))
+		b, err := os.ReadFile(filepath.Clean(fn))
 		if err != nil {
 			errs.Add(err)
 			continue
@@ -365,7 +364,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 				errs.Add(errors.Wrapf(err, "create %s", filepath.Dir(newFn)))
 				continue
 			}
-			if err := ioutil.WriteFile(newFn, b, os.ModePerm); err != nil {
+			if err := os.WriteFile(newFn, b, os.ModePerm); err != nil {
 				errs.Add(errors.Wrapf(err, "write file %v", newFn))
 				continue
 			}

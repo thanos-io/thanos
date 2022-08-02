@@ -59,7 +59,6 @@ import (
 	"crypto/sha256"
 	"hash"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -280,7 +279,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		}
 		cfgHash = h.Sum(nil)
 		if r.cfgOutputFile != "" {
-			b, err := ioutil.ReadFile(r.cfgFile)
+			b, err := os.ReadFile(r.cfgFile)
 			if err != nil {
 				return errors.Wrap(err, "read file")
 			}
@@ -293,7 +292,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 				}
 				defer runutil.CloseWithLogOnErr(r.logger, zr, "gzip reader close")
 
-				b, err = ioutil.ReadAll(zr)
+				b, err = io.ReadAll(zr)
 				if err != nil {
 					return errors.Wrap(err, "read compressed config file")
 				}
@@ -308,7 +307,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			defer func() {
 				_ = os.Remove(tmpFile)
 			}()
-			if err := ioutil.WriteFile(tmpFile, b, 0644); err != nil {
+			if err := os.WriteFile(tmpFile, b, 0644); err != nil {
 				return errors.Wrap(err, "write file")
 			}
 			if err := os.Rename(tmpFile, r.cfgOutputFile); err != nil {

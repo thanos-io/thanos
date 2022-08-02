@@ -5,7 +5,7 @@ package labelpb
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"reflect"
 	"sort"
 	"strings"
@@ -127,7 +127,7 @@ func testInjectExtLabels(tb testutil.TB) {
 			), x)
 		}
 	}
-	fmt.Fprint(ioutil.Discard, x)
+	fmt.Fprint(io.Discard, x)
 }
 
 var (
