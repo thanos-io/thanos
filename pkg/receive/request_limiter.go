@@ -70,7 +70,7 @@ func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *writeLimits
 
 func (l *configRequestLimiter) AllowSizeBytes(tenant string, contentLengthBytes int64) bool {
 	limit := l.limitsFor(tenant).SizeBytesLimit
-	if l.unlimitedLimitValue(limit) {
+	if *limit <= 0 {
 		return true
 	}
 
@@ -85,7 +85,7 @@ func (l *configRequestLimiter) AllowSizeBytes(tenant string, contentLengthBytes 
 
 func (l *configRequestLimiter) AllowSeries(tenant string, amount int64) bool {
 	limit := l.limitsFor(tenant).SeriesLimit
-	if l.unlimitedLimitValue(limit) {
+	if *limit <= 0 {
 		return true
 	}
 
@@ -100,7 +100,7 @@ func (l *configRequestLimiter) AllowSeries(tenant string, amount int64) bool {
 
 func (l *configRequestLimiter) AllowSamples(tenant string, amount int64) bool {
 	limit := l.limitsFor(tenant).SamplesLimit
-	if l.unlimitedLimitValue(limit) {
+	if *limit <= 0 {
 		return true
 	}
 	allowed := *limit >= amount
@@ -110,13 +110,6 @@ func (l *configRequestLimiter) AllowSamples(tenant string, amount int64) bool {
 			Observe(float64(amount - *limit))
 	}
 	return allowed
-}
-
-func (l *configRequestLimiter) unlimitedLimitValue(value *int64) bool {
-	// The nil check is here for safety purposes, although it should never
-	// happen because of the default configuration is completely zeroed and
-	// overlayed on the tenant config.
-	return value == nil || *value <= 0
 }
 
 func (l *configRequestLimiter) limitsFor(tenant string) *requestLimitsConfig {
