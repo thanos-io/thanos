@@ -101,9 +101,7 @@ type Options struct {
 	ForwardTimeout               time.Duration
 	RelabelConfigs               []*relabel.Config
 	TSDBStats                    TSDBStats
-	WriteSeriesLimit             int64
-	WriteSamplesLimit            int64
-	WriteRequestSizeLimit        int64
+	LimitsConfig                 *RootLimitsConfig
 	WriteRequestConcurrencyLimit int
 }
 
@@ -129,8 +127,8 @@ type Handler struct {
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
 
-	writeGate      gate.Gate
-	requestLimiter requestLimiter
+	writeGate gate.Gate
+	limiter   *limiter
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -156,13 +154,8 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
+		limiter:   newLimiter(o.LimitsConfig, registerer),
 		writeGate: gate.NewNoop(),
-		requestLimiter: newRequestLimiter(
-			o.WriteRequestSizeLimit,
-			o.WriteSeriesLimit,
-			o.WriteSamplesLimit,
-			registerer,
-		),
 		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -428,14 +421,15 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	defer h.writeGate.Done()
+
+	requestLimiter := h.limiter.requestLimiter
 
 	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}
 	if r.ContentLength >= 0 {
-		if !h.requestLimiter.AllowSizeBytes(tenant, r.ContentLength) {
+		if !requestLimiter.AllowSizeBytes(tenant, r.ContentLength) {
 			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
 			return
 		}
@@ -455,7 +449,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requestLimiter.AllowSizeBytes(tenant, int64(len(reqBuf))) {
+	if !requestLimiter.AllowSizeBytes(tenant, int64(len(reqBuf))) {
 		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -491,7 +485,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requestLimiter.AllowSeries(tenant, int64(len(wreq.Timeseries))) {
+	if !requestLimiter.AllowSeries(tenant, int64(len(wreq.Timeseries))) {
 		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -500,7 +494,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, timeseries := range wreq.Timeseries {
 		totalSamples += len(timeseries.Samples)
 	}
-	if !h.requestLimiter.AllowSamples(tenant, int64(totalSamples)) {
+	if !requestLimiter.AllowSamples(tenant, int64(totalSamples)) {
 		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
 		return
 	}

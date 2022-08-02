@@ -1,0 +1,21 @@
+write:
+  global:
+    max_concurrency: 30
+  default:
+    request:
+      size_bytes_limit: 1024
+      series_limit: 1000
+      samples_limit: 10
+    # head_series: 100 # Integrating with head series limit
+  tenants:
+    cool_tenant:
+      request:
+        size_bytes_limit: 0 # `0`` means unlimited
+        series_limit: 0
+        samples_limit: 0
+      # head_series: 2000
+    another_tenant:
+      request: # Missing value for size_bytes_limit should mean inherit from default.
+        series_limit: 50000
+        samples_limit: 500
+      # head_series: 2000
