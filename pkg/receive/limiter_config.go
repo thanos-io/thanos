@@ -25,7 +25,7 @@ type writeLimitsConfig struct {
 	GlobalLimits globalLimitsConfig `yaml:"global"`
 	// DefaultLimits are the default limits for tenants without specified limits.
 	DefaultLimits defaultLimitsConfig `yaml:"default"`
-	// TenantsLimits are the limits per tenant..
+	// TenantsLimits are the limits per tenant.
 	TenantsLimits tenantsWriteLimitsConfig `yaml:"tenants"`
 }
 
@@ -36,7 +36,7 @@ type globalLimitsConfig struct {
 
 type defaultLimitsConfig struct {
 	// RequestLimits holds the difficult per-request limits.
-	RequestLimits defaultRequestLimitsConfig `yaml:"request"`
+	RequestLimits requestLimitsConfig `yaml:"request"`
 	// HeadSeriesConfig *headSeriesLimiter `yaml:"head_series"`
 }
 
@@ -56,25 +56,21 @@ type requestLimitsConfig struct {
 	SamplesLimit   *int64 `yaml:"samples_limit"`
 }
 
-type defaultRequestLimitsConfig struct {
-	SizeBytesLimit int64 `yaml:"size_bytes_limit"`
-	SeriesLimit    int64 `yaml:"series_limit"`
-	SamplesLimit   int64 `yaml:"samples_limit"`
-}
-
 func newEmptyRequestLimitsConfig() *requestLimitsConfig {
 	return &requestLimitsConfig{}
 }
 
-func (rl *requestLimitsConfig) MergeWithDefaults(defaults defaultRequestLimitsConfig) *requestLimitsConfig {
+// MergeWith merges the current configuration with another one on limits that
+// are not set (have a nil value).
+func (rl *requestLimitsConfig) MergeWith(other *requestLimitsConfig) *requestLimitsConfig {
 	if rl.SamplesLimit == nil {
-		rl.SamplesLimit = &defaults.SamplesLimit
+		rl.SamplesLimit = other.SamplesLimit
 	}
 	if rl.SeriesLimit == nil {
-		rl.SeriesLimit = &defaults.SeriesLimit
+		rl.SeriesLimit = other.SeriesLimit
 	}
 	if rl.SizeBytesLimit == nil {
-		rl.SizeBytesLimit = &defaults.SizeBytesLimit
+		rl.SizeBytesLimit = other.SizeBytesLimit
 	}
 	return rl
 }

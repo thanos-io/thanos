@@ -11,6 +11,11 @@ const (
 	sizeBytesLimitName = "body_size"
 )
 
+var unlimitedRequestLimitsConfig = newEmptyRequestLimitsConfig().
+	SetSizeBytesLimits(0).
+	SetSeriesLimits(0).
+	SetSamplesLimits(0)
+
 type configRequestLimiter struct {
 	tenantLimits        map[string]*requestLimitsConfig
 	cachedDefaultLimits *requestLimitsConfig
@@ -19,17 +24,25 @@ type configRequestLimiter struct {
 }
 
 func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *writeLimitsConfig) *configRequestLimiter {
-	defaultRequestLimits := writeLimits.DefaultLimits.RequestLimits
-	tenantLimits := writeLimits.TenantsLimits
-	requestLimits := make(map[string]*requestLimitsConfig)
-	for tenant, limitConfig := range tenantLimits {
-		requestLimits[tenant] = limitConfig.RequestLimits.MergeWithDefaults(defaultRequestLimits)
-	}
-	limiter := configRequestLimiter{
-		tenantLimits:        requestLimits,
-		cachedDefaultLimits: newEmptyRequestLimitsConfig().MergeWithDefaults(defaultRequestLimits),
+	// Merge the default limits configuration with an unlimited configuration
+	// to ensure the nils are overwritten with zeroes.
+	defaultRequestLimits := writeLimits.DefaultLimits.RequestLimits.MergeWith(unlimitedRequestLimitsConfig)
+
+	// Load up the request limits into a map with the tenant name as key and
+	// merge with the defaults to provide easy and fast access when checking
+	// limits.
+	// The merge with the default happen because a tenant limit that isn't
+	// present means the value is inherited from the default configuration.
+	tenantsLimits := writeLimits.TenantsLimits
+	tenantRequestLimits := make(map[string]*requestLimitsConfig)
+	for tenant, limitConfig := range tenantsLimits {
+		tenantRequestLimits[tenant] = limitConfig.RequestLimits.MergeWith(defaultRequestLimits)
 	}
 
+	limiter := configRequestLimiter{
+		tenantLimits:        tenantRequestLimits,
+		cachedDefaultLimits: defaultRequestLimits,
+	}
 	limiter.limitsHit = promauto.With(reg).NewSummaryVec(
 		prometheus.SummaryOpts{
 			Namespace:  "thanos",
@@ -47,7 +60,7 @@ func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *writeLimits
 			Help:      "The configured write limits.",
 		}, []string{"tenant", "limit"},
 	)
-	for tenant, limits := range requestLimits {
+	for tenant, limits := range tenantRequestLimits {
 		limiter.configuredLimits.WithLabelValues(tenant, sizeBytesLimitName).Set(float64(*limits.SizeBytesLimit))
 		limiter.configuredLimits.WithLabelValues(tenant, seriesLimitName).Set(float64(*limits.SeriesLimit))
 		limiter.configuredLimits.WithLabelValues(tenant, samplesLimitName).Set(float64(*limits.SamplesLimit))
@@ -56,61 +69,62 @@ func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *writeLimits
 }
 
 func (l *configRequestLimiter) AllowSizeBytes(tenant string, contentLengthBytes int64) bool {
-	limits := l.limitsFor(tenant)
-
-	if limits.SizeBytesLimit == nil || *limits.SizeBytesLimit <= 0 {
+	limit := l.limitsFor(tenant).SizeBytesLimit
+	if l.unlimitedLimitValue(limit) {
 		return true
 	}
 
-	// This happens when the content length is unknown, then we allow it.
-	if contentLengthBytes < 0 {
-		return true
-	}
-	allowed := *limits.SizeBytesLimit >= contentLengthBytes
+	allowed := *limit >= contentLengthBytes
 	if !allowed {
 		l.limitsHit.
 			WithLabelValues(tenant, sizeBytesLimitName).
-			Observe(float64(contentLengthBytes - *limits.SizeBytesLimit))
+			Observe(float64(contentLengthBytes - *limit))
 	}
 	return allowed
 }
 
 func (l *configRequestLimiter) AllowSeries(tenant string, amount int64) bool {
-	limits := l.limitsFor(tenant)
-
-	if limits.SeriesLimit == nil || *limits.SeriesLimit <= 0 {
+	limit := l.limitsFor(tenant).SeriesLimit
+	if l.unlimitedLimitValue(limit) {
 		return true
 	}
-	allowed := *limits.SeriesLimit >= amount
+
+	allowed := *limit >= amount
 	if !allowed {
 		l.limitsHit.
 			WithLabelValues(tenant, seriesLimitName).
-			Observe(float64(amount - *limits.SeriesLimit))
+			Observe(float64(amount - *limit))
 	}
 	return allowed
 }
 
 func (l *configRequestLimiter) AllowSamples(tenant string, amount int64) bool {
-	limits := l.limitsFor(tenant)
-
-	if limits.SamplesLimit == nil || *limits.SamplesLimit <= 0 {
+	limit := l.limitsFor(tenant).SamplesLimit
+	if l.unlimitedLimitValue(limit) {
 		return true
 	}
-	allowed := *limits.SamplesLimit >= amount
+	allowed := *limit >= amount
 	if !allowed {
 		l.limitsHit.
 			WithLabelValues(tenant, samplesLimitName).
-			Observe(float64(amount - *limits.SamplesLimit))
+			Observe(float64(amount - *limit))
 	}
 	return allowed
 }
 
-func (l *configRequestLimiter) limitsFor(tenant string) requestLimitsConfig {
+func (l *configRequestLimiter) unlimitedLimitValue(value *int64) bool {
+	// The nil check is here for safety purposes, although it should never
+	// happen because of the default configuration is completely zeroed and
+	// overlayed on the tenant config.
+	return value == nil || *value <= 0
+}
+
+func (l *configRequestLimiter) limitsFor(tenant string) *requestLimitsConfig {
 	limits, ok := l.tenantLimits[tenant]
 	if !ok {
 		limits = l.cachedDefaultLimits
 	}
-	return *limits
+	return limits
 }
 
 type noopRequestLimiter struct{}

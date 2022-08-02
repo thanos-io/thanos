@@ -23,11 +23,10 @@ func TestParseLimiterConfig(t *testing.T) {
 				WriteLimits: writeLimitsConfig{
 					GlobalLimits: globalLimitsConfig{MaxConcurrency: 30},
 					DefaultLimits: defaultLimitsConfig{
-						RequestLimits: defaultRequestLimitsConfig{
-							SizeBytesLimit: 1024,
-							SeriesLimit:    1000,
-							SamplesLimit:   10,
-						},
+						RequestLimits: *newEmptyRequestLimitsConfig().
+							SetSizeBytesLimits(1024).
+							SetSeriesLimits(1000).
+							SetSamplesLimits(10),
 					},
 					TenantsLimits: tenantsWriteLimitsConfig{
 						"cool_tenant": &writeLimitConfig{
