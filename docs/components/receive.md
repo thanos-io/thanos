@@ -115,7 +115,7 @@ The available request gates in Thanos Receive can be configured with the followi
 
 By default all gates are disabled.
 
-## Active Series Limiting
+## Active Series Limiting (experimental)
 
 Thanos Receive, in Router or RouterIngestor mode, supports limiting tenant active (head) series to maintain the system's stability. It uses any Prometheus Query API compatible meta-monitoring solution that consumes the metrics exposed by all receivers in the Thanos system. Such query endpoint allows getting the scrape time seconds old number of all active series per tenant, which is then compared with a configured limit before ingesting any tenant's remote write request. In case a tenant has gone above the limit, their remote write requests fail fully.
 
