@@ -12,9 +12,9 @@ const (
 )
 
 var unlimitedRequestLimitsConfig = newEmptyRequestLimitsConfig().
-	SetSizeBytesLimits(0).
-	SetSeriesLimits(0).
-	SetSamplesLimits(0)
+	SetSizeBytesLimit(0).
+	SetSeriesLimit(0).
+	SetSamplesLimit(0)
 
 type configRequestLimiter struct {
 	tenantLimits        map[string]*requestLimitsConfig

@@ -75,17 +75,17 @@ func (rl *requestLimitsConfig) MergeWith(other *requestLimitsConfig) *requestLim
 	return rl
 }
 
-func (rl *requestLimitsConfig) SetSizeBytesLimits(value int64) *requestLimitsConfig {
+func (rl *requestLimitsConfig) SetSizeBytesLimit(value int64) *requestLimitsConfig {
 	rl.SizeBytesLimit = &value
 	return rl
 }
 
-func (rl *requestLimitsConfig) SetSeriesLimits(value int64) *requestLimitsConfig {
+func (rl *requestLimitsConfig) SetSeriesLimit(value int64) *requestLimitsConfig {
 	rl.SeriesLimit = &value
 	return rl
 }
 
-func (rl *requestLimitsConfig) SetSamplesLimits(value int64) *requestLimitsConfig {
+func (rl *requestLimitsConfig) SetSamplesLimit(value int64) *requestLimitsConfig {
 	rl.SamplesLimit = &value
 	return rl
 }

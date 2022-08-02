@@ -16,12 +16,12 @@ func TestRequestLimiter_limitsFor(t *testing.T) {
 	limits := writeLimitsConfig{
 		DefaultLimits: defaultLimitsConfig{
 			RequestLimits: *newEmptyRequestLimitsConfig().
-				SetSeriesLimits(10),
+				SetSeriesLimit(10),
 		},
 		TenantsLimits: tenantsWriteLimitsConfig{
 			tenantWithLimits: &writeLimitConfig{
 				RequestLimits: newEmptyRequestLimitsConfig().
-					SetSeriesLimits(30),
+					SetSeriesLimit(30),
 			},
 		},
 	}
@@ -34,17 +34,17 @@ func TestRequestLimiter_limitsFor(t *testing.T) {
 			name:   "Gets the default limits when tenant's limits aren't present",
 			tenant: tenantWithoutLimits,
 			wantLimits: newEmptyRequestLimitsConfig().
-				SetSeriesLimits(10).
-				SetSamplesLimits(0).
-				SetSizeBytesLimits(0),
+				SetSeriesLimit(10).
+				SetSamplesLimit(0).
+				SetSizeBytesLimit(0),
 		},
 		{
 			name:   "Gets the tenant's limits when it is present",
 			tenant: tenantWithLimits,
 			wantLimits: newEmptyRequestLimitsConfig().
-				SetSeriesLimits(30).
-				SetSamplesLimits(0).
-				SetSizeBytesLimits(0),
+				SetSeriesLimit(30).
+				SetSamplesLimit(0).
+				SetSizeBytesLimit(0),
 		},
 	}
 
@@ -102,11 +102,11 @@ func TestRequestLimiter_AllowRequestBodySizeBytes(t *testing.T) {
 			tenant := "tenant"
 			limits := writeLimitsConfig{
 				DefaultLimits: defaultLimitsConfig{
-					RequestLimits: *newEmptyRequestLimitsConfig().SetSeriesLimits(10),
+					RequestLimits: *newEmptyRequestLimitsConfig().SetSeriesLimit(10),
 				},
 				TenantsLimits: tenantsWriteLimitsConfig{
 					tenant: &writeLimitConfig{
-						RequestLimits: newEmptyRequestLimitsConfig().SetSizeBytesLimits(tt.sizeByteLimit),
+						RequestLimits: newEmptyRequestLimitsConfig().SetSizeBytesLimit(tt.sizeByteLimit),
 					},
 				},
 			}
@@ -159,11 +159,11 @@ func TestRequestLimiter_AllowSeries(t *testing.T) {
 			tenant := "tenant"
 			limits := writeLimitsConfig{
 				DefaultLimits: defaultLimitsConfig{
-					RequestLimits: *newEmptyRequestLimitsConfig().SetSeriesLimits(10),
+					RequestLimits: *newEmptyRequestLimitsConfig().SetSeriesLimit(10),
 				},
 				TenantsLimits: tenantsWriteLimitsConfig{
 					tenant: &writeLimitConfig{
-						RequestLimits: newEmptyRequestLimitsConfig().SetSeriesLimits(tt.seriesLimit),
+						RequestLimits: newEmptyRequestLimitsConfig().SetSeriesLimit(tt.seriesLimit),
 					},
 				},
 			}
@@ -217,11 +217,11 @@ func TestRequestLimiter_AllowSamples(t *testing.T) {
 			tenant := "tenant"
 			limits := writeLimitsConfig{
 				DefaultLimits: defaultLimitsConfig{
-					RequestLimits: *newEmptyRequestLimitsConfig().SetSeriesLimits(10),
+					RequestLimits: *newEmptyRequestLimitsConfig().SetSeriesLimit(10),
 				},
 				TenantsLimits: tenantsWriteLimitsConfig{
 					tenant: &writeLimitConfig{
-						RequestLimits: newEmptyRequestLimitsConfig().SetSamplesLimits(tt.samplesLimit),
+						RequestLimits: newEmptyRequestLimitsConfig().SetSamplesLimit(tt.samplesLimit),
 					},
 				},
 			}

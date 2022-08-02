@@ -752,9 +752,9 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 						TenantsLimits: tenantsWriteLimitsConfig{
 							tenant: &writeLimitConfig{
 								RequestLimits: newEmptyRequestLimitsConfig().
-									SetSizeBytesLimits(int64(1 * units.Megabyte)).
-									SetSeriesLimits(20).
-									SetSamplesLimits(200),
+									SetSizeBytesLimit(int64(1 * units.Megabyte)).
+									SetSeriesLimit(20).
+									SetSamplesLimit(200),
 							},
 						},
 					},
