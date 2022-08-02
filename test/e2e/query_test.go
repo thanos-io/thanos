@@ -892,6 +892,43 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 	return result
 }
 
+func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected model.Vector) {
+	t.Helper()
+
+	fmt.Println("queryWaitAndAssert: Waiting for", len(expected), "results for query", q())
+	var result model.Vector
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+		if err != nil {
+			return err
+		}
+
+		if len(warnings) > 0 {
+			return errors.Errorf("unexpected warnings %s", warnings)
+		}
+
+		if len(res) != len(expected) {
+			return errors.Errorf("unexpected result size, expected %d; result %d: %v", len(expected), len(res), res)
+		}
+		result = res
+		sortResults(result)
+		for _, r := range result {
+			r.Timestamp = 0 // Does not matter for us.
+		}
+
+		// Retry if not expected result
+		if reflect.DeepEqual(expected, result) {
+			return nil
+		}
+		return errors.New("series are different")
+	}))
+
+	testutil.Equals(t, expected, result)
+}
+
 func queryAndAssertSeries(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected []model.Metric) {
 	t.Helper()
 
