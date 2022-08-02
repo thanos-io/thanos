@@ -761,24 +761,24 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
 		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Greater(0), "thanos_compact_iterations_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(18), "thanos_compact_blocks_cleaned_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_block_cleanup_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_blocks_marked_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_vertical_compactions_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_group_compactions_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(7), "thanos_compact_group_compaction_runs_started_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(7), "thanos_compact_group_compaction_runs_completed_total"))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Greater(0), []string{"thanos_compact_iterations_total"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(18), []string{"thanos_compact_blocks_cleaned_total"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(0), []string{"thanos_compact_block_cleanup_failures_total"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(0), []string{"thanos_compact_blocks_marked_total"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(0), []string{"thanos_compact_aborted_partial_uploads_deletion_attempts_total"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(0), []string{"thanos_compact_group_compactions_total"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(0), []string{"thanos_compact_group_vertical_compactions_total"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(0), []string{"thanos_compact_group_compactions_failures_total"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(7), []string{"thanos_compact_group_compaction_runs_started_total"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(7), []string{"thanos_compact_group_compaction_runs_completed_total"}, e2e.WaitMissingMetrics()))
 
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_downsample_failures_total"))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(0), []string{"thanos_compact_downsample_total"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(0), []string{"thanos_compact_downsample_failures_total"}, e2e.WaitMissingMetrics()))
 
-		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(float64(len(rawBlockIDs)+8+6-18-2+2)), "thanos_blocks_meta_synced"))
-		testutil.Ok(t, str.WaitSumMetrics(e2e.Equals(0), "thanos_blocks_meta_sync_failures_total"))
+		testutil.Ok(t, str.WaitSumMetricsWithOptions(e2e.Equals(float64(len(rawBlockIDs)+8+6-18-2+2)), []string{"thanos_blocks_meta_synced"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, str.WaitSumMetricsWithOptions(e2e.Equals(0), []string{"thanos_blocks_meta_sync_failures_total"}, e2e.WaitMissingMetrics()))
 
-		testutil.Ok(t, c.WaitSumMetrics(e2e.Equals(0), "thanos_compact_halted"))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(0), []string{"thanos_compact_halted"}, e2e.WaitMissingMetrics()))
 		// Make sure compactor does not modify anything else over time.
 		testutil.Ok(t, c.Stop())
 
