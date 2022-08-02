@@ -9,7 +9,7 @@ import (
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 )
 
-// ThanosResponseExtractor helps extracting specific info from Query Response.
+// ThanosResponseExtractor helps to extract specific info from Query Response.
 type ThanosResponseExtractor struct{}
 
 // Extract extracts response for specific a range from a response.
