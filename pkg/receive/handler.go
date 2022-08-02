@@ -21,8 +21,6 @@ import (
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
-	"github.com/thanos-io/thanos/pkg/extprom"
-	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -142,8 +140,7 @@ type Handler struct {
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
 
-	writeGate gate.Gate
-	limiter   *limiter
+	limiter *limiter
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -169,8 +166,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
-		limiter:   newLimiter(o.LimitsConfig, registerer),
-		writeGate: gate.NewNoop(),
+		limiter: newLimiter(o.LimitsConfig, registerer),
 		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -207,14 +203,6 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
 		),
-	}
-
-	maxWriteConcurrenty := o.LimitsConfig.WriteLimits.GlobalLimits.MaxConcurrency
-	if maxWriteConcurrenty > 0 {
-		h.writeGate = gate.New(
-			extprom.WrapRegistererWithPrefix("thanos_receive_write_request_concurrent_", registerer),
-			int(maxWriteConcurrenty),
-		)
 	}
 
 	h.forwardRequests.WithLabelValues(labelSuccess)
@@ -435,14 +423,14 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	tLogger := log.With(h.logger, "tenant", tenant)
 
 	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
-		err = h.writeGate.Start(r.Context())
+		err = h.limiter.writeGate.Start(r.Context())
 	})
 	if err != nil {
 		level.Error(tLogger).Log("err", err, "msg", "internal server error")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer h.writeGate.Done()
+	defer h.limiter.writeGate.Done()
 
 	under, err := h.ActiveSeriesLimit.isUnderLimit(tenant, tLogger)
 	if err != nil {

@@ -5,10 +5,13 @@ package receive
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/gate"
 )
 
 type limiter struct {
 	requestLimiter requestLimiter
+	writeGate      gate.Gate
 	// activeSeriesLimiter *activeSeriesLimiter `yaml:"active_series"`
 }
 
@@ -19,16 +22,25 @@ type requestLimiter interface {
 }
 
 func newLimiter(root *RootLimitsConfig, reg prometheus.Registerer) *limiter {
+	limiter := &limiter{
+		writeGate:      gate.NewNoop(),
+		requestLimiter: &noopRequestLimiter{},
+	}
 	if root == nil {
-		return &limiter{
-			requestLimiter: &noopRequestLimiter{},
-		}
+		return limiter
 	}
 
-	return &limiter{
-		requestLimiter: newConfigRequestLimiter(
-			reg,
-			&root.WriteLimits,
-		),
+	maxWriteConcurrency := root.WriteLimits.GlobalLimits.MaxConcurrency
+	if maxWriteConcurrency > 0 {
+		limiter.writeGate = gate.New(
+			extprom.WrapRegistererWithPrefix(
+				"thanos_receive_write_request_concurrent_",
+				reg,
+			),
+			int(maxWriteConcurrency),
+		)
 	}
+	limiter.requestLimiter = newConfigRequestLimiter(reg, &root.WriteLimits)
+
+	return limiter
 }
