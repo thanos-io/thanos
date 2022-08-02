@@ -89,32 +89,28 @@ var (
 
 // Options for the web Handler.
 type Options struct {
-	Writer                       *Writer
-	ListenAddress                string
-	Registry                     *prometheus.Registry
-	TenantHeader                 string
-	TenantField                  string
-	DefaultTenantID              string
-	ReplicaHeader                string
-	Endpoint                     string
-	ReplicationFactor            uint64
-	ReceiverMode                 ReceiverMode
-	Tracer                       opentracing.Tracer
-	TLSConfig                    *tls.Config
-	DialOpts                     []grpc.DialOption
-	ForwardTimeout               time.Duration
-	RelabelConfigs               []*relabel.Config
-	TSDBStats                    TSDBStats
-	LimitsConfig                 *RootLimitsConfig
-	SeriesLimitSupported         bool
-	WriteRequestConcurrencyLimit int
-	MaxPerTenantLimit            uint64
-	MetaMonitoringUrl            *url.URL
-	MetaMonitoringHttpClient     *extflag.PathOrContent
-	MetaMonitoringLimitQuery     string
-	WriteSeriesLimit             int64
-	WriteSamplesLimit            int64
-	WriteRequestSizeLimit        int64
+	Writer                   *Writer
+	ListenAddress            string
+	Registry                 *prometheus.Registry
+	TenantHeader             string
+	TenantField              string
+	DefaultTenantID          string
+	ReplicaHeader            string
+	Endpoint                 string
+	ReplicationFactor        uint64
+	ReceiverMode             ReceiverMode
+	Tracer                   opentracing.Tracer
+	TLSConfig                *tls.Config
+	DialOpts                 []grpc.DialOption
+	ForwardTimeout           time.Duration
+	RelabelConfigs           []*relabel.Config
+	TSDBStats                TSDBStats
+	LimitsConfig             *RootLimitsConfig
+	SeriesLimitSupported     bool
+	MaxPerTenantLimit        uint64
+	MetaMonitoringUrl        *url.URL
+	MetaMonitoringHttpClient *extflag.PathOrContent
+	MetaMonitoringLimitQuery string
 }
 
 // activeSeriesLimiter encompasses active series limiting logic.
@@ -213,12 +209,11 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 	}
 
-	// TODO(douglascamata): get the configuration from the limits file instead.
-	// Then do some cleanup.
-	if o.WriteRequestConcurrencyLimit > 0 {
+	maxWriteConcurrenty := o.LimitsConfig.WriteLimits.GlobalLimits.MaxConcurrency
+	if maxWriteConcurrenty > 0 {
 		h.writeGate = gate.New(
 			extprom.WrapRegistererWithPrefix("thanos_receive_write_request_concurrent_", registerer),
-			o.WriteRequestConcurrencyLimit,
+			int(maxWriteConcurrenty),
 		)
 	}
 

@@ -11,7 +11,8 @@ type RootLimitsConfig struct {
 	WriteLimits writeLimitsConfig `yaml:"write"`
 }
 
-// ParseRootLimitConfig parses the root limit configuration.
+// ParseRootLimitConfig parses the root limit configuration. Even though
+// the result is a pointer, it will only be nil if an error is returned.
 func ParseRootLimitConfig(content []byte) (*RootLimitsConfig, error) {
 	var root RootLimitsConfig
 	if err := yaml.UnmarshalStrict(content, &root); err != nil {

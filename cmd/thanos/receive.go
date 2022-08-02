@@ -214,29 +214,28 @@ func runReceive(
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:                       writer,
-		ListenAddress:                conf.rwAddress,
-		Registry:                     reg,
-		Endpoint:                     conf.endpoint,
-		TenantHeader:                 conf.tenantHeader,
-		TenantField:                  conf.tenantField,
-		DefaultTenantID:              conf.defaultTenantID,
-		ReplicaHeader:                conf.replicaHeader,
-		ReplicationFactor:            conf.replicationFactor,
-		RelabelConfigs:               relabelConfig,
-		ReceiverMode:                 receiveMode,
-		Tracer:                       tracer,
-		TLSConfig:                    rwTLSConfig,
-		DialOpts:                     dialOpts,
-		ForwardTimeout:               time.Duration(*conf.forwardTimeout),
-		TSDBStats:                    dbs,
-		WriteRequestConcurrencyLimit: conf.writeRequestConcurrencyLimit,
-		LimitsConfig:                 limitsConfig,
-		SeriesLimitSupported:         seriesLimitSupported,
-		MaxPerTenantLimit:            conf.maxPerTenantLimit,
-		MetaMonitoringUrl:            conf.metaMonitoringUrl,
-		MetaMonitoringHttpClient:     conf.metaMonitoringHttpClient,
-		MetaMonitoringLimitQuery:     conf.metaMonitoringLimitQuery,
+		Writer:                   writer,
+		ListenAddress:            conf.rwAddress,
+		Registry:                 reg,
+		Endpoint:                 conf.endpoint,
+		TenantHeader:             conf.tenantHeader,
+		TenantField:              conf.tenantField,
+		DefaultTenantID:          conf.defaultTenantID,
+		ReplicaHeader:            conf.replicaHeader,
+		ReplicationFactor:        conf.replicationFactor,
+		RelabelConfigs:           relabelConfig,
+		ReceiverMode:             receiveMode,
+		Tracer:                   tracer,
+		TLSConfig:                rwTLSConfig,
+		DialOpts:                 dialOpts,
+		ForwardTimeout:           time.Duration(*conf.forwardTimeout),
+		TSDBStats:                dbs,
+		LimitsConfig:             limitsConfig,
+		SeriesLimitSupported:     seriesLimitSupported,
+		MaxPerTenantLimit:        conf.maxPerTenantLimit,
+		MetaMonitoringUrl:        conf.metaMonitoringUrl,
+		MetaMonitoringHttpClient: conf.metaMonitoringHttpClient,
+		MetaMonitoringLimitQuery: conf.metaMonitoringLimitQuery,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -810,8 +809,7 @@ type receiveConfig struct {
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
 
-	limitsConfig                 *extflag.PathOrContent
-	writeRequestConcurrencyLimit int
+	limitsConfig *extflag.PathOrContent
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -911,15 +909,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 
-	// TODO(douglascamata): Allow all these limits to be configured per tenant
-	// and move the configuration to a file. Then this is done, remove the
-	// "hidden" modifier on all these flags.
-	rc.limitsConfig = extflag.RegisterPathOrContent(cmd, "receive.limits-config", "YAML file that contains limit configuration.", extflag.WithEnvSubstitution())
-
-	cmd.Flag("receive.write-request-limits.max-concurrency",
-		"The maximum amount of remote write requests that will be concurrently processed while others wait."+
-			"The default is no limit, represented by 0.").
-		Default("0").Hidden().IntVar(&rc.writeRequestConcurrencyLimit)
+	rc.limitsConfig = extflag.RegisterPathOrContent(cmd, "receive.limits-config", "YAML file that contains limit configuration.", extflag.WithEnvSubstitution(), extflag.WithHidden())
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
