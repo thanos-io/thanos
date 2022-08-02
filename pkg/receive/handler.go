@@ -213,6 +213,8 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 	}
 
+	// TODO(douglascamata): get the configuration from the limits file instead.
+	// Then do some cleanup.
 	if o.WriteRequestConcurrencyLimit > 0 {
 		h.writeGate = gate.New(
 			extprom.WrapRegistererWithPrefix("thanos_receive_write_request_concurrent_", registerer),
