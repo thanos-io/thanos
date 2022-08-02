@@ -168,6 +168,45 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, we
 	return prom, sidecar
 }
 
+type AvalancheOptions struct {
+	MetricCount    string
+	SeriesCount    string
+	MetricInterval string
+	SeriesInterval string
+	ValueInterval  string
+
+	RemoteURL           string
+	RemoteWriteInterval string
+	RemoteBatchSize     string
+	RemoteRequestCount  string
+
+	TenantID string
+}
+
+func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) e2e.InstrumentedRunnable {
+	f := e2e.NewInstrumentedRunnable(e, name).WithPorts(map[string]int{"http": 9001}, "http").Future()
+
+	args := e2e.BuildArgs(map[string]string{
+		"--metric-count":          o.MetricCount,
+		"--series-count":          o.SeriesCount,
+		"--remote-url":            o.RemoteURL,
+		"--remote-write-interval": o.RemoteWriteInterval,
+		"--remote-batch-size":     o.RemoteBatchSize,
+		"--remote-requests-count": o.RemoteRequestCount,
+		"--value-interval":        o.ValueInterval,
+		"--metric-interval":       o.MetricInterval,
+		"--series-interval":       o.SeriesInterval,
+		"--remote-tenant-header":  "THANOS-TENANT",
+		"--remote-tenant":         o.TenantID,
+	})
+
+	// Using this particular image as https://github.com/prometheus-community/avalanche/pull/25 is not merged yet.
+	return f.Init(wrapWithDefaults(e2e.StartOptions{
+		Image:   "quay.io/observatorium/avalanche:make-tenant-header-configurable-2021-10-07-0a2cbf5",
+		Command: e2e.NewCommandWithoutEntrypoint("avalanche", args...),
+	}))
+}
+
 type QuerierBuilder struct {
 	name           string
 	routePrefix    string
@@ -364,12 +403,15 @@ type ReceiveBuilder struct {
 
 	f e2e.FutureInstrumentedRunnable
 
-	maxExemplars    int
-	ingestion       bool
-	hashringConfigs []receive.HashringConfig
-	relabelConfigs  []*relabel.Config
-	replication     int
-	image           string
+	maxExemplars        int
+	ingestion           bool
+	limit               int
+	metamonitoring      string
+	metamonitoringQuery string
+	hashringConfigs     []receive.HashringConfig
+	relabelConfigs      []*relabel.Config
+	replication         int
+	image               string
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -411,6 +453,15 @@ func (r *ReceiveBuilder) WithRelabelConfigs(relabelConfigs []*relabel.Config) *R
 	return r
 }
 
+func (r *ReceiveBuilder) WithValidationEnabled(limit int, metamonitoring string, query ...string) *ReceiveBuilder {
+	r.limit = limit
+	r.metamonitoring = metamonitoring
+	if len(query) > 0 {
+		r.metamonitoringQuery = query[0]
+	}
+	return r
+}
+
 // Init creates a Thanos Receive instance.
 // If ingestion is enabled it will be configured for ingesting samples.
 // If routing is configured (i.e. hashring configuration is provided) it routes samples to other receivers.
@@ -435,6 +486,14 @@ func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
 	hashring := r.hashringConfigs
 	if len(hashring) > 0 && r.ingestion {
 		args["--receive.local-endpoint"] = r.InternalEndpoint("grpc")
+	}
+
+	if r.limit != 0 && r.metamonitoring != "" {
+		args["--receive.tenant-limits.max-head-series"] = fmt.Sprintf("%v", r.limit)
+		args["--receive.tenant-limits.meta-monitoring-url"] = r.metamonitoring
+		if r.metamonitoringQuery != "" {
+			args["--receive.tenant-limits.meta-monitoring-query"] = r.metamonitoringQuery
+		}
 	}
 
 	if err := os.MkdirAll(filepath.Join(r.Dir(), "data"), 0750); err != nil {
