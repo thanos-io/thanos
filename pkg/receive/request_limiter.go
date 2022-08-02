@@ -48,7 +48,7 @@ func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *writeLimits
 			Namespace:  "thanos",
 			Subsystem:  "receive",
 			Name:       "write_limits_hit",
-			Help:       "The number of times a request was refused due to a remote write limit.",
+			Help:       "Summary of how much beyond the limit a refused remote write request was.",
 			Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
 		}, []string{"tenant", "limit"},
 	)
