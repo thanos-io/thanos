@@ -725,6 +725,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 				bucketMatcher,
 				operationMatcher,
 			)),
+			e2e.WaitMissingMetrics(),
 		)
 
 		// Make sure compactor does not modify anything else over time.
