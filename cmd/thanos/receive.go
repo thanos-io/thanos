@@ -198,22 +198,26 @@ func runReceive(
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:            writer,
-		ListenAddress:     conf.rwAddress,
-		Registry:          reg,
-		Endpoint:          conf.endpoint,
-		TenantHeader:      conf.tenantHeader,
-		TenantField:       conf.tenantField,
-		DefaultTenantID:   conf.defaultTenantID,
-		ReplicaHeader:     conf.replicaHeader,
-		ReplicationFactor: conf.replicationFactor,
-		RelabelConfigs:    relabelConfig,
-		ReceiverMode:      receiveMode,
-		Tracer:            tracer,
-		TLSConfig:         rwTLSConfig,
-		DialOpts:          dialOpts,
-		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
-		TSDBStats:         dbs,
+		Writer:                       writer,
+		ListenAddress:                conf.rwAddress,
+		Registry:                     reg,
+		Endpoint:                     conf.endpoint,
+		TenantHeader:                 conf.tenantHeader,
+		TenantField:                  conf.tenantField,
+		DefaultTenantID:              conf.defaultTenantID,
+		ReplicaHeader:                conf.replicaHeader,
+		ReplicationFactor:            conf.replicationFactor,
+		RelabelConfigs:               relabelConfig,
+		ReceiverMode:                 receiveMode,
+		Tracer:                       tracer,
+		TLSConfig:                    rwTLSConfig,
+		DialOpts:                     dialOpts,
+		ForwardTimeout:               time.Duration(*conf.forwardTimeout),
+		TSDBStats:                    dbs,
+		WriteSeriesLimit:             conf.writeSeriesLimit,
+		WriteSamplesLimit:            conf.writeSamplesLimit,
+		WriteRequestSizeLimit:        conf.writeRequestSizeLimit,
+		WriteRequestConcurrencyLimit: conf.writeRequestConcurrencyLimit,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -764,6 +768,11 @@ type receiveConfig struct {
 
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
+
+	writeSeriesLimit             int64
+	writeSamplesLimit            int64
+	writeRequestSizeLimit        int64
+	writeRequestConcurrencyLimit int
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -854,6 +863,29 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").Hidden().BoolVar(&rc.allowOutOfOrderUpload)
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
+
+	// TODO(douglascamata): Allow all these limits to be configured per tenant
+	// and move the configuration to a file. Then this is done, remove the
+	// "hidden" modifier on all these flags.
+	cmd.Flag("receive.write-request-limits.max-series",
+		"The maximum amount of series accepted in remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeSeriesLimit)
+
+	cmd.Flag("receive.write-request-limits.max-samples",
+		"The maximum amount of samples accepted in remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeSamplesLimit)
+
+	cmd.Flag("receive.write-request-limits.max-size-bytes",
+		"The maximum size (in bytes) of remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeRequestSizeLimit)
+
+	cmd.Flag("receive.write-request-limits.max-concurrency",
+		"The maximum amount of remote write requests that will be concurrently processed while others wait."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().IntVar(&rc.writeRequestConcurrencyLimit)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

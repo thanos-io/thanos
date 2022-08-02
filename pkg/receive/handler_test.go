@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
@@ -685,6 +686,91 @@ func TestReceiveQuorum(t *testing.T) {
 						t.Errorf("handler: %d, labels %q: expected minimum of %d samples, got %d", j, lset.String(), expectedMin, got)
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestReceiveWriteRequestLimits(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		status        int
+		amountSeries  int
+		amountSamples int
+	}{
+		{
+			name:         "Request above limit of series",
+			status:       http.StatusRequestEntityTooLarge,
+			amountSeries: 21,
+		},
+		{
+			name:         "Request under the limit of series",
+			status:       http.StatusOK,
+			amountSeries: 20,
+		},
+		{
+			name:          "Request above limit of samples (series * samples)",
+			status:        http.StatusRequestEntityTooLarge,
+			amountSeries:  30,
+			amountSamples: 15,
+		},
+		{
+			name:          "Request under the limit of samples (series * samples)",
+			status:        http.StatusOK,
+			amountSeries:  10,
+			amountSamples: 2,
+		},
+		{
+			name:          "Request above body size limit",
+			status:        http.StatusRequestEntityTooLarge,
+			amountSeries:  300,
+			amountSamples: 150,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.amountSamples == 0 {
+				tc.amountSamples = 1
+			}
+
+			appendables := []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			}
+			handlers, _ := newTestHandlerHashring(appendables, 3)
+			handler := handlers[0]
+			handler.requestLimiter = newRequestLimiter(int64(1*units.Megabyte), 20, 200, nil)
+			tenant := "test"
+
+			wreq := &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{},
+			}
+
+			for i := 0; i < tc.amountSeries; i += 1 {
+				label := labelpb.ZLabel{Name: "foo", Value: "bar"}
+				series := prompb.TimeSeries{
+					Labels: []labelpb.ZLabel{label},
+				}
+				for j := 0; j < tc.amountSamples; j += 1 {
+					sample := prompb.Sample{Value: float64(j), Timestamp: int64(j)}
+					series.Samples = append(series.Samples, sample)
+				}
+				wreq.Timeseries = append(wreq.Timeseries, series)
+			}
+
+			// Test that the correct status is returned.
+			rec, err := makeRequest(handler, tenant, wreq)
+			if err != nil {
+				t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", tc.status, err)
+			}
+			if rec.Code != tc.status {
+				t.Errorf("handler: got unexpected HTTP status code: expected %d, got %d; body: %s", tc.status, rec.Code, rec.Body.String())
 			}
 		})
 	}

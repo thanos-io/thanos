@@ -19,6 +19,8 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/logging"
 
 	"github.com/go-kit/log"
@@ -83,22 +85,26 @@ var (
 
 // Options for the web Handler.
 type Options struct {
-	Writer            *Writer
-	ListenAddress     string
-	Registry          *prometheus.Registry
-	TenantHeader      string
-	TenantField       string
-	DefaultTenantID   string
-	ReplicaHeader     string
-	Endpoint          string
-	ReplicationFactor uint64
-	ReceiverMode      ReceiverMode
-	Tracer            opentracing.Tracer
-	TLSConfig         *tls.Config
-	DialOpts          []grpc.DialOption
-	ForwardTimeout    time.Duration
-	RelabelConfigs    []*relabel.Config
-	TSDBStats         TSDBStats
+	Writer                       *Writer
+	ListenAddress                string
+	Registry                     *prometheus.Registry
+	TenantHeader                 string
+	TenantField                  string
+	DefaultTenantID              string
+	ReplicaHeader                string
+	Endpoint                     string
+	ReplicationFactor            uint64
+	ReceiverMode                 ReceiverMode
+	Tracer                       opentracing.Tracer
+	TLSConfig                    *tls.Config
+	DialOpts                     []grpc.DialOption
+	ForwardTimeout               time.Duration
+	RelabelConfigs               []*relabel.Config
+	TSDBStats                    TSDBStats
+	WriteSeriesLimit             int64
+	WriteSamplesLimit            int64
+	WriteRequestSizeLimit        int64
+	WriteRequestConcurrencyLimit int
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -122,6 +128,9 @@ type Handler struct {
 
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
+
+	writeGate      gate.Gate
+	requestLimiter requestLimiter
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -147,6 +156,13 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
+		writeGate: gate.NewNoop(),
+		requestLimiter: newRequestLimiter(
+			o.WriteRequestSizeLimit,
+			o.WriteSeriesLimit,
+			o.WriteSamplesLimit,
+			registerer,
+		),
 		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -183,6 +199,13 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
 		),
+	}
+
+	if o.WriteRequestConcurrencyLimit > 0 {
+		h.writeGate = gate.New(
+			extprom.WrapRegistererWithPrefix("thanos_receive_write_request_concurrent_", registerer),
+			o.WriteRequestConcurrencyLimit,
+		)
 	}
 
 	h.forwardRequests.WithLabelValues(labelSuccess)
@@ -397,10 +420,25 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tLogger := log.With(h.logger, "tenant", tenant)
 
+	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
+		err = h.writeGate.Start(r.Context())
+	})
+	if err != nil {
+		level.Error(tLogger).Log("err", err, "msg", "internal server error")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	defer h.writeGate.Done()
+
 	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}
 	if r.ContentLength >= 0 {
+		if !h.requestLimiter.AllowSizeBytes(tenant, r.ContentLength) {
+			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		compressed.Grow(int(r.ContentLength))
 	} else {
 		compressed.Grow(512)
@@ -410,11 +448,15 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
 	}
-
 	reqBuf, err := s2.Decode(nil, compressed.Bytes())
 	if err != nil {
 		level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
 		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !h.requestLimiter.AllowSizeBytes(tenant, int64(len(reqBuf))) {
+		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
 		return
 	}
 
@@ -449,6 +491,20 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.requestLimiter.AllowSeries(tenant, int64(len(wreq.Timeseries))) {
+		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	totalSamples := 0
+	for _, timeseries := range wreq.Timeseries {
+		totalSamples += len(timeseries.Samples)
+	}
+	if !h.requestLimiter.AllowSamples(tenant, int64(totalSamples)) {
+		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
+		return
+	}
+
 	// Apply relabeling configs.
 	h.relabel(&wreq)
 	if len(wreq.Timeseries) == 0 {
@@ -475,10 +531,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), responseStatusCode)
 	}
 	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(len(wreq.Timeseries)))
-	totalSamples := 0
-	for _, timeseries := range wreq.Timeseries {
-		totalSamples += len(timeseries.Samples)
-	}
 	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
 }
 
