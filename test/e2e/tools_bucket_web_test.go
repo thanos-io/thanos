@@ -25,6 +25,7 @@ import (
 	"github.com/thanos-io/objstore/client"
 
 	v1 "github.com/thanos-io/thanos/pkg/api/blocks"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -214,24 +215,52 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(b))
 
-	// Request blocks api.
-	resp, err := http.DefaultClient.Get("http://" + b.Endpoint("http") + "/api/v1/blocks")
-	testutil.Ok(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
 
-	testutil.Equals(t, http.StatusOK, resp.StatusCode)
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	testutil.Ok(t, err)
-	var data struct {
+	var respData struct {
 		Status string
 		Data   *v1.BlocksInfo
 	}
-	testutil.Ok(t, json.Unmarshal(body, &data))
-	testutil.Equals(t, "success", data.Status)
 
-	// Filtered by time and relabel, result only one blocks.
-	testutil.Equals(t, 1, len(data.Data.Blocks))
-	testutil.Equals(t, data.Data.Blocks[0].MaxTime, blocks[0].maxt)
-	testutil.Equals(t, data.Data.Blocks[0].MinTime, blocks[0].mint)
-	testutil.Equals(t, data.Data.Blocks[0].Thanos.Labels, blocks[0].extLset.Map())
+	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
+		// Request blocks api.
+		resp, err := http.DefaultClient.Get("http://" + b.Endpoint("http") + "/api/v1/blocks")
+		if err != nil {
+			return err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return errors.Newf("statuscode is not 200, got %d", resp.StatusCode)
+		}
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return errors.Wrapf(err, "error reading body")
+		}
+
+		if err := resp.Body.Close(); err != nil {
+			return errors.Wrapf(err, "error closing body")
+		}
+
+		if err := json.Unmarshal(body, &respData); err != nil {
+			return errors.Wrapf(err, "error unmarshaling body")
+		}
+
+		if respData.Status != "success" {
+			return errors.Newf("status is not success, got %s", respData.Status)
+		}
+
+		// Filtered by time and relabel, result only one blocks.
+		if len(respData.Data.Blocks) == 1 {
+			return nil
+		}
+
+		return errors.Newf("expected 1 block, got %d", len(respData.Data.Blocks))
+	}))
+
+	testutil.Equals(t, 1, len(respData.Data.Blocks))
+	testutil.Equals(t, respData.Data.Blocks[0].MaxTime, blocks[0].maxt)
+	testutil.Equals(t, respData.Data.Blocks[0].MinTime, blocks[0].mint)
+	testutil.Equals(t, respData.Data.Blocks[0].Thanos.Labels, blocks[0].extLset.Map())
 }
