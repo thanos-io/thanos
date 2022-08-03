@@ -32,13 +32,13 @@ func TestParseLimiterConfig(t *testing.T) {
 							SetSamplesLimit(10),
 					},
 					TenantsLimits: tenantsWriteLimitsConfig{
-						"cool_tenant": &writeLimitConfig{
+						"acme": &writeLimitConfig{
 							RequestLimits: newEmptyRequestLimitsConfig().
 								SetSizeBytesLimit(0).
 								SetSeriesLimit(0).
 								SetSamplesLimit(0),
 						},
-						"another_tenant": &writeLimitConfig{
+						"ajax": &writeLimitConfig{
 							RequestLimits: newEmptyRequestLimitsConfig().
 								SetSeriesLimit(50000).
 								SetSamplesLimit(500),
