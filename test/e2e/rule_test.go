@@ -8,7 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -133,7 +133,7 @@ type rulesResp struct {
 
 func createRuleFile(t *testing.T, path, content string) {
 	t.Helper()
-	err := ioutil.WriteFile(path, []byte(content), 0666)
+	err := os.WriteFile(path, []byte(content), 0666)
 	testutil.Ok(t, err)
 }
 
@@ -146,7 +146,7 @@ func createRuleFiles(t *testing.T, dir string) {
 }
 
 func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
-	req, err := http.NewRequestWithContext(ctx, "POST", "http://"+endpoint+"/-/reload", ioutil.NopCloser(bytes.NewReader(nil)))
+	req, err := http.NewRequestWithContext(ctx, "POST", "http://"+endpoint+"/-/reload", io.NopCloser(bytes.NewReader(nil)))
 	testutil.Ok(t, err)
 	resp, err := http.DefaultClient.Do(req)
 	testutil.Ok(t, err)
@@ -164,7 +164,7 @@ func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, e
 	errCount := 0
 
 	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
-		req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
+		req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", io.NopCloser(bytes.NewReader(nil)))
 		if err != nil {
 			errCount++
 			return err
@@ -181,7 +181,7 @@ func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, e
 			return errors.Newf("statuscode is not 200, got %d", resp.StatusCode)
 		}
 
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			errCount++
 			return errors.Wrapf(err, "error reading body")
@@ -214,14 +214,14 @@ func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, e
 }
 
 func rulegroupCorrectData(t *testing.T, ctx context.Context, endpoint string) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", io.NopCloser(bytes.NewReader(nil)))
 	testutil.Ok(t, err)
 	resp, err := http.DefaultClient.Do(req)
 	testutil.Ok(t, err)
 	testutil.Equals(t, 200, resp.StatusCode)
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	testutil.Ok(t, err)
 
 	var data = rulesResp{}
@@ -252,7 +252,7 @@ func writeTargets(t *testing.T, path string, addrs ...string) {
 	b, err := yaml.Marshal([]*targetgroup.Group{{Targets: tgs}})
 	testutil.Ok(t, err)
 
-	testutil.Ok(t, ioutil.WriteFile(path+".tmp", b, 0660))
+	testutil.Ok(t, os.WriteFile(path+".tmp", b, 0660))
 	testutil.Ok(t, os.Rename(path+".tmp", path))
 }
 

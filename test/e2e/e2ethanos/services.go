@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"net"
 	"os"
@@ -102,12 +101,12 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create prometheus dir"))
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "prometheus.yml"), []byte(promConfig), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(f.Dir(), "prometheus.yml"), []byte(promConfig), 0600); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating prom config"))
 	}
 
 	if len(webConfig) > 0 {
-		if err := ioutil.WriteFile(filepath.Join(f.Dir(), "web-config.yml"), []byte(webConfig), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(f.Dir(), "web-config.yml"), []byte(webConfig), 0600); err != nil {
 			return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating web-config"))
 		}
 	}
@@ -378,7 +377,7 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 			return nil, err
 		}
 
-		if err := ioutil.WriteFile(q.Dir()+"/filesd.yaml", b, 0600); err != nil {
+		if err := os.WriteFile(q.Dir()+"/filesd.yaml", b, 0600); err != nil {
 			return nil, errors.Wrap(err, "creating query SD config failed")
 		}
 
@@ -506,7 +505,7 @@ func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
 			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate hashring file: %v", hashring))
 		}
 
-		if err := ioutil.WriteFile(filepath.Join(r.Dir(), "hashrings.json"), b, 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(r.Dir(), "hashrings.json"), b, 0600); err != nil {
 			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "creating receive config"))
 		}
 
@@ -666,7 +665,7 @@ route:
 receivers:
 - name: 'null'
 `
-	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "config.yaml"), []byte(config), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(f.Dir(), "config.yaml"), []byte(config), 0600); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating alertmanager config file failed"))
 	}
 
@@ -840,7 +839,7 @@ http {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create store dir"))
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "nginx.conf"), []byte(conf), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(f.Dir(), "nginx.conf"), []byte(conf), 0600); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating nginx config file failed"))
 	}
 
@@ -1003,7 +1002,7 @@ func genCerts(certPath, privkeyPath, caPath, serverName string) error {
 		Type:  "CERTIFICATE",
 		Bytes: caBytes,
 	})
-	err = ioutil.WriteFile(caPath, caPEM, 0644)
+	err = os.WriteFile(caPath, caPEM, 0644)
 	if err != nil {
 		return err
 	}
@@ -1017,7 +1016,7 @@ func genCerts(certPath, privkeyPath, caPath, serverName string) error {
 		Type:  "CERTIFICATE",
 		Bytes: certBytes,
 	})
-	err = ioutil.WriteFile(certPath, certPEM, 0644)
+	err = os.WriteFile(certPath, certPEM, 0644)
 	if err != nil {
 		return err
 	}
@@ -1026,7 +1025,7 @@ func genCerts(certPath, privkeyPath, caPath, serverName string) error {
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
 	})
-	err = ioutil.WriteFile(privkeyPath, certPrivKeyPEM, 0644)
+	err = os.WriteFile(privkeyPath, certPrivKeyPEM, 0644)
 	if err != nil {
 		return err
 	}

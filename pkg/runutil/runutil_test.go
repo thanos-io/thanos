@@ -5,7 +5,6 @@ package runutil
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,7 +125,7 @@ func TestCloseMoreThanOnce(t *testing.T) {
 }
 
 func TestDeleteAll(t *testing.T) {
-	dir, err := ioutil.TempDir("", "example")
+	dir, err := os.MkdirTemp("", "example")
 	testutil.Ok(t, err)
 
 	t.Cleanup(func() {
@@ -167,7 +166,7 @@ func TestDeleteAll(t *testing.T) {
 }
 
 func TestDeleteAll_ShouldReturnNoErrorIfDirectoryDoesNotExists(t *testing.T) {
-	dir, err := ioutil.TempDir("", "example")
+	dir, err := os.MkdirTemp("", "example")
 	testutil.Ok(t, err)
 	testutil.Ok(t, os.RemoveAll(dir))
 

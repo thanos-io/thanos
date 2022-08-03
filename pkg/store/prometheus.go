@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
@@ -549,7 +548,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 	}
 	if presp.StatusCode/100 != 2 {
 		// Best effort read.
-		b, err := ioutil.ReadAll(presp.Body)
+		b, err := io.ReadAll(presp.Body)
 		if err != nil {
 			level.Error(p.logger).Log("msg", "failed to read response from non 2XX remote read request", "err", err)
 		}

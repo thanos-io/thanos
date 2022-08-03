@@ -463,7 +463,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
+	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}
 	if r.ContentLength >= 0 {

@@ -6,7 +6,6 @@ package compactv2
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -589,7 +588,7 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
-			tmpDir, err := ioutil.TempDir("", "test-series-writer")
+			tmpDir, err := os.MkdirTemp("", "test-series-writer")
 			testutil.Ok(t, err)
 			defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 

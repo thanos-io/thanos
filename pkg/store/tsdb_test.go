@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"os"
@@ -230,7 +229,7 @@ func (s *delegatorServer) Delegate(c io.Closer) {
 func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 	t.Skip(skipMessage)
 
-	tmpDir, err := ioutil.TempDir("", "test")
+	tmpDir, err := os.MkdirTemp("", "test")
 	testutil.Ok(t, err)
 	t.Cleanup(func() {
 		testutil.Ok(t, os.RemoveAll(tmpDir))
@@ -403,7 +402,7 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 func TestTSDBStore_SeriesAccessWithoutDelegateClosing(t *testing.T) {
 	t.Skip(skipMessage)
 
-	tmpDir, err := ioutil.TempDir("", "test")
+	tmpDir, err := os.MkdirTemp("", "test")
 	testutil.Ok(t, err)
 	t.Cleanup(func() {
 		testutil.Ok(t, os.RemoveAll(tmpDir))
@@ -531,7 +530,7 @@ func BenchmarkTSDBStoreSeries(b *testing.B) {
 }
 
 func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
-	tmpDir, err := ioutil.TempDir("", "testorbench-testtsdbseries")
+	tmpDir, err := os.MkdirTemp("", "testorbench-testtsdbseries")
 	testutil.Ok(t, err)
 	t.Cleanup(func() {
 		testutil.Ok(t, os.RemoveAll(tmpDir))
