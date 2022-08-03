@@ -1,5 +1,5 @@
 ---
-type: proposal
+type: Proposal
 title: Granular Endpoint Configuration
 status: Approved
 owner: SrushtiSapkale
@@ -12,31 +12,39 @@ menu: proposals-accepted
 
 ## What
 
-This proposal builds up on the [Unified Endpoint Discovery Proposal](https://thanos.io/tip/proposals-accepted/202101-endpoint-discovery.md/) and [Automated, per-endpoint mTLS Proposal](https://thanos.io/tip/proposals-accepted/202106-automated-per-endpoint-mtls.md/)
+This proposal builds up on the [Unified Endpoint Discovery Proposal](https://thanos.io/tip/proposals-accepted/202101-endpoint-discovery.md/) and [Automated, per-endpoint mTLS Proposal](https://thanos.io/tip/proposals-accepted/202106-automated-per-endpoint-mtls.md/) and to add possibility to have granular setting per endpoint and deprecate old flags.
 
 ## Why
 
-The Thanos Querier component supports basic mTLS configuration for internal gRPC communication. Mutual TLS (mTLS) ensures that traffic is both secure and trusted in both directions between a client and server. This works great for basic use cases but it still requires extra forward proxies to make it work for bigger deployments.
-
-Let’s imagine we have an Observer Cluster that is hosting Thanos Querier along with Thanos Store Gateway. Within the same Observer Cluster, we would like to connect one or more Thanos Sidecars. Additionally, we also want to connect the Querier in the Observer Cluster to several remote instances of Thanos Sidecar in remote clusters.
-
-In this scenario we can use a proxy server (e.g. envoy). In thanos as we have multiple queriers connected to a central querier, Envoy can efficiently loadbalance gRPC connections, something we currently don't support natively in Thanos. If we used the endpoints config to connect the global to the regional queriers, they will not be able to scale regional queriers due to the persistent nature of gRPC connections. We can use Envoy when we need to scale our regional queries but here having an endpoint configuration is a better option in distributed store architecture as Thanos can communicate securely and directly through remote endpoints.
+The Thanos Querier component supports basic mTLS configuration for internal gRPC communication. Mutual TLS (mTLS) ensures that traffic is both secure and trusted in both directions between a client and server. This works great for basic use cases, but it still requires extra forward proxies to make it work for quite common deployments where different servers have different auth, cert or TLS options.
+This is similar to cases where we want to have further per-endpoint configuration pieces like what APIs to enable or in future what load balancing groups it belongs to.
+We also have to be prepared for more options that will appear as the functionality of Queriers grows per endpoint (e.g limits).
 
 ## Pitfalls of the current solution
 
-Ideally, we would want to use mTLS to encrypt the connection to the remote clusters. If we would enable the current mTLS, it would be applied to all the storeAPI’s but we don’t want it to be applied on the storeAPI’s of central Thanos instance (Observer cluster) in which Thanos query component is present (for faster communications with storeAPI’s (sidecars) of same cluster, to reduce the pain of provisioning certificates etc.). So it requires extra forward proxies to make it work for bigger (multi-cluster) deployments.
+Current users cannot use different certifcates, auth or TLS options for different endpoints. The current workarounds is to use layered queries for this which is much more complex and confusing deployment.
+Second, quite viable option is to use forward proxy like envoy. The problem with this approach is that any Thanos adopter have to learn yet another configuration language/options, deployment (build, release, support) models and operational (metrics, migration) models  which is not trivial and hinders adoptions.
 
 ## Goals
 
-* To add support for per-endpoint TLS configuration in Thanos Query Component for internal gRPC communication.
-* Adding a new `endpoint.config` flag will deprecate the following flags: `store.sd-interval`, `store.sd-dns-interval`, `store.sd-dns-resolver`, `store.sd-files` and all `grpc-client-.*`. We can mark the current flags as deprecated, and after some time we can remove them.
-* Enable token based auth for endpoints
+* To add support for per-endpoint granularity configuration. For example:
+  * TLS configuration in for Querier gRPC communication.
+  * Basic/Token Auth
+  * Strict mode
+  * Enabled APIs (specifying that server which can serve Exemplars and Store should only be asked for Exemplars)
+  * (perhaps more in future)
+* Unify endpoint configuration. Which means deprecating all non `endpoint` flags for endpoint configuration like `rule`, `metadata`, `exemplar`, `store.sd-interval`, `store.sd-dns-interval`, `store.sd-dns-resolver`, `store.sd-files` and all `grpc-client-.*`.
+
+## Non Goals
+
+* Granular configuration & implementation for load balancing groups. This can be improved in the next proposals and is currently fulfilled using any forward or reverse proxy like `envoy`, `caddy` or `nginx`.
 
 ## How
 
-A new CLI option `--endpoints.config`, with no dynamic reloading, which will accept the path to a yaml file is proposed which contains a list as follows :
+A new CLI option `--endpoints.config`, with no dynamic reloading, which will accept the path to a yaml file is proposed which contains a list as follows:
 
 ```yaml
+endpoints:
 - tls_config:
     cert_file: ""
     key_file: ""
@@ -58,10 +66,8 @@ Also we noticed that even if the user wants to connect to the store api only, th
 
 ## Alternatives
 
-* Granular endpoint configuration is not a solution for federate querier loadbalncing and scalability. As an alternative can embed Envoy in thanos for loadbalancing. This would work efficiently because endpointset cannot configure federated queriers when they scale due to persistent nature of grpc connections.
-
 ## Action Plan
 
 * Implement `--endpoint.config`.
-* Add e2e tests for the changes
+* Add e2e tests for the changes.
 * Update the filtering of APIs in the querier to return only the endpoints that are needed.
