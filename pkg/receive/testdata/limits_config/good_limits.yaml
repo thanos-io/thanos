@@ -6,16 +6,13 @@ write:
       size_bytes_limit: 1024
       series_limit: 1000
       samples_limit: 10
-    # head_series: 100 # Integrating with head series limit
   tenants:
-    cool_tenant:
+    acme:
       request:
-        size_bytes_limit: 0 # `0`` means unlimited
+        size_bytes_limit: 0
         series_limit: 0
         samples_limit: 0
-      # head_series: 2000
-    another_tenant:
-      request: # Missing value for size_bytes_limit should mean inherit from default.
+    ajax:
+      request:
         series_limit: 50000
         samples_limit: 500
-      # head_series: 2000

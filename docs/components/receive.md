@@ -84,17 +84,68 @@ Thanos Receive has some limits and gates that can be configured to control resou
 - **Limits**: if a request hits any configured limit the client will receive an error response from the server.
 - **Gates**: if a request hits a gate without capacity it will wait until the gate's capacity is replenished to be processed. It doesn't trigger an error response from the server.
 
+To configure the gates and limits you can use one of the two options:
+
+- `--receive.limits-config-file=<file-path>`: where `<file-path>` is the path to the YAML file.
+- `--receive.limits-config=<content>`: where `<content>` is the content of YAML file.
+
+By default all the limits and gates are **disabled**.
+
+### Understanding the configuration file
+
+The configuration file follows a few standards:
+
+1. The value `0` (zero) is used to explicitly define "there is no limit" (infinite limit).
+2. In the configuration of default limits (in the `default` section) or global limits (in the `global` section), a value that is not present means "no limit".
+3. In the configuration of per tenant limits (in the `tenants` section), a value that is not present means they are the same as the default.
+
+All the configuration for the remote write endpoint of Receive is contained in the `write` key. Inside it there are 3 subsections:
+
+- `global`: limits and/or gates that are applied considering all the requests.
+- `default`: the default values for limits in case a given tenant doesn't have any specified.
+- `tenants`: the limits for a given tenant.
+
+From the example configuration below, it's understood that:
+
+1. This Receive instance has a max concurrency of 30.
+2. This Receive instance has some default request limits that apply of all tenants, **unless** a given tenant has their own limits (i.e. the `acme` tenant and partially for the `ajax` tenant).
+3. Tenant `acme` has no request limits.
+4. Tenant `ajax` has a request series limit of 50000 and samples limit of 500. Their request size bytes limit is inherited from the default, 1024 bytes.
+
+The next sections explain what each configuration value means.
+
+```yaml mdox-exec="cat pkg/receive/testdata/limits_config/good_limits.yaml"
+write:
+  global:
+    max_concurrency: 30
+  default:
+    request:
+      size_bytes_limit: 1024
+      series_limit: 1000
+      samples_limit: 10
+  tenants:
+    acme:
+      request:
+        size_bytes_limit: 0
+        series_limit: 0
+        samples_limit: 0
+    ajax:
+      request:
+        series_limit: 50000
+        samples_limit: 500
+```
+
 **IMPORTANT**: this feature is experimental and a work-in-progres. It might change in the near future, i.e. configuration might move to a file (to allow easy configuration of different request limits per tenant) or its structure could change.
 
-### Request limits
+### Remote write request limits
 
 Thanos Receive supports setting limits on the incoming remote write request sizes. These limits should help you to prevent a single tenant from being able to send big requests and possibly crash the Receive.
 
-These limits are applied per request and can be configured with the following command line arguments:
+These limits are applied per request and can be configured within the `request` key:
 
-- `--receive.write-request-limits.max-size-bytes`: the maximum body size.
-- `--receive.write-request-limits.max-series`: the maximum amount of series in a single remote write request.
-- `--receive.write-request-limits.max-samples`: the maximum amount of samples in a single remote write request (summed from all series).
+- `size_bytes_limit`: the maximum body size.
+- `series_limit`: the maximum amount of series in a single remote write request.
+- `samples_limit`: the maximum amount of samples in a single remote write request (summed from all series).
 
 Any request above these limits will cause an 413 HTTP response (*Entity Too Large*) and should not be retried without modifications.
 
@@ -105,15 +156,11 @@ Future work that can improve this scenario:
 - Proper handling of 413 responses in clients, given Receive can somehow communicate which limit was reached.
 - Including in the 413 response which are the current limits that apply to the tenant.
 
-By default all these limits are disabled.
+### Remote write request gates
 
-## Request gates
+The available request gates in Thanos Receive can be configured within the `global` key:
 
-The available request gates in Thanos Receive can be configured with the following command line arguments:
-
-- `--receive.write-request-limits.max-concurrency`: the maximum amount of remote write requests that will be concurrently worked on. Any request request that would exceed this limit will be accepted, but wait until the gate allows it to be processed.
-
-By default all gates are disabled.
+- `max_concurrency`: the maximum amount of remote write requests that will be concurrently worked on. Any request request that would exceed this limit will be accepted, but wait until the gate allows it to be processed.
 
 ## Active Series Limiting (experimental)
 
