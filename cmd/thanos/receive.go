@@ -73,14 +73,15 @@ func registerReceive(app *extkingpin.App) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:       int64(time.Duration(*conf.tsdbMinBlockDuration) / time.Millisecond),
-			MaxBlockDuration:       int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
-			RetentionDuration:      int64(time.Duration(*conf.retention) / time.Millisecond),
-			NoLockfile:             conf.noLockFile,
-			WALCompression:         conf.walCompression,
-			AllowOverlappingBlocks: conf.tsdbAllowOverlappingBlocks,
-			MaxExemplars:           conf.tsdbMaxExemplars,
-			EnableExemplarStorage:  true,
+			MinBlockDuration:         int64(time.Duration(*conf.tsdbMinBlockDuration) / time.Millisecond),
+			MaxBlockDuration:         int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
+			RetentionDuration:        int64(time.Duration(*conf.retention) / time.Millisecond),
+			NoLockfile:               conf.noLockFile,
+			WALCompression:           conf.walCompression,
+			AllowOverlappingBlocks:   conf.tsdbAllowOverlappingBlocks,
+			MaxExemplars:             conf.tsdbMaxExemplars,
+			EnableExemplarStorage:    true,
+			HeadChunksWriteQueueSize: int(conf.tsdbWriteQueueSize),
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -787,6 +788,7 @@ type receiveConfig struct {
 	tsdbMaxBlockDuration       *model.Duration
 	tsdbAllowOverlappingBlocks bool
 	tsdbMaxExemplars           int64
+	tsdbWriteQueueSize         int64
 
 	walCompression bool
 	noLockFile     bool
@@ -888,6 +890,11 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 			" In case the exemplar storage becomes full (number of stored exemplars becomes equal to max-exemplars),"+
 			" ingesting a new exemplar will evict the oldest exemplar from storage. 0 (or less) value of this flag disables exemplars storage.").
 		Default("0").Int64Var(&rc.tsdbMaxExemplars)
+
+	cmd.Flag("tsdb.write-queue-size",
+		"[EXPERIMENTAL] Enables configuring the size of the chunk write queue used in the head chunks mapper. "+
+			"A queue size of zero (default) disables this feature entirely.").
+		Default("0").Hidden().Int64Var(&rc.tsdbWriteQueueSize)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")
