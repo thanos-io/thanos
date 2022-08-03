@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
@@ -88,7 +87,7 @@ type Prometheus struct {
 }
 
 func NewTSDB() (*tsdb.DB, error) {
-	dir, err := ioutil.TempDir("", "prometheus-test")
+	dir, err := os.MkdirTemp("", "prometheus-test")
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +332,7 @@ func CreateEmptyBlock(dir string, mint, maxt int64, extLset labels.Labels, resol
 		return ulid.ULID{}, err
 	}
 
-	if err := ioutil.WriteFile(path.Join(dir, uid.String(), "meta.json"), b, os.ModePerm); err != nil {
+	if err := os.WriteFile(path.Join(dir, uid.String(), "meta.json"), b, os.ModePerm); err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "saving meta.json")
 	}
 

@@ -6,7 +6,7 @@ package metadata
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"path"
 
 	"github.com/go-kit/log"
@@ -100,7 +100,7 @@ func ReadMarker(ctx context.Context, logger log.Logger, bkt objstore.Instrumente
 	}
 	defer runutil.CloseWithLogOnErr(logger, r, "close bkt marker reader")
 
-	metaContent, err := ioutil.ReadAll(r)
+	metaContent, err := io.ReadAll(r)
 	if err != nil {
 		return errors.Wrapf(err, "read file: %s", markerFile)
 	}

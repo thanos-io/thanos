@@ -4,7 +4,6 @@
 package downsample
 
 import (
-	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -433,7 +432,7 @@ func TestDownsample(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			logger := log.NewLogfmtLogger(os.Stderr)
 
-			dir, err := ioutil.TempDir("", "downsample-raw")
+			dir, err := os.MkdirTemp("", "downsample-raw")
 			testutil.Ok(t, err)
 			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -508,7 +507,7 @@ func TestDownsample(t *testing.T) {
 
 func TestDownsampleAggrAndEmptyXORChunks(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
-	dir, err := ioutil.TempDir("", "downsample-mixed")
+	dir, err := os.MkdirTemp("", "downsample-mixed")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -539,7 +538,7 @@ func TestDownsampleAggrAndEmptyXORChunks(t *testing.T) {
 
 func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
-	dir, err := ioutil.TempDir("", "downsample-mixed")
+	dir, err := os.MkdirTemp("", "downsample-mixed")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 

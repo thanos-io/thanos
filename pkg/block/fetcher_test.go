@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path"
@@ -68,7 +67,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		dir, err := ioutil.TempDir("", "test-meta-fetcher")
+		dir, err := os.MkdirTemp("", "test-meta-fetcher")
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 

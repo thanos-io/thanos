@@ -5,7 +5,6 @@ package store
 
 import (
 	"context"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"os"
@@ -22,7 +21,7 @@ import (
 )
 
 func TestDiffVarintCodec(t *testing.T) {
-	chunksDir, err := ioutil.TempDir("", "diff_varint_codec")
+	chunksDir, err := os.MkdirTemp("", "diff_varint_codec")
 	testutil.Ok(t, err)
 
 	headOpts := tsdb.DefaultHeadOptions()

@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -76,7 +75,7 @@ scrape_configs:
 	time.Sleep(10 * time.Minute)
 
 	t.Run("receive", func(t *testing.T) {
-		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "receive.yaml"),
+		testutil.Ok(t, os.WriteFile(filepath.Join(compliance.Dir(), "receive.yaml"),
 			[]byte(promQLCompatConfig(prom, queryReceive, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
 
 		testutil.Ok(t, compliance.Exec(e2e.NewCommand(
@@ -86,7 +85,7 @@ scrape_configs:
 		)))
 	})
 	t.Run("sidecar", func(t *testing.T) {
-		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "sidecar.yaml"),
+		testutil.Ok(t, os.WriteFile(filepath.Join(compliance.Dir(), "sidecar.yaml"),
 			[]byte(promQLCompatConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
 
 		testutil.Ok(t, compliance.Exec(e2e.NewCommand(
@@ -187,7 +186,7 @@ func TestAlertCompliance(t *testing.T) {
 			}()
 			testutil.Equals(t, http.StatusOK, resp.StatusCode)
 		}
-		testutil.Ok(t, ioutil.WriteFile(filepath.Join(compliance.Dir(), "test-thanos.yaml"), []byte(alertCompatConfig(receive, query)), os.ModePerm))
+		testutil.Ok(t, os.WriteFile(filepath.Join(compliance.Dir(), "test-thanos.yaml"), []byte(alertCompatConfig(receive, query)), os.ModePerm))
 
 		fmt.Println(alertCompatConfig(receive, query))
 

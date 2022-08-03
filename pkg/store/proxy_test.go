@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"os"
@@ -1741,7 +1740,7 @@ func BenchmarkProxySeries(b *testing.B) {
 }
 
 func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
-	tmpDir, err := ioutil.TempDir("", "testorbench-proxyseries")
+	tmpDir, err := os.MkdirTemp("", "testorbench-proxyseries")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 

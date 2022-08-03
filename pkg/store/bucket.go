@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"path"
@@ -533,7 +532,7 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 		return errors.Wrap(err, "sync block")
 	}
 
-	fis, err := ioutil.ReadDir(s.dir)
+	fis, err := os.ReadDir(s.dir)
 	if err != nil {
 		return errors.Wrap(err, "read dir")
 	}

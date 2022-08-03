@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sort"
 	"strings"
 	"sync"
@@ -256,7 +255,7 @@ func verifyGetRange(t *testing.T, cachingBucket *CachingBucket, name string, off
 	r, err := cachingBucket.GetRange(context.Background(), name, offset, length)
 	testutil.Ok(t, err)
 
-	read, err := ioutil.ReadAll(r)
+	read, err := io.ReadAll(r)
 	testutil.Ok(t, err)
 	testutil.Equals(t, expectedLength, int64(len(read)))
 
@@ -619,7 +618,7 @@ func verifyGet(t *testing.T, cb *CachingBucket, file string, expectedData []byte
 	} else {
 		testutil.Ok(t, err)
 		defer runutil.CloseWithLogOnErr(nil, r, "verifyGet")
-		data, err := ioutil.ReadAll(r)
+		data, err := io.ReadAll(r)
 		testutil.Ok(t, err)
 		testutil.Equals(t, expectedData, data)
 

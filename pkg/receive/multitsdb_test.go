@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -31,7 +30,7 @@ import (
 )
 
 func TestMultiTSDB(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test")
+	dir, err := os.MkdirTemp("", "test")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -437,7 +436,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			dir, err := ioutil.TempDir("", "multitsdb-prune")
+			dir, err := os.MkdirTemp("", "multitsdb-prune")
 			testutil.Ok(t, err)
 			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -507,7 +506,7 @@ func TestMultiTSDBStats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			dir, err := ioutil.TempDir("", "tsdb-stats")
+			dir, err := os.MkdirTemp("", "tsdb-stats")
 			testutil.Ok(t, err)
 			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -562,7 +561,7 @@ func appendSample(m *MultiTSDB, tenant string, timestamp time.Time) error {
 }
 
 func BenchmarkMultiTSDB(b *testing.B) {
-	dir, err := ioutil.TempDir("", "multitsdb")
+	dir, err := os.MkdirTemp("", "multitsdb")
 	testutil.Ok(b, err)
 	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
 

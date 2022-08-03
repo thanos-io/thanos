@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -81,7 +80,7 @@ func TestUpload(t *testing.T) {
 
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-upload")
+	tmpDir, err := os.MkdirTemp("", "test-block-upload")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -234,7 +233,7 @@ func TestDelete(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-delete")
+	tmpDir, err := os.MkdirTemp("", "test-block-delete")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -281,7 +280,7 @@ func TestMarkForDeletion(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-mark-for-delete")
+	tmpDir, err := os.MkdirTemp("", "test-block-mark-for-delete")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -337,7 +336,7 @@ func TestMarkForNoCompact(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-mark-for-no-compact")
+	tmpDir, err := os.MkdirTemp("", "test-block-mark-for-no-compact")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -397,7 +396,7 @@ func TestHashDownload(t *testing.T) {
 
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-download")
+	tmpDir, err := os.MkdirTemp("", "test-block-download")
 	testutil.Ok(t, err)
 	t.Cleanup(func() {
 		testutil.Ok(t, os.RemoveAll(tmpDir))
@@ -493,7 +492,7 @@ func TestUploadCleanup(t *testing.T) {
 
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-upload")
+	tmpDir, err := os.MkdirTemp("", "test-block-upload")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 

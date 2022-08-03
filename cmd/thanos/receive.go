@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -727,7 +726,7 @@ func migrateLegacyStorage(logger log.Logger, dataDir, defaultTenantID string) er
 
 	level.Info(logger).Log("msg", "found legacy storage, migrating to multi-tsdb layout with default tenant", "defaultTenantID", defaultTenantID)
 
-	files, err := ioutil.ReadDir(dataDir)
+	files, err := os.ReadDir(dataDir)
 	if err != nil {
 		return errors.Wrapf(err, "read legacy data dir: %v", dataDir)
 	}
