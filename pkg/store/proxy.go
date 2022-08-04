@@ -277,6 +277,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		QueryHints:              originalRequest.QueryHints,
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
 		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
+		ShardInfo:               originalRequest.ShardInfo,
 	}
 
 	stores := []Client{}
@@ -297,7 +298,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
 
-		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, EagerRetrieval)
+		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, LazyRetrieval, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 

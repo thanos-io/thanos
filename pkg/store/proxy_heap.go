@@ -12,7 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-kit/log"
+
 	"github.com/cespare/xxhash/v2"
+	"github.com/go-kit/log/level"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -293,6 +296,8 @@ type lazyRespSet struct {
 	err        error
 	errMtx     sync.Mutex
 	noMoreData bool
+
+	shardMatcher *storepb.ShardMatcher
 }
 
 func (l *lazyRespSet) Err() error {
@@ -342,6 +347,8 @@ func newLazyRespSet(
 	st Client,
 	closeSeries context.CancelFunc,
 	cl storepb.Store_SeriesClient,
+	shardMatcher *storepb.ShardMatcher,
+	applySharding bool,
 ) respSet {
 	bufferedResponses := []*storepb.SeriesResponse{}
 	bufferedResponsesMtx := &sync.Mutex{}
@@ -357,6 +364,7 @@ func newLazyRespSet(
 		dataOrFinishEvent:    dataAvailable,
 		bufferedResponsesMtx: bufferedResponsesMtx,
 		bufferedResponses:    bufferedResponses,
+		shardMatcher:         shardMatcher,
 	}
 
 	go func(st Client, l *lazyRespSet) {
@@ -419,6 +427,10 @@ func newLazyRespSet(
 					return false
 				}
 
+				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
+					return true
+				}
+
 				l.bufferedResponsesMtx.Lock()
 				l.bufferedResponses = append(l.bufferedResponses, resp)
 				l.dataOrFinishEvent.Signal()
@@ -449,7 +461,7 @@ const (
 	EagerRetrieval RetrievalStrategy = "eager"
 )
 
-func newAsyncRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest, frameTimeout time.Duration, retrievalStrategy RetrievalStrategy) (respSet, error) {
+func newAsyncRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest, frameTimeout time.Duration, retrievalStrategy RetrievalStrategy, storeSupportsSharding bool, buffers *sync.Pool, shardInfo *storepb.ShardInfo, logger log.Logger) (respSet, error) {
 	var span opentracing.Span
 	var closeSeries context.CancelFunc
 
@@ -468,6 +480,15 @@ func newAsyncRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest,
 	})
 
 	seriesCtx, closeSeries = context.WithCancel(seriesCtx)
+
+	shardMatcher := shardInfo.Matcher(buffers)
+	defer shardMatcher.Close()
+
+	applySharding := shardInfo != nil && !storeSupportsSharding
+	if applySharding {
+		msg := "Applying series sharding in the proxy since there is not support in the underlying store"
+		level.Debug(logger).Log("msg", msg, "store", st.String())
+	}
 
 	cl, err := st.Series(seriesCtx, req)
 	if err != nil {
@@ -488,6 +509,8 @@ func newAsyncRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest,
 			st,
 			closeSeries,
 			cl,
+			shardMatcher,
+			applySharding,
 		), nil
 	case EagerRetrieval:
 		return newEagerRespSet(
@@ -497,6 +520,8 @@ func newAsyncRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest,
 			st,
 			closeSeries,
 			cl,
+			shardMatcher,
+			applySharding,
 		), nil
 	default:
 		panic(fmt.Sprintf("unsupported retrieval strategy %s", retrievalStrategy))
@@ -510,6 +535,8 @@ func (l *lazyRespSet) Close() {
 	l.closeSeries()
 	l.noMoreData = true
 	l.dataOrFinishEvent.Signal()
+
+	l.shardMatcher.Close()
 }
 
 // eagerRespSet is a SeriesSet that blocks until all data is retrieved from
@@ -523,6 +550,8 @@ type eagerRespSet struct {
 	closeSeries  context.CancelFunc
 	st           Client
 	frameTimeout time.Duration
+
+	shardMatcher *storepb.ShardMatcher
 
 	// Internal bookkeeping.
 	err               error
@@ -538,6 +567,8 @@ func newEagerRespSet(
 	st Client,
 	closeSeries context.CancelFunc,
 	cl storepb.Store_SeriesClient,
+	shardMatcher *storepb.ShardMatcher,
+	applySharding bool,
 ) respSet {
 	ret := &eagerRespSet{
 		span:              span,
@@ -548,6 +579,7 @@ func newEagerRespSet(
 		ctx:               ctx,
 		bufferedResponses: []*storepb.SeriesResponse{},
 		wg:                &sync.WaitGroup{},
+		shardMatcher:      shardMatcher,
 	}
 
 	ret.wg.Add(1)
@@ -584,6 +616,10 @@ func newEagerRespSet(
 					return false
 				}
 
+				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
+					return true
+				}
+
 				l.bufferedResponses = append(l.bufferedResponses, resp)
 				return true
 			}
@@ -605,6 +641,7 @@ func newEagerRespSet(
 }
 
 func (l *eagerRespSet) Close() {
+	l.shardMatcher.Close()
 }
 
 func (l *eagerRespSet) At() *storepb.SeriesResponse {

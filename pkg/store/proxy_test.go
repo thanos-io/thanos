@@ -1101,7 +1101,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		func() []Client { return cls },
 		component.Query,
 		nil,
-		0*time.Second,
+		1*time.Second,
 	)
 
 	ctx := context.Background()
@@ -1111,12 +1111,12 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		MinTime:                 1,
 		MaxTime:                 300,
 		Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
-		PartialResponseDisabled: true,
+		PartialResponseDisabled: false,
 		Aggregates: []storepb.Aggr{
 			storepb.Aggr_COUNTER,
 			storepb.Aggr_COUNT,
 		},
-		PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+		PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 		MaxResolutionWindow:     1234,
 	}
 	testutil.Ok(t, q.Series(req, s))
