@@ -68,6 +68,10 @@ func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *writeLimits
 		limiter.configuredLimits.WithLabelValues(tenant, seriesLimitName).Set(float64(*limits.SeriesLimit))
 		limiter.configuredLimits.WithLabelValues(tenant, samplesLimitName).Set(float64(*limits.SamplesLimit))
 	}
+	limiter.configuredLimits.WithLabelValues("", sizeBytesLimitName).Set(float64(*defaultRequestLimits.SizeBytesLimit))
+	limiter.configuredLimits.WithLabelValues("", seriesLimitName).Set(float64(*defaultRequestLimits.SeriesLimit))
+	limiter.configuredLimits.WithLabelValues("", samplesLimitName).Set(float64(*defaultRequestLimits.SamplesLimit))
+
 	return &limiter
 }
 
