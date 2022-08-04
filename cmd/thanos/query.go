@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -487,11 +488,6 @@ func runQuery(
 		}
 	)
 
-	if activeQueryDir != "" {
-		queryTracker := promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
-		engineOpts.ActiveQueryTracker = queryTracker
-	}
-
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -585,7 +581,8 @@ func runQuery(
 		grpcProbe,
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
-	engineCreator := engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta)
+	engineCreator := engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta, activeQueryDir,
+		maxConcurrentQueries, logger)
 
 	// Start query API + UI HTTP server.
 	{
@@ -745,6 +742,9 @@ func engineFactory(
 	newEngine func(promql.EngineOpts) *promql.Engine,
 	eo promql.EngineOpts,
 	dynamicLookbackDelta bool,
+	activeQueryDir string,
+	maxConcurrentQueries int,
+	logger log.Logger,
 ) func(int64) *promql.Engine {
 	resolutions := []int64{downsample.ResLevel0}
 	if dynamicLookbackDelta {
@@ -763,17 +763,27 @@ func engineFactory(
 		if ld < r {
 			lookbackDelta = time.Duration(r) * time.Millisecond
 		}
-		engines[i] = newEngine(promql.EngineOpts{
+
+		var queryTracker *promql.ActiveQueryTracker
+		newEngingOpts := promql.EngineOpts{
 			Logger:                   eo.Logger,
 			Reg:                      wrapReg(i),
 			MaxSamples:               eo.MaxSamples,
 			Timeout:                  eo.Timeout,
-			ActiveQueryTracker:       eo.ActiveQueryTracker,
 			LookbackDelta:            lookbackDelta,
 			NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
 			EnableAtModifier:         eo.EnableAtModifier,
 			EnableNegativeOffset:     eo.EnableNegativeOffset,
-		})
+		}
+		if activeQueryDir != "" {
+			resActiveQueryDir := filepath.Join(activeQueryDir, getActiveQueryDirBasedOnResolution(r))
+			queryTracker = promql.NewActiveQueryTracker(resActiveQueryDir, maxConcurrentQueries, logger)
+			newEngingOpts.ActiveQueryTracker = queryTracker
+		} else {
+			newEngingOpts.ActiveQueryTracker = eo.ActiveQueryTracker
+		}
+
+		engines[i] = newEngine(newEngingOpts)
 	}
 	return func(maxSourceResolutionMillis int64) *promql.Engine {
 		for i := len(resolutions) - 1; i >= 1; i-- {
@@ -787,4 +797,17 @@ func engineFactory(
 		}
 		return engines[0]
 	}
+}
+
+func getActiveQueryDirBasedOnResolution(resolution int64) string {
+	if resolution == downsample.ResLevel0 {
+		return "raw"
+	}
+	if resolution == downsample.ResLevel1 {
+		return "5m"
+	}
+	if resolution == downsample.ResLevel2 {
+		return "1h"
+	}
+	return ""
 }

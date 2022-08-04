@@ -248,7 +248,7 @@ Example file SD file in YAML:
 
 ## Active Query Tracking
 
-`--query.active-query-path` is an option which allows the user to specify a directory which will contain a `queries.active` file to track active queries. To enable this feature, the user has to specify a directory other than "", since that is skipped being the default. Currently, this feature is not covered under the primarily container-based E2E test suite due to container permission issues for creating files.
+`--query.active-query-path` is an option which allows the user to specify a directory which will contain a `queries.active` file to track active queries. To enable this feature, the user has to specify a directory other than "", since that is skipped being the default.
 
 ## Flags
 
