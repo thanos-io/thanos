@@ -19,6 +19,7 @@ import (
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -347,8 +348,12 @@ func newLazyRespSet(
 	st Client,
 	closeSeries context.CancelFunc,
 	cl storepb.Store_SeriesClient,
+	shardInfo *storepb.ShardInfo,
+	logger log.Logger,
 	shardMatcher *storepb.ShardMatcher,
 	applySharding bool,
+	emptyStreamResponses prometheus.Counter,
+
 ) respSet {
 	bufferedResponses := []*storepb.SeriesResponse{}
 	bufferedResponsesMtx := &sync.Mutex{}
@@ -368,6 +373,33 @@ func newLazyRespSet(
 	}
 
 	go func(st Client, l *lazyRespSet) {
+		bytesProcessed := 0
+		seriesStats := &storepb.SeriesStatsCounter{}
+
+		defer func() {
+			if shardInfo != nil {
+				level.Info(logger).Log("msg", "Done fetching series",
+					"series", seriesStats.Series,
+					"chunks", seriesStats.Chunks,
+					"samples", seriesStats.Samples,
+					"bytes", bytesProcessed,
+				)
+			}
+
+			l.span.SetTag("processed.series", seriesStats.Series)
+			l.span.SetTag("processed.chunks", seriesStats.Chunks)
+			l.span.SetTag("processed.samples", seriesStats.Samples)
+			l.span.SetTag("processed.bytes", bytesProcessed)
+			l.span.Finish()
+		}()
+
+		numResponses := 0
+		defer func() {
+			if numResponses == 0 {
+				emptyStreamResponses.Inc()
+			}
+		}()
+
 		handleRecvResponse := func(t *time.Timer) bool {
 			if t != nil {
 				defer t.Reset(frameTimeout)
@@ -380,7 +412,6 @@ func newLazyRespSet(
 				l.err = err
 				l.errMtx.Unlock()
 				l.span.SetTag("err", err.Error())
-				l.span.Finish()
 
 				l.bufferedResponsesMtx.Lock()
 				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
@@ -391,8 +422,6 @@ func newLazyRespSet(
 			default:
 				resp, err := cl.Recv()
 				if err == io.EOF {
-					l.span.Finish()
-
 					l.bufferedResponsesMtx.Lock()
 					l.noMoreData = true
 					l.dataOrFinishEvent.Signal()
@@ -407,7 +436,6 @@ func newLazyRespSet(
 					l.errMtx.Unlock()
 
 					l.span.SetTag("err", err.Error())
-					l.span.Finish()
 
 					l.bufferedResponsesMtx.Lock()
 					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
@@ -417,8 +445,15 @@ func newLazyRespSet(
 					return false
 				}
 
+				numResponses++
+				bytesProcessed += resp.Size()
+
 				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 					return true
+				}
+
+				if resp.GetSeries() != nil {
+					seriesStats.Count(resp.GetSeries())
 				}
 
 				l.bufferedResponsesMtx.Lock()
@@ -457,7 +492,17 @@ const (
 	EagerRetrieval RetrievalStrategy = "eager"
 )
 
-func newAsyncRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest, frameTimeout time.Duration, retrievalStrategy RetrievalStrategy, storeSupportsSharding bool, buffers *sync.Pool, shardInfo *storepb.ShardInfo, logger log.Logger) (respSet, error) {
+func newAsyncRespSet(ctx context.Context,
+	st Client,
+	req *storepb.SeriesRequest,
+	frameTimeout time.Duration,
+	retrievalStrategy RetrievalStrategy,
+	storeSupportsSharding bool,
+	buffers *sync.Pool,
+	shardInfo *storepb.ShardInfo,
+	logger log.Logger,
+	emptyStreamResponses prometheus.Counter) (respSet, error) {
+
 	var span opentracing.Span
 	var closeSeries context.CancelFunc
 
@@ -478,7 +523,6 @@ func newAsyncRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest,
 	seriesCtx, closeSeries = context.WithCancel(seriesCtx)
 
 	shardMatcher := shardInfo.Matcher(buffers)
-	defer shardMatcher.Close()
 
 	applySharding := shardInfo != nil && !storeSupportsSharding
 	if applySharding {
@@ -505,8 +549,11 @@ func newAsyncRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest,
 			st,
 			closeSeries,
 			cl,
+			shardInfo,
+			logger,
 			shardMatcher,
 			applySharding,
+			emptyStreamResponses,
 		), nil
 	case EagerRetrieval:
 		return newEagerRespSet(
@@ -516,8 +563,11 @@ func newAsyncRespSet(ctx context.Context, st Client, req *storepb.SeriesRequest,
 			st,
 			closeSeries,
 			cl,
+			shardInfo,
+			logger,
 			shardMatcher,
 			applySharding,
+			emptyStreamResponses,
 		), nil
 	default:
 		panic(fmt.Sprintf("unsupported retrieval strategy %s", retrievalStrategy))
@@ -563,8 +613,11 @@ func newEagerRespSet(
 	st Client,
 	closeSeries context.CancelFunc,
 	cl storepb.Store_SeriesClient,
+	shardInfo *storepb.ShardInfo,
+	logger log.Logger,
 	shardMatcher *storepb.ShardMatcher,
 	applySharding bool,
+	emptyStreamResponses prometheus.Counter,
 ) respSet {
 	ret := &eagerRespSet{
 		span:              span,
@@ -582,7 +635,35 @@ func newEagerRespSet(
 
 	// Start a goroutine and immediately buffer everything.
 	go func(st Client, l *eagerRespSet) {
+		seriesStats := &storepb.SeriesStatsCounter{}
+		bytesProcessed := 0
+
+		defer func() {
+			if shardInfo != nil {
+				level.Info(logger).Log("msg", "Done fetching series",
+					"series", seriesStats.Series,
+					"chunks", seriesStats.Chunks,
+					"samples", seriesStats.Samples,
+					"bytes", bytesProcessed,
+				)
+			}
+
+			l.span.SetTag("processed.series", seriesStats.Series)
+			l.span.SetTag("processed.chunks", seriesStats.Chunks)
+			l.span.SetTag("processed.samples", seriesStats.Samples)
+			l.span.SetTag("processed.bytes", bytesProcessed)
+			l.span.Finish()
+			ret.wg.Done()
+		}()
+
 		defer ret.wg.Done()
+
+		numResponses := 0
+		defer func() {
+			if numResponses == 0 {
+				emptyStreamResponses.Inc()
+			}
+		}()
 
 		handleRecvResponse := func(t *time.Timer) bool {
 			if t != nil {
@@ -595,12 +676,10 @@ func newEagerRespSet(
 				l.err = err
 				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
 				l.span.SetTag("err", err.Error())
-				l.span.Finish()
 				return false
 			default:
 				resp, err := cl.Recv()
 				if err == io.EOF {
-					l.span.Finish()
 					return false
 				}
 				if err != nil {
@@ -608,12 +687,18 @@ func newEagerRespSet(
 					l.err = err
 					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
 					l.span.SetTag("err", err.Error())
-					l.span.Finish()
 					return false
 				}
 
+				numResponses++
+				bytesProcessed += resp.Size()
+
 				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
 					return true
+				}
+
+				if resp.GetSeries() != nil {
+					seriesStats.Count(resp.GetSeries())
 				}
 
 				l.bufferedResponses = append(l.bufferedResponses, resp)
