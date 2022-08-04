@@ -241,14 +241,6 @@ func (s cancelableRespSender) send(r *storepb.SeriesResponse) {
 	}
 }
 
-func frameCtx(ctx context.Context, responseTimeout time.Duration) (context.Context, context.CancelFunc) {
-	frameTimeoutCtx := ctx
-	if responseTimeout != 0 {
-		return context.WithTimeout(frameTimeoutCtx, responseTimeout)
-	}
-	return frameTimeoutCtx, func() {}
-}
-
 func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	// TODO(bwplotka): This should be part of request logger, otherwise it does not make much sense. Also, could be
 	// tiggered by tracing span to reduce cognitive load.

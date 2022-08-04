@@ -368,9 +368,10 @@ func newLazyRespSet(
 	}
 
 	go func(st Client, l *lazyRespSet) {
-		handleRecvResponse := func() bool {
-			frameTimeoutCtx, cancel := frameCtx(l.ctx, frameTimeout)
-			defer cancel()
+		handleRecvResponse := func(t *time.Timer) bool {
+			if t != nil {
+				defer t.Reset(frameTimeout)
+			}
 
 			select {
 			case <-l.ctx.Done():
@@ -382,19 +383,7 @@ func newLazyRespSet(
 				l.span.Finish()
 
 				l.bufferedResponsesMtx.Lock()
-				l.noMoreData = true
-				l.dataOrFinishEvent.Signal()
-				l.bufferedResponsesMtx.Unlock()
-				return false
-			case <-frameTimeoutCtx.Done():
-				err := errors.Wrapf(frameTimeoutCtx.Err(), "failed to receive any data in %v from %s", frameTimeout, st.String())
-				l.errMtx.Lock()
-				l.err = err
-				l.errMtx.Unlock()
-				l.span.SetTag("err", err.Error())
-				l.span.Finish()
-
-				l.bufferedResponsesMtx.Lock()
+				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
 				l.noMoreData = true
 				l.dataOrFinishEvent.Signal()
 				l.bufferedResponsesMtx.Unlock()
@@ -421,6 +410,7 @@ func newLazyRespSet(
 					l.span.Finish()
 
 					l.bufferedResponsesMtx.Lock()
+					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
 					l.noMoreData = true
 					l.dataOrFinishEvent.Signal()
 					l.bufferedResponsesMtx.Unlock()
@@ -438,8 +428,14 @@ func newLazyRespSet(
 				return true
 			}
 		}
+
+		var t *time.Timer
+		if frameTimeout > 0 {
+			t = time.AfterFunc(frameTimeout, closeSeries)
+			defer t.Stop()
+		}
 		for {
-			if !handleRecvResponse() {
+			if !handleRecvResponse(t) {
 				return
 			}
 		}
