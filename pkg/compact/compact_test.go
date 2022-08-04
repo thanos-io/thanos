@@ -8,7 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"path"
 	"testing"
 	"time"
@@ -20,12 +20,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -143,7 +143,7 @@ func TestGroupMaxMinTime(t *testing.T) {
 
 func BenchmarkGatherNoCompactionMarkFilter_Filter(b *testing.B) {
 	ctx := context.TODO()
-	logger := log.NewLogfmtLogger(ioutil.Discard)
+	logger := log.NewLogfmtLogger(io.Discard)
 
 	m := extprom.NewTxGaugeVec(nil, prometheus.GaugeOpts{}, []string{"state"})
 
@@ -210,7 +210,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
-	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "")
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1)
 
 	type groupedResult map[string]float64
 
@@ -376,7 +376,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
-	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "")
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1)
 
 	for _, tcase := range []struct {
 		testName string
@@ -498,7 +498,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for downsample progress tests"})
-	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "")
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1)
 
 	for _, tcase := range []struct {
 		testName string

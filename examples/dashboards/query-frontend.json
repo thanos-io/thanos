@@ -610,7 +610,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tripperware) (rate(cortex_cache_fetched_keys{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, tripperware) (rate(cortex_cache_fetched_keys_total{job=~\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{tripperware}}",
@@ -687,7 +687,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tripperware) (rate(cortex_cache_hits{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, tripperware) (rate(cortex_cache_hits_total{job=~\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{tripperware}}",

@@ -6,10 +6,11 @@ package receive
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/thanos-io/objstore"
 
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/types"
@@ -29,7 +30,7 @@ import (
 )
 
 func TestMultiTSDB(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test")
+	dir, err := os.MkdirTemp("", "test")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -412,8 +413,155 @@ func checkExemplarsResponse(t *testing.T, name string, expected, data []exemplar
 	}
 }
 
+func TestMultiTSDBPrune(t *testing.T) {
+	tests := []struct {
+		name            string
+		bucket          objstore.Bucket
+		expectedTenants int
+		expectedUploads int
+	}{
+		{
+			name:            "prune tsdbs without object storage",
+			bucket:          nil,
+			expectedTenants: 1,
+			expectedUploads: 0,
+		},
+		{
+			name:            "prune tsdbs with object storage",
+			bucket:          objstore.NewInMemBucket(),
+			expectedTenants: 1,
+			expectedUploads: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir, err := os.MkdirTemp("", "multitsdb-prune")
+			testutil.Ok(t, err)
+			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				test.bucket,
+				false,
+				metadata.NoneFunc,
+			)
+			defer func() { testutil.Ok(t, m.Close()) }()
+
+			for i := 0; i < 100; i++ {
+				testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10+i))))
+				testutil.Ok(t, appendSample(m, "bar", time.UnixMilli(int64(10+i))))
+				testutil.Ok(t, appendSample(m, "baz", time.Now().Add(time.Duration(i)*time.Second)))
+			}
+			testutil.Equals(t, 3, len(m.TSDBStores()))
+
+			testutil.Ok(t, m.Prune(context.Background()))
+			testutil.Equals(t, test.expectedTenants, len(m.TSDBStores()))
+
+			var shippedBlocks int
+			if test.bucket != nil {
+				testutil.Ok(t, test.bucket.Iter(context.Background(), "", func(s string) error {
+					shippedBlocks++
+					return nil
+				}))
+			}
+			testutil.Equals(t, test.expectedUploads, shippedBlocks)
+		})
+	}
+}
+
+func TestMultiTSDBStats(t *testing.T) {
+	tests := []struct {
+		name          string
+		tenants       []string
+		expectedStats int
+	}{
+		{
+			name:          "single tenant",
+			tenants:       []string{"foo"},
+			expectedStats: 1,
+		},
+		{
+			name:          "missing tenant",
+			tenants:       []string{"missing-foo"},
+			expectedStats: 0,
+		},
+		{
+			name:          "multiple tenants with missing tenant",
+			tenants:       []string{"foo", "missing-foo"},
+			expectedStats: 1,
+		},
+		{
+			name:          "all tenants",
+			tenants:       []string{"foo", "bar", "baz"},
+			expectedStats: 3,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir, err := os.MkdirTemp("", "tsdb-stats")
+			testutil.Ok(t, err)
+			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				nil,
+				false,
+				metadata.NoneFunc,
+			)
+			defer func() { testutil.Ok(t, m.Close()) }()
+
+			testutil.Ok(t, appendSample(m, "foo", time.Now()))
+			testutil.Ok(t, appendSample(m, "bar", time.Now()))
+			testutil.Ok(t, appendSample(m, "baz", time.Now()))
+			testutil.Equals(t, 3, len(m.TSDBStores()))
+
+			stats := m.TenantStats(labels.MetricName, test.tenants...)
+			testutil.Equals(t, test.expectedStats, len(stats))
+		})
+	}
+}
+
+func appendSample(m *MultiTSDB, tenant string, timestamp time.Time) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	app, err := m.TenantAppendable(tenant)
+	if err != nil {
+		return err
+	}
+
+	var a storage.Appender
+	if err := runutil.Retry(1*time.Second, ctx.Done(), func() error {
+		a, err = app.Appender(ctx)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	_, err = a.Append(0, labels.FromStrings("foo", "bar"), timestamp.UnixMilli(), 10)
+	if err != nil {
+		return err
+	}
+
+	return a.Commit()
+}
+
 func BenchmarkMultiTSDB(b *testing.B) {
-	dir, err := ioutil.TempDir("", "multitsdb")
+	dir, err := os.MkdirTemp("", "multitsdb")
 	testutil.Ok(b, err)
 	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
 

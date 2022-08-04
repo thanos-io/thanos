@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"os"
 	"path"
@@ -24,10 +24,11 @@ import (
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/tsdb"
 
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/objtesting"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -38,7 +39,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 		metrics := prometheus.NewRegistry()
 		metricsBucket := objstore.BucketWithMetrics("test", bkt, metrics)
 
-		dir, err := ioutil.TempDir("", "shipper-e2e-test")
+		dir, err := os.MkdirTemp("", "shipper-e2e-test")
 		testutil.Ok(t, err)
 		defer func() {
 			testutil.Ok(t, os.RemoveAll(dir))
@@ -94,8 +95,8 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			metab, err := json.Marshal(&meta)
 			testutil.Ok(t, err)
 
-			testutil.Ok(t, ioutil.WriteFile(tmp+"/meta.json", metab, 0666))
-			testutil.Ok(t, ioutil.WriteFile(tmp+"/index", []byte("indexcontents"), 0666))
+			testutil.Ok(t, os.WriteFile(tmp+"/meta.json", metab, 0666))
+			testutil.Ok(t, os.WriteFile(tmp+"/index", []byte("indexcontents"), 0666))
 
 			// Running shipper while a block is being written to temp dir should not trigger uploads.
 			b, err := shipper.Sync(ctx)
@@ -110,8 +111,8 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
 			testutil.Ok(t, os.MkdirAll(tmp+"/chunks", 0777))
-			testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0001", []byte("chunkcontents1"), 0666))
-			testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0002", []byte("chunkcontents2"), 0666))
+			testutil.Ok(t, os.WriteFile(tmp+"/chunks/0001", []byte("chunkcontents1"), 0666))
+			testutil.Ok(t, os.WriteFile(tmp+"/chunks/0002", []byte("chunkcontents2"), 0666))
 
 			testutil.Ok(t, os.Rename(tmp, bdir))
 
@@ -183,7 +184,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 		for fn, exp := range expFiles {
 			rc, err := bkt.Get(ctx, fn)
 			testutil.Ok(t, err)
-			act, err := ioutil.ReadAll(rc)
+			act, err := io.ReadAll(rc)
 			testutil.Ok(t, err)
 			testutil.Ok(t, rc.Close())
 			testutil.Equals(t, string(exp), string(act))
@@ -197,7 +198,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 
 func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
-		dir, err := ioutil.TempDir("", "shipper-e2e-test")
+		dir, err := os.MkdirTemp("", "shipper-e2e-test")
 		testutil.Ok(t, err)
 		defer func() {
 			testutil.Ok(t, os.RemoveAll(dir))
@@ -269,8 +270,8 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			metab, err := json.Marshal(&meta)
 			testutil.Ok(t, err)
 
-			testutil.Ok(t, ioutil.WriteFile(tmp+"/meta.json", metab, 0666))
-			testutil.Ok(t, ioutil.WriteFile(tmp+"/index", []byte("indexcontents"), 0666))
+			testutil.Ok(t, os.WriteFile(tmp+"/meta.json", metab, 0666))
+			testutil.Ok(t, os.WriteFile(tmp+"/index", []byte("indexcontents"), 0666))
 
 			// Running shipper while a block is being written to temp dir should not trigger uploads.
 			b, err := shipper.Sync(ctx)
@@ -285,8 +286,8 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
 			testutil.Ok(t, os.MkdirAll(tmp+"/chunks", 0777))
-			testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0001", []byte("chunkcontents1"), 0666))
-			testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0002", []byte("chunkcontents2"), 0666))
+			testutil.Ok(t, os.WriteFile(tmp+"/chunks/0001", []byte("chunkcontents1"), 0666))
+			testutil.Ok(t, os.WriteFile(tmp+"/chunks/0002", []byte("chunkcontents2"), 0666))
 
 			testutil.Ok(t, os.Rename(tmp, bdir))
 
@@ -340,7 +341,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		for fn, exp := range expFiles {
 			rc, err := bkt.Get(ctx, fn)
 			testutil.Ok(t, err)
-			act, err := ioutil.ReadAll(rc)
+			act, err := io.ReadAll(rc)
 			testutil.Ok(t, err)
 			testutil.Ok(t, rc.Close())
 			testutil.Equals(t, string(exp), string(act))
@@ -356,7 +357,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
-	dir, err := ioutil.TempDir("", "shipper-e2e-test")
+	dir, err := os.MkdirTemp("", "shipper-e2e-test")
 	testutil.Ok(t, err)
 	defer func() {
 		testutil.Ok(t, os.RemoveAll(dir))
@@ -436,8 +437,8 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 		metab, err := json.Marshal(&m[i])
 		testutil.Ok(t, err)
 
-		testutil.Ok(t, ioutil.WriteFile(tmp[i]+"/meta.json", metab, 0666))
-		testutil.Ok(t, ioutil.WriteFile(tmp[i]+"/index", []byte("indexcontents"), 0666))
+		testutil.Ok(t, os.WriteFile(tmp[i]+"/meta.json", metab, 0666))
+		testutil.Ok(t, os.WriteFile(tmp[i]+"/index", []byte("indexcontents"), 0666))
 
 		// Running shipper while a block is being written to temp dir should not trigger uploads.
 		b, err := shipper.Sync(ctx)
@@ -452,8 +453,8 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 		testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
 		testutil.Ok(t, os.MkdirAll(tmp[i]+"/chunks", 0777))
-		testutil.Ok(t, ioutil.WriteFile(tmp[i]+"/chunks/0001", []byte("chunkcontents1"), 0666))
-		testutil.Ok(t, ioutil.WriteFile(tmp[i]+"/chunks/0002", []byte("chunkcontents2"), 0666))
+		testutil.Ok(t, os.WriteFile(tmp[i]+"/chunks/0001", []byte("chunkcontents1"), 0666))
+		testutil.Ok(t, os.WriteFile(tmp[i]+"/chunks/0002", []byte("chunkcontents2"), 0666))
 
 		testutil.Ok(t, os.Rename(tmp[i], bdir))
 
@@ -496,7 +497,7 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 	for fn, exp := range expFiles {
 		rc, err := bkt.Get(ctx, fn)
 		testutil.Ok(t, err)
-		act, err := ioutil.ReadAll(rc)
+		act, err := io.ReadAll(rc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, rc.Close())
 		testutil.Equals(t, string(exp), string(act))

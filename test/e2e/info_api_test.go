@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"path"
 	"testing"
@@ -16,7 +16,8 @@ import (
 	"github.com/efficientgo/e2e"
 	"github.com/prometheus/prometheus/model/labels"
 
-	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/objstore/client"
+
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -30,36 +31,31 @@ func TestInfo(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	prom1, sidecar1, err := e2ethanos.NewPrometheusWithSidecar(e, "alone1", e2ethanos.DefaultPromConfig("prom-alone1", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	testutil.Ok(t, err)
-	prom2, sidecar2, err := e2ethanos.NewPrometheusWithSidecar(e, "alone2", e2ethanos.DefaultPromConfig("prom-alone2", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	testutil.Ok(t, err)
-	prom3, sidecar3, err := e2ethanos.NewPrometheusWithSidecar(e, "alone3", e2ethanos.DefaultPromConfig("prom-alone3", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	testutil.Ok(t, err)
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone1", e2ethanos.DefaultPromConfig("prom-alone1", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "alone2", e2ethanos.DefaultPromConfig("prom-alone2", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom3, sidecar3 := e2ethanos.NewPrometheusWithSidecar(e, "alone3", e2ethanos.DefaultPromConfig("prom-alone3", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
 
 	const bucket = "info-api-test"
-	m, err := e2ethanos.NewMinio(e, "thanos-minio", bucket)
-	testutil.Ok(t, err)
+	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
-	store, err := e2ethanos.NewStoreGW(
+	store := e2ethanos.NewStoreGW(
 		e,
 		"1",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), e2ethanos.ContainerSharedDir),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 		},
 		"",
 		nil,
 	)
-	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(store))
 
 	// Register `sidecar1` in all flags (i.e. '--store', '--rule', '--target', '--metadata', '--exemplar', '--endpoint') to verify
 	// '--endpoint' flag works properly works together with other flags ('--target', '--metadata' etc.).
 	// Register 2 sidecars and 1 storeGW using '--endpoint'.
 	// Register `sidecar3` twice to verify it is deduplicated.
-	q, err := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).
 		WithTargetAddresses(sidecar1.InternalEndpoint("grpc")).
 		WithMetadataAddresses(sidecar1.InternalEndpoint("grpc")).
 		WithExemplarAddresses(sidecar1.InternalEndpoint("grpc")).
@@ -70,8 +66,7 @@ func TestInfo(t *testing.T) {
 			sidecar3.InternalEndpoint("grpc"),
 			store.InternalEndpoint("grpc"),
 		).
-		Build()
-	testutil.Ok(t, err)
+		Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	expected := map[string][]query.EndpointStatus{
@@ -141,7 +136,7 @@ func TestInfo(t *testing.T) {
 			return err
 		}
 
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		defer runutil.CloseWithErrCapture(&err, resp.Body, "response body close")
 
 		var res struct {

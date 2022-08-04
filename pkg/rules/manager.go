@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -333,7 +332,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	}
 
 	for _, fn := range files {
-		b, err := ioutil.ReadFile(filepath.Clean(fn))
+		b, err := os.ReadFile(filepath.Clean(fn))
 		if err != nil {
 			errs.Add(err)
 			continue
@@ -365,7 +364,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 				errs.Add(errors.Wrapf(err, "create %s", filepath.Dir(newFn)))
 				continue
 			}
-			if err := ioutil.WriteFile(newFn, b, os.ModePerm); err != nil {
+			if err := os.WriteFile(newFn, b, os.ModePerm); err != nil {
 				errs.Add(errors.Wrapf(err, "write file %v", newFn))
 				continue
 			}
@@ -382,7 +381,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 			continue
 		}
 		// We add external labels in `pkg/alert.Queue`.
-		if err := mgr.Update(evalInterval, fs, nil, m.externalURL); err != nil {
+		if err := mgr.Update(evalInterval, fs, m.extLset, m.externalURL, nil); err != nil {
 			// TODO(bwplotka): Prometheus logs all error details. Fix it upstream to have consistent error handling.
 			errs.Add(errors.Wrapf(err, "strategy %s, update rules", s))
 			continue

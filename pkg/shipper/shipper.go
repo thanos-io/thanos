@@ -8,7 +8,6 @@ package shipper
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"math"
 	"os"
 	"path"
@@ -25,9 +24,10 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 
+	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -369,7 +369,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 // blockMetasFromOldest returns the block meta of each block found in dir
 // sorted by minTime asc.
 func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, _ error) {
-	fis, err := ioutil.ReadDir(s.dir)
+	fis, err := os.ReadDir(s.dir)
 	if err != nil {
 		return nil, errors.Wrap(err, "read dir")
 	}
@@ -409,7 +409,7 @@ func hardlinkBlock(src, dst string) error {
 		return errors.Wrap(err, "create chunks dir")
 	}
 
-	fis, err := ioutil.ReadDir(filepath.Join(src, block.ChunksDirname))
+	fis, err := os.ReadDir(filepath.Join(src, block.ChunksDirname))
 	if err != nil {
 		return errors.Wrap(err, "read chunk dir")
 	}

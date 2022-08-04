@@ -5,16 +5,21 @@ package main
 
 import (
 	"bytes"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
+type copyright []byte
+
 var (
-	// license compatible for Go and Proto files.
-	license = []byte(`// Copyright (c) The Thanos Authors.
+	// thanos compatible for Go and Proto files.
+	thanos copyright = []byte(`// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+`)
+	cortex copyright = []byte(`// Copyright (c) The Cortex Authors.
 // Licensed under the Apache License 2.0.
 
 `)
@@ -38,30 +43,44 @@ func applyLicenseToProtoAndGo() error {
 			return nil
 		}
 		if (filepath.Ext(path) != ".proto" && filepath.Ext(path) != ".go") ||
-			// We copied this file and we want maintain its license (MIT).
+			// We copied this file, and we want to maintain its license (MIT).
 			path == "pkg/testutil/testutil.go" ||
 			// Generated file.
 			path == "pkg/ui/bindata.go" {
 			return nil
 		}
 
-		b, err := ioutil.ReadFile(filepath.Clean(path))
+		b, err := os.ReadFile(filepath.Clean(path))
 		if err != nil {
 			return err
 		}
 
-		if !strings.HasPrefix(string(b), string(license)) {
-			log.Println("file", path, "is missing Copyright header. Adding.")
-
-			var bb bytes.Buffer
-			_, _ = bb.Write(license)
-			_, _ = bb.Write(b)
-			if err = ioutil.WriteFile(path, bb.Bytes(), 0600); err != nil {
-				return err
-			}
+		var cr copyright
+		if strings.HasPrefix(path, "internal/cortex") {
+			// We vendored in Cortex files, and we want to maintain its license
+			cr = cortex
+		} else {
+			cr = thanos
+		}
+		if err := writeLicence(cr, path, b); err != nil {
+			return err
 		}
 		return nil
 	})
+}
+
+func writeLicence(cr copyright, path string, b []byte) error {
+	if !strings.HasPrefix(string(b), string(cr)) {
+		log.Println("file", path, "is missing Copyright header. Adding.")
+
+		var bb bytes.Buffer
+		_, _ = bb.Write(cr)
+		_, _ = bb.Write(b)
+		if err := os.WriteFile(path, bb.Bytes(), 0600); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func main() {

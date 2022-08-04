@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"path"
 	"sort"
 
@@ -20,10 +19,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 
+	"github.com/thanos-io/objstore"
+
 	thanosblock "github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -241,13 +241,13 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 	}
 
 	// TODO(bwplotka): Allow injecting custom labels as shipper does.
-	originMetaFileContent, err := ioutil.ReadAll(originMetaFile)
+	originMetaFileContent, err := io.ReadAll(originMetaFile)
 	if err != nil {
 		return errors.Wrap(err, "read origin meta file")
 	}
 
 	if targetMetaFile != nil && !rs.toBkt.IsObjNotFoundErr(err) {
-		targetMetaFileContent, err := ioutil.ReadAll(targetMetaFile)
+		targetMetaFileContent, err := io.ReadAll(targetMetaFile)
 		if err != nil {
 			return errors.Wrap(err, "read target meta file")
 		}

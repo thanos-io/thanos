@@ -5,9 +5,10 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
+	"net/url"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
@@ -22,7 +23,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
+	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -33,8 +38,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -173,6 +176,18 @@ func runReceive(
 		return errors.Wrapf(err, "migrate legacy storage in %v to default tenant %v", conf.dataDir, conf.defaultTenantID)
 	}
 
+	relabelContentYaml, err := conf.relabelConfigPath.Content()
+	if err != nil {
+		return errors.Wrap(err, "get content of relabel configuration")
+	}
+	var relabelConfig []*relabel.Config
+	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
+		return errors.Wrap(err, "parse relabel configuration")
+	}
+
+	// Impose active series limit only if Receiver is in Router or RouterIngestor mode, and config is provided.
+	seriesLimitSupported := (receiveMode == receive.RouterOnly || receiveMode == receive.RouterIngestor) && conf.maxPerTenantLimit != 0
+
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
@@ -186,19 +201,31 @@ func runReceive(
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:            writer,
-		ListenAddress:     conf.rwAddress,
-		Registry:          reg,
-		Endpoint:          conf.endpoint,
-		TenantHeader:      conf.tenantHeader,
-		DefaultTenantID:   conf.defaultTenantID,
-		ReplicaHeader:     conf.replicaHeader,
-		ReplicationFactor: conf.replicationFactor,
-		ReceiverMode:      receiveMode,
-		Tracer:            tracer,
-		TLSConfig:         rwTLSConfig,
-		DialOpts:          dialOpts,
-		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
+		Writer:                       writer,
+		ListenAddress:                conf.rwAddress,
+		Registry:                     reg,
+		Endpoint:                     conf.endpoint,
+		TenantHeader:                 conf.tenantHeader,
+		TenantField:                  conf.tenantField,
+		DefaultTenantID:              conf.defaultTenantID,
+		ReplicaHeader:                conf.replicaHeader,
+		ReplicationFactor:            conf.replicationFactor,
+		RelabelConfigs:               relabelConfig,
+		ReceiverMode:                 receiveMode,
+		Tracer:                       tracer,
+		TLSConfig:                    rwTLSConfig,
+		DialOpts:                     dialOpts,
+		ForwardTimeout:               time.Duration(*conf.forwardTimeout),
+		TSDBStats:                    dbs,
+		SeriesLimitSupported:         seriesLimitSupported,
+		MaxPerTenantLimit:            conf.maxPerTenantLimit,
+		MetaMonitoringUrl:            conf.metaMonitoringUrl,
+		MetaMonitoringHttpClient:     conf.metaMonitoringHttpClient,
+		MetaMonitoringLimitQuery:     conf.metaMonitoringLimitQuery,
+		WriteSeriesLimit:             conf.writeSeriesLimit,
+		WriteSamplesLimit:            conf.writeSamplesLimit,
+		WriteRequestSizeLimit:        conf.writeRequestSizeLimit,
+		WriteRequestConcurrencyLimit: conf.writeRequestConcurrencyLimit,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -278,6 +305,38 @@ func runReceive(
 		)
 	}
 
+	if seriesLimitSupported {
+		level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
+		{
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				return runutil.Repeat(15*time.Second, ctx.Done(), func() error {
+					if err := webHandler.ActiveSeriesLimit.QueryMetaMonitoring(ctx, log.With(logger, "component", "receive-meta-monitoring")); err != nil {
+						level.Error(logger).Log("msg", "failed to query meta-monitoring", "err", err.Error())
+					}
+					return nil
+				})
+			}, func(err error) {
+				cancel()
+			})
+		}
+	}
+
+	level.Debug(logger).Log("msg", "setting up periodic tenant pruning")
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			return runutil.Repeat(2*time.Hour, ctx.Done(), func() error {
+				if err := dbs.Prune(ctx); err != nil {
+					level.Error(logger).Log("err", err)
+				}
+				return nil
+			})
+		}, func(err error) {
+			cancel()
+		})
+	}
+
 	level.Info(logger).Log("msg", "starting receiver")
 	return nil
 }
@@ -334,8 +393,9 @@ func setupAndRunGRPCServer(g *run.Group,
 					if isReady() {
 						minTime, maxTime := mts.TimeRange()
 						return &infopb.StoreInfo{
-							MinTime: minTime,
-							MaxTime: maxTime,
+							MinTime:          minTime,
+							MaxTime:          maxTime,
+							SupportsSharding: true,
 						}
 					}
 					return nil
@@ -414,7 +474,7 @@ func setupHashring(g *run.Group,
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "the hashring initialized with config watcher.")
-			return receive.HashringFromConfigWatcher(ctx, updates, cw)
+			return receive.HashringFromConfigWatcher(ctx, receive.HashringAlgorithm(conf.hashringsAlgorithm), updates, cw)
 		}, func(error) {
 			cancel()
 		})
@@ -425,7 +485,7 @@ func setupHashring(g *run.Group,
 		)
 		// The Hashrings config file content given initialize configuration from content.
 		if len(conf.hashringsFileContent) > 0 {
-			ring, err = receive.HashringFromConfig(conf.hashringsFileContent)
+			ring, err = receive.HashringFromConfig(receive.HashringAlgorithm(conf.hashringsAlgorithm), conf.hashringsFileContent)
 			if err != nil {
 				close(updates)
 				return errors.Wrap(err, "failed to validate hashring configuration file")
@@ -657,7 +717,7 @@ func migrateLegacyStorage(logger log.Logger, dataDir, defaultTenantID string) er
 
 	level.Info(logger).Log("msg", "found legacy storage, migrating to multi-tsdb layout with default tenant", "defaultTenantID", defaultTenantID)
 
-	files, err := ioutil.ReadDir(dataDir)
+	files, err := os.ReadDir(dataDir)
 	if err != nil {
 		return errors.Wrapf(err, "read legacy data dir: %v", dataDir)
 	}
@@ -698,6 +758,11 @@ type receiveConfig struct {
 	rwClientServerCA   string
 	rwClientServerName string
 
+	maxPerTenantLimit        uint64
+	metaMonitoringLimitQuery string
+	metaMonitoringUrl        *url.URL
+	metaMonitoringHttpClient *extflag.PathOrContent
+
 	dataDir   string
 	labelStrs []string
 
@@ -706,10 +771,12 @@ type receiveConfig struct {
 
 	hashringsFilePath    string
 	hashringsFileContent string
+	hashringsAlgorithm   string
 
 	refreshInterval   *model.Duration
 	endpoint          string
 	tenantHeader      string
+	tenantField       string
 	tenantLabelName   string
 	defaultTenantID   string
 	replicaHeader     string
@@ -729,7 +796,13 @@ type receiveConfig struct {
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
 
-	reqLogConfig *extflag.PathOrContent
+	reqLogConfig      *extflag.PathOrContent
+	relabelConfigPath *extflag.PathOrContent
+
+	writeSeriesLimit             int64
+	writeSamplesLimit            int64
+	writeRequestSizeLimit        int64
+	writeRequestConcurrencyLimit int
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -760,18 +833,25 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
-	rc.retention = extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention.").Default("15d"))
+	rc.retention = extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention. For more details on how retention is enforced for individual tenants, please refer to the Tenant lifecycle management section in the Receive documentation: https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management").Default("15d"))
 
 	cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration. A watcher is initialized to watch changes and update the hashring dynamically.").PlaceHolder("<path>").StringVar(&rc.hashringsFilePath)
 
 	cmd.Flag("receive.hashrings", "Alternative to 'receive.hashrings-file' flag (lower priority). Content of file that contains the hashring configuration.").PlaceHolder("<content>").StringVar(&rc.hashringsFileContent)
 
+	hashringAlgorithmsHelptext := strings.Join([]string{string(receive.AlgorithmHashmod), string(receive.AlgorithmKetama)}, ", ")
+	cmd.Flag("receive.hashrings-algorithm", "The algorithm used when distributing series in the hashrings. Must be one of "+hashringAlgorithmsHelptext).
+		Default(string(receive.AlgorithmHashmod)).
+		EnumVar(&rc.hashringsAlgorithm, string(receive.AlgorithmHashmod), string(receive.AlgorithmKetama))
+
 	rc.refreshInterval = extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
 
-	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration.").StringVar(&rc.endpoint)
+	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration. If it's empty AND hashring configuration was provided, it means that receive will run in RoutingOnly mode.").StringVar(&rc.endpoint)
 
 	cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(receive.DefaultTenantHeader).StringVar(&rc.tenantHeader)
+
+	cmd.Flag("receive.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+receive.CertificateFieldOrganization+", "+receive.CertificateFieldOrganizationalUnit+" or "+receive.CertificateFieldCommonName+". This setting will cause the receive.tenant-header flag value to be ignored.").Default("").EnumVar(&rc.tenantField, "", receive.CertificateFieldOrganization, receive.CertificateFieldOrganizationalUnit, receive.CertificateFieldCommonName)
 
 	cmd.Flag("receive.default-tenant-id", "Default tenant ID to use when none is provided via a header.").Default(receive.DefaultTenant).StringVar(&rc.defaultTenantID)
 
@@ -781,7 +861,17 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
 
+	cmd.Flag("receive.tenant-limits.max-head-series", "The total number of active (head) series that a tenant is allowed to have within a Receive topology. For more details refer: https://thanos.io/tip/components/receive.md/#limiting").Hidden().Uint64Var(&rc.maxPerTenantLimit)
+
+	cmd.Flag("receive.tenant-limits.meta-monitoring-url", "Meta-monitoring URL which is compatible with Prometheus Query API for active series limiting.").Hidden().URLVar(&rc.metaMonitoringUrl)
+
+	cmd.Flag("receive.tenant-limits.meta-monitoring-query", "PromQL Query to execute against meta-monitoring, to get the current number of active series for each tenant, across Receive replicas.").Default("sum(prometheus_tsdb_head_series) by (tenant)").Hidden().StringVar(&rc.metaMonitoringLimitQuery)
+
+	rc.metaMonitoringHttpClient = extflag.RegisterPathOrContent(cmd, "receive.tenant-limits.meta-monitoring-client", "YAML file or string with http client configs for meta-monitoring.", extflag.WithHidden())
+
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
+
+	rc.relabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 
@@ -811,6 +901,29 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").Hidden().BoolVar(&rc.allowOutOfOrderUpload)
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
+
+	// TODO(douglascamata): Allow all these limits to be configured per tenant
+	// and move the configuration to a file. Then this is done, remove the
+	// "hidden" modifier on all these flags.
+	cmd.Flag("receive.write-request-limits.max-series",
+		"The maximum amount of series accepted in remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeSeriesLimit)
+
+	cmd.Flag("receive.write-request-limits.max-samples",
+		"The maximum amount of samples accepted in remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeSamplesLimit)
+
+	cmd.Flag("receive.write-request-limits.max-size-bytes",
+		"The maximum size (in bytes) of remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeRequestSizeLimit)
+
+	cmd.Flag("receive.write-request-limits.max-concurrency",
+		"The maximum amount of remote write requests that will be concurrently processed while others wait."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().IntVar(&rc.writeRequestConcurrencyLimit)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

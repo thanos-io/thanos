@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -29,7 +30,7 @@ import (
 
 var testGRPCOpts = []grpc.DialOption{
 	grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
-	grpc.WithInsecure(),
+	grpc.WithTransportCredentials(insecure.NewCredentials()),
 }
 
 type testStore struct {

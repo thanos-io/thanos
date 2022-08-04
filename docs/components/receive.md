@@ -12,6 +12,20 @@ For more information please check out [initial design proposal](../proposals-don
 
 > NOTE: As the block producer it's important to set correct "external labels" that will identify data block across Thanos clusters. See [external labels](../storage.md#external-labels) docs for details.
 
+## TSDB stats
+
+Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
+
+Note that each Thanos Receive will only expose local stats and replicated series will not be included in the response.
+
+## Tenant lifecycle management
+
+Tenants in Receivers are created dynamically and do not need to be provisioned upfront. When a new value is detected in the tenant HTTP header, Receivers will provision and start managing an independent TSDB for that tenant. TSDB blocks that are sent to S3 will contain a unique `tenant_id` label which can be used to compact blocks independently for each tenant.
+
+A Receiver will automatically decommission a tenant once new samples have not been seen for longer than the `--tsdb.retention` period configured for the Receiver. The tenant decommission process includes flushing all in-memory samples for that tenant to disk, sending all unsent blocks to S3, and removing the tenant TSDB from the filesystem. If a tenant receives new samples after being decommissioned, a new TSDB will be created for the tenant.
+
+Note that because of the built-in decommissioning process, the semantic of the `--tsdb.retention` flag in the Receiver is different than the one in Prometheus. For Receivers, `--tsdb.retention=t` indicates that the data for a tenant will be kept for `t` amount of time, whereas in Prometheus, `--tsdb.retention=t` denotes that the last `t` duration of data will be maintained in TSDB. In other words, Prometheus will keep the last `t` duration of data even when it stops getting new samples.
+
 ## Example
 
 ```bash
@@ -44,6 +58,7 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+prefix: ""
 ```
 
 The example content of `hashring.json`:
@@ -61,6 +76,61 @@ The example content of `hashring.json`:
 ```
 
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed for tenancy and replication.
+
+## Limits & gates (experimental)
+
+Thanos Receive has some limits and gates that can be configured to control resource usage. Here's the difference between limits and gates:
+
+- **Limits**: if a request hits any configured limit the client will receive an error response from the server.
+- **Gates**: if a request hits a gate without capacity it will wait until the gate's capacity is replenished to be processed. It doesn't trigger an error response from the server.
+
+**IMPORTANT**: this feature is experimental and a work-in-progres. It might change in the near future, i.e. configuration might move to a file (to allow easy configuration of different request limits per tenant) or its structure could change.
+
+### Request limits
+
+Thanos Receive supports setting limits on the incoming remote write request sizes. These limits should help you to prevent a single tenant from being able to send big requests and possibly crash the Receive.
+
+These limits are applied per request and can be configured with the following command line arguments:
+
+- `--receive.write-request-limits.max-size-bytes`: the maximum body size.
+- `--receive.write-request-limits.max-series`: the maximum amount of series in a single remote write request.
+- `--receive.write-request-limits.max-samples`: the maximum amount of samples in a single remote write request (summed from all series).
+
+Any request above these limits will cause an 413 HTTP response (*Entity Too Large*) and should not be retried without modifications.
+
+Currently a 413 HTTP response will cause data loss at the client, as none of them (Prometheus included) will break down 413 responses into smaller requests. The recommendation is to monitor these errors in the client and contact the owners of your Receive instance for more information on its configured limits.
+
+Future work that can improve this scenario:
+
+- Proper handling of 413 responses in clients, given Receive can somehow communicate which limit was reached.
+- Including in the 413 response which are the current limits that apply to the tenant.
+
+By default all these limits are disabled.
+
+## Request gates
+
+The available request gates in Thanos Receive can be configured with the following command line arguments:
+
+- `--receive.write-request-limits.max-concurrency`: the maximum amount of remote write requests that will be concurrently worked on. Any request request that would exceed this limit will be accepted, but wait until the gate allows it to be processed.
+
+By default all gates are disabled.
+
+## Active Series Limiting (experimental)
+
+Thanos Receive, in Router or RouterIngestor mode, supports limiting tenant active (head) series to maintain the system's stability. It uses any Prometheus Query API compatible meta-monitoring solution that consumes the metrics exposed by all receivers in the Thanos system. Such query endpoint allows getting the scrape time seconds old number of all active series per tenant, which is then compared with a configured limit before ingesting any tenant's remote write request. In case a tenant has gone above the limit, their remote write requests fail fully.
+
+Every Receive Router/RouterIngestor node, queries meta-monitoring for active series of all tenants, every 15 seconds, and caches the results in a map. This cached result is used to limit all incoming remote write requests.
+
+To use the feature, one should specify the following (hidden) flags:
+- `--receive.tenant-limits.max-head-series`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive.
+- `--receive.tenant-limits.meta-monitoring-url`: Specifies Prometheus Query API compatible meta-monitoring endpoint.
+- `--receive.tenant-limits.meta-monitoring-query`: Optional flag to specify PromQL query to execute against meta-monitoring.
+- `--receive.tenant-limits.meta-monitoring-client`: Optional YAML file/string specifying HTTP client config for meta-monitoring.
+
+NOTE:
+- It is possible that Receive ingests more active series than the specified limit, as it relies on meta-monitoring, which may not have the latest data for current number of active series of a tenant at all times.
+- Thanos Receive performs best-effort limiting. In case meta-monitoring is down/unreachable, Thanos Receive will not impose limits and only log errors for meta-monitoring being unreachable. Similaly to when one receiver cannot be scraped.
+- Support for different limit configuration for different tenants is planned for the future.
 
 ## Flags
 
@@ -126,6 +196,9 @@ Flags:
                                  Alternative to 'receive.hashrings-file' flag
                                  (lower priority). Content of file that contains
                                  the hashring configuration.
+      --receive.hashrings-algorithm=hashmod
+                                 The algorithm used when distributing series in
+                                 the hashrings. Must be one of hashmod, ketama
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
                                  configuration. A watcher is initialized to
@@ -137,6 +210,15 @@ Flags:
       --receive.local-endpoint=RECEIVE.LOCAL-ENDPOINT
                                  Endpoint of local receive node. Used to
                                  identify the local node in the hashring
+                                 configuration. If it's empty AND hashring
+                                 configuration was provided, it means that
+                                 receive will run in RoutingOnly mode.
+      --receive.relabel-config=<content>
+                                 Alternative to 'receive.relabel-config-file'
+                                 flag (mutually exclusive). Content of YAML file
+                                 that contains relabeling configuration.
+      --receive.relabel-config-file=<file-path>
+                                 Path to YAML file that contains relabeling
                                  configuration.
       --receive.replica-header="THANOS-REPLICA"
                                  HTTP header specifying the replica number of a
@@ -144,6 +226,12 @@ Flags:
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
+      --receive.tenant-certificate-field=
+                                 Use TLS client's certificate field to determine
+                                 tenant for write requests. Must be one of
+                                 organization, organizationalUnit or commonName.
+                                 This setting will cause the
+                                 receive.tenant-header flag value to be ignored.
       --receive.tenant-header="THANOS-TENANT"
                                  HTTP header to determine tenant for write
                                  requests.
@@ -208,7 +296,12 @@ Flags:
                                  next startup.
       --tsdb.path="./data"       Data directory of TSDB.
       --tsdb.retention=15d       How long to retain raw samples on local
-                                 storage. 0d - disables this retention.
+                                 storage. 0d - disables this retention. For more
+                                 details on how retention is enforced for
+                                 individual tenants, please refer to the Tenant
+                                 lifecycle management section in the Receive
+                                 documentation:
+                                 https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management
       --tsdb.wal-compression     Compress the tsdb WAL.
       --version                  Show application version.
 

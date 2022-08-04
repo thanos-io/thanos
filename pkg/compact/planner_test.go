@@ -6,7 +6,6 @@ package compact
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,10 +18,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -352,7 +351,7 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 
 			// For compatibility.
 			t.Run("tsdbPlannerAdapter", func(t *testing.T) {
-				dir, err := ioutil.TempDir("", "test-compact")
+				dir, err := os.MkdirTemp("", "test-compact")
 				testutil.Ok(t, err)
 				defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -436,7 +435,7 @@ func TestRangeWithFailedCompactionWontGetSelected(t *testing.T) {
 			c.metas[1].Compaction.Failed = true
 			// For compatibility.
 			t.Run("tsdbPlannerAdapter", func(t *testing.T) {
-				dir, err := ioutil.TempDir("", "test-compact")
+				dir, err := os.MkdirTemp("", "test-compact")
 				testutil.Ok(t, err)
 				defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 

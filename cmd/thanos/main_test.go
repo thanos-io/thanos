@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -19,11 +18,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -105,7 +104,7 @@ func (b *erroringBucket) Name() string {
 // Testing for https://github.com/thanos-io/thanos/issues/4960.
 func TestRegression4960_Deadlock(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
-	dir, err := ioutil.TempDir("", "test-compact-cleanup")
+	dir, err := os.MkdirTemp("", "test-compact-cleanup")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -168,7 +167,7 @@ func TestRegression4960_Deadlock(t *testing.T) {
 
 func TestCleanupDownsampleCacheFolder(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
-	dir, err := ioutil.TempDir("", "test-compact-cleanup")
+	dir, err := os.MkdirTemp("", "test-compact-cleanup")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 

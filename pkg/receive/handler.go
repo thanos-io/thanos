@@ -12,10 +12,20 @@ import (
 	stdlog "log"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"sync"
 	"time"
+
+	extflag "github.com/efficientgo/tools/extkingpin"
+	"github.com/thanos-io/thanos/pkg/api"
+	statusapi "github.com/thanos-io/thanos/pkg/api/status"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/promclient"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -28,6 +38,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"google.golang.org/grpc"
@@ -38,6 +49,7 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -52,9 +64,18 @@ const (
 	DefaultTenantLabel = "tenant_id"
 	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
 	DefaultReplicaHeader = "THANOS-REPLICA"
+	// AllTenantsQueryParam is the query parameter for getting TSDB stats for all tenants.
+	AllTenantsQueryParam = "all_tenants"
 	// Labels for metrics.
 	labelSuccess = "success"
 	labelError   = "error"
+)
+
+// Allowed fields in client certificates.
+const (
+	CertificateFieldOrganization       = "organization"
+	CertificateFieldOrganizationalUnit = "organizationalUnit"
+	CertificateFieldCommonName         = "commonName"
 )
 
 var (
@@ -68,19 +89,37 @@ var (
 
 // Options for the web Handler.
 type Options struct {
-	Writer            *Writer
-	ListenAddress     string
-	Registry          prometheus.Registerer
-	TenantHeader      string
-	DefaultTenantID   string
-	ReplicaHeader     string
-	Endpoint          string
-	ReplicationFactor uint64
-	ReceiverMode      ReceiverMode
-	Tracer            opentracing.Tracer
-	TLSConfig         *tls.Config
-	DialOpts          []grpc.DialOption
-	ForwardTimeout    time.Duration
+	Writer                       *Writer
+	ListenAddress                string
+	Registry                     *prometheus.Registry
+	TenantHeader                 string
+	TenantField                  string
+	DefaultTenantID              string
+	ReplicaHeader                string
+	Endpoint                     string
+	ReplicationFactor            uint64
+	ReceiverMode                 ReceiverMode
+	Tracer                       opentracing.Tracer
+	TLSConfig                    *tls.Config
+	DialOpts                     []grpc.DialOption
+	ForwardTimeout               time.Duration
+	RelabelConfigs               []*relabel.Config
+	TSDBStats                    TSDBStats
+	SeriesLimitSupported         bool
+	MaxPerTenantLimit            uint64
+	MetaMonitoringUrl            *url.URL
+	MetaMonitoringHttpClient     *extflag.PathOrContent
+	MetaMonitoringLimitQuery     string
+	WriteSeriesLimit             int64
+	WriteSamplesLimit            int64
+	WriteRequestSizeLimit        int64
+	WriteRequestConcurrencyLimit int
+}
+
+// activeSeriesLimiter encompasses active series limiting logic.
+type activeSeriesLimiter interface {
+	QueryMetaMonitoring(context.Context, log.Logger) error
+	isUnderLimit(string, log.Logger) (bool, error)
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -91,21 +130,33 @@ type Handler struct {
 	options  *Options
 	listener net.Listener
 
-	mtx          sync.RWMutex
-	hashring     Hashring
-	peers        *peerGroup
-	expBackoff   backoff.Backoff
-	peerStates   map[string]*retryState
-	receiverMode ReceiverMode
+	mtx               sync.RWMutex
+	hashring          Hashring
+	peers             *peerGroup
+	expBackoff        backoff.Backoff
+	peerStates        map[string]*retryState
+	receiverMode      ReceiverMode
+	ActiveSeriesLimit activeSeriesLimiter
 
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
 	replicationFactor prometheus.Gauge
+
+	writeSamplesTotal    *prometheus.HistogramVec
+	writeTimeseriesTotal *prometheus.HistogramVec
+
+	writeGate      gate.Gate
+	requestLimiter requestLimiter
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
 	if logger == nil {
 		logger = log.NewNopLogger()
+	}
+
+	var registerer prometheus.Registerer = nil
+	if o.Registry != nil {
+		registerer = o.Registry
 	}
 
 	h := &Handler{
@@ -121,24 +172,56 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
-		forwardRequests: promauto.With(o.Registry).NewCounterVec(
+		writeGate: gate.NewNoop(),
+		requestLimiter: newRequestLimiter(
+			o.WriteRequestSizeLimit,
+			o.WriteSeriesLimit,
+			o.WriteSamplesLimit,
+			registerer,
+		),
+		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
 				Help: "The number of forward requests.",
 			}, []string{"result"},
 		),
-		replications: promauto.With(o.Registry).NewCounterVec(
+		replications: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_replications_total",
 				Help: "The number of replication operations done by the receiver. The success of replication is fulfilled when a quorum is met.",
 			}, []string{"result"},
 		),
-		replicationFactor: promauto.With(o.Registry).NewGauge(
+		replicationFactor: promauto.With(registerer).NewGauge(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_replication_factor",
 				Help: "The number of times to replicate incoming write requests.",
 			},
 		),
+		writeTimeseriesTotal: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_timeseries",
+				Help:      "The number of timeseries received in the incoming write requests.",
+				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+			}, []string{"code", "tenant"},
+		),
+		writeSamplesTotal: promauto.With(registerer).NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_samples",
+				Help:      "The number of sampled received in the incoming write requests.",
+				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+			}, []string{"code", "tenant"},
+		),
+	}
+
+	if o.WriteRequestConcurrencyLimit > 0 {
+		h.writeGate = gate.New(
+			extprom.WrapRegistererWithPrefix("thanos_receive_write_request_concurrent_", registerer),
+			o.WriteRequestConcurrencyLimit,
+		)
 	}
 
 	h.forwardRequests.WithLabelValues(labelSuccess)
@@ -152,9 +235,16 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		h.replicationFactor.Set(1)
 	}
 
+	h.ActiveSeriesLimit = NewNopSeriesLimit()
+	if h.options.SeriesLimitSupported {
+		h.ActiveSeriesLimit = NewActiveSeriesLimit(h.options, registerer, h.receiverMode, logger)
+	}
+
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
-		ins = extpromhttp.NewInstrumentationMiddleware(o.Registry,
+		ins = extpromhttp.NewTenantInstrumentationMiddleware(
+			o.TenantHeader,
+			o.Registry,
 			[]float64{0.001, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.25, 0.5, 0.75, 1, 2, 3, 4, 5},
 		)
 	}
@@ -162,13 +252,30 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 		next = ins.NewHandler(name, http.HandlerFunc(next))
+
 		if o.Tracer != nil {
 			next = tracing.HTTPMiddleware(o.Tracer, name, logger, http.HandlerFunc(next))
 		}
 		return next
 	}
 
-	h.router.Post("/api/v1/receive", instrf("receive", readyf(middleware.RequestID(http.HandlerFunc(h.receiveHTTP)))))
+	h.router.Post(
+		"/api/v1/receive",
+		instrf(
+			"receive",
+			readyf(
+				middleware.RequestID(
+					http.HandlerFunc(h.receiveHTTP),
+				),
+			),
+		),
+	)
+
+	statusAPI := statusapi.New(statusapi.Options{
+		GetStats: h.getStats,
+		Registry: h.options.Registry,
+	})
+	statusAPI.Register(h.router, o.Tracer, logger, ins, logging.NewHTTPServerMiddleware(logger))
 
 	return h
 }
@@ -209,6 +316,29 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 			h.logger.Log("msg", "failed to write to response body", "err", err)
 		}
 	}
+}
+
+func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusapi.TenantStats, *api.ApiError) {
+	if !h.isReady() {
+		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: fmt.Errorf("service unavailable")}
+	}
+
+	tenantID := r.Header.Get(h.options.TenantHeader)
+	getAllTenantStats := r.FormValue(AllTenantsQueryParam) == "true"
+	if getAllTenantStats && tenantID != "" {
+		err := fmt.Errorf("using both the %s parameter and the %s header is not supported", AllTenantsQueryParam, h.options.TenantHeader)
+		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+	}
+
+	if getAllTenantStats {
+		return h.options.TSDBStats.TenantStats(statsByLabelName), nil
+	}
+
+	if tenantID == "" {
+		tenantID = h.options.DefaultTenantID
+	}
+
+	return h.options.TSDBStats.TenantStats(statsByLabelName, tenantID), nil
 }
 
 // Close stops the Handler.
@@ -291,6 +421,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 }
 
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
+	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
 	defer span.Finish()
 
@@ -299,26 +430,65 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		tenant = h.options.DefaultTenantID
 	}
 
+	if h.options.TenantField != "" {
+		tenant, err = h.getTenantFromCertificate(r)
+		if err != nil {
+			// This must hard fail to ensure hard tenancy when feature is enabled.
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
 	tLogger := log.With(h.logger, "tenant", tenant)
 
-	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
+	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
+		err = h.writeGate.Start(r.Context())
+	})
+	if err != nil {
+		level.Error(tLogger).Log("err", err, "msg", "internal server error")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	defer h.writeGate.Done()
+
+	under, err := h.ActiveSeriesLimit.isUnderLimit(tenant, tLogger)
+	if err != nil {
+		level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
+	}
+
+	// Fail request fully if tenant has exceeded set limit.
+	if !under {
+		http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
+		return
+	}
+
+	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}
 	if r.ContentLength >= 0 {
+		if !h.requestLimiter.AllowSizeBytes(tenant, r.ContentLength) {
+			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		compressed.Grow(int(r.ContentLength))
 	} else {
 		compressed.Grow(512)
 	}
-	_, err := io.Copy(&compressed, r.Body)
+	_, err = io.Copy(&compressed, r.Body)
 	if err != nil {
 		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
 	}
-
 	reqBuf, err := s2.Decode(nil, compressed.Bytes())
 	if err != nil {
 		level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
 		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !h.requestLimiter.AllowSizeBytes(tenant, int64(len(reqBuf))) {
+		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
 		return
 	}
 
@@ -353,26 +523,182 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.handleRequest(ctx, rep, tenant, &wreq)
-	if err != nil {
-		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
+	if !h.requestLimiter.AllowSeries(tenant, int64(len(wreq.Timeseries))) {
+		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
+		return
 	}
 
-	switch determineWriteErrorCause(err, 1) {
-	case nil:
-		return
-	case errNotReady:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case errUnavailable:
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	case errConflict:
-		http.Error(w, err.Error(), http.StatusConflict)
-	case errBadReplica:
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	default:
-		level.Error(tLogger).Log("err", err, "msg", "internal server error")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	totalSamples := 0
+	for _, timeseries := range wreq.Timeseries {
+		totalSamples += len(timeseries.Samples)
 	}
+	if !h.requestLimiter.AllowSamples(tenant, int64(totalSamples)) {
+		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	// Apply relabeling configs.
+	h.relabel(&wreq)
+	if len(wreq.Timeseries) == 0 {
+		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
+		return
+	}
+
+	responseStatusCode := http.StatusOK
+	if err = h.handleRequest(ctx, rep, tenant, &wreq); err != nil {
+		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
+		switch determineWriteErrorCause(err, 1) {
+		case errNotReady:
+			responseStatusCode = http.StatusServiceUnavailable
+		case errUnavailable:
+			responseStatusCode = http.StatusServiceUnavailable
+		case errConflict:
+			responseStatusCode = http.StatusConflict
+		case errBadReplica:
+			responseStatusCode = http.StatusBadRequest
+		default:
+			level.Error(tLogger).Log("err", err, "msg", "internal server error")
+			responseStatusCode = http.StatusInternalServerError
+		}
+		http.Error(w, err.Error(), responseStatusCode)
+	}
+	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(len(wreq.Timeseries)))
+	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
+}
+
+// activeSeriesLimit implements activeSeriesLimiter interface.
+type activeSeriesLimit struct {
+	mtx                    sync.RWMutex
+	limit                  uint64
+	tenantCurrentSeriesMap map[string]float64
+
+	metaMonitoringURL    *url.URL
+	metaMonitoringClient *http.Client
+	metaMonitoringQuery  string
+
+	configuredTenantLimit prometheus.Gauge
+	limitedRequests       *prometheus.CounterVec
+	metaMonitoringErr     prometheus.Counter
+}
+
+func NewActiveSeriesLimit(o *Options, registerer prometheus.Registerer, r ReceiverMode, logger log.Logger) *activeSeriesLimit {
+	limit := &activeSeriesLimit{
+		limit:               o.MaxPerTenantLimit,
+		metaMonitoringURL:   o.MetaMonitoringUrl,
+		metaMonitoringQuery: o.MetaMonitoringLimitQuery,
+		configuredTenantLimit: promauto.With(registerer).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_tenant_head_series_limit",
+				Help: "The configured limit for active (head) series of tenants.",
+			},
+		),
+		limitedRequests: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_head_series_limited_requests_total",
+				Help: "The total number of remote write requests that have been dropped due to active series limiting.",
+			}, []string{"tenant"},
+		),
+		metaMonitoringErr: promauto.With(registerer).NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_metamonitoring_failed_queries_total",
+				Help: "The total number of meta-monitoring queries that failed while limiting.",
+			},
+		),
+	}
+
+	limit.configuredTenantLimit.Set(float64(o.MaxPerTenantLimit))
+	limit.tenantCurrentSeriesMap = map[string]float64{}
+
+	// Use specified HTTPConfig to make requests to meta-monitoring.
+	httpConfContentYaml, err := o.MetaMonitoringHttpClient.Content()
+	if err != nil {
+		level.Error(logger).Log("msg", "getting http client config", "err", err.Error())
+	}
+
+	httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
+	if err != nil {
+		level.Error(logger).Log("msg", "parsing http config YAML", "err", err.Error())
+	}
+
+	limit.metaMonitoringClient, err = httpconfig.NewHTTPClient(*httpClientConfig, "meta-mon-for-limit")
+	if err != nil {
+		level.Error(logger).Log("msg", "improper http client config", "err", err.Error())
+	}
+
+	return limit
+}
+
+// QueryMetaMonitoring queries any Prometheus Query API compatible meta-monitoring
+// solution with the configured query for getting current active (head) series of all tenants.
+// It then populates tenantCurrentSeries map with result.
+func (a *activeSeriesLimit) QueryMetaMonitoring(ctx context.Context, logger log.Logger) error {
+	c := promclient.NewWithTracingClient(logger, a.metaMonitoringClient, httpconfig.ThanosUserAgent)
+
+	vectorRes, _, err := c.QueryInstant(ctx, a.metaMonitoringURL, a.metaMonitoringQuery, time.Now(), promclient.QueryOptions{})
+	if err != nil {
+		a.metaMonitoringErr.Inc()
+		return err
+	}
+
+	level.Debug(logger).Log("msg", "successfully queried meta-monitoring", "vectors", len(vectorRes))
+
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+	// Construct map of tenant name and current HEAD series.
+	for _, e := range vectorRes {
+		for k, v := range e.Metric {
+			if k == "tenant" {
+				a.tenantCurrentSeriesMap[string(v)] = float64(e.Value)
+				level.Debug(logger).Log("msg", "tenant value queried", "tenant", string(v), "value", e.Value)
+			}
+		}
+	}
+
+	return nil
+}
+
+// isUnderLimit ensures that the current number of active series for a tenant does not exceed given limit.
+// It does so in a best-effort way, i.e, in case meta-monitoring is unreachable, it does not impose limits.
+// TODO(saswatamcode): Add capability to configure different limits for different tenants.
+func (a *activeSeriesLimit) isUnderLimit(tenant string, logger log.Logger) (bool, error) {
+	a.mtx.RLock()
+	defer a.mtx.RUnlock()
+	if a.limit == 0 || a.metaMonitoringURL.Host == "" {
+		return true, nil
+	}
+
+	// In such limiting flow, we ingest the first remote write request
+	// and then check meta-monitoring metric to ascertain current active
+	// series. As such metric is updated in intervals, it is possible
+	// that Receive ingests more series than the limit, before detecting that
+	// a tenant has exceeded the set limits.
+	v, ok := a.tenantCurrentSeriesMap[tenant]
+	if !ok {
+		return true, errors.New("tenant not in current series map")
+	}
+
+	if v >= float64(a.limit) {
+		level.Error(logger).Log("msg", "tenant above limit", "currentSeries", v, "limit", a.limit)
+		a.limitedRequests.WithLabelValues(tenant).Inc()
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// nopSeriesLimit implements activeSeriesLimiter interface as no-op.
+type nopSeriesLimit struct{}
+
+func NewNopSeriesLimit() *nopSeriesLimit {
+	return &nopSeriesLimit{}
+}
+
+func (a *nopSeriesLimit) QueryMetaMonitoring(_ context.Context, _ log.Logger) error {
+	return nil
+}
+
+func (a *nopSeriesLimit) isUnderLimit(_ string, _ log.Logger) (bool, error) {
+	return true, nil
 }
 
 // forward accepts a write request, batches its time series by
@@ -682,6 +1008,23 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	}
 }
 
+// relabel relabels the time series labels in the remote write request.
+func (h *Handler) relabel(wreq *prompb.WriteRequest) {
+	if len(h.options.RelabelConfigs) == 0 {
+		return
+	}
+	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
+	for _, ts := range wreq.Timeseries {
+		lbls := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		if lbls == nil {
+			continue
+		}
+		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+		timeSeries = append(timeSeries, ts)
+	}
+	wreq.Timeseries = timeSeries
+}
+
 // isConflict returns whether or not the given error represents a conflict.
 func isConflict(err error) bool {
 	if err == nil {
@@ -691,6 +1034,9 @@ func isConflict(err error) bool {
 		err == storage.ErrDuplicateSampleForTimestamp ||
 		err == storage.ErrOutOfOrderSample ||
 		err == storage.ErrOutOfBounds ||
+		err == storage.ErrDuplicateExemplar ||
+		err == storage.ErrOutOfOrderExemplar ||
+		err == storage.ErrExemplarLabelLength ||
 		status.Code(err) == codes.AlreadyExists
 }
 
@@ -809,4 +1155,43 @@ func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStor
 	client := storepb.NewWriteableStoreClient(conn)
 	p.cache[addr] = client
 	return client, nil
+}
+
+// getTenantFromCertificate extracts the tenant value from a client's presented certificate. The x509 field to use as
+// value can be configured with Options.TenantField. An error is returned when the extraction has not succeeded.
+func (h *Handler) getTenantFromCertificate(r *http.Request) (string, error) {
+	var tenant string
+
+	if len(r.TLS.PeerCertificates) == 0 {
+		return "", errors.New("could not get required certificate field from client cert")
+	}
+
+	// First cert is the leaf authenticated against.
+	cert := r.TLS.PeerCertificates[0]
+
+	switch h.options.TenantField {
+
+	case CertificateFieldOrganization:
+		if len(cert.Subject.Organization) == 0 {
+			return "", errors.New("could not get organization field from client cert")
+		}
+		tenant = cert.Subject.Organization[0]
+
+	case CertificateFieldOrganizationalUnit:
+		if len(cert.Subject.OrganizationalUnit) == 0 {
+			return "", errors.New("could not get organizationalUnit field from client cert")
+		}
+		tenant = cert.Subject.OrganizationalUnit[0]
+
+	case CertificateFieldCommonName:
+		if cert.Subject.CommonName == "" {
+			return "", errors.New("could not get commonName field from client cert")
+		}
+		tenant = cert.Subject.CommonName
+
+	default:
+		return "", errors.New("tls client cert field requested is not supported")
+	}
+
+	return tenant, nil
 }

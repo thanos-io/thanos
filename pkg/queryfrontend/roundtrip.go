@@ -9,13 +9,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	"github.com/cortexproject/cortex/pkg/util/validation"
+	"github.com/thanos-io/thanos/pkg/querysharding"
 
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
+	"github.com/thanos-io/thanos/internal/cortex/util/validation"
 )
 
 const (
@@ -26,6 +28,8 @@ const (
 	labelValuesOp  = "label_values"
 	seriesOp       = "series"
 )
+
+var labelValuesPattern = regexp.MustCompile("/api/v1/label/.+/values$")
 
 // NewTripperware returns a Tripperware which sends requests to different sub tripperwares based on the query type.
 func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger) (queryrange.Tripperware, error) {
@@ -50,7 +54,11 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 	queryRangeCodec := NewThanosQueryRangeCodec(config.QueryRangeConfig.PartialResponseStrategy)
 	labelsCodec := NewThanosLabelsCodec(config.LabelsConfig.PartialResponseStrategy, config.DefaultTimeRange)
 
-	queryRangeTripperware, err := newQueryRangeTripperware(config.QueryRangeConfig, queryRangeLimits, queryRangeCodec,
+	queryRangeTripperware, err := newQueryRangeTripperware(
+		config.QueryRangeConfig,
+		queryRangeLimits,
+		queryRangeCodec,
+		config.NumShards,
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger, config.ForwardHeaders)
 	if err != nil {
 		return nil, err
@@ -120,8 +128,7 @@ func getOperation(r *http.Request) string {
 		case strings.HasSuffix(r.URL.Path, "/api/v1/series"):
 			return seriesOp
 		default:
-			matched, err := regexp.MatchString("/api/v1/label/.+/values$", r.URL.Path)
-			if err == nil && matched {
+			if labelValuesPattern.MatchString(r.URL.Path) {
 				return labelValuesOp
 			}
 		}
@@ -136,6 +143,7 @@ func newQueryRangeTripperware(
 	config QueryRangeConfig,
 	limits queryrange.Limits,
 	codec *queryRangeCodec,
+	numShards int,
 	reg prometheus.Registerer,
 	logger log.Logger,
 	forwardHeaders []string,
@@ -200,6 +208,13 @@ func newQueryRangeTripperware(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("retry", m),
 			queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
+		)
+	}
+
+	if numShards > 0 {
+		queryRangeMiddleware = append(
+			queryRangeMiddleware,
+			PromQLShardingMiddleware(querysharding.NewQueryAnalyzer(), numShards, limits, codec),
 		)
 	}
 

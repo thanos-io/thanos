@@ -45,6 +45,9 @@ type Client interface {
 	// TimeRange returns minimum and maximum time range of data in the store.
 	TimeRange() (mint int64, maxt int64)
 
+	// SupportsSharding returns true if sharding is supported by the underlying store.
+	SupportsSharding() bool
+
 	String() string
 	// Addr returns address of a Client.
 	Addr() string
@@ -56,6 +59,7 @@ type ProxyStore struct {
 	stores         func() []Client
 	component      component.StoreAPI
 	selectorLabels labels.Labels
+	buffers        sync.Pool
 
 	responseTimeout time.Duration
 	metrics         *proxyStoreMetrics
@@ -98,10 +102,14 @@ func NewProxyStore(
 
 	metrics := newProxyStoreMetrics(reg)
 	s := &ProxyStore{
-		logger:          logger,
-		stores:          stores,
-		component:       component,
-		selectorLabels:  selectorLabels,
+		logger:         logger,
+		stores:         stores,
+		component:      component,
+		selectorLabels: selectorLabels,
+		buffers: sync.Pool{New: func() interface{} {
+			b := make([]byte, 0, initialBufSize)
+			return &b
+		}},
 		responseTimeout: responseTimeout,
 		metrics:         metrics,
 	}

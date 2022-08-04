@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"strconv"
 	"sync"
 	"time"
@@ -20,8 +19,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/cache"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/cache/cachekey"
 )
@@ -389,7 +389,7 @@ func (cb *CachingBucket) cachedGetRange(ctx context.Context, name string, offset
 		}
 	}
 
-	return ioutil.NopCloser(newSubrangesReader(cfg.SubrangeSize, offsetKeys, hits, offset, length)), nil
+	return io.NopCloser(newSubrangesReader(cfg.SubrangeSize, offsetKeys, hits, offset, length)), nil
 }
 
 type rng struct {

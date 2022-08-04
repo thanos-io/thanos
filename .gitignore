@@ -10,6 +10,9 @@ kube/bin
 kube/.kube
 kube/.minikube
 
+# Ignore mdox cache file
+.mdoxcache
+
 # Ignore e2e working dirs.
 data/
 test/e2e/e2e_*
@@ -34,3 +37,6 @@ examples/tmp/
 
 # Ignore the MacOS Trash (DS-Store)
 .DS_Store
+
+# Ignore generated Cortex files
+internal/cortex/querier/active-query-tracker

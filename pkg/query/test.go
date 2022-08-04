@@ -6,8 +6,8 @@ package query
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -106,7 +106,7 @@ func newTest(t testing.TB, input string) (*test, error) {
 }
 
 func newTestFromFile(t testing.TB, filename string) (*test, error) {
-	content, err := ioutil.ReadFile(filepath.Clean(filename))
+	content, err := os.ReadFile(filepath.Clean(filename))
 	if err != nil {
 		return nil, err
 	}
@@ -560,7 +560,7 @@ func (ev *evalCmd) compareResult(result parser.Value) error {
 }
 
 func (ev *evalCmd) Eval(ctx context.Context, queryEngine *promql.Engine, queryable storage.Queryable) error {
-	q, err := queryEngine.NewInstantQuery(queryable, ev.expr, ev.start)
+	q, err := queryEngine.NewInstantQuery(queryable, &promql.QueryOpts{}, ev.expr, ev.start)
 	if err != nil {
 		return err
 	}
@@ -584,7 +584,7 @@ func (ev *evalCmd) Eval(ctx context.Context, queryEngine *promql.Engine, queryab
 
 	// Check query returns same result in range mode,
 	// by checking against the middle step.
-	q, err = queryEngine.NewRangeQuery(queryable, ev.expr, ev.start.Add(-time.Minute), ev.start.Add(time.Minute), time.Minute)
+	q, err = queryEngine.NewRangeQuery(queryable, &promql.QueryOpts{}, ev.expr, ev.start.Add(-time.Minute), ev.start.Add(time.Minute), time.Minute)
 	if err != nil {
 		return err
 	}
@@ -651,6 +651,10 @@ func (i inProcessClient) TimeRange() (mint, maxt int64) {
 	r, err := i.Info(context.TODO(), &storepb.InfoRequest{})
 	testutil.Ok(i.t, err)
 	return r.MinTime, r.MaxTime
+}
+
+func (i inProcessClient) SupportsSharding() bool {
+	return false
 }
 
 func (i inProcessClient) String() string { return i.name }

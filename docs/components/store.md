@@ -15,6 +15,7 @@ type: GCS
 config:
   bucket: ""
   service_account: ""
+prefix: ""
 ```
 
 In general, an average of 6 MB of local disk space is required per TSDB block stored in the object storage bucket, but for high cardinality blocks with large label set it can even go up to 30MB and more. It is for the pre-computed index, which includes symbols and postings offsets as well as metadata JSON.

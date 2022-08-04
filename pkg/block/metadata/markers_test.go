@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -16,9 +15,9 @@ import (
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/objstore"
 	"go.uber.org/goleak"
 
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -29,7 +28,7 @@ func TestMain(m *testing.M) {
 func TestReadMarker(t *testing.T) {
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-read-mark")
+	tmpDir, err := os.MkdirTemp("", "test-read-mark")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 

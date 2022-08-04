@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	io "io"
 	"math"
 	"net/http"
 	"net/url"
@@ -16,14 +16,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-	cortexutil "github.com/cortexproject/cortex/pkg/util"
-	"github.com/cortexproject/cortex/pkg/util/spanlogger"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/weaveworks/common/httpgrpc"
 
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
+	cortexutil "github.com/thanos-io/thanos/internal/cortex/util"
+	"github.com/thanos-io/thanos/internal/cortex/util/spanlogger"
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
@@ -208,13 +208,13 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 
 func (c labelsCodec) DecodeResponse(ctx context.Context, r *http.Response, req queryrange.Request) (queryrange.Response, error) {
 	if r.StatusCode/100 != 2 {
-		body, _ := ioutil.ReadAll(r.Body)
+		body, _ := io.ReadAll(r.Body)
 		return nil, httpgrpc.Errorf(r.StatusCode, string(body))
 	}
 	log, _ := spanlogger.New(ctx, "ParseQueryResponse") //nolint:ineffassign,staticcheck
 	defer log.Finish()
 
-	buf, err := ioutil.ReadAll(r.Body)
+	buf, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Error(err) //nolint:errcheck
 		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error decoding response: %v", err)
@@ -276,7 +276,7 @@ func (c labelsCodec) EncodeResponse(ctx context.Context, res queryrange.Response
 		Header: http.Header{
 			"Content-Type": []string{"application/json"},
 		},
-		Body:       ioutil.NopCloser(bytes.NewBuffer(b)),
+		Body:       io.NopCloser(bytes.NewBuffer(b)),
 		StatusCode: http.StatusOK,
 	}
 	return &resp, nil

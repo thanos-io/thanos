@@ -38,6 +38,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/util/strutil"
+	"github.com/thanos-io/objstore/client"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -53,7 +54,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	thanosrules "github.com/thanos-io/thanos/pkg/rules"
@@ -120,12 +120,12 @@ func registerRule(app *extkingpin.App) {
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
 	cmd.Flag("data-dir", "data directory").Default("data/").StringVar(&conf.dataDir)
-	cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated).").
+	cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated). Note that rules are not automatically detected, use SIGHUP or do HTTP POST /-/reload to re-read them.").
 		Default("rules/").StringsVar(&conf.ruleFiles)
 	cmd.Flag("resend-delay", "Minimum amount of time to wait before resending an alert to Alertmanager.").
 		Default("1m").DurationVar(&conf.resendDelay)
 	cmd.Flag("eval-interval", "The default evaluation interval to use.").
-		Default("30s").DurationVar(&conf.evalInterval)
+		Default("1m").DurationVar(&conf.evalInterval)
 
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
@@ -607,8 +607,9 @@ func runRule(
 				if httpProbe.IsReady() {
 					mint, maxt := tsdbStore.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime: mint,
-						MaxTime: maxt,
+						MinTime:          mint,
+						MaxTime:          maxt,
+						SupportsSharding: true,
 					}
 				}
 				return nil

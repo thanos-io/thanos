@@ -21,11 +21,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -611,6 +611,7 @@ func TestQueryEndpoints(t *testing.T) {
 		}
 	}
 
+	qs := &stats.BuiltinStats{}
 	tests = []endpointTestCase{
 		{
 			endpoint: api.query,
@@ -628,7 +629,7 @@ func TestQueryEndpoints(t *testing.T) {
 				"stats": []string{"true"},
 			},
 			response: &queryData{
-				Stats: &stats.QueryStats{},
+				Stats: qs,
 			},
 		},
 	}
@@ -679,7 +680,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "prometheus-test")
+	dir, err := os.MkdirTemp("", "prometheus-test")
 	testutil.Ok(t, err)
 
 	const chunkRange int64 = 600_000
@@ -1713,7 +1714,7 @@ func TestRulesHandler(t *testing.T) {
 			Type:           "alerting",
 		},
 	}
-	var tests = []test{
+	for _, test := range []test{
 		{
 			response: &testpromcompatibility.RuleDiscovery{
 				RuleGroups: []*testpromcompatibility.RuleGroup{
@@ -1770,9 +1771,7 @@ func TestRulesHandler(t *testing.T) {
 				},
 			},
 		},
-	}
-
-	for _, test := range tests {
+	} {
 		t.Run(fmt.Sprintf("endpoint=%s/method=%s/query=%q", "rules", http.MethodGet, test.query.Encode()), func(t *testing.T) {
 			// Build a context with the correct request params.
 			ctx := context.Background()

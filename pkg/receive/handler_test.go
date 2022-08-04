@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"math/rand"
 	"net/http"
@@ -21,13 +21,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"google.golang.org/grpc"
@@ -103,6 +106,16 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			exp:       errConflict,
 		},
 		{
+			name: "matching multierror (exemplar error)",
+			err: errutil.NonNilMultiError([]error{
+				storage.ErrExemplarLabelLength,
+				errors.New("foo"),
+				errors.New("bar"),
+			}),
+			threshold: 1,
+			exp:       errConflict,
+		},
+		{
 			name: "matching but below threshold multierror",
 			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
@@ -136,6 +149,19 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			}),
 			threshold: 2,
 			exp:       errNotReady,
+		},
+		{
+			name: "matching multierror many, one above threshold (exemplar error)",
+			err: errutil.NonNilMultiError([]error{
+				tsdb.ErrNotReady,
+				tsdb.ErrNotReady,
+				storage.ErrDuplicateExemplar,
+				storage.ErrDuplicateSampleForTimestamp,
+				storage.ErrExemplarLabelLength,
+				errors.New("foo"),
+			}),
+			threshold: 2,
+			exp:       errConflict,
 		},
 		{
 			name: "matching multierror many, both above threshold, conflict have precedence",
@@ -322,7 +348,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		cfg[0].Endpoints = append(cfg[0].Endpoints, h.options.Endpoint)
 		peers.cache[addr] = &fakeRemoteWriteGRPCServer{h: h}
 	}
-	hashring := newMultiHashring(cfg)
+	hashring := newMultiHashring(AlgorithmHashmod, cfg)
 	for _, h := range handlers {
 		h.Hashring(hashring)
 	}
@@ -660,6 +686,91 @@ func TestReceiveQuorum(t *testing.T) {
 						t.Errorf("handler: %d, labels %q: expected minimum of %d samples, got %d", j, lset.String(), expectedMin, got)
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestReceiveWriteRequestLimits(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		status        int
+		amountSeries  int
+		amountSamples int
+	}{
+		{
+			name:         "Request above limit of series",
+			status:       http.StatusRequestEntityTooLarge,
+			amountSeries: 21,
+		},
+		{
+			name:         "Request under the limit of series",
+			status:       http.StatusOK,
+			amountSeries: 20,
+		},
+		{
+			name:          "Request above limit of samples (series * samples)",
+			status:        http.StatusRequestEntityTooLarge,
+			amountSeries:  30,
+			amountSamples: 15,
+		},
+		{
+			name:          "Request under the limit of samples (series * samples)",
+			status:        http.StatusOK,
+			amountSeries:  10,
+			amountSamples: 2,
+		},
+		{
+			name:          "Request above body size limit",
+			status:        http.StatusRequestEntityTooLarge,
+			amountSeries:  300,
+			amountSamples: 150,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.amountSamples == 0 {
+				tc.amountSamples = 1
+			}
+
+			appendables := []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			}
+			handlers, _ := newTestHandlerHashring(appendables, 3)
+			handler := handlers[0]
+			handler.requestLimiter = newRequestLimiter(int64(1*units.Megabyte), 20, 200, nil)
+			tenant := "test"
+
+			wreq := &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{},
+			}
+
+			for i := 0; i < tc.amountSeries; i += 1 {
+				label := labelpb.ZLabel{Name: "foo", Value: "bar"}
+				series := prompb.TimeSeries{
+					Labels: []labelpb.ZLabel{label},
+				}
+				for j := 0; j < tc.amountSamples; j += 1 {
+					sample := prompb.Sample{Value: float64(j), Timestamp: int64(j)}
+					series.Samples = append(series.Samples, sample)
+				}
+				wreq.Timeseries = append(wreq.Timeseries, series)
+			}
+
+			// Test that the correct status is returned.
+			rec, err := makeRequest(handler, tenant, wreq)
+			if err != nil {
+				t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", tc.status, err)
+			}
+			if rec.Code != tc.status {
+				t.Errorf("handler: got unexpected HTTP status code: expected %d, got %d; body: %s", tc.status, rec.Code, rec.Body.String())
 			}
 		})
 	}
@@ -1136,7 +1247,7 @@ func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byt
 }
 
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
-	dir, err := ioutil.TempDir("", "test_receive")
+	dir, err := os.MkdirTemp("", "test_receive")
 	testutil.Ok(b, err)
 	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
 
@@ -1240,7 +1351,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					r := httptest.NewRecorder()
-					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
 					testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 				}
 			})
@@ -1264,7 +1375,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 
 			// First request should be fine, since we don't change timestamp, rest is wrong.
 			r := httptest.NewRecorder()
-			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
 			testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
 			b.Run("conflict errors", func(b testutil.TB) {
@@ -1272,9 +1383,9 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					r := httptest.NewRecorder()
-					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
 					testutil.Equals(b, http.StatusConflict, r.Code, "%v-%s", i, func() string {
-						b, _ := ioutil.ReadAll(r.Body)
+						b, _ := io.ReadAll(r.Body)
 						return string(b)
 					}())
 				}
@@ -1299,4 +1410,373 @@ func Heap(dir string) (err error) {
 	}
 	defer runutil.CloseWithErrCapture(&err, f, "close")
 	return pprof.WriteHeapProfile(f)
+}
+
+func TestRelabel(t *testing.T) {
+	for _, tcase := range []struct {
+		name                 string
+		relabel              []*relabel.Config
+		writeRequest         prompb.WriteRequest
+		expectedWriteRequest prompb.WriteRequest
+	}{
+		{
+			name: "empty relabel configs",
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "has relabel configs but no relabelling applied",
+			relabel: []*relabel.Config{
+				{
+					SourceLabels: model.LabelNames{"zoo"},
+					TargetLabel:  "bar",
+					Regex:        relabel.MustNewRegexp("bar"),
+					Action:       relabel.Replace,
+					Replacement:  "baz",
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "relabel rewrite existing labels",
+			relabel: []*relabel.Config{
+				{
+					TargetLabel: "foo",
+					Action:      relabel.Replace,
+					Regex:       relabel.MustNewRegexp(""),
+					Replacement: "test",
+				},
+				{
+					TargetLabel: "__name__",
+					Action:      relabel.Replace,
+					Regex:       relabel.MustNewRegexp(""),
+					Replacement: "foo",
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "foo",
+							},
+							{
+								Name:  "foo",
+								Value: "test",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "relabel drops label",
+			relabel: []*relabel.Config{
+				{
+					Action: relabel.LabelDrop,
+					Regex:  relabel.MustNewRegexp("foo"),
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "relabel drops time series",
+			relabel: []*relabel.Config{
+				{
+					SourceLabels: model.LabelNames{"foo"},
+					Action:       relabel.Drop,
+					Regex:        relabel.MustNewRegexp("bar"),
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{},
+			},
+		},
+		{
+			name: "relabel rewrite existing exemplar series labels",
+			relabel: []*relabel.Config{
+				{
+					Action: relabel.LabelDrop,
+					Regex:  relabel.MustNewRegexp("foo"),
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Exemplars: []prompb.Exemplar{
+							{
+								Labels: []labelpb.ZLabel{
+									{
+										Name:  "traceID",
+										Value: "foo",
+									},
+								},
+								Value:     1,
+								Timestamp: 1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+						},
+						Exemplars: []prompb.Exemplar{
+							{
+								Labels: []labelpb.ZLabel{
+									{
+										Name:  "traceID",
+										Value: "foo",
+									},
+								},
+								Value:     1,
+								Timestamp: 1,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "relabel drops exemplars",
+			relabel: []*relabel.Config{
+				{
+					SourceLabels: model.LabelNames{"foo"},
+					Action:       relabel.Drop,
+					Regex:        relabel.MustNewRegexp("bar"),
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Exemplars: []prompb.Exemplar{
+							{
+								Labels: []labelpb.ZLabel{
+									{
+										Name:  "traceID",
+										Value: "foo",
+									},
+								},
+								Value:     1,
+								Timestamp: 1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{},
+			},
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			h := NewHandler(nil, &Options{
+				RelabelConfigs: tcase.relabel,
+			})
+
+			h.relabel(&tcase.writeRequest)
+			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
+		})
+	}
 }

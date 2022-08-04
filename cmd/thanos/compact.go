@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/objstore/client"
 
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -38,7 +39,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -280,7 +280,7 @@ func runCompact(
 			ignoreDeletionMarkFilter,
 			compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
 			compactMetrics.garbageCollectedBlocks,
-			conf.blockSyncConcurrency)
+		)
 		if err != nil {
 			return errors.Wrap(err, "create syncer")
 		}
@@ -349,6 +349,8 @@ func runCompact(
 		compactMetrics.garbageCollectedBlocks,
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
 		metadata.HashFunc(conf.hashFunc),
+		conf.blockFilesConcurrency,
+		conf.compactBlocksFetchConcurrency,
 	)
 	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
 	planner := compact.WithLargeTotalIndexSizeFilter(
@@ -629,13 +631,14 @@ type compactConfig struct {
 	wait                                           bool
 	waitInterval                                   time.Duration
 	disableDownsampling                            bool
-	blockSyncConcurrency                           int
 	blockMetaFetchConcurrency                      int
+	blockFilesConcurrency                          int
 	blockViewerSyncBlockInterval                   time.Duration
 	blockViewerSyncBlockTimeout                    time.Duration
 	cleanupBlocksInterval                          time.Duration
 	compactionConcurrency                          int
 	downsampleConcurrency                          int
+	compactBlocksFetchConcurrency                  int
 	deleteDelay                                    model.Duration
 	dedupReplicaLabels                             []string
 	selectorRelabelConf                            extflag.PathOrContent
@@ -687,10 +690,10 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"as querying long time ranges without non-downsampled data is not efficient and useful e.g it is not possible to render all samples for a human eye anyway").
 		Default("false").BoolVar(&cc.disableDownsampling)
 
-	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
-		Default("20").IntVar(&cc.blockSyncConcurrency)
 	cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
 		Default("32").IntVar(&cc.blockMetaFetchConcurrency)
+	cmd.Flag("block-files-concurrency", "Number of goroutines to use when fetching/uploading block files from object storage.").
+		Default("1").IntVar(&cc.blockFilesConcurrency)
 	cmd.Flag("block-viewer.global.sync-block-interval", "Repeat interval for syncing the blocks between local and remote view for /global Block Viewer UI.").
 		Default("1m").DurationVar(&cc.blockViewerSyncBlockInterval)
 	cmd.Flag("block-viewer.global.sync-block-timeout", "Maximum time for syncing the blocks between local and remote view for /global Block Viewer UI.").
@@ -702,6 +705,8 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").IntVar(&cc.compactionConcurrency)
+	cmd.Flag("compact.blocks-fetch-concurrency", "Number of goroutines to use when download block during compaction.").
+		Default("1").IntVar(&cc.compactBlocksFetchConcurrency)
 	cmd.Flag("downsample.concurrency", "Number of goroutines to use when downsampling blocks.").
 		Default("1").IntVar(&cc.downsampleConcurrency)
 

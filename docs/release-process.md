@@ -21,32 +21,33 @@ Release shepherd responsibilities:
 * Perform releases (from first RC to actual release).
 * Announce all releases on all communication channels.
 
-| Release | Time of first RC     | Shepherd (GitHub handle)    |
-|---------|----------------------|-----------------------------|
-| v0.28.0 | (planned) 2022.07.22 | No one ATM                  |
-| v0.27.0 | (planned) 2022.06.10 | No one ATM                  |
-| v0.26.0 | 2022.04.29           | `@wiardvanrij`              |
-| v0.25.0 | 2022.03.01           | `@bwplotka` and `@matej-g`  |
-| v0.24.0 | 2021.12.22           | `@squat`                    |
-| v0.23.0 | 2021.09.02           | `@bwplotka`                 |
-| v0.22.0 | 2021.07.06           | `@GiedriusS`                |
-| v0.21.0 | 2021.05.28           | `@metalmatze` and `@onprem` |
-| v0.20.0 | 2021.04.23           | `@kakkoyun`                 |
-| v0.19.0 | 2021.03.02           | `@bwplotka`                 |
-| v0.18.0 | 2021.01.06           | `@squat`                    |
-| v0.17.0 | 2020.11.18           | `@metalmatze`               |
-| v0.16.0 | 2020.10.26           | `@bwplotka`                 |
-| v0.15.0 | 2020.08.12           | `@kakkoyun`                 |
-| v0.14.0 | 2020.07.10           | `@kakkoyun`                 |
-| v0.13.0 | 2020.05.13           | `@bwplotka`                 |
-| v0.12.0 | 2020.04.15           | `@squat`                    |
-| v0.11.0 | 2020.02.19           | `@metalmatze`               |
-| v0.10.0 | 2020.01.08           | `@GiedriusS`                |
-| v0.9.0  | 2019.11.26           | `@bwplotka`                 |
-| v0.8.0  | 2019.10.09           | `@bwplotka`                 |
-| v0.7.0  | 2019.08.28           | `@domgreen`                 |
-| v0.6.0  | 2019.07.12           | `@GiedriusS`                |
-| v0.5.0  | 2019.06.31           | `@bwplotka`                 |
+| Release | Time of first RC     | Shepherd (GitHub handle)      |
+|---------|----------------------|-------------------------------|
+| v0.29.0 | (planned) 2022.09.29 | No one ATM                    |
+| v0.28.0 | (planned) 2022.08.18 | No one ATM                    |
+| v0.27.0 | 2022.06.21           | `@wiardvanrij` and `@matej-g` |
+| v0.26.0 | 2022.04.29           | `@wiardvanrij`                |
+| v0.25.0 | 2022.03.01           | `@bwplotka` and `@matej-g`    |
+| v0.24.0 | 2021.12.22           | `@squat`                      |
+| v0.23.0 | 2021.09.02           | `@bwplotka`                   |
+| v0.22.0 | 2021.07.06           | `@GiedriusS`                  |
+| v0.21.0 | 2021.05.28           | `@metalmatze` and `@onprem`   |
+| v0.20.0 | 2021.04.23           | `@kakkoyun`                   |
+| v0.19.0 | 2021.03.02           | `@bwplotka`                   |
+| v0.18.0 | 2021.01.06           | `@squat`                      |
+| v0.17.0 | 2020.11.18           | `@metalmatze`                 |
+| v0.16.0 | 2020.10.26           | `@bwplotka`                   |
+| v0.15.0 | 2020.08.12           | `@kakkoyun`                   |
+| v0.14.0 | 2020.07.10           | `@kakkoyun`                   |
+| v0.13.0 | 2020.05.13           | `@bwplotka`                   |
+| v0.12.0 | 2020.04.15           | `@squat`                      |
+| v0.11.0 | 2020.02.19           | `@metalmatze`                 |
+| v0.10.0 | 2020.01.08           | `@GiedriusS`                  |
+| v0.9.0  | 2019.11.26           | `@bwplotka`                   |
+| v0.8.0  | 2019.10.09           | `@bwplotka`                   |
+| v0.7.0  | 2019.08.28           | `@domgreen`                   |
+| v0.6.0  | 2019.07.12           | `@GiedriusS`                  |
+| v0.5.0  | 2019.06.31           | `@bwplotka`                   |
 
 # For maintainers: Cutting individual release
 

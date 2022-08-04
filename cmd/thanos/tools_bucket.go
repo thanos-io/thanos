@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,6 +34,8 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"golang.org/x/text/language"
@@ -53,8 +54,6 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/replicate"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -792,15 +791,15 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, tbc.deleteDelay/2, block.FetcherConcurrency)
-		duplicateBlocksFilter := block.NewDeduplicateFilter(block.FetcherConcurrency)
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, tbc.deleteDelay/2, tbc.blockSyncConcurrency)
+		duplicateBlocksFilter := block.NewDeduplicateFilter(tbc.blockSyncConcurrency)
 		blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, tbc.deleteDelay, stubCounter, stubCounter)
 
 		ctx := context.Background()
 
 		var sy *compact.Syncer
 		{
-			baseMetaFetcher, err := block.NewBaseFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
+			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
 			if err != nil {
 				return errors.Wrap(err, "create meta fetcher")
 			}
@@ -821,7 +820,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				ignoreDeletionMarkFilter,
 				stubCounter,
 				stubCounter,
-				tbc.blockSyncConcurrency)
+			)
 			if err != nil {
 				return errors.Wrap(err, "create syncer")
 			}
@@ -1153,7 +1152,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			chunkPool := chunkenc.NewPool()
-			changeLog := compactv2.NewChangeLog(ioutil.Discard)
+			changeLog := compactv2.NewChangeLog(io.Discard)
 			stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 			for _, id := range ids {
 				// Delete series from block & modify.
@@ -1318,13 +1317,13 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 		// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 		// This is to make sure compactor will not accidentally perform compactions with gap instead.
-		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, tbc.deleteDelay/2, block.FetcherConcurrency)
-		duplicateBlocksFilter := block.NewDeduplicateFilter(block.FetcherConcurrency)
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, tbc.deleteDelay/2, tbc.blockSyncConcurrency)
+		duplicateBlocksFilter := block.NewDeduplicateFilter(tbc.blockSyncConcurrency)
 		stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 
 		var sy *compact.Syncer
 		{
-			baseMetaFetcher, err := block.NewBaseFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
+			baseMetaFetcher, err := block.NewBaseFetcher(logger, tbc.blockSyncConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg))
 			if err != nil {
 				return errors.Wrap(err, "create meta fetcher")
 			}
@@ -1345,7 +1344,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 				ignoreDeletionMarkFilter,
 				stubCounter,
 				stubCounter,
-				tbc.blockSyncConcurrency)
+			)
 			if err != nil {
 				return errors.Wrap(err, "create syncer")
 			}

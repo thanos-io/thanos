@@ -190,7 +190,7 @@ This value has to be smaller than upload duration and [consistency delay](#consi
 
 ## Halting
 
-Because of the very specific nature of Compactor which is writing to object storage, potentially deleting sensitive data, and downloading GBs of data, by default we halt Compactor on certain data failures. This means that that Compactor does not crash on halt errors, but instead is kept running and does nothing with metric `thanos_compactor_halted` set to 1.
+Because of the very specific nature of Compactor which is writing to object storage, potentially deleting sensitive data, and downloading GBs of data, by default we halt Compactor on certain data failures. This means that that Compactor does not crash on halt errors, but instead is kept running and does nothing with metric `thanos_compact_halted` set to 1.
 
 Reason is that we don't want to retry compaction and all the computations if we know that, for example, there is already overlapped state in the object storage for some reason.
 
@@ -243,7 +243,7 @@ The only risk is that without compactor running for longer time (weeks) you migh
 
 The main and only `Service Level Indicator` for Compactor is how fast it can cope with uploaded TSDB blocks to the bucket.
 
-To understand that you can use mix `thanos_objstore_bucket_last_successful_upload_time` being quite fresh, `thanos_compactor_halted` being non 1 and `thanos_blocks_meta_synced{state="loaded"}` constantly increasing over days.
+To understand that you can use mix `thanos_objstore_bucket_last_successful_upload_time` being quite fresh, `thanos_compact_halted` being non 1 and `thanos_blocks_meta_synced{state="loaded"}` constantly increasing over days.
 
 <img src="compactor_no_coping_with_load.png" class="img-fluid" alt="Example view of compactor not coping with amount and size of incoming blocks"/>
 
@@ -253,7 +253,7 @@ Generally there two scalability directions:
 
 You should horizontally scale Compactor to cope with this using [label sharding](../sharding.md#compactor). This allows to assign multiple streams to each instance of compactor.
 
-1. TSDB blocks from single stream is too big, it takes too much time or resources.
+2. TSDB blocks from single stream is too big, it takes too much time or resources.
 
 This is rare as first you would need to ingest that amount of data into Prometheus and it's usually not recommended to have bigger than 10 millions series in the 2 hours blocks. However, with 2 weeks blocks, potential [Vertical Compaction](#vertical-compactions) enabled and other producers than Prometheus (e.g backfilling) this scalability concern can appear as well. See [Limit size of blocks](https://github.com/thanos-io/thanos/issues/3068) ticket to track progress of solution if you are hitting this.
 
@@ -279,11 +279,12 @@ usage: thanos compact [<flags>]
 Continuously compacts blocks in an object store bucket.
 
 Flags:
+      --block-files-concurrency=1
+                                Number of goroutines to use when
+                                fetching/uploading block files from object
+                                storage.
       --block-meta-fetch-concurrency=32
                                 Number of goroutines to use when fetching block
-                                metadata from object storage.
-      --block-sync-concurrency=20
-                                Number of goroutines to use when syncing block
                                 metadata from object storage.
       --block-viewer.global.sync-block-interval=1m
                                 Repeat interval for syncing the blocks between
@@ -296,6 +297,9 @@ Flags:
       --bucket-web-label=BUCKET-WEB-LABEL
                                 Prometheus label to use as timeline title in the
                                 bucket web UI
+      --compact.blocks-fetch-concurrency=1
+                                Number of goroutines to use when download block
+                                during compaction.
       --compact.cleanup-interval=5m
                                 How often we should clean up partially uploaded
                                 blocks and blocks with deletion mark in the

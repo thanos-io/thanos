@@ -18,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
+	"github.com/thanos-io/objstore/client"
 
 	commonmodel "github.com/prometheus/common/model"
 
@@ -36,7 +37,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
@@ -393,8 +393,9 @@ func runStore(
 			if httpProbe.IsReady() {
 				mint, maxt := bs.TimeRange()
 				return &infopb.StoreInfo{
-					MinTime: mint,
-					MaxTime: maxt,
+					MinTime:          mint,
+					MaxTime:          maxt,
+					SupportsSharding: true,
 				}
 			}
 			return nil

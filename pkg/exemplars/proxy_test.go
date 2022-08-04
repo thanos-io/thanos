@@ -5,6 +5,7 @@ package exemplars
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -14,8 +15,11 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -49,7 +53,31 @@ func (t *testExemplarClient) Recv() (*exemplarspb.ExemplarsResponse, error) {
 }
 
 func (t *testExemplarClient) Exemplars(ctx context.Context, in *exemplarspb.ExemplarsRequest, opts ...grpc.CallOption) (exemplarspb.Exemplars_ExemplarsClient, error) {
+	expr, err := parser.ParseExpr(in.Query)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if err := t.assertUniqueMatchers(expr); err != nil {
+		return nil, err
+	}
+
 	return t, t.exemplarErr
+}
+
+func (t *testExemplarClient) assertUniqueMatchers(expr parser.Expr) error {
+	matchersList := parser.ExtractSelectors(expr)
+	for _, matchers := range matchersList {
+		matcherSet := make(map[string]struct{})
+		for _, matcher := range matchers {
+			if _, ok := matcherSet[matcher.String()]; ok {
+				return status.Error(codes.Internal, fmt.Sprintf("duplicate matcher set found %s", matcher))
+			}
+			matcherSet[matcher.String()] = struct{}{}
+		}
+	}
+
+	return nil
 }
 
 var _ exemplarspb.ExemplarsClient = &testExemplarClient{}
@@ -94,7 +122,7 @@ func TestProxy(t *testing.T) {
 		{
 			name: "proxy success",
 			request: &exemplarspb.ExemplarsRequest{
-				Query:                   "http_request_duration_bucket",
+				Query:                   `http_request_duration_bucket`,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 			},
 			clients: []*exemplarspb.ExemplarStore{
@@ -105,7 +133,38 @@ func TestProxy(t *testing.T) {
 							Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 						}),
 					},
-					LabelSets: []labels.Labels{labels.FromMap(map[string]string{"cluster": "A"})},
+					LabelSets: []labels.Labels{
+						labels.FromMap(map[string]string{"cluster": "A"}),
+						labels.FromMap(map[string]string{"cluster": "B"}),
+					},
+				},
+			},
+			server: &testExemplarServer{},
+			wantResponses: []*exemplarspb.ExemplarsResponse{
+				exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
+					SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+					Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
+				}),
+			},
+		},
+		{
+			name: "proxy success with multiple selectors",
+			request: &exemplarspb.ExemplarsRequest{
+				Query:                   `http_request_duration_bucket{region="us-east1"} / on (region) group_left() http_request_duration_bucket`,
+				PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+			},
+			clients: []*exemplarspb.ExemplarStore{
+				{
+					ExemplarsClient: &testExemplarClient{
+						response: exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
+							SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+							Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
+						}),
+					},
+					LabelSets: []labels.Labels{
+						labels.FromMap(map[string]string{"cluster": "A"}),
+						labels.FromMap(map[string]string{"cluster": "B"}),
+					},
 				},
 			},
 			server: &testExemplarServer{},
@@ -119,7 +178,7 @@ func TestProxy(t *testing.T) {
 		{
 			name: "warning proxy success",
 			request: &exemplarspb.ExemplarsRequest{
-				Query:                   "http_request_duration_bucket",
+				Query:                   `http_request_duration_bucket`,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 			},
 			clients: []*exemplarspb.ExemplarStore{

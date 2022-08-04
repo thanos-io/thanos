@@ -6,7 +6,7 @@ package block
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 
@@ -30,7 +31,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -267,7 +267,7 @@ func (f *BaseFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 
 	defer runutil.CloseWithLogOnErr(f.logger, r, "close bkt meta get")
 
-	metaContent, err := ioutil.ReadAll(r)
+	metaContent, err := io.ReadAll(r)
 	if err != nil {
 		return nil, errors.Wrapf(err, "read meta file: %v", metaFile)
 	}
@@ -391,7 +391,7 @@ func (f *BaseFetcher) fetchMetadata(ctx context.Context) (interface{}, error) {
 
 	// Best effort cleanup of disk-cached metas.
 	if f.cacheDir != "" {
-		fis, err := ioutil.ReadDir(f.cacheDir)
+		fis, err := os.ReadDir(f.cacheDir)
 		names := make([]string, 0, len(fis))
 		for _, fi := range fis {
 			names = append(names, fi.Name())

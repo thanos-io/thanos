@@ -420,6 +420,7 @@ func runQuery(
 
 	var (
 		endpoints = query.NewEndpointSet(
+			time.Now,
 			logger,
 			reg,
 			func() (specs []*query.GRPCEndpointSpec) {
@@ -665,8 +666,9 @@ func runQuery(
 				if httpProbe.IsReady() {
 					mint, maxt := proxy.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime: mint,
-						MaxTime: maxt,
+						MinTime:          mint,
+						MaxTime:          maxt,
+						SupportsSharding: true,
 					}
 				}
 				return nil

@@ -59,7 +59,6 @@ import (
 	"crypto/sha256"
 	"hash"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -96,6 +95,7 @@ type Reloader struct {
 
 	lastCfgHash         []byte
 	lastWatchedDirsHash []byte
+	forceReload         bool
 
 	reloads                    prometheus.Counter
 	reloadErrors               prometheus.Counter
@@ -279,7 +279,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		}
 		cfgHash = h.Sum(nil)
 		if r.cfgOutputFile != "" {
-			b, err := ioutil.ReadFile(r.cfgFile)
+			b, err := os.ReadFile(r.cfgFile)
 			if err != nil {
 				return errors.Wrap(err, "read file")
 			}
@@ -292,7 +292,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 				}
 				defer runutil.CloseWithLogOnErr(r.logger, zr, "gzip reader close")
 
-				b, err = ioutil.ReadAll(zr)
+				b, err = io.ReadAll(zr)
 				if err != nil {
 					return errors.Wrap(err, "read compressed config file")
 				}
@@ -307,7 +307,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			defer func() {
 				_ = os.Remove(tmpFile)
 			}()
-			if err := ioutil.WriteFile(tmpFile, b, 0644); err != nil {
+			if err := os.WriteFile(tmpFile, b, 0644); err != nil {
 				return errors.Wrap(err, "write file")
 			}
 			if err := os.Rename(tmpFile, r.cfgOutputFile); err != nil {
@@ -352,7 +352,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		watchedDirsHash = h.Sum(nil)
 	}
 
-	if bytes.Equal(r.lastCfgHash, cfgHash) && bytes.Equal(r.lastWatchedDirsHash, watchedDirsHash) {
+	if !r.forceReload && bytes.Equal(r.lastCfgHash, cfgHash) && bytes.Equal(r.lastWatchedDirsHash, watchedDirsHash) {
 		// Nothing to do.
 		return nil
 	}
@@ -368,6 +368,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			return errors.Wrap(err, "trigger reload")
 		}
 
+		r.forceReload = false
 		r.lastCfgHash = cfgHash
 		r.lastWatchedDirsHash = watchedDirsHash
 		level.Info(r.logger).Log(
@@ -379,6 +380,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		r.lastReloadSuccessTimestamp.SetToCurrentTime()
 		return nil
 	}); err != nil {
+		r.forceReload = true
 		level.Error(r.logger).Log("msg", "Failed to trigger reload. Retrying.", "err", err)
 	}
 

@@ -55,6 +55,7 @@ message InfoResponse {
 message StoreInfo {
     int64 min_time = 1;
     int64 max_time = 2;
+    bool  supports_sharding = 3;
 }
 
 // RulesInfo holds the metadata related to Rules API exposed by the component.

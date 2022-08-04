@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cortexproject/cortex/pkg/querier/queryrange"
-
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
 

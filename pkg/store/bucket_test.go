@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"os"
@@ -36,7 +35,10 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/encoding"
+	"github.com/thanos-io/objstore/providers/filesystem"
 	"go.uber.org/atomic"
+
+	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
@@ -44,8 +46,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/gate"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 	"github.com/thanos-io/thanos/pkg/pool"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
@@ -191,7 +191,7 @@ func TestBucketBlock_Property(t *testing.T) {
 func TestBucketBlock_matchLabels(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 
-	dir, err := ioutil.TempDir("", "bucketblock-test")
+	dir, err := os.MkdirTemp("", "bucketblock-test")
 	testutil.Ok(t, err)
 	defer testutil.Ok(t, os.RemoveAll(dir))
 
@@ -588,7 +588,7 @@ func TestBucketStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dir, err := ioutil.TempDir("", "bucketstore-test")
+	dir, err := os.MkdirTemp("", "bucketstore-test")
 	testutil.Ok(t, err)
 
 	defer testutil.Ok(t, os.RemoveAll(dir))
@@ -653,7 +653,7 @@ func TestBucketStore_Sharding(t *testing.T) {
 	ctx := context.Background()
 	logger := log.NewNopLogger()
 
-	dir, err := ioutil.TempDir("", "test-sharding-prepare")
+	dir, err := os.MkdirTemp("", "test-sharding-prepare")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -682,7 +682,7 @@ func TestBucketStore_Sharding(t *testing.T) {
 		return
 	}
 
-	dir2, err := ioutil.TempDir("", "test-sharding2")
+	dir2, err := os.MkdirTemp("", "test-sharding2")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir2)) }()
 
@@ -830,7 +830,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 
 			if dir == "" {
 				var err error
-				dir, err = ioutil.TempDir("", "test-sharding")
+				dir, err = os.MkdirTemp("", "test-sharding")
 				testutil.Ok(t, err)
 				defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 			}
@@ -1013,7 +1013,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 func TestBucketIndexReader_ExpandedPostings(t *testing.T) {
 	tb := testutil.NewTB(t)
 
-	tmpDir, err := ioutil.TempDir("", "test-expanded-postings")
+	tmpDir, err := os.MkdirTemp("", "test-expanded-postings")
 	testutil.Ok(tb, err)
 	defer func() { testutil.Ok(tb, os.RemoveAll(tmpDir)) }()
 
@@ -1032,7 +1032,7 @@ func TestBucketIndexReader_ExpandedPostings(t *testing.T) {
 func BenchmarkBucketIndexReader_ExpandedPostings(b *testing.B) {
 	tb := testutil.NewTB(b)
 
-	tmpDir, err := ioutil.TempDir("", "bench-expanded-postings")
+	tmpDir, err := os.MkdirTemp("", "bench-expanded-postings")
 	testutil.Ok(tb, err)
 	defer func() { testutil.Ok(tb, os.RemoveAll(tmpDir)) }()
 
@@ -1215,7 +1215,7 @@ func BenchmarkBucketSkipChunksSeries(b *testing.B) {
 func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSeries int, requestedRatios ...float64) {
 	const numOfBlocks = 4
 
-	tmpDir, err := ioutil.TempDir("", "testorbench-bucketseries")
+	tmpDir, err := os.MkdirTemp("", "testorbench-bucketseries")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -1379,7 +1379,7 @@ func (m *mockedPool) Put(b *[]byte) {
 
 // Regression test against: https://github.com/thanos-io/thanos/issues/2147.
 func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
-	tmpDir, err := ioutil.TempDir("", "segfault-series")
+	tmpDir, err := os.MkdirTemp("", "segfault-series")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -1630,7 +1630,7 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 	tb := testutil.NewTB(t)
 
-	tmpDir, err := ioutil.TempDir("", "test-series-hints-enabled")
+	tmpDir, err := os.MkdirTemp("", "test-series-hints-enabled")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -1691,7 +1691,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	tb := testutil.NewTB(t)
 
-	tmpDir, err := ioutil.TempDir("", "test-block-with-multiple-chunks")
+	tmpDir, err := os.MkdirTemp("", "test-block-with-multiple-chunks")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -1871,7 +1871,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 
 	closers := []func(){}
 
-	tmpDir, err := ioutil.TempDir("", "test-hints")
+	tmpDir, err := os.MkdirTemp("", "test-hints")
 	testutil.Ok(t, err)
 	closers = append(closers, func() { testutil.Ok(t, os.RemoveAll(tmpDir)) })
 
@@ -2120,7 +2120,7 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 		readLengths = []int64{300, 500, 1000, 5000, 10000, 30000, 50000, 100000, 300000, 1500000}
 	)
 
-	tmpDir, err := ioutil.TempDir("", "benchmark")
+	tmpDir, err := os.MkdirTemp("", "benchmark")
 	testutil.Ok(b, err)
 	b.Cleanup(func() {
 		testutil.Ok(b, os.RemoveAll(tmpDir))
@@ -2185,7 +2185,7 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 		logger = log.NewNopLogger()
 	)
 
-	tmpDir, err := ioutil.TempDir("", "benchmark")
+	tmpDir, err := os.MkdirTemp("", "benchmark")
 	testutil.Ok(b, err)
 	b.Cleanup(func() {
 		testutil.Ok(b, os.RemoveAll(tmpDir))
@@ -2290,7 +2290,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				indexReader := blk.indexReader()
 				chunkReader := blk.chunkReader()
 
-				seriesSet, _, err := blockSeries(context.Background(), nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates)
+				seriesSet, _, err := blockSeries(context.Background(), nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, nil)
 				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).

@@ -34,9 +34,9 @@ Query Frontend supports a retry mechanism to retry query when HTTP requests are 
 
 ### Caching
 
-Query Frontend supports caching query results and reuses them on subsequent queries. If the cached results are incomplete, Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers. Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results. Currently, in-memory cache (fifo cache) and memcached are supported.
+Query Frontend supports caching query results and reuses them on subsequent queries. If the cached results are incomplete, Query Frontend calculates the required subqueries and executes them in parallel on downstream queriers. Query Frontend can optionally align queries with their step parameter to improve the cacheability of the query results. Currently, in-memory cache (fifo cache), memcached, and redis are supported.
 
-### Excluded from caching
+#### Excluded from caching
 
 * Requests that support deduplication and having it disabled with `dedup=false`. Read more about deduplication in [Dedup documentation](query.md#deduplication-enabled).
 * Requests that specify Store Matchers.
@@ -269,6 +269,12 @@ Flags:
                                  headers match the request, the first matching
                                  arg specified will take precedence. If no
                                  headers match 'anonymous' will be used.
+      --query-frontend.vertical-shards=QUERY-FRONTEND.VERTICAL-SHARDS
+                                 Number of shards to use when distributing
+                                 shardable PromQL queries. For more details, you
+                                 can refer to the Vertical query sharding
+                                 proposal:
+                                 https://thanos.io/tip/proposals-accepted/202205-vertical-query-sharding.md
       --query-range.align-range-with-step
                                  Mutate incoming queries to align their start
                                  and end with their step for better

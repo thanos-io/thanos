@@ -9,29 +9,72 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
+- [#5453](https://github.com/thanos-io/thanos/pull/5453) Compact: Skip erroneous empty non `*AggrChunk` chunks during 1h downsampling of 5m resolution blocks.
 
 ### Fixed
-- [#5339](https://github.com/thanos-io/thanos/pull/5339) Receive: Fix deadlock on interrupt in routerOnly mode
+- [#5502](https://github.com/thanos-io/thanos/pull/5502) Receive: Handle exemplar storage errors as conflict error.
+- [#5534](https://github.com/thanos-io/thanos/pull/5534) Query: Set struct return by query api alerts same as prometheus api.
+- [#5554](https://github.com/thanos-io/thanos/pull/5554) Query/Receiver: Fix querying exemplars from multi-tenant receivers.
 
 ### Added
+
+- [#5440](https://github.com/thanos-io/thanos/pull/5440) HTTP metrics: export number of in-flight HTTP requests.
+- [#5424](https://github.com/thanos-io/thanos/pull/5424) Receive: Export metrics regarding size of remote write requests.
+- [#5420](https://github.com/thanos-io/thanos/pull/5420) Receive: Automatically remove stale tenants.
+- [#5472](https://github.com/thanos-io/thanos/pull/5472) Receive: add new tenant metrics to example dashboard.
+- [#5475](https://github.com/thanos-io/thanos/pull/5475) Compact/Store: Added `--block-files-concurrency` allowing to configure number of go routines for download/upload block files during compaction.
+- [#5470](https://github.com/thanos-io/thanos/pull/5470) Receive: Implement exposing TSDB stats for all tenants
+- [#5493](https://github.com/thanos-io/thanos/pull/5493) Compact: Added `--compact.blocks-fetch-concurrency` allowing to configure number of go routines for download blocks during compactions.
+- [#5527](https://github.com/thanos-io/thanos/pull/5527) Receive: Add per request limits for remote write.
+- [#5520](https://github.com/thanos-io/thanos/pull/5520) Receive: Meta-monitoring based active series limiting
 
 ### Changed
 
 - [#5255](https://github.com/thanos-io/thanos/pull/5296) Query: Use k-way merging for the proxying logic. This ensures that network is used as efficiently as possible. Also, the proxying sub-system now uses much less resources (~30-50% less CPU usage, ~30-40% less RAM usage according to our benchmarks). We intend to add a series limiter on Thanos Query in the near future as now Query buffers series responses as fast as possible.
+- [#5447](https://github.com/thanos-io/thanos/pull/5447) Promclient: Ignore 405 status codes for Prometheus buildVersion requests
+- [#5451](https://github.com/thanos-io/thanos/pull/5451) Azure: Reduce memory usage by not buffering file downloads entirely in memory.
+- [#5484](https://github.com/thanos-io/thanos/pull/5484) Update Prometheus deps to v2.36.2.
+- [#5511](https://github.com/thanos-io/thanos/pull/5511) Update Prometheus deps to v2.37.0.
 
 ### Removed
+
+## [v0.27.0](https://github.com/thanos-io/thanos/tree/release-0.27) - 2022.07.05
+
+### Fixed
+- [#5339](https://github.com/thanos-io/thanos/pull/5339) Receive: Fix deadlock on interrupt in routerOnly mode.
+- [#5357](https://github.com/thanos-io/thanos/pull/5357) Store: fix groupcache handling of slashes.
+- [#5427](https://github.com/thanos-io/thanos/pull/5427) Receive: Fix Ketama hashring replication consistency.
+
+### Added
+
+- [#5337](https://github.com/thanos-io/thanos/pull/5337) Thanos Object Store: Add the `prefix` option to buckets.
+- [#5409](https://github.com/thanos-io/thanos/pull/5409) S3: Add option to force DNS style lookup.
+- [#5352](https://github.com/thanos-io/thanos/pull/5352) Cache: Add cache metrics to groupcache.
+- [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Add relabeling support.
+- [#5408](https://github.com/thanos-io/thanos/pull/5408) Receive: Add support for consistent hashrings.
+- [#5391](https://github.com/thanos-io/thanos/pull/5391) Receive: Implement api/v1/status/tsdb.
+
+### Changed
+
+- [#5410](https://github.com/thanos-io/thanos/pull/5410) Query: Close() after using query. This should reduce bumps in memory allocations.
+- [#5417](https://github.com/thanos-io/thanos/pull/5417) Ruler: *Breaking if you have not set this value (`--eval-interval`) yourself and rely on that value. :warning:*. Change the default evaluation interval from 30s to 1 minute in order to be compliant with Prometheus alerting compliance specification: https://github.com/prometheus/compliance/blob/main/alert_generator/specification.md#executing-an-alerting-rule.
+
+### Removed
+
+- [#5426](https://github.com/thanos-io/thanos/pull/5426) Compactor: Remove an unused flag `--block-sync-concurrency`.
 
 ## [v0.26.0](https://github.com/thanos-io/thanos/tree/release-0.26) - 2022.05.05
 
 ### Fixed
 - [#5281](https://github.com/thanos-io/thanos/pull/5281) Blocks: Use correct separators for filesystem paths and object storage paths respectively.
 - [#5300](https://github.com/thanos-io/thanos/pull/5300) Query: Ignore cache on queries with deduplication off.
+- [#5324](https://github.com/thanos-io/thanos/pull/5324) Reloader: Force trigger reload when config rollbacked.
 
 ### Added
 
 - [#5220](https://github.com/thanos-io/thanos/pull/5220) Query Frontend: Add `--query-frontend.forward-header` flag, forward headers to downstream querier.
 - [#5250](https://github.com/thanos-io/thanos/pull/5250/files) Querier: Expose Query and QueryRange APIs through GRPC.
-- [#5290](https://github.com/thanos-io/thanos/pull/5290) Add support for [ppc64le](https://en.wikipedia.org/wiki/Ppc64)
+- [#5290](https://github.com/thanos-io/thanos/pull/5290) Add support for [ppc64le](https://en.wikipedia.org/wiki/Ppc64).
 
 ### Changed
 
@@ -70,6 +113,7 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 
 ### Added
 
+- [#5153](https://github.com/thanos-io/thanos/pull/5153) Receive: option to extract tenant from client certificate
 - [#5110](https://github.com/thanos-io/thanos/pull/5110) Block: Do not upload DebugMeta files to obj store.
 - [#4963](https://github.com/thanos-io/thanos/pull/4963) Compactor, Store, Tools: Loading block metadata now only filters out duplicates within a source (or compaction group if replica labels are configured), and does so in parallel over sources.
 - [#5089](https://github.com/thanos-io/thanos/pull/5089) S3: Create an empty map in the case SSE-KMS is used and no KMSEncryptionContext is passed.

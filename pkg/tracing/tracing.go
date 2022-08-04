@@ -76,13 +76,15 @@ func StartSpan(ctx context.Context, operationName string, opts ...opentracing.St
 // DoInSpanWtihErr executes function doFn inside new span with `operationName` name and hooking as child to a span found within given context if any.
 // It uses opentracing.Tracer propagated in context. If no found, it uses noop tracer notification.
 // It logs the error inside the new span created, which differentiates it from DoInSpan and DoWithSpan.
-func DoInSpanWithErr(ctx context.Context, operationName string, doFn func(context.Context) error, opts ...opentracing.StartSpanOption) {
+func DoInSpanWithErr(ctx context.Context, operationName string, doFn func(context.Context) error, opts ...opentracing.StartSpanOption) error {
 	span, newCtx := StartSpan(ctx, operationName, opts...)
 	defer span.Finish()
 	err := doFn(newCtx)
 	if err != nil {
 		ext.LogError(span, err)
 	}
+
+	return err
 }
 
 // DoInSpan executes function doFn inside new span with `operationName` name and hooking as child to a span found within given context if any.

@@ -5,7 +5,6 @@ package verifier
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,8 +15,9 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 
+	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block"
-	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 // IndexKnownIssues verifies any known index issue.
@@ -42,7 +42,7 @@ func (IndexKnownIssues) VerifyRepair(ctx Context, idMatcher func(ulid.ULID) bool
 			continue
 		}
 
-		tmpdir, err := ioutil.TempDir("", fmt.Sprintf("index-issue-block-%s-", id))
+		tmpdir, err := os.MkdirTemp("", fmt.Sprintf("index-issue-block-%s-", id))
 		if err != nil {
 			return err
 		}

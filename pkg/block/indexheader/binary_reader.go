@@ -10,7 +10,6 @@ import (
 	"hash"
 	"hash/crc32"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -26,9 +25,9 @@ import (
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/pkg/block"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -143,7 +142,7 @@ func newChunkedIndexReader(ctx context.Context, bkt objstore.BucketReader, id ul
 		return nil, 0, errors.Wrapf(err, "get TOC from object storage of %s", indexFilepath)
 	}
 
-	b, err := ioutil.ReadAll(rc)
+	b, err := io.ReadAll(rc)
 	if err != nil {
 		runutil.CloseWithErrCapture(&err, rc, "close reader")
 		return nil, 0, errors.Wrapf(err, "get header from object storage of %s", indexFilepath)
@@ -185,7 +184,7 @@ func (r *chunkedIndexReader) readTOC() (*index.TOC, error) {
 		return nil, errors.Wrapf(err, "get TOC from object storage of %s", r.path)
 	}
 
-	tocBytes, err := ioutil.ReadAll(rc)
+	tocBytes, err := io.ReadAll(rc)
 	if err != nil {
 		runutil.CloseWithErrCapture(&err, rc, "close toc reader")
 		return nil, errors.Wrapf(err, "get TOC from object storage of %s", r.path)

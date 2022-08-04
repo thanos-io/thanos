@@ -21,6 +21,7 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"net/http"
 	"sort"
@@ -70,6 +71,7 @@ const (
 	StoreMatcherParam        = "storeMatch[]"
 	Step                     = "step"
 	Stats                    = "stats"
+	ShardInfoParam           = "shard_info"
 )
 
 // QueryAPI is an API used by Thanos Querier.
@@ -185,6 +187,7 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 
 	r.Get("/stores", instr("stores", qapi.stores))
 
+	r.Get("/alerts", instr("alerts", NewAlertsHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
 	r.Get("/rules", instr("rules", NewRulesHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
 
 	r.Get("/targets", instr("targets", NewTargetsHandler(qapi.targets, qapi.enableTargetPartialResponse)))
@@ -196,9 +199,9 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 }
 
 type queryData struct {
-	ResultType parser.ValueType  `json:"resultType"`
-	Result     parser.Value      `json:"result"`
-	Stats      *stats.QueryStats `json:"stats,omitempty"`
+	ResultType parser.ValueType `json:"resultType"`
+	Result     parser.Value     `json:"result"`
+	Stats      stats.QueryStats `json:"stats,omitempty"`
 	// Additional Thanos Response field.
 	Warnings []error `json:"warnings,omitempty"`
 }
@@ -295,6 +298,24 @@ func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Dura
 	return d, nil
 }
 
+func (qapi *QueryAPI) parseShardInfo(r *http.Request) (*storepb.ShardInfo, *api.ApiError) {
+	data := r.FormValue(ShardInfoParam)
+	if data == "" {
+		return nil, nil
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var info storepb.ShardInfo
+	if err := json.Unmarshal([]byte(data), &info); err != nil {
+		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "could not unmarshal parameter %s", ShardInfoParam)}
+	}
+
+	return &info, nil
+}
+
 func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError) {
 	ts, err := parseTimeParam(r, "time", qapi.baseAPI.Now())
 	if err != nil {
@@ -338,16 +359,22 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr
 	}
 
+	shardInfo, apiErr := qapi.parseShardInfo(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	qe := qapi.queryEngine(maxSourceResolution)
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	qry, err := qe.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, qapi.enableQueryPushdown, false), r.FormValue("query"), ts)
+	qry, err := qe.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, qapi.enableQueryPushdown, false, shardInfo), &promql.QueryOpts{}, r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
+	defer qry.Close()
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
 		err = qapi.gate.Start(ctx)
@@ -371,7 +398,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	}
 
 	// Optional stats field in response if parameter "stats" is not empty.
-	var qs *stats.QueryStats
+	var qs stats.QueryStats
 	if r.FormValue(Stats) != "" {
 		qs = stats.NewQueryStats(qry.Stats())
 	}
@@ -451,6 +478,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr
 	}
 
+	shardInfo, apiErr := qapi.parseShardInfo(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	qe := qapi.queryEngine(maxSourceResolution)
 
 	// Record the query range requested.
@@ -461,7 +493,8 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	defer span.Finish()
 
 	qry, err := qe.NewRangeQuery(
-		qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, qapi.enableQueryPushdown, false),
+		qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, qapi.enableQueryPushdown, false, shardInfo),
+		&promql.QueryOpts{},
 		r.FormValue("query"),
 		start,
 		end,
@@ -470,6 +503,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
 	}
+	defer qry.Close()
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
 		err = qapi.gate.Start(ctx)
@@ -491,7 +525,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	}
 
 	// Optional stats field in response if parameter "stats" is not empty.
-	var qs *stats.QueryStats
+	var qs stats.QueryStats
 	if r.FormValue(Stats) != "" {
 		qs = stats.NewQueryStats(qry.Stats())
 	}
@@ -534,7 +568,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		matcherSets = append(matcherSets, matchers)
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, qapi.enableQueryPushdown, true).
+	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, qapi.enableQueryPushdown, true, nil).
 		Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
@@ -621,7 +655,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, apiErr
 	}
 
-	q, err := qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, math.MaxInt64, enablePartialResponse, qapi.enableQueryPushdown, true).
+	q, err := qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, math.MaxInt64, enablePartialResponse, qapi.enableQueryPushdown, true, nil).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
@@ -671,7 +705,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		matcherSets = append(matcherSets, matchers)
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, qapi.enableQueryPushdown, true).
+	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, qapi.enableQueryPushdown, true, nil).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}
@@ -757,6 +791,52 @@ func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) f
 		}
 
 		return t, warnings, nil
+	}
+}
+
+// NewAlertsHandler created handler compatible with HTTP /api/v1/alerts https://prometheus.io/docs/prometheus/latest/querying/api/#alerts
+// which uses gRPC Unary Rules API (Rules API works for both /alerts and /rules).
+func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError) {
+	ps := storepb.PartialResponseStrategy_ABORT
+	if enablePartialResponse {
+		ps = storepb.PartialResponseStrategy_WARN
+	}
+
+	return func(r *http.Request) (interface{}, []error, *api.ApiError) {
+		span, ctx := tracing.StartSpan(r.Context(), "receive_http_request")
+		defer span.Finish()
+
+		var (
+			groups   *rulespb.RuleGroups
+			warnings storage.Warnings
+			err      error
+		)
+
+		// TODO(bwplotka): Allow exactly the same functionality as query API: passing replica, dedup and partial response as HTTP params as well.
+		req := &rulespb.RulesRequest{
+			Type:                    rulespb.RulesRequest_ALERT,
+			PartialResponseStrategy: ps,
+		}
+		tracing.DoInSpan(ctx, "retrieve_rules", func(ctx context.Context) {
+			groups, warnings, err = client.Rules(ctx, req)
+		})
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error retrieving rules: %v", err)}
+		}
+
+		var resp struct {
+			Alerts []*rulespb.AlertInstance `json:"alerts"`
+		}
+		for _, g := range groups.Groups {
+			for _, r := range g.Rules {
+				a := r.GetAlert()
+				if a == nil {
+					continue
+				}
+				resp.Alerts = append(resp.Alerts, a.Alerts...)
+			}
+		}
+		return resp, warnings, nil
 	}
 }
 

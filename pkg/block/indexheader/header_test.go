@@ -6,7 +6,6 @@ package indexheader
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -20,11 +19,11 @@ import (
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/providers/filesystem"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -32,7 +31,7 @@ import (
 func TestReaders(t *testing.T) {
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-indexheader")
+	tmpDir, err := os.MkdirTemp("", "test-indexheader")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -333,7 +332,7 @@ func prepareIndexV2Block(t testing.TB, tmpDir string, bkt objstore.Bucket) *meta
 func BenchmarkBinaryWrite(t *testing.B) {
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "bench-indexheader")
+	tmpDir, err := os.MkdirTemp("", "bench-indexheader")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -352,7 +351,7 @@ func BenchmarkBinaryWrite(t *testing.B) {
 
 func BenchmarkBinaryReader(t *testing.B) {
 	ctx := context.Background()
-	tmpDir, err := ioutil.TempDir("", "bench-indexheader")
+	tmpDir, err := os.MkdirTemp("", "bench-indexheader")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -385,7 +384,7 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 	ctx := context.Background()
 	logger := log.NewNopLogger()
 
-	tmpDir, err := ioutil.TempDir("", "benchmark-lookupsymbol")
+	tmpDir, err := os.MkdirTemp("", "benchmark-lookupsymbol")
 	testutil.Ok(b, err)
 	defer func() { testutil.Ok(b, os.RemoveAll(tmpDir)) }()
 

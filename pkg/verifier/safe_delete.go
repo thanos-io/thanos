@@ -6,7 +6,6 @@ package verifier
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -15,9 +14,10 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 
+	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 // TSDBBlockExistsInBucket checks to see if a given TSDB block ID exists in a
@@ -50,7 +50,7 @@ func BackupAndDelete(ctx Context, id ulid.ULID) error {
 	}
 
 	// Create a tempdir to locally store TSDB block.
-	tempdir, err := ioutil.TempDir("", fmt.Sprintf("safe-delete-%s", id.String()))
+	tempdir, err := os.MkdirTemp("", fmt.Sprintf("safe-delete-%s", id.String()))
 	if err != nil {
 		return err
 	}

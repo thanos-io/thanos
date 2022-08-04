@@ -8,7 +8,7 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -286,7 +286,7 @@ func readFile(logger log.Logger, path string) ([]byte, error) {
 		}
 	}()
 
-	return ioutil.ReadAll(fd)
+	return io.ReadAll(fd)
 }
 
 // parseConfig parses the raw configuration content and returns a HashringConfig.

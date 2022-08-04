@@ -95,7 +95,15 @@ func BuildAlertmanagerConfig(address string, timeout time.Duration) (Alertmanage
 	}
 
 	scheme := parsed.Scheme
+	if scheme == "" {
+		return AlertmanagerConfig{}, errors.New("alertmanagers.url contains empty scheme")
+	}
+
 	host := parsed.Host
+	if host == "" {
+		return AlertmanagerConfig{}, errors.New("alertmanagers.url contains empty host")
+	}
+
 	for _, qType := range []dns.QType{dns.A, dns.SRV, dns.SRVNoA} {
 		prefix := string(qType) + "+"
 		if strings.HasPrefix(strings.ToLower(scheme), prefix) {

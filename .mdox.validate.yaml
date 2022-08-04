@@ -1,4 +1,10 @@
 version: 1
+timeout: '1m'
+host_max_conns: 10
+cache:
+  type: 'SQLite'
+  # # 60h is 2.5 days, half the default cache validity (5 days).
+  jitter: '60h'
 
 validators:
   # Validators to skip checking PR/issue links of Thanos, Prometheus and Cortex.

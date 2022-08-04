@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -24,12 +23,12 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/objtesting"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/dedup"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -104,7 +103,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		blockMarkedForNoCompact := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, nil, 48*time.Hour, fetcherConcurrency)
-		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 1)
+		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks)
 		testutil.Ok(t, err)
 
 		// Do one initial synchronization with the bucket.
@@ -139,7 +138,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		testutil.Ok(t, sy.GarbageCollect(ctx))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
-		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks, blockMarkedForNoCompact, metadata.NoneFunc)
+		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks, blockMarkedForNoCompact, metadata.NoneFunc, 10, 10)
 		groups, err := grouper.Groups(sy.Metas())
 		testutil.Ok(t, err)
 
@@ -186,7 +185,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		defer cancel()
 
 		// Create fresh, empty directory for actual test.
-		dir, err := ioutil.TempDir("", "test-compact")
+		dir, err := os.MkdirTemp("", "test-compact")
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -207,14 +206,14 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		blocksMarkedForDeletion := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		blocksMaredForNoCompact := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 5)
+		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks)
 		testutil.Ok(t, err)
 
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil, mergeFunc)
 		testutil.Ok(t, err)
 
 		planner := NewPlanner(logger, []int64{1000, 3000}, noCompactMarkerFilter)
-		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, blocksMaredForNoCompact, metadata.NoneFunc)
+		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, blocksMaredForNoCompact, metadata.NoneFunc, 10, 10)
 		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2, true)
 		testutil.Ok(t, err)
 
@@ -431,7 +430,7 @@ type blockgenSpec struct {
 }
 
 func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec, blocksWithOutOfOrderChunks []blockgenSpec) (metas []*metadata.Meta) {
-	prepareDir, err := ioutil.TempDir("", "test-compact-prepare")
+	prepareDir, err := os.MkdirTemp("", "test-compact-prepare")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(prepareDir)) }()
 
@@ -519,7 +518,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 		})
 		testutil.Ok(t, err)
 
-		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks, 1)
+		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks)
 		testutil.Ok(t, err)
 
 		// Do one initial synchronization with the bucket.

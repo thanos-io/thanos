@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,11 +20,11 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/thanos-io/objstore"
 
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -94,7 +93,7 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 
 func TestMarkBlockEndpoint(t *testing.T) {
 	ctx := context.Background()
-	tmpDir, err := ioutil.TempDir("", "test-read-mark")
+	tmpDir, err := os.MkdirTemp("", "test-read-mark")
 	testutil.Ok(t, err)
 
 	// create block
