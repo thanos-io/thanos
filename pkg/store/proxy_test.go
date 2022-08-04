@@ -616,7 +616,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedErr: errors.New(`fetch series for {ext="1"} test: receive series from test: test`),
+			expectedErr: errors.New(`rpc error: code = Aborted desc = warning`),
 		},
 		{
 			title: "partial response disabled; 1st store is slow, 2nd store is fast;",
@@ -652,7 +652,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedErr: errors.New("failed to receive any data in 4s from test: context deadline exceeded"),
+			expectedErr: errors.New("rpc error: code = Aborted desc = receive series from test: context canceled"),
 		},
 		{
 			title: "partial response disabled; 1st store is fast, 2nd store is slow;",
@@ -688,7 +688,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedErr: errors.New("failed to receive any data in 4s from test: context deadline exceeded"),
+			expectedErr: errors.New("rpc error: code = Aborted desc = warning"),
 		},
 		{
 			title: "partial response disabled; 1st store is slow on 2nd series, 2nd store is fast;",
@@ -727,7 +727,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedErr: errors.New("failed to receive any data in 4s from test: context deadline exceeded"),
+			expectedErr: errors.New("rpc error: code = Aborted desc = warning"),
 		},
 		{
 			title: "partial response disabled; 1st store is fast to respond, 2nd store is slow on 2nd series;",
@@ -766,7 +766,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedErr: errors.New("failed to receive any data in 4s from test: context deadline exceeded"),
+			expectedErr: errors.New("rpc error: code = Aborted desc = warning"),
 		},
 		{
 			title: "partial response enabled; 1st store is slow to respond, 2nd store is fast;",
@@ -992,7 +992,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
 				},
 			},
-			expectedErr: errors.New("failed to receive any data from test: context deadline exceeded"),
+			expectedErr: errors.New("rpc error: code = Aborted desc = receive series from test: context deadline exceeded"),
 		},
 		{
 			title: "partial response enabled; all stores respond 3s",
@@ -1060,7 +1060,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			elapsedTime := time.Since(t0)
 			if tc.expectedErr != nil {
 				testutil.NotOk(t, err)
-				//testutil.Equals(t, tc.expectedErr.Error(), err.Error())
+				testutil.Equals(t, tc.expectedErr.Error(), err.Error())
 				return
 			}
 

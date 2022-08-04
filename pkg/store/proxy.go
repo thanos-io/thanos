@@ -290,7 +290,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
 
-		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, LazyRetrieval, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger)
+		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, EagerRetrieval, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
