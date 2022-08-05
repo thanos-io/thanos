@@ -30,7 +30,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
-- [#5255](https://github.com/thanos-io/thanos/pull/5296) Query: Use k-way merging for the proxying logic. This ensures that network is used as efficiently as possible. Also, the proxying sub-system now uses much less resources (~30-50% less CPU usage, ~30-40% less RAM usage according to our benchmarks). We intend to add a series limiter on Thanos Query in the near future as now Query buffers series responses as fast as possible.
+- [#5255](https://github.com/thanos-io/thanos/pull/5296) Query: Use k-way merging for the proxying logic. The proxying sub-system now uses much less resources (~25-80% less CPU usage, ~30-50% less RAM usage according to our benchmarks). Reduces query duration by a few percent on queries with lots of series.
 - [#5447](https://github.com/thanos-io/thanos/pull/5447) Promclient: Ignore 405 status codes for Prometheus buildVersion requests
 - [#5451](https://github.com/thanos-io/thanos/pull/5451) Azure: Reduce memory usage by not buffering file downloads entirely in memory.
 - [#5484](https://github.com/thanos-io/thanos/pull/5484) Update Prometheus deps to v2.36.2.
