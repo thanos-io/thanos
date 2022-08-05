@@ -225,7 +225,8 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_ = w.Write(ctx, "foo", wreq)
+		err := w.Write(ctx, "foo", wreq)
+		testutil.Ok(b, err)
 	}
 }
 
