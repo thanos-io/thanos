@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1153,7 +1152,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			chunkPool := chunkenc.NewPool()
-			changeLog := compactv2.NewChangeLog(ioutil.Discard)
+			changeLog := compactv2.NewChangeLog(io.Discard)
 			stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 			for _, id := range ids {
 				// Delete series from block & modify.

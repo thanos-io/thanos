@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -94,7 +93,7 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 
 func TestMarkBlockEndpoint(t *testing.T) {
 	ctx := context.Background()
-	tmpDir, err := ioutil.TempDir("", "test-read-mark")
+	tmpDir, err := os.MkdirTemp("", "test-read-mark")
 	testutil.Ok(t, err)
 
 	// create block

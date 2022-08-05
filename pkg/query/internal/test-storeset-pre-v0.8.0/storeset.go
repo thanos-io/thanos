@@ -204,6 +204,10 @@ func (s *storeRef) TimeRange() (int64, int64) {
 	return s.minTime, s.maxTime
 }
 
+func (s *storeRef) SupportsSharding() bool {
+	return false
+}
+
 func (s *storeRef) String() string {
 	mint, maxt := s.TimeRange()
 	return fmt.Sprintf("Addr: %s LabelSets: %v Mint: %d Maxt: %d", s.addr, labelpb.PromLabelSetsToString(s.LabelSets()), mint, maxt)

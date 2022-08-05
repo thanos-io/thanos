@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
+	e2emonitoring "github.com/efficientgo/e2e/monitoring"
+	"github.com/efficientgo/tools/core/pkg/backoff"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/relabel"
 
@@ -599,6 +602,185 @@ func TestReceive(t *testing.T) {
 				"receive":   "receive-ingestor",
 				"replica":   "0",
 				"tenant_id": "default-tenant",
+			},
+		})
+	})
+
+	t.Run("multitenant_active_series_limiting", func(t *testing.T) {
+
+		/*
+			The multitenant_active_series_limiting suite configures a hashring with
+			two avalanche writers and dedicated meta-monitoring.
+
+			┌──────────┐                           ┌──────────┐
+			│          │                           │          │
+			│Avalanche │                           │Avalanche │
+			│          │                           │          │
+			│          │                           │          │
+			└──────────┴──────────┐     ┌──────────┴──────────┘
+			                      │     │
+			                    ┌─▼─────▼──┐
+			                    │          │
+			                    │Router    ├────────────────► Meta-monitoring
+			                    │Ingestor  │
+			                    │          │
+			                    └──▲─┬──▲──┘
+			                       │ │  │
+			    ┌──────────┐       │ │  │        ┌──────────┐
+			    │          │       │ │  │        │          │
+			    │Router    ◄───────┘ │  └────────►Router    │
+			    │Ingestor  │         │           │Ingestor  │
+			    │          ◄─────────┼───────────►          │
+			    └────┬─────┘         │           └────┬─────┘
+			         │               │                │
+			         │          ┌────▼─────┐          │
+			         │          │          │          │
+			         └──────────► Query    ◄──────────┘
+			                    │          │
+			                    │          │
+			                    └──────────┘
+
+			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
+		*/
+
+		t.Parallel()
+		e, err := e2e.NewDockerEnvironment("e2e_multitenant_active_series_limiting")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		// This can be treated as the meta-monitoring service.
+		meta, err := e2emonitoring.Start(e)
+		testutil.Ok(t, err)
+
+		// Setup 3 RouterIngestors with a limit of 10 active series.
+		ingestor1 := e2ethanos.NewReceiveBuilder(e, "i1").WithIngestionEnabled()
+		ingestor2 := e2ethanos.NewReceiveBuilder(e, "i2").WithIngestionEnabled()
+		ingestor3 := e2ethanos.NewReceiveBuilder(e, "i3").WithIngestionEnabled()
+
+		h := receive.HashringConfig{
+			Endpoints: []string{
+				ingestor1.InternalEndpoint("grpc"),
+				ingestor2.InternalEndpoint("grpc"),
+				ingestor3.InternalEndpoint("grpc"),
+			},
+		}
+
+		i1Runnable := ingestor1.WithRouting(1, h).WithValidationEnabled(10, "http://"+meta.GetMonitoringRunnable().InternalEndpoint(e2edb.AccessPortName)).Init()
+		i2Runnable := ingestor2.WithRouting(1, h).WithValidationEnabled(10, "http://"+meta.GetMonitoringRunnable().InternalEndpoint(e2edb.AccessPortName)).Init()
+		i3Runnable := ingestor3.WithRouting(1, h).WithValidationEnabled(10, "http://"+meta.GetMonitoringRunnable().InternalEndpoint(e2edb.AccessPortName)).Init()
+
+		testutil.Ok(t, e2e.StartAndWaitReady(i1Runnable, i2Runnable, i3Runnable))
+
+		querier := e2ethanos.NewQuerierBuilder(e, "1", ingestor1.InternalEndpoint("grpc"), ingestor2.InternalEndpoint("grpc"), ingestor3.InternalEndpoint("grpc")).Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(querier))
+
+		testutil.Ok(t, querier.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+
+		// We run two avalanches, one tenant which exceeds the limit, and one tenant which remains under it.
+
+		// Avalanche in this configuration, would send 5 requests each with 10 new timeseries.
+		// One request always fails due to TSDB not being ready for new tenant.
+		// So without limiting we end up with 40 timeseries and 40 samples.
+		avalanche1 := e2ethanos.NewAvalanche(e, "avalanche-1",
+			e2ethanos.AvalancheOptions{
+				MetricCount:    "10",
+				SeriesCount:    "1",
+				MetricInterval: "30",
+				SeriesInterval: "3600",
+				ValueInterval:  "3600",
+
+				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
+				RemoteWriteInterval: "30s",
+				RemoteBatchSize:     "10",
+				RemoteRequestCount:  "5",
+
+				TenantID: "exceed-tenant",
+			})
+
+		// Avalanche in this configuration, would send 5 requests each with 5 of the same timeseries.
+		// One request always fails due to TSDB not being ready for new tenant.
+		// So we end up with 5 timeseries, 20 samples.
+		avalanche2 := e2ethanos.NewAvalanche(e, "avalanche-2",
+			e2ethanos.AvalancheOptions{
+				MetricCount:    "5",
+				SeriesCount:    "1",
+				MetricInterval: "3600",
+				SeriesInterval: "3600",
+				ValueInterval:  "3600",
+
+				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
+				RemoteWriteInterval: "30s",
+				RemoteBatchSize:     "5",
+				RemoteRequestCount:  "5",
+
+				TenantID: "under-tenant",
+			})
+
+		testutil.Ok(t, e2e.StartAndWaitReady(avalanche1, avalanche2))
+
+		// Here, 3/5 requests are failed due to limiting, as one request fails due to TSDB readiness and we ingest one initial request.
+		// 3 limited requests belong to the exceed-tenant.
+		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_receive_head_series_limited_requests_total"}, e2e.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2e.WaitMissingMetrics()))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		t.Cleanup(cancel)
+
+		// Here for exceed-tenant we go above limit by 10, which results in 0 value.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+			return "sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e_multitenant_active_series_limiting-receive-i1:8080\", job=\"receive-i1\"}"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{},
+				Value:  model.SampleValue(0),
+			},
+		})
+
+		// For under-tenant we stay at -5, as we have only pushed 5 series.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+			return "sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e_multitenant_active_series_limiting-receive-i1:8080\", job=\"receive-i1\"}"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{},
+				Value:  model.SampleValue(-5),
+			},
+		})
+
+		// Query meta-monitoring solution to assert that only 10 timeseries have been ingested for exceed-tenant.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"})" }, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{},
+				Value:  model.SampleValue(10),
+			},
+		})
+
+		// Query meta-monitoring solution to assert that only 5 timeseries have been ingested for under-tenant.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"})" }, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{},
+				Value:  model.SampleValue(5),
+			},
+		})
+
+		// Query meta-monitoring solution to assert that 3 requests were limited for exceed-tenant and none for under-tenant.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "thanos_receive_head_series_limited_requests_total" }, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{
+					"__name__": "thanos_receive_head_series_limited_requests_total",
+					"instance": "e2e_multitenant_active_series_limiting-receive-i1:8080",
+					"job":      "receive-i1",
+					"tenant":   "exceed-tenant",
+				},
+				Value: model.SampleValue(3),
 			},
 		})
 	})

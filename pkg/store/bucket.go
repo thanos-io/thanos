@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"path"
@@ -279,6 +278,7 @@ type BucketStore struct {
 	dir             string
 	indexCache      storecache.IndexCache
 	indexReaderPool *indexheader.ReaderPool
+	buffers         sync.Pool
 	chunkPool       pool.Bytes
 
 	// Sets of blocks that have the same labels. They are indexed by a hash over their label set.
@@ -401,11 +401,15 @@ func NewBucketStore(
 	options ...BucketStoreOption,
 ) (*BucketStore, error) {
 	s := &BucketStore{
-		logger:                      log.NewNopLogger(),
-		bkt:                         bkt,
-		fetcher:                     fetcher,
-		dir:                         dir,
-		indexCache:                  noopCache{},
+		logger:     log.NewNopLogger(),
+		bkt:        bkt,
+		fetcher:    fetcher,
+		dir:        dir,
+		indexCache: noopCache{},
+		buffers: sync.Pool{New: func() interface{} {
+			b := make([]byte, 0, initialBufSize)
+			return &b
+		}},
 		chunkPool:                   pool.NoopBytes{},
 		blocks:                      map[ulid.ULID]*bucketBlock{},
 		blockSets:                   map[uint64]*bucketBlockSet{},
@@ -528,7 +532,7 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 		return errors.Wrap(err, "sync block")
 	}
 
-	fis, err := ioutil.ReadDir(s.dir)
+	fis, err := os.ReadDir(s.dir)
 	if err != nil {
 		return errors.Wrap(err, "read dir")
 	}
@@ -784,6 +788,7 @@ func blockSeries(
 	skipChunks bool, // If true, chunks are not loaded.
 	minTime, maxTime int64, // Series must have data in this time range to be returned.
 	loadAggregates []storepb.Aggr, // List of aggregates to load when loading chunks.
+	shardMatcher *storepb.ShardMatcher,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(ctx, matchers)
 	if err != nil {
@@ -814,6 +819,7 @@ func blockSeries(
 		lset           labels.Labels
 		chks           []chunks.Meta
 	)
+
 	for _, id := range ps {
 		ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, skipChunks, minTime, maxTime)
 		if err != nil {
@@ -824,7 +830,18 @@ func blockSeries(
 			continue
 		}
 
+		if err := indexr.LookupLabelsSymbols(symbolizedLset, &lset); err != nil {
+			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
+		}
+
+		completeLabelset := labelpb.ExtendSortedLabels(lset, extLset)
+		if !shardMatcher.MatchesLabels(completeLabelset) {
+			continue
+		}
+
 		s := seriesEntry{}
+		s.lset = completeLabelset
+
 		if !skipChunks {
 			// Schedule loading chunks.
 			s.refs = make([]chunks.ChunkRef, 0, len(chks))
@@ -847,11 +864,7 @@ func blockSeries(
 				return nil, nil, errors.Wrap(err, "exceeded chunks limit")
 			}
 		}
-		if err := indexr.LookupLabelsSymbols(symbolizedLset, &lset); err != nil {
-			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
-		}
 
-		s.lset = labelpb.ExtendSortedLabels(lset, extLset)
 		res = append(res, s)
 	}
 
@@ -1059,6 +1072,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				})
 				defer span.Finish()
 
+				shardMatcher := req.ShardInfo.Matcher(&s.buffers)
+				defer shardMatcher.Close()
 				part, pstats, err := blockSeries(
 					newCtx,
 					b.extLset,
@@ -1070,6 +1085,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					req.SkipChunks,
 					req.MinTime, req.MaxTime,
 					req.Aggregates,
+					shardMatcher,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
@@ -1272,7 +1288,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 				result = strutil.MergeSlices(res, extRes)
 			} else {
-				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil)
+				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
@@ -1403,7 +1419,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				}
 				result = res
 			} else {
-				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil)
+				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}

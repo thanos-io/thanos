@@ -269,6 +269,12 @@ Flags:
                                  headers match the request, the first matching
                                  arg specified will take precedence. If no
                                  headers match 'anonymous' will be used.
+      --query-frontend.vertical-shards=QUERY-FRONTEND.VERTICAL-SHARDS
+                                 Number of shards to use when distributing
+                                 shardable PromQL queries. For more details, you
+                                 can refer to the Vertical query sharding
+                                 proposal:
+                                 https://thanos.io/tip/proposals-accepted/202205-vertical-query-sharding.md
       --query-range.align-range-with-step
                                  Mutate incoming queries to align their start
                                  and end with their step for better
