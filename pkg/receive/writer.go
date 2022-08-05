@@ -77,8 +77,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	for _, t := range wreq.Timeseries {
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
-		err := labelpb.ValidateLabels(t.Labels)
-		if err != nil {
+		if err := labelpb.ValidateLabels(t.Labels); err != nil {
 			switch err {
 			case labelpb.ErrOutOfOrderLabels:
 				numLabelsOutOfOrder++
@@ -89,6 +88,8 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			case labelpb.ErrEmptyLabels:
 				numLabelsEmpty++
 				level.Debug(tLogger).Log("msg", "Labels with empty name in the label set", "lset", t.Labels)
+			default:
+				level.Debug(tLogger).Log("msg", "Error validating labels", "err", err)
 			}
 
 			continue
@@ -118,6 +119,10 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			case storage.ErrOutOfBounds:
 				numSamplesOutOfBounds++
 				level.Debug(tLogger).Log("msg", "Out of bounds metric", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
+			default:
+				if err != nil {
+					level.Debug(tLogger).Log("msg", "Error ingesting sample", "err", err)
+				}
 			}
 		}
 
@@ -126,27 +131,28 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		if ref != 0 && len(t.Exemplars) > 0 {
 			for _, ex := range t.Exemplars {
 				exLset := labelpb.ZLabelsToPromLabels(ex.Labels)
-				logger := log.With(tLogger, "exemplarLset", exLset, "exemplar", ex.String())
+				exLogger := log.With(tLogger, "exemplarLset", exLset, "exemplar", ex.String())
 
-				_, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
+				if _, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
 					Labels: exLset,
 					Value:  ex.Value,
 					Ts:     ex.Timestamp,
 					HasTs:  true,
-				})
-				switch err {
-				case storage.ErrOutOfOrderExemplar:
-					numExemplarsOutOfOrder++
-					level.Debug(logger).Log("msg", "Out of order exemplar")
-				case storage.ErrDuplicateExemplar:
-					numExemplarsDuplicate++
-					level.Debug(logger).Log("msg", "Duplicate exemplar")
-				case storage.ErrExemplarLabelLength:
-					numExemplarsLabelLength++
-					level.Debug(logger).Log("msg", "Label length for exemplar exceeds max limit", "limit", exemplar.ExemplarMaxLabelSetLength)
-				default:
-					if err != nil {
-						level.Debug(logger).Log("msg", "Error ingesting exemplar", "err", err)
+				}); err != nil {
+					switch err {
+					case storage.ErrOutOfOrderExemplar:
+						numExemplarsOutOfOrder++
+						level.Debug(exLogger).Log("msg", "Out of order exemplar")
+					case storage.ErrDuplicateExemplar:
+						numExemplarsDuplicate++
+						level.Debug(exLogger).Log("msg", "Duplicate exemplar")
+					case storage.ErrExemplarLabelLength:
+						numExemplarsLabelLength++
+						level.Debug(exLogger).Log("msg", "Label length for exemplar exceeds max limit", "limit", exemplar.ExemplarMaxLabelSetLength)
+					default:
+						if err != nil {
+							level.Debug(exLogger).Log("msg", "Error ingesting exemplar", "err", err)
+						}
 					}
 				}
 			}
