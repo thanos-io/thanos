@@ -29,11 +29,11 @@ $(BINGO): $(BINGO_DIR)/bingo.mod
 	@echo "(re)installing $(GOBIN)/bingo-v0.6.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=bingo.mod -o=$(GOBIN)/bingo-v0.6.0 "github.com/bwplotka/bingo"
 
-FAILLINT := $(GOBIN)/faillint-v1.8.0
+FAILLINT := $(GOBIN)/faillint-v1.10.0
 $(FAILLINT): $(BINGO_DIR)/faillint.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/faillint-v1.8.0"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=faillint.mod -o=$(GOBIN)/faillint-v1.8.0 "github.com/fatih/faillint"
+	@echo "(re)installing $(GOBIN)/faillint-v1.10.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=faillint.mod -o=$(GOBIN)/faillint-v1.10.0 "github.com/fatih/faillint"
 
 GO_BINDATA := $(GOBIN)/go-bindata-v3.1.1+incompatible
 $(GO_BINDATA): $(BINGO_DIR)/go-bindata.mod

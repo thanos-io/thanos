@@ -118,7 +118,12 @@ message SeriesRequest {
   // query_hints are the hints coming from the PromQL engine when
   // requesting a storage.SeriesSet for a given expression.
   QueryHints query_hints = 12;
+
+  // shard_info is used by the querier to request a specific
+  // shard of blocks instead of entire blocks.
+  ShardInfo shard_info = 13;
 }
+
 
 // Analogous to storage.SelectHints.
 message QueryHints {
@@ -133,6 +138,21 @@ message QueryHints {
 
   // Range vector selector.
   Range range = 5;
+}
+
+// ShardInfo are the parameters used to shard series in Stores.
+message ShardInfo {
+  // The index of the current shard.
+  int64 shard_index = 1;
+
+  // The total number of shards.
+  int64 total_shards = 2;
+
+  // Group by or without labels.
+  bool by = 3;
+
+  // Labels on which to partition series.
+  repeated string labels = 4;
 }
 
 message Func {

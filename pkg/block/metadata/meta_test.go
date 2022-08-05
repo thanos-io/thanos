@@ -5,7 +5,7 @@ package metadata
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"testing"
 
 	"github.com/oklog/ulid"
@@ -35,7 +35,7 @@ func TestMeta_ReadWrite(t *testing.T) {
 	}
 }
 `, b.String())
-		_, err := Read(ioutil.NopCloser(&b))
+		_, err := Read(io.NopCloser(&b))
 		testutil.NotOk(t, err)
 		testutil.Equals(t, "unexpected meta file version 0", err.Error())
 	})
@@ -125,7 +125,7 @@ func TestMeta_ReadWrite(t *testing.T) {
 	}
 }
 `, b.String())
-		retMeta, err := Read(ioutil.NopCloser(&b))
+		retMeta, err := Read(io.NopCloser(&b))
 		testutil.Ok(t, err)
 		testutil.Equals(t, m1, *retMeta)
 	})
@@ -203,7 +203,7 @@ func TestMeta_ReadWrite(t *testing.T) {
 	}
 }
 `, b.String())
-		retMeta, err := Read(ioutil.NopCloser(&b))
+		retMeta, err := Read(io.NopCloser(&b))
 		testutil.Ok(t, err)
 
 		// We expect map to be empty but allocated.

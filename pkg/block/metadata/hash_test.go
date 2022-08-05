@@ -4,7 +4,6 @@
 package metadata
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -14,10 +13,10 @@ import (
 )
 
 func TestHashSmoke(t *testing.T) {
-	dir, err := ioutil.TempDir("", "testhash")
+	dir, err := os.MkdirTemp("", "testhash")
 	testutil.Ok(t, err)
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	f, err := ioutil.TempFile(dir, "hash")
+	f, err := os.CreateTemp(dir, "hash")
 	testutil.Ok(t, err)
 
 	_, err = f.Write([]byte("test"))

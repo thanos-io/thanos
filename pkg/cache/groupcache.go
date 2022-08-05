@@ -8,7 +8,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -209,7 +209,7 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 				}
 				defer runutil.CloseWithLogOnErr(logger, rc, "closing get")
 
-				b, err := ioutil.ReadAll(rc)
+				b, err := io.ReadAll(rc)
 				if err != nil {
 					return err
 				}
@@ -242,7 +242,7 @@ func NewGroupcacheWithConfig(logger log.Logger, reg prometheus.Registerer, conf 
 				}
 				defer runutil.CloseWithLogOnErr(logger, rc, "closing get_range")
 
-				b, err := ioutil.ReadAll(rc)
+				b, err := io.ReadAll(rc)
 				if err != nil {
 					return err
 				}
@@ -278,7 +278,7 @@ func (c *unsafeByteCodec) MarshalBinary() ([]byte, time.Time, error) {
 
 // UnmarshalBinary to provided data so they share the same backing array
 // this is a generally unsafe performance optimization, but safe in our
-// case because we always use ioutil.ReadAll(). That is fine though
+// case because we always use io.ReadAll(). That is fine though
 // because later that slice remains in our local cache.
 // Used https://github.com/vimeo/galaxycache/pull/23/files as inspiration.
 // TODO(GiedriusS): figure out if pooling could be used somehow by hooking into

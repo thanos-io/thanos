@@ -6,7 +6,6 @@ package query
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -40,7 +39,7 @@ func BenchmarkQuerySelect(b *testing.B) {
 }
 
 func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) {
-	tmpDir, err := ioutil.TempDir("", "testorbench-queryselect")
+	tmpDir, err := os.MkdirTemp("", "testorbench-queryselect")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 

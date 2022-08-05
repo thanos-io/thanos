@@ -21,11 +21,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -680,7 +680,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "prometheus-test")
+	dir, err := os.MkdirTemp("", "prometheus-test")
 	testutil.Ok(t, err)
 
 	const chunkRange int64 = 600_000

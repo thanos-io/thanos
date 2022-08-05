@@ -607,8 +607,9 @@ func runRule(
 				if httpProbe.IsReady() {
 					mint, maxt := tsdbStore.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime: mint,
-						MaxTime: maxt,
+						MinTime:          mint,
+						MaxTime:          maxt,
+						SupportsSharding: true,
 					}
 				}
 				return nil

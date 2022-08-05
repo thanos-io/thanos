@@ -6,7 +6,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -485,7 +484,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		dir, err := ioutil.TempDir("", "test_bucketstore_e2e")
+		dir, err := os.MkdirTemp("", "test_bucketstore_e2e")
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -540,7 +539,7 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		dir, err := ioutil.TempDir("", "test_bucketstore_e2e")
+		dir, err := os.MkdirTemp("", "test_bucketstore_e2e")
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -562,7 +561,7 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 	defer cancel()
 	bkt := objstore.NewInMemBucket()
 
-	dir, err := ioutil.TempDir("", "test_bucket_time_part_e2e")
+	dir, err := os.MkdirTemp("", "test_bucket_time_part_e2e")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -649,7 +648,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 			defer cancel()
 			bkt := objstore.NewInMemBucket()
 
-			dir, err := ioutil.TempDir("", "test_bucket_chunks_limiter_e2e")
+			dir, err := os.MkdirTemp("", "test_bucket_chunks_limiter_e2e")
 			testutil.Ok(t, err)
 			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -686,7 +685,7 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		dir, err := ioutil.TempDir("", "test_bucketstore_label_names_e2e")
+		dir, err := os.MkdirTemp("", "test_bucketstore_label_names_e2e")
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
@@ -788,7 +787,7 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		dir, err := ioutil.TempDir("", "test_bucketstore_label_values_e2e")
+		dir, err := os.MkdirTemp("", "test_bucketstore_label_values_e2e")
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 

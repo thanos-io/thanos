@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"math/rand"
 	"net/http"
@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
@@ -690,6 +691,91 @@ func TestReceiveQuorum(t *testing.T) {
 	}
 }
 
+func TestReceiveWriteRequestLimits(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		status        int
+		amountSeries  int
+		amountSamples int
+	}{
+		{
+			name:         "Request above limit of series",
+			status:       http.StatusRequestEntityTooLarge,
+			amountSeries: 21,
+		},
+		{
+			name:         "Request under the limit of series",
+			status:       http.StatusOK,
+			amountSeries: 20,
+		},
+		{
+			name:          "Request above limit of samples (series * samples)",
+			status:        http.StatusRequestEntityTooLarge,
+			amountSeries:  30,
+			amountSamples: 15,
+		},
+		{
+			name:          "Request under the limit of samples (series * samples)",
+			status:        http.StatusOK,
+			amountSeries:  10,
+			amountSamples: 2,
+		},
+		{
+			name:          "Request above body size limit",
+			status:        http.StatusRequestEntityTooLarge,
+			amountSeries:  300,
+			amountSamples: 150,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.amountSamples == 0 {
+				tc.amountSamples = 1
+			}
+
+			appendables := []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			}
+			handlers, _ := newTestHandlerHashring(appendables, 3)
+			handler := handlers[0]
+			handler.requestLimiter = newRequestLimiter(int64(1*units.Megabyte), 20, 200, nil)
+			tenant := "test"
+
+			wreq := &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{},
+			}
+
+			for i := 0; i < tc.amountSeries; i += 1 {
+				label := labelpb.ZLabel{Name: "foo", Value: "bar"}
+				series := prompb.TimeSeries{
+					Labels: []labelpb.ZLabel{label},
+				}
+				for j := 0; j < tc.amountSamples; j += 1 {
+					sample := prompb.Sample{Value: float64(j), Timestamp: int64(j)}
+					series.Samples = append(series.Samples, sample)
+				}
+				wreq.Timeseries = append(wreq.Timeseries, series)
+			}
+
+			// Test that the correct status is returned.
+			rec, err := makeRequest(handler, tenant, wreq)
+			if err != nil {
+				t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", tc.status, err)
+			}
+			if rec.Code != tc.status {
+				t.Errorf("handler: got unexpected HTTP status code: expected %d, got %d; body: %s", tc.status, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestReceiveWithConsistencyDelay(t *testing.T) {
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
@@ -1161,7 +1247,7 @@ func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byt
 }
 
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
-	dir, err := ioutil.TempDir("", "test_receive")
+	dir, err := os.MkdirTemp("", "test_receive")
 	testutil.Ok(b, err)
 	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
 
@@ -1265,7 +1351,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					r := httptest.NewRecorder()
-					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
 					testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 				}
 			})
@@ -1289,7 +1375,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 
 			// First request should be fine, since we don't change timestamp, rest is wrong.
 			r := httptest.NewRecorder()
-			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
 			testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
 			b.Run("conflict errors", func(b testutil.TB) {
@@ -1297,9 +1383,9 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					r := httptest.NewRecorder()
-					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
 					testutil.Equals(b, http.StatusConflict, r.Code, "%v-%s", i, func() string {
-						b, _ := ioutil.ReadAll(r.Body)
+						b, _ := io.ReadAll(r.Body)
 						return string(b)
 					}())
 				}
