@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -1961,4 +1962,101 @@ func TestProxyStore_storeMatchMetadata(t *testing.T) {
 	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "testaddr")}})
 	testutil.Assert(t, ok)
 	testutil.Equals(t, "", reason)
+}
+
+func TestDedupRespHeap_Deduplication(t *testing.T) {
+	t.Parallel()
+
+	for _, tcase := range []struct {
+		responses []*storepb.SeriesResponse
+		testFn    func(responses []*storepb.SeriesResponse, h *dedupResponseHeap)
+		tname     string
+	}{
+		{
+			tname:     "edge case with zero responses",
+			responses: []*storepb.SeriesResponse{},
+			testFn: func(responses []*storepb.SeriesResponse, h *dedupResponseHeap) {
+				testutil.Equals(t, false, h.Next())
+				testutil.Equals(t, (*storepb.SeriesResponse)(nil), h.At())
+			},
+		},
+		{
+			tname: "edge case with only one response",
+			responses: []*storepb.SeriesResponse{
+				{
+					Result: &storepb.SeriesResponse_Series{
+						Series: &storepb.Series{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+							Chunks: []storepb.AggrChunk{
+								{
+									Raw: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Data: []byte(`abcdefgh`),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			testFn: func(responses []*storepb.SeriesResponse, h *dedupResponseHeap) {
+				testutil.Equals(t, true, h.Next())
+				resp := h.At()
+				testutil.Equals(t, responses[0], resp)
+				testutil.Equals(t, false, h.Next())
+			},
+		},
+		{
+			tname: "dedups identical series",
+			responses: []*storepb.SeriesResponse{
+				{
+					Result: &storepb.SeriesResponse_Series{
+						Series: &storepb.Series{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+							Chunks: []storepb.AggrChunk{
+								{
+									Raw: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Data: []byte(`abcdefgh`),
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Result: &storepb.SeriesResponse_Series{
+						Series: &storepb.Series{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+							Chunks: []storepb.AggrChunk{
+								{
+									Raw: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Data: []byte(`abcdefgh`),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			testFn: func(responses []*storepb.SeriesResponse, h *dedupResponseHeap) {
+				testutil.Equals(t, true, h.Next())
+				resp := h.At()
+				testutil.Equals(t, responses[0], resp)
+				testutil.Equals(t, false, h.Next())
+			},
+		},
+	} {
+		t.Run(tcase.tname, func(t *testing.T) {
+			h := NewDedupResponseHeap(NewProxyResponseHeap(
+				&eagerRespSet{
+					wg:                &sync.WaitGroup{},
+					bufferedResponses: tcase.responses,
+				},
+			))
+			tcase.testFn(tcase.responses, h)
+		})
+	}
+
 }

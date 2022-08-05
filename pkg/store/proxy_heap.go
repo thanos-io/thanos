@@ -233,6 +233,9 @@ func NewProxyResponseHeap(seriesSets ...respSet) *ProxyResponseHeap {
 	ret := make(ProxyResponseHeap, 0, len(seriesSets))
 
 	for _, ss := range seriesSets {
+		if ss.Empty() {
+			continue
+		}
 		ss := ss
 		ret.Push(ProxyResponseHeapNode{rs: ss})
 	}
@@ -305,6 +308,13 @@ func (l *lazyRespSet) Err() error {
 	l.errMtx.Lock()
 	defer l.errMtx.Unlock()
 	return l.err
+}
+
+func (l *lazyRespSet) Empty() bool {
+	l.bufferedResponsesMtx.Lock()
+	defer l.bufferedResponsesMtx.Unlock()
+
+	return len(l.bufferedResponses) == 0 && l.noMoreData
 }
 
 // Next either blocks until more data is available or reads
@@ -656,8 +666,6 @@ func newEagerRespSet(
 			ret.wg.Done()
 		}()
 
-		defer ret.wg.Done()
-
 		numResponses := 0
 		defer func() {
 			if numResponses == 0 {
@@ -743,6 +751,12 @@ func (l *eagerRespSet) Next() bool {
 	return l.i < len(l.bufferedResponses)
 }
 
+func (l *eagerRespSet) Empty() bool {
+	l.wg.Wait()
+
+	return len(l.bufferedResponses) == 0
+}
+
 func (l *eagerRespSet) Err() error {
 	return l.err
 }
@@ -762,4 +776,5 @@ type respSet interface {
 	Err() error
 	StoreID() string
 	Labelset() string
+	Empty() bool
 }
