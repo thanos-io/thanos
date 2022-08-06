@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/promql"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -102,7 +103,8 @@ func TestEngineFactory(t *testing.T) {
 		}
 	)
 	for _, td := range tData {
-		e := engineFactory(mockNewEngine, promql.EngineOpts{LookbackDelta: td.lookbackDelta}, td.dynamicLookbackDelta)
+		e := engineFactory(mockNewEngine, promql.EngineOpts{LookbackDelta: td.lookbackDelta}, td.dynamicLookbackDelta,
+			"", 1, log.NewNopLogger())
 		for _, tc := range td.tcs {
 			got := e(tc.stepMillis)
 			testutil.Equals(t, tc.expect, got)
