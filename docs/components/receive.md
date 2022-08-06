@@ -192,6 +192,10 @@ Flags:
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
                                  via a header.
+      --receive.grpc-compression=none
+                                 Compression algorithm to use for gRPC requests
+                                 to other receivers. Must be one of: none,
+                                 snappy
       --receive.hashrings=<content>
                                  Alternative to 'receive.hashrings-file' flag
                                  (lower priority). Content of file that contains

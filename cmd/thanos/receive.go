@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/grpc"
+
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -29,6 +31,7 @@ import (
 	"github.com/thanos-io/objstore/client"
 	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/internal/cortex/util/grpcencoding/snappy"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -47,6 +50,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
+
+const compressionNone = "none"
 
 func registerReceive(app *extkingpin.App) {
 	cmd := app.Command(component.Receive.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
@@ -138,6 +143,9 @@ func runReceive(
 	)
 	if err != nil {
 		return err
+	}
+	if conf.compression != compressionNone {
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
 	}
 
 	var bkt objstore.Bucket
@@ -782,6 +790,7 @@ type receiveConfig struct {
 	replicaHeader     string
 	replicationFactor uint64
 	forwardTimeout    *model.Duration
+	compression       string
 
 	tsdbMinBlockDuration       *model.Duration
 	tsdbMaxBlockDuration       *model.Duration
@@ -858,6 +867,9 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.tenant-label-name", "Label name through which the tenant will be announced.").Default(receive.DefaultTenantLabel).StringVar(&rc.tenantLabelName)
 
 	cmd.Flag("receive.replica-header", "HTTP header specifying the replica number of a write request.").Default(receive.DefaultReplicaHeader).StringVar(&rc.replicaHeader)
+
+	compressionOptions := strings.Join([]string{compressionNone, snappy.Name}, ", ")
+	cmd.Flag("receive.grpc-compression", "Compression algorithm to use for gRPC requests to other receivers. Must be one of: "+compressionOptions).Default(compressionNone).EnumVar(&rc.compression, compressionNone, snappy.Name)
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
 
