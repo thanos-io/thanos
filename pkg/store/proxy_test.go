@@ -1740,9 +1740,7 @@ func BenchmarkProxySeries(b *testing.B) {
 }
 
 func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
-	tmpDir, err := os.MkdirTemp("", "testorbench-proxyseries")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	const numOfClients = 4
 

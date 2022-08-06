@@ -1271,9 +1271,7 @@ func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byt
 }
 
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
-	dir, err := os.MkdirTemp("", "test_receive")
-	testutil.Ok(b, err)
-	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
+	dir := b.TempDir()
 
 	handlers, _ := newTestHandlerHashring([]*fakeAppendable{nil}, 1)
 	handler := handlers[0]

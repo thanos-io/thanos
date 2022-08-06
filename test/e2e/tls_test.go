@@ -40,16 +40,12 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 	expMessage := "hello world"
 
-	tmpDirClt, err := os.MkdirTemp("", "test-tls-clt")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDirClt)) }()
+	tmpDirClt := t.TempDir()
 	caClt := filepath.Join(tmpDirClt, "ca")
 	certClt := filepath.Join(tmpDirClt, "cert")
 	keyClt := filepath.Join(tmpDirClt, "key")
 
-	tmpDirSrv, err := os.MkdirTemp("", "test-tls-srv")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDirSrv)) }()
+	tmpDirSrv := t.TempDir()
 	caSrv := filepath.Join(tmpDirSrv, "ca")
 	certSrv := filepath.Join(tmpDirSrv, "cert")
 	keySrv := filepath.Join(tmpDirSrv, "key")

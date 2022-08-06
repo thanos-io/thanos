@@ -125,12 +125,7 @@ func TestCloseMoreThanOnce(t *testing.T) {
 }
 
 func TestDeleteAll(t *testing.T) {
-	dir, err := os.MkdirTemp("", "example")
-	testutil.Ok(t, err)
-
-	t.Cleanup(func() {
-		testutil.Ok(t, os.RemoveAll(dir))
-	})
+	dir := t.TempDir()
 
 	f, err := os.Create(filepath.Join(dir, "file1"))
 	testutil.Ok(t, err)
@@ -166,8 +161,7 @@ func TestDeleteAll(t *testing.T) {
 }
 
 func TestDeleteAll_ShouldReturnNoErrorIfDirectoryDoesNotExists(t *testing.T) {
-	dir, err := os.MkdirTemp("", "example")
-	testutil.Ok(t, err)
+	dir := t.TempDir()
 	testutil.Ok(t, os.RemoveAll(dir))
 
 	// Calling DeleteAll() on a non-existent directory should return no error.
