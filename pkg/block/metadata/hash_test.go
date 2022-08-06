@@ -13,9 +13,7 @@ import (
 )
 
 func TestHashSmoke(t *testing.T) {
-	dir, err := os.MkdirTemp("", "testhash")
-	testutil.Ok(t, err)
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	dir := t.TempDir()
 	f, err := os.CreateTemp(dir, "hash")
 	testutil.Ok(t, err)
 
