@@ -764,8 +764,7 @@ func engineFactory(
 			lookbackDelta = time.Duration(r) * time.Millisecond
 		}
 
-		var queryTracker *promql.ActiveQueryTracker
-		newEngingOpts := promql.EngineOpts{
+		newEngineOpts := promql.EngineOpts{
 			Logger:                   eo.Logger,
 			Reg:                      wrapReg(i),
 			MaxSamples:               eo.MaxSamples,
@@ -775,15 +774,16 @@ func engineFactory(
 			EnableAtModifier:         eo.EnableAtModifier,
 			EnableNegativeOffset:     eo.EnableNegativeOffset,
 		}
+		// An active query tracker will be added only if the user specifies a non-default path.
+		// Otherwise, the nil active query tracker from existing engine options will be used.
 		if activeQueryDir != "" {
 			resActiveQueryDir := filepath.Join(activeQueryDir, getActiveQueryDirBasedOnResolution(r))
-			queryTracker = promql.NewActiveQueryTracker(resActiveQueryDir, maxConcurrentQueries, logger)
-			newEngingOpts.ActiveQueryTracker = queryTracker
+			newEngineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(resActiveQueryDir, maxConcurrentQueries, logger)
 		} else {
-			newEngingOpts.ActiveQueryTracker = eo.ActiveQueryTracker
+			newEngineOpts.ActiveQueryTracker = eo.ActiveQueryTracker
 		}
 
-		engines[i] = newEngine(newEngingOpts)
+		engines[i] = newEngine(newEngineOpts)
 	}
 	return func(maxSourceResolutionMillis int64) *promql.Engine {
 		for i := len(resolutions) - 1; i >= 1; i-- {
