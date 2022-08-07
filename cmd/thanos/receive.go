@@ -262,7 +262,7 @@ func runReceive(
 
 		level.Debug(logger).Log("msg", "setting up tsdb")
 		{
-			if err := startTSDBAndUpload(g, logger, reg, dbs, reloadGRPCServer, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt); err != nil {
+			if err := startTSDBAndUpload(g, logger, reg, dbs, reloadGRPCServer, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
 				return err
 			}
 		}
@@ -567,7 +567,7 @@ func startTSDBAndUpload(g *run.Group,
 	uploadDone chan struct{},
 	statusProber prober.Probe,
 	bkt objstore.Bucket,
-
+	hashringAlgorithm receive.HashringAlgorithm,
 ) error {
 
 	log.With(logger, "component", "storage")
@@ -605,6 +605,7 @@ func startTSDBAndUpload(g *run.Group,
 			level.Info(logger).Log("msg", "storage is closed")
 		}()
 
+		var initialized bool
 		for {
 			select {
 			case <-cancel:
@@ -613,22 +614,34 @@ func startTSDBAndUpload(g *run.Group,
 				if !ok {
 					return nil
 				}
-				dbUpdatesStarted.Inc()
-				level.Info(logger).Log("msg", "updating storage")
 
-				if err := dbs.Flush(); err != nil {
-					return errors.Wrap(err, "flushing storage")
+				// When using Ketama as the hashring algorithm, there is no need to flush the TSDB head.
+				// If new receivers were added to the hashring, existing receivers will not need to
+				// ingest additional series.
+				// If receivers are removed from the hashring, existing receivers will only need
+				// to ingest a subset of the series that were assigned to the removed receivers.
+				// As a result, changing the hashring produces no churn, hence no need to force head compaction.
+				flushHead := !initialized || hashringAlgorithm != receive.AlgorithmKetama
+				if flushHead {
+					level.Info(logger).Log("msg", "updating storage")
+					dbUpdatesStarted.Inc()
+					if err := dbs.Flush(); err != nil {
+						return errors.Wrap(err, "flushing storage")
+					}
+					if err := dbs.Open(); err != nil {
+						return errors.Wrap(err, "opening storage")
+					}
+					if upload {
+						uploadC <- struct{}{}
+						<-uploadDone
+					}
+					dbUpdatesCompleted.Inc()
 				}
-				if err := dbs.Open(); err != nil {
-					return errors.Wrap(err, "opening storage")
-				}
-				if upload {
-					uploadC <- struct{}{}
-					<-uploadDone
-				}
+				initialized = true
+
 				statusProber.Ready()
 				level.Info(logger).Log("msg", "storage started, and server is ready to receive web requests")
-				dbUpdatesCompleted.Inc()
+
 				reloadGRPCServer <- struct{}{}
 			}
 		}

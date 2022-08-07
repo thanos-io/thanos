@@ -13,6 +13,7 @@ import (
 	"github.com/cespare/xxhash"
 
 	"github.com/pkg/errors"
+
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -107,13 +108,9 @@ type ketamaHashring struct {
 
 func newKetamaHashring(endpoints []string, sectionsPerNode int) *ketamaHashring {
 	numSections := len(endpoints) * sectionsPerNode
-	ring := ketamaHashring{
-		endpoints:    endpoints,
-		sections:     make(sections, 0, numSections),
-		numEndpoints: uint64(len(endpoints)),
-	}
 
 	hash := xxhash.New()
+	ringSections := make(sections, 0, numSections)
 	for endpointIndex, endpoint := range endpoints {
 		for i := 1; i <= sectionsPerNode; i++ {
 			_, _ = hash.Write([]byte(endpoint + ":" + strconv.Itoa(i)))
@@ -122,12 +119,17 @@ func newKetamaHashring(endpoints []string, sectionsPerNode int) *ketamaHashring 
 				hash:          hash.Sum64(),
 			}
 
-			ring.sections = append(ring.sections, *n)
+			ringSections = append(ringSections, *n)
 			hash.Reset()
 		}
 	}
-	sort.Sort(ring.sections)
-	return &ring
+	sort.Sort(ringSections)
+
+	return &ketamaHashring{
+		endpoints:    endpoints,
+		sections:     ringSections,
+		numEndpoints: uint64(len(endpoints)),
+	}
 }
 
 func (c ketamaHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
@@ -151,8 +153,18 @@ func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 		i = 0
 	}
 
-	i = (i + n) % numSections
-	nodeIndex := c.sections[i].endpointIndex
+	ringSection := i % numSections
+	replicas := make(map[uint64]struct{})
+	for {
+		r := c.sections[ringSection].endpointIndex
+		replicas[r] = struct{}{}
+		if uint64(len(replicas))-1 == n {
+			break
+		}
+		ringSection = (ringSection + 1) % numSections
+	}
+
+	nodeIndex := c.sections[ringSection].endpointIndex
 	return c.endpoints[nodeIndex], nil
 }
 
@@ -198,6 +210,7 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 			m.mu.Lock()
 			m.cache[tenant] = m.hashrings[i]
 			m.mu.Unlock()
+
 			return m.hashrings[i].GetN(tenant, ts, n)
 		}
 	}

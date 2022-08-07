@@ -188,14 +188,14 @@ func TestKetamaHashringGet(t *testing.T) {
 			nodes:        []string{"node-1", "node-2", "node-3"},
 			ts:           baseTS,
 			n:            2,
-			expectedNode: "node-2",
+			expectedNode: "node-3",
 		},
 		{
 			name:         "base case with replication and reordered nodes",
 			nodes:        []string{"node-1", "node-3", "node-2"},
 			ts:           baseTS,
 			n:            2,
-			expectedNode: "node-2",
+			expectedNode: "node-3",
 		},
 		{
 			name:         "base case with new node at beginning of ring",
