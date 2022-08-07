@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +33,94 @@ func TestWriter(t *testing.T) {
 		expectedIngested []prompb.TimeSeries
 		maxExemplars     int64
 	}{
+		"should error out on series with no labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+						{
+							Labels:  []labelpb.ZLabel{{Name: "__name__", Value: ""}},
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: errors.Wrapf(labelpb.ErrEmptyLabels, "add 2 series"),
+		},
+		"should succeed on series with valid labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: nil,
+			expectedIngested: []prompb.TimeSeries{
+				{
+					Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+				},
+			},
+		},
+		"should error out and skip series with out-of-order labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "1"}, labelpb.ZLabel{Name: "Z", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: errors.Wrapf(labelpb.ErrOutOfOrderLabels, "add 1 series"),
+		},
+		"should error out and skip series with duplicate labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}, labelpb.ZLabel{Name: "z", Value: "1"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: errors.Wrapf(labelpb.ErrDuplicateLabels, "add 1 series"),
+		},
+		"should error out and skip series with out-of-order labels; accept series with valid labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "A", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "c", Value: "1"}, labelpb.ZLabel{Name: "d", Value: "2"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "E", Value: "1"}, labelpb.ZLabel{Name: "f", Value: "2"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: errors.Wrapf(labelpb.ErrOutOfOrderLabels, "add 2 series"),
+			expectedIngested: []prompb.TimeSeries{
+				{
+					Labels:  append(lbls, labelpb.ZLabel{Name: "c", Value: "1"}, labelpb.ZLabel{Name: "d", Value: "2"}),
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+				},
+			},
+		},
 		"should succeed on valid series with exemplars": {
 			reqs: []*prompb.WriteRequest{{
 				Timeseries: []prompb.TimeSeries{
@@ -121,9 +208,7 @@ func TestWriter(t *testing.T) {
 
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
-			dir, err := os.MkdirTemp("", "test")
-			testutil.Ok(t, err)
-			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+			dir := t.TempDir()
 
 			logger := log.NewNopLogger()
 
@@ -171,6 +256,16 @@ func TestWriter(t *testing.T) {
 					testutil.Equals(t, testData.expectedErr.Error(), err.Error())
 				}
 			}
+
+			// On each expected series, assert we have a ref available.
+			a, err := app.Appender(context.Background())
+			testutil.Ok(t, err)
+			gr := a.(storage.GetRef)
+
+			for _, ts := range testData.expectedIngested {
+				ref, _ := gr.GetRef(labelpb.ZLabelsToPromLabels(ts.Labels))
+				testutil.Assert(t, ref != 0, fmt.Sprintf("appender should have reference to series %v", ts))
+			}
 		})
 	}
 }
@@ -184,9 +279,7 @@ func BenchmarkWriterTimeSeriesWith10Labels_100(b *testing.B)  { benchmarkWriter(
 func BenchmarkWriterTimeSeriesWith10Labels_1000(b *testing.B) { benchmarkWriter(b, 10, 1000) }
 
 func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int) {
-	dir, err := os.MkdirTemp("", "bench-writer")
-	testutil.Ok(b, err)
-	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
+	dir := b.TempDir()
 
 	logger := log.NewNopLogger()
 
