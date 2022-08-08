@@ -1,4 +1,4 @@
-// Copyright (c) The Cortex Authors.
+// Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
 package snappy
