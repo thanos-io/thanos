@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -209,9 +208,7 @@ func TestWriter(t *testing.T) {
 
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
-			dir, err := os.MkdirTemp("", "test")
-			testutil.Ok(t, err)
-			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+			dir := t.TempDir()
 
 			logger := log.NewNopLogger()
 
@@ -282,9 +279,7 @@ func BenchmarkWriterTimeSeriesWith10Labels_100(b *testing.B)  { benchmarkWriter(
 func BenchmarkWriterTimeSeriesWith10Labels_1000(b *testing.B) { benchmarkWriter(b, 10, 1000) }
 
 func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int) {
-	dir, err := os.MkdirTemp("", "bench-writer")
-	testutil.Ok(b, err)
-	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
+	dir := b.TempDir()
 
 	logger := log.NewNopLogger()
 

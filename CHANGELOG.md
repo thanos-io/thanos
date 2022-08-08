@@ -27,7 +27,9 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5493](https://github.com/thanos-io/thanos/pull/5493) Compact: Added `--compact.blocks-fetch-concurrency` allowing to configure number of go routines for download blocks during compactions.
 - [#5527](https://github.com/thanos-io/thanos/pull/5527) Receive: Add per request limits for remote write.
 - [#5520](https://github.com/thanos-io/thanos/pull/5520) Receive: Meta-monitoring based active series limiting.
-- [#5575](https://github.com/thanos-io/thanos/pull/5575) Receive: Add support for gRPC compression.
+- [#5555](https://github.com/thanos-io/thanos/pull/5555) Query: Added `--query.active-query-path` flag, allowing the user to configure the directory to create an active query tracking file, `queries.active`, for different resolution.
+- [#5566](https://github.com/thanos-io/thanos/pull/5566) Receive: Added experimental support to enable chunk write queue via `--tsdb.write-queue-size` flag.
+- [#5575](https://github.com/thanos-io/thanos/pull/5575) Receive: Add support for gRPC compression with snappy.
 
 ### Changed
 

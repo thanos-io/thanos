@@ -59,9 +59,7 @@ func TestReloader_ConfigApply(t *testing.T) {
 	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
 	testutil.Ok(t, err)
 
-	dir, err := os.MkdirTemp("", "reloader-cfg-test")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in"), os.ModePerm))
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "out"), os.ModePerm))
@@ -182,9 +180,7 @@ faulty_config:
   a: 1
 `)
 
-	dir, err := os.MkdirTemp("", "reloader-cfg-test")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in"), os.ModePerm))
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "out"), os.ModePerm))
@@ -318,8 +314,6 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 	testutil.Ok(t, os.WriteFile(tempRule1File, []byte("rule1-changed"), os.ModePerm))
 	testutil.Ok(t, os.WriteFile(tempRule3File, []byte("rule3-changed"), os.ModePerm))
 	testutil.Ok(t, os.WriteFile(tempRule4File, []byte("rule4-changed"), os.ModePerm))
-
-	defer func() { testutil.Ok(t, os.RemoveAll(ruleDir)) }()
 
 	dir := t.TempDir()
 	dir2 := t.TempDir()
@@ -644,9 +638,7 @@ func TestReloader_ConfigApplyWithWatchIntervalEqualsZero(t *testing.T) {
 	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
 	testutil.Ok(t, err)
 
-	dir, err := os.MkdirTemp("", "reloader-cfg-test")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in"), os.ModePerm))
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "out"), os.ModePerm))

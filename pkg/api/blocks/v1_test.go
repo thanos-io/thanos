@@ -93,8 +93,7 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 
 func TestMarkBlockEndpoint(t *testing.T) {
 	ctx := context.Background()
-	tmpDir, err := os.MkdirTemp("", "test-read-mark")
-	testutil.Ok(t, err)
+	tmpDir := t.TempDir()
 
 	// create block
 	b1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{

@@ -25,7 +25,6 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -680,8 +679,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 	}
 
-	dir, err := os.MkdirTemp("", "prometheus-test")
-	testutil.Ok(t, err)
+	dir := t.TempDir()
 
 	const chunkRange int64 = 600_000
 	var series []storage.Series
@@ -699,7 +697,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		series = append(series, storage.NewListSeries(lbl, samples))
 	}
 
-	_, err = tsdb.CreateBlock(series, dir, chunkRange, log.NewNopLogger())
+	_, err := tsdb.CreateBlock(series, dir, chunkRange, log.NewNopLogger())
 	testutil.Ok(t, err)
 
 	opts := tsdb.DefaultOptions()
