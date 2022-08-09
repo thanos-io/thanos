@@ -128,11 +128,13 @@ Flags:
       --prometheus.http-client=<content>
                                  Alternative to 'prometheus.http-client-file'
                                  flag (mutually exclusive). Content of YAML file
-                                 or string with http client configs. see Format
-                                 details : ...
+                                 or string with http client configs. See Format
+                                 details:
+                                 https://thanos.io/tip/components/sidecar.md/#configuration.
       --prometheus.http-client-file=<file-path>
                                  Path to YAML file or string with http client
-                                 configs. see Format details : ...
+                                 configs. See Format details:
+                                 https://thanos.io/tip/components/sidecar.md/#configuration.
       --prometheus.ready_timeout=10m
                                  Maximum time to wait for the Prometheus
                                  instance to start up
@@ -180,4 +182,37 @@ Flags:
       --tsdb.path="./data"       Data directory of TSDB.
       --version                  Show application version.
 
+```
+
+## Configuration
+
+### Prometheus HTTP client
+
+You can configure the Prometheus HTTP client for Thanos sidecar with YAML, either by passing the YAML content directly to the `--prometheus.http-client` flag, or by passing the YAML file path to the `--prometheus.http-client-file` flag.
+
+The configuration format is the following:
+
+```yaml
+basic_auth:
+  username: ""
+  password: ""
+  password_file: ""
+bearer_token: ""
+bearer_token_file: ""
+proxy_url: ""
+tls_config:
+  ca_file: ""
+  cert_file: ""
+  key_file: ""
+  server_name: ""
+  insecure_skip_verify: false
+transport_config:
+  max_idle_conns: 0
+  max_idle_conns_per_host: 0
+  idle_conn_timeout: 0
+  response_header_timeout: 0
+  expect_continue_timeout: 0
+  max_conns_per_host: 0
+  disable_compression: false
+  tls_handshake_timeout: 0
 ```

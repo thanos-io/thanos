@@ -67,7 +67,7 @@ The following section explains various suggestions and procedures to note during
 ### Prerequisites
 
 * It is strongly recommended that you use Linux distributions systems or OSX for development.
-* Go 1.13.9 or newer installed.
+* Go 1.17.x or higher.
 * For React UI, you will need a working NodeJS environment and the npm package manager to compile the Web UI assets.
 
 ### First Steps

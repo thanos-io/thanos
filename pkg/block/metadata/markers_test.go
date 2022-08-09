@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"os"
 	"path"
 	"testing"
 	"time"
@@ -28,9 +27,7 @@ func TestMain(m *testing.M) {
 func TestReadMarker(t *testing.T) {
 	ctx := context.Background()
 
-	tmpDir, err := os.MkdirTemp("", "test-read-mark")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 	t.Run(DeletionMarkFilename, func(t *testing.T) {

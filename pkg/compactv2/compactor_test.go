@@ -588,9 +588,7 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "test-series-writer")
-			testutil.Ok(t, err)
-			defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+			tmpDir := t.TempDir()
 
 			chunkPool := chunkenc.NewPool()
 

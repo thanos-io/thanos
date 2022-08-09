@@ -39,11 +39,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 		metrics := prometheus.NewRegistry()
 		metricsBucket := objstore.BucketWithMetrics("test", bkt, metrics)
 
-		dir, err := os.MkdirTemp("", "shipper-e2e-test")
-		testutil.Ok(t, err)
-		defer func() {
-			testutil.Ok(t, os.RemoveAll(dir))
-		}()
+		dir := t.TempDir()
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
 		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, metricsBucket, func() labels.Labels { return extLset }, metadata.TestSource, false, false, metadata.NoneFunc)
@@ -198,11 +194,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 
 func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
-		dir, err := os.MkdirTemp("", "shipper-e2e-test")
-		testutil.Ok(t, err)
-		defer func() {
-			testutil.Ok(t, os.RemoveAll(dir))
-		}()
+		dir := t.TempDir()
 
 		bkt := objstore.NewInMemBucket()
 
@@ -357,11 +349,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
-	dir, err := os.MkdirTemp("", "shipper-e2e-test")
-	testutil.Ok(t, err)
-	defer func() {
-		testutil.Ok(t, os.RemoveAll(dir))
-	}()
+	dir := t.TempDir()
 
 	bkt := objstore.NewInMemBucket()
 
