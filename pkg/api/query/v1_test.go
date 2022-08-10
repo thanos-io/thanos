@@ -109,7 +109,8 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		}
 
-		resp, _, apiErr := test.endpoint(req.WithContext(ctx))
+		resp, _, apiErr, releaseResources := test.endpoint(req.WithContext(ctx))
+		defer releaseResources()
 		if apiErr != nil {
 			if test.errType == baseAPI.ErrorNone {
 				t.Fatalf("Unexpected error: %s", apiErr)
@@ -1781,7 +1782,8 @@ func TestRulesHandler(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			res, errors, apiError := endpoint(req.WithContext(ctx))
+			res, errors, apiError, releaseResources := endpoint(req.WithContext(ctx))
+			defer releaseResources()
 			if errors != nil {
 				t.Fatalf("Unexpected errors: %s", errors)
 				return
