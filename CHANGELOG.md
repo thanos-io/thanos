@@ -31,6 +31,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5566](https://github.com/thanos-io/thanos/pull/5566) Receive: Added experimental support to enable chunk write queue via `--tsdb.write-queue-size` flag.
 - [#5575](https://github.com/thanos-io/thanos/pull/5575) Receive: Add support for gRPC compression with snappy.
 - [#5508](https://github.com/thanos-io/thanos/pull/5508) Receive: Validate labels in write requests.
+- [#5439](https://github.com/thanos-io/thanos/pull/5439) Mixin: Add Alert ThanosQueryOverload to Mixin.
 
 ### Changed
 
