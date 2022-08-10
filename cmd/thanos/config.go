@@ -78,7 +78,7 @@ func (pc *prometheusConfig) registerFlag(cmd extkingpin.FlagClause) *prometheusC
 	pc.httpClient = extflag.RegisterPathOrContent(
 		cmd,
 		"prometheus.http-client",
-		"YAML file or string with http client configs. see Format details : ...",
+		"YAML file or string with http client configs. See Format details: https://thanos.io/tip/components/sidecar.md/#configuration.",
 	)
 
 	return pc

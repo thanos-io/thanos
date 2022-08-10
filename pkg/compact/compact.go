@@ -1052,7 +1052,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 					return issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", bdir), meta.ULID)
 				}
 
-				if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
+				if err := stats.OutOfOrderLabelsErr(); !cg.acceptMalformedIndex && err != nil {
 					return errors.Wrapf(err,
 						"block id %s, try running with --debug.accept-malformed-index", meta.ULID)
 				}

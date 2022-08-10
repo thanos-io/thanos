@@ -116,6 +116,16 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			exp:       errConflict,
 		},
 		{
+			name: "matching multierror (labels error)",
+			err: errutil.NonNilMultiError([]error{
+				labelpb.ErrEmptyLabels,
+				errors.New("foo"),
+				errors.New("bar"),
+			}),
+			threshold: 1,
+			exp:       errConflict,
+		},
+		{
 			name: "matching but below threshold multierror",
 			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
@@ -164,7 +174,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			exp:       errConflict,
 		},
 		{
-			name: "matching multierror many, both above threshold, conflict have precedence",
+			name: "matching multierror many, both above threshold, conflict has precedence",
 			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
 				errConflict,
@@ -172,6 +182,20 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 				tsdb.ErrNotReady,
 				tsdb.ErrNotReady,
 				status.Error(codes.AlreadyExists, "conflict"),
+				errors.New("foo"),
+			}),
+			threshold: 2,
+			exp:       errConflict,
+		},
+		{
+			name: "matching multierror many, both above threshold, conflict has precedence (labels error)",
+			err: errutil.NonNilMultiError([]error{
+				labelpb.ErrDuplicateLabels,
+				labelpb.ErrDuplicateLabels,
+				tsdb.ErrNotReady,
+				tsdb.ErrNotReady,
+				tsdb.ErrNotReady,
+				labelpb.ErrDuplicateLabels,
 				errors.New("foo"),
 			}),
 			threshold: 2,
@@ -1247,9 +1271,7 @@ func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byt
 }
 
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
-	dir, err := os.MkdirTemp("", "test_receive")
-	testutil.Ok(b, err)
-	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
+	dir := b.TempDir()
 
 	handlers, _ := newTestHandlerHashring([]*fakeAppendable{nil}, 1)
 	handler := handlers[0]

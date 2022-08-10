@@ -9,7 +9,6 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"os"
 	"sort"
 	"testing"
 
@@ -229,11 +228,7 @@ func (s *delegatorServer) Delegate(c io.Closer) {
 func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 	t.Skip(skipMessage)
 
-	tmpDir, err := os.MkdirTemp("", "test")
-	testutil.Ok(t, err)
-	t.Cleanup(func() {
-		testutil.Ok(t, os.RemoveAll(tmpDir))
-	})
+	tmpDir := t.TempDir()
 
 	var (
 		random = rand.New(rand.NewSource(120))
@@ -402,11 +397,7 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 func TestTSDBStore_SeriesAccessWithoutDelegateClosing(t *testing.T) {
 	t.Skip(skipMessage)
 
-	tmpDir, err := os.MkdirTemp("", "test")
-	testutil.Ok(t, err)
-	t.Cleanup(func() {
-		testutil.Ok(t, os.RemoveAll(tmpDir))
-	})
+	tmpDir := t.TempDir()
 
 	var (
 		random = rand.New(rand.NewSource(120))
@@ -530,11 +521,7 @@ func BenchmarkTSDBStoreSeries(b *testing.B) {
 }
 
 func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
-	tmpDir, err := os.MkdirTemp("", "testorbench-testtsdbseries")
-	testutil.Ok(t, err)
-	t.Cleanup(func() {
-		testutil.Ok(t, os.RemoveAll(tmpDir))
-	})
+	tmpDir := t.TempDir()
 
 	// This means 3 blocks and the head.
 	const numOfBlocks = 4
