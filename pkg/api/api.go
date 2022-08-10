@@ -121,7 +121,7 @@ func SetCORS(w http.ResponseWriter) {
 	}
 }
 
-type ApiFunc func(r *http.Request) (interface{}, []error, *ApiError)
+type ApiFunc func(r *http.Request) (interface{}, []error, *ApiError, func())
 
 type BaseAPI struct {
 	logger      log.Logger
@@ -156,20 +156,20 @@ func (api *BaseAPI) Register(r *route.Router, tracer opentracing.Tracer, logger 
 	r.Get("/status/buildinfo", instr("status_build", api.serveBuildInfo))
 }
 
-func (api *BaseAPI) options(r *http.Request) (interface{}, []error, *ApiError) {
-	return nil, nil, nil
+func (api *BaseAPI) options(r *http.Request) (interface{}, []error, *ApiError, func()) {
+	return nil, nil, nil, func() {}
 }
 
-func (api *BaseAPI) flags(r *http.Request) (interface{}, []error, *ApiError) {
-	return api.flagsMap, nil, nil
+func (api *BaseAPI) flags(r *http.Request) (interface{}, []error, *ApiError, func()) {
+	return api.flagsMap, nil, nil, func() {}
 }
 
-func (api *BaseAPI) serveRuntimeInfo(r *http.Request) (interface{}, []error, *ApiError) {
-	return api.runtimeInfo(), nil, nil
+func (api *BaseAPI) serveRuntimeInfo(r *http.Request) (interface{}, []error, *ApiError, func()) {
+	return api.runtimeInfo(), nil, nil, func() {}
 }
 
-func (api *BaseAPI) serveBuildInfo(r *http.Request) (interface{}, []error, *ApiError) {
-	return api.buildInfo, nil, nil
+func (api *BaseAPI) serveBuildInfo(r *http.Request) (interface{}, []error, *ApiError, func()) {
+	return api.buildInfo, nil, nil, func() {}
 }
 
 func GetRuntimeInfoFunc(logger log.Logger) RuntimeInfoFn {
@@ -208,12 +208,15 @@ func GetInstr(
 			if !disableCORS {
 				SetCORS(w)
 			}
-			if data, warnings, err := f(r); err != nil {
+			if data, warnings, err, releaseResources := f(r); err != nil {
 				RespondError(w, err, data)
+				releaseResources()
 			} else if data != nil {
 				Respond(w, data, warnings)
+				releaseResources()
 			} else {
 				w.WriteHeader(http.StatusNoContent)
+				releaseResources()
 			}
 		})
 
