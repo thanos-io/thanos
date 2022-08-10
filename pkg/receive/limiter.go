@@ -12,7 +12,8 @@ import (
 type limiter struct {
 	requestLimiter requestLimiter
 	writeGate      gate.Gate
-	// activeSeriesLimiter *activeSeriesLimiter `yaml:"active_series"`
+	// TODO: extract active series limiting logic into a self-contained type and
+	// move it here.
 }
 
 type requestLimiter interface {
