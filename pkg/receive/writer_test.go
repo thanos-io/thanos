@@ -209,7 +209,6 @@ func TestWriter(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			dir := t.TempDir()
-
 			logger := log.NewNopLogger()
 
 			m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
@@ -226,7 +225,7 @@ func TestWriter(t *testing.T) {
 				false,
 				metadata.NoneFunc,
 			)
-			defer func() { testutil.Ok(t, m.Close()) }()
+			t.Cleanup(func() { testutil.Ok(t, m.Close()) })
 
 			testutil.Ok(t, m.Flush())
 			testutil.Ok(t, m.Open())
@@ -280,7 +279,6 @@ func BenchmarkWriterTimeSeriesWith10Labels_1000(b *testing.B) { benchmarkWriter(
 
 func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int) {
 	dir := b.TempDir()
-
 	logger := log.NewNopLogger()
 
 	m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
@@ -297,7 +295,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int) {
 		false,
 		metadata.NoneFunc,
 	)
-	defer func() { testutil.Ok(b, m.Close()) }()
+	b.Cleanup(func() { testutil.Ok(b, m.Close()) })
 
 	testutil.Ok(b, m.Flush())
 	testutil.Ok(b, m.Open())
@@ -325,16 +323,21 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_ = w.Write(ctx, "foo", wreq)
+		testutil.Ok(b, w.Write(ctx, "foo", wreq))
 	}
 }
 
+// generateLabelsAndSeries generates time series for benchmark with specified number of labels.
+// Although in this method we're reusing samples with same value and timestamp, Prometheus actually allows us to provide exact
+// duplicates without error (see comment https://github.com/prometheus/prometheus/blob/release-2.37/tsdb/head_append.go#L316).
+// This also means the sample won't be appended, which means the overhead of appending additional samples to head is not
+// reflected in the benchmark, but should still capture the performance of receive writer.
 func generateLabelsAndSeries(numLabels int, numSeries int) []prompb.TimeSeries {
 	// Generate some labels first.
 	l := make([]labelpb.ZLabel, 0, numLabels)
 	l = append(l, labelpb.ZLabel{Name: "__name__", Value: "test"})
 	for i := 0; i < numLabels; i++ {
-		l = append(l, labelpb.ZLabel{Name: fmt.Sprintf("label_%q", rune('a'-1+i)), Value: fmt.Sprintf("%d", i)})
+		l = append(l, labelpb.ZLabel{Name: fmt.Sprintf("label_%s", string(rune('a'+i))), Value: fmt.Sprintf("%d", i)})
 	}
 
 	ts := make([]prompb.TimeSeries, 0, numSeries)
