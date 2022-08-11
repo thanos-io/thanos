@@ -1,3 +1,5 @@
+local utils = import '../lib/utils.libsonnet';
+
 {
   local thanos = self,
   sidecar+:: {
@@ -7,14 +9,15 @@
   },
   prometheusAlerts+:: {
     groups+: if thanos.sidecar == null then [] else [
-      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
+      local location = utils.location(thanos.targetGroups);
+      local labels = utils.labelsTemplate(thanos.sidecar.dimensions, thanos.targetGroups);
       {
         name: 'thanos-sidecar',
         rules: [
           {
             alert: 'ThanosSidecarBucketOperationsFailed',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}}%s bucket operations are failing' % location,
+              description: 'Thanos Sidecar %s%s bucket operations are failing' % [labels, location],
               summary: 'Thanos Sidecar bucket operations are failing',
             },
             expr: |||
@@ -28,7 +31,7 @@
           {
             alert: 'ThanosSidecarNoConnectionToStartedPrometheus',
             annotations: {
-              description: 'Thanos Sidecar {{$labels.instance}}%s is unhealthy.' % location,
+              description: 'Thanos Sidecar %s%s is unhealthy.' % [labels, location],
               summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.',
             },
             expr: |||

@@ -1,3 +1,5 @@
+local utils = import '../lib/utils.libsonnet';
+
 {
   local thanos = self,
   bucketReplicate+:: {
@@ -8,14 +10,16 @@
   },
   prometheusAlerts+:: {
     groups+: if thanos.bucketReplicate == null then [] else [
-      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
+      local location = utils.location(thanos.targetGroups);
+      local labels = utils.labelsTemplate(thanos.bucketReplicate.dimensions, thanos.targetGroups);
+
       {
         name: 'thanos-bucket-replicate',
         rules: [
           {
             alert: 'ThanosBucketReplicateErrorRate',
             annotations: {
-              description: 'Thanos Replicate is failing to run%s, {{$value | humanize}}%% of attempts failed.' % location,
+              description: 'Thanos Replicate %s%s is failing to run, {{$value | humanize}}%% of attempts failed.' % [labels, location],
               summary: 'Thanos Replicate is failing to run%s.' % location,
             },
             expr: |||
@@ -33,7 +37,7 @@
           {
             alert: 'ThanosBucketReplicateRunLatency',
             annotations: {
-              description: 'Thanos Replicate {{$labels.job}}%s has a 99th percentile latency of {{$value}} seconds for the replicate operations.' % location,
+              description: 'Thanos Replicate %s%s has a 99th percentile latency of {{$value}} seconds for the replicate operations.' % [labels, location],
               summary: 'Thanos Replicate has a high latency for replicate operations.',
             },
             expr: |||

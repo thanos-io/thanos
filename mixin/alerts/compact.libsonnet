@@ -1,3 +1,5 @@
+local utils = import '../lib/utils.libsonnet';
+
 {
   local thanos = self,
   compact+:: {
@@ -8,14 +10,16 @@
   },
   prometheusAlerts+:: {
     groups+: if thanos.compact == null then [] else [
-      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
+      local location = utils.location(thanos.targetGroups);
+      local labels = utils.labelsTemplate(thanos.compact.dimensions, thanos.targetGroups);
+
       {
         name: 'thanos-compact',
         rules: [
           {
             alert: 'ThanosCompactMultipleRunning',
             annotations: {
-              description: 'No more than one Thanos Compact instance should be running at once. There are {{$value}}%s instances running.' % location,
+              description: 'No more than one Thanos Compact instance should be running at once. There are {{$value}} instances with %s%s running.' % [labels, location],
               summary: 'Thanos Compact has multiple instances running.',
             },
             expr: 'sum by (%(dimensions)s) (up{%(selector)s}) > 1' % thanos.compact,
@@ -27,7 +31,7 @@
           {
             alert: 'ThanosCompactHalted',
             annotations: {
-              description: 'Thanos Compact {{$labels.job}}%s has failed to run and now is halted.' % location,
+              description: 'Thanos Compact %s%s has failed to run and now is halted.' % [labels, location],
               summary: 'Thanos Compact has failed to run and is now halted.',
             },
             expr: 'thanos_compact_halted{%(selector)s} == 1' % thanos.compact,
@@ -39,7 +43,7 @@
           {
             alert: 'ThanosCompactHighCompactionFailures',
             annotations: {
-              description: 'Thanos Compact {{$labels.job}}%s is failing to execute {{$value | humanize}}%% of compactions.' % location,
+              description: 'Thanos Compact %s%s is failing to execute {{$value | humanize}}%% of compactions.' % [labels, location],
               summary: 'Thanos Compact is failing to execute compactions.',
             },
             expr: |||
@@ -58,7 +62,7 @@
           {
             alert: 'ThanosCompactBucketHighOperationFailures',
             annotations: {
-              description: 'Thanos Compact {{$labels.job}}%s Bucket is failing to execute {{$value | humanize}}%% of operations.' % location,
+              description: 'Thanos Compact %s%s Bucket is failing to execute {{$value | humanize}}%% of operations.' % [labels, location],
               summary: 'Thanos Compact Bucket is having a high number of operation failures.',
             },
             expr: |||
@@ -77,7 +81,7 @@
           {
             alert: 'ThanosCompactHasNotRun',
             annotations: {
-              description: 'Thanos Compact {{$labels.job}}%s has not uploaded anything for 24 hours.' % location,
+              description: 'Thanos Compact %s%s has not uploaded anything for 24 hours.' % [labels, location],
               summary: 'Thanos Compact has not uploaded anything for last 24 hours.',
             },
             expr: '(time() - max by (%(dimensions)s) (max_over_time(thanos_objstore_bucket_last_successful_upload_time{%(selector)s}[24h]))) / 60 / 60 > 24' % thanos.compact,

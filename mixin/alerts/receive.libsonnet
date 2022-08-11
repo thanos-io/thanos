@@ -1,3 +1,5 @@
+local utils = import '../lib/utils.libsonnet';
+
 {
   local thanos = self,
   receive+:: {
@@ -11,14 +13,16 @@
   },
   prometheusAlerts+:: {
     groups+: if thanos.receive == null then [] else [
-      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
+      local location = utils.location(thanos.targetGroups);
+      local labels = utils.labelsTemplate(thanos.receive.dimensions, thanos.targetGroups);
+
       {
         name: 'thanos-receive',
         rules: [
           {
             alert: 'ThanosReceiveHttpRequestErrorRateHigh',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%s is failing to handle {{$value | humanize}}%% of requests.' % location,
+              description: 'Thanos Receive %s%s is failing to handle {{$value | humanize}}%% of requests.' % [labels, location],
               summary: 'Thanos Receive is failing to handle requests.',
             },
             expr: |||
@@ -36,7 +40,7 @@
           {
             alert: 'ThanosReceiveHttpRequestLatencyHigh',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%s has a 99th percentile latency of {{ $value }} seconds for requests.' % location,
+              description: 'Thanos Receive %s%s has a 99th percentile latency of {{ $value }} seconds for requests.' % [labels, location],
               summary: 'Thanos Receive has high HTTP requests latency.',
             },
             expr: |||
@@ -54,7 +58,7 @@
           {
             alert: 'ThanosReceiveHighReplicationFailures',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%s is failing to replicate {{$value | humanize}}%% of requests.' % location,
+              description: 'Thanos Receive %s%s is failing to replicate {{$value | humanize}}%% of requests.' % [labels, location],
               summary: 'Thanos Receive is having high number of replication failures.',
             },
             expr: |||
@@ -82,7 +86,7 @@
           {
             alert: 'ThanosReceiveHighForwardRequestFailures',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%s is failing to forward {{$value | humanize}}%% of requests.' % location,
+              description: 'Thanos Receive %s%s is failing to forward {{$value | humanize}}%% of requests.' % [labels, location],
               summary: 'Thanos Receive is failing to forward requests.',
             },
             expr: |||
@@ -100,7 +104,7 @@
           {
             alert: 'ThanosReceiveHighHashringFileRefreshFailures',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%s is failing to refresh hashring file, {{$value | humanize}} of attempts failed.' % location,
+              description: 'Thanos Receive %s%s is failing to refresh hashring file, {{$value | humanize}} of attempts failed.' % [labels, location],
               summary: 'Thanos Receive is failing to refresh hasring file.',
             },
             expr: |||
@@ -119,7 +123,7 @@
           {
             alert: 'ThanosReceiveConfigReloadFailure',
             annotations: {
-              description: 'Thanos Receive {{$labels.job}}%s has not been able to reload hashring configurations.' % location,
+              description: 'Thanos Receive %s%s has not been able to reload hashring configurations.' % [labels, location],
               summary: 'Thanos Receive has not been able to reload configuration.',
             },
             expr: 'avg by (%(dimensions)s) (thanos_receive_config_last_reload_successful{%(selector)s}) != 1' % thanos.receive,
@@ -131,7 +135,7 @@
           {
             alert: 'ThanosReceiveNoUpload',
             annotations: {
-              description: 'Thanos Receive {{$labels.instance}}%s has not uploaded latest data to object storage.' % location,
+              description: 'Thanos Receive instance={{$labels.instance}} %s%s has not uploaded latest data to object storage.' % [labels, location],
               summary: 'Thanos Receive has not uploaded latest data to object storage.',
             },
             expr: |||
@@ -147,7 +151,7 @@
           {
             alert: 'ThanosReceiveTrafficBelowThreshold',
             annotations: {
-              description: 'At Thanos Receive {{$labels.job}} in {{$labels.namespace}} , the average 1-hr avg. metrics ingestion rate  is {{$value | humanize}}% of 12-hr avg. ingestion rate.',
+              description: 'At Thanos Receive %s, the average 1-hr avg. metrics ingestion rate  is {{$value | humanize}}%% of 12-hr avg. ingestion rate.' % labels,
               summary: 'Thanos Receive is experiencing low avg. 1-hr ingestion rate relative to avg. 12-hr ingestion rate.',
             },
             expr: |||

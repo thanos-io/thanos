@@ -1,3 +1,5 @@
+local utils = import '../lib/utils.libsonnet';
+
 {
   local thanos = self,
   query+:: {
@@ -11,14 +13,16 @@
   },
   prometheusAlerts+:: {
     groups+: if thanos.query == null then [] else [
-      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
+      local location = utils.location(thanos.targetGroups);
+      local labels = utils.labelsTemplate(thanos.query.dimensions, thanos.targetGroups);
+
       {
         name: 'thanos-query',
         rules: [
           {
             alert: 'ThanosQueryHttpRequestQueryErrorRateHigh',
             annotations: {
-              description: 'Thanos Query {{$labels.job}}%s is failing to handle {{$value | humanize}}%% of "query" requests.' % location,
+              description: 'Thanos Query %s%s is failing to handle {{$value | humanize}}%% of "query" requests.' % [labels, location],
               summary: 'Thanos Query is failing to handle requests.',
             },
             expr: |||
@@ -36,7 +40,7 @@
           {
             alert: 'ThanosQueryHttpRequestQueryRangeErrorRateHigh',
             annotations: {
-              description: 'Thanos Query {{$labels.job}}%s is failing to handle {{$value | humanize}}%% of "query_range" requests.' % location,
+              description: 'Thanos Query %s%s is failing to handle {{$value | humanize}}%% of "query_range" requests.' % [labels, location],
               summary: 'Thanos Query is failing to handle requests.',
             },
             expr: |||
@@ -54,7 +58,7 @@
           {
             alert: 'ThanosQueryGrpcServerErrorRate',
             annotations: {
-              description: 'Thanos Query {{$labels.job}}%s is failing to handle {{$value | humanize}}%% of requests.' % location,
+              description: 'Thanos Query %s%s is failing to handle {{$value | humanize}}%% of requests.' % [labels, location],
               summary: 'Thanos Query is failing to handle requests.',
             },
             expr: |||
@@ -73,7 +77,7 @@
           {
             alert: 'ThanosQueryGrpcClientErrorRate',
             annotations: {
-              description: 'Thanos Query {{$labels.job}}%s is failing to send {{$value | humanize}}%% of requests.' % location,
+              description: 'Thanos Query %s%s is failing to send {{$value | humanize}}%% of requests.' % [labels, location],
               summary: 'Thanos Query is failing to send requests.',
             },
             expr: |||
@@ -91,7 +95,7 @@
           {
             alert: 'ThanosQueryHighDNSFailures',
             annotations: {
-              description: 'Thanos Query {{$labels.job}}%s have {{$value | humanize}}%% of failing DNS queries for store endpoints.' % location,
+              description: 'Thanos Query %s%s have {{$value | humanize}}%% of failing DNS queries for store endpoints.' % [labels, location],
               summary: 'Thanos Query is having high number of DNS failures.',
             },
             expr: |||
@@ -109,7 +113,7 @@
           {
             alert: 'ThanosQueryInstantLatencyHigh',
             annotations: {
-              description: 'Thanos Query {{$labels.job}}%s has a 99th percentile latency of {{$value}} seconds for instant queries.' % location,
+              description: 'Thanos Query %s%s has a 99th percentile latency of {{$value}} seconds for instant queries.' % [labels, location],
               summary: 'Thanos Query has high latency for queries.',
             },
             expr: |||
@@ -127,7 +131,7 @@
           {
             alert: 'ThanosQueryRangeLatencyHigh',
             annotations: {
-              description: 'Thanos Query {{$labels.job}}%s has a 99th percentile latency of {{$value}} seconds for range queries.' % location,
+              description: 'Thanos Query %s%s has a 99th percentile latency of {{$value}} seconds for range queries.' % [labels, location],
               summary: 'Thanos Query has high latency for queries.',
             },
             expr: |||
@@ -145,7 +149,7 @@
           {
             alert: 'ThanosQueryOverload',
             annotations: {
-              description: 'Thanos Query {{$labels.job}}%s has been overloaded for more than 15 minutes. This may be a symptom of excessive simultanous complex requests, low performance of the Prometheus API, or failures within these components. Assess the health of the Thanos query instances, the connnected Prometheus instances, look for potential senders of these requests and then contact support.' % location,
+              description: 'Thanos Query %s%s has been overloaded for more than 15 minutes. This may be a symptom of excessive simultanous complex requests, low performance of the Prometheus API, or failures within these components. Assess the health of the Thanos query instances, the connnected Prometheus instances, look for potential senders of these requests and then contact support.' % [labels, location],
               summary: 'Thanos query reaches its maximum capacity serving concurrent requests.',
             },
             expr: |||

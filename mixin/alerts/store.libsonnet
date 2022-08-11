@@ -1,3 +1,5 @@
+local utils = import '../lib/utils.libsonnet';
+
 {
   local thanos = self,
   store+:: {
@@ -11,14 +13,16 @@
   },
   prometheusAlerts+:: {
     groups+: if thanos.store == null then [] else [
-      local location = if std.length(std.objectFields(thanos.targetGroups)) > 0 then ' in %s' % std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.targetGroups)]) else '';
+      local location = utils.location(thanos.targetGroups);
+      local labels = utils.labelsTemplate(thanos.store.dimensions, thanos.targetGroups);
+
       {
         name: 'thanos-store',
         rules: [
           {
             alert: 'ThanosStoreGrpcErrorRate',
             annotations: {
-              description: 'Thanos Store {{$labels.job}}%s is failing to handle {{$value | humanize}}%% of requests.' % location,
+              description: 'Thanos Store %s%s is failing to handle {{$value | humanize}}%% of requests.' % [labels, location],
               summary: 'Thanos Store is failing to handle qrpcd requests.',
             },
             expr: |||
@@ -37,7 +41,7 @@
           {
             alert: 'ThanosStoreSeriesGateLatencyHigh',
             annotations: {
-              description: 'Thanos Store {{$labels.job}}%s has a 99th percentile latency of {{$value}} seconds for store series gate requests.' % location,
+              description: 'Thanos Store %s%s has a 99th percentile latency of {{$value}} seconds for store series gate requests.' % [labels, location],
               summary: 'Thanos Store has high latency for store series gate requests.',
             },
             expr: |||
@@ -55,7 +59,7 @@
           {
             alert: 'ThanosStoreBucketHighOperationFailures',
             annotations: {
-              description: 'Thanos Store {{$labels.job}}%s Bucket is failing to execute {{$value | humanize}}%% of operations.' % location,
+              description: 'Thanos Store %s%s Bucket is failing to execute {{$value | humanize}}%% of operations.' % [labels, location],
               summary: 'Thanos Store Bucket is failing to execute operations.',
             },
             expr: |||
@@ -74,7 +78,7 @@
           {
             alert: 'ThanosStoreObjstoreOperationLatencyHigh',
             annotations: {
-              description: 'Thanos Store {{$labels.job}}%s Bucket has a 99th percentile latency of {{$value}} seconds for the bucket operations.' % location,
+              description: 'Thanos Store %s%s Bucket has a 99th percentile latency of {{$value}} seconds for the bucket operations.' % [labels, location],
               summary: 'Thanos Store is having high latency for bucket operations.',
             },
             expr: |||
