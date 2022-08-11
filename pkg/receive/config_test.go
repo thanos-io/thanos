@@ -5,7 +5,6 @@ package receive
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -49,7 +48,7 @@ func TestValidateConfig(t *testing.T) {
 			content, err := json.Marshal(tc.cfg)
 			testutil.Ok(t, err)
 
-			tmpfile, err := ioutil.TempFile("", "configwatcher_test.*.json")
+			tmpfile, err := os.CreateTemp("", "configwatcher_test.*.json")
 			testutil.Ok(t, err)
 
 			defer func() {

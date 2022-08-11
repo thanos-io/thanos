@@ -6,6 +6,7 @@ package exemplars
 import (
 	"context"
 	"io"
+	"strings"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -79,11 +80,14 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 		exemplars []*exemplarspb.ExemplarData
 	)
 
+	queryParts := make([]string, 0)
+	labelMatchers := make([]string, 0)
 	for _, st := range s.exemplars() {
-		query := ""
+		queryParts = queryParts[:0]
+
 	Matchers:
 		for _, matchers := range selectors {
-			metricsSelector := ""
+			matcherSet := make(map[string]struct{})
 			for _, m := range matchers {
 				for _, ls := range st.LabelSets {
 					if lv := ls.Get(m.Name); lv != "" {
@@ -96,27 +100,27 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 							continue
 						}
 					}
-					if metricsSelector == "" {
-						metricsSelector += m.String()
-					} else {
-						metricsSelector += ", " + m.String()
-					}
+					matcherSet[m.String()] = struct{}{}
 				}
 			}
-			// Construct the query by concatenating metric selectors with '+'.
-			// We cannot preserve the original query info, but the returned
-			// results are the same.
-			if query == "" {
-				query += "{" + metricsSelector + "}"
-			} else {
-				query += " + {" + metricsSelector + "}"
+
+			labelMatchers = labelMatchers[:0]
+			for m := range matcherSet {
+				labelMatchers = append(labelMatchers, m)
 			}
+
+			queryParts = append(queryParts, "{"+strings.Join(labelMatchers, ", ")+"}")
 		}
 
 		// No matchers match this store.
-		if query == "" {
+		if len(queryParts) == 0 {
 			continue
 		}
+
+		// Construct the query by concatenating metric selectors with '+'.
+		// We cannot preserve the original query info, but the returned
+		// results are the same.
+		query := strings.Join(queryParts, "+")
 		r := &exemplarspb.ExemplarsRequest{
 			Start:                   req.Start,
 			End:                     req.End,

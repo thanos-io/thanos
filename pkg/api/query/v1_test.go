@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
@@ -110,7 +109,8 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		}
 
-		resp, _, apiErr := test.endpoint(req.WithContext(ctx))
+		resp, _, apiErr, releaseResources := test.endpoint(req.WithContext(ctx))
+		defer releaseResources()
 		if apiErr != nil {
 			if test.errType == baseAPI.ErrorNone {
 				t.Fatalf("Unexpected error: %s", apiErr)
@@ -680,8 +680,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		},
 	}
 
-	dir, err := ioutil.TempDir("", "prometheus-test")
-	testutil.Ok(t, err)
+	dir := t.TempDir()
 
 	const chunkRange int64 = 600_000
 	var series []storage.Series
@@ -699,7 +698,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		series = append(series, storage.NewListSeries(lbl, samples))
 	}
 
-	_, err = tsdb.CreateBlock(series, dir, chunkRange, log.NewNopLogger())
+	_, err := tsdb.CreateBlock(series, dir, chunkRange, log.NewNopLogger())
 	testutil.Ok(t, err)
 
 	opts := tsdb.DefaultOptions()
@@ -1783,7 +1782,8 @@ func TestRulesHandler(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			res, errors, apiError := endpoint(req.WithContext(ctx))
+			res, errors, apiError, releaseResources := endpoint(req.WithContext(ctx))
+			defer releaseResources()
 			if errors != nil {
 				t.Fatalf("Unexpected errors: %s", errors)
 				return

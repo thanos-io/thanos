@@ -246,6 +246,10 @@ Example file SD file in YAML:
   - thanos-store.infra:10901
 ```
 
+## Active Query Tracking
+
+`--query.active-query-path` is an option which allows the user to specify a directory which will contain a `queries.active` file to track active queries. To enable this feature, the user has to specify a directory other than "", since that is skipped being the default.
+
 ## Flags
 
 ```$ mdox-exec="thanos query --help"
@@ -323,6 +327,9 @@ Flags:
                                  LogStartAndFinishCall: Logs the start and
                                  finish call of the requests. NoLogCall: Disable
                                  request logging.
+      --query.active-query-path=""
+                                 Directory to log currently active queries in
+                                 the queries.active file.
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.

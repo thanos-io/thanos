@@ -8,7 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,12 +20,14 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
+	"github.com/thanos-io/thanos/pkg/errors"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -131,7 +133,7 @@ type rulesResp struct {
 
 func createRuleFile(t *testing.T, path, content string) {
 	t.Helper()
-	err := ioutil.WriteFile(path, []byte(content), 0666)
+	err := os.WriteFile(path, []byte(content), 0666)
 	testutil.Ok(t, err)
 }
 
@@ -144,7 +146,7 @@ func createRuleFiles(t *testing.T, dir string) {
 }
 
 func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
-	req, err := http.NewRequestWithContext(ctx, "POST", "http://"+endpoint+"/-/reload", ioutil.NopCloser(bytes.NewReader(nil)))
+	req, err := http.NewRequestWithContext(ctx, "POST", "http://"+endpoint+"/-/reload", io.NopCloser(bytes.NewReader(nil)))
 	testutil.Ok(t, err)
 	resp, err := http.DefaultClient.Do(req)
 	testutil.Ok(t, err)
@@ -158,32 +160,68 @@ func reloadRulesSignal(t *testing.T, r e2e.InstrumentedRunnable) {
 }
 
 func checkReloadSuccessful(t *testing.T, ctx context.Context, endpoint string, expectedRulegroupCount int) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
-	testutil.Ok(t, err)
-	resp, err := http.DefaultClient.Do(req)
-	testutil.Ok(t, err)
-	testutil.Equals(t, 200, resp.StatusCode)
+	data := rulesResp{}
+	errCount := 0
 
-	body, _ := ioutil.ReadAll(resp.Body)
-	testutil.Ok(t, resp.Body.Close())
+	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
+		req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", io.NopCloser(bytes.NewReader(nil)))
+		if err != nil {
+			errCount++
+			return err
+		}
 
-	var data = rulesResp{}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			errCount++
+			return err
+		}
 
-	testutil.Ok(t, json.Unmarshal(body, &data))
-	testutil.Equals(t, "success", data.Status)
+		if resp.StatusCode != 200 {
+			errCount++
+			return errors.Newf("statuscode is not 200, got %d", resp.StatusCode)
+		}
 
-	testutil.Assert(t, len(data.Data.Groups) == expectedRulegroupCount, fmt.Sprintf("expected there to be %d rule groups", expectedRulegroupCount))
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			errCount++
+			return errors.Wrapf(err, "error reading body")
+		}
+
+		if err := resp.Body.Close(); err != nil {
+			errCount++
+			return err
+		}
+
+		if err := json.Unmarshal(body, &data); err != nil {
+			errCount++
+			return errors.Wrapf(err, "error unmarshaling body")
+		}
+
+		if data.Status != "success" {
+			errCount++
+			return errors.Newf("response status is not success, got %s", data.Status)
+		}
+
+		if len(data.Data.Groups) == expectedRulegroupCount {
+			return nil
+		}
+
+		errCount++
+		return errors.Newf("different number of rulegroups: expected %d, got %d", expectedRulegroupCount, len(data.Data.Groups))
+	}))
+
+	testutil.Assert(t, len(data.Data.Groups) == expectedRulegroupCount, fmt.Sprintf("expected there to be %d rule groups but got %d. encountered %d errors", expectedRulegroupCount, len(data.Data.Groups), errCount))
 }
 
 func rulegroupCorrectData(t *testing.T, ctx context.Context, endpoint string) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", ioutil.NopCloser(bytes.NewReader(nil)))
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://"+endpoint+"/api/v1/rules", io.NopCloser(bytes.NewReader(nil)))
 	testutil.Ok(t, err)
 	resp, err := http.DefaultClient.Do(req)
 	testutil.Ok(t, err)
 	testutil.Equals(t, 200, resp.StatusCode)
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	testutil.Ok(t, err)
 
 	var data = rulesResp{}
@@ -214,7 +252,7 @@ func writeTargets(t *testing.T, path string, addrs ...string) {
 	b, err := yaml.Marshal([]*targetgroup.Group{{Targets: tgs}})
 	testutil.Ok(t, err)
 
-	testutil.Ok(t, ioutil.WriteFile(path+".tmp", b, 0660))
+	testutil.Ok(t, os.WriteFile(path+".tmp", b, 0660))
 	testutil.Ok(t, os.Rename(path+".tmp", path))
 }
 

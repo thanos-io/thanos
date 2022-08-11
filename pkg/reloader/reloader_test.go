@@ -6,7 +6,6 @@ package reloader
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -60,9 +59,7 @@ func TestReloader_ConfigApply(t *testing.T) {
 	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
 	testutil.Ok(t, err)
 
-	dir, err := ioutil.TempDir("", "reloader-cfg-test")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in"), os.ModePerm))
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "out"), os.ModePerm))
@@ -86,7 +83,7 @@ func TestReloader_ConfigApply(t *testing.T) {
 	testutil.NotOk(t, err)
 	testutil.Assert(t, strings.HasSuffix(err.Error(), "no such file or directory"), "expect error since there is no input config.")
 
-	testutil.Ok(t, ioutil.WriteFile(input, []byte(`
+	testutil.Ok(t, os.WriteFile(input, []byte(`
 config:
   a: 1
   b: $(TEST_RELOADER_THANOS_ENV)
@@ -124,7 +121,7 @@ Outer:
 
 		if reloadsSeen == 1 {
 			// Initial apply seen (without doing nothing).
-			f, err := ioutil.ReadFile(output)
+			f, err := os.ReadFile(output)
 			testutil.Ok(t, err)
 			testutil.Equals(t, `
 config:
@@ -134,7 +131,7 @@ config:
 `, string(f))
 
 			// Change config, expect reload in another iteration.
-			testutil.Ok(t, ioutil.WriteFile(input, []byte(`
+			testutil.Ok(t, os.WriteFile(input, []byte(`
 config:
   a: changed
   b: $(TEST_RELOADER_THANOS_ENV)
@@ -142,7 +139,7 @@ config:
 `), os.ModePerm))
 		} else if reloadsSeen == 2 {
 			// Another apply, ensure we see change.
-			f, err := ioutil.ReadFile(output)
+			f, err := os.ReadFile(output)
 			testutil.Ok(t, err)
 			testutil.Equals(t, `
 config:
@@ -183,9 +180,7 @@ faulty_config:
   a: 1
 `)
 
-	dir, err := ioutil.TempDir("", "reloader-cfg-test")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in"), os.ModePerm))
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "out"), os.ModePerm))
@@ -200,7 +195,7 @@ faulty_config:
 	srv := &http.Server{}
 
 	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
-		f, err := ioutil.ReadFile(output)
+		f, err := os.ReadFile(output)
 		testutil.Ok(t, err)
 
 		if string(f) == string(faultyConfig) {
@@ -227,7 +222,7 @@ faulty_config:
 		DelayInterval: 1 * time.Millisecond,
 	})
 
-	testutil.Ok(t, ioutil.WriteFile(input, correctConfig, os.ModePerm))
+	testutil.Ok(t, os.WriteFile(input, correctConfig, os.ModePerm))
 
 	rctx, cancel2 := context.WithCancel(ctx)
 	g := sync.WaitGroup{}
@@ -252,24 +247,24 @@ faulty_config:
 
 		if reloadsSeen == 1 && !faulty {
 			// Initial apply seen (without doing anything).
-			f, err := ioutil.ReadFile(output)
+			f, err := os.ReadFile(output)
 			testutil.Ok(t, err)
 			testutil.Equals(t, string(correctConfig), string(f))
 
 			// Change to a faulty config
-			testutil.Ok(t, ioutil.WriteFile(input, faultyConfig, os.ModePerm))
+			testutil.Ok(t, os.WriteFile(input, faultyConfig, os.ModePerm))
 			faulty = true
 		} else if reloadsSeen == 1 && faulty {
 			// Faulty config will trigger a reload, but reload failed
-			f, err := ioutil.ReadFile(output)
+			f, err := os.ReadFile(output)
 			testutil.Ok(t, err)
 			testutil.Equals(t, string(faultyConfig), string(f))
 
 			// Rollback config
-			testutil.Ok(t, ioutil.WriteFile(input, correctConfig, os.ModePerm))
+			testutil.Ok(t, os.WriteFile(input, correctConfig, os.ModePerm))
 		} else if reloadsSeen >= 2 {
 			// Rollback to previous config should trigger a reload
-			f, err := ioutil.ReadFile(output)
+			f, err := os.ReadFile(output)
 			testutil.Ok(t, err)
 			testutil.Equals(t, string(correctConfig), string(f))
 
@@ -316,11 +311,9 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 	tempRule3File := path.Join(ruleDir, "rule3.yaml")
 	tempRule4File := path.Join(ruleDir, "rule4.yaml")
 
-	testutil.Ok(t, ioutil.WriteFile(tempRule1File, []byte("rule1-changed"), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(tempRule3File, []byte("rule3-changed"), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(tempRule4File, []byte("rule4-changed"), os.ModePerm))
-
-	defer func() { testutil.Ok(t, os.RemoveAll(ruleDir)) }()
+	testutil.Ok(t, os.WriteFile(tempRule1File, []byte("rule1-changed"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(tempRule3File, []byte("rule3-changed"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(tempRule4File, []byte("rule4-changed"), os.ModePerm))
 
 	dir := t.TempDir()
 	dir2 := t.TempDir()
@@ -355,10 +348,10 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 	// ├─ rule3-001.yaml -> rule3-source.yaml
 	// └─ rule3-source.yaml
 	// The reloader watches 2 directories: dir and dir/rule-dir.
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule"), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3"), os.ModePerm))
 	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-001.yaml")))
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4"), os.ModePerm))
 
 	stepFunc := func(rel int) {
 		t.Log("Performing step number", rel)
@@ -375,7 +368,7 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 			// │  └─ rule4.yaml
 			// ├─ rule3-001.yaml -> rule3-source.yaml
 			// └─ rule3-source.yaml
-			testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule2.yaml"), []byte("rule2"), os.ModePerm))
+			testutil.Ok(t, os.WriteFile(path.Join(dir, "rule2.yaml"), []byte("rule2"), os.ModePerm))
 		case 1:
 			// Update rule1.yaml.
 			//
@@ -544,10 +537,10 @@ func TestReloaderDirectoriesApplyBasedOnWatchInterval(t *testing.T) {
 	// └─ rule3-source.yaml
 	//
 	// The reloader watches 2 directories: dir and dir/rule-dir.
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule"), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3"), os.ModePerm))
 	testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-source.yaml"), path.Join(dir2, "rule3-001.yaml")))
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4"), os.ModePerm))
+	testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4"), os.ModePerm))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	g := sync.WaitGroup{}
@@ -608,7 +601,7 @@ func TestReloaderDirectoriesApplyBasedOnWatchInterval(t *testing.T) {
 				// │  └─ rule4.yaml
 				// ├─ rule3-001.yaml -> rule3-source.yaml
 				// └─ rule3-source.yaml (*)
-				testutil.Ok(t, ioutil.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3-changed"), os.ModePerm))
+				testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3-changed"), os.ModePerm))
 			}
 
 			if rel > 1 {
@@ -645,9 +638,7 @@ func TestReloader_ConfigApplyWithWatchIntervalEqualsZero(t *testing.T) {
 	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
 	testutil.Ok(t, err)
 
-	dir, err := ioutil.TempDir("", "reloader-cfg-test")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "in"), os.ModePerm))
 	testutil.Ok(t, os.Mkdir(filepath.Join(dir, "out"), os.ModePerm))
@@ -666,7 +657,7 @@ func TestReloader_ConfigApplyWithWatchIntervalEqualsZero(t *testing.T) {
 		DelayInterval: 1 * time.Millisecond,
 	})
 
-	testutil.Ok(t, ioutil.WriteFile(input, []byte(`
+	testutil.Ok(t, os.WriteFile(input, []byte(`
 config:
   a: 1
   b: 2
@@ -690,7 +681,7 @@ Outer:
 		}
 		if reloads.Load().(int) == 0 {
 			// Initial apply seen (without doing nothing).
-			f, err := ioutil.ReadFile(output)
+			f, err := os.ReadFile(output)
 			testutil.Ok(t, err)
 			testutil.Equals(t, `
 config:

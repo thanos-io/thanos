@@ -5,11 +5,13 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
+	"net/url"
 	"os"
 	"path"
 	"strings"
 	"time"
+
+	"google.golang.org/grpc"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
@@ -33,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
+	"github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/info"
@@ -47,6 +50,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
+
+const compressionNone = "none"
 
 func registerReceive(app *extkingpin.App) {
 	cmd := app.Command(component.Receive.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
@@ -73,14 +78,15 @@ func registerReceive(app *extkingpin.App) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:       int64(time.Duration(*conf.tsdbMinBlockDuration) / time.Millisecond),
-			MaxBlockDuration:       int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
-			RetentionDuration:      int64(time.Duration(*conf.retention) / time.Millisecond),
-			NoLockfile:             conf.noLockFile,
-			WALCompression:         conf.walCompression,
-			AllowOverlappingBlocks: conf.tsdbAllowOverlappingBlocks,
-			MaxExemplars:           conf.tsdbMaxExemplars,
-			EnableExemplarStorage:  true,
+			MinBlockDuration:         int64(time.Duration(*conf.tsdbMinBlockDuration) / time.Millisecond),
+			MaxBlockDuration:         int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
+			RetentionDuration:        int64(time.Duration(*conf.retention) / time.Millisecond),
+			NoLockfile:               conf.noLockFile,
+			WALCompression:           conf.walCompression,
+			AllowOverlappingBlocks:   conf.tsdbAllowOverlappingBlocks,
+			MaxExemplars:             conf.tsdbMaxExemplars,
+			EnableExemplarStorage:    true,
+			HeadChunksWriteQueueSize: int(conf.tsdbWriteQueueSize),
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -139,6 +145,9 @@ func runReceive(
 	if err != nil {
 		return err
 	}
+	if conf.compression != compressionNone {
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
+	}
 
 	var bkt objstore.Bucket
 	confContentYaml, err := conf.objStoreConfig.Content()
@@ -185,6 +194,9 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
+	// Impose active series limit only if Receiver is in Router or RouterIngestor mode, and config is provided.
+	seriesLimitSupported := (receiveMode == receive.RouterOnly || receiveMode == receive.RouterIngestor) && conf.maxPerTenantLimit != 0
+
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
@@ -198,22 +210,31 @@ func runReceive(
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:            writer,
-		ListenAddress:     conf.rwAddress,
-		Registry:          reg,
-		Endpoint:          conf.endpoint,
-		TenantHeader:      conf.tenantHeader,
-		TenantField:       conf.tenantField,
-		DefaultTenantID:   conf.defaultTenantID,
-		ReplicaHeader:     conf.replicaHeader,
-		ReplicationFactor: conf.replicationFactor,
-		RelabelConfigs:    relabelConfig,
-		ReceiverMode:      receiveMode,
-		Tracer:            tracer,
-		TLSConfig:         rwTLSConfig,
-		DialOpts:          dialOpts,
-		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
-		TSDBStats:         dbs,
+		Writer:                       writer,
+		ListenAddress:                conf.rwAddress,
+		Registry:                     reg,
+		Endpoint:                     conf.endpoint,
+		TenantHeader:                 conf.tenantHeader,
+		TenantField:                  conf.tenantField,
+		DefaultTenantID:              conf.defaultTenantID,
+		ReplicaHeader:                conf.replicaHeader,
+		ReplicationFactor:            conf.replicationFactor,
+		RelabelConfigs:               relabelConfig,
+		ReceiverMode:                 receiveMode,
+		Tracer:                       tracer,
+		TLSConfig:                    rwTLSConfig,
+		DialOpts:                     dialOpts,
+		ForwardTimeout:               time.Duration(*conf.forwardTimeout),
+		TSDBStats:                    dbs,
+		SeriesLimitSupported:         seriesLimitSupported,
+		MaxPerTenantLimit:            conf.maxPerTenantLimit,
+		MetaMonitoringUrl:            conf.metaMonitoringUrl,
+		MetaMonitoringHttpClient:     conf.metaMonitoringHttpClient,
+		MetaMonitoringLimitQuery:     conf.metaMonitoringLimitQuery,
+		WriteSeriesLimit:             conf.writeSeriesLimit,
+		WriteSamplesLimit:            conf.writeSamplesLimit,
+		WriteRequestSizeLimit:        conf.writeRequestSizeLimit,
+		WriteRequestConcurrencyLimit: conf.writeRequestConcurrencyLimit,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -293,6 +314,23 @@ func runReceive(
 		)
 	}
 
+	if seriesLimitSupported {
+		level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
+		{
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				return runutil.Repeat(15*time.Second, ctx.Done(), func() error {
+					if err := webHandler.ActiveSeriesLimit.QueryMetaMonitoring(ctx, log.With(logger, "component", "receive-meta-monitoring")); err != nil {
+						level.Error(logger).Log("msg", "failed to query meta-monitoring", "err", err.Error())
+					}
+					return nil
+				})
+			}, func(err error) {
+				cancel()
+			})
+		}
+	}
+
 	level.Debug(logger).Log("msg", "setting up periodic tenant pruning")
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -364,8 +402,9 @@ func setupAndRunGRPCServer(g *run.Group,
 					if isReady() {
 						minTime, maxTime := mts.TimeRange()
 						return &infopb.StoreInfo{
-							MinTime: minTime,
-							MaxTime: maxTime,
+							MinTime:          minTime,
+							MaxTime:          maxTime,
+							SupportsSharding: true,
 						}
 					}
 					return nil
@@ -687,7 +726,7 @@ func migrateLegacyStorage(logger log.Logger, dataDir, defaultTenantID string) er
 
 	level.Info(logger).Log("msg", "found legacy storage, migrating to multi-tsdb layout with default tenant", "defaultTenantID", defaultTenantID)
 
-	files, err := ioutil.ReadDir(dataDir)
+	files, err := os.ReadDir(dataDir)
 	if err != nil {
 		return errors.Wrapf(err, "read legacy data dir: %v", dataDir)
 	}
@@ -728,6 +767,11 @@ type receiveConfig struct {
 	rwClientServerCA   string
 	rwClientServerName string
 
+	maxPerTenantLimit        uint64
+	metaMonitoringLimitQuery string
+	metaMonitoringUrl        *url.URL
+	metaMonitoringHttpClient *extflag.PathOrContent
+
 	dataDir   string
 	labelStrs []string
 
@@ -747,11 +791,13 @@ type receiveConfig struct {
 	replicaHeader     string
 	replicationFactor uint64
 	forwardTimeout    *model.Duration
+	compression       string
 
 	tsdbMinBlockDuration       *model.Duration
 	tsdbMaxBlockDuration       *model.Duration
 	tsdbAllowOverlappingBlocks bool
 	tsdbMaxExemplars           int64
+	tsdbWriteQueueSize         int64
 
 	walCompression bool
 	noLockFile     bool
@@ -763,6 +809,11 @@ type receiveConfig struct {
 
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
+
+	writeSeriesLimit             int64
+	writeSamplesLimit            int64
+	writeRequestSizeLimit        int64
+	writeRequestConcurrencyLimit int
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -819,7 +870,18 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.replica-header", "HTTP header specifying the replica number of a write request.").Default(receive.DefaultReplicaHeader).StringVar(&rc.replicaHeader)
 
+	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
+	cmd.Flag("receive.grpc-compression", "Compression algorithm to use for gRPC requests to other receivers. Must be one of: "+compressionOptions).Default(snappy.Name).EnumVar(&rc.compression, snappy.Name, compressionNone)
+
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
+
+	cmd.Flag("receive.tenant-limits.max-head-series", "The total number of active (head) series that a tenant is allowed to have within a Receive topology. For more details refer: https://thanos.io/tip/components/receive.md/#limiting").Hidden().Uint64Var(&rc.maxPerTenantLimit)
+
+	cmd.Flag("receive.tenant-limits.meta-monitoring-url", "Meta-monitoring URL which is compatible with Prometheus Query API for active series limiting.").Hidden().URLVar(&rc.metaMonitoringUrl)
+
+	cmd.Flag("receive.tenant-limits.meta-monitoring-query", "PromQL Query to execute against meta-monitoring, to get the current number of active series for each tenant, across Receive replicas.").Default("sum(prometheus_tsdb_head_series) by (tenant)").Hidden().StringVar(&rc.metaMonitoringLimitQuery)
+
+	rc.metaMonitoringHttpClient = extflag.RegisterPathOrContent(cmd, "receive.tenant-limits.meta-monitoring-client", "YAML file or string with http client configs for meta-monitoring.", extflag.WithHidden())
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
@@ -841,6 +903,11 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 			" ingesting a new exemplar will evict the oldest exemplar from storage. 0 (or less) value of this flag disables exemplars storage.").
 		Default("0").Int64Var(&rc.tsdbMaxExemplars)
 
+	cmd.Flag("tsdb.write-queue-size",
+		"[EXPERIMENTAL] Enables configuring the size of the chunk write queue used in the head chunks mapper. "+
+			"A queue size of zero (default) disables this feature entirely.").
+		Default("0").Hidden().Int64Var(&rc.tsdbWriteQueueSize)
+
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")
 
@@ -853,6 +920,29 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").Hidden().BoolVar(&rc.allowOutOfOrderUpload)
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
+
+	// TODO(douglascamata): Allow all these limits to be configured per tenant
+	// and move the configuration to a file. Then this is done, remove the
+	// "hidden" modifier on all these flags.
+	cmd.Flag("receive.write-request-limits.max-series",
+		"The maximum amount of series accepted in remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeSeriesLimit)
+
+	cmd.Flag("receive.write-request-limits.max-samples",
+		"The maximum amount of samples accepted in remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeSamplesLimit)
+
+	cmd.Flag("receive.write-request-limits.max-size-bytes",
+		"The maximum size (in bytes) of remote write requests."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().Int64Var(&rc.writeRequestSizeLimit)
+
+	cmd.Flag("receive.write-request-limits.max-concurrency",
+		"The maximum amount of remote write requests that will be concurrently processed while others wait."+
+			"The default is no limit, represented by 0.").
+		Default("0").Hidden().IntVar(&rc.writeRequestConcurrencyLimit)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

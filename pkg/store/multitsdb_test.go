@@ -6,10 +6,8 @@ package store
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -62,9 +60,7 @@ type mockedStartTimeDB struct {
 func (db *mockedStartTimeDB) StartTime() (int64, error) { return db.startTime, nil }
 
 func benchMultiTSDBSeries(t testutil.TB, totalSamples, totalSeries int, flushToBlocks bool) {
-	tmpDir, err := ioutil.TempDir("", "testorbench-multitsdbseries")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	const numOfTSDBs = 4
 

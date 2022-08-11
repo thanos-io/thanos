@@ -6,6 +6,8 @@ package queryfrontend
 import (
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/prometheus/model/labels"
@@ -46,6 +48,7 @@ type ThanosQueryRangeRequest struct {
 	CachingOptions      queryrange.CachingOptions
 	Headers             []*RequestHeader
 	Stats               string
+	ShardInfo           *storepb.ShardInfo
 }
 
 // IsDedupEnabled returns true if deduplication is enabled.
@@ -90,6 +93,13 @@ func (r *ThanosQueryRangeRequest) WithStartEnd(start, end int64) queryrange.Requ
 func (r *ThanosQueryRangeRequest) WithQuery(query string) queryrange.Request {
 	q := *r
 	q.Query = query
+	return &q
+}
+
+// WithShardInfo clones the current request with a different shard info.
+func (r *ThanosQueryRangeRequest) WithShardInfo(info *storepb.ShardInfo) queryrange.Request {
+	q := *r
+	q.ShardInfo = info
 	return &q
 }
 

@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -186,9 +185,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		defer cancel()
 
 		// Create fresh, empty directory for actual test.
-		dir, err := ioutil.TempDir("", "test-compact")
-		testutil.Ok(t, err)
-		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+		dir := t.TempDir()
 
 		logger := log.NewLogfmtLogger(os.Stderr)
 
@@ -431,9 +428,7 @@ type blockgenSpec struct {
 }
 
 func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec, blocksWithOutOfOrderChunks []blockgenSpec) (metas []*metadata.Meta) {
-	prepareDir, err := ioutil.TempDir("", "test-compact-prepare")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(prepareDir)) }()
+	prepareDir := t.TempDir()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

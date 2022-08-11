@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -131,7 +130,7 @@ func (c *Client) req2xx(ctx context.Context, u *url.URL, method string) (_ []byt
 	}
 	defer runutil.ExhaustCloseWithErrCapture(&err, resp.Body, "%s: close body", req.URL.String())
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp.StatusCode, errors.Wrap(err, "read body")
 	}
@@ -283,7 +282,7 @@ func (c *Client) ConfiguredFlags(ctx context.Context, base *url.URL) (Flags, err
 	}
 	defer runutil.ExhaustCloseWithLogOnErr(c.logger, resp.Body, "query body")
 
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return Flags{}, errors.New("failed to read body")
 	}
@@ -335,7 +334,7 @@ func (c *Client) Snapshot(ctx context.Context, base *url.URL, skipHead bool) (st
 	}
 	defer runutil.ExhaustCloseWithLogOnErr(c.logger, resp.Body, "query body")
 
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", errors.New("failed to read body")
 	}

@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
@@ -195,7 +194,10 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		return nil
 	}
 
-	if r.QueryHints != nil && r.QueryHints.IsSafeToExecute() {
+	shardMatcher := r.ShardInfo.Matcher(&p.buffers)
+	defer shardMatcher.Close()
+
+	if r.QueryHints != nil && r.QueryHints.IsSafeToExecute() && !shardMatcher.IsSharded() {
 		return p.queryPrometheus(s, r)
 	}
 
@@ -237,7 +239,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
-	return p.handleStreamedPrometheusResponse(s, httpResp, queryPrometheusSpan, extLset)
+	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset)
 }
 
 func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *storepb.SeriesRequest) error {
@@ -351,7 +353,13 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_Series
 	return nil
 }
 
-func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_SeriesServer, httpResp *http.Response, querySpan tracing.Span, extLset labels.Labels) error {
+func (p *PrometheusStore) handleStreamedPrometheusResponse(
+	s storepb.Store_SeriesServer,
+	shardMatcher *storepb.ShardMatcher,
+	httpResp *http.Response,
+	querySpan tracing.Span,
+	extLset labels.Labels,
+) error {
 	level.Debug(p.logger).Log("msg", "started handling ReadRequest_STREAMED_XOR_CHUNKS streamed read response.")
 
 	framesNum := 0
@@ -387,6 +395,11 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 
 		framesNum++
 		for _, series := range res.ChunkedSeries {
+			completeLabelset := labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(series.Labels), extLset)
+			if !shardMatcher.MatchesLabels(completeLabelset) {
+				continue
+			}
+
 			seriesStats.CountSeries(series.Labels)
 			thanosChks := make([]storepb.AggrChunk, len(series.Chunks))
 			for i, chk := range series.Chunks {
@@ -408,12 +421,13 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 				series.Chunks[i].Data = nil
 			}
 
-			if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
+			r := storepb.NewSeriesResponse(&storepb.Series{
 				Labels: labelpb.ZLabelsFromPromLabels(
-					labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(series.Labels), extLset),
+					completeLabelset,
 				),
 				Chunks: thanosChks,
-			})); err != nil {
+			})
+			if err := s.Send(r); err != nil {
 				return err
 			}
 		}
@@ -424,6 +438,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(s storepb.Store_Serie
 	querySpan.SetTag("processed.samples", seriesStats.Samples)
 	querySpan.SetTag("processed.bytes", bodySizer.BytesCount())
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_STREAMED_XOR_CHUNKS request.", "frames", framesNum)
+
 	return nil
 }
 
@@ -533,7 +548,7 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 	}
 	if presp.StatusCode/100 != 2 {
 		// Best effort read.
-		b, err := ioutil.ReadAll(presp.Body)
+		b, err := io.ReadAll(presp.Body)
 		if err != nil {
 			level.Error(p.logger).Log("msg", "failed to read response from non 2XX remote read request", "err", err)
 		}

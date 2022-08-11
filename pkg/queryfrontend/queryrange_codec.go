@@ -6,6 +6,7 @@ package queryfrontend
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"math"
 	"net/http"
 	"net/url"
@@ -117,6 +118,11 @@ func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request, forwa
 		return nil, err
 	}
 
+	result.ShardInfo, err = parseShardInfo(r.Form, queryv1.ShardInfoParam)
+	if err != nil {
+		return nil, err
+	}
+
 	result.Query = r.FormValue("query")
 	result.Path = r.URL.Path
 
@@ -163,6 +169,14 @@ func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request
 
 	if len(thanosReq.StoreMatchers) > 0 {
 		params[queryv1.StoreMatcherParam] = matchersToStringSlice(thanosReq.StoreMatchers)
+	}
+
+	if thanosReq.ShardInfo != nil {
+		data, err := encodeShardInfo(thanosReq.ShardInfo)
+		if err != nil {
+			return nil, err
+		}
+		params[queryv1.ShardInfoParam] = []string{data}
 	}
 
 	req, err := http.NewRequest(http.MethodPost, thanosReq.Path, bytes.NewBufferString(params.Encode()))
@@ -246,6 +260,24 @@ func parseMatchersParam(ss url.Values, matcherParam string) ([][]*labels.Matcher
 	return matchers, nil
 }
 
+func parseShardInfo(ss url.Values, key string) (*storepb.ShardInfo, error) {
+	data, ok := ss[key]
+	if !ok {
+		return nil, nil
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var info storepb.ShardInfo
+	if err := json.Unmarshal([]byte(data[0]), &info); err != nil {
+		return nil, err
+	}
+
+	return &info, nil
+}
+
 func encodeTime(t int64) string {
 	f := float64(t) / 1.0e3
 	return strconv.FormatFloat(f, 'f', -1, 64)
@@ -262,4 +294,17 @@ func matchersToStringSlice(storeMatchers [][]*labels.Matcher) []string {
 		res = append(res, storepb.PromMatchersToString(storeMatcher...))
 	}
 	return res
+}
+
+func encodeShardInfo(info *storepb.ShardInfo) (string, error) {
+	if info == nil {
+		return "", nil
+	}
+
+	data, err := json.Marshal(info)
+	if err != nil {
+		return "", err
+	}
+
+	return string(data), nil
 }

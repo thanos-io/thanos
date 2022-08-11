@@ -142,6 +142,22 @@
               severity: 'critical',
             },
           },
+          {
+            alert: 'ThanosQueryOverload',
+            annotations: {
+              description: 'Thanos Query {{$labels.job}}%s has been overloaded for more than 15 minutes. This may be a symptom of excessive simultanous complex requests, low performance of the Prometheus API, or failures within these components. Assess the health of the Thanos query instances, the connnected Prometheus instances, look for potential senders of these requests and then contact support.' % location,
+              summary: 'Thanos query reaches its maximum capacity serving concurrent requests.',
+            },
+            expr: |||
+              (
+                max_over_time(thanos_query_concurrent_gate_queries_max[5m]) - avg_over_time(thanos_query_concurrent_gate_queries_in_flight[5m]) < 1
+              )
+            ||| % thanos.query,
+            'for': '15m',
+            labels: {
+              severity: 'warning',
+            },
+          },
         ],
       },
     ],

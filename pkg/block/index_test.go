@@ -5,7 +5,6 @@ package block
 
 import (
 	"context"
-	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -25,9 +24,7 @@ import (
 func TestRewrite(t *testing.T) {
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-indexheader")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	b, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 		{{Name: "a", Value: "1"}},
@@ -88,10 +85,9 @@ func TestRewrite(t *testing.T) {
 }
 
 func TestGatherIndexHealthStatsReturnsOutOfOrderChunksErr(t *testing.T) {
-	blockDir, err := ioutil.TempDir("", "test-ooo-index")
-	testutil.Ok(t, err)
+	blockDir := t.TempDir()
 
-	err = testutil.PutOutOfOrderIndex(blockDir, 0, math.MaxInt64)
+	err := testutil.PutOutOfOrderIndex(blockDir, 0, math.MaxInt64)
 	testutil.Ok(t, err)
 
 	stats, err := GatherIndexHealthStats(log.NewLogfmtLogger(os.Stderr), blockDir+"/"+IndexFilename, 0, math.MaxInt64)

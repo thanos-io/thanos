@@ -5,8 +5,7 @@ package receive
 
 import (
 	"context"
-	"io/ioutil"
-	"os"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +33,94 @@ func TestWriter(t *testing.T) {
 		expectedIngested []prompb.TimeSeries
 		maxExemplars     int64
 	}{
+		"should error out on series with no labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+						{
+							Labels:  []labelpb.ZLabel{{Name: "__name__", Value: ""}},
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: errors.Wrapf(labelpb.ErrEmptyLabels, "add 2 series"),
+		},
+		"should succeed on series with valid labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: nil,
+			expectedIngested: []prompb.TimeSeries{
+				{
+					Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+				},
+			},
+		},
+		"should error out and skip series with out-of-order labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "1"}, labelpb.ZLabel{Name: "Z", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: errors.Wrapf(labelpb.ErrOutOfOrderLabels, "add 1 series"),
+		},
+		"should error out and skip series with duplicate labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "a", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}, labelpb.ZLabel{Name: "z", Value: "1"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: errors.Wrapf(labelpb.ErrDuplicateLabels, "add 1 series"),
+		},
+		"should error out and skip series with out-of-order labels; accept series with valid labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "A", Value: "1"}, labelpb.ZLabel{Name: "b", Value: "2"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "c", Value: "1"}, labelpb.ZLabel{Name: "d", Value: "2"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "E", Value: "1"}, labelpb.ZLabel{Name: "f", Value: "2"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: errors.Wrapf(labelpb.ErrOutOfOrderLabels, "add 2 series"),
+			expectedIngested: []prompb.TimeSeries{
+				{
+					Labels:  append(lbls, labelpb.ZLabel{Name: "c", Value: "1"}, labelpb.ZLabel{Name: "d", Value: "2"}),
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+				},
+			},
+		},
 		"should succeed on valid series with exemplars": {
 			reqs: []*prompb.WriteRequest{{
 				Timeseries: []prompb.TimeSeries{
@@ -121,10 +208,7 @@ func TestWriter(t *testing.T) {
 
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
-			dir, err := ioutil.TempDir("", "test")
-			testutil.Ok(t, err)
-			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
-
+			dir := t.TempDir()
 			logger := log.NewNopLogger()
 
 			m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
@@ -141,7 +225,7 @@ func TestWriter(t *testing.T) {
 				false,
 				metadata.NoneFunc,
 			)
-			defer func() { testutil.Ok(t, m.Close()) }()
+			t.Cleanup(func() { testutil.Ok(t, m.Close()) })
 
 			testutil.Ok(t, m.Flush())
 			testutil.Ok(t, m.Open())
@@ -171,6 +255,95 @@ func TestWriter(t *testing.T) {
 					testutil.Equals(t, testData.expectedErr.Error(), err.Error())
 				}
 			}
+
+			// On each expected series, assert we have a ref available.
+			a, err := app.Appender(context.Background())
+			testutil.Ok(t, err)
+			gr := a.(storage.GetRef)
+
+			for _, ts := range testData.expectedIngested {
+				ref, _ := gr.GetRef(labelpb.ZLabelsToPromLabels(ts.Labels))
+				testutil.Assert(t, ref != 0, fmt.Sprintf("appender should have reference to series %v", ts))
+			}
 		})
 	}
+}
+
+func BenchmarkWriterTimeSeriesWithSingleLabel_10(b *testing.B)   { benchmarkWriter(b, 1, 10) }
+func BenchmarkWriterTimeSeriesWithSingleLabel_100(b *testing.B)  { benchmarkWriter(b, 1, 100) }
+func BenchmarkWriterTimeSeriesWithSingleLabel_1000(b *testing.B) { benchmarkWriter(b, 1, 1000) }
+
+func BenchmarkWriterTimeSeriesWith10Labels_10(b *testing.B)   { benchmarkWriter(b, 10, 10) }
+func BenchmarkWriterTimeSeriesWith10Labels_100(b *testing.B)  { benchmarkWriter(b, 10, 100) }
+func BenchmarkWriterTimeSeriesWith10Labels_1000(b *testing.B) { benchmarkWriter(b, 10, 1000) }
+
+func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int) {
+	dir := b.TempDir()
+	logger := log.NewNopLogger()
+
+	m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+		MinBlockDuration:      (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
+		RetentionDuration:     (6 * time.Hour).Milliseconds(),
+		NoLockfile:            true,
+		MaxExemplars:          0,
+		EnableExemplarStorage: true,
+	},
+		labels.FromStrings("replica", "01"),
+		"tenant_id",
+		nil,
+		false,
+		metadata.NoneFunc,
+	)
+	b.Cleanup(func() { testutil.Ok(b, m.Close()) })
+
+	testutil.Ok(b, m.Flush())
+	testutil.Ok(b, m.Open())
+
+	app, err := m.TenantAppendable("foo")
+	testutil.Ok(b, err)
+
+	w := NewWriter(logger, m)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+		_, err = app.Appender(context.Background())
+		return err
+	}))
+
+	timeSeries := generateLabelsAndSeries(labelsNum, seriesNum)
+
+	wreq := &prompb.WriteRequest{
+		Timeseries: timeSeries,
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		testutil.Ok(b, w.Write(ctx, "foo", wreq))
+	}
+}
+
+// generateLabelsAndSeries generates time series for benchmark with specified number of labels.
+// Although in this method we're reusing samples with same value and timestamp, Prometheus actually allows us to provide exact
+// duplicates without error (see comment https://github.com/prometheus/prometheus/blob/release-2.37/tsdb/head_append.go#L316).
+// This also means the sample won't be appended, which means the overhead of appending additional samples to head is not
+// reflected in the benchmark, but should still capture the performance of receive writer.
+func generateLabelsAndSeries(numLabels int, numSeries int) []prompb.TimeSeries {
+	// Generate some labels first.
+	l := make([]labelpb.ZLabel, 0, numLabels)
+	l = append(l, labelpb.ZLabel{Name: "__name__", Value: "test"})
+	for i := 0; i < numLabels; i++ {
+		l = append(l, labelpb.ZLabel{Name: fmt.Sprintf("label_%s", string(rune('a'+i))), Value: fmt.Sprintf("%d", i)})
+	}
+
+	ts := make([]prompb.TimeSeries, 0, numSeries)
+	for j := 0; j < numSeries; j++ {
+		ts = append(ts, prompb.TimeSeries{Labels: l, Samples: []prompb.Sample{{Value: 1, Timestamp: 10}}})
+	}
+
+	return ts
 }
