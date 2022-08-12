@@ -60,15 +60,29 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	// Wait metadata response to be ready as Prometheus gets metadata after scrape.
 	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
 		promMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+prom1.Endpoint("http")), "", -1)
-		testutil.Ok(t, err)
+		if err != nil {
+			return err
+		}
 		if len(promMeta) > 0 {
 			return nil
 		}
 		return fmt.Errorf("empty metadata response from Prometheus")
 	}))
 
-	thanosMeta, err := promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), "", -1)
-	testutil.Ok(t, err)
+	var thanosMeta map[string][]metadatapb.Meta
+	// Retry until length of metadata response is the same as Prometheus.
+	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
+		thanosMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), "", -1)
+		if err != nil {
+			return err
+		}
+		if len(thanosMeta) == len(promMeta) {
+			return nil
+		}
+
+		return fmt.Errorf("different metadata response from Prometheus")
+	}))
+
 	testutil.Assert(t, len(thanosMeta) > 0, "got empty metadata response from Thanos")
 
 	// Metadata response from Prometheus and Thanos Querier should be the same after deduplication.

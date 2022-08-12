@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -163,6 +164,8 @@ func registerQuery(app *extkingpin.App) {
 	enableMetricMetadataPartialResponse := cmd.Flag("metric-metadata.partial-response", "Enable partial response for metric metadata endpoint. --no-metric-metadata.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
+	activeQueryDir := cmd.Flag("query.active-query-path", "Directory to log currently active queries in the queries.active file.").Default("").String()
+
 	featureList := cmd.Flag("enable-feature", "Comma separated experimental feature names to enable.The current list of features is "+queryPushdown+".").Default("").Strings()
 
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
@@ -273,6 +276,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
 			*enableExemplarPartialResponse,
+			*activeQueryDir,
 			fileSD,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
@@ -341,6 +345,7 @@ func runQuery(
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
+	activeQueryDir string,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
@@ -472,6 +477,7 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 		)
+
 		engineOpts = promql.EngineOpts{
 			Logger: logger,
 			Reg:    reg,
@@ -580,7 +586,8 @@ func runQuery(
 		grpcProbe,
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
-	engineCreator := engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta)
+	engineCreator := engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta, activeQueryDir,
+		maxConcurrentQueries, logger)
 
 	// Start query API + UI HTTP server.
 	{
@@ -671,8 +678,9 @@ func runQuery(
 				if httpProbe.IsReady() {
 					mint, maxt := proxy.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime: mint,
-						MaxTime: maxt,
+						MinTime:          mint,
+						MaxTime:          maxt,
+						SupportsSharding: true,
 					}
 				}
 				return nil
@@ -739,6 +747,9 @@ func engineFactory(
 	newEngine func(promql.EngineOpts) *promql.Engine,
 	eo promql.EngineOpts,
 	dynamicLookbackDelta bool,
+	activeQueryDir string,
+	maxConcurrentQueries int,
+	logger log.Logger,
 ) func(int64) *promql.Engine {
 	resolutions := []int64{downsample.ResLevel0}
 	if dynamicLookbackDelta {
@@ -757,17 +768,27 @@ func engineFactory(
 		if ld < r {
 			lookbackDelta = time.Duration(r) * time.Millisecond
 		}
-		engines[i] = newEngine(promql.EngineOpts{
+
+		newEngineOpts := promql.EngineOpts{
 			Logger:                   eo.Logger,
 			Reg:                      wrapReg(i),
 			MaxSamples:               eo.MaxSamples,
 			Timeout:                  eo.Timeout,
-			ActiveQueryTracker:       eo.ActiveQueryTracker,
 			LookbackDelta:            lookbackDelta,
 			NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
 			EnableAtModifier:         eo.EnableAtModifier,
 			EnableNegativeOffset:     eo.EnableNegativeOffset,
-		})
+		}
+		// An active query tracker will be added only if the user specifies a non-default path.
+		// Otherwise, the nil active query tracker from existing engine options will be used.
+		if activeQueryDir != "" {
+			resActiveQueryDir := filepath.Join(activeQueryDir, getActiveQueryDirBasedOnResolution(r))
+			newEngineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(resActiveQueryDir, maxConcurrentQueries, logger)
+		} else {
+			newEngineOpts.ActiveQueryTracker = eo.ActiveQueryTracker
+		}
+
+		engines[i] = newEngine(newEngineOpts)
 	}
 	return func(maxSourceResolutionMillis int64) *promql.Engine {
 		for i := len(resolutions) - 1; i >= 1; i-- {
@@ -781,4 +802,17 @@ func engineFactory(
 		}
 		return engines[0]
 	}
+}
+
+func getActiveQueryDirBasedOnResolution(resolution int64) string {
+	if resolution == downsample.ResLevel0 {
+		return "raw"
+	}
+	if resolution == downsample.ResLevel1 {
+		return "5m"
+	}
+	if resolution == downsample.ResLevel2 {
+		return "1h"
+	}
+	return ""
 }

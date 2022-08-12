@@ -6,7 +6,6 @@ package verifier
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -51,7 +50,7 @@ func BackupAndDelete(ctx Context, id ulid.ULID) error {
 	}
 
 	// Create a tempdir to locally store TSDB block.
-	tempdir, err := ioutil.TempDir("", fmt.Sprintf("safe-delete-%s", id.String()))
+	tempdir, err := os.MkdirTemp("", fmt.Sprintf("safe-delete-%s", id.String()))
 	if err != nil {
 		return err
 	}

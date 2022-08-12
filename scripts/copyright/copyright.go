@@ -5,7 +5,6 @@ package main
 
 import (
 	"bytes"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -51,7 +50,7 @@ func applyLicenseToProtoAndGo() error {
 			return nil
 		}
 
-		b, err := ioutil.ReadFile(filepath.Clean(path))
+		b, err := os.ReadFile(filepath.Clean(path))
 		if err != nil {
 			return err
 		}
@@ -77,7 +76,7 @@ func writeLicence(cr copyright, path string, b []byte) error {
 		var bb bytes.Buffer
 		_, _ = bb.Write(cr)
 		_, _ = bb.Write(b)
-		if err := ioutil.WriteFile(path, bb.Bytes(), 0600); err != nil {
+		if err := os.WriteFile(path, bb.Bytes(), 0600); err != nil {
 			return err
 		}
 	}

@@ -5,7 +5,7 @@ package labelpb
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"reflect"
 	"sort"
 	"strings"
@@ -64,6 +64,181 @@ func TestExtendLabels(t *testing.T) {
 		ExtendSortedLabels(labels.Labels{{Name: "a", Value: "1"}, {Name: "replica", Value: "NOT01"}, {Name: "xb", Value: "2"}}, labels.FromStrings("replica", "01")))
 
 	testInjectExtLabels(testutil.NewTB(t))
+}
+
+func TestValidateLabels(t *testing.T) {
+	testCases := []struct {
+		labelSet    []ZLabel
+		expectedErr error
+	}{
+		{
+			// No labels at all.
+			labelSet:    []ZLabel{},
+			expectedErr: ErrEmptyLabels,
+		},
+		{
+			// Empty label.
+			labelSet: []ZLabel{
+				{
+					Name:  "foo",
+					Value: "bar",
+				},
+				{
+					Name:  "",
+					Value: "baz",
+				},
+			},
+			expectedErr: ErrEmptyLabels,
+		},
+		{
+			// Empty label (first label).
+			labelSet: []ZLabel{
+				{
+					Name:  "",
+					Value: "bar",
+				},
+				{
+					Name:  "foo",
+					Value: "baz",
+				},
+			},
+			expectedErr: ErrEmptyLabels,
+		},
+		{
+			// Empty label (empty value).
+			labelSet: []ZLabel{
+				{
+					Name:  "foo",
+					Value: "bar",
+				},
+				{
+					Name:  "baz",
+					Value: "",
+				},
+			},
+			expectedErr: ErrEmptyLabels,
+		},
+		{
+			// Out-of-order and duplicate label (out-of-order comes first).
+			labelSet: []ZLabel{
+				{
+					Name:  "foo",
+					Value: "bar",
+				},
+				{
+					Name:  "test",
+					Value: "baz",
+				},
+				{
+					Name:  "foo",
+					Value: "bar",
+				},
+			},
+			expectedErr: ErrOutOfOrderLabels,
+		},
+		{
+			// Out-of-order and duplicate label (out-of-order comes first).
+			labelSet: []ZLabel{
+				{
+					Name:  "__test__",
+					Value: "baz",
+				},
+				{
+					Name:  "foo",
+					Value: "bar",
+				},
+				{
+					Name:  "foo",
+					Value: "bar",
+				},
+				{
+					Name:  "test",
+					Value: "baz",
+				},
+			},
+			expectedErr: ErrDuplicateLabels,
+		},
+		{
+			// Empty and duplicate label (empty comes first).
+			labelSet: []ZLabel{
+				{
+					Name:  "foo",
+					Value: "bar",
+				},
+				{
+					Name:  "",
+					Value: "baz",
+				},
+				{
+					Name:  "foo",
+					Value: "bar",
+				},
+			},
+			expectedErr: ErrEmptyLabels,
+		},
+		{
+			// Wrong order.
+			labelSet: []ZLabel{
+				{
+					Name:  "a",
+					Value: "bar",
+				},
+				{
+					Name:  "b",
+					Value: "baz",
+				},
+				{
+					Name:  "__name__",
+					Value: "test",
+				},
+			},
+			expectedErr: ErrOutOfOrderLabels,
+		},
+		{
+			// Wrong order and duplicate (wrong order comes first).
+			labelSet: []ZLabel{
+				{
+					Name:  "a",
+					Value: "bar",
+				},
+				{
+					Name:  "__name__",
+					Value: "test",
+				},
+				{
+					Name:  "a",
+					Value: "bar",
+				},
+			},
+			expectedErr: ErrOutOfOrderLabels,
+		},
+		{
+			// All good.
+			labelSet: []ZLabel{
+				{
+					Name:  "__name__",
+					Value: "test",
+				},
+				{
+					Name:  "a1",
+					Value: "bar",
+				},
+				{
+					Name:  "a2",
+					Value: "baz",
+				},
+			},
+			expectedErr: nil,
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("case %d", i+1), func(t *testing.T) {
+			err := ValidateLabels(tc.labelSet)
+			testutil.Equals(t, tc.expectedErr, err)
+		})
+	}
+
 }
 
 func BenchmarkExtendLabels(b *testing.B) {
@@ -127,7 +302,7 @@ func testInjectExtLabels(tb testutil.TB) {
 			), x)
 		}
 	}
-	fmt.Fprint(ioutil.Discard, x)
+	fmt.Fprint(io.Discard, x)
 }
 
 var (

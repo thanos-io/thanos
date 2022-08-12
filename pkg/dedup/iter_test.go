@@ -5,7 +5,7 @@ package dedup
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"math/rand"
 	"sort"
@@ -501,7 +501,7 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 			t, _ := it.At()
 			total += t
 		}
-		fmt.Fprint(ioutil.Discard, total)
+		fmt.Fprint(io.Discard, total)
 	}
 	b.Run("equal", func(b *testing.B) {
 		var s1, s2 []sample

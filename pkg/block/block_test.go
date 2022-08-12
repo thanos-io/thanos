@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -81,9 +80,7 @@ func TestUpload(t *testing.T) {
 
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-upload")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	bkt := objstore.NewInMemBucket()
 	b1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
@@ -234,9 +231,7 @@ func TestDelete(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-delete")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	bkt := objstore.NewInMemBucket()
 	{
@@ -281,9 +276,7 @@ func TestMarkForDeletion(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-mark-for-delete")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	for _, tcase := range []struct {
 		name      string
@@ -337,9 +330,7 @@ func TestMarkForNoCompact(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-mark-for-no-compact")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	for _, tcase := range []struct {
 		name      string
@@ -397,11 +388,7 @@ func TestHashDownload(t *testing.T) {
 
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-download")
-	testutil.Ok(t, err)
-	t.Cleanup(func() {
-		testutil.Ok(t, os.RemoveAll(tmpDir))
-	})
+	tmpDir := t.TempDir()
 
 	bkt := objstore.NewInMemBucket()
 	r := prometheus.NewRegistry()
@@ -493,9 +480,7 @@ func TestUploadCleanup(t *testing.T) {
 
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-block-upload")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	bkt := objstore.NewInMemBucket()
 	b1, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{

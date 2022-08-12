@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"path"
 	"testing"
@@ -136,7 +136,7 @@ func TestInfo(t *testing.T) {
 			return err
 		}
 
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		defer runutil.CloseWithErrCapture(&err, resp.Body, "response body close")
 
 		var res struct {

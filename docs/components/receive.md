@@ -77,6 +77,61 @@ The example content of `hashring.json`:
 
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed for tenancy and replication.
 
+## Limits & gates (experimental)
+
+Thanos Receive has some limits and gates that can be configured to control resource usage. Here's the difference between limits and gates:
+
+- **Limits**: if a request hits any configured limit the client will receive an error response from the server.
+- **Gates**: if a request hits a gate without capacity it will wait until the gate's capacity is replenished to be processed. It doesn't trigger an error response from the server.
+
+**IMPORTANT**: this feature is experimental and a work-in-progres. It might change in the near future, i.e. configuration might move to a file (to allow easy configuration of different request limits per tenant) or its structure could change.
+
+### Request limits
+
+Thanos Receive supports setting limits on the incoming remote write request sizes. These limits should help you to prevent a single tenant from being able to send big requests and possibly crash the Receive.
+
+These limits are applied per request and can be configured with the following command line arguments:
+
+- `--receive.write-request-limits.max-size-bytes`: the maximum body size.
+- `--receive.write-request-limits.max-series`: the maximum amount of series in a single remote write request.
+- `--receive.write-request-limits.max-samples`: the maximum amount of samples in a single remote write request (summed from all series).
+
+Any request above these limits will cause an 413 HTTP response (*Entity Too Large*) and should not be retried without modifications.
+
+Currently a 413 HTTP response will cause data loss at the client, as none of them (Prometheus included) will break down 413 responses into smaller requests. The recommendation is to monitor these errors in the client and contact the owners of your Receive instance for more information on its configured limits.
+
+Future work that can improve this scenario:
+
+- Proper handling of 413 responses in clients, given Receive can somehow communicate which limit was reached.
+- Including in the 413 response which are the current limits that apply to the tenant.
+
+By default all these limits are disabled.
+
+## Request gates
+
+The available request gates in Thanos Receive can be configured with the following command line arguments:
+
+- `--receive.write-request-limits.max-concurrency`: the maximum amount of remote write requests that will be concurrently worked on. Any request request that would exceed this limit will be accepted, but wait until the gate allows it to be processed.
+
+By default all gates are disabled.
+
+## Active Series Limiting (experimental)
+
+Thanos Receive, in Router or RouterIngestor mode, supports limiting tenant active (head) series to maintain the system's stability. It uses any Prometheus Query API compatible meta-monitoring solution that consumes the metrics exposed by all receivers in the Thanos system. Such query endpoint allows getting the scrape time seconds old number of all active series per tenant, which is then compared with a configured limit before ingesting any tenant's remote write request. In case a tenant has gone above the limit, their remote write requests fail fully.
+
+Every Receive Router/RouterIngestor node, queries meta-monitoring for active series of all tenants, every 15 seconds, and caches the results in a map. This cached result is used to limit all incoming remote write requests.
+
+To use the feature, one should specify the following (hidden) flags:
+- `--receive.tenant-limits.max-head-series`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive.
+- `--receive.tenant-limits.meta-monitoring-url`: Specifies Prometheus Query API compatible meta-monitoring endpoint.
+- `--receive.tenant-limits.meta-monitoring-query`: Optional flag to specify PromQL query to execute against meta-monitoring.
+- `--receive.tenant-limits.meta-monitoring-client`: Optional YAML file/string specifying HTTP client config for meta-monitoring.
+
+NOTE:
+- It is possible that Receive ingests more active series than the specified limit, as it relies on meta-monitoring, which may not have the latest data for current number of active series of a tenant at all times.
+- Thanos Receive performs best-effort limiting. In case meta-monitoring is down/unreachable, Thanos Receive will not impose limits and only log errors for meta-monitoring being unreachable. Similaly to when one receiver cannot be scraped.
+- Support for different limit configuration for different tenants is planned for the future.
+
 ## Flags
 
 ```$ mdox-exec="thanos receive --help"
@@ -137,6 +192,10 @@ Flags:
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
                                  via a header.
+      --receive.grpc-compression=snappy
+                                 Compression algorithm to use for gRPC requests
+                                 to other receivers. Must be one of: snappy,
+                                 none
       --receive.hashrings=<content>
                                  Alternative to 'receive.hashrings-file' flag
                                  (lower priority). Content of file that contains

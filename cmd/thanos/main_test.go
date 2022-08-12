@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -105,9 +104,7 @@ func (b *erroringBucket) Name() string {
 // Testing for https://github.com/thanos-io/thanos/issues/4960.
 func TestRegression4960_Deadlock(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
-	dir, err := ioutil.TempDir("", "test-compact-cleanup")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -115,6 +112,7 @@ func TestRegression4960_Deadlock(t *testing.T) {
 	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 	bkt = &erroringBucket{bkt: bkt}
 	var id, id2, id3 ulid.ULID
+	var err error
 	{
 		id, err = e2eutil.CreateBlock(
 			ctx,
@@ -168,15 +166,14 @@ func TestRegression4960_Deadlock(t *testing.T) {
 
 func TestCleanupDownsampleCacheFolder(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
-	dir, err := ioutil.TempDir("", "test-compact-cleanup")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
 	var id ulid.ULID
+	var err error
 	{
 		id, err = e2eutil.CreateBlock(
 			ctx,

@@ -6,7 +6,6 @@ package rules
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -55,11 +54,9 @@ func (n nopQueryable) Querier(_ context.Context, _, _ int64) (storage.Querier, e
 
 // Regression test against https://github.com/thanos-io/thanos/issues/1779.
 func TestRun_Subqueries(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test_rule_run")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
-	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "rule.yaml"), []byte(`
+	testutil.Ok(t, os.WriteFile(filepath.Join(dir, "rule.yaml"), []byte(`
 groups:
 - name: "rule with subquery"
   partial_response_strategy: "warn"
@@ -109,25 +106,20 @@ groups:
 }
 
 func TestUpdate_Error_UpdatePartial(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test_rule_rule_groups")
-	testutil.Ok(t, err)
-	dataDir, err := ioutil.TempDir("", "test_rule_data")
-	testutil.Ok(t, err)
-	defer func() {
-		testutil.Ok(t, os.RemoveAll(dir))
-		testutil.Ok(t, os.RemoveAll(dataDir))
-	}()
-	err = os.MkdirAll(filepath.Join(dir, "subdir"), 0775)
+	dir := t.TempDir()
+	dataDir := t.TempDir()
+
+	err := os.MkdirAll(filepath.Join(dir, "subdir"), 0775)
 	testutil.Ok(t, err)
 
-	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "no_strategy.yaml"), []byte(`
+	testutil.Ok(t, os.WriteFile(filepath.Join(dir, "no_strategy.yaml"), []byte(`
 groups:
 - name: "something1"
   rules:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "abort.yaml"), []byte(`
+	testutil.Ok(t, os.WriteFile(filepath.Join(dir, "abort.yaml"), []byte(`
 groups:
 - name: "something2"
   partial_response_strategy: "abort"
@@ -135,7 +127,7 @@ groups:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "warn.yaml"), []byte(`
+	testutil.Ok(t, os.WriteFile(filepath.Join(dir, "warn.yaml"), []byte(`
 groups:
 - name: "something3"
   partial_response_strategy: "warn"
@@ -143,7 +135,7 @@ groups:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "wrong.yaml"), []byte(`
+	testutil.Ok(t, os.WriteFile(filepath.Join(dir, "wrong.yaml"), []byte(`
 groups:
 - name: "something4"
   partial_response_strategy: "afafsdgsdgs" # Err 1
@@ -151,7 +143,7 @@ groups:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "combined.yaml"), []byte(`
+	testutil.Ok(t, os.WriteFile(filepath.Join(dir, "combined.yaml"), []byte(`
 groups:
 - name: "something5"
   partial_response_strategy: "warn"
@@ -169,7 +161,7 @@ groups:
     expr: "up"
 `), os.ModePerm))
 	// Same filename as the first rule file but different path.
-	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "subdir", "no_strategy.yaml"), []byte(`
+	testutil.Ok(t, os.WriteFile(filepath.Join(dir, "subdir", "no_strategy.yaml"), []byte(`
 groups:
 - name: "something8"
   rules:
@@ -320,9 +312,7 @@ func TestConfigRuleAdapterUnmarshalMarshalYAML(t *testing.T) {
 }
 
 func TestManager_Rules(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test_rule_run")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	curr, err := os.Getwd()
 	testutil.Ok(t, err)
@@ -357,11 +347,9 @@ func TestManager_Rules(t *testing.T) {
 }
 
 func TestManagerUpdateWithNoRules(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test_rule_rule_groups")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
-	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "no_strategy.yaml"), []byte(`
+	testutil.Ok(t, os.WriteFile(filepath.Join(dir, "no_strategy.yaml"), []byte(`
 groups:
 - name: "something1"
   rules:
@@ -391,7 +379,7 @@ groups:
 	thanosRuleMgr.Run()
 	t.Cleanup(thanosRuleMgr.Stop)
 
-	err = thanosRuleMgr.Update(1*time.Second, []string{
+	err := thanosRuleMgr.Update(1*time.Second, []string{
 		filepath.Join(dir, "no_strategy.yaml"),
 	})
 	testutil.Ok(t, err)
@@ -403,11 +391,9 @@ groups:
 }
 
 func TestManagerRunRulesWithRuleGroupLimit(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test_rule_rule_groups")
-	testutil.Ok(t, err)
-	t.Cleanup(func() { testutil.Ok(t, os.RemoveAll(dir)) })
+	dir := t.TempDir()
 	filename := filepath.Join(dir, "with_limit.yaml")
-	testutil.Ok(t, ioutil.WriteFile(filename, []byte(`
+	testutil.Ok(t, os.WriteFile(filename, []byte(`
 groups:
 - name: "something1"
   interval: 1ms

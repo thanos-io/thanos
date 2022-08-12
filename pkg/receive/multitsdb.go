@@ -5,7 +5,6 @@ package receive
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -141,7 +140,7 @@ func (t *MultiTSDB) Open() error {
 		return err
 	}
 
-	files, err := ioutil.ReadDir(t.dataDir)
+	files, err := os.ReadDir(t.dataDir)
 	if err != nil {
 		return err
 	}
@@ -339,7 +338,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 }
 
 func (t *MultiTSDB) RemoveLockFilesIfAny() error {
-	fis, err := ioutil.ReadDir(t.dataDir)
+	fis, err := os.ReadDir(t.dataDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
