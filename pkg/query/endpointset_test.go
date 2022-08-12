@@ -373,7 +373,6 @@ func TestEndpointSetUpdate_DuplicateSpecs(t *testing.T) {
 	discoveredEndpointAddr = append(discoveredEndpointAddr, discoveredEndpointAddr[0])
 
 	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
-	endpointSet.gRPCInfoCallTimeout = 1 * time.Second
 	defer endpointSet.Close()
 
 	endpointSet.Update(context.Background())
@@ -396,7 +395,6 @@ func TestEndpointSetUpdate_EndpointGoingAway(t *testing.T) {
 
 	discoveredEndpointAddr := endpoints.EndpointAddresses()
 	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
-	endpointSet.gRPCInfoCallTimeout = 1 * time.Second
 	defer endpointSet.Close()
 
 	// Initial update.
@@ -559,7 +557,7 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 	updateTime := time.Now()
 	discoveredEndpointAddr := endpoints.EndpointAddresses()
 	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, func() time.Time { return updateTime })
-	endpointSet.gRPCInfoCallTimeout = 3 * time.Second
+	endpointSet.endpointInfoTimeout = 3 * time.Second
 	defer endpointSet.Close()
 
 	var wg sync.WaitGroup
@@ -648,8 +646,7 @@ func TestEndpointSet_Update(t *testing.T) {
 			}
 			return specs
 		},
-		testGRPCOpts, time.Minute)
-	endpointSet.gRPCInfoCallTimeout = 2 * time.Second
+		testGRPCOpts, time.Minute, 2*time.Second)
 	defer endpointSet.Close()
 
 	// Initial update.
@@ -1030,8 +1027,7 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 			}
 			return specs
 		},
-		testGRPCOpts, time.Minute)
-	endpointSet.gRPCInfoCallTimeout = 2 * time.Second
+		testGRPCOpts, time.Minute, 2*time.Second)
 	defer endpointSet.Close()
 
 	// Should not matter how many of these we run.
@@ -1140,9 +1136,8 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 			NewGRPCEndpointSpec(discoveredEndpointAddr[1], false),
 			NewGRPCEndpointSpec(discoveredEndpointAddr[2], true),
 		}
-	}, testGRPCOpts, time.Minute)
+	}, testGRPCOpts, time.Minute, 1*time.Second)
 	defer endpointSet.Close()
-	endpointSet.gRPCInfoCallTimeout = 1 * time.Second
 
 	// Initial update.
 	endpointSet.Update(context.Background())
@@ -1161,12 +1156,12 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 	testutil.Equals(t, int64(54321), curMax, "got incorrect minimum time")
 
 	// Successfully retrieve the information and observe minTime/maxTime updating.
-	endpointSet.gRPCInfoCallTimeout = 3 * time.Second
+	endpointSet.endpointInfoTimeout = 3 * time.Second
 	endpointSet.Update(context.Background())
 	updatedCurMin, updatedCurMax := endpointSet.endpoints[slowStaticEndpointAddr].metadata.Store.MinTime, endpointSet.endpoints[slowStaticEndpointAddr].metadata.Store.MaxTime
 	testutil.Equals(t, int64(65644), updatedCurMin)
 	testutil.Equals(t, int64(77777), updatedCurMax)
-	endpointSet.gRPCInfoCallTimeout = 1 * time.Second
+	endpointSet.endpointInfoTimeout = 1 * time.Second
 
 	// Turn off the endpoints.
 	endpoints.Close()
@@ -1320,7 +1315,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 
 					return tc.states[currentState].endpointSpec()
 				},
-				testGRPCOpts, time.Minute)
+				testGRPCOpts, time.Minute, 2*time.Second)
 
 			defer endpointSet.Close()
 
@@ -1506,9 +1501,7 @@ func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc) 
 			}
 			return specs
 		},
-		testGRPCOpts, time.Minute)
-	endpointSet.gRPCInfoCallTimeout = 1 * time.Second
-
+		testGRPCOpts, time.Minute, time.Second)
 	return endpointSet
 }
 
