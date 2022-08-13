@@ -46,8 +46,8 @@ func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (quer
 	}
 
 	promResponses := make([]*queryrange.PrometheusInstantQueryResponse, 0, len(responses))
-	for _, res := range responses {
-		promResponses = append(promResponses, res.(*queryrange.PrometheusInstantQueryResponse))
+	for _, resp := range responses {
+		promResponses = append(promResponses, resp.(*queryrange.PrometheusInstantQueryResponse))
 	}
 	res := &queryrange.PrometheusInstantQueryResponse{
 		Status: queryrange.StatusSuccess,
@@ -227,7 +227,8 @@ func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response,
 func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Samples {
 	output := map[string]*queryrange.Sample{}
 	for _, resp := range resps {
-		// Merge vector result samples only.
+		// Merge vector result samples only. Skip other types such as
+		// string, scalar as those are not sharable.
 		if resp.Data.Result.GetSamples() == nil {
 			continue
 		}

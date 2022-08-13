@@ -32,7 +32,6 @@ for dir in ${DIRS}; do
   ${PROTOC_BIN} --gogofast_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,plugins=grpc:. \
     -I=. \
     -I="${GOGOPROTO_PATH}" \
-    -I=../internal \
     ${dir}/*.proto
 
   pushd ${dir}
@@ -49,9 +48,10 @@ for dir in ${DIRS}; do
 done
 popd
 
-DIRS="cortex/querier/queryrange/"
+# Generate vendored Cortex protobufs.
+CORTEX_DIRS="cortex/querier/queryrange/"
 pushd "internal"
-for dir in ${DIRS}; do
+for dir in ${CORTEX_DIRS}; do
  ${PROTOC_BIN} --gogofast_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,plugins=grpc:. \
     -I=../pkg \
     -I="${GOGOPROTO_PATH}" \

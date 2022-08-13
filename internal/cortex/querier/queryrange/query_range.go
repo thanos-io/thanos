@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -23,6 +22,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
+	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/weaveworks/common/httpgrpc"
@@ -104,6 +104,7 @@ type Response interface {
 	proto.Message
 	// GetHeaders returns the HTTP headers in the response.
 	GetHeaders() []*PrometheusResponseHeader
+	// GetStats returns the Prometheus query stats in the response.
 	GetStats() *PrometheusResponseStats
 }
 
@@ -422,75 +423,6 @@ func (s *SampleStream) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
-func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
-	var queryData struct {
-		ResultType string                   `json:"resultType"`
-		Stats      *PrometheusResponseStats `json:"stats,omitempty"`
-	}
-
-	if err := json.Unmarshal(data, &queryData); err != nil {
-		return err
-	}
-	s.ResultType = queryData.ResultType
-	s.Stats = queryData.Stats
-	switch s.ResultType {
-	case "vector":
-		var result struct {
-			Samples []*Sample `json:"result"`
-		}
-		if err := json.Unmarshal(data, &result); err != nil {
-			return err
-		}
-		s.Result = PrometheusInstantQueryResult{
-			Result: &PrometheusInstantQueryResult_Samples{Samples: &Samples{
-				Result: result.Samples,
-			}},
-		}
-	case "matrix":
-		return errors.New("matrix result type not supported")
-	default:
-		var result struct {
-			Sample cortexpb.Sample `json:"result"`
-		}
-		if err := json.Unmarshal(data, &result); err != nil {
-			return err
-		}
-		s.Result = PrometheusInstantQueryResult{
-			Result: &PrometheusInstantQueryResult_Sample{Sample: &result.Sample},
-		}
-	}
-	return nil
-}
-
-// MarshalJSON implements json.Marshaler.
-func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
-	switch s.ResultType {
-	case "vector":
-		res := struct {
-			ResultType string                   `json:"resultType"`
-			Data       []*Sample                `json:"data"`
-			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
-		}{
-			ResultType: s.ResultType,
-			Data:       s.Result.GetSamples().Result,
-			Stats:      s.Stats,
-		}
-		return json.Marshal(res)
-	default:
-		res := struct {
-			ResultType string                   `json:"resultType"`
-			Data       *cortexpb.Sample         `json:"data"`
-			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
-		}{
-			ResultType: s.ResultType,
-			Data:       s.Result.GetSample(),
-			Stats:      s.Stats,
-		}
-		return json.Marshal(res)
-	}
-}
-
-// UnmarshalJSON implements json.Unmarshaler.
 func (s *Sample) UnmarshalJSON(data []byte) error {
 	var sample struct {
 		Metric model.Metric    `json:"metric"`
@@ -514,6 +446,77 @@ func (s *Sample) MarshalJSON() ([]byte, error) {
 		Value:  s.Sample,
 	}
 	return json.Marshal(sample)
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
+	var queryData struct {
+		ResultType string                   `json:"resultType"`
+		Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+	}
+
+	if err := json.Unmarshal(data, &queryData); err != nil {
+		return err
+	}
+	s.ResultType = queryData.ResultType
+	s.Stats = queryData.Stats
+	switch s.ResultType {
+	case model.ValVector.String():
+		var result struct {
+			Samples []*Sample `json:"result"`
+		}
+		if err := json.Unmarshal(data, &result); err != nil {
+			return err
+		}
+		s.Result = PrometheusInstantQueryResult{
+			Result: &PrometheusInstantQueryResult_Samples{Samples: &Samples{
+				Result: result.Samples,
+			}},
+		}
+	case model.ValMatrix.String():
+		return errors.New("matrix result type not supported for PrometheusInstantQueryData")
+	default:
+		var result struct {
+			Sample cortexpb.Sample `json:"result"`
+		}
+		if err := json.Unmarshal(data, &result); err != nil {
+			return err
+		}
+		s.Result = PrometheusInstantQueryResult{
+			Result: &PrometheusInstantQueryResult_Sample{Sample: &result.Sample},
+		}
+	}
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler.
+func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
+	if s.ResultType == model.ValVector.String() {
+		res := struct {
+			ResultType string                   `json:"resultType"`
+			Data       []*Sample                `json:"data"`
+			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+		}{
+			ResultType: s.ResultType,
+			Data:       s.Result.GetSamples().Result,
+			Stats:      s.Stats,
+		}
+		return json.Marshal(res)
+	} else if s.ResultType == model.ValMatrix.String() {
+		return nil, errors.New("matrix result type not supported for PrometheusInstantQueryData")
+	}
+
+	// Other cases only include scalar and string.
+	res := struct {
+		ResultType string                   `json:"resultType"`
+		Data       *cortexpb.Sample         `json:"data"`
+		Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+	}{
+		ResultType: s.ResultType,
+		Data:       s.Result.GetSample(),
+		Stats:      s.Stats,
+	}
+	return json.Marshal(res)
 }
 
 // StatsMerge merge the stats from 2 responses
