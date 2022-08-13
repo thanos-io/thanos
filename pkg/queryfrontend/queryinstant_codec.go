@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -191,7 +191,7 @@ func (c queryInstantCodec) EncodeResponse(ctx context.Context, res queryrange.Re
 		Header: http.Header{
 			"Content-Type": []string{"application/json"},
 		},
-		Body:          ioutil.NopCloser(bytes.NewBuffer(b)),
+		Body:          io.NopCloser(bytes.NewBuffer(b)),
 		StatusCode:    http.StatusOK,
 		ContentLength: int64(len(b)),
 	}
@@ -200,7 +200,7 @@ func (c queryInstantCodec) EncodeResponse(ctx context.Context, res queryrange.Re
 
 func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response, _ queryrange.Request) (queryrange.Response, error) {
 	if r.StatusCode/100 != 2 {
-		body, _ := ioutil.ReadAll(r.Body)
+		body, _ := io.ReadAll(r.Body)
 		return nil, httpgrpc.Errorf(r.StatusCode, string(body))
 	}
 	log, ctx := spanlogger.New(ctx, "ParseQueryInstantResponse") //nolint:ineffassign,staticcheck
