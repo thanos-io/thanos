@@ -32,6 +32,7 @@ for dir in ${DIRS}; do
   ${PROTOC_BIN} --gogofast_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,plugins=grpc:. \
     -I=. \
     -I="${GOGOPROTO_PATH}" \
+    -I=../internal \
     ${dir}/*.proto
 
   pushd ${dir}
@@ -45,5 +46,24 @@ for dir in ${DIRS}; do
   rm -f *.bak
   ${GOIMPORTS_BIN} -w *.pb.go
   popd
+done
+popd
+
+DIRS="cortex/querier/queryrange/"
+pushd "internal"
+for dir in ${DIRS}; do
+ ${PROTOC_BIN} --gogofast_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,plugins=grpc:. \
+    -I=../pkg \
+    -I="${GOGOPROTO_PATH}" \
+    -I=. \
+    ${dir}/*.proto
+
+    pushd ${dir}
+    sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
+    sed -i.bak -E 's/_ \"google\/protobuf\"//g' *.pb.go
+    sed -i.bak -E 's/\"cortex\/cortexpb\"/\"github.com\/thanos-io\/thanos\/internal\/cortex\/cortexpb\"/g' *.pb.go
+    rm -f *.bak
+    ${GOIMPORTS_BIN} -w *.pb.go
+    popd
 done
 popd

@@ -6,30 +6,62 @@ package queryfrontend
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/opentracing/opentracing-go"
+	otlog "github.com/opentracing/opentracing-go/log"
+	"github.com/prometheus/common/model"
 	"github.com/weaveworks/common/httpgrpc"
 
+	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexutil "github.com/thanos-io/thanos/internal/cortex/util"
+	"github.com/thanos-io/thanos/internal/cortex/util/spanlogger"
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 )
 
 // queryInstantCodec is used to encode/decode Thanos instant query requests and responses.
 type queryInstantCodec struct {
-	queryrange.Codec
 	partialResponse bool
 }
 
 // NewThanosQueryInstantCodec initializes a queryInstantCodec.
 func NewThanosQueryInstantCodec(partialResponse bool) *queryInstantCodec {
 	return &queryInstantCodec{
-		Codec:           queryrange.PrometheusCodec,
 		partialResponse: partialResponse,
 	}
+}
+
+func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (queryrange.Response, error) {
+	if len(responses) == 0 {
+		return queryrange.NewEmptyPrometheusInstantQueryResponse(), nil
+	} else if len(responses) == 1 {
+		return responses[0], nil
+	}
+
+	promResponses := make([]*queryrange.PrometheusInstantQueryResponse, 0, len(responses))
+	for _, res := range responses {
+		promResponses = append(promResponses, res.(*queryrange.PrometheusInstantQueryResponse))
+	}
+	res := &queryrange.PrometheusInstantQueryResponse{
+		Status: queryrange.StatusSuccess,
+		Data: queryrange.PrometheusInstantQueryData{
+			ResultType: model.ValVector.String(),
+			Result: queryrange.PrometheusInstantQueryResult{
+				Result: &queryrange.PrometheusInstantQueryResult_Samples{
+					Samples: vectorMerge(promResponses),
+				},
+			},
+			Stats: queryrange.StatsMerge(responses),
+		},
+	}
+	return res, nil
 }
 
 func (c queryInstantCodec) DecodeRequest(_ context.Context, r *http.Request, forwardHeaders []string) (queryrange.Request, error) {
@@ -137,4 +169,90 @@ func (c queryInstantCodec) EncodeRequest(ctx context.Context, r queryrange.Reque
 		}
 	}
 	return req.WithContext(ctx), nil
+}
+
+func (c queryInstantCodec) EncodeResponse(ctx context.Context, res queryrange.Response) (*http.Response, error) {
+	sp, _ := opentracing.StartSpanFromContext(ctx, "APIResponse.ToHTTPResponse")
+	defer sp.Finish()
+
+	a, ok := res.(*queryrange.PrometheusInstantQueryResponse)
+	if !ok {
+		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "invalid response format")
+	}
+
+	b, err := json.Marshal(a)
+	if err != nil {
+		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error encoding response: %v", err)
+	}
+
+	sp.LogFields(otlog.Int("bytes", len(b)))
+
+	resp := http.Response{
+		Header: http.Header{
+			"Content-Type": []string{"application/json"},
+		},
+		Body:          ioutil.NopCloser(bytes.NewBuffer(b)),
+		StatusCode:    http.StatusOK,
+		ContentLength: int64(len(b)),
+	}
+	return &resp, nil
+}
+
+func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response, _ queryrange.Request) (queryrange.Response, error) {
+	if r.StatusCode/100 != 2 {
+		body, _ := ioutil.ReadAll(r.Body)
+		return nil, httpgrpc.Errorf(r.StatusCode, string(body))
+	}
+	log, ctx := spanlogger.New(ctx, "ParseQueryInstantResponse") //nolint:ineffassign,staticcheck
+	defer log.Finish()
+
+	buf, err := queryrange.BodyBuffer(r)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	log.LogFields(otlog.Int("bytes", len(buf)))
+
+	var resp queryrange.PrometheusInstantQueryResponse
+	if err := json.Unmarshal(buf, &resp); err != nil {
+		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error decoding response: %v", err)
+	}
+
+	for h, hv := range r.Header {
+		resp.Headers = append(resp.Headers, &queryrange.PrometheusResponseHeader{Name: h, Values: hv})
+	}
+	return &resp, nil
+}
+
+func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Samples {
+	output := map[string]*queryrange.Sample{}
+	for _, resp := range resps {
+		// Merge vector result samples only.
+		if resp.Data.Result.GetSamples() == nil {
+			continue
+		}
+		for _, sample := range resp.Data.Result.GetSamples().Result {
+			s := sample
+			metric := cortexpb.FromLabelAdaptersToLabels(sample.Labels).String()
+			if existingSample, ok := output[metric]; !ok {
+				output[metric] = s
+			} else if existingSample.GetSample().TimestampMs < s.GetSample().TimestampMs {
+				output[metric] = s
+			}
+		}
+	}
+
+	keys := make([]string, 0, len(output))
+	for key := range output {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	result := &queryrange.Samples{
+		Result: make([]*queryrange.Sample, 0, len(output)),
+	}
+	for _, key := range keys {
+		result.Result = append(result.Result, output[key])
+	}
+	return result
 }

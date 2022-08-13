@@ -54,3 +54,13 @@ func (m *ThanosLabelsResponse) GetHeaders() []*queryrange.PrometheusResponseHead
 func (m *ThanosSeriesResponse) GetHeaders() []*queryrange.PrometheusResponseHeader {
 	return headersToQueryRangeHeaders(m.Headers)
 }
+
+// GetHeaders returns the HTTP headers in the response.
+func (m *ThanosLabelsResponse) GetStats() *queryrange.PrometheusResponseStats {
+	return nil
+}
+
+// GetHeaders returns the HTTP headers in the response.
+func (m *ThanosSeriesResponse) GetStats() *queryrange.PrometheusResponseStats {
+	return nil
+}
