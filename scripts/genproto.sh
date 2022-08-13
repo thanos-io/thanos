@@ -58,12 +58,12 @@ for dir in ${CORTEX_DIRS}; do
     -I=. \
     ${dir}/*.proto
 
-    pushd ${dir}
-    sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
-    sed -i.bak -E 's/_ \"google\/protobuf\"//g' *.pb.go
-    sed -i.bak -E 's/\"cortex\/cortexpb\"/\"github.com\/thanos-io\/thanos\/internal\/cortex\/cortexpb\"/g' *.pb.go
-    rm -f *.bak
-    ${GOIMPORTS_BIN} -w *.pb.go
-    popd
+  pushd ${dir}
+  sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
+  sed -i.bak -E 's/_ \"google\/protobuf\"//g' *.pb.go
+  sed -i.bak -E 's/\"cortex\/cortexpb\"/\"github.com\/thanos-io\/thanos\/internal\/cortex\/cortexpb\"/g' *.pb.go
+  rm -f *.bak
+  ${GOIMPORTS_BIN} -w *.pb.go
+  popd
 done
 popd

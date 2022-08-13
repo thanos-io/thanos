@@ -208,7 +208,7 @@ func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response,
 
 	buf, err := queryrange.BodyBuffer(r)
 	if err != nil {
-		log.Error(err)
+		log.Error(err) //nolint:errcheck
 		return nil, err
 	}
 	log.LogFields(otlog.Int("bytes", len(buf)))

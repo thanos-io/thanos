@@ -211,6 +211,7 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 		end       = "end"
 		startTime = "123"
 		endTime   = "456"
+		trueStr   = "true"
 	)
 	for _, tc := range []struct {
 		name          string
@@ -253,7 +254,7 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 				return r.URL.Query().Get(start) == startTime &&
 					r.URL.Query().Get(end) == endTime &&
 					r.URL.Path == "/api/v1/label/__name__/values" &&
-					r.URL.Query().Get(queryv1.PartialResponseParam) == "true"
+					r.URL.Query().Get(queryv1.PartialResponseParam) == trueStr
 			},
 		},
 		{
@@ -291,7 +292,7 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			checkFunc: func(r *http.Request) bool {
 				return r.FormValue(start) == startTime &&
 					r.FormValue(end) == endTime &&
-					r.FormValue(queryv1.DedupParam) == "true" &&
+					r.FormValue(queryv1.DedupParam) == trueStr &&
 					r.URL.Path == "/api/v1/series"
 			},
 		},
