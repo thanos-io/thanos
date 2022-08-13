@@ -52,7 +52,7 @@ popd
 CORTEX_DIRS="cortex/querier/queryrange/"
 pushd "internal"
 for dir in ${CORTEX_DIRS}; do
- ${PROTOC_BIN} --gogofast_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,plugins=grpc:. \
+  ${PROTOC_BIN} --gogofast_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,plugins=grpc:. \
     -I=../pkg \
     -I="${GOGOPROTO_PATH}" \
     -I=. \
