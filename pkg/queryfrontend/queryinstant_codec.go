@@ -224,7 +224,7 @@ func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response,
 	return &resp, nil
 }
 
-func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Samples {
+func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Vector {
 	output := map[string]*queryrange.Sample{}
 	for _, resp := range resps {
 		// Merge vector result samples only. Skip other types such as
@@ -249,7 +249,7 @@ func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange
 	}
 	sort.Strings(keys)
 
-	result := &queryrange.Samples{
+	result := &queryrange.Vector{
 		Result: make([]*queryrange.Sample, 0, len(output)),
 	}
 	for _, key := range keys {

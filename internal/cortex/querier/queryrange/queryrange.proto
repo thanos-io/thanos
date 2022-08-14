@@ -67,11 +67,11 @@ message PrometheusInstantQueryData {
 message PrometheusInstantQueryResult {
   oneof result {
     cortexpb.Sample sample = 1;
-    Samples samples = 2;
+    Vector samples = 2;
   }
 }
 
-message Samples {
+message Vector {
   repeated Sample Result = 1;
 }
 

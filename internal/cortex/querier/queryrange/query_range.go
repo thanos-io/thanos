@@ -463,14 +463,14 @@ func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 	switch s.ResultType {
 	case model.ValVector.String():
 		var result struct {
-			Samples []*Sample `json:"result"`
+			Vector []*Sample `json:"result"`
 		}
 		if err := json.Unmarshal(data, &result); err != nil {
 			return err
 		}
 		s.Result = PrometheusInstantQueryResult{
-			Result: &PrometheusInstantQueryResult_Samples{Samples: &Samples{
-				Result: result.Samples,
+			Result: &PrometheusInstantQueryResult_Samples{Samples: &Vector{
+				Result: result.Vector,
 			}},
 		}
 	case model.ValMatrix.String():
@@ -494,7 +494,7 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 	if s.ResultType == model.ValVector.String() {
 		res := struct {
 			ResultType string                   `json:"resultType"`
-			Data       []*Sample                `json:"data"`
+			Data       []*Sample                `json:"result"`
 			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
 		}{
 			ResultType: s.ResultType,
@@ -509,7 +509,7 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 	// Other cases only include scalar and string.
 	res := struct {
 		ResultType string                   `json:"resultType"`
-		Data       *cortexpb.Sample         `json:"data"`
+		Data       *cortexpb.Sample         `json:"result"`
 		Stats      *PrometheusResponseStats `json:"stats,omitempty"`
 	}{
 		ResultType: s.ResultType,
