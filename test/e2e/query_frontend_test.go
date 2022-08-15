@@ -589,3 +589,69 @@ func TestRangeQueryShardingWithRandomData(t *testing.T) {
 
 	testutil.Equals(t, resultWithoutSharding, resultWithSharding)
 }
+
+func TestInstantQueryShardingWithRandomData(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e_test_instant_query_sharding_random_data")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "")
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+
+	now := model.Now()
+	ctx := context.Background()
+	timeSeries := []labels.Labels{
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "1"}, {Name: "handler", Value: "/"}},
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "1"}, {Name: "handler", Value: "/metrics"}},
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "2"}, {Name: "handler", Value: "/"}},
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "2"}, {Name: "handler", Value: "/metrics"}},
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "3"}, {Name: "handler", Value: "/"}},
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "3"}, {Name: "handler", Value: "/metrics"}},
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "4"}, {Name: "handler", Value: "/"}},
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "4"}, {Name: "handler", Value: "/metrics"}},
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "5"}, {Name: "handler", Value: "/"}},
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "5"}, {Name: "handler", Value: "/metrics"}},
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/"}},
+		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/metrics"}},
+	}
+
+	startTime := now.Time().Add(-1 * time.Hour)
+	endTime := now.Time().Add(1 * time.Hour)
+	_, err = e2eutil.CreateBlock(ctx, prom.Dir(), timeSeries, 20, timestamp.FromTime(startTime), timestamp.FromTime(endTime), nil, 0, metadata.NoneFunc)
+	testutil.Ok(t, err)
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	stores := []string{sidecar.InternalEndpoint("grpc")}
+	q1 := e2ethanos.NewQuerierBuilder(e, "q1", stores...).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q1))
+
+	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
+		Type: queryfrontend.INMEMORY,
+		Config: queryfrontend.InMemoryResponseCacheConfig{
+			MaxSizeItems: 1000,
+			Validity:     time.Hour,
+		},
+	}
+	config := queryfrontend.Config{
+		QueryRangeConfig: queryfrontend.QueryRangeConfig{
+			AlignRangeWithStep: false,
+		},
+		NumShards: 2,
+	}
+	qfe := e2ethanos.NewQueryFrontend(e, "query-frontend", "http://"+q1.InternalEndpoint("http"), config, inMemoryCacheConfig)
+	testutil.Ok(t, e2e.StartAndWaitReady(qfe))
+
+	qryFunc := func() string { return `sum by (pod) (http_requests_total)` }
+	expectedSeries := 6
+	queryOpts := promclient.QueryOptions{Deduplicate: true}
+
+	resultWithoutSharding := instantQuery(t, ctx, q1.Endpoint("http"), qryFunc, func() time.Time {
+		return now.Time()
+	}, queryOpts, expectedSeries)
+	resultWithSharding := instantQuery(t, ctx, qfe.Endpoint("http"), qryFunc, func() time.Time {
+		return now.Time()
+	}, queryOpts, expectedSeries)
+	testutil.Equals(t, resultWithoutSharding, resultWithSharding)
+}
