@@ -207,31 +207,31 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 		},
 	}
 	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil)
-	ms := []*labels.Matcher {
+	ms := []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a", Value: "b"},
-		}
+	}
 	res, _ := b.FilterExtLabelsMatchers(ms)
 	testutil.Equals(t, len(res), 0)
 
-	ms = []*labels.Matcher {
+	ms = []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
-		}
+	}
 	_, ok := b.FilterExtLabelsMatchers(ms)
 	testutil.Equals(t, ok, false)
 
-	ms = []*labels.Matcher {
+	ms = []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
-			{Type: labels.MatchNotEqual, Name: "c", Value: "d"},
-		}
+		{Type: labels.MatchNotEqual, Name: "c", Value: "d"},
+	}
 	res, _ = b.FilterExtLabelsMatchers(ms)
 	testutil.Equals(t, len(res), 0)
 
-	ms = []*labels.Matcher {
+	ms = []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a2", Value: "a"},
-		}
+	}
 	res, _ = b.FilterExtLabelsMatchers(ms)
 	testutil.Equals(t, len(res), 1)
-	testutil.Equals(t, res, ms)	
+	testutil.Equals(t, res, ms)
 }
 
 func TestBucketBlock_matchLabels(t *testing.T) {

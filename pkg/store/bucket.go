@@ -1349,7 +1349,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*labels.Matcher, bool) {
 	// we filter external labels from matchers
 	// so it won't try to match series on them.
-	var result []*labels.Matcher	
+	var result []*labels.Matcher
 	for _, m := range matchers {
 		// get value of external label from block
 		v := b.extLset.Get(m.Name)
@@ -1405,7 +1405,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		if len(reqBlockMatchers) > 0 && !b.matchRelabelLabels(reqBlockMatchers) {
 			continue
 		}
-				// filter ext labels
+		// filter ext labels
 		reqSeriesMatchersNoExtLabels, ok := b.FilterExtLabelsMatchers(reqSeriesMatchers)
 		if !ok {
 			continue
