@@ -188,6 +188,52 @@ func TestBucketBlock_Property(t *testing.T) {
 	properties.TestingRun(t)
 }
 
+func TestBucketFilterExtLabelsMatchers(t *testing.T) {
+	defer testutil.TolerantVerifyLeak(t)
+
+	dir := t.TempDir()
+	bkt, err := filesystem.NewBucket(dir)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	blockID := ulid.MustNew(1, nil)
+	meta := &metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{ULID: blockID},
+		Thanos: metadata.Thanos{
+			Labels: map[string]string{
+				"a": "b",
+				"c": "d",
+			},
+		},
+	}
+	b, err := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil)
+	ms := []*labels.Matcher {
+		{Type: labels.MatchNotEqual, Name: "a", Value: "b"},
+		}
+	res, _ := b.FilterExtLabelsMatchers(ms)
+	testutil.Equals(t, len(res), 0)
+
+	ms = []*labels.Matcher {
+		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
+		}
+	_, ok := b.FilterExtLabelsMatchers(ms)
+	testutil.Equals(t, ok, false)
+
+	ms = []*labels.Matcher {
+		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
+			{Type: labels.MatchNotEqual, Name: "c", Value: "d"},
+		}
+	res, _ = b.FilterExtLabelsMatchers(ms)
+	testutil.Equals(t, len(res), 0)
+
+	ms = []*labels.Matcher {
+		{Type: labels.MatchNotEqual, Name: "a2", Value: "a"},
+		}
+	res, _ = b.FilterExtLabelsMatchers(ms)
+	testutil.Equals(t, len(res), 1)
+	testutil.Equals(t, res, ms)	
+}
+
 func TestBucketBlock_matchLabels(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
 
