@@ -1254,7 +1254,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		if len(reqBlockMatchers) > 0 && !b.matchRelabelLabels(reqBlockMatchers) {
 			continue
 		}
-		// filter ext labels
+		// Filter external labels from matchers.
 		reqSeriesMatchersNoExtLabels, ok := b.FilterExtLabelsMatchers(reqSeriesMatchers)
 		if !ok {
 			continue
@@ -1347,17 +1347,16 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 }
 
 func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*labels.Matcher, bool) {
-	// we filter external labels from matchers
-	// so it won't try to match series on them.
+	// We filter external labels from matchers so we won't try to match series on them.
 	var result []*labels.Matcher
 	for _, m := range matchers {
-		// get value of external label from block
+		// Get value of external label from block.
 		v := b.extLset.Get(m.Name)
-		// if value is empty string the matcher is a valid one since it's not part of external labels
+		// If value is empty string the matcher is a valid one since it's not part of external labels.
 		if v == "" {
 			result = append(result, m)
 		} else if v != "" && v != m.Value {
-			// if matcher is external label but value is different we don't want to look in block anyway
+			// If matcher is external label but value is different we don't want to look in block anyway.
 			return []*labels.Matcher{}, false
 		}
 	}
@@ -1405,7 +1404,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		if len(reqBlockMatchers) > 0 && !b.matchRelabelLabels(reqBlockMatchers) {
 			continue
 		}
-		// filter ext labels
+		// Filter external labels from matchers.
 		reqSeriesMatchersNoExtLabels, ok := b.FilterExtLabelsMatchers(reqSeriesMatchers)
 		if !ok {
 			continue
