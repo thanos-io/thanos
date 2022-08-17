@@ -1,0 +1,11 @@
+containers:
+  default:
+    build:
+      from: ubuntu-latest
+      type: ci
+
+steps:
+  - label: Tests
+    timeout: 5m
+    run:
+    - echo "Hello World"
