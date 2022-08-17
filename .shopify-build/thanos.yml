@@ -1,7 +1,7 @@
 containers:
   thanos:
     dockerfile:
-      path: Dockerfile.multi-stage
+      path: Dockerfile.shopify
 
 steps:
   - build: thanos
