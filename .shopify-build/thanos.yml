@@ -1,11 +1,7 @@
 containers:
-  default:
-    build:
-      from: ubuntu-latest
-      type: ci
+  thanos:
+    dockerfile:
+      path: Dockerfile.multi-stage
 
 steps:
-  - label: Tests
-    timeout: 5m
-    run:
-    - echo "Hello World"
+  - build: thanos
