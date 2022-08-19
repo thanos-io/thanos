@@ -586,8 +586,16 @@ func runQuery(
 		grpcProbe,
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
-	engineCreator := engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta, activeQueryDir,
-		maxConcurrentQueries, logger)
+
+	// An active query tracker will be added only if the user specifies a non-default path.
+	// Otherwise, the nil active query tracker from existing engine options will be used.
+	if activeQueryDir != "" {
+		engineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
+	} else {
+		engineOpts.ActiveQueryTracker = engineOpts.ActiveQueryTracker
+	}
+	engine := promql.NewEngine(engineOpts)
+	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts, dynamicLookbackDelta)
 
 	// Start query API + UI HTTP server.
 	{
@@ -617,7 +625,8 @@ func runQuery(
 		api := apiv1.NewQueryAPI(
 			logger,
 			endpoints.GetEndpointStatus,
-			engineCreator,
+			engine,
+			lookbackDeltaCreator,
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
 			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
@@ -692,7 +701,7 @@ func runQuery(
 			info.WithQueryAPIInfoFunc(),
 		)
 
-		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, engineCreator, instantDefaultMaxSourceResolution)
+		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, engine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
@@ -735,6 +744,41 @@ func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus
 		deduplicated = append(deduplicated, value)
 	}
 	return deduplicated
+}
+
+func LookbackDeltaFactory(
+	eo promql.EngineOpts,
+	dynamicLookbackDelta bool,
+) func(int64) time.Duration {
+	resolutions := []int64{downsample.ResLevel0}
+	if dynamicLookbackDelta {
+		resolutions = []int64{downsample.ResLevel0, downsample.ResLevel1, downsample.ResLevel2}
+	}
+	var (
+		lds = make([]time.Duration, len(resolutions))
+		ld  = eo.LookbackDelta.Milliseconds()
+	)
+
+	lookbackDelta := eo.LookbackDelta
+	for i, r := range resolutions {
+		if ld < r {
+			lookbackDelta = time.Duration(r) * time.Millisecond
+		}
+
+		lds[i] = lookbackDelta
+	}
+	return func(maxSourceResolutionMillis int64) time.Duration {
+		for i := len(resolutions) - 1; i >= 1; i-- {
+			left := resolutions[i-1]
+			if resolutions[i-1] < ld {
+				left = ld
+			}
+			if left < maxSourceResolutionMillis {
+				return lds[i]
+			}
+		}
+		return lds[0]
+	}
 }
 
 // engineFactory creates from 1 to 3 promql.Engines depending on
