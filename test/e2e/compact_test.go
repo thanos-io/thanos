@@ -344,7 +344,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	dir := filepath.Join(e.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 
-	const bucket = "compact_test"
+	const bucket = "compact-test"
 	m := e2ethanos.NewMinio(e, "minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
