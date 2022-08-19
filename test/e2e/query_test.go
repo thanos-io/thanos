@@ -586,7 +586,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
 
-	const bucket = "store_gateway_test"
+	const bucket = "store-gateway-test"
 	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
