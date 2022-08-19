@@ -465,6 +465,7 @@ func setupHashring(g *run.Group,
 	// In the single-node case, which has no configuration
 	// watcher, we close the chan ourselves.
 	updates := make(chan receive.Hashring, 1)
+	algorithm := receive.HashringAlgorithm(conf.hashringsAlgorithm)
 
 	// The Hashrings config file path is given initializing config watcher.
 	if conf.hashringsFilePath != "" {
@@ -483,7 +484,7 @@ func setupHashring(g *run.Group,
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "the hashring initialized with config watcher.")
-			return receive.HashringFromConfigWatcher(ctx, receive.HashringAlgorithm(conf.hashringsAlgorithm), updates, cw)
+			return receive.HashringFromConfigWatcher(ctx, algorithm, conf.replicationFactor, updates, cw)
 		}, func(error) {
 			cancel()
 		})
@@ -494,7 +495,7 @@ func setupHashring(g *run.Group,
 		)
 		// The Hashrings config file content given initialize configuration from content.
 		if len(conf.hashringsFileContent) > 0 {
-			ring, err = receive.HashringFromConfig(receive.HashringAlgorithm(conf.hashringsAlgorithm), conf.hashringsFileContent)
+			ring, err = receive.HashringFromConfig(algorithm, conf.replicationFactor, conf.hashringsFileContent)
 			if err != nil {
 				close(updates)
 				return errors.Wrap(err, "failed to validate hashring configuration file")
@@ -620,7 +621,8 @@ func startTSDBAndUpload(g *run.Group,
 				// ingest additional series.
 				// If receivers are removed from the hashring, existing receivers will only need
 				// to ingest a subset of the series that were assigned to the removed receivers.
-				// As a result, changing the hashring produces no churn, hence no need to force head compaction.
+				// As a result, changing the hashring produces no churn, hence no need to force
+				// head compaction and upload.
 				flushHead := !initialized || hashringAlgorithm != receive.AlgorithmKetama
 				if flushHead {
 					level.Info(logger).Log("msg", "updating storage")
