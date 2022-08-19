@@ -66,13 +66,14 @@ message PrometheusInstantQueryData {
 
 message PrometheusInstantQueryResult {
   oneof result {
-    cortexpb.Sample sample = 1;
-    Vector samples = 2;
+    cortexpb.Sample scalar = 1;
+    StringSample stringSample = 2;
+    Vector vector = 3;
   }
 }
 
 message Vector {
-  repeated Sample Result = 1;
+  repeated Sample samples = 1;
 }
 
 message PrometheusResponseStats {
@@ -97,6 +98,11 @@ message SampleStream {
 message Sample {
   repeated cortexpb.LabelPair labels = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "metric", (gogoproto.customtype) = "github.com/thanos-io/thanos/internal/cortex/cortexpb.LabelAdapter"];
   cortexpb.Sample sample = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "value"];
+}
+
+message StringSample {
+  string value = 1;
+  int64 timestamp_ms = 2;
 }
 
 message CachedResponse  {

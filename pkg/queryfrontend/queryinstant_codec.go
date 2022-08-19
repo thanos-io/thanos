@@ -38,6 +38,9 @@ func NewThanosQueryInstantCodec(partialResponse bool) *queryInstantCodec {
 	}
 }
 
+// MergeResponse merges multiple responses into a single response.
+// For instant query only vector responses will be merged because other types of queries
+// are not shardable like number literal, string literal, scalar, etc.
 func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (queryrange.Response, error) {
 	if len(responses) == 0 {
 		return queryrange.NewEmptyPrometheusInstantQueryResponse(), nil
@@ -54,8 +57,8 @@ func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (quer
 		Data: queryrange.PrometheusInstantQueryData{
 			ResultType: model.ValVector.String(),
 			Result: queryrange.PrometheusInstantQueryResult{
-				Result: &queryrange.PrometheusInstantQueryResult_Samples{
-					Samples: vectorMerge(promResponses),
+				Result: &queryrange.PrometheusInstantQueryResult_Vector{
+					Vector: vectorMerge(promResponses),
 				},
 			},
 			Stats: queryrange.StatsMerge(responses),
@@ -227,19 +230,32 @@ func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response,
 func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Vector {
 	output := map[string]*queryrange.Sample{}
 	for _, resp := range resps {
-		// Merge vector result samples only. Skip other types such as
-		// string, scalar as those are not sharable.
-		if resp.Data.Result.GetSamples() == nil {
+		if resp == nil {
 			continue
 		}
-		for _, sample := range resp.Data.Result.GetSamples().Result {
+		// Merge vector result samples only. Skip other types such as
+		// string, scalar as those are not sharable.
+		if resp.Data.Result.GetVector() == nil {
+			continue
+		}
+		for _, sample := range resp.Data.Result.GetVector().Samples {
 			s := sample
+			if s == nil {
+				continue
+			}
 			metric := cortexpb.FromLabelAdaptersToLabels(sample.Labels).String()
 			if existingSample, ok := output[metric]; !ok {
 				output[metric] = s
 			} else if existingSample.GetSample().TimestampMs < s.GetSample().TimestampMs {
+				// Choose the latest sample if we see overlap.
 				output[metric] = s
 			}
+		}
+	}
+
+	if len(output) == 0 {
+		return &queryrange.Vector{
+			Samples: make([]*queryrange.Sample, 0),
 		}
 	}
 
@@ -250,10 +266,10 @@ func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange
 	sort.Strings(keys)
 
 	result := &queryrange.Vector{
-		Result: make([]*queryrange.Sample, 0, len(output)),
+		Samples: make([]*queryrange.Sample, 0, len(output)),
 	}
 	for _, key := range keys {
-		result.Result = append(result.Result, output[key])
+		result.Samples = append(result.Samples, output[key])
 	}
 	return result
 }
