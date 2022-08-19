@@ -499,6 +499,18 @@ func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 				Samples: result.Samples,
 			}},
 		}
+	case model.ValMatrix.String():
+		var result struct {
+			SampleStreams []*SampleStream `json:"result"`
+		}
+		if err := json.Unmarshal(data, &result); err != nil {
+			return err
+		}
+		s.Result = PrometheusInstantQueryResult{
+			Result: &PrometheusInstantQueryResult_Matrix{Matrix: &Matrix{
+				SampleStreams: result.SampleStreams,
+			}},
+		}
 	case model.ValScalar.String():
 		var result struct {
 			Scalar cortexpb.Sample `json:"result"`
@@ -523,7 +535,6 @@ func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 			}},
 		}
 	default:
-		// Matrix result type or other malformed types.
 		return errors.New(fmt.Sprintf("%s result type not supported for PrometheusInstantQueryData", s.ResultType))
 	}
 	return nil
@@ -540,6 +551,17 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 		}{
 			ResultType: s.ResultType,
 			Data:       s.Result.GetVector().Samples,
+			Stats:      s.Stats,
+		}
+		return json.Marshal(res)
+	case model.ValMatrix.String():
+		res := struct {
+			ResultType string                   `json:"resultType"`
+			Data       []*SampleStream          `json:"result"`
+			Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+		}{
+			ResultType: s.ResultType,
+			Data:       s.Result.GetMatrix().SampleStreams,
 			Stats:      s.Stats,
 		}
 		return json.Marshal(res)
@@ -566,7 +588,6 @@ func (s *PrometheusInstantQueryData) MarshalJSON() ([]byte, error) {
 		}
 		return json.Marshal(res)
 	default:
-		// Matrix result type or other malformed types.
 		return nil, errors.New(fmt.Sprintf("%s result type not supported for PrometheusInstantQueryData", s.ResultType))
 	}
 }

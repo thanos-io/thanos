@@ -69,11 +69,16 @@ message PrometheusInstantQueryResult {
     cortexpb.Sample scalar = 1;
     StringSample stringSample = 2;
     Vector vector = 3;
+    Matrix matrix = 4;
   }
 }
 
 message Vector {
   repeated Sample samples = 1;
+}
+
+message Matrix {
+  repeated SampleStream sampleStreams = 1;
 }
 
 message PrometheusResponseStats {
