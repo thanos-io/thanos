@@ -492,14 +492,14 @@ config:
 					ActiveTargets: []*targetspb.ActiveTarget{
 						{
 							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-								{Name: "__address__", Value: fmt.Sprintf("e2e_test_query_comp_query_%d-querier-1:8080", i)},
+								{Name: "__address__", Value: fmt.Sprintf("e2e-test-query-comp-query-%d-querier-1:8080", i)},
 								{Name: "__metrics_path__", Value: "/metrics"},
 								{Name: "__scheme__", Value: "http"},
 								{Name: "job", Value: "myself"},
 								{Name: "prometheus", Value: "p1"},
 							}},
 							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-								{Name: "instance", Value: fmt.Sprintf("e2e_test_query_comp_query_%d-querier-1:8080", i)},
+								{Name: "instance", Value: fmt.Sprintf("e2e-test-query-comp-query-%d-querier-1:8080", i)},
 								{Name: "job", Value: "myself"},
 								{Name: "prometheus", Value: "p1"},
 							}},
