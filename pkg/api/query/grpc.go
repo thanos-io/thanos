@@ -76,7 +76,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	if len(request.ReplicaLabels) != 0 {
 		replicaLabels = request.ReplicaLabels
 	}
-	//	qe := g.queryEngine(request.MaxResolutionSeconds)
+
 	queryable := g.queryableCreate(
 		request.EnableDedup,
 		replicaLabels,
@@ -150,7 +150,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	if len(request.ReplicaLabels) != 0 {
 		replicaLabels = request.ReplicaLabels
 	}
-	// qe := g.queryEngine(request.MaxResolutionSeconds)
+
 	queryable := g.queryableCreate(
 		request.EnableDedup,
 		replicaLabels,
