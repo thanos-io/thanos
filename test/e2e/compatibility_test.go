@@ -6,7 +6,6 @@ package e2e_test
 import (
 	"bytes"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"io"
 	"net/http"
 	"os"
@@ -16,8 +15,10 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
+
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
