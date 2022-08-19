@@ -6,7 +6,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -111,7 +111,7 @@ config:
 		// We got a 200 response.
 		defer response.Body.Close()
 
-		body, err := ioutil.ReadAll(response.Body)
+		body, err := io.ReadAll(response.Body)
 		testutil.Ok(t, err)
 
 		t.Logf("\n\n the resp is: %s", string(body))

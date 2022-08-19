@@ -85,11 +85,11 @@ require (
 	go.etcd.io/etcd/api/v3 v3.5.4
 	go.etcd.io/etcd/client/pkg/v3 v3.5.4
 	go.etcd.io/etcd/client/v3 v3.5.4
-	go.opentelemetry.io/contrib/propagators/ot v1.4.0
-	go.opentelemetry.io/otel v1.8.0
+	go.opentelemetry.io/contrib/propagators/ot v1.9.0 // indirect
+	go.opentelemetry.io/otel v1.9.0
 	go.opentelemetry.io/otel/bridge/opentracing v1.8.0
-	go.opentelemetry.io/otel/sdk v1.8.0
-	go.opentelemetry.io/otel/trace v1.8.0
+	go.opentelemetry.io/otel/sdk v1.9.0
+	go.opentelemetry.io/otel/trace v1.9.0
 	go.uber.org/atomic v1.9.0
 	go.uber.org/automaxprocs v1.5.1
 	go.uber.org/goleak v1.1.12
@@ -141,6 +141,8 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.8.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.8.0
 )
+
+require go.opentelemetry.io/contrib/propagators/autoprop v0.34.0
 
 require (
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
@@ -268,6 +270,9 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.34.0 // indirect
 	go.opentelemetry.io/otel/metric v0.31.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.32.0 // indirect
+	go.opentelemetry.io/contrib/propagators/aws v1.9.0 // indirect
+	go.opentelemetry.io/contrib/propagators/b3 v1.9.0 // indirect
+	go.opentelemetry.io/contrib/propagators/jaeger v1.9.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.8.0 // indirect
 	go.opentelemetry.io/otel/metric v0.30.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.18.0 // indirect

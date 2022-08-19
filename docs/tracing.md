@@ -114,8 +114,6 @@ You will also need to ensure that the authentication with the API is working, fo
 *Note:* The `type` in the configuration below can have either value `GOOGLE_CLOUD` or `STACKDRIVER` - this is to ensure backwards compatibility.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=google_cloud.Config"
-# github.com/shirou/gopsutil/v3/cpu
-../../../go/pkg/mod/github.com/shirou/gopsutil/v3@v3.21.2/cpu/cpu_darwin_cgo.go:13:5: warning: 'TARGET_OS_MAC' is not defined, evaluates to 0 [-Wundef-prefix=TARGET_OS_]
 type: GOOGLE_CLOUD
 config:
   service_name: ""
@@ -128,8 +126,6 @@ config:
 Client for https://www.elastic.co/products/apm tracing.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=elasticapm.Config"
-# github.com/shirou/gopsutil/v3/cpu
-../../../go/pkg/mod/github.com/shirou/gopsutil/v3@v3.21.2/cpu/cpu_darwin_cgo.go:13:5: warning: 'TARGET_OS_MAC' is not defined, evaluates to 0 [-Wundef-prefix=TARGET_OS_]
 type: ELASTIC_APM
 config:
   service_name: ""
@@ -145,8 +141,6 @@ Client for [Lightstep](https://lightstep.com).
 In order to configure Thanos to interact with Lightstep you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-use-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=lightstep.Config"
-# github.com/shirou/gopsutil/v3/cpu
-../../../go/pkg/mod/github.com/shirou/gopsutil/v3@v3.21.2/cpu/cpu_darwin_cgo.go:13:5: warning: 'TARGET_OS_MAC' is not defined, evaluates to 0 [-Wundef-prefix=TARGET_OS_]
 type: LIGHTSTEP
 config:
   access_token: ""
