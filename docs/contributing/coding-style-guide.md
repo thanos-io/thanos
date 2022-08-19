@@ -239,7 +239,7 @@ NOTE: This is because, in very simple view, the Go runtime allocates 2 times the
 <tr><td>
 
 ```go
-func copyIntoSliceAndMap(biggy []string) (a []string, b map[string]struct{})
+func copyIntoSliceAndMap(biggy []string) (a []string, b map[string]struct{}){
     b = map[string]struct{}{}
 
     for _, item := range biggy {
@@ -254,7 +254,7 @@ func copyIntoSliceAndMap(biggy []string) (a []string, b map[string]struct{})
 <tr><td>
 
 ```go
-func copyIntoSliceAndMap(biggy []string) (a []string, b map[string]struct{})
+func copyIntoSliceAndMap(biggy []string) (a []string, b map[string]struct{}){
     b = make(map[string]struct{}, len(biggy))
     a = make([]string, len(biggy))
 
@@ -405,7 +405,7 @@ type Cleaner interface {
 
 func (s *myStruct) doSomethingAndHandleError() {
     if err := doSomething(); err != nil {
-        level.Error(s.logger).Log("msg" "failed to do something; sorry", "err", err)
+        level.Error(s.logger).Log("msg", "failed to do something; sorry", "err", err)
     }
 }
 ```
@@ -417,7 +417,7 @@ func (s *myStruct) doSomethingAndHandleError() {
 ```go
     // Some code...
     if err := doSomething(); err != nil {
-        level.Error(s.logger).Log("msg" "failed to do something; sorry", "err", err)
+        level.Error(s.logger).Log("msg", "failed to do something; sorry", "err", err)
     }
 
     // Some code...
@@ -599,7 +599,7 @@ It's tempting to define a variable as an intermittent step to create something b
 
 ```go
 	// This variable is required for potentially consistent results. It is used twice.
-	someConfig := a.FetchConfig()
+	someConfig := a.GetConfig()
 	return &MyType{
 		HostPort:  fmt.Sprintf("%s:%d", someConfig.Addresses[124].Host, someConfig.Addresses[124].Port),
 		SomeOther: thing,
@@ -637,7 +637,7 @@ func function(
 	argument4 someType,
 	argument5 float64,
 	argument6 time.Time,
-) (ret int, err error)
+) (ret int, err error) {
 ```
 
 </td></tr>
@@ -669,7 +669,7 @@ In most of the cases, you don't need `else`. You can usually use `continue`, `br
 for _, elem := range elems {
     if a == 1 {
         something[i] = "yes"
-    } else
+    } else {
         something[i] = "no"
     }
 }
@@ -731,7 +731,7 @@ Blank identifiers are very useful to mark variables that are not used. Consider 
 ```go
 // We don't need the second return parameter.
 // Let's use the blank identifier instead.
-a, _, err := function1(...)
+a, _ , err := function1(...)
 if err != nil {
     // handle err
 }
@@ -806,7 +806,7 @@ testutil.Equals(t, "1234", port)
 host, port, err = net.SplitHostPort("1.2.3.4:something")
 testutil.Ok(t, err)
 testutil.Equals(t, "1.2.3.4", host)
-testutil.Equals(t, "http", port)
+testutil.Equals(t, "something", port)
 
 host, port, err = net.SplitHostPort(":1234")
 testutil.Ok(t, err)
@@ -833,29 +833,25 @@ for _, tcase := range []struct{
 }{
     {
         name: "host and port",
-
-        input:     "1.2.3.4:1234",
+        input:  "1.2.3.4:1234",
         expectedHost: "1.2.3.4",
         expectedPort: "1234",
     },
     {
         name: "host and named port",
-
-        input:     "1.2.3.4:something",
+        input:  "1.2.3.4:something",
         expectedHost: "1.2.3.4",
         expectedPort: "something",
     },
     {
         name: "just port",
-
-        input:     ":1234",
+        input: ":1234",
         expectedHost: "",
         expectedPort: "1234",
     },
     {
         name: "not valid hostport",
-
-        input:     "yolo",
+        input:  "yolo",
         expectedErr: errors.New("<exact error>")
     },
 }{
