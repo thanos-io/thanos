@@ -5,33 +5,17 @@ package jaeger
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/opentracing/opentracing-go"
-	"github.com/uber/jaeger-client-go"
 	"go.opentelemetry.io/otel/attribute"
 	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"gopkg.in/yaml.v2"
 )
-
-// Tracer extends opentracing.Tracer.
-type Tracer struct {
-	opentracing.Tracer
-}
-
-// GetTraceIDFromSpanContext return TraceID from span.Context.
-func (t *Tracer) GetTraceIDFromSpanContext(ctx opentracing.SpanContext) (string, bool) {
-	if c, ok := ctx.(jaeger.SpanContext); ok {
-		return fmt.Sprintf("%016x", c.TraceID().Low), true
-	}
-	return "", false
-}
 
 // NewTracerProvider returns a new instance of an OpenTelemetry tracer provider.
 func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tracesdk.TracerProvider, error) {
