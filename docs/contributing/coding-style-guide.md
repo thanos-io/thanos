@@ -667,11 +667,11 @@ In most of the cases, you don't need `else`. You can usually use `continue`, `br
 
 ```go
 for _, elem := range elems {
-    if a == 1 {
-        something[i] = "yes"
-    } else {
-        something[i] = "no"
-    }
+	if a == 1 {
+		something[i] = "yes"
+	} else {
+		something[i] = "no"
+	}
 }
 ```
 
