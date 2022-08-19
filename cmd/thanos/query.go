@@ -781,16 +781,3 @@ func LookbackDeltaFactory(
 		return lds[0]
 	}
 }
-
-func getActiveQueryDirBasedOnResolution(resolution int64) string {
-	if resolution == downsample.ResLevel0 {
-		return "raw"
-	}
-	if resolution == downsample.ResLevel1 {
-		return "5m"
-	}
-	if resolution == downsample.ResLevel2 {
-		return "1h"
-	}
-	return ""
-}
