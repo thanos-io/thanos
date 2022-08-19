@@ -199,9 +199,8 @@ func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) e2e.Instru
 		"--remote-tenant":         o.TenantID,
 	})
 
-	// Using this particular image as https://github.com/prometheus-community/avalanche/pull/25 is not merged yet.
 	return f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image:   "quay.io/observatorium/avalanche:make-tenant-header-configurable-2021-10-07-0a2cbf5",
+		Image:   "quay.io/observatorium/avalanche:main",
 		Command: e2e.NewCommandWithoutEntrypoint("avalanche", args...),
 	}))
 }
@@ -880,7 +879,7 @@ func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable 
 
 	commands := []string{
 		fmt.Sprintf("curl -sSL --tlsv1.2 -O '%s/root.key' -O '%s/root.cert'", minioKESGithubContent, minioKESGithubContent),
-		fmt.Sprintf("mkdir -p /data/%s && minio server --certs-dir %s/certs --address :%v --console-address :%v --quiet /data", bktName, f.InternalDir(), httpsPort, consolePort),
+		fmt.Sprintf("mkdir -p /data/%s && minio server --certs-dir %s/certs --address :%v --console-address :%v /data", bktName, f.InternalDir(), httpsPort, consolePort),
 	}
 
 	minio := f.Init(e2e.StartOptions{
