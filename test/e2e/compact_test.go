@@ -333,9 +333,9 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		},
 	)
 
-	name := "e2e_test_compact"
+	name := "e2e-test-compact"
 	if penaltyDedup {
-		name = "e2e_test_compact_penalty_dedup"
+		name = "e2e-test-compact-penalty-dedup"
 	}
 	e, err := e2e.NewDockerEnvironment(name)
 	testutil.Ok(t, err)

@@ -27,7 +27,7 @@ import (
 func TestInfo(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_info")
+	e, err := e2e.NewDockerEnvironment("e2e-test-info")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -72,7 +72,7 @@ func TestInfo(t *testing.T) {
 	expected := map[string][]query.EndpointStatus{
 		"sidecar": {
 			{
-				Name: "e2e_test_info-sidecar-alone1:9091",
+				Name: "e2e-test-info-sidecar-alone1:9091",
 				LabelSets: []labels.Labels{{
 					{
 						Name:  "prometheus",
@@ -85,7 +85,7 @@ func TestInfo(t *testing.T) {
 				}},
 			},
 			{
-				Name: "e2e_test_info-sidecar-alone2:9091",
+				Name: "e2e-test-info-sidecar-alone2:9091",
 				LabelSets: []labels.Labels{{
 					{
 						Name:  "prometheus",
@@ -98,7 +98,7 @@ func TestInfo(t *testing.T) {
 				}},
 			},
 			{
-				Name: "e2e_test_info-sidecar-alone3:9091",
+				Name: "e2e-test-info-sidecar-alone3:9091",
 				LabelSets: []labels.Labels{{
 					{
 						Name:  "prometheus",
@@ -113,7 +113,7 @@ func TestInfo(t *testing.T) {
 		},
 		"store": {
 			{
-				Name:      "e2e_test_info-store-gw-1:9091",
+				Name:      "e2e-test-info-store-gw-1:9091",
 				LabelSets: []labels.Labels{},
 			},
 		},

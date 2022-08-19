@@ -122,7 +122,7 @@ func TestAlertCompliance(t *testing.T) {
 	t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator. This tool is not optimized for CI runs (e.g. it infinitely retries, takes 38 minutes)")
 
 	t.Run("stateful ruler", func(t *testing.T) {
-		e, err := e2e.NewDockerEnvironment("alert_compatibility")
+		e, err := e2e.NewDockerEnvironment("alert-compatibility")
 		testutil.Ok(t, err)
 		t.Cleanup(e.Close)
 

@@ -39,7 +39,7 @@ const testQuery = "{a=\"1\"}"
 func TestStoreGateway(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_store_gateway")
+	e, err := e2e.NewDockerEnvironment("e2e-test-store-gateway")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -277,7 +277,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 func TestStoreGatewayMemcachedCache(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_store_gateway_memcached_cache")
+	e, err := e2e.NewDockerEnvironment("e2e-test-store-gateway-memcached-cache")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -379,7 +379,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 func TestStoreGatewayGroupCache(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_store_gateway_groupcache")
+	e, err := e2e.NewDockerEnvironment("e2e-test-store-gateway-groupcache")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -389,12 +389,12 @@ func TestStoreGatewayGroupCache(t *testing.T) {
 
 	groupcacheConfig := `type: GROUPCACHE
 config:
-  self_url: http://e2e_test_store_gateway_groupcache-store-gw-%d:8080
+  self_url: http://e2e-test-store-gateway-groupcache-store-gw-%d:8080
   peers:
-    - http://e2e_test_store_gateway_groupcache-store-gw-1:8080
-    - http://e2e_test_store_gateway_groupcache-store-gw-2:8080
-    - http://e2e_test_store_gateway_groupcache-store-gw-3:8080
-  groupcache_group: groupcache_test_group
+    - http://e2e-test-store-gateway-groupcache-store-gw-1:8080
+    - http://e2e-test-store-gateway-groupcache-store-gw-2:8080
+    - http://e2e-test-store-gateway-groupcache-store-gw-3:8080
+  groupcache_group: groupcache-test-group
   dns_interval: 1s
 blocks_iter_ttl: 0s
 metafile_exists_ttl: 0s

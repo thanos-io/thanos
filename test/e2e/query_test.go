@@ -74,7 +74,7 @@ func sortResults(res model.Vector) {
 func TestSidecarNotReady(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_sidecar_not_ready")
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-sidecar-not-ready")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -107,7 +107,7 @@ func TestSidecarNotReady(t *testing.T) {
 func TestQuery(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query")
+	e, err := e2e.NewDockerEnvironment("e2e-test-query")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -190,7 +190,7 @@ func TestQuery(t *testing.T) {
 func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_route_prefix")
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-route-prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -206,7 +206,7 @@ func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 func TestQueryExternalPrefix(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_external_prefix")
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-external-prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -227,7 +227,7 @@ func TestQueryExternalPrefix(t *testing.T) {
 func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_external_prefix_and_route_prefix")
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-external-prefix-and-route-prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -252,7 +252,7 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 func TestQueryLabelNames(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_label_names")
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-label-names")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -299,7 +299,7 @@ func TestQueryLabelNames(t *testing.T) {
 func TestQueryLabelValues(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_label_values")
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-label-values")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -342,7 +342,7 @@ func TestQueryLabelValues(t *testing.T) {
 func TestQueryWithAuthorizedSidecar(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_authorized_sidecar")
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-authorized-sidecar")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -386,7 +386,7 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 	} {
 		i := i
 		t.Run(fmt.Sprintf("%+v", tcase), func(t *testing.T) {
-			e, err := e2e.NewDockerEnvironment(fmt.Sprintf("e2e_test_query_comp_query_%d", i))
+			e, err := e2e.NewDockerEnvironment(fmt.Sprintf("e2e-test-query-comp-query-%d", i))
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -579,7 +579,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 	t.Parallel()
 
 	// Build up.
-	e, err := e2e.NewDockerEnvironment("e2e_sidecar_store_pushdown")
+	e, err := e2e.NewDockerEnvironment("e2e-sidecar-store-pushdown")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -791,7 +791,7 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 
 	for _, tc := range ts {
 		t.Run(tc.query, func(t *testing.T) {
-			e, err := e2e.NewDockerEnvironment("e2e_test_query_pushdown")
+			e, err := e2e.NewDockerEnvironment("e2e-test-query-pushdown")
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1199,7 +1199,7 @@ func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
 
 	for _, tc := range ts {
 		t.Run(tc.query, func(t *testing.T) {
-			e, err := e2e.NewDockerEnvironment("e2e_test_query_pushdown_dedup")
+			e, err := e2e.NewDockerEnvironment("e2e-test-query-pushdown-dedup")
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1239,7 +1239,7 @@ func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
 func TestSidecarAlignmentPushdown(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_pushdown_min_max_time")
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-pushdown-min-max-time")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1320,7 +1320,7 @@ func TestSidecarAlignmentPushdown(t *testing.T) {
 func TestGrpcInstantQuery(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_grpc_api_instant")
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-grpc-api-instant")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1426,7 +1426,7 @@ func TestGrpcInstantQuery(t *testing.T) {
 func TestGrpcQueryRange(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_query_grpc_api_range")
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-grpc-api-range")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
