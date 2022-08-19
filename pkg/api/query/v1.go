@@ -82,12 +82,12 @@ type QueryAPI struct {
 	gate            gate.Gate
 	queryableCreate query.QueryableCreator
 	// queryEngine returns appropriate promql.Engine for a query with a given step.
-	queryEngine          *promql.Engine
-	lookbackDeltaCreate  func(int64) time.Duration
-	ruleGroups  rules.UnaryClient
-	targets     targets.UnaryClient
-	metadatas   metadata.UnaryClient
-	exemplars   exemplars.UnaryClient
+	queryEngine         *promql.Engine
+	lookbackDeltaCreate func(int64) time.Duration
+	ruleGroups          rules.UnaryClient
+	targets             targets.UnaryClient
+	metadatas           metadata.UnaryClient
+	exemplars           exemplars.UnaryClient
 
 	enableAutodownsampling              bool
 	enableQueryPartialResponse          bool
@@ -136,16 +136,16 @@ func NewQueryAPI(
 	reg *prometheus.Registry,
 ) *QueryAPI {
 	return &QueryAPI{
-		baseAPI:         api.NewBaseAPI(logger, disableCORS, flagsMap),
-		logger:          logger,
-		queryEngine:     qe,
-		queryableCreate: c,
-		gate:            gate,
-		ruleGroups:      ruleGroups,
-		targets:         targets,
-		metadatas:       metadatas,
-		exemplars:       exemplars,
-		lookbackDeltaCreate: lookbackDeltaCreate,
+		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
+		logger:                                 logger,
+		queryEngine:                            qe,
+		queryableCreate:                        c,
+		gate:                                   gate,
+		ruleGroups:                             ruleGroups,
+		targets:                                targets,
+		metadatas:                              metadatas,
+		exemplars:                              exemplars,
+		lookbackDeltaCreate:                    lookbackDeltaCreate,
 		enableAutodownsampling:                 enableAutodownsampling,
 		enableQueryPartialResponse:             enableQueryPartialResponse,
 		enableRulePartialResponse:              enableRulePartialResponse,
@@ -382,7 +382,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	}
 
 	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
-	// Get custom lookback delta from request.	
+	// Get custom lookback delta from request.
 	lookbackDeltaFromReq, apiErr := qapi.parseLookbackDeltaParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
@@ -508,7 +508,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	}
 
 	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
-	// Get custom lookback delta from request.	
+	// Get custom lookback delta from request.
 	lookbackDeltaFromReq, apiErr := qapi.parseLookbackDeltaParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}

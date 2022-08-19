@@ -31,7 +31,7 @@ func NewGRPCAPI(now func() time.Time, replicaLabels []string, creator query.Quer
 		queryableCreate:             creator,
 		queryEngine:                 queryEngine,
 		defaultMaxResolutionSeconds: defaultMaxResolutionSeconds,
-		lookbackDeltaCreate: lookbackDeltaCreate,
+		lookbackDeltaCreate:         lookbackDeltaCreate,
 	}
 }
 
@@ -66,7 +66,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	if request.LookbackDeltaSeconds > 0 {
 		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
 	}
-	
+
 	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(request.StoreMatchers)
 	if err != nil {
 		return err
@@ -140,7 +140,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	if request.LookbackDeltaSeconds > 0 {
 		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
 	}
-	
+
 	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(request.StoreMatchers)
 	if err != nil {
 		return err
