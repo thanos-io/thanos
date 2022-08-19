@@ -504,7 +504,7 @@ config:
 								{Name: "prometheus", Value: "p1"},
 							}},
 							ScrapePool: "myself",
-							ScrapeUrl:  fmt.Sprintf("http://e2e_test_query_comp_query_%d-querier-1:8080/metrics", i),
+							ScrapeUrl:  fmt.Sprintf("http://e2e-test-query-comp-query-%d-querier-1:8080/metrics", i),
 							Health:     targetspb.TargetHealth_UP,
 						},
 						{
