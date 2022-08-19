@@ -589,8 +589,6 @@ func runQuery(
 	// Otherwise, the nil active query tracker from existing engine options will be used.
 	if activeQueryDir != "" {
 		engineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
-	} else {
-		engineOpts.ActiveQueryTracker = engineOpts.ActiveQueryTracker
 	}
 	engine := promql.NewEngine(engineOpts)
 	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts, dynamicLookbackDelta)
