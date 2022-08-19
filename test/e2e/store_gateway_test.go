@@ -383,7 +383,7 @@ func TestStoreGatewayGroupCache(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	const bucket = "store_gateway_groupcache_test"
+	const bucket = "store-gateway-groupcache-test"
 	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
