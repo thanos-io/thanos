@@ -856,11 +856,13 @@ http {
 // TODO(@matej-g): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/11;
 // after this is addresses fixed all calls should be replaced with e2edb.NewMinio.
 func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable {
-	image := "minio/minio:RELEASE.2019-12-30T05-45-39Z"
+	image := "minio/minio:RELEASE.2022-07-30T05-21-40Z"
 	minioKESGithubContent := "https://raw.githubusercontent.com/minio/kes/master"
 
+	httpsPort := 8090
+	consolePort := 8080
 	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("minio-%s", name)).
-		WithPorts(map[string]int{"https": 8090}, "https").
+		WithPorts(map[string]int{"https": httpsPort, "console": consolePort}, "https").
 		Future()
 
 	if err := os.MkdirAll(filepath.Join(f.Dir(), "certs", "CAs"), 0750); err != nil {
@@ -878,19 +880,19 @@ func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable 
 
 	commands := []string{
 		fmt.Sprintf("curl -sSL --tlsv1.2 -O '%s/root.key' -O '%s/root.cert'", minioKESGithubContent, minioKESGithubContent),
-		fmt.Sprintf("mkdir -p /data/%s && minio server --certs-dir %s/certs --address :%v --quiet /data", bktName, f.InternalDir(), 8090),
+		fmt.Sprintf("mkdir -p /data/%s && minio server --certs-dir %s/certs --address :%v --console-address :%v --quiet /data", bktName, f.InternalDir(), httpsPort, consolePort),
 	}
 
-	return f.Init(e2e.StartOptions{
+	minio := f.Init(e2e.StartOptions{
 		Image: image,
 		// Create the required bucket before starting minio.
 		Command:   e2e.NewCommandWithoutEntrypoint("sh", "-c", strings.Join(commands, " && ")),
-		Readiness: e2e.NewHTTPSReadinessProbe("https", "/minio/health/ready", 200, 200),
+		Readiness: e2e.NewHTTPSReadinessProbe("console", "/", 200, 200),
 		EnvVars: map[string]string{
-			"MINIO_ACCESS_KEY": e2edb.MinioAccessKey,
-			"MINIO_SECRET_KEY": e2edb.MinioSecretKey,
-			"MINIO_BROWSER":    "off",
-			"ENABLE_HTTPS":     "1",
+			"MINIO_ROOT_USER":     e2edb.MinioAccessKey,
+			"MINIO_ROOT_PASSWORD": e2edb.MinioSecretKey,
+			"MINIO_BROWSER":       "on",
+			"ENABLE_HTTPS":        "1",
 			// https://docs.min.io/docs/minio-kms-quickstart-guide.html
 			"MINIO_KMS_KES_ENDPOINT":  "https://play.min.io:7373",
 			"MINIO_KMS_KES_KEY_FILE":  "root.key",
@@ -898,6 +900,7 @@ func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable 
 			"MINIO_KMS_KES_KEY_NAME":  "my-minio-key",
 		},
 	})
+	return minio
 }
 
 func NewMemcached(e e2e.Environment, name string) e2e.InstrumentedRunnable {
