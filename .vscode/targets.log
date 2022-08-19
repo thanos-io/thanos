@@ -1,0 +1,1470 @@
+/home/demon-lord/Documents/Repos/thanos/.bin/protoc-gen-gogofast-v1.3.2: .bingo//protoc-gen-gogofast.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 136):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/protoc-gen-gogofast-v1.3.2"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=protoc-gen-gogofast.mod -o=$(GOBIN)/protoc-gen-gogofast-v1.3.2 "github.com/gogo/protobuf/protoc-gen-gogofast"
+
+# Not a target:
+mixin/dashboards/defaults.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+shell-format: /home/demon-lord/Documents/Repos/thanos/.bin/shfmt-v3.5.1
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 274):
+	@echo ">> formatting shell scripts"
+	@$(SHFMT) -i 2 -ci -w -s $(shell find . -type f -name "*.sh" -not -path "*vendor*" -not -path "tmp/*")
+
+# Not a target:
+pkg/ui/react-app/src/utils/utils.test.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/themes:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/flags/__snapshots__/Flags.test.tsx.snap:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+docker-test: docker-test-amd64 docker-test-arm64 docker-test-ppc64le
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/Legend.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+/home/demon-lord/Documents/Repos/thanos/.bin/jsonnet-lint-v0.18.0: .bingo//jsonnet-lint.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 82):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/jsonnet-lint-v0.18.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnet-lint.mod -o=$(GOBIN)/jsonnet-lint-v0.18.0 "github.com/google/go-jsonnet/cmd/jsonnet-lint"
+
+docker-build-arm64:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  Implicit/static pattern stem: 'arm64'
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 218):
+	@docker build -t "thanos-linux-$*" \
+  --build-arg BASE_DOCKER_SHA="$($*)" \
+  --build-arg ARCH="$*" \
+  -f Dockerfile.multi-arch .
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/stores/StoreLabels.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/hooks:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.bingo//gotesplit.mod:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/stores/StoreLabels.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/SeriesName.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/dashboards/compact.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+assets: /home/demon-lord/Documents/Repos/thanos/.bin/go-bindata-v3.1.1+incompatible pkg/ui/static/react
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 124):
+	@echo ">> deleting asset file"
+	@rm pkg/ui/bindata.go || true
+	@echo ">> writing assets"
+	@$(GO_BINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go  pkg/ui/static/...
+	@$(MAKE) format
+
+# Not a target:
+pkg/ui/react-app/src/components/CustomInfiniteScroll.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+/home/demon-lord/Documents/Repos/thanos/.bin/jsonnet-v0.18.0: .bingo//jsonnet.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 88):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/jsonnet-v0.18.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jsonnet.mod -o=$(GOBIN)/jsonnet-v0.18.0 "github.com/google/go-jsonnet/cmd/jsonnet"
+
+# Not a target:
+pkg/ui/react-app/src/pages/config/Config.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/blocks/Blocks.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/public/:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+go-format: /home/demon-lord/Documents/Repos/thanos/.bin/goimports-v0.1.11
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has been updated.
+#  Needs to be updated (-q is set).
+# variable set hash-table stats:
+# Load=0/32=0%, Rehash=0, Collisions=0/10=0%
+#  recipe to execute (from 'Makefile', line 285):
+	@echo ">> formatting go code"
+	@gofmt -s -w $(FILES_TO_FMT)
+	@$(GOIMPORTS) -w $(FILES_TO_FMT)
+
+pkg/ui/static/react: pkg/ui/react-app/node_modules pkg/ui/react-app/public/ pkg/ui/react-app/public/favicon.ico pkg/ui/react-app/public/index.html pkg/ui/react-app/public/manifest.json pkg/ui/react-app/src/ pkg/ui/react-app/src/themes pkg/ui/react-app/src/themes/_bootstrap_dark.scss pkg/ui/react-app/src/themes/light.scss pkg/ui/react-app/src/themes/dark.scss pkg/ui/react-app/src/themes/_bootstrap_light.scss pkg/ui/react-app/src/themes/_shared.scss pkg/ui/react-app/src/themes/app.scss pkg/ui/react-app/src/App.tsx pkg/ui/react-app/src/thanos pkg/ui/react-app/src/thanos/config.ts pkg/ui/react-app/src/thanos/pages pkg/ui/react-app/src/thanos/pages/blocks pkg/ui/react-app/src/thanos/pages/blocks/helpers.ts pkg/ui/react-app/src/thanos/pages/blocks/Blocks.tsx pkg/ui/react-app/src/thanos/pages/blocks/Blocks.test.tsx pkg/ui/react-app/src/thanos/pages/blocks/blocks.module.css pkg/ui/react-app/src/thanos/pages/blocks/BlockDetails.tsx pkg/ui/react-app/src/thanos/pages/blocks/BlockDetails.test.tsx pkg/ui/react-app/src/thanos/pages/blocks/SourceView.test.tsx pkg/ui/react-app/src/thanos/pages/blocks/helpers.test.tsx pkg/ui/react-app/src/thanos/pages/blocks/BlockFilterCompaction.tsx pkg/ui/react-app/src/thanos/pages/blocks/BlockSearchInput.tsx pkg/ui/react-app/src/thanos/pages/blocks/__testdata__ pkg/ui/react-app/src/thanos/pages/blocks/__testdata__/testdata.ts pkg/ui/react-app/src/thanos/pages/blocks/block.ts pkg/ui/react-app/src/thanos/pages/blocks/BlockSpan.tsx pkg/ui/react-app/src/thanos/pages/blocks/SourceView.tsx pkg/ui/react-app/src/thanos/pages/blocks/TimeRange.tsx pkg/ui/react-app/src/thanos/pages/stores pkg/ui/react-app/src/thanos/pages/stores/store.ts pkg/ui/react-app/src/thanos/pages/stores/StoreLabels.test.tsx pkg/ui/react-app/src/thanos/pages/stores/Stores.tsx pkg/ui/react-app/src/thanos/pages/stores/__snapshots__ pkg/ui/react-app/src/thanos/pages/stores/__snapshots__/StoreLabels.test.tsx.snap pkg/ui/react-app/src/thanos/pages/stores/StorePoolPanel.tsx pkg/ui/react-app/src/thanos/pages/stores/StorePoolPanel.test.tsx pkg/ui/react-app/src/thanos/pages/stores/StoreLabels.tsx pkg/ui/react-app/src/thanos/pages/stores/__testdata__ pkg/ui/react-app/src/thanos/pages/stores/__testdata__/testdata.ts pkg/ui/react-app/src/thanos/pages/stores/Stores.test.tsx pkg/ui/react-app/src/thanos/pages/notFound pkg/ui/react-app/src/thanos/pages/notFound/NotFound.module.css pkg/ui/react-app/src/thanos/pages/notFound/NotFound.tsx pkg/ui/react-app/src/thanos/pages/errorBoundary pkg/ui/react-app/src/thanos/pages/errorBoundary/ErrorBoundary.module.css pkg/ui/react-app/src/thanos/pages/errorBoundary/ErrorBoundary.tsx pkg/ui/react-app/src/thanos/pages/index.tsx pkg/ui/react-app/src/thanos/Navbar.tsx pkg/ui/react-app/src/thanos/types pkg/ui/react-app/src/thanos/types/ThanosComponentProps.ts pkg/ui/react-app/src/utils pkg/ui/react-app/src/utils/index.ts pkg/ui/react-app/src/utils/utils.test.ts pkg/ui/react-app/src/Theme.tsx pkg/ui/react-app/src/contexts pkg/ui/react-app/src/contexts/ThemeContext.tsx pkg/ui/react-app/src/hooks pkg/ui/react-app/src/hooks/useFetch.ts pkg/ui/react-app/src/hooks/useLocalStorage.tsx pkg/ui/react-app/src/hooks/useLocalStorage.test.tsx pkg/ui/react-app/src/react-app-env.d.ts pkg/ui/react-app/src/App.test.tsx pkg/ui/react-app/src/setupTests.ts pkg/ui/react-app/src/App.css pkg/ui/react-app/src/pages pkg/ui/react-app/src/pages/tsdbStatus pkg/ui/react-app/src/pages/tsdbStatus/TSDBStatus.tsx pkg/ui/react-app/src/pages/tsdbStatus/TSDBStatus.test.tsx pkg/ui/react-app/src/pages/status pkg/ui/react-app/src/pages/status/Status.tsx pkg/ui/react-app/src/pages/status/__snapshots__ pkg/ui/react-app/src/pages/status/__snapshots__/Status.test.tsx.snap pkg/ui/react-app/src/pages/status/Status.test.tsx pkg/ui/react-app/src/pages/index.ts pkg/ui/react-app/src/pages/flags pkg/ui/react-app/src/pages/flags/__snapshots__ pkg/ui/react-app/src/pages/flags/__snapshots__/Flags.test.tsx.snap pkg/ui/react-app/src/pages/flags/Flags.tsx pkg/ui/react-app/src/pages/flags/Flags.test.tsx pkg/ui/react-app/src/pages/config pkg/ui/react-app/src/pages/config/Config.tsx pkg/ui/react-app/src/pages/alerts pkg/ui/react-app/src/pages/alerts/Alerts.tsx pkg/ui/react-app/src/pages/alerts/CollapsibleAlertPanel.tsx pkg/ui/react-app/src/pages/alerts/AlertContents.tsx pkg/ui/react-app/src/pages/graph pkg/ui/react-app/src/pages/graph/GraphControls.tsx pkg/ui/react-app/src/pages/graph/DataTable.tsx pkg/ui/react-app/src/pages/graph/Graph.test.tsx pkg/ui/react-app/src/pages/graph/GraphControls.test.tsx pkg/ui/react-app/src/pages/graph/Panel.tsx pkg/ui/react-app/src/pages/graph/ExpressionInput.test.tsx pkg/ui/react-app/src/pages/graph/Panel.test.tsx pkg/ui/react-app/src/pages/graph/ColorPool.ts pkg/ui/react-app/src/pages/graph/TimeInput.tsx pkg/ui/react-app/src/pages/graph/ExpressionInput.tsx pkg/ui/react-app/src/pages/graph/SeriesName.tsx pkg/ui/react-app/src/pages/graph/Legend.tsx pkg/ui/react-app/src/pages/graph/PanelList.tsx pkg/ui/react-app/src/pages/graph/GraphTabContent.test.tsx pkg/ui/react-app/src/pages/graph/GraphTabContent.tsx pkg/ui/react-app/src/pages/graph/TimeInput.test.tsx pkg/ui/react-app/src/pages/graph/PanelList.test.tsx pkg/ui/react-app/src/pages/graph/DataTable.test.tsx pkg/ui/react-app/src/pages/graph/SeriesName.test.tsx pkg/ui/react-app/src/pages/graph/QueryStatsView.test.tsx pkg/ui/react-app/src/pages/graph/GraphHelpers.test.ts pkg/ui/react-app/src/pages/graph/GraphHelpers.ts pkg/ui/react-app/src/pages/graph/QueryStatsView.tsx pkg/ui/react-app/src/pages/graph/Graph.tsx pkg/ui/react-app/src/pages/graph/CMTheme.tsx pkg/ui/react-app/src/pages/rules pkg/ui/react-app/src/pages/rules/RulesContent.tsx pkg/ui/react-app/src/pages/rules/Rules.tsx pkg/ui/react-app/src/pages/serviceDiscovery pkg/ui/react-app/src/pages/serviceDiscovery/Services.tsx pkg/ui/react-app/src/pages/serviceDiscovery/LabelsTable.tsx pkg/ui/react-app/src/pages/targets pkg/ui/react-app/src/pages/targets/TargetLabels.module.css pkg/ui/react-app/src/pages/targets/TargetLabels.tsx pkg/ui/react-app/src/pages/targets/EndpointLink.test.tsx pkg/ui/react-app/src/pages/targets/__snapshots__ pkg/ui/react-app/src/pages/targets/__snapshots__/TargetLabels.test.tsx.snap pkg/ui/react-app/src/pages/targets/target.ts pkg/ui/react-app/src/pages/targets/Targets.test.tsx pkg/ui/react-app/src/pages/targets/ScrapePoolContent.tsx pkg/ui/react-app/src/pages/targets/EndpointLink.tsx pkg/ui/react-app/src/pages/targets/Filter.tsx pkg/ui/react-app/src/pages/targets/Filter.test.tsx pkg/ui/react-app/src/pages/targets/ScrapePoolList.test.tsx pkg/ui/react-app/src/pages/targets/__testdata__ pkg/ui/react-app/src/pages/targets/__testdata__/testdata.ts pkg/ui/react-app/src/pages/targets/ScrapePoolPanel.module.css pkg/ui/react-app/src/pages/targets/TargetLabels.test.tsx pkg/ui/react-app/src/pages/targets/ScrapePoolList.tsx pkg/ui/react-app/src/pages/targets/Targets.tsx pkg/ui/react-app/src/pages/targets/target.test.ts pkg/ui/react-app/src/fonts pkg/ui/react-app/src/fonts/codicon.ttf pkg/ui/react-app/src/types pkg/ui/react-app/src/types/PathPrefixProps.ts pkg/ui/react-app/src/types/types.ts pkg/ui/react-app/src/types/index.d.ts pkg/ui/react-app/src/index.tsx pkg/ui/react-app/src/globals.ts pkg/ui/react-app/src/vendor pkg/ui/react-app/src/vendor/flot pkg/ui/react-app/src/vendor/flot/jquery.flot.stack.js pkg/ui/react-app/src/vendor/flot/jquery.flot.time.js pkg/ui/react-app/src/vendor/flot/jquery.flot.crosshair.js pkg/ui/react-app/src/vendor/flot/jquery.flot.js pkg/ui/react-app/src/components pkg/ui/react-app/src/components/ToggleMoreLess.test.tsx pkg/ui/react-app/src/components/Checkbox.tsx pkg/ui/react-app/src/components/CustomInfiniteScroll.tsx pkg/ui/react-app/src/components/SearchBar.tsx pkg/ui/react-app/src/components/ToggleMoreLess.tsx pkg/ui/react-app/src/components/Checkbox.test.tsx pkg/ui/react-app/src/components/withStatusIndicator.tsx pkg/ui/react-app/tsconfig.json
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 118):
+	   @echo ">> building React app"
+	   @scripts/build-react-app.sh
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/ScrapePoolList.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/utils/index.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/dashboards/query-frontend.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/config.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/alerts/CollapsibleAlertPanel.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/vendor/flot/jquery.flot.crosshair.js:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/CMTheme.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/themes/app.scss:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/react-app-env.d.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/tsconfig.json:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+/home/demon-lord/Documents/Repos/thanos/.bin/hugo-v0.101.0: .bingo//hugo.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 70):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/hugo-v0.101.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=hugo.mod -o=$(GOBIN)/hugo-v0.101.0 "github.com/gohugoio/hugo"
+
+# Not a target:
+pkg/ui/react-app/src/pages/alerts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+jsonnet-format: /home/demon-lord/Documents/Repos/thanos/.bin/jsonnetfmt-v0.18.0
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 448):
+	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
+		xargs -n 1 -- $(JSONNETFMT_CMD) -i
+
+ 
+# Not a target:
+.bingo//jsonnet.mod:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+install-tool-deps: /home/demon-lord/Documents/Repos/thanos/.bin/alertmanager-v0.24.0 /home/demon-lord/Documents/Repos/thanos/.bin/minio-v0.0.0-20220720015624-ce8397f7d944 /home/demon-lord/Documents/Repos/thanos/.bin/prometheus-v0.37.0
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 346):
+	@echo ">>GOBIN=$(GOBIN)"
+
+# makefile (from 'Makefile', line 315)
+test-local: THANOS_TEST_OBJSTORE_SKIP = GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS
+test-local:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+# variable set hash-table stats:
+# Load=1/32=3%, Rehash=0, Collisions=0/2=0%
+#  recipe to execute (from 'Makefile', line 317):
+	$(MAKE) test
+
+go-lint: check-git deps /home/demon-lord/Documents/Repos/thanos/.bin/golangci-lint-v1.47.1 /home/demon-lord/Documents/Repos/thanos/.bin/faillint-v1.10.0
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 388):
+	$(call require_clean_work_tree,'detected not clean work tree before running lint, previous job changed something?')
+	@echo ">> verifying modules being imported"
+	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
+	@$(FAILLINT) -paths "errors=github.com/pkg/errors,\
+github.com/prometheus/tsdb=github.com/prometheus/prometheus/tsdb,\
+github.com/prometheus/prometheus/pkg/testutils=github.com/thanos-io/thanos/pkg/testutil,\
+github.com/prometheus/client_golang/prometheus.{DefaultGatherer,DefBuckets,NewUntypedFunc,UntypedFunc},\
+github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,\
+NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}=github.com/prometheus/client_golang/prometheus/promauto.{NewCounter,\
+NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec},\
+sync/atomic=go.uber.org/atomic,github.com/cortexproject/cortex=github.com/thanos-io/thanos/internal/cortex,\
+io/ioutil.{Discard,NopCloser,ReadAll,ReadDir,ReadFile,TempDir,TempFile,Writefile}" $(shell go list ./... | grep -v "internal/cortex")
+	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
+	@echo ">> linting all of the Go files GOGC=${GOGC}"
+	@$(GOLANGCI_LINT) run
+	@echo ">> ensuring Copyright headers"
+	@go run ./scripts/copyright
+	@echo ">> ensuring generated proto files are up to date"
+	@$(MAKE) proto
+	$(call require_clean_work_tree,'detected files without copyright, run make lint and commit changes')
+
+# Not a target:
+pkg/ui/react-app/src/hooks/useLocalStorage.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/__snapshots__:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+pkg/ui/react-app/node_modules: pkg/ui/react-app/package.json pkg/ui/react-app/package-lock.json
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 115):
+	   cd $(REACT_APP_PATH) && npm ci
+
+# Not a target:
+mixin/jsonnetfile.lock.json:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.bingo//alertmanager.mod:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.bingo//promdoc.mod:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/TargetLabels.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/alerts/Alerts.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/target.test.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/Targets.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/blocks:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/blocks/blocks.module.css:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/QueryStatsView.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/rules/query.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# makefile (from 'Makefile', line 333)
+test-e2e-local: THANOS_TEST_OBJSTORE_SKIP = GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS
+test-e2e-local:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+# variable set hash-table stats:
+# Load=1/32=3%, Rehash=0, Collisions=0/2=0%
+#  recipe to execute (from 'Makefile', line 335):
+	$(MAKE) test-e2e
+
+# Not a target:
+pkg/ui/react-app/src/index.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/errorBoundary/ErrorBoundary.module.css:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/status/Status.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+docker-build-ppc64le:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  Implicit/static pattern stem: 'ppc64le'
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 218):
+	@docker build -t "thanos-linux-$*" \
+  --build-arg BASE_DOCKER_SHA="$($*)" \
+  --build-arg ARCH="$*" \
+  -f Dockerfile.multi-arch .
+
+# Not a target:
+.DEFAULT:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+/home/demon-lord/Documents/Repos/thanos/.bin/gojsontoyaml-v0.1.0: .bingo//gojsontoyaml.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 52):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/gojsontoyaml-v0.1.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=gojsontoyaml.mod -o=$(GOBIN)/gojsontoyaml-v0.1.0 "github.com/brancz/gojsontoyaml"
+
+/home/demon-lord/Documents/Repos/thanos/.bin/mdox-v0.9.1-0.20220713110358-25b9abcf90a0: .bingo//mdox.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 100):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/mdox-v0.9.1-0.20220713110358-25b9abcf90a0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=mdox.mod -o=$(GOBIN)/mdox-v0.9.1-0.20220713110358-25b9abcf90a0 "github.com/bwplotka/mdox"
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/__testdata__:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+docker-test-amd64:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  Implicit/static pattern stem: 'amd64'
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 226):
+	@echo ">> testing image"
+	@docker run "thanos-linux-$*" --help
+
+check-examples: examples example-rules-lint
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 466):
+	$(call require_clean_work_tree,'all generated files should be committed, run make check-examples and commit changes.')
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/PanelList.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+all: format build
+#  Phony target (prerequisite of .PHONY).
+#  Command line target.
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has been updated.
+#  Needs to be updated (-q is set).
+# variable set hash-table stats:
+# Load=0/32=0%, Rehash=0, Collisions=0/10=0%
+
+# Not a target:
+pkg/ui/react-app/src/pages/index.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+docker-build-amd64:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  Implicit/static pattern stem: 'amd64'
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 218):
+	@docker build -t "thanos-linux-$*" \
+  --build-arg BASE_DOCKER_SHA="$($*)" \
+  --build-arg ARCH="$*" \
+  -f Dockerfile.multi-arch .
+
+mixin/runbook.md: /home/demon-lord/Documents/Repos/thanos/.bin/promdoc-v0.8.0 examples/alerts/alerts.yaml
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 437):
+	$(PROMDOC) generate  examples/alerts/alerts.yaml -i mixin -o $@
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/TargetLabels.module.css:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+help:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 109):
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} /^[a-z0-9A-Z_-]+:.*?##/ { printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+ 
+
+/home/demon-lord/Documents/Repos/thanos/.bin/jb-v0.5.1: .bingo//jb.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 76):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/jb-v0.5.1"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=jb.mod -o=$(GOBIN)/jb-v0.5.1 "github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb"
+
+# Not a target:
+mixin/alerts/query.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/TargetLabels.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/stores/StorePoolPanel.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+web: web-pre-process /home/demon-lord/Documents/Repos/thanos/.bin/hugo-v0.101.0
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 364):
+	@echo ">> building documentation website"
+	@rm -rf "$(WEB_DIR)/public"
+	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
+
+# Not a target:
+.bingo//shfmt.mod:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/DataTable.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/Filter.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/components/ToggleMoreLess.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+build: check-git deps /home/demon-lord/Documents/Repos/thanos/.bin/promu-v0.5.0
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 153):
+	@echo ">> building Thanos binary in $(PREFIX)"
+	@$(PROMU) build --prefix $(PREFIX)
+
+docker-push-ppc64le:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  Implicit/static pattern stem: 'ppc64le'
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 240):
+	@echo ">> pushing image"
+	@docker tag "thanos-linux-$*" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
+	@docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/blocks/BlockSearchInput.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/serviceDiscovery/LabelsTable.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/rules/Rules.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/TimeInput.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.bingo//minio.mod:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.bingo//promtool.mod:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+examples: jsonnet-vendor jsonnet-format mixin/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp mixin/runbook.md
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/themes/dark.scss:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.bingo//jb.mod:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/blocks/__testdata__/testdata.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/target.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/types:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/App.css:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/stores/__snapshots__/StoreLabels.test.tsx.snap:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+docker-multi-stage:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 211):
+	@echo ">> building docker image 'thanos' with Dockerfile.multi-stage"
+	@docker build -f Dockerfile.multi-stage -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/__snapshots__/TargetLabels.test.tsx.snap:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/types:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/notFound/NotFound.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# makefile (from 'Makefile', line 305)
+test: THANOS_TEST_MINIO_PATH = $(MINIO)
+# makefile (from 'Makefile', line 306)
+test: THANOS_TEST_PROMETHEUS_PATHS = $(PROMETHEUS)
+# makefile (from 'Makefile', line 307)
+test: THANOS_TEST_ALERTMANAGER_PATH = $(ALERTMANAGER)
+# makefile (from 'Makefile', line 304)
+test: GOCACHE = $(TMP_GOPATH)/gocache
+test: check-git install-tool-deps
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+# variable set hash-table stats:
+# Load=4/32=12%, Rehash=0, Collisions=0/5=0%
+#  recipe to execute (from 'Makefile', line 309):
+	@echo ">> install thanos GOOPTS=${GOOPTS}"
+	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
+	@go test $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
+
+/home/demon-lord/Documents/Repos/thanos/.bin/go-bindata-v3.1.1+incompatible: .bingo//go-bindata.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 40):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/go-bindata-v3.1.1+incompatible"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=go-bindata.mod -o=$(GOBIN)/go-bindata-v3.1.1+incompatible "github.com/go-bindata/go-bindata/go-bindata"
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/notFound/NotFound.module.css:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/contexts/ThemeContext.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/blocks/Blocks.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/__testdata__/testdata.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/status/__snapshots__/Status.test.tsx.snap:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+test-e2e: docker /home/demon-lord/Documents/Repos/thanos/.bin/gotesplit-v0.2.1
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 322):
+	@echo ">> cleaning docker environment."
+	@docker system prune -f --volumes
+	@echo ">> cleaning e2e test garbage."
+	@rm -rf ./test/e2e/e2e_*
+	@echo ">> running /test/e2e tests."
+	# NOTE(bwplotka):
+	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 (Wiard note: to the GOTEST_OPTS arg) to limit to single CPU to reproduce small 1CPU machine.
+	@$(GOTESPLIT) -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e/... -- ${GOTEST_OPTS}
+
+# Not a target:
+pkg/ui/react-app/src/themes/_shared.scss:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+/home/demon-lord/Documents/Repos/thanos/.bin/shfmt-v3.5.1: .bingo//shfmt.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 142):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/shfmt-v3.5.1"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=shfmt.mod -o=$(GOBIN)/shfmt-v3.5.1 "mvdan.cc/sh/v3/cmd/shfmt"
+
+# Not a target:
+mixin/alerts/add-runbook-links.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/dashboards/sidecar.libsonnet:
+ 
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/rules/rules.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/App.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/fonts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+check-docs: build examples /home/demon-lord/Documents/Repos/thanos/.bin/mdox-v0.9.1-0.20220713110358-25b9abcf90a0
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 261):
+	@echo ">> checking docs"
+	PATH="${PATH}:$(GOBIN)" $(MDOX) fmt -l --links.localize.address-regex="https://thanos.io/.*" --links.validate.config-file=$(MDOX_VALIDATE_CONFIG) $(MD_FILES_TO_FORMAT)
+	$(MAKE) white-noise-cleanup
+	$(call require_clean_work_tree,'run make docs and commit changes')
+
+# Not a target:
+mixin/dashboards/query.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/themes/light.scss:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+examples/alerts/rules.yaml: /home/demon-lord/Documents/Repos/thanos/.bin/jsonnet-v0.18.0 /home/demon-lord/Documents/Repos/thanos/.bin/gojsontoyaml-v0.1.0 mixin/mixin.libsonnet mixin/config.libsonnet mixin/rules/bucket-replicate.libsonnet mixin/rules/query.libsonnet mixin/rules/receive.libsonnet mixin/rules/rules.libsonnet mixin/rules/store.libsonnet
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 433):
+	$(JSONNET) ${THANOS_MIXIN}/rules.jsonnet | $(GOJSONTOYAML) > $@
+
+# Not a target:
+pkg/ui/react-app/public/index.html:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/GraphHelpers.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+docker-push-amd64:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  Implicit/static pattern stem: 'amd64'
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 240):
+	@echo ">> pushing image"
+	@docker tag "thanos-linux-$*" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
+	@docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
+
+# Not a target:
+mixin/alerts/rule.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/EndpointLink.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+docker-push: docker-push-amd64 docker-push-arm64 docker-push-ppc64le
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+
+# Not a target:
+mixin/alerts/sidecar.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# 'override' directive
+/home/demon-lord/Documents/Repos/thanos/.bin/goimports-v0.1.11: .SHELLSTATUS := 0
+/home/demon-lord/Documents/Repos/thanos/.bin/goimports-v0.1.11: .bingo//goimports.mod
+#  Implicit rule search has not been done.
+#  Implicit/static pattern stem: ''
+#  File does not exist.
+#  File has been updated.
+#  Needs to be updated (-q is set).
+# automatic
+# @ := /home/demon-lord/Documents/Repos/thanos/.bin/goimports-v0.1.11
+# automatic
+# * := 
+# automatic
+# < := .bingo//goimports.mod
+# automatic
+# + := .bingo//goimports.mod
+# automatic
+# % := 
+# automatic
+# ^ := .bingo//goimports.mod
+# automatic
+# ? := .bingo//goimports.mod
+# automatic
+# | := 
+# variable set hash-table stats:
+# Load=9/32=28%, Rehash=0, Collisions=12/19=63%
+#  recipe to execute (from '.bingo/Variables.mk', line 46):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/goimports-v0.1.11"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=goimports.mod -o=$(GOBIN)/goimports-v0.1.11 "golang.org/x/tools/cmd/goimports"
+
+examples-clean:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 470):
+	rm -f examples/alerts/alerts.yaml
+	rm -f examples/alerts/rules.yaml
+	rm -f examples/dashboards/*.json
+	rm -f examples/tmp/*.yaml
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/PanelList.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/stores/StorePoolPanel.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/stores:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/dashboards/bucket-replicate.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/alerts/absent.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+/home/demon-lord/Documents/Repos/thanos/.bin/promdoc-v0.8.0: .bingo//promdoc.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 112):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/promdoc-v0.8.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=promdoc.mod -o=$(GOBIN)/promdoc-v0.8.0 "github.com/plexsystems/promdoc"
+
+# Not a target:
+pkg/ui/react-app/src/pages/targets/Targets.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+examples/tmp:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 420):
+	-rm -rf examples/tmp/
+	-mkdir -p examples/tmp/
+	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/tmp/ ${THANOS_MIXIN}/separated-alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
+
+# Not a target:
+.bingo//goimports.mod:
+#  Implicit rule search has been done.
+#  Last modified 2022-08-19 16:19:07.127748745
+#  File has been updated.
+#  Successfully updated.
+
+/home/demon-lord/Documents/Repos/thanos/.bin/promtool-v0.37.0: .bingo//promtool.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 124):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/promtool-v0.37.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=promtool.mod -o=$(GOBIN)/promtool-v0.37.0 "github.com/prometheus/prometheus/cmd/promtool"
+
+# Not a target:
+pkg/ui/react-app/src/globals.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/blocks/block.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/stores/Stores.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/setupTests.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+format: go-format shell-format
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has been updated.
+#  Needs to be updated (-q is set).
+# variable set hash-table stats:
+# Load=0/32=0%, Rehash=0, Collisions=0/10=0%
+#  recipe to execute (from 'Makefile', line 280):
+	@SED_BIN="$(SED)" scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
+
+# Not a target:
+pkg/ui/react-app/src/vendor/flot/jquery.flot.time.js:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+quickstart: build install-tool-deps
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 341):
+	scripts/quickstart.sh
+
+# Not a target:
+pkg/ui/react-app/src/components/ToggleMoreLess.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/rules/store.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+docker-build: docker-build-amd64 docker-build-arm64 docker-build-ppc64le
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+
+/home/demon-lord/Documents/Repos/thanos/.bin/alertmanager-v0.24.0: .bingo//alertmanager.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 22):
+ 
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/alertmanager-v0.24.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=alertmanager.mod -o=$(GOBIN)/alertmanager-v0.24.0 "github.com/prometheus/alertmanager/cmd/alertmanager"
+
+deps:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 173):
+	@go mod tidy
+	@go mod verify
+
+jsonnet-lint: /home/demon-lord/Documents/Repos/thanos/.bin/jsonnet-lint-v0.18.0 jsonnet-vendor
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 453):
+	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
+		xargs -n 1 -- $(JSONNET_LINT) -J ${JSONNET_VENDOR_DIR}
+	find ./mixin -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | sed -E \
+		-e 's/.*\///' \
+		-e '/^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\.(lib|j)sonnet$$/!{s/(.*)/Non-RFC1123 filename: \1/;q1};{d}'
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/blocks/TimeRange.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/notFound:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+/home/demon-lord/Documents/Repos/thanos/.bin/prometheus-v0.37.0: .bingo//prometheus.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 118):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/prometheus-v0.37.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=prometheus.mod -o=$(GOBIN)/prometheus-v0.37.0 "github.com/prometheus/prometheus/cmd/prometheus"
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/TimeInput.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/serviceDiscovery/Services.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.bingo//jsonnet-lint.mod:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/blocks/__testdata__:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/types/types.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/dashboards/rule.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/DataTable.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/types/PathPrefixProps.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/tsdbStatus/TSDBStatus.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/components/withStatusIndicator.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.SUFFIXES:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/errorBoundary:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.bingo//promu.mod:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+.PHONY: all assets react-app-lint react-app-lint-fix react-app-test react-app-start build crossbuild deps internal/cortex docker docker-multi-stage docker-build docker-build-amd64 docker-build-arm64 docker-build-ppc64le docker-test docker-test-amd64 docker-test-arm64 docker-test-ppc64le docker-manifest docker-push docker-push-amd64 docker-push-arm64 docker-push-ppc64le docs changed-docs check-docs white-noise-cleanup shell-format format go-format proto tarballs-release test test-local test-e2e test-e2e-local quickstart install-tool-deps check-git web-pre-process web web-serve lint go-lint shell-lint examples examples/tmp examples/dashboards mixin/runbook.md jsonnet-vendor jsonnet-format jsonnet-lint example-rules-lint check-examples examples-clean
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+jsonnet-vendor: /home/demon-lord/Documents/Repos/thanos/.bin/jb-v0.5.1 mixin/jsonnetfile.json mixin/jsonnetfile.lock.json
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 441):
+	rm -rf ${JSONNET_VENDOR_DIR}
+	cd ${THANOS_MIXIN} && $(JB) install
+
+# Not a target:
+pkg/ui/react-app/src/pages/flags/__snapshots__:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+docker-test-ppc64le:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  Implicit/static pattern stem: 'ppc64le'
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 226):
+	@echo ">> testing image"
+	@docker run "thanos-linux-$*" --help
+
+# Not a target:
+pkg/ui/react-app/src/components/SearchBar.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/contexts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/flags/Flags.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/vendor/flot/jquery.flot.js:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+/home/demon-lord/Documents/Repos/thanos/.bin/minio-v0.0.0-20220720015624-ce8397f7d944: .bingo//minio.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 106):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/minio-v0.0.0-20220720015624-ce8397f7d944"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=minio.mod -o=$(GOBIN)/minio-v0.0.0-20220720015624-ce8397f7d944 "github.com/minio/minio"
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/blocks/helpers.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/utils:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/graph/ExpressionInput.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/public/favicon.ico:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/hooks/useFetch.ts:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/Theme.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/alerts/alerts.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/thanos/pages/stores/Stores.test.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+.bingo//bingo.mod:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+mixin/dashboards/store.libsonnet:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+/home/demon-lord/Documents/Repos/thanos/.bin/promu-v0.5.0: .bingo//promu.mod
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+#  recipe to execute (from '.bingo/Variables.mk', line 130):
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/promu-v0.5.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=promu.mod -o=$(GOBIN)/promu-v0.5.0 "github.com/prometheus/promu"
+
+# Not a target:
+pkg/ui/react-app/src/themes/_bootstrap_dark.scss:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+internal/cortex:
+#  Phony target (prerequisite of .PHONY).
+#  Implicit rule search has not been done.
+#  File does not exist.
+#  File has not been updated.
+#  recipe to execute (from 'Makefile', line 182):
+	rm -rf internal/cortex
+	rm -rf tmp/cortex
+	git clone --depth 1 https://github.com/cortexproject/cortex tmp/cortex
+	mkdir -p internal/cortex
+	rsync -avur --delete tmp/cortex/pkg/* internal/cortex --include-from=.cortex-packages.txt
+	mkdir -p internal/cortex/integration
+	cp -R tmp/cortex/integration/ca internal/cortex/integration/ca
+	find internal/cortex -type f -exec sed -i 's/github.com\/cortexproject\/cortex\/pkg/github.com\/thanos-io\/thanos\/internal\/cortex/g' {} +
+	find internal/cortex -type f -exec sed -i 's/github.com\/cortexproject\/cortex\/integration/github.com\/thanos-io\/thanos\/internal\/cortex\/integration/g' {} +
+	rm -rf tmp/cortex
+	@echo ">> ensuring Copyright headers"
+ 
+	@go run ./scripts/copyright
+
+# Not a target:
+pkg/ui/react-app/src/vendor/flot/jquery.flot.stack.js:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/vendor/flot:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# Not a target:
+pkg/ui/react-app/src/pages/status/Status.tsx:
+#  Implicit rule search has not been done.
+#  Modification time never checked.
+#  File has not been updated.
+
+# files hash-table stats:
+# Load=312/1024=30%, Rehash=0, Collisions=216/830=26%
+# VPATH Search Paths
+
+# No 'vpath' search paths.
+
+# No general ('VPATH' variable) search path.
+
+# strcache buffers: 2 (0) / strings = 380 / storage = 12751 B / avg = 33 B
+# current buf: size = 8162 B / used = 4635 B / count = 160 / avg = 28 B
+# other used: total = 8116 B / count = 220 / avg = 36 B
+# other free: total = 46 B / max = 46 B / min = 46 B / avg = 46 B
+
+# strcache performance: lookups = 799 / hit rate = 52%
+# hash-table stats:
+# Load=380/8192=5%, Rehash=0, Collisions=14/799=2%
+# Finished Make data base on Fri Aug 19 16:19:59 2022
+
+ 
