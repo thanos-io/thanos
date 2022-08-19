@@ -394,7 +394,7 @@ config:
     - http://e2e-test-store-gateway-groupcache-store-gw-1:8080
     - http://e2e-test-store-gateway-groupcache-store-gw-2:8080
     - http://e2e-test-store-gateway-groupcache-store-gw-3:8080
-  groupcache_group: groupcache-test-group
+  groupcache_group: groupcache_test_group
   dns_interval: 1s
 blocks_iter_ttl: 0s
 metafile_exists_ttl: 0s
