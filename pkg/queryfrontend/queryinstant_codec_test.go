@@ -530,7 +530,7 @@ func TestDecodeResponse(t *testing.T) {
   "data": {
     "resultType": "vector",
     "result": [
-      
+
     ]
   }
 }`,
@@ -651,7 +651,7 @@ func TestDecodeResponse(t *testing.T) {
   "data": {
     "resultType": "matrix",
     "result": [
-      
+
     ]
   }
 }`,
