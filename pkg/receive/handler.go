@@ -85,6 +85,7 @@ var (
 	errBadReplica  = errors.New("request replica exceeds receiver replication factor")
 	errNotReady    = errors.New("target not ready")
 	errUnavailable = errors.New("target not available")
+	errWrongMode   = errors.New("local node does not support ingestion")
 )
 
 // Options for the web Handler.
@@ -297,9 +298,16 @@ func (h *Handler) Hashring(hashring Hashring) {
 func (h *Handler) isReady() bool {
 	h.mtx.RLock()
 	hr := h.hashring != nil
-	sr := h.writer != nil
+
+	// Writer has to be ready only if ingestion is enabled.
+	if h.options.ReceiverMode != RouterOnly {
+		sr := h.writer != nil
+		h.mtx.RUnlock()
+		return sr && hr
+	}
+
 	h.mtx.RUnlock()
-	return sr && hr
+	return hr
 }
 
 // Checks if server is ready, calls f if it is, returns 503 if it is not.
@@ -321,6 +329,11 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusapi.TenantStats, *api.ApiError) {
 	if !h.isReady() {
 		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: fmt.Errorf("service unavailable")}
+	}
+
+	// Do not return stats if TSDB is not initialized.
+	if h.options.ReceiverMode == RouterOnly || h.options.TSDBStats == nil {
+		return []statusapi.TenantStats{}, nil
 	}
 
 	tenantID := r.Header.Get(h.options.TenantHeader)
@@ -817,6 +830,11 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 		if endpoint == h.options.Endpoint {
 			go func(endpoint string) {
 				defer wg.Done()
+				// We should not ever get here.
+				if h.options.ReceiverMode == RouterOnly || h.writer == nil {
+					ec <- errors.Wrapf(errWrongMode, "endpoint %s", endpoint)
+					return
+				}
 
 				var err error
 				tracing.DoInSpan(fctx, "receive_tsdb_write", func(_ context.Context) {
