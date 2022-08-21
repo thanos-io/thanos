@@ -16,6 +16,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5534](https://github.com/thanos-io/thanos/pull/5534) Query: Set struct return by query api alerts same as prometheus api.
 - [#5554](https://github.com/thanos-io/thanos/pull/5554) Query/Receiver: Fix querying exemplars from multi-tenant receivers.
 - [#5583](https://github.com/thanos-io/thanos/pull/5583) Query: fix data race between Respond() and query/queryRange functions. Fixes [#5410](https://github.com/thanos-io/thanos/pull/5410).
+- [#5623](https://github.com/thanos-io/thanos/pull/5623) Receive: Do not instantiate multi TSDB or run store API if running in router-only mode.
 
 ### Added
 
