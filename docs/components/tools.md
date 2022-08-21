@@ -17,13 +17,13 @@ Flags:
       --log.format=logfmt  Log format to use. Possible options: logfmt or json.
       --log.level=info     Log filtering level.
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (mutually
-                           exclusive). Content of YAML file with tracing
-                           configuration. See format details:
+                           Alternative to 'tracing.config-file' flag
+                           (mutually exclusive). Content of YAML file
+                           with tracing configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing configuration. See
-                           format details:
+                           Path to YAML file with tracing
+                           configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --version            Show application version.
 
@@ -58,13 +58,13 @@ Subcommands:
     potentially a noop.
 
   tools bucket rewrite --id=ID [<flags>]
-    Rewrite chosen blocks in the bucket, while deleting or modifying series
-    Resulted block has modified stats in meta.json. Additionally
-    compaction.sources are altered to not confuse readers of meta.json. Instead
-    thanos.rewrite section is added with useful info like old sources and
-    deletion requests. NOTE: It's recommended to turn off compactor while doing
-    this operation. If the compactor is running and touching exactly same block
-    that is being rewritten, the resulted rewritten block might only cause
+    Rewrite chosen blocks in the bucket, while deleting or modifying
+    series Resulted block has modified stats in meta.json. Additionally
+    compaction.sources are altered to not confuse readers of meta.json.
+    Instead thanos.rewrite section is added with useful info like old sources
+    and deletion requests. NOTE: It's recommended to turn off compactor while
+    doing this operation. If the compactor is running and touching exactly same
+    block that is being rewritten, the resulted rewritten block might only cause
     overlap (mitigated by marking overlapping block manually for deletion) and
     the data you wanted to rewrite could already part of bigger block.
 
@@ -118,21 +118,21 @@ Flags:
       --log.level=info     Log filtering level.
       --objstore.config=<content>
                            Alternative to 'objstore.config-file' flag (mutually
-                           exclusive). Content of YAML file that contains object
-                           store configuration. See format details:
+                           exclusive). Content of YAML file that contains
+                           object store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains object store
-                           configuration. See format details:
+                           Path to YAML file that contains object
+                           store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (mutually
-                           exclusive). Content of YAML file with tracing
-                           configuration. See format details:
+                           Alternative to 'tracing.config-file' flag
+                           (mutually exclusive). Content of YAML file
+                           with tracing configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing configuration. See
-                           format details:
+                           Path to YAML file with tracing
+                           configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --version            Show application version.
 
@@ -167,13 +167,13 @@ Subcommands:
     potentially a noop.
 
   tools bucket rewrite --id=ID [<flags>]
-    Rewrite chosen blocks in the bucket, while deleting or modifying series
-    Resulted block has modified stats in meta.json. Additionally
-    compaction.sources are altered to not confuse readers of meta.json. Instead
-    thanos.rewrite section is added with useful info like old sources and
-    deletion requests. NOTE: It's recommended to turn off compactor while doing
-    this operation. If the compactor is running and touching exactly same block
-    that is being rewritten, the resulted rewritten block might only cause
+    Rewrite chosen blocks in the bucket, while deleting or modifying
+    series Resulted block has modified stats in meta.json. Additionally
+    compaction.sources are altered to not confuse readers of meta.json.
+    Instead thanos.rewrite section is added with useful info like old sources
+    and deletion requests. NOTE: It's recommended to turn off compactor while
+    doing this operation. If the compactor is running and touching exactly same
+    block that is being rewritten, the resulted rewritten block might only cause
     overlap (mitigated by marking overlapping block manually for deletion) and
     the data you wanted to rewrite could already part of bigger block.
 
@@ -224,84 +224,84 @@ Flags:
                                 json.
       --log.level=info          Log filtering level.
       --max-time=9999-12-31T23:59:59Z
-                                End of time range limit to serve. Thanos tool
-                                bucket web will serve only blocks, which
-                                happened earlier than this value. Option can be
-                                a constant time in RFC3339 format or time
+                                End of time range limit to serve. Thanos
+                                tool bucket web will serve only blocks,
+                                which happened earlier than this value. Option
+                                can be a constant time in RFC3339 format or time
                                 duration relative to current time, such as -1d
                                 or 2h45m. Valid duration units are ms, s, m, h,
                                 d, w, y.
       --min-time=0000-01-01T00:00:00Z
-                                Start of time range limit to serve. Thanos tool
-                                bucket web will serve only blocks, which
+                                Start of time range limit to serve. Thanos
+                                tool bucket web will serve only blocks, which
                                 happened later than this value. Option can be a
                                 constant time in RFC3339 format or time duration
                                 relative to current time, such as -1d or 2h45m.
                                 Valid duration units are ms, s, m, h, d, w, y.
       --objstore.config=<content>
-                                Alternative to 'objstore.config-file' flag
-                                (mutually exclusive). Content of YAML file that
-                                contains object store configuration. See format
-                                details:
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                Path to YAML file that contains object store
-                                configuration. See format details:
+                                Path to YAML file that contains object
+                                store configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --refresh=30m             Refresh interval to download metadata from
                                 remote storage
       --selector.relabel-config=<content>
                                 Alternative to 'selector.relabel-config-file'
-                                flag (mutually exclusive). Content of YAML file
-                                that contains relabeling configuration that
-                                allows selecting blocks. It follows native
-                                Prometheus relabel-config syntax. See format
-                                details:
+                                flag (mutually exclusive). Content of
+                                YAML file that contains relabeling
+                                configuration that allows selecting
+                                blocks. It follows native Prometheus
+                                relabel-config syntax. See format details:
                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --selector.relabel-config-file=<file-path>
                                 Path to YAML file that contains relabeling
-                                configuration that allows selecting blocks. It
-                                follows native Prometheus relabel-config syntax.
-                                See format details:
+                                configuration that allows selecting
+                                blocks. It follows native Prometheus
+                                relabel-config syntax. See format details:
                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --timeout=5m              Timeout to download metadata from remote storage
       --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag
-                                (mutually exclusive). Content of YAML file with
-                                tracing configuration. See format details:
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                                Path to YAML file with tracing configuration.
-                                See format details:
+                                Path to YAML file with tracing
+                                configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --version                 Show application version.
       --web.disable-cors        Whether to disable CORS headers to be set by
                                 Thanos. By default Thanos sets CORS headers to
                                 be allowed by all.
       --web.external-prefix=""  Static prefix for all HTML links and redirect
-                                URLs in the bucket web UI interface. Actual
-                                endpoints are still served on / or the
-                                web.route-prefix. This allows thanos bucket web
-                                UI to be served behind a reverse proxy that
+                                URLs in the bucket web UI interface.
+                                Actual endpoints are still served on / or the
+                                web.route-prefix. This allows thanos bucket
+                                web UI to be served behind a reverse proxy that
                                 strips a URL sub-path.
       --web.prefix-header=""    Name of HTTP request header used for dynamic
-                                prefixing of UI links and redirects. This option
-                                is ignored if web.external-prefix argument is
-                                set. Security risk: enable this option only if a
-                                reverse proxy in front of thanos is resetting
-                                the header. The
-                                --web.prefix-header=X-Forwarded-Prefix option
-                                can be useful, for example, if Thanos UI is
-                                served via Traefik reverse proxy with
+                                prefixing of UI links and redirects.
+                                This option is ignored if web.external-prefix
+                                argument is set. Security risk: enable
+                                this option only if a reverse proxy in
+                                front of thanos is resetting the header.
+                                The --web.prefix-header=X-Forwarded-Prefix
+                                option can be useful, for example, if Thanos
+                                UI is served via Traefik reverse proxy with
                                 PathPrefixStrip option enabled, which sends the
                                 stripped prefix value in X-Forwarded-Prefix
                                 header. This allows thanos UI to be served on a
                                 sub-path.
       --web.route-prefix=""     Prefix for API and UI endpoints. This allows
-                                thanos UI to be served on a sub-path. Defaults
-                                to the value of --web.external-prefix. This
-                                option is analogous to --web.route-prefix of
-                                Prometheus.
+                                thanos UI to be served on a sub-path.
+                                Defaults to the value of --web.external-prefix.
+                                This option is analogous to --web.route-prefix
+                                of Prometheus.
 
 ```
 
@@ -325,22 +325,22 @@ issue this might take time and will need downloading all specified blocks to
 disk.
 
 Flags:
-      --delete-delay=0s    Duration after which blocks marked for deletion would
-                           be deleted permanently from source bucket by
+      --delete-delay=0s    Duration after which blocks marked for deletion
+                           would be deleted permanently from source bucket by
                            compactor component. If delete-delay is non zero,
                            blocks will be marked for deletion and compactor
                            component is required to delete blocks from source
                            bucket. If delete-delay is 0, blocks will be deleted
-                           straight away. Use this if you want to get rid of or
-                           move the block immediately. Note that deleting blocks
-                           immediately can cause query failures, if store
+                           straight away. Use this if you want to get rid of
+                           or move the block immediately. Note that deleting
+                           blocks immediately can cause query failures, if store
                            gateway still has the block loaded, or compactor is
                            ignoring the deletion because it's compacting the
                            block at the same time.
   -h, --help               Show context-sensitive help (also try --help-long and
                            --help-man).
-      --id=ID ...          Block IDs to verify (and optionally repair) only. If
-                           none is specified, all blocks will be verified.
+      --id=ID ...          Block IDs to verify (and optionally repair) only.
+                           If none is specified, all blocks will be verified.
                            Repeated field
   -i, --issues=index_known_issues... ...
                            Issues to verify (and optionally repair). Possible
@@ -350,38 +350,38 @@ Flags:
       --log.format=logfmt  Log format to use. Possible options: logfmt or json.
       --log.level=info     Log filtering level.
       --objstore-backup.config=<content>
-                           Alternative to 'objstore-backup.config-file' flag
-                           (mutually exclusive). Content of YAML file that
-                           contains object store-backup configuration. See
-                           format details:
+                           Alternative to 'objstore-backup.config-file'
+                           flag (mutually exclusive). Content of YAML
+                           file that contains object store-backup
+                           configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
                            Used for repair logic to backup blocks before
                            removal.
       --objstore-backup.config-file=<file-path>
-                           Path to YAML file that contains object store-backup
-                           configuration. See format details:
+                           Path to YAML file that contains object
+                           store-backup configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
                            Used for repair logic to backup blocks before
                            removal.
       --objstore.config=<content>
                            Alternative to 'objstore.config-file' flag (mutually
-                           exclusive). Content of YAML file that contains object
-                           store configuration. See format details:
+                           exclusive). Content of YAML file that contains
+                           object store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains object store
-                           configuration. See format details:
+                           Path to YAML file that contains object
+                           store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
   -r, --repair             Attempt to repair blocks for which issues were
                            detected
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (mutually
-                           exclusive). Content of YAML file with tracing
-                           configuration. See format details:
+                           Alternative to 'tracing.config-file' flag
+                           (mutually exclusive). Content of YAML file
+                           with tracing configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing configuration. See
-                           format details:
+                           Path to YAML file with tracing
+                           configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --version            Show application version.
 
@@ -410,24 +410,24 @@ Flags:
       --log.level=info     Log filtering level.
       --objstore.config=<content>
                            Alternative to 'objstore.config-file' flag (mutually
-                           exclusive). Content of YAML file that contains object
-                           store configuration. See format details:
+                           exclusive). Content of YAML file that contains
+                           object store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains object store
-                           configuration. See format details:
+                           Path to YAML file that contains object
+                           store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
   -o, --output=""          Optional format in which to print each block's
                            information. Options are 'json', 'wide' or a custom
                            template.
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (mutually
-                           exclusive). Content of YAML file with tracing
-                           configuration. See format details:
+                           Alternative to 'tracing.config-file' flag
+                           (mutually exclusive). Content of YAML file
+                           with tracing configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing configuration. See
-                           format details:
+                           Path to YAML file with tracing
+                           configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --version            Show application version.
 
@@ -455,14 +455,14 @@ Flags:
                              json.
       --log.level=info       Log filtering level.
       --objstore.config=<content>
-                             Alternative to 'objstore.config-file' flag
-                             (mutually exclusive). Content of YAML file that
-                             contains object store configuration. See format
-                             details:
+                             Alternative to 'objstore.config-file'
+                             flag (mutually exclusive). Content of
+                             YAML file that contains object store
+                             configuration. See format details:
                              https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                             Path to YAML file that contains object store
-                             configuration. See format details:
+                             Path to YAML file that contains object
+                             store configuration. See format details:
                              https://thanos.io/tip/thanos/storage.md/#configuration
       --output=table         Output format for result. Currently supports table,
                              cvs, tsv.
@@ -476,13 +476,13 @@ Flags:
                              are then further sorted by the 'UNTIL' value.
       --timeout=5m           Timeout to download metadata from remote storage
       --tracing.config=<content>
-                             Alternative to 'tracing.config-file' flag (mutually
-                             exclusive). Content of YAML file with tracing
-                             configuration. See format details:
+                             Alternative to 'tracing.config-file' flag
+                             (mutually exclusive). Content of YAML file
+                             with tracing configuration. See format details:
                              https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                             Path to YAML file with tracing configuration. See
-                             format details:
+                             Path to YAML file with tracing
+                             configuration. See format details:
                              https://thanos.io/tip/thanos/tracing.md/#configuration
       --version              Show application version.
 
@@ -532,54 +532,54 @@ Flags:
       --matcher=key="value" ...  Only blocks whose external labels exactly match
                                  this matcher will be replicated.
       --max-time=9999-12-31T23:59:59Z
-                                 End of time range limit to replicate. Thanos
-                                 Replicate will replicate only metrics, which
-                                 happened earlier than this value. Option can be
-                                 a constant time in RFC3339 format or time
-                                 duration relative to current time, such as -1d
-                                 or 2h45m. Valid duration units are ms, s, m, h,
-                                 d, w, y.
+                                 End of time range limit to replicate.
+                                 Thanos Replicate will replicate only metrics,
+                                 which happened earlier than this value.
+                                 Option can be a constant time in RFC3339 format
+                                 or time duration relative to current time, such
+                                 as -1d or 2h45m. Valid duration units are ms,
+                                 s, m, h, d, w, y.
       --min-time=0000-01-01T00:00:00Z
-                                 Start of time range limit to replicate. Thanos
-                                 Replicate will replicate only metrics, which
-                                 happened later than this value. Option can be a
-                                 constant time in RFC3339 format or time
-                                 duration relative to current time, such as -1d
-                                 or 2h45m. Valid duration units are ms, s, m, h,
-                                 d, w, y.
+                                 Start of time range limit to replicate.
+                                 Thanos Replicate will replicate only metrics,
+                                 which happened later than this value. Option
+                                 can be a constant time in RFC3339 format or
+                                 time duration relative to current time, such as
+                                 -1d or 2h45m. Valid duration units are ms, s,
+                                 m, h, d, w, y.
       --objstore-to.config=<content>
-                                 Alternative to 'objstore-to.config-file' flag
-                                 (mutually exclusive). Content of YAML file that
-                                 contains object store-to configuration. See
-                                 format details:
+                                 Alternative to 'objstore-to.config-file'
+                                 flag (mutually exclusive). Content of
+                                 YAML file that contains object store-to
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
                                  The object storage which replicate data to.
       --objstore-to.config-file=<file-path>
-                                 Path to YAML file that contains object store-to
-                                 configuration. See format details:
+                                 Path to YAML file that contains object
+                                 store-to configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
                                  The object storage which replicate data to.
       --objstore.config=<content>
-                                 Alternative to 'objstore.config-file' flag
-                                 (mutually exclusive). Content of YAML file that
-                                 contains object store configuration. See format
-                                 details:
+                                 Alternative to 'objstore.config-file'
+                                 flag (mutually exclusive). Content of
+                                 YAML file that contains object store
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                 Path to YAML file that contains object store
-                                 configuration. See format details:
+                                 Path to YAML file that contains object
+                                 store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --resolution=0s... ...     Only blocks with these resolutions will be
                                  replicated. Repeated flag.
       --single-run               Run replication only one time, then exit.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (mutually exclusive). Content of YAML file with
-                                 tracing configuration. See format details:
+                                 (mutually exclusive). Content of YAML file
+                                 with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                                 Path to YAML file with tracing configuration.
-                                 See format details:
+                                 Path to YAML file with tracing
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --version                  Show application version.
 
@@ -628,30 +628,30 @@ Flags:
                               Listen host:port for HTTP endpoints.
       --http-grace-period=2m  Time to wait after an interrupt received for HTTP
                               Server.
-      --http.config=""        [EXPERIMENTAL] Path to the configuration file that
-                              can enable TLS or authentication for all HTTP
+      --http.config=""        [EXPERIMENTAL] Path to the configuration file
+                              that can enable TLS or authentication for all HTTP
                               endpoints.
       --log.format=logfmt     Log format to use. Possible options: logfmt or
                               json.
       --log.level=info        Log filtering level.
       --objstore.config=<content>
-                              Alternative to 'objstore.config-file' flag
-                              (mutually exclusive). Content of YAML file that
-                              contains object store configuration. See format
-                              details:
+                              Alternative to 'objstore.config-file'
+                              flag (mutually exclusive). Content of
+                              YAML file that contains object store
+                              configuration. See format details:
                               https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                              Path to YAML file that contains object store
-                              configuration. See format details:
+                              Path to YAML file that contains object
+                              store configuration. See format details:
                               https://thanos.io/tip/thanos/storage.md/#configuration
       --tracing.config=<content>
                               Alternative to 'tracing.config-file' flag
-                              (mutually exclusive). Content of YAML file with
-                              tracing configuration. See format details:
+                              (mutually exclusive). Content of YAML file
+                              with tracing configuration. See format details:
                               https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                              Path to YAML file with tracing configuration. See
-                              format details:
+                              Path to YAML file with tracing
+                              configuration. See format details:
                               https://thanos.io/tip/thanos/tracing.md/#configuration
       --version               Show application version.
       --wait-interval=5m      Wait interval between downsample runs.
@@ -698,21 +698,21 @@ Flags:
       --marker=MARKER      Marker to be put.
       --objstore.config=<content>
                            Alternative to 'objstore.config-file' flag (mutually
-                           exclusive). Content of YAML file that contains object
-                           store configuration. See format details:
+                           exclusive). Content of YAML file that contains
+                           object store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                           Path to YAML file that contains object store
-                           configuration. See format details:
+                           Path to YAML file that contains object
+                           store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (mutually
-                           exclusive). Content of YAML file with tracing
-                           configuration. See format details:
+                           Alternative to 'tracing.config-file' flag
+                           (mutually exclusive). Content of YAML file
+                           with tracing configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing configuration. See
-                           format details:
+                           Path to YAML file with tracing
+                           configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --version            Show application version.
 
@@ -748,8 +748,8 @@ usage: thanos tools bucket rewrite --id=ID [<flags>]
 
 Rewrite chosen blocks in the bucket, while deleting or modifying series Resulted
 block has modified stats in meta.json. Additionally compaction.sources are
-altered to not confuse readers of meta.json. Instead thanos.rewrite section is
-added with useful info like old sources and deletion requests. NOTE: It's
+altered to not confuse readers of meta.json. Instead thanos.rewrite section
+is added with useful info like old sources and deletion requests. NOTE: It's
 recommended to turn off compactor while doing this operation. If the compactor
 is running and touching exactly same block that is being rewritten, the resulted
 rewritten block might only cause overlap (mitigated by marking overlapping block
@@ -769,11 +769,11 @@ Flags:
                                 Defaults to true, for user to double check. (:
                                 Pass --no-dry-run to skip this.
       --hash-func=              Specify which hash function to use when
-                                calculating the hashes of produced files. If no
-                                function has been specified, it does not happen.
-                                This permits avoiding downloading some files
-                                twice albeit at some performance cost. Possible
-                                values are: "", "SHA256".
+                                calculating the hashes of produced files.
+                                If no function has been specified, it does not
+                                happen. This permits avoiding downloading some
+                                files twice albeit at some performance cost.
+                                Possible values are: "", "SHA256".
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --id=ID ...               ID (ULID) of the blocks for rewrite (repeated
@@ -782,14 +782,14 @@ Flags:
                                 json.
       --log.level=info          Log filtering level.
       --objstore.config=<content>
-                                Alternative to 'objstore.config-file' flag
-                                (mutually exclusive). Content of YAML file that
-                                contains object store configuration. See format
-                                details:
+                                Alternative to 'objstore.config-file'
+                                flag (mutually exclusive). Content of
+                                YAML file that contains object store
+                                configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                Path to YAML file that contains object store
-                                configuration. See format details:
+                                Path to YAML file that contains object
+                                store configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --prom-blocks             If specified, we assume the blocks to be
                                 uploaded are only used with Prometheus so we
@@ -808,8 +808,8 @@ Flags:
                                 to blocks
       --rewrite.to-relabel-config=<content>
                                 Alternative to 'rewrite.to-relabel-config-file'
-                                flag (mutually exclusive). Content of YAML file
-                                that contains relabel configs that will be
+                                flag (mutually exclusive). Content of YAML
+                                file that contains relabel configs that will be
                                 applied to blocks
       --rewrite.to-relabel-config-file=<file-path>
                                 Path to YAML file that contains relabel configs
@@ -818,12 +818,12 @@ Flags:
                                 Working directory for temporary files
       --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag
-                                (mutually exclusive). Content of YAML file with
-                                tracing configuration. See format details:
+                                (mutually exclusive). Content of YAML file
+                                with tracing configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                                Path to YAML file with tracing configuration.
-                                See format details:
+                                Path to YAML file with tracing
+                                configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --version                 Show application version.
 
@@ -857,13 +857,13 @@ Flags:
       --log.level=info     Log filtering level.
       --rules=RULES ...    The rule files glob to check (repeated).
       --tracing.config=<content>
-                           Alternative to 'tracing.config-file' flag (mutually
-                           exclusive). Content of YAML file with tracing
-                           configuration. See format details:
+                           Alternative to 'tracing.config-file' flag
+                           (mutually exclusive). Content of YAML file
+                           with tracing configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                           Path to YAML file with tracing configuration. See
-                           format details:
+                           Path to YAML file with tracing
+                           configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
       --version            Show application version.
 
