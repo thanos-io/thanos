@@ -197,18 +197,56 @@ func runReceive(
 	// Impose active series limit only if Receiver is in Router or RouterIngestor mode, and config is provided.
 	seriesLimitSupported := (receiveMode == receive.RouterOnly || receiveMode == receive.RouterIngestor) && conf.maxPerTenantLimit != 0
 
-	dbs := receive.NewMultiTSDB(
-		conf.dataDir,
-		logger,
-		reg,
-		tsdbOpts,
-		lset,
-		conf.tenantLabelName,
-		bkt,
-		conf.allowOutOfOrderUpload,
-		hashFunc,
+	grpcProbe := prober.NewGRPC()
+	httpProbe := prober.NewHTTP()
+	statusProber := prober.Combine(
+		httpProbe,
+		grpcProbe,
+		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
-	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
+
+	var (
+		// Start all components while we wait for TSDB to open but only load
+		// initial config and mark ourselves as ready after it completed.
+
+		// reloadGRPCServer signals when - (1)TSDB is ready and the Store gRPC server can start.
+		// (2) The Hashring files have changed if tsdb ingestion is disabled.
+		reloadGRPCServer = make(chan struct{}, 1)
+		// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
+		hashringChangedChan = make(chan struct{}, 1)
+
+		dbs    *receive.MultiTSDB
+		writer *receive.Writer
+	)
+
+	// We need MultiTSDB and Writer only if ingestion is enabled.
+	if enableIngestion {
+		dbs = receive.NewMultiTSDB(
+			conf.dataDir,
+			logger,
+			reg,
+			tsdbOpts,
+			lset,
+			conf.tenantLabelName,
+			bkt,
+			conf.allowOutOfOrderUpload,
+			hashFunc,
+		)
+		writer = receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
+
+		// uploadC signals when new blocks should be uploaded.
+		uploadC := make(chan struct{}, 1)
+		// uploadDone signals when uploading has finished.
+		uploadDone := make(chan struct{}, 1)
+
+		level.Debug(logger).Log("msg", "setting up tsdb")
+		{
+			if err := startTSDBAndUpload(g, logger, reg, dbs, reloadGRPCServer, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt); err != nil {
+				return err
+			}
+		}
+	}
+
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
 		Writer:                       writer,
 		ListenAddress:                conf.rwAddress,
@@ -236,37 +274,6 @@ func runReceive(
 		WriteRequestSizeLimit:        conf.writeRequestSizeLimit,
 		WriteRequestConcurrencyLimit: conf.writeRequestConcurrencyLimit,
 	})
-
-	grpcProbe := prober.NewGRPC()
-	httpProbe := prober.NewHTTP()
-	statusProber := prober.Combine(
-		httpProbe,
-		grpcProbe,
-		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
-	)
-
-	// Start all components while we wait for TSDB to open but only load
-	// initial config and mark ourselves as ready after it completed.
-
-	// reloadGRPCServer signals when - (1)TSDB is ready and the Store gRPC server can start.
-	// (2) The Hashring files have changed if tsdb ingestion is disabled.
-	reloadGRPCServer := make(chan struct{}, 1)
-	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
-	hashringChangedChan := make(chan struct{}, 1)
-
-	if enableIngestion {
-		// uploadC signals when new blocks should be uploaded.
-		uploadC := make(chan struct{}, 1)
-		// uploadDone signals when uploading has finished.
-		uploadDone := make(chan struct{}, 1)
-
-		level.Debug(logger).Log("msg", "setting up tsdb")
-		{
-			if err := startTSDBAndUpload(g, logger, reg, dbs, reloadGRPCServer, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt); err != nil {
-				return err
-			}
-		}
-	}
 
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
@@ -314,14 +321,31 @@ func runReceive(
 		)
 	}
 
-	if seriesLimitSupported {
-		level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
+	if enableIngestion {
+		if seriesLimitSupported {
+			level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
+			{
+				ctx, cancel := context.WithCancel(context.Background())
+				g.Add(func() error {
+					return runutil.Repeat(15*time.Second, ctx.Done(), func() error {
+						if err := webHandler.ActiveSeriesLimit.QueryMetaMonitoring(ctx, log.With(logger, "component", "receive-meta-monitoring")); err != nil {
+							level.Error(logger).Log("msg", "failed to query meta-monitoring", "err", err.Error())
+						}
+						return nil
+					})
+				}, func(err error) {
+					cancel()
+				})
+			}
+		}
+
+		level.Debug(logger).Log("msg", "setting up periodic tenant pruning")
 		{
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
-				return runutil.Repeat(15*time.Second, ctx.Done(), func() error {
-					if err := webHandler.ActiveSeriesLimit.QueryMetaMonitoring(ctx, log.With(logger, "component", "receive-meta-monitoring")); err != nil {
-						level.Error(logger).Log("msg", "failed to query meta-monitoring", "err", err.Error())
+				return runutil.Repeat(2*time.Hour, ctx.Done(), func() error {
+					if err := dbs.Prune(ctx); err != nil {
+						level.Error(logger).Log("err", err)
 					}
 					return nil
 				})
@@ -329,21 +353,6 @@ func runReceive(
 				cancel()
 			})
 		}
-	}
-
-	level.Debug(logger).Log("msg", "setting up periodic tenant pruning")
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			return runutil.Repeat(2*time.Hour, ctx.Done(), func() error {
-				if err := dbs.Prune(ctx); err != nil {
-					level.Error(logger).Log("err", err)
-				}
-				return nil
-			})
-		}, func(err error) {
-			cancel()
-		})
 	}
 
 	level.Info(logger).Log("msg", "starting receiver")
@@ -384,44 +393,63 @@ func setupAndRunGRPCServer(g *run.Group,
 				s.Shutdown(errors.New("reload hashrings"))
 			}
 
-			mts := store.NewMultiTSDBStore(
-				logger,
-				reg,
-				comp,
-				dbs.TSDBStores,
-			)
-			rw := store.ReadWriteTSDBStore{
-				StoreServer:          mts,
-				WriteableStoreServer: webHandler,
-			}
-
-			infoSrv := info.NewInfoServer(
-				component.Receive.String(),
-				info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return mts.LabelSet() }),
-				info.WithStoreInfoFunc(func() *infopb.StoreInfo {
-					if isReady() {
-						minTime, maxTime := mts.TimeRange()
-						return &infopb.StoreInfo{
-							MinTime:          minTime,
-							MaxTime:          maxTime,
-							SupportsSharding: true,
-						}
-					}
-					return nil
-				}),
-				info.WithExemplarsInfoFunc(),
-			)
-
-			s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
-				grpcserver.WithServer(store.RegisterStoreServer(rw)),
-				grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
-				grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
-				grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
+			grpcOpts := []grpcserver.Option{
 				grpcserver.WithListen(*conf.grpcBindAddr),
 				grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
 				grpcserver.WithTLSConfig(tlsCfg),
 				grpcserver.WithMaxConnAge(*conf.grpcMaxConnAge),
+			}
+			infoOpts := []info.ServerOptionFunc{}
+
+			rw := store.ReadWriteTSDBStore{
+				WriteableStoreServer: webHandler,
+			}
+			if dbs != nil {
+				mts := store.NewMultiTSDBStore(
+					logger,
+					reg,
+					comp,
+					dbs.TSDBStores,
+				)
+				rw.StoreServer = mts
+
+				// If we'll expose store client, make sure if also set proper info server options.
+				// Otherwise we'll expose only minimal info server.
+				infoOpts = append(infoOpts,
+					info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return mts.LabelSet() }),
+					info.WithStoreInfoFunc(func() *infopb.StoreInfo {
+						if isReady() {
+							minTime, maxTime := mts.TimeRange()
+							return &infopb.StoreInfo{
+								MinTime:          minTime,
+								MaxTime:          maxTime,
+								SupportsSharding: true,
+							}
+						}
+						return nil
+					}),
+					info.WithExemplarsInfoFunc(),
+				)
+				grpcOpts = append(
+					grpcOpts,
+					grpcserver.WithServer(store.RegisterStoreServer(rw)),
+					grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
+				)
+			}
+
+			// Writeable store client should be available even if MultiTSDB is not initialized
+			// to enable request routing (forwarding).
+			grpcOpts = append(
+				grpcOpts,
+				grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
+				grpcserver.WithServer(info.RegisterInfoServer(
+					info.NewInfoServer(
+						component.Receive.String(),
+						infoOpts...,
+					))),
 			)
+
+			s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe, grpcOpts...)
 			startGRPCListening <- struct{}{}
 		}
 		if s != nil {
