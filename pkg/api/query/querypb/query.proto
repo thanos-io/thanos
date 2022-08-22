@@ -28,18 +28,19 @@ message QueryRequest {
   int64 time_seconds = 2;
   int64 timeout_seconds = 3;
   int64 max_resolution_seconds = 4;
-  int64 lookback_delta_seconds = 5;
     
-  repeated string replica_labels = 6;
+  repeated string replica_labels = 5;
 
-  repeated StoreMatchers storeMatchers = 7 [(gogoproto.nullable) = false];
+  repeated StoreMatchers storeMatchers = 6 [(gogoproto.nullable) = false];
 
-  bool enableDedup = 8;
-  bool enablePartialResponse = 9;
-  bool enableQueryPushdown = 10;
-  bool skipChunks = 11;
+  bool enableDedup = 7;
+  bool enablePartialResponse = 8;
+  bool enableQueryPushdown = 9;
+  bool skipChunks = 10;
 
-  ShardInfo shard_info = 12;
+  ShardInfo shard_info = 11;
+
+  int64 lookback_delta_seconds = 12;
 }
 
 message StoreMatchers {
@@ -65,18 +66,18 @@ message QueryRangeRequest {
 
   int64 timeout_seconds = 5;
   int64 max_resolution_seconds = 6;
-  int64 lookback_delta_seconds = 7;
-  
-  repeated string replica_labels = 8;
 
-  repeated StoreMatchers storeMatchers = 9 [(gogoproto.nullable) = false];
+  repeated string replica_labels = 7;
 
-  bool enableDedup = 10;
-  bool enablePartialResponse = 11;
-  bool enableQueryPushdown = 12;
-  bool skipChunks = 13;
+  repeated StoreMatchers storeMatchers = 8 [(gogoproto.nullable) = false];
 
-  ShardInfo shard_info = 14;
+  bool enableDedup = 9;
+  bool enablePartialResponse = 10;
+  bool enableQueryPushdown = 11;
+  bool skipChunks = 12;
+
+  ShardInfo shard_info = 13;
+  int64 lookback_delta_seconds = 14;
 }
 
 message QueryRangeResponse {
