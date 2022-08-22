@@ -643,15 +643,66 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 	qfe := e2ethanos.NewQueryFrontend(e, "query-frontend", "http://"+q1.InternalEndpoint("http"), config, inMemoryCacheConfig)
 	testutil.Ok(t, e2e.StartAndWaitReady(qfe))
 
-	qryFunc := func() string { return `sum by (pod) (http_requests_total)` }
-	expectedSeries := 6
 	queryOpts := promclient.QueryOptions{Deduplicate: true}
-
-	resultWithoutSharding := instantQuery(t, ctx, q1.Endpoint("http"), qryFunc, func() time.Time {
-		return now.Time()
-	}, queryOpts, expectedSeries)
-	resultWithSharding := instantQuery(t, ctx, qfe.Endpoint("http"), qryFunc, func() time.Time {
-		return now.Time()
-	}, queryOpts, expectedSeries)
-	testutil.Equals(t, resultWithoutSharding, resultWithSharding)
+	for _, tc := range []struct {
+		name           string
+		qryFunc        func() string
+		expectedSeries int
+	}{
+		{
+			name:           "aggregation",
+			qryFunc:        func() string { return `sum(http_requests_total)` },
+			expectedSeries: 1,
+		},
+		{
+			name:           "outer aggregation with no grouping",
+			qryFunc:        func() string { return `count(sum by (pod) (http_requests_total))` },
+			expectedSeries: 1,
+		},
+		{
+			name:           "scalar",
+			qryFunc:        func() string { return `1 + 1` },
+			expectedSeries: 1,
+		},
+		{
+			name:           "binary expression",
+			qryFunc:        func() string { return `http_requests_total{pod="1"} / http_requests_total` },
+			expectedSeries: 2,
+		},
+		{
+			name:           "binary expression with constant",
+			qryFunc:        func() string { return `http_requests_total / 2` },
+			expectedSeries: 12,
+		},
+		{
+			name:           "vector selector",
+			qryFunc:        func() string { return `http_requests_total` },
+			expectedSeries: 12,
+		},
+		{
+			name:           "aggregation with grouping",
+			qryFunc:        func() string { return `sum by (pod) (http_requests_total)` },
+			expectedSeries: 6,
+		},
+		{
+			name:           "aggregate without grouping",
+			qryFunc:        func() string { return `sum without (pod) (http_requests_total)` },
+			expectedSeries: 2,
+		},
+		{
+			name:           "multiple aggregations with grouping",
+			qryFunc:        func() string { return `max by (handler) (sum(http_requests_total) by (pod, handler))` },
+			expectedSeries: 2,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resultWithoutSharding := instantQuery(t, ctx, q1.Endpoint("http"), tc.qryFunc, func() time.Time {
+				return now.Time()
+			}, queryOpts, tc.expectedSeries)
+			resultWithSharding := instantQuery(t, ctx, qfe.Endpoint("http"), tc.qryFunc, func() time.Time {
+				return now.Time()
+			}, queryOpts, tc.expectedSeries)
+			testutil.Equals(t, resultWithoutSharding, resultWithSharding)
+		})
+	}
 }

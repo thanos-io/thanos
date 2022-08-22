@@ -22,8 +22,8 @@ type ThanosRequestStoreMatcherGetter interface {
 	GetStoreMatchers() [][]*labels.Matcher
 }
 
-// ShardedQuery interface represents a query that can be sharded.
-type ShardedQuery interface {
+// ShardedRequest interface represents a query request that can be sharded vertically.
+type ShardedRequest interface {
 	WithShardInfo(info *storepb.ShardInfo) queryrange.Request
 }
 

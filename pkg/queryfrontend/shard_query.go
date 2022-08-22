@@ -67,7 +67,7 @@ func (s querySharder) Do(ctx context.Context, r queryrange.Request) (queryrange.
 }
 
 func (s querySharder) shardQuery(r queryrange.Request, analysis querysharding.QueryAnalysis) []queryrange.Request {
-	tr, ok := r.(ShardedQuery)
+	tr, ok := r.(ShardedRequest)
 	if !ok {
 		return []queryrange.Request{r}
 	}
