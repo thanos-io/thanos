@@ -62,7 +62,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		maxResolution = g.defaultMaxResolutionSeconds.Milliseconds() / 1000
 	}
 
-	lookbackDelta := g.lookbackDeltaCreate(maxResolution)
+	lookbackDelta := g.lookbackDeltaCreate(maxResolution * 1000)
 	if request.LookbackDeltaSeconds > 0 {
 		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
 	}
@@ -136,7 +136,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		maxResolution = g.defaultMaxResolutionSeconds.Milliseconds() / 1000
 	}
 
-	lookbackDelta := g.lookbackDeltaCreate(maxResolution)
+	lookbackDelta := g.lookbackDeltaCreate(maxResolution * 1000)
 	if request.LookbackDeltaSeconds > 0 {
 		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
 	}
