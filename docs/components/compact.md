@@ -150,7 +150,7 @@ message AggrChunk {
 }
 ```
 
-This means that for each series we collect various aggregations with a given interval: 5m or 1h (depending on resolution) This allows us to keep precision on large duration queries, without fetching too many samples.
+This means that for each series we collect various aggregations with a given interval: 5m or 1h (depending on resolution). This allows us to keep precision on large duration queries, without fetching too many samples.
 
 ### ⚠ ️Downsampling: Note About Resolution and Retention ⚠️
 
@@ -166,7 +166,7 @@ Compactor downsampling is done in two passes:
 
 > **NOTE:** If retention at each resolution is lower than minimum age for the successive downsampling pass, data will be deleted before downsampling can be completed. As a rule of thumb retention for each downsampling level should be the same, and should be greater than the maximum date range (10 days for 5m to 1h downsampling).
 
-Keep in mind that the initial goal of downsampling is not saving disk or object storage space. In fact, downsampling doesn't save you **any** space but instead, it adds 2 more blocks for each raw block which are only slightly smaller or relatively similar size to raw blocks. This is done by internal downsampling implementation which to be mathematically correct holds various aggregations. This means that downsampling can increase the size of your storage a bit (~3x), if you choose to store all resolutions (recommended and by default).
+Keep in mind that the initial goal of downsampling is not saving disk or object storage space. In fact, downsampling doesn't save you **any** space but instead, it adds 2 more blocks for each raw block which are only slightly smaller or relatively similar size to raw blocks. This is done by internal downsampling implementation which, to ensure mathematical correctness, holds various aggregations. This means that downsampling can increase the size of your storage a bit (~3x), if you choose to store all resolutions (recommended and enabled by default).
 
 The goal of downsampling is to provide an opportunity to get fast results for range queries of big time intervals like months or years. In other words, if you set `--retention.resolution-raw` less than `--retention.resolution-5m` and `--retention.resolution-1h` - you might run into a problem of not being able to "zoom in" to your historical data.
 
@@ -182,15 +182,15 @@ Please note that blocks are only deleted after they completely "fall off" of the
 
 ## Deleting Aborted Partial Uploads
 
-It can happen that any producer started uploading some block, but never finished and never will. Sidecars will retry in case of failures during upload or process (unless there was no persistent storage), but a very common case is with Compactor. If the Compactor process crashes during upload of a compacted block, the whole compaction starts from scratch and a new block ID is created. This means that partial upload will never be retried.
+It can happen that a producer started uploading some block, but it never finished and it never will. Sidecars will retry in case of failures during upload or process (unless there was no persistent storage), but a very common case is with Compactor. If the Compactor process crashes during upload of a compacted block, the whole compaction starts from scratch and a new block ID is created. This means that partial upload will never be retried.
 
-To handle this case there is `--delete-delay=48h` flag that starts deletion of directories inside object storage without `meta.json` only after a given time.
+To handle this case there is the `--delete-delay=48h` flag that starts deletion of directories inside object storage without `meta.json` only after a given time.
 
 This value has to be smaller than upload duration and [consistency delay](#consistency-delay).
 
 ## Halting
 
-Because of the very specific nature of Compactor which is writing to object storage, potentially deleting sensitive data, and downloading GBs of data, by default we halt Compactor on certain data failures. This means that Compactor does not crash on halt errors, but instead is kept running and does nothing with metric `thanos_compact_halted` set to 1.
+Because of the very specific nature of Compactor which is writing to object storage, potentially deleting sensitive data, and downloading GBs of data, by default we halt Compactor on certain data failures. This means that Compactor does not crash on halt errors, but instead keeps running and does nothing with metric `thanos_compact_halted` set to 1.
 
 Reason is that we don't want to retry compaction and all the computations if we know that, for example, there is already an overlapped state in the object storage for some reason.
 
@@ -215,13 +215,13 @@ Generally, the maximum memory utilization is exactly the same as for Prometheus 
 
 You need to multiply this with X where X is `--compact.concurrency` (by default 1).
 
-**NOTE:** Don't check heap memory only. Prometheus and Thanos's compaction leverages `mmap` heavily which is outside of `Go` `runtime` stats. Refer to process / OS memory used rather. On Linux/MacOS Go will also use as much as available, so utilization will be always near limit.
+**NOTE:** Don't check heap memory only. Prometheus and Thanos compaction leverages `mmap` heavily which is outside of `Go` `runtime` stats. Refer to process / OS memory used rather. On Linux/MacOS Go will also use as much as available, so utilization will be always near limit.
 
-Generally, a medium-sized bucket limit of 10GB of memory should be enough to keep it working.
+Generally, for a medium-sized bucket, limit of 10GB of memory should be enough to keep it working.
 
 ### Network
 
-Overall Compactor is the component that might have the heaviest use of the network against object storage, so place it near the bucket's zone/location.
+Overall, Compactor is the component that possibly uses the most network bandwidth, so place it near the bucket's zone/location.
 
 It has to download each block needed for compaction / downsampling and it does that on every compaction / downsampling. It then uploads computed blocks. It also refreshes the state of bucket often.
 
