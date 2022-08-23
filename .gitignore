@@ -1,4 +1,6 @@
 .envrc
+.bin
+.vscode
 
 /prometheus
 /thanos
