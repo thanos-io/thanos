@@ -468,15 +468,6 @@ func startStreamSeriesSet(
 		bytesProcessed := 0
 
 		defer func() {
-			if shardInfo != nil {
-				level.Info(logger).Log("msg", "Done fetching series",
-					"series", seriesStats.Series,
-					"chunks", seriesStats.Chunks,
-					"samples", seriesStats.Samples,
-					"bytes", bytesProcessed,
-				)
-			}
-
 			span.SetTag("processed.series", seriesStats.Series)
 			span.SetTag("processed.chunks", seriesStats.Chunks)
 			span.SetTag("processed.samples", seriesStats.Samples)
