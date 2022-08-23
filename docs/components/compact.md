@@ -221,7 +221,7 @@ Generally, for a medium-sized bucket, limit of 10GB of memory should be enough t
 
 ### Network
 
-Overall, Compactor is the component that possibly uses the most network bandwidth, so place it near the bucket's zone/location.
+Overall, Compactor is the component that can potentially use the highest amount of network bandwidth, so place it near the bucket's zone/location.
 
 It has to download each block needed for compaction / downsampling and it does that on every compaction / downsampling. It then uploads computed blocks. It also refreshes the state of bucket often.
 
