@@ -217,7 +217,7 @@ You need to multiply this with X where X is `--compact.concurrency` (by default 
 
 **NOTE:** Don't check heap memory only. Prometheus and Thanos compaction leverages `mmap` heavily which is outside of `Go` `runtime` stats. Refer to process / OS memory used rather. On Linux/MacOS Go will also use as much as available, so utilization will be always near limit.
 
-Generally, for a medium-sized bucket, limit of 10GB of memory should be enough to keep it working.
+Generally, for a medium-sized bucket, a limit of 10GB of memory should be enough to keep it working.
 
 ### Network
 
