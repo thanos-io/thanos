@@ -15,8 +15,10 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
+
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
+	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -25,6 +27,15 @@ import (
 // NOTE: This requires dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
 // Test requires at least ~11m, so run this with `-test.timeout 9999m`.
 func TestPromQLCompliance(t *testing.T) {
+	testPromQLCompliance(t, false)
+}
+
+// TestPromQLComplianceWithQueryFrontend tests PromQL compatibility with query frontend with sharding enabled.
+func TestPromQLComplianceWithShardingQueryFrontend(t *testing.T) {
+	testPromQLCompliance(t, true)
+}
+
+func testPromQLCompliance(t *testing.T, queryFrontend bool) {
 	t.Skip("This is interactive test, it requires time to build up (scrape) the data. The data is also obtain from remote promlab servers.")
 
 	e, err := e2e.NewDockerEnvironment("compatibility")
@@ -75,8 +86,15 @@ scrape_configs:
 	time.Sleep(10 * time.Minute)
 
 	t.Run("receive", func(t *testing.T) {
+		queryTargetRunnable := queryReceive
+		if queryFrontend {
+			qf := newQueryFrontendRunnable(e, "query_frontend_receive", queryReceive.InternalEndpoint("http"))
+			testutil.Ok(t, e2e.StartAndWaitReady(qf))
+			queryTargetRunnable = qf
+		}
+
 		testutil.Ok(t, os.WriteFile(filepath.Join(compliance.Dir(), "receive.yaml"),
-			[]byte(promQLCompatConfig(prom, queryReceive, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
+			[]byte(promQLCompatConfig(prom, queryTargetRunnable, []string{"prometheus", "receive", "tenant_id"})), os.ModePerm))
 
 		testutil.Ok(t, compliance.Exec(e2e.NewCommand(
 			"/promql-compliance-tester",
@@ -85,8 +103,15 @@ scrape_configs:
 		)))
 	})
 	t.Run("sidecar", func(t *testing.T) {
+		queryTargetRunnable := querySidecar
+		if queryFrontend {
+			qf := newQueryFrontendRunnable(e, "query_frontend_sidecar", queryReceive.InternalEndpoint("http"))
+			testutil.Ok(t, e2e.StartAndWaitReady(qf))
+			queryTargetRunnable = qf
+		}
+
 		testutil.Ok(t, os.WriteFile(filepath.Join(compliance.Dir(), "sidecar.yaml"),
-			[]byte(promQLCompatConfig(prom, querySidecar, []string{"prometheus"})), os.ModePerm))
+			[]byte(promQLCompatConfig(prom, queryTargetRunnable, []string{"prometheus"})), os.ModePerm))
 
 		testutil.Ok(t, compliance.Exec(e2e.NewCommand(
 			"/promql-compliance-tester",
@@ -205,4 +230,21 @@ func alertCompatConfig(receive e2e.Runnable, query e2e.Runnable) string {
   alert_reception_server_port: 8080
   alert_message_parser: default
 `, e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("remote-write")), query.InternalEndpoint("http"), query.InternalEndpoint("http"))
+}
+
+func newQueryFrontendRunnable(e e2e.Environment, name, downstreamURL string) e2e.InstrumentedRunnable {
+	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
+		Type: queryfrontend.INMEMORY,
+		Config: queryfrontend.InMemoryResponseCacheConfig{
+			MaxSizeItems: 1000,
+			Validity:     time.Hour,
+		},
+	}
+	config := queryfrontend.Config{
+		QueryRangeConfig: queryfrontend.QueryRangeConfig{
+			AlignRangeWithStep: false,
+		},
+		NumShards: 3,
+	}
+	return e2ethanos.NewQueryFrontend(e, name, downstreamURL, config, inMemoryCacheConfig)
 }
