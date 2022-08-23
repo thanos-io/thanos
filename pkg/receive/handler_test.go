@@ -30,6 +30,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
+	prometheusMetadata "github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -295,6 +296,10 @@ func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppend
 		commitErr:   commitErr,
 		rollbackErr: rollbackErr,
 	}
+}
+
+func (f *fakeAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, prometheusMetadata.Metadata) (storage.SeriesRef, error) {
+	return 0, nil
 }
 
 func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {

@@ -72,6 +72,7 @@ const (
 	Step                     = "step"
 	Stats                    = "stats"
 	ShardInfoParam           = "shard_info"
+	LookbackDeltaParam       = "lookback_delta"
 )
 
 // QueryAPI is an API used by Thanos Querier.
@@ -81,11 +82,12 @@ type QueryAPI struct {
 	gate            gate.Gate
 	queryableCreate query.QueryableCreator
 	// queryEngine returns appropriate promql.Engine for a query with a given step.
-	queryEngine func(int64) *promql.Engine
-	ruleGroups  rules.UnaryClient
-	targets     targets.UnaryClient
-	metadatas   metadata.UnaryClient
-	exemplars   exemplars.UnaryClient
+	queryEngine         *promql.Engine
+	lookbackDeltaCreate func(int64) time.Duration
+	ruleGroups          rules.UnaryClient
+	targets             targets.UnaryClient
+	metadatas           metadata.UnaryClient
+	exemplars           exemplars.UnaryClient
 
 	enableAutodownsampling              bool
 	enableQueryPartialResponse          bool
@@ -110,7 +112,8 @@ type QueryAPI struct {
 func NewQueryAPI(
 	logger log.Logger,
 	endpointStatus func() []query.EndpointStatus,
-	qe func(int64) *promql.Engine,
+	qe *promql.Engine,
+	lookbackDeltaCreate func(int64) time.Duration,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
 	targets targets.UnaryClient,
@@ -133,16 +136,16 @@ func NewQueryAPI(
 	reg *prometheus.Registry,
 ) *QueryAPI {
 	return &QueryAPI{
-		baseAPI:         api.NewBaseAPI(logger, disableCORS, flagsMap),
-		logger:          logger,
-		queryEngine:     qe,
-		queryableCreate: c,
-		gate:            gate,
-		ruleGroups:      ruleGroups,
-		targets:         targets,
-		metadatas:       metadatas,
-		exemplars:       exemplars,
-
+		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
+		logger:                                 logger,
+		queryEngine:                            qe,
+		queryableCreate:                        c,
+		gate:                                   gate,
+		ruleGroups:                             ruleGroups,
+		targets:                                targets,
+		metadatas:                              metadatas,
+		exemplars:                              exemplars,
+		lookbackDeltaCreate:                    lookbackDeltaCreate,
 		enableAutodownsampling:                 enableAutodownsampling,
 		enableQueryPartialResponse:             enableQueryPartialResponse,
 		enableRulePartialResponse:              enableRulePartialResponse,
@@ -247,6 +250,20 @@ func (qapi *QueryAPI) parseStoreDebugMatchersParam(r *http.Request) (storeMatche
 	}
 
 	return storeMatchers, nil
+}
+
+func (qapi *QueryAPI) parseLookbackDeltaParam(r *http.Request) (time.Duration, *api.ApiError) {
+	// Overwrite the cli flag when provided as a query parameter.
+	if val := r.FormValue(LookbackDeltaParam); val != "" {
+		var err error
+		lookbackDelta, err := parseDuration(val)
+		if err != nil {
+			return 0, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", LookbackDeltaParam)}
+		}
+		return lookbackDelta, nil
+	}
+	// If duration 0 is returned, lookback delta is taken from engine config.
+	return time.Duration(0), nil
 }
 
 func (qapi *QueryAPI) parseDownsamplingParamMillis(r *http.Request, defaultVal time.Duration) (maxResolutionMillis int64, _ *api.ApiError) {
@@ -364,13 +381,21 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr, func() {}
 	}
 
-	qe := qapi.queryEngine(maxSourceResolution)
+	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
+	// Get custom lookback delta from request.
+	lookbackDeltaFromReq, apiErr := qapi.parseLookbackDeltaParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
+	}
+	if lookbackDeltaFromReq > 0 {
+		lookbackDelta = lookbackDeltaFromReq
+	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	qry, err := qe.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, qapi.enableQueryPushdown, false, shardInfo), &promql.QueryOpts{}, r.FormValue("query"), ts)
+	qry, err := qapi.queryEngine.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, qapi.enableQueryPushdown, false, shardInfo), &promql.QueryOpts{LookbackDelta: lookbackDelta}, r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
@@ -482,7 +507,15 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr, func() {}
 	}
 
-	qe := qapi.queryEngine(maxSourceResolution)
+	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
+	// Get custom lookback delta from request.
+	lookbackDeltaFromReq, apiErr := qapi.parseLookbackDeltaParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
+	}
+	if lookbackDeltaFromReq > 0 {
+		lookbackDelta = lookbackDeltaFromReq
+	}
 
 	// Record the query range requested.
 	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
@@ -491,9 +524,9 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
-	qry, err := qe.NewRangeQuery(
+	qry, err := qapi.queryEngine.NewRangeQuery(
 		qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, qapi.enableQueryPushdown, false, shardInfo),
-		&promql.QueryOpts{},
+		&promql.QueryOpts{LookbackDelta: lookbackDelta},
 		r.FormValue("query"),
 		start,
 		end,
