@@ -200,7 +200,7 @@ func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) e2e.Instru
 	})
 
 	return f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image:   "quay.io/observatorium/avalanche:main",
+		Image:   "quay.io/prometheuscommunity/avalanche:main",
 		Command: e2e.NewCommandWithoutEntrypoint("avalanche", args...),
 	}))
 }
