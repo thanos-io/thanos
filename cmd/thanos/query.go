@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -586,8 +584,14 @@ func runQuery(
 		grpcProbe,
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
-	engineCreator := engineFactory(promql.NewEngine, engineOpts, dynamicLookbackDelta, activeQueryDir,
-		maxConcurrentQueries, logger)
+
+	// An active query tracker will be added only if the user specifies a non-default path.
+	// Otherwise, the nil active query tracker from existing engine options will be used.
+	if activeQueryDir != "" {
+		engineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
+	}
+	engine := promql.NewEngine(engineOpts)
+	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts, dynamicLookbackDelta)
 
 	// Start query API + UI HTTP server.
 	{
@@ -617,7 +621,8 @@ func runQuery(
 		api := apiv1.NewQueryAPI(
 			logger,
 			endpoints.GetEndpointStatus,
-			engineCreator,
+			engine,
+			lookbackDeltaCreator,
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
 			rules.NewGRPCClientWithDedup(rulesProxy, queryReplicaLabels),
@@ -692,7 +697,7 @@ func runQuery(
 			info.WithQueryAPIInfoFunc(),
 		)
 
-		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, engineCreator, instantDefaultMaxSourceResolution)
+		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, engine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
@@ -737,31 +742,21 @@ func removeDuplicateEndpointSpecs(logger log.Logger, duplicatedStores prometheus
 	return deduplicated
 }
 
-// engineFactory creates from 1 to 3 promql.Engines depending on
+// LookbackDeltaFactory creates from 1 to 3 lookback deltas depending on
 // dynamicLookbackDelta and eo.LookbackDelta and returns a function
-// that returns appropriate engine for given maxSourceResolutionMillis.
-//
-// TODO: it seems like a good idea to tweak Prometheus itself
-// instead of creating several Engines here.
-func engineFactory(
-	newEngine func(promql.EngineOpts) *promql.Engine,
+// that returns appropriate lookback delta for given maxSourceResolutionMillis.
+func LookbackDeltaFactory(
 	eo promql.EngineOpts,
 	dynamicLookbackDelta bool,
-	activeQueryDir string,
-	maxConcurrentQueries int,
-	logger log.Logger,
-) func(int64) *promql.Engine {
+) func(int64) time.Duration {
 	resolutions := []int64{downsample.ResLevel0}
 	if dynamicLookbackDelta {
 		resolutions = []int64{downsample.ResLevel0, downsample.ResLevel1, downsample.ResLevel2}
 	}
 	var (
-		engines = make([]*promql.Engine, len(resolutions))
-		ld      = eo.LookbackDelta.Milliseconds()
+		lds = make([]time.Duration, len(resolutions))
+		ld  = eo.LookbackDelta.Milliseconds()
 	)
-	wrapReg := func(engineNum int) prometheus.Registerer {
-		return extprom.WrapRegistererWith(map[string]string{"engine": strconv.Itoa(engineNum)}, eo.Reg)
-	}
 
 	lookbackDelta := eo.LookbackDelta
 	for i, r := range resolutions {
@@ -769,50 +764,18 @@ func engineFactory(
 			lookbackDelta = time.Duration(r) * time.Millisecond
 		}
 
-		newEngineOpts := promql.EngineOpts{
-			Logger:                   eo.Logger,
-			Reg:                      wrapReg(i),
-			MaxSamples:               eo.MaxSamples,
-			Timeout:                  eo.Timeout,
-			LookbackDelta:            lookbackDelta,
-			NoStepSubqueryIntervalFn: eo.NoStepSubqueryIntervalFn,
-			EnableAtModifier:         eo.EnableAtModifier,
-			EnableNegativeOffset:     eo.EnableNegativeOffset,
-		}
-		// An active query tracker will be added only if the user specifies a non-default path.
-		// Otherwise, the nil active query tracker from existing engine options will be used.
-		if activeQueryDir != "" {
-			resActiveQueryDir := filepath.Join(activeQueryDir, getActiveQueryDirBasedOnResolution(r))
-			newEngineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(resActiveQueryDir, maxConcurrentQueries, logger)
-		} else {
-			newEngineOpts.ActiveQueryTracker = eo.ActiveQueryTracker
-		}
-
-		engines[i] = newEngine(newEngineOpts)
+		lds[i] = lookbackDelta
 	}
-	return func(maxSourceResolutionMillis int64) *promql.Engine {
+	return func(maxSourceResolutionMillis int64) time.Duration {
 		for i := len(resolutions) - 1; i >= 1; i-- {
 			left := resolutions[i-1]
 			if resolutions[i-1] < ld {
 				left = ld
 			}
 			if left < maxSourceResolutionMillis {
-				return engines[i]
+				return lds[i]
 			}
 		}
-		return engines[0]
+		return lds[0]
 	}
-}
-
-func getActiveQueryDirBasedOnResolution(resolution int64) string {
-	if resolution == downsample.ResLevel0 {
-		return "raw"
-	}
-	if resolution == downsample.ResLevel1 {
-		return "5m"
-	}
-	if resolution == downsample.ResLevel2 {
-		return "1h"
-	}
-	return ""
 }

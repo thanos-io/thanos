@@ -19,17 +19,19 @@ type GRPCAPI struct {
 	now                         func() time.Time
 	replicaLabels               []string
 	queryableCreate             query.QueryableCreator
-	queryEngine                 func(int64) *promql.Engine
+	queryEngine                 *promql.Engine
+	lookbackDeltaCreate         func(int64) time.Duration
 	defaultMaxResolutionSeconds time.Duration
 }
 
-func NewGRPCAPI(now func() time.Time, replicaLabels []string, creator query.QueryableCreator, queryEngine func(int64) *promql.Engine, defaultMaxResolutionSeconds time.Duration) *GRPCAPI {
+func NewGRPCAPI(now func() time.Time, replicaLabels []string, creator query.QueryableCreator, queryEngine *promql.Engine, lookbackDeltaCreate func(int64) time.Duration, defaultMaxResolutionSeconds time.Duration) *GRPCAPI {
 	return &GRPCAPI{
 		now:                         now,
 		replicaLabels:               replicaLabels,
 		queryableCreate:             creator,
 		queryEngine:                 queryEngine,
 		defaultMaxResolutionSeconds: defaultMaxResolutionSeconds,
+		lookbackDeltaCreate:         lookbackDeltaCreate,
 	}
 }
 
@@ -60,6 +62,11 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		maxResolution = g.defaultMaxResolutionSeconds.Milliseconds() / 1000
 	}
 
+	lookbackDelta := g.lookbackDeltaCreate(maxResolution * 1000)
+	if request.LookbackDeltaSeconds > 0 {
+		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
+	}
+
 	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(request.StoreMatchers)
 	if err != nil {
 		return err
@@ -69,7 +76,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	if len(request.ReplicaLabels) != 0 {
 		replicaLabels = request.ReplicaLabels
 	}
-	qe := g.queryEngine(request.MaxResolutionSeconds)
+
 	queryable := g.queryableCreate(
 		request.EnableDedup,
 		replicaLabels,
@@ -80,7 +87,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		false,
 		request.ShardInfo,
 	)
-	qry, err := qe.NewInstantQuery(queryable, &promql.QueryOpts{}, request.Query, ts)
+	qry, err := g.queryEngine.NewInstantQuery(queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, ts)
 	if err != nil {
 		return err
 	}
@@ -129,6 +136,11 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		maxResolution = g.defaultMaxResolutionSeconds.Milliseconds() / 1000
 	}
 
+	lookbackDelta := g.lookbackDeltaCreate(maxResolution * 1000)
+	if request.LookbackDeltaSeconds > 0 {
+		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
+	}
+
 	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(request.StoreMatchers)
 	if err != nil {
 		return err
@@ -138,7 +150,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	if len(request.ReplicaLabels) != 0 {
 		replicaLabels = request.ReplicaLabels
 	}
-	qe := g.queryEngine(request.MaxResolutionSeconds)
+
 	queryable := g.queryableCreate(
 		request.EnableDedup,
 		replicaLabels,
@@ -154,7 +166,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	endTime := time.Unix(request.EndTimeSeconds, 0)
 	interval := time.Duration(request.IntervalSeconds) * time.Second
 
-	qry, err := qe.NewRangeQuery(queryable, &promql.QueryOpts{}, request.Query, startTime, endTime, interval)
+	qry, err := g.queryEngine.NewRangeQuery(queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, startTime, endTime, interval)
 	if err != nil {
 		return err
 	}

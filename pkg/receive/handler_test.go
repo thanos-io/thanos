@@ -30,6 +30,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
+	prometheusMetadata "github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -297,6 +298,10 @@ func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppend
 	}
 }
 
+func (f *fakeAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, prometheusMetadata.Metadata) (storage.SeriesRef, error) {
+	return 0, nil
+}
+
 func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
 	f.Lock()
 	defer f.Unlock()
@@ -372,7 +377,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		cfg[0].Endpoints = append(cfg[0].Endpoints, h.options.Endpoint)
 		peers.cache[addr] = &fakeRemoteWriteGRPCServer{h: h}
 	}
-	hashring := newMultiHashring(AlgorithmHashmod, cfg)
+	hashring := newMultiHashring(AlgorithmHashmod, replicationFactor, cfg)
 	for _, h := range handlers {
 		h.Hashring(hashring)
 	}
@@ -1253,7 +1258,7 @@ func (a *tsOverrideAppender) GetRef(lset labels.Labels) (storage.SeriesRef, labe
 }
 
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would
-// be send to Thanos receive.
+// be sent to Thanos receive.
 // It has one sample and allow passing multiple series, in same manner as typical Prometheus would batch it.
 func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byte {
 	r := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, 0, len(series))}
@@ -1322,6 +1327,21 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			name: "typical labels under 1KB, 5000 of them",
 			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
 				series := make([][]labelpb.ZLabel, 5000)
+				for s := 0; s < len(series); s++ {
+					lbls := make([]labelpb.ZLabel, 10)
+					for i := 0; i < len(lbls); i++ {
+						// Label ~20B name, 50B value.
+						lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					}
+					series[s] = lbls
+				}
+				return series
+			}()),
+		},
+		{
+			name: "typical labels under 1KB, 20000 of them",
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
+				series := make([][]labelpb.ZLabel, 20000)
 				for s := 0; s < len(series); s++ {
 					lbls := make([]labelpb.ZLabel, 10)
 					for i := 0; i < len(lbls); i++ {
