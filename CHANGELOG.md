@@ -102,6 +102,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5145](https://github.com/thanos-io/thanos/pull/5145) UI: Remove old Prometheus UI.
 
 ## v0.25.2 - 2022.03.24
+
 Release [v0.25.2](https://github.com/thanos-io/thanos/releases/tag/v0.25.2)
 
 ### Fixed
@@ -336,11 +337,11 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 
 ### Changed
 
--
+- 
 
 ### Removed
 
--
+- 
 
 ## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.04.28
 
