@@ -720,13 +720,14 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, err)
 		operationMatcher, err := matchers.NewMatcher(matchers.MatchEqual, "operation", "get")
 		testutil.Ok(t, err)
-		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(573),
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(
+			e2e.Equals(573),
 			[]string{"thanos_objstore_bucket_operations_total"}, e2e.WithLabelMatchers(
 				bucketMatcher,
 				operationMatcher,
-			)),
+			),
 			e2e.WaitMissingMetrics(),
-		)
+		))
 
 		// Make sure compactor does not modify anything else over time.
 		testutil.Ok(t, c.Stop())
