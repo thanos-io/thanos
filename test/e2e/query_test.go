@@ -371,7 +371,7 @@ func TestQueryWithAuthorizedSidecar(t *testing.T) {
 
 func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 	t.Parallel()
-	if runtime.GOARCH == "arm64" {
+	if runtime.GOARCH != "amd64" {
 		t.Skip("Skip pre-info API test because of lack of multi-arch image for Thanos v0.22.0.")
 	}
 
