@@ -497,7 +497,6 @@ config:
 								{Name: "__scheme__", Value: "http"},
 								{Name: "__scrape_interval__", Value: "1s"},
 								{Name: "__scrape_timeout__", Value: "1s"},
-								{Name: "__scheme__", Value: "http"},
 								{Name: "job", Value: "myself"},
 								{Name: "prometheus", Value: "p1"},
 							}},
