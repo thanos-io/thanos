@@ -68,7 +68,7 @@ const (
 
 // DefaultPrometheusImage sets default Prometheus image used in e2e service.
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.29.2"
+	return "quay.io/prometheus/prometheus:v2.38.0"
 }
 
 // DefaultAlertmanagerImage sets default Alertmanager image used in e2e service.
