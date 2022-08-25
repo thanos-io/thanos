@@ -88,6 +88,8 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 					{Name: "__address__", Value: "localhost:80"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
+					{Name: "__scrape_interval__", Value: "1s"},
+					{Name: "__scrape_timeout__", Value: "1s"},
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
 				}},
