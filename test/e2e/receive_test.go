@@ -727,7 +727,7 @@ func TestReceive(t *testing.T) {
 
 		// Here for exceed-tenant we go above limit by 10, which results in 0 value.
 		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-			return "sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e_multitenant_active_series_limiting-receive-i1:8080\", job=\"receive-i1\"}"
+			return "sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e-multitenant-active-series-limiting-receive-i1:8080\", job=\"receive-i1\"}"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
@@ -739,7 +739,7 @@ func TestReceive(t *testing.T) {
 
 		// For under-tenant we stay at -5, as we have only pushed 5 series.
 		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-			return "sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e_multitenant_active_series_limiting-receive-i1:8080\", job=\"receive-i1\"}"
+			return "sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e-multitenant-active-series-limiting-receive-i1:8080\", job=\"receive-i1\"}"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
@@ -776,7 +776,7 @@ func TestReceive(t *testing.T) {
 			&model.Sample{
 				Metric: model.Metric{
 					"__name__": "thanos_receive_head_series_limited_requests_total",
-					"instance": "e2e_multitenant_active_series_limiting-receive-i1:8080",
+					"instance": "e2e-multitenant-active-series-limiting-receive-i1:8080",
 					"job":      "receive-i1",
 					"tenant":   "exceed-tenant",
 				},
