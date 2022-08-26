@@ -52,14 +52,14 @@ func TestCloneNode(t *testing.T) {
 						mustLabelMatcher(labels.MatchEqual, string(model.MetricNameLabel), "some_metric"),
 					},
 					PosRange: parser.PositionRange{
-						Start: 18,
-						End:   29,
+						Start: 19,
+						End:   30,
 					},
 				},
 				Grouping: []string{"foo"},
 				PosRange: parser.PositionRange{
 					Start: 0,
-					End:   30,
+					End:   31,
 				},
 			},
 		},

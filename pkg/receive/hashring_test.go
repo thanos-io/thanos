@@ -136,7 +136,7 @@ func TestHashringGet(t *testing.T) {
 			},
 		},
 	} {
-		hs := newMultiHashring(AlgorithmHashmod, tc.cfg)
+		hs := newMultiHashring(AlgorithmHashmod, 3, tc.cfg)
 		h, err := hs.Get(tc.tenant, ts)
 		if tc.nodes != nil {
 			if err != nil {
@@ -188,14 +188,14 @@ func TestKetamaHashringGet(t *testing.T) {
 			nodes:        []string{"node-1", "node-2", "node-3"},
 			ts:           baseTS,
 			n:            2,
-			expectedNode: "node-2",
+			expectedNode: "node-3",
 		},
 		{
 			name:         "base case with replication and reordered nodes",
 			nodes:        []string{"node-1", "node-3", "node-2"},
 			ts:           baseTS,
 			n:            2,
-			expectedNode: "node-2",
+			expectedNode: "node-3",
 		},
 		{
 			name:         "base case with new node at beginning of ring",
@@ -226,7 +226,8 @@ func TestKetamaHashringGet(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			hashRing := newKetamaHashring(test.nodes, 10)
+			hashRing := newKetamaHashring(test.nodes, 10, test.n+1)
+
 			result, err := hashRing.GetN("tenant", test.ts, test.n)
 			require.NoError(t, err)
 			require.Equal(t, test.expectedNode, result)
@@ -314,11 +315,11 @@ func TestKetamaHashringReplicationConsistency(t *testing.T) {
 	}
 }
 
-func makeSeries() []*prompb.TimeSeries {
+func makeSeries() []prompb.TimeSeries {
 	numSeries := 10000
-	series := make([]*prompb.TimeSeries, numSeries)
+	series := make([]prompb.TimeSeries, numSeries)
 	for i := 0; i < numSeries; i++ {
-		series[i] = &prompb.TimeSeries{
+		series[i] = prompb.TimeSeries{
 			Labels: []labelpb.ZLabel{
 				{
 					Name:  "pod",
@@ -330,7 +331,7 @@ func makeSeries() []*prompb.TimeSeries {
 	return series
 }
 
-func findSeries(initialAssignments map[string][]*prompb.TimeSeries, node string, newSeries *prompb.TimeSeries) bool {
+func findSeries(initialAssignments map[string][]prompb.TimeSeries, node string, newSeries prompb.TimeSeries) bool {
 	for _, oldSeries := range initialAssignments[node] {
 		l1 := labelpb.ZLabelsToPromLabels(newSeries.Labels)
 		l2 := labelpb.ZLabelsToPromLabels(oldSeries.Labels)
@@ -342,16 +343,16 @@ func findSeries(initialAssignments map[string][]*prompb.TimeSeries, node string,
 	return false
 }
 
-func assignSeries(series []*prompb.TimeSeries, nodes []string) (map[string][]*prompb.TimeSeries, error) {
+func assignSeries(series []prompb.TimeSeries, nodes []string) (map[string][]prompb.TimeSeries, error) {
 	return assignReplicatedSeries(series, nodes, 0)
 }
 
-func assignReplicatedSeries(series []*prompb.TimeSeries, nodes []string, replicas uint64) (map[string][]*prompb.TimeSeries, error) {
-	hashRing := newKetamaHashring(nodes, SectionsPerNode)
-	assignments := make(map[string][]*prompb.TimeSeries)
+func assignReplicatedSeries(series []prompb.TimeSeries, nodes []string, replicas uint64) (map[string][]prompb.TimeSeries, error) {
+	hashRing := newKetamaHashring(nodes, SectionsPerNode, replicas)
+	assignments := make(map[string][]prompb.TimeSeries)
 	for i := uint64(0); i < replicas; i++ {
 		for _, ts := range series {
-			result, err := hashRing.GetN("tenant", ts, i)
+			result, err := hashRing.GetN("tenant", &ts, i)
 			if err != nil {
 				return nil, err
 			}

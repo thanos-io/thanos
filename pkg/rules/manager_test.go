@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
@@ -45,6 +46,9 @@ func (n nopAppender) AppendExemplar(storage.SeriesRef, labels.Labels, exemplar.E
 func (n nopAppender) Commit() error                                        { return nil }
 func (n nopAppender) Rollback() error                                      { return nil }
 func (n nopAppender) Appender(_ context.Context) (storage.Appender, error) { return n, nil }
+func (n nopAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, metadata.Metadata) (storage.SeriesRef, error) {
+	return 0, nil
+}
 
 type nopQueryable struct{}
 

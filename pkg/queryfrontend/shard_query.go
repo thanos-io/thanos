@@ -67,9 +67,9 @@ func (s querySharder) Do(ctx context.Context, r queryrange.Request) (queryrange.
 }
 
 func (s querySharder) shardQuery(r queryrange.Request, analysis querysharding.QueryAnalysis) []queryrange.Request {
-	tr, ok := r.(*ThanosQueryRangeRequest)
+	tr, ok := r.(ShardedRequest)
 	if !ok {
-		return []queryrange.Request{tr}
+		return []queryrange.Request{r}
 	}
 
 	reqs := make([]queryrange.Request, s.numShards)

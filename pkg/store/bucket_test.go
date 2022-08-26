@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -186,6 +187,52 @@ func TestBucketBlock_Property(t *testing.T) {
 	)
 
 	properties.TestingRun(t)
+}
+
+func TestBucketFilterExtLabelsMatchers(t *testing.T) {
+	defer testutil.TolerantVerifyLeak(t)
+
+	dir := t.TempDir()
+	bkt, err := filesystem.NewBucket(dir)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	blockID := ulid.MustNew(1, nil)
+	meta := &metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{ULID: blockID},
+		Thanos: metadata.Thanos{
+			Labels: map[string]string{
+				"a": "b",
+				"c": "d",
+			},
+		},
+	}
+	b, _ := newBucketBlock(context.Background(), log.NewNopLogger(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil)
+	ms := []*labels.Matcher{
+		{Type: labels.MatchNotEqual, Name: "a", Value: "b"},
+	}
+	res, _ := b.FilterExtLabelsMatchers(ms)
+	testutil.Equals(t, len(res), 0)
+
+	ms = []*labels.Matcher{
+		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
+	}
+	_, ok := b.FilterExtLabelsMatchers(ms)
+	testutil.Equals(t, ok, false)
+
+	ms = []*labels.Matcher{
+		{Type: labels.MatchNotEqual, Name: "a", Value: "a"},
+		{Type: labels.MatchNotEqual, Name: "c", Value: "d"},
+	}
+	res, _ = b.FilterExtLabelsMatchers(ms)
+	testutil.Equals(t, len(res), 0)
+
+	ms = []*labels.Matcher{
+		{Type: labels.MatchNotEqual, Name: "a2", Value: "a"},
+	}
+	res, _ = b.FilterExtLabelsMatchers(ms)
+	testutil.Equals(t, len(res), 1)
+	testutil.Equals(t, res, ms)
 }
 
 func TestBucketBlock_matchLabels(t *testing.T) {
@@ -1067,14 +1114,16 @@ func appendTestData(t testing.TB, app storage.Appender, series int) {
 	}
 
 	series = series / 5
+	uniq := 0
 	for n := 0; n < 10; n++ {
 		for i := 0; i < series/10; i++ {
-			addSeries(labels.FromStrings("i", strconv.Itoa(i)+storetestutil.LabelLongSuffix, "n", strconv.Itoa(n)+storetestutil.LabelLongSuffix, "j", "foo"))
+			addSeries(labels.FromStrings("i", strconv.Itoa(i)+storetestutil.LabelLongSuffix, "n", strconv.Itoa(n)+storetestutil.LabelLongSuffix, "j", "foo", "uniq", fmt.Sprintf("%08d", uniq)))
 			// Have some series that won't be matched, to properly test inverted matches.
-			addSeries(labels.FromStrings("i", strconv.Itoa(i)+storetestutil.LabelLongSuffix, "n", strconv.Itoa(n)+storetestutil.LabelLongSuffix, "j", "bar"))
-			addSeries(labels.FromStrings("i", strconv.Itoa(i)+storetestutil.LabelLongSuffix, "n", "0_"+strconv.Itoa(n)+storetestutil.LabelLongSuffix, "j", "bar"))
-			addSeries(labels.FromStrings("i", strconv.Itoa(i)+storetestutil.LabelLongSuffix, "n", "1_"+strconv.Itoa(n)+storetestutil.LabelLongSuffix, "j", "bar"))
-			addSeries(labels.FromStrings("i", strconv.Itoa(i)+storetestutil.LabelLongSuffix, "n", "2_"+strconv.Itoa(n)+storetestutil.LabelLongSuffix, "j", "foo"))
+			addSeries(labels.FromStrings("i", strconv.Itoa(i)+storetestutil.LabelLongSuffix, "n", strconv.Itoa(n)+storetestutil.LabelLongSuffix, "j", "bar", "uniq", fmt.Sprintf("%08d", uniq+1)))
+			addSeries(labels.FromStrings("i", strconv.Itoa(i)+storetestutil.LabelLongSuffix, "n", "0_"+strconv.Itoa(n)+storetestutil.LabelLongSuffix, "j", "bar", "uniq", fmt.Sprintf("%08d", uniq+2)))
+			addSeries(labels.FromStrings("i", strconv.Itoa(i)+storetestutil.LabelLongSuffix, "n", "1_"+strconv.Itoa(n)+storetestutil.LabelLongSuffix, "j", "bar", "uniq", fmt.Sprintf("%08d", uniq+3)))
+			addSeries(labels.FromStrings("i", strconv.Itoa(i)+storetestutil.LabelLongSuffix, "n", "2_"+strconv.Itoa(n)+storetestutil.LabelLongSuffix, "j", "foo", "uniq", fmt.Sprintf("%08d", uniq+4)))
+			uniq += 5
 		}
 	}
 	testutil.Ok(t, app.Commit())
@@ -1115,6 +1164,19 @@ func benchmarkExpandedPostings(
 	iNot2 := labels.MustNewMatcher(labels.MatchNotEqual, "n", "2"+storetestutil.LabelLongSuffix)
 	iNot2Star := labels.MustNewMatcher(labels.MatchNotRegexp, "i", "^2.*$")
 	iRegexSet := labels.MustNewMatcher(labels.MatchRegexp, "i", "0"+storetestutil.LabelLongSuffix+"|1"+storetestutil.LabelLongSuffix+"|2"+storetestutil.LabelLongSuffix)
+	bigValueSetSize := series / 10
+	if bigValueSetSize > 50000 {
+		bigValueSetSize = 50000
+	}
+	bigValueSet := make([]string, 0, bigValueSetSize)
+	for i := 0; i < series; i += series / bigValueSetSize {
+		bigValueSet = append(bigValueSet, fmt.Sprintf("%08d", i))
+	}
+	bigValueSetSize = len(bigValueSet)
+	rand.New(rand.NewSource(time.Now().UnixNano())).Shuffle(len(bigValueSet), func(i, j int) {
+		bigValueSet[i], bigValueSet[j] = bigValueSet[j], bigValueSet[i]
+	})
+	iRegexBigValueSet := labels.MustNewMatcher(labels.MatchRegexp, "uniq", strings.Join(bigValueSet, "|"))
 
 	series = series / 5
 	cases := []struct {
@@ -1140,6 +1202,7 @@ func benchmarkExpandedPostings(
 		{`n="1",i=~".+",i!="2",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2, jFoo}, int(float64(series) * 0.1)},
 		{`n="1",i=~".+",i!~"2.*",j="foo"`, []*labels.Matcher{n1, iPlus, iNot2Star, jFoo}, int(1 + float64(series)*0.088888)},
 		{`i=~"0|1|2"`, []*labels.Matcher{iRegexSet}, 150}, // 50 series for "1", 50 for "2" and 50 for "3".
+		{`uniq=~"9|random-shuffled-values|1"`, []*labels.Matcher{iRegexBigValueSet}, bigValueSetSize},
 	}
 
 	for _, c := range cases {
