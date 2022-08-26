@@ -10,9 +10,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-## v0.28.0 - In Progress
-
-## [v0.28.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.28) - 2022.08.22
+## [v0.28.0](https://github.com/thanos-io/thanos/tree/release-0.28) - 2022.08.26
 
 ### Fixed
 - [#5502](https://github.com/thanos-io/thanos/pull/5502) Receive: Handle exemplar storage errors as conflict error.
@@ -39,7 +37,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5439](https://github.com/thanos-io/thanos/pull/5439) Mixin: Add Alert ThanosQueryOverload to Mixin.
 - [#5342](https://github.com/thanos-io/thanos/pull/5342) Query/Query Frontend: Implement vertical sharding at query frontend for range queries.
 - [#5561](https://github.com/thanos-io/thanos/pull/5561) Query Frontend: Support instant query vertical sharding.
-- [#5453](https://github.com/thanos-io/thanos/pull/5453) Compact: Skip erroneous empty non `*AggrChunk` chunks during 1h downsampling of 5m resolution blocks.- [#5607](https://github.com/thanos-io/thanos/pull/5607) Query: Support custom lookback delta from request in query api.
+- [#5453](https://github.com/thanos-io/thanos/pull/5453) Compact: Skip erroneous empty non `*AggrChunk` chunks during 1h downsampling of 5m resolution blocks.
 - [#5607](https://github.com/thanos-io/thanos/pull/5607) Query: Support custom lookback delta from request in query api.
 
 ### Changed
