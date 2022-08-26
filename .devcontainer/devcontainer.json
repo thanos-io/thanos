@@ -29,7 +29,7 @@
 		"davidanson.vscode-markdownlint",
 		"timonwong.shellcheck",
 		"docsmsft.docs-yaml",
-		"heptio.jsonnet",
+		"Grafana.vscode-jsonnet",
 		"codezombiech.gitignore",
 		"golang.Go"
 
