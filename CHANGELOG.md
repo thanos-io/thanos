@@ -37,6 +37,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5508](https://github.com/thanos-io/thanos/pull/5508) Receive: Validate labels in write requests.
 - [#5439](https://github.com/thanos-io/thanos/pull/5439) Mixin: Add Alert ThanosQueryOverload to Mixin.
 - [#5561](https://github.com/thanos-io/thanos/pull/5561) Query Frontend: Support instant query sharding.
+- [#5561](https://github.com/thanos-io/thanos/pull/5650) Query Frontend: Add sharded queries metrics.
 
 ### Changed
 
