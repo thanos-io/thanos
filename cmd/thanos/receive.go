@@ -246,7 +246,7 @@ func runReceive(
 	)
 
 	// Start all components while we wait for TSDB to open but only load
-	// initial config and mark ourselves as ready after it completed.
+	// initial config and mark ourselves as ready after it completes.
 
 	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
 	hashringChangedChan := make(chan struct{}, 1)
@@ -257,7 +257,7 @@ func runReceive(
 		// uploadDone signals when uploading has finished.
 		uploadDone := make(chan struct{}, 1)
 
-		level.Debug(logger).Log("msg", "setting up tsdb")
+		level.Debug(logger).Log("msg", "setting up TSDB")
 		{
 			if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
 				return err
@@ -272,7 +272,7 @@ func runReceive(
 		}
 	}
 
-	level.Debug(logger).Log("msg", "setting up http server")
+	level.Debug(logger).Log("msg", "setting up HTTP server")
 	{
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(*conf.httpBindAddr),
@@ -290,7 +290,7 @@ func runReceive(
 		})
 	}
 
-	level.Debug(logger).Log("msg", "setting up grpc server")
+	level.Debug(logger).Log("msg", "setting up gRPC server")
 	{
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), *conf.grpcCert, *conf.grpcKey, *conf.grpcClientCA)
 		if err != nil {
@@ -351,7 +351,7 @@ func runReceive(
 		)
 	}
 
-	level.Debug(logger).Log("msg", "setting up receive http handler")
+	level.Debug(logger).Log("msg", "setting up receive HTTP handler")
 	{
 		g.Add(
 			func() error {
@@ -481,9 +481,8 @@ func setupHashring(g *run.Group,
 					return nil
 				}
 				webHandler.Hashring(h)
-
+				// If ingestion is enabled, send a signal to TSDB to flush.
 				if enableIngestion {
-					// send a signal to tsdb to reload, and then restart the gRPC server.
 					hashringChangedChan <- struct{}{}
 				} else {
 					// If not, just signal we are ready (this is important during first hashring load)
@@ -500,8 +499,8 @@ func setupHashring(g *run.Group,
 	return nil
 }
 
-// startTSDBAndUpload starts up the multi-tsdb and sets up the rungroup to flush the tsdb and reload on hashring change.
-// It also uploads the tsdb to object store if upload is enabled.
+// startTSDBAndUpload starts the multi-TSDB and sets up the rungroup to flush the TSDB and reload on hashring change.
+// It also upload blocks to object store, if upload is enabled.
 func startTSDBAndUpload(g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
@@ -559,9 +558,6 @@ func startTSDBAndUpload(g *run.Group,
 				if !ok {
 					return nil
 				}
-				msg := "hashring has changed; server is not ready to receive requests"
-				statusProber.NotReady(errors.New(msg))
-				level.Info(logger).Log("msg", msg)
 
 				// When using Ketama as the hashring algorithm, there is no need to flush the TSDB head.
 				// If new receivers were added to the hashring, existing receivers will not need to
@@ -572,6 +568,10 @@ func startTSDBAndUpload(g *run.Group,
 				// head compaction and upload.
 				flushHead := !initialized || hashringAlgorithm != receive.AlgorithmKetama
 				if flushHead {
+					msg := "hashring has changed; server is not ready to receive requests"
+					statusProber.NotReady(errors.New(msg))
+					level.Info(logger).Log("msg", msg)
+
 					level.Info(logger).Log("msg", "updating storage")
 					dbUpdatesStarted.Inc()
 					if err := dbs.Flush(); err != nil {
@@ -585,12 +585,11 @@ func startTSDBAndUpload(g *run.Group,
 						<-uploadDone
 					}
 					dbUpdatesCompleted.Inc()
+					statusProber.Ready()
+					level.Info(logger).Log("msg", "storage started, and server is ready to receive requests")
+					dbUpdatesCompleted.Inc()
 				}
 				initialized = true
-
-				statusProber.Ready()
-				level.Info(logger).Log("msg", "storage started, and server is ready to receive requests")
-				dbUpdatesCompleted.Inc()
 			}
 		}
 	}, func(err error) {
