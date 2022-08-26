@@ -9,7 +9,7 @@ import (
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 )
 
-// ThanosResponseExtractor helps extracting specific info from Query Response.
+// ThanosResponseExtractor helps to extract specific info from Query Response.
 type ThanosResponseExtractor struct{}
 
 // Extract extracts response for specific a range from a response.
@@ -53,4 +53,14 @@ func (m *ThanosLabelsResponse) GetHeaders() []*queryrange.PrometheusResponseHead
 // GetHeaders returns the HTTP headers in the response.
 func (m *ThanosSeriesResponse) GetHeaders() []*queryrange.PrometheusResponseHeader {
 	return headersToQueryRangeHeaders(m.Headers)
+}
+
+// GetStats returns response stats. Unimplemented for ThanosLabelsResponse.
+func (m *ThanosLabelsResponse) GetStats() *queryrange.PrometheusResponseStats {
+	return nil
+}
+
+// GetStats returns response stats. Unimplemented for ThanosSeriesResponse.
+func (m *ThanosSeriesResponse) GetStats() *queryrange.PrometheusResponseStats {
+	return nil
 }

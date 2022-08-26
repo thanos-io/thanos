@@ -7,9 +7,9 @@ package queryrange;
 
 option go_package = "queryrange";
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
-import "github.com/thanos-io/thanos/internal/cortex/cortexpb/cortex.proto";
+import "cortex/cortexpb/cortex.proto";
 import "google/protobuf/any.proto";
 
 option (gogoproto.marshaler_all) = true;
@@ -50,8 +50,39 @@ message PrometheusData {
   PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
 }
 
+message PrometheusInstantQueryResponse {
+  string Status = 1 [(gogoproto.jsontag) = "status"];
+  PrometheusInstantQueryData Data = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "data,omitempty"];
+  string ErrorType = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
+  string Error = 4 [(gogoproto.jsontag) = "error,omitempty"];
+  repeated PrometheusResponseHeader Headers = 5 [(gogoproto.jsontag) = "-"];
+}
+
+message PrometheusInstantQueryData {
+  string ResultType = 1 [(gogoproto.jsontag) = "resultType"];
+  PrometheusInstantQueryResult Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
+  PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
+}
+
+message PrometheusInstantQueryResult {
+  oneof result {
+    cortexpb.Sample scalar = 1;
+    StringSample stringSample = 2;
+    Vector vector = 3;
+    Matrix matrix = 4;
+  }
+}
+
+message Vector {
+  repeated Sample samples = 1;
+}
+
+message Matrix {
+  repeated SampleStream sampleStreams = 1;
+}
+
 message PrometheusResponseStats {
-    PrometheusResponseSamplesStats samples = 1 [(gogoproto.jsontag) = "samples"];
+  PrometheusResponseSamplesStats samples = 1 [(gogoproto.jsontag) = "samples"];
 }
 
 message PrometheusResponseSamplesStats {
@@ -60,7 +91,7 @@ message PrometheusResponseSamplesStats {
 }
 
 message PrometheusResponseQueryableSamplesStatsPerStep {
-  int64 value       = 1;
+  int64 value = 1;
   int64 timestamp_ms = 2;
 }
 
@@ -69,15 +100,25 @@ message SampleStream {
   repeated cortexpb.Sample samples = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "values"];
 }
 
-message CachedResponse  {
-	string key = 1 [(gogoproto.jsontag) = "key"];
+message Sample {
+  repeated cortexpb.LabelPair labels = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "metric", (gogoproto.customtype) = "github.com/thanos-io/thanos/internal/cortex/cortexpb.LabelAdapter"];
+  cortexpb.Sample sample = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "value"];
+}
 
-	// List of cached responses; non-overlapping and in order.
-	repeated Extent extents = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "extents"];
+message StringSample {
+  string value = 1;
+  int64 timestamp_ms = 2;
+}
+
+message CachedResponse  {
+  string key = 1 [(gogoproto.jsontag) = "key"];
+
+  // List of cached responses; non-overlapping and in order.
+  repeated Extent extents = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "extents"];
 }
 
 message Extent  {
-	int64 start = 1 [(gogoproto.jsontag) = "start"];
+  int64 start = 1 [(gogoproto.jsontag) = "start"];
   int64 end = 2 [(gogoproto.jsontag) = "end"];
   // reserved the previous key to ensure cache transition
   reserved 3;

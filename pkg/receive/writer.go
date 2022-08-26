@@ -78,16 +78,17 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
 		if err := labelpb.ValidateLabels(t.Labels); err != nil {
+			lset := &labelpb.ZLabelSet{Labels: t.Labels}
 			switch err {
 			case labelpb.ErrOutOfOrderLabels:
 				numLabelsOutOfOrder++
-				level.Debug(tLogger).Log("msg", "Out of order labels in the label set", "lset", t.Labels)
+				level.Debug(tLogger).Log("msg", "Out of order labels in the label set", "lset", lset.String())
 			case labelpb.ErrDuplicateLabels:
 				numLabelsDuplicates++
-				level.Debug(tLogger).Log("msg", "Duplicate labels in the label set", "lset", t.Labels)
+				level.Debug(tLogger).Log("msg", "Duplicate labels in the label set", "lset", lset.String())
 			case labelpb.ErrEmptyLabels:
 				numLabelsEmpty++
-				level.Debug(tLogger).Log("msg", "Labels with empty name in the label set", "lset", t.Labels)
+				level.Debug(tLogger).Log("msg", "Labels with empty name in the label set", "lset", lset.String())
 			default:
 				level.Debug(tLogger).Log("msg", "Error validating labels", "err", err)
 			}

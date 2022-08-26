@@ -28,7 +28,7 @@ message QueryRequest {
   int64 time_seconds = 2;
   int64 timeout_seconds = 3;
   int64 max_resolution_seconds = 4;
-
+    
   repeated string replica_labels = 5;
 
   repeated StoreMatchers storeMatchers = 6 [(gogoproto.nullable) = false];
@@ -39,6 +39,8 @@ message QueryRequest {
   bool skipChunks = 10;
 
   ShardInfo shard_info = 11;
+
+  int64 lookback_delta_seconds = 12;
 }
 
 message StoreMatchers {
@@ -75,6 +77,7 @@ message QueryRangeRequest {
   bool skipChunks = 12;
 
   ShardInfo shard_info = 13;
+  int64 lookback_delta_seconds = 14;
 }
 
 message QueryRangeResponse {

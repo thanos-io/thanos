@@ -68,20 +68,20 @@ func (sapi *StatusAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 	r.Get("/api/v1/status/tsdb", instr("tsdb_status", sapi.httpServeStats))
 }
 
-func (sapi *StatusAPI) httpServeStats(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (sapi *StatusAPI) httpServeStats(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
 	stats, sterr := sapi.getTSDBStats(r, labels.MetricName)
 	if sterr != nil {
-		return nil, nil, sterr
+		return nil, nil, sterr, func() {}
 	}
 
 	result := make([]TSDBStatus, 0, len(stats))
 	if len(stats) == 0 {
-		return result, nil, nil
+		return result, nil, nil, func() {}
 	}
 
 	metrics, err := sapi.registry.Gather()
 	if err != nil {
-		return nil, []error{err}, nil
+		return nil, []error{err}, nil, func() {}
 	}
 
 	tenantChunks := make(map[string]int64)
@@ -121,5 +121,5 @@ func (sapi *StatusAPI) httpServeStats(r *http.Request) (interface{}, []error, *a
 			},
 		})
 	}
-	return result, nil, nil
+	return result, nil, nil, func() {}
 }
