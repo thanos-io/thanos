@@ -9,6 +9,9 @@ package queryfrontend
 import (
 	"context"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 
 	"github.com/thanos-io/thanos/pkg/querysharding"
@@ -16,7 +19,7 @@ import (
 )
 
 // PromQLShardingMiddleware creates a new Middleware that shards PromQL aggregations using grouping labels.
-func PromQLShardingMiddleware(queryAnalyzer *querysharding.QueryAnalyzer, numShards int, limits queryrange.Limits, merger queryrange.Merger) queryrange.Middleware {
+func PromQLShardingMiddleware(queryAnalyzer *querysharding.QueryAnalyzer, numShards int, limits queryrange.Limits, merger queryrange.Merger, registerer prometheus.Registerer) queryrange.Middleware {
 	return queryrange.MiddlewareFunc(func(next queryrange.Handler) queryrange.Handler {
 		return querySharder{
 			next:          next,
@@ -24,6 +27,17 @@ func PromQLShardingMiddleware(queryAnalyzer *querysharding.QueryAnalyzer, numSha
 			queryAnalyzer: queryAnalyzer,
 			numShards:     numShards,
 			merger:        merger,
+
+			shardableQueriesCount: promauto.With(registerer).NewCounter(prometheus.CounterOpts{
+				Namespace: "thanos",
+				Name:      "frontend_shardable_queries_total",
+				Help:      "Total number of shardable queries",
+			}),
+			nonShardableQueriesCount: promauto.With(registerer).NewCounter(prometheus.CounterOpts{
+				Namespace: "thanos",
+				Name:      "frontend_non_shardable_queries_total",
+				Help:      "Total number of non-shardable queries",
+			}),
 		}
 	})
 }
@@ -35,6 +49,10 @@ type querySharder struct {
 	queryAnalyzer *querysharding.QueryAnalyzer
 	numShards     int
 	merger        queryrange.Merger
+
+	// Metrics
+	shardableQueriesCount    prometheus.Counter
+	nonShardableQueriesCount prometheus.Counter
 }
 
 func (s querySharder) Do(ctx context.Context, r queryrange.Request) (queryrange.Response, error) {
@@ -44,9 +62,11 @@ func (s querySharder) Do(ctx context.Context, r queryrange.Request) (queryrange.
 	}
 
 	if !analysis.IsShardable() {
+		s.nonShardableQueriesCount.Inc()
 		return s.next.Do(ctx, r)
 	}
 
+	s.shardableQueriesCount.Inc()
 	reqs := s.shardQuery(r, analysis)
 
 	reqResps, err := queryrange.DoRequests(ctx, s.next, reqs, s.limits)
