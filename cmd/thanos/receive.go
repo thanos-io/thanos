@@ -312,7 +312,7 @@ func runReceive(
 			component.Receive.String(),
 			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return mts.LabelSet() }),
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
-				if true {
+				if httpProbe.IsReady() {
 					minTime, maxTime := mts.TimeRange()
 					return &infopb.StoreInfo{
 						MinTime:          minTime,
