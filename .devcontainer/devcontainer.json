@@ -8,24 +8,31 @@
 	
 	
 
-	"customizations": {
+	"customizations": 
+	{
 		"vscode": {
-			"settings": { 
-				"go.toolsManagement.checkForUpdates": "local",
-				"go.useLanguageServer": true,
-				"go.gopath": "/go"
+					"settings": { 
+									"go.toolsManagement.checkForUpdates": "local",
+									"go.useLanguageServer": true,
+									"go.gopath": "/go"
 			
+								}
 				}
-			}
 			
 			
 	},
 
-	"extensions": [
+	"extensions": 
+	[
 		"ms-azuretools.vscode-docker",
 		"ms-kubernetes-tools.vscode-kubernetes-tools",
 		"davidanson.vscode-markdownlint",
-		"timonwong.shellcheck"
+		"timonwong.shellcheck",
+		"docsmsft.docs-yaml",
+		"heptio.jsonnet",
+		"codezombiech.gitignore",
+		"golang.Go"
+
 	]
 
 	
