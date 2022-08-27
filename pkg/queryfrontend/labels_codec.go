@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	io "io"
 	"math"
 	"net/http"
 	"net/url"
@@ -35,7 +35,6 @@ var (
 
 // labelsCodec is used to encode/decode Thanos labels and series requests and responses.
 type labelsCodec struct {
-	queryrange.Codec
 	partialResponse          bool
 	defaultMetadataTimeRange time.Duration
 }
@@ -43,7 +42,6 @@ type labelsCodec struct {
 // NewThanosLabelsCodec initializes a labelsCodec.
 func NewThanosLabelsCodec(partialResponse bool, defaultMetadataTimeRange time.Duration) *labelsCodec {
 	return &labelsCodec{
-		Codec:                    queryrange.PrometheusCodec,
 		partialResponse:          partialResponse,
 		defaultMetadataTimeRange: defaultMetadataTimeRange,
 	}
@@ -208,13 +206,13 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 
 func (c labelsCodec) DecodeResponse(ctx context.Context, r *http.Response, req queryrange.Request) (queryrange.Response, error) {
 	if r.StatusCode/100 != 2 {
-		body, _ := ioutil.ReadAll(r.Body)
+		body, _ := io.ReadAll(r.Body)
 		return nil, httpgrpc.Errorf(r.StatusCode, string(body))
 	}
 	log, _ := spanlogger.New(ctx, "ParseQueryResponse") //nolint:ineffassign,staticcheck
 	defer log.Finish()
 
-	buf, err := ioutil.ReadAll(r.Body)
+	buf, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Error(err) //nolint:errcheck
 		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error decoding response: %v", err)
@@ -276,7 +274,7 @@ func (c labelsCodec) EncodeResponse(ctx context.Context, res queryrange.Response
 		Header: http.Header{
 			"Content-Type": []string{"application/json"},
 		},
-		Body:       ioutil.NopCloser(bytes.NewBuffer(b)),
+		Body:       io.NopCloser(bytes.NewBuffer(b)),
 		StatusCode: http.StatusOK,
 	}
 	return &resp, nil

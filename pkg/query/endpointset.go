@@ -243,7 +243,7 @@ type EndpointSet struct {
 	// accessible and we close gRPC client for it, unless it is strict.
 	endpointSpec             func() map[string]*GRPCEndpointSpec
 	dialOpts                 []grpc.DialOption
-	gRPCInfoCallTimeout      time.Duration
+	endpointInfoTimeout      time.Duration
 	unhealthyEndpointTimeout time.Duration
 
 	updateMtx sync.Mutex
@@ -267,6 +267,7 @@ func NewEndpointSet(
 	endpointSpecs func() []*GRPCEndpointSpec,
 	dialOpts []grpc.DialOption,
 	unhealthyEndpointTimeout time.Duration,
+	endpointInfoTimeout time.Duration,
 ) *EndpointSet {
 	endpointsMetric := newEndpointSetNodeCollector()
 	if reg != nil {
@@ -287,9 +288,8 @@ func NewEndpointSet(
 		endpointsMetric: endpointsMetric,
 
 		dialOpts:                 dialOpts,
-		gRPCInfoCallTimeout:      5 * time.Second,
+		endpointInfoTimeout:      endpointInfoTimeout,
 		unhealthyEndpointTimeout: unhealthyEndpointTimeout,
-
 		endpointSpec: func() map[string]*GRPCEndpointSpec {
 			specs := make(map[string]*GRPCEndpointSpec)
 			for _, s := range endpointSpecs() {
@@ -322,7 +322,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 			wg.Add(1)
 			go func(spec *GRPCEndpointSpec) {
 				defer wg.Done()
-				ctx, cancel := context.WithTimeout(ctx, e.gRPCInfoCallTimeout)
+				ctx, cancel := context.WithTimeout(ctx, e.endpointInfoTimeout)
 				defer cancel()
 				e.updateEndpoint(ctx, spec, er)
 
@@ -337,7 +337,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 		wg.Add(1)
 		go func(spec *GRPCEndpointSpec) {
 			defer wg.Done()
-			ctx, cancel := context.WithTimeout(ctx, e.gRPCInfoCallTimeout)
+			ctx, cancel := context.WithTimeout(ctx, e.endpointInfoTimeout)
 			defer cancel()
 
 			newRef, err := e.newEndpointRef(ctx, spec)
@@ -751,6 +751,17 @@ func (er *endpointRef) timeRange() (int64, int64) {
 
 	// Currently, min/max time of only StoreAPI is being updated by all components.
 	return er.metadata.Store.MinTime, er.metadata.Store.MaxTime
+}
+
+func (er *endpointRef) SupportsSharding() bool {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	if er.metadata == nil || er.metadata.Store == nil {
+		return false
+	}
+
+	return er.metadata.Store.SupportsSharding
 }
 
 func (er *endpointRef) String() string {

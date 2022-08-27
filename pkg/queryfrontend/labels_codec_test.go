@@ -8,7 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	io "io"
 	"net/http"
 	"testing"
 	"time"
@@ -211,6 +211,7 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 		end       = "end"
 		startTime = "123"
 		endTime   = "456"
+		trueStr   = "true"
 	)
 	for _, tc := range []struct {
 		name          string
@@ -253,7 +254,7 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 				return r.URL.Query().Get(start) == startTime &&
 					r.URL.Query().Get(end) == endTime &&
 					r.URL.Path == "/api/v1/label/__name__/values" &&
-					r.URL.Query().Get(queryv1.PartialResponseParam) == "true"
+					r.URL.Query().Get(queryv1.PartialResponseParam) == trueStr
 			},
 		},
 		{
@@ -291,7 +292,7 @@ func TestLabelsCodec_EncodeRequest(t *testing.T) {
 			checkFunc: func(r *http.Request) bool {
 				return r.FormValue(start) == startTime &&
 					r.FormValue(end) == endTime &&
-					r.FormValue(queryv1.DedupParam) == "true" &&
+					r.FormValue(queryv1.DedupParam) == trueStr &&
 					r.URL.Path == "/api/v1/series"
 			},
 		},
@@ -351,26 +352,26 @@ func TestLabelsCodec_DecodeResponse(t *testing.T) {
 		{
 			name:          "prometheus request, invalid for labelsCodec",
 			req:           &queryrange.PrometheusRequest{},
-			res:           http.Response{StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer([]byte("foo")))},
+			res:           http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewBuffer([]byte("foo")))},
 			expectedError: httpgrpc.Errorf(http.StatusInternalServerError, "invalid request type"),
 		},
 		{
 			name:          "thanos query range request, invalid for labelsCodec",
 			req:           &ThanosQueryRangeRequest{},
-			res:           http.Response{StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer([]byte("foo")))},
+			res:           http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewBuffer([]byte("foo")))},
 			expectedError: httpgrpc.Errorf(http.StatusInternalServerError, "invalid request type"),
 		},
 		{
 			name:             "thanos labels request",
 			req:              &ThanosLabelsRequest{},
-			res:              http.Response{StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer(labelsData))},
+			res:              http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewBuffer(labelsData))},
 			expectedResponse: labelResponse,
 		},
 		{
 			name: "thanos labels request with HTTP headers",
 			req:  &ThanosLabelsRequest{},
 			res: http.Response{
-				StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer(labelsDataWithHeaders)),
+				StatusCode: 200, Body: io.NopCloser(bytes.NewBuffer(labelsDataWithHeaders)),
 				Header: map[string][]string{
 					cacheControlHeader: {noStoreValue},
 				},
@@ -380,14 +381,14 @@ func TestLabelsCodec_DecodeResponse(t *testing.T) {
 		{
 			name:             "thanos series request",
 			req:              &ThanosSeriesRequest{},
-			res:              http.Response{StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer(seriesData))},
+			res:              http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewBuffer(seriesData))},
 			expectedResponse: seriesResponse,
 		},
 		{
 			name: "thanos series request with HTTP headers",
 			req:  &ThanosSeriesRequest{},
 			res: http.Response{
-				StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer(seriesDataWithHeaders)),
+				StatusCode: 200, Body: io.NopCloser(bytes.NewBuffer(seriesDataWithHeaders)),
 				Header: map[string][]string{
 					cacheControlHeader: {noStoreValue},
 				},
@@ -720,7 +721,7 @@ func makeQueryRangeResponses(size int) ([]queryrange.Response, []queryrange.Resp
 
 func makeResponse(data []byte, withHeader bool) *http.Response {
 	r := &http.Response{
-		StatusCode: 200, Body: ioutil.NopCloser(bytes.NewBuffer(data)),
+		StatusCode: 200, Body: io.NopCloser(bytes.NewBuffer(data)),
 	}
 
 	if withHeader {

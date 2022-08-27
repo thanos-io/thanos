@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -126,6 +125,10 @@ func (l *localClient) StoreInfo() (store.StoreType, string) {
 	return store.Local, ""
 }
 
+func (l *localClient) SupportsSharding() bool {
+	return false
+}
+
 type tenant struct {
 	readyS        *ReadyStorage
 	storeTSDB     *store.TSDBStore
@@ -187,7 +190,7 @@ func (t *MultiTSDB) Open() error {
 		return err
 	}
 
-	files, err := ioutil.ReadDir(t.dataDir)
+	files, err := os.ReadDir(t.dataDir)
 	if err != nil {
 		return err
 	}
@@ -385,7 +388,7 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 }
 
 func (t *MultiTSDB) RemoveLockFilesIfAny() error {
-	fis, err := ioutil.ReadDir(t.dataDir)
+	fis, err := os.ReadDir(t.dataDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil

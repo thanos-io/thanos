@@ -98,19 +98,6 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 		expected    int
 	}{
 		{
-			name:       "not query range, retry won't be triggered 1.",
-			maxRetries: 100,
-			req: &ThanosQueryRangeRequest{
-				Path:  "/api/v1/query",
-				Start: 0,
-				End:   2 * hour,
-				Step:  10 * seconds,
-			},
-			codec:       queryRangeCodec,
-			handlerFunc: promqlResults,
-			expected:    1,
-		},
-		{
 			name:        "no retry, get counter value 1",
 			maxRetries:  0,
 			req:         testRequest,
@@ -262,19 +249,6 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 		expected      int
 	}{
 		{
-			name: "non query range request won't be split 1",
-			req: &ThanosQueryRangeRequest{
-				Path:  "/api/v1/query",
-				Start: 0,
-				End:   2 * hour,
-				Step:  10 * seconds,
-			},
-			handlerFunc:   promqlResults,
-			codec:         queryRangeCodec,
-			splitInterval: time.Hour,
-			expected:      1,
-		},
-		{
 			name:          "split interval == 0, disable split",
 			req:           testRequest,
 			handlerFunc:   promqlResults,
@@ -393,15 +367,6 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 		Dedup:               false,
 	}
 
-	// Non query range request, won't be cached.
-	testRequestInstant := &ThanosQueryRangeRequest{
-		Path:  "/api/v1/query",
-		Start: 0,
-		End:   2 * hour,
-		Step:  10 * seconds,
-		Dedup: true,
-	}
-
 	// Same query params as testRequest, different maxSourceResolution
 	// but still in the same downsampling level, so it will be cached in this case.
 	testRequestSameLevelDownsampling := &ThanosQueryRangeRequest{
@@ -472,11 +437,9 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 		{name: "first request", req: testRequest, expected: 1},
 		{name: "same request as the first one, directly use cache", req: testRequest, expected: 1},
 		{name: "same request as the first one but with dedup disabled, should not use cache", req: testRequestWithoutDedup, expected: 2},
-		{name: "non query range request won't be cached", req: testRequestInstant, expected: 3},
-		{name: "do it again", req: testRequestInstant, expected: 4},
-		{name: "different max source resolution but still same level", req: testRequestSameLevelDownsampling, expected: 4},
-		{name: "different max source resolution and different level", req: testRequestHigherLevelDownsampling, expected: 5},
-		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 6},
+		{name: "different max source resolution but still same level", req: testRequestSameLevelDownsampling, expected: 2},
+		{name: "different max source resolution and different level", req: testRequestHigherLevelDownsampling, expected: 3},
+		{name: "storeMatchers requests won't go to cache", req: testRequestWithStoreMatchers, expected: 4},
 		{
 			name: "request but will be partitioned",
 			req: &ThanosQueryRangeRequest{
@@ -486,7 +449,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 				Step:  10 * seconds,
 				Dedup: true,
 			},
-			expected: 8,
+			expected: 6,
 		},
 		{
 			name: "same query as the previous one",
@@ -497,7 +460,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 				Step:  10 * seconds,
 				Dedup: true,
 			},
-			expected: 8,
+			expected: 6,
 		},
 	} {
 		if !t.Run(tc.name, func(t *testing.T) {

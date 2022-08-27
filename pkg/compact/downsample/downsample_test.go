@@ -4,7 +4,6 @@
 package downsample
 
 import (
-	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
@@ -433,9 +432,7 @@ func TestDownsample(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			logger := log.NewLogfmtLogger(os.Stderr)
 
-			dir, err := ioutil.TempDir("", "downsample-raw")
-			testutil.Ok(t, err)
-			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+			dir := t.TempDir()
 
 			// Ideally we would use tsdb.HeadBlock here for less dependency on our own code. However,
 			// it cannot accept the counter signal sample with the same timestamp as the previous sample.
@@ -508,9 +505,7 @@ func TestDownsample(t *testing.T) {
 
 func TestDownsampleAggrAndEmptyXORChunks(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
-	dir, err := ioutil.TempDir("", "downsample-mixed")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	ser := &series{lset: labels.FromStrings("__name__", "a")}
 	aggr := map[AggrType][]sample{
@@ -539,9 +534,7 @@ func TestDownsampleAggrAndEmptyXORChunks(t *testing.T) {
 
 func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
-	dir, err := ioutil.TempDir("", "downsample-mixed")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	ser := &series{lset: labels.FromStrings("__name__", "a")}
 	aggr := map[AggrType][]sample{

@@ -6,8 +6,8 @@ package query
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -106,7 +106,7 @@ func newTest(t testing.TB, input string) (*test, error) {
 }
 
 func newTestFromFile(t testing.TB, filename string) (*test, error) {
-	content, err := ioutil.ReadFile(filepath.Clean(filename))
+	content, err := os.ReadFile(filepath.Clean(filename))
 	if err != nil {
 		return nil, err
 	}
@@ -651,6 +651,10 @@ func (i inProcessClient) TimeRange() (mint, maxt int64) {
 	r, err := i.Info(context.TODO(), &storepb.InfoRequest{})
 	testutil.Ok(i.t, err)
 	return r.MinTime, r.MaxTime
+}
+
+func (i inProcessClient) SupportsSharding() bool {
+	return false
 }
 
 func (i inProcessClient) String() string                       { return i.name }

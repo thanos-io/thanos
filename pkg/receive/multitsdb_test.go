@@ -6,7 +6,6 @@ package receive
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -32,9 +31,7 @@ import (
 )
 
 func TestMultiTSDB(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	dir := t.TempDir()
 
 	logger := log.NewLogfmtLogger(os.Stderr)
 	t.Run("run fresh", func(t *testing.T) {
@@ -404,9 +401,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			dir, err := ioutil.TempDir("", "multitsdb-prune")
-			testutil.Ok(t, err)
-			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+			dir := t.TempDir()
 
 			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
 				&tsdb.Options{
@@ -474,9 +469,7 @@ func TestMultiTSDBStats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			dir, err := ioutil.TempDir("", "tsdb-stats")
-			testutil.Ok(t, err)
-			defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+			dir := t.TempDir()
 
 			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
 				&tsdb.Options{
@@ -529,9 +522,7 @@ func appendSample(m *MultiTSDB, tenant string, timestamp time.Time) error {
 }
 
 func BenchmarkMultiTSDB(b *testing.B) {
-	dir, err := ioutil.TempDir("", "multitsdb")
-	testutil.Ok(b, err)
-	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
+	dir := b.TempDir()
 
 	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(), &tsdb.Options{
 		MinBlockDuration:  (2 * time.Hour).Milliseconds(),

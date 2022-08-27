@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"path"
@@ -279,6 +278,7 @@ type BucketStore struct {
 	dir             string
 	indexCache      storecache.IndexCache
 	indexReaderPool *indexheader.ReaderPool
+	buffers         sync.Pool
 	chunkPool       pool.Bytes
 
 	// Sets of blocks that have the same labels. They are indexed by a hash over their label set.
@@ -401,11 +401,15 @@ func NewBucketStore(
 	options ...BucketStoreOption,
 ) (*BucketStore, error) {
 	s := &BucketStore{
-		logger:                      log.NewNopLogger(),
-		bkt:                         bkt,
-		fetcher:                     fetcher,
-		dir:                         dir,
-		indexCache:                  noopCache{},
+		logger:     log.NewNopLogger(),
+		bkt:        bkt,
+		fetcher:    fetcher,
+		dir:        dir,
+		indexCache: noopCache{},
+		buffers: sync.Pool{New: func() interface{} {
+			b := make([]byte, 0, initialBufSize)
+			return &b
+		}},
 		chunkPool:                   pool.NoopBytes{},
 		blocks:                      map[ulid.ULID]*bucketBlock{},
 		blockSets:                   map[uint64]*bucketBlockSet{},
@@ -528,7 +532,7 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 		return errors.Wrap(err, "sync block")
 	}
 
-	fis, err := ioutil.ReadDir(s.dir)
+	fis, err := os.ReadDir(s.dir)
 	if err != nil {
 		return errors.Wrap(err, "read dir")
 	}
@@ -784,6 +788,7 @@ func blockSeries(
 	skipChunks bool, // If true, chunks are not loaded.
 	minTime, maxTime int64, // Series must have data in this time range to be returned.
 	loadAggregates []storepb.Aggr, // List of aggregates to load when loading chunks.
+	shardMatcher *storepb.ShardMatcher,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(ctx, matchers)
 	if err != nil {
@@ -814,6 +819,7 @@ func blockSeries(
 		lset           labels.Labels
 		chks           []chunks.Meta
 	)
+
 	for _, id := range ps {
 		ok, err := indexr.LoadSeriesForTime(id, &symbolizedLset, &chks, skipChunks, minTime, maxTime)
 		if err != nil {
@@ -824,7 +830,18 @@ func blockSeries(
 			continue
 		}
 
+		if err := indexr.LookupLabelsSymbols(symbolizedLset, &lset); err != nil {
+			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
+		}
+
+		completeLabelset := labelpb.ExtendSortedLabels(lset, extLset)
+		if !shardMatcher.MatchesLabels(completeLabelset) {
+			continue
+		}
+
 		s := seriesEntry{}
+		s.lset = completeLabelset
+
 		if !skipChunks {
 			// Schedule loading chunks.
 			s.refs = make([]chunks.ChunkRef, 0, len(chks))
@@ -847,11 +864,7 @@ func blockSeries(
 				return nil, nil, errors.Wrap(err, "exceeded chunks limit")
 			}
 		}
-		if err := indexr.LookupLabelsSymbols(symbolizedLset, &lset); err != nil {
-			return nil, nil, errors.Wrap(err, "Lookup labels symbols")
-		}
 
-		s.lset = labelpb.ExtendSortedLabels(lset, extLset)
 		res = append(res, s)
 	}
 
@@ -1059,6 +1072,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				})
 				defer span.Finish()
 
+				shardMatcher := req.ShardInfo.Matcher(&s.buffers)
+				defer shardMatcher.Close()
 				part, pstats, err := blockSeries(
 					newCtx,
 					b.extLset,
@@ -1070,6 +1085,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					req.SkipChunks,
 					req.MinTime, req.MaxTime,
 					req.Aggregates,
+					shardMatcher,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
@@ -1238,6 +1254,11 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		if len(reqBlockMatchers) > 0 && !b.matchRelabelLabels(reqBlockMatchers) {
 			continue
 		}
+		// Filter external labels from matchers.
+		reqSeriesMatchersNoExtLabels, ok := b.FilterExtLabelsMatchers(reqSeriesMatchers)
+		if !ok {
+			continue
+		}
 
 		resHints.AddQueriedBlock(b.meta.ULID)
 
@@ -1254,7 +1275,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
 
 			var result []string
-			if len(reqSeriesMatchers) == 0 {
+			if len(reqSeriesMatchersNoExtLabels) == 0 {
 				// Do it via index reader to have pending reader registered correctly.
 				// LabelNames are already sorted.
 				res, err := indexr.block.indexHeaderReader.LabelNames()
@@ -1272,7 +1293,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 				result = strutil.MergeSlices(res, extRes)
 			} else {
-				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil)
+				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchersNoExtLabels, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
@@ -1325,6 +1346,24 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	}, nil
 }
 
+func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*labels.Matcher, bool) {
+	// We filter external labels from matchers so we won't try to match series on them.
+	var result []*labels.Matcher
+	for _, m := range matchers {
+		// Get value of external label from block.
+		v := b.extLset.Get(m.Name)
+		// If value is empty string the matcher is a valid one since it's not part of external labels.
+		if v == "" {
+			result = append(result, m)
+		} else if v != "" && v != m.Value {
+			// If matcher is external label but value is different we don't want to look in block anyway.
+			return []*labels.Matcher{}, false
+		}
+	}
+
+	return result, true
+}
+
 // LabelValues implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
 	reqSeriesMatchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
@@ -1350,16 +1389,6 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		}
 	}
 
-	// If we have series matchers, add <labelName> != "" matcher, to only select series that have given label name.
-	if len(reqSeriesMatchers) > 0 {
-		m, err := labels.NewMatcher(labels.MatchNotEqual, req.Label, "")
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, err.Error())
-		}
-
-		reqSeriesMatchers = append(reqSeriesMatchers, m)
-	}
-
 	s.mtx.RLock()
 
 	var mtx sync.Mutex
@@ -1374,6 +1403,21 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		}
 		if len(reqBlockMatchers) > 0 && !b.matchRelabelLabels(reqBlockMatchers) {
 			continue
+		}
+		// Filter external labels from matchers.
+		reqSeriesMatchersNoExtLabels, ok := b.FilterExtLabelsMatchers(reqSeriesMatchers)
+		if !ok {
+			continue
+		}
+
+		// If we have series matchers, add <labelName> != "" matcher, to only select series that have given label name.
+		if len(reqSeriesMatchersNoExtLabels) > 0 {
+			m, err := labels.NewMatcher(labels.MatchNotEqual, req.Label, "")
+			if err != nil {
+				return nil, status.Error(codes.InvalidArgument, err.Error())
+			}
+
+			reqSeriesMatchersNoExtLabels = append(reqSeriesMatchersNoExtLabels, m)
 		}
 
 		resHints.AddQueriedBlock(b.meta.ULID)
@@ -1390,7 +1434,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label values")
 
 			var result []string
-			if len(reqSeriesMatchers) == 0 {
+			if len(reqSeriesMatchersNoExtLabels) == 0 {
 				// Do it via index reader to have pending reader registered correctly.
 				res, err := indexr.block.indexHeaderReader.LabelValues(req.Label)
 				if err != nil {
@@ -1403,7 +1447,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				}
 				result = res
 			} else {
-				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchers, nil, seriesLimiter, true, req.Start, req.End, nil)
+				seriesSet, _, err := blockSeries(newCtx, b.extLset, indexr, nil, reqSeriesMatchersNoExtLabels, nil, seriesLimiter, true, req.Start, req.End, nil, nil)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
@@ -1918,13 +1962,18 @@ func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
 func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
-	if m.Type == labels.MatchRegexp && len(findSetMatches(m.Value)) > 0 {
-		vals := findSetMatches(m.Value)
-		toAdd := make([]labels.Label, 0, len(vals))
-		for _, val := range vals {
-			toAdd = append(toAdd, labels.Label{Name: m.Name, Value: val})
+	if m.Type == labels.MatchRegexp {
+		if vals := findSetMatches(m.Value); len(vals) > 0 {
+			// Sorting will improve the performance dramatically if the dataset is relatively large
+			// since entries in the postings offset table was sorted by label name and value,
+			// the sequential reading is much faster.
+			sort.Strings(vals)
+			toAdd := make([]labels.Label, 0, len(vals))
+			for _, val := range vals {
+				toAdd = append(toAdd, labels.Label{Name: m.Name, Value: val})
+			}
+			return newPostingGroup(false, toAdd, nil), nil
 		}
-		return newPostingGroup(false, toAdd, nil), nil
 	}
 
 	// If the matcher selects an empty value, it selects all the series which don't

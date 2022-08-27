@@ -204,6 +204,7 @@ type Config struct {
 	RequestLoggingDecision string
 	DownstreamURL          string
 	ForwardHeaders         []string
+	NumShards              int
 }
 
 // QueryRangeConfig holds the config for query range tripperware.

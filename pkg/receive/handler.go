@@ -12,14 +12,20 @@ import (
 	stdlog "log"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"sync"
 	"time"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/promclient"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -83,22 +89,37 @@ var (
 
 // Options for the web Handler.
 type Options struct {
-	Writer            *Writer
-	ListenAddress     string
-	Registry          *prometheus.Registry
-	TenantHeader      string
-	TenantField       string
-	DefaultTenantID   string
-	ReplicaHeader     string
-	Endpoint          string
-	ReplicationFactor uint64
-	ReceiverMode      ReceiverMode
-	Tracer            opentracing.Tracer
-	TLSConfig         *tls.Config
-	DialOpts          []grpc.DialOption
-	ForwardTimeout    time.Duration
-	RelabelConfigs    []*relabel.Config
-	TSDBStats         TSDBStats
+	Writer                       *Writer
+	ListenAddress                string
+	Registry                     *prometheus.Registry
+	TenantHeader                 string
+	TenantField                  string
+	DefaultTenantID              string
+	ReplicaHeader                string
+	Endpoint                     string
+	ReplicationFactor            uint64
+	ReceiverMode                 ReceiverMode
+	Tracer                       opentracing.Tracer
+	TLSConfig                    *tls.Config
+	DialOpts                     []grpc.DialOption
+	ForwardTimeout               time.Duration
+	RelabelConfigs               []*relabel.Config
+	TSDBStats                    TSDBStats
+	SeriesLimitSupported         bool
+	MaxPerTenantLimit            uint64
+	MetaMonitoringUrl            *url.URL
+	MetaMonitoringHttpClient     *extflag.PathOrContent
+	MetaMonitoringLimitQuery     string
+	WriteSeriesLimit             int64
+	WriteSamplesLimit            int64
+	WriteRequestSizeLimit        int64
+	WriteRequestConcurrencyLimit int
+}
+
+// activeSeriesLimiter encompasses active series limiting logic.
+type activeSeriesLimiter interface {
+	QueryMetaMonitoring(context.Context, log.Logger) error
+	isUnderLimit(string, log.Logger) (bool, error)
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -109,12 +130,13 @@ type Handler struct {
 	options  *Options
 	listener net.Listener
 
-	mtx          sync.RWMutex
-	hashring     Hashring
-	peers        *peerGroup
-	expBackoff   backoff.Backoff
-	peerStates   map[string]*retryState
-	receiverMode ReceiverMode
+	mtx               sync.RWMutex
+	hashring          Hashring
+	peers             *peerGroup
+	expBackoff        backoff.Backoff
+	peerStates        map[string]*retryState
+	receiverMode      ReceiverMode
+	ActiveSeriesLimit activeSeriesLimiter
 
 	forwardRequests   *prometheus.CounterVec
 	replications      *prometheus.CounterVec
@@ -122,6 +144,9 @@ type Handler struct {
 
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
+
+	writeGate      gate.Gate
+	requestLimiter requestLimiter
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -147,6 +172,13 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
+		writeGate: gate.NewNoop(),
+		requestLimiter: newRequestLimiter(
+			o.WriteRequestSizeLimit,
+			o.WriteSeriesLimit,
+			o.WriteSamplesLimit,
+			registerer,
+		),
 		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -185,6 +217,13 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 	}
 
+	if o.WriteRequestConcurrencyLimit > 0 {
+		h.writeGate = gate.New(
+			extprom.WrapRegistererWithPrefix("thanos_receive_write_request_concurrent_", registerer),
+			o.WriteRequestConcurrencyLimit,
+		)
+	}
+
 	h.forwardRequests.WithLabelValues(labelSuccess)
 	h.forwardRequests.WithLabelValues(labelError)
 	h.replications.WithLabelValues(labelSuccess)
@@ -194,6 +233,11 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		h.replicationFactor.Set(float64(o.ReplicationFactor))
 	} else {
 		h.replicationFactor.Set(1)
+	}
+
+	h.ActiveSeriesLimit = NewNopSeriesLimit()
+	if h.options.SeriesLimitSupported {
+		h.ActiveSeriesLimit = NewActiveSeriesLimit(h.options, registerer, h.receiverMode, logger)
 	}
 
 	ins := extpromhttp.NewNopInstrumentationMiddleware()
@@ -344,6 +388,12 @@ type replica struct {
 	replicated bool
 }
 
+// endpointReplica is a pair of a receive endpoint and a write request replica.
+type endpointReplica struct {
+	endpoint string
+	replica  replica
+}
+
 func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
 	tLogger := log.With(h.logger, "tenant", tenant)
 
@@ -397,10 +447,36 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tLogger := log.With(h.logger, "tenant", tenant)
 
-	// ioutil.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
+	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
+		err = h.writeGate.Start(r.Context())
+	})
+	if err != nil {
+		level.Error(tLogger).Log("err", err, "msg", "internal server error")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	defer h.writeGate.Done()
+
+	under, err := h.ActiveSeriesLimit.isUnderLimit(tenant, tLogger)
+	if err != nil {
+		level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
+	}
+
+	// Fail request fully if tenant has exceeded set limit.
+	if !under {
+		http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
+		return
+	}
+
+	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}
 	if r.ContentLength >= 0 {
+		if !h.requestLimiter.AllowSizeBytes(tenant, r.ContentLength) {
+			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		compressed.Grow(int(r.ContentLength))
 	} else {
 		compressed.Grow(512)
@@ -410,11 +486,15 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
 	}
-
 	reqBuf, err := s2.Decode(nil, compressed.Bytes())
 	if err != nil {
 		level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
 		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
+		return
+	}
+
+	if !h.requestLimiter.AllowSizeBytes(tenant, int64(len(reqBuf))) {
+		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
 		return
 	}
 
@@ -449,6 +529,20 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.requestLimiter.AllowSeries(tenant, int64(len(wreq.Timeseries))) {
+		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	totalSamples := 0
+	for _, timeseries := range wreq.Timeseries {
+		totalSamples += len(timeseries.Samples)
+	}
+	if !h.requestLimiter.AllowSamples(tenant, int64(totalSamples)) {
+		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
+		return
+	}
+
 	// Apply relabeling configs.
 	h.relabel(&wreq)
 	if len(wreq.Timeseries) == 0 {
@@ -475,11 +569,142 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), responseStatusCode)
 	}
 	h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(len(wreq.Timeseries)))
-	totalSamples := 0
-	for _, timeseries := range wreq.Timeseries {
-		totalSamples += len(timeseries.Samples)
-	}
 	h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(totalSamples))
+}
+
+// activeSeriesLimit implements activeSeriesLimiter interface.
+type activeSeriesLimit struct {
+	mtx                    sync.RWMutex
+	limit                  uint64
+	tenantCurrentSeriesMap map[string]float64
+
+	metaMonitoringURL    *url.URL
+	metaMonitoringClient *http.Client
+	metaMonitoringQuery  string
+
+	configuredTenantLimit prometheus.Gauge
+	limitedRequests       *prometheus.CounterVec
+	metaMonitoringErr     prometheus.Counter
+}
+
+func NewActiveSeriesLimit(o *Options, registerer prometheus.Registerer, r ReceiverMode, logger log.Logger) *activeSeriesLimit {
+	limit := &activeSeriesLimit{
+		limit:               o.MaxPerTenantLimit,
+		metaMonitoringURL:   o.MetaMonitoringUrl,
+		metaMonitoringQuery: o.MetaMonitoringLimitQuery,
+		configuredTenantLimit: promauto.With(registerer).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_tenant_head_series_limit",
+				Help: "The configured limit for active (head) series of tenants.",
+			},
+		),
+		limitedRequests: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_head_series_limited_requests_total",
+				Help: "The total number of remote write requests that have been dropped due to active series limiting.",
+			}, []string{"tenant"},
+		),
+		metaMonitoringErr: promauto.With(registerer).NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_metamonitoring_failed_queries_total",
+				Help: "The total number of meta-monitoring queries that failed while limiting.",
+			},
+		),
+	}
+
+	limit.configuredTenantLimit.Set(float64(o.MaxPerTenantLimit))
+	limit.tenantCurrentSeriesMap = map[string]float64{}
+
+	// Use specified HTTPConfig to make requests to meta-monitoring.
+	httpConfContentYaml, err := o.MetaMonitoringHttpClient.Content()
+	if err != nil {
+		level.Error(logger).Log("msg", "getting http client config", "err", err.Error())
+	}
+
+	httpClientConfig, err := httpconfig.NewClientConfigFromYAML(httpConfContentYaml)
+	if err != nil {
+		level.Error(logger).Log("msg", "parsing http config YAML", "err", err.Error())
+	}
+
+	limit.metaMonitoringClient, err = httpconfig.NewHTTPClient(*httpClientConfig, "meta-mon-for-limit")
+	if err != nil {
+		level.Error(logger).Log("msg", "improper http client config", "err", err.Error())
+	}
+
+	return limit
+}
+
+// QueryMetaMonitoring queries any Prometheus Query API compatible meta-monitoring
+// solution with the configured query for getting current active (head) series of all tenants.
+// It then populates tenantCurrentSeries map with result.
+func (a *activeSeriesLimit) QueryMetaMonitoring(ctx context.Context, logger log.Logger) error {
+	c := promclient.NewWithTracingClient(logger, a.metaMonitoringClient, httpconfig.ThanosUserAgent)
+
+	vectorRes, _, err := c.QueryInstant(ctx, a.metaMonitoringURL, a.metaMonitoringQuery, time.Now(), promclient.QueryOptions{})
+	if err != nil {
+		a.metaMonitoringErr.Inc()
+		return err
+	}
+
+	level.Debug(logger).Log("msg", "successfully queried meta-monitoring", "vectors", len(vectorRes))
+
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+	// Construct map of tenant name and current HEAD series.
+	for _, e := range vectorRes {
+		for k, v := range e.Metric {
+			if k == "tenant" {
+				a.tenantCurrentSeriesMap[string(v)] = float64(e.Value)
+				level.Debug(logger).Log("msg", "tenant value queried", "tenant", string(v), "value", e.Value)
+			}
+		}
+	}
+
+	return nil
+}
+
+// isUnderLimit ensures that the current number of active series for a tenant does not exceed given limit.
+// It does so in a best-effort way, i.e, in case meta-monitoring is unreachable, it does not impose limits.
+// TODO(saswatamcode): Add capability to configure different limits for different tenants.
+func (a *activeSeriesLimit) isUnderLimit(tenant string, logger log.Logger) (bool, error) {
+	a.mtx.RLock()
+	defer a.mtx.RUnlock()
+	if a.limit == 0 || a.metaMonitoringURL.Host == "" {
+		return true, nil
+	}
+
+	// In such limiting flow, we ingest the first remote write request
+	// and then check meta-monitoring metric to ascertain current active
+	// series. As such metric is updated in intervals, it is possible
+	// that Receive ingests more series than the limit, before detecting that
+	// a tenant has exceeded the set limits.
+	v, ok := a.tenantCurrentSeriesMap[tenant]
+	if !ok {
+		return true, errors.New("tenant not in current series map")
+	}
+
+	if v >= float64(a.limit) {
+		level.Error(logger).Log("msg", "tenant above limit", "currentSeries", v, "limit", a.limit)
+		a.limitedRequests.WithLabelValues(tenant).Inc()
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// nopSeriesLimit implements activeSeriesLimiter interface as no-op.
+type nopSeriesLimit struct{}
+
+func NewNopSeriesLimit() *nopSeriesLimit {
+	return &nopSeriesLimit{}
+}
+
+func (a *nopSeriesLimit) QueryMetaMonitoring(_ context.Context, _ log.Logger) error {
+	return nil
+}
+
+func (a *nopSeriesLimit) isUnderLimit(_ string, _ log.Logger) (bool, error) {
+	return true, nil
 }
 
 // forward accepts a write request, batches its time series by
@@ -493,9 +718,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *prompb.WriteRequest) error {
 	span, ctx := tracing.StartSpan(ctx, "receive_fanout_forward")
 	defer span.Finish()
-
-	wreqs := make(map[string]*prompb.WriteRequest)
-	replicas := make(map[string]replica)
 
 	// It is possible that hashring is ready in testReady() but unready now,
 	// so need to lock here.
@@ -512,22 +734,23 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 	// at most one outgoing write request will be made
 	// to every other node in the hashring, rather than
 	// one request per time series.
+	wreqs := make(map[endpointReplica]*prompb.WriteRequest)
 	for i := range wreq.Timeseries {
 		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[i], r.n)
 		if err != nil {
 			h.mtx.RUnlock()
 			return err
 		}
-		if _, ok := wreqs[endpoint]; !ok {
-			wreqs[endpoint] = &prompb.WriteRequest{}
-			replicas[endpoint] = r
+		key := endpointReplica{endpoint: endpoint, replica: r}
+		if _, ok := wreqs[key]; !ok {
+			wreqs[key] = &prompb.WriteRequest{}
 		}
-		wr := wreqs[endpoint]
+		wr := wreqs[key]
 		wr.Timeseries = append(wr.Timeseries, wreq.Timeseries[i])
 	}
 	h.mtx.RUnlock()
 
-	return h.fanoutForward(ctx, tenant, replicas, wreqs, len(wreqs))
+	return h.fanoutForward(ctx, tenant, wreqs, len(wreqs))
 }
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
@@ -537,7 +760,7 @@ func (h *Handler) writeQuorum() int {
 
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
 // requests succeeds or fails or if context is canceled.
-func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest, successThreshold int) error {
+func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[endpointReplica]*prompb.WriteRequest, successThreshold int) error {
 	var errs errutil.MultiError
 
 	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
@@ -562,19 +785,22 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 	ec := make(chan error)
 
 	var wg sync.WaitGroup
-	for endpoint := range wreqs {
-		wg.Add(1)
+	for er := range wreqs {
+		er := er
+		r := er.replica
+		endpoint := er.endpoint
 
+		wg.Add(1)
 		// If the request is not yet replicated, let's replicate it.
 		// If the replication factor isn't greater than 1, let's
 		// just forward the requests.
-		if !replicas[endpoint].replicated && h.options.ReplicationFactor > 1 {
+		if !r.replicated && h.options.ReplicationFactor > 1 {
 			go func(endpoint string) {
 				defer wg.Done()
 
 				var err error
 				tracing.DoInSpan(fctx, "receive_replicate", func(ctx context.Context) {
-					err = h.replicate(ctx, tenant, wreqs[endpoint])
+					err = h.replicate(ctx, tenant, wreqs[er])
 				})
 				if err != nil {
 					h.replications.WithLabelValues(labelError).Inc()
@@ -601,7 +827,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 
 				var err error
 				tracing.DoInSpan(fctx, "receive_tsdb_write", func(_ context.Context) {
-					err = h.writer.Write(fctx, tenant, wreqs[endpoint])
+					err = h.writer.Write(fctx, tenant, wreqs[er])
 				})
 				if err != nil {
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
@@ -654,10 +880,10 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 			tracing.DoInSpan(fctx, "receive_forward", func(ctx context.Context) {
 				// Actually make the request against the endpoint we determined should handle these time series.
 				_, err = cl.RemoteWrite(ctx, &storepb.WriteRequest{
-					Timeseries: wreqs[endpoint].Timeseries,
+					Timeseries: wreqs[er].Timeseries,
 					Tenant:     tenant,
 					// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
-					Replica: int64(replicas[endpoint].n + 1),
+					Replica: int64(r.n + 1),
 				})
 			})
 			if err != nil {
@@ -733,10 +959,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, replicas ma
 // The function only returns when all replication requests have finished
 // or the context is canceled.
 func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.WriteRequest) error {
-	wreqs := make(map[string]*prompb.WriteRequest)
-	replicas := make(map[string]replica)
-	var i uint64
-
 	// It is possible that hashring is ready in testReady() but unready now,
 	// so need to lock here.
 	h.mtx.RLock()
@@ -745,20 +967,34 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 		return errors.New("hashring is not ready")
 	}
 
-	for i = 0; i < h.options.ReplicationFactor; i++ {
-		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[0], i)
-		if err != nil {
-			h.mtx.RUnlock()
-			return err
+	replicatedRequests := make(map[endpointReplica]*prompb.WriteRequest)
+	for i := uint64(0); i < h.options.ReplicationFactor; i++ {
+		for _, ts := range wreq.Timeseries {
+			endpoint, err := h.hashring.GetN(tenant, &ts, i)
+			if err != nil {
+				h.mtx.RUnlock()
+				return err
+			}
+
+			er := endpointReplica{
+				endpoint: endpoint,
+				replica:  replica{n: i, replicated: true},
+			}
+			replicatedRequest, ok := replicatedRequests[er]
+			if !ok {
+				replicatedRequest = &prompb.WriteRequest{
+					Timeseries: make([]prompb.TimeSeries, 0),
+				}
+				replicatedRequests[er] = replicatedRequest
+			}
+			replicatedRequest.Timeseries = append(replicatedRequest.Timeseries, ts)
 		}
-		wreqs[endpoint] = wreq
-		replicas[endpoint] = replica{i, true}
 	}
 	h.mtx.RUnlock()
 
 	quorum := h.writeQuorum()
 	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
-	if err := h.fanoutForward(ctx, tenant, replicas, wreqs, quorum); err != nil {
+	if err := h.fanoutForward(ctx, tenant, replicatedRequests, quorum); err != nil {
 		return errors.Wrap(determineWriteErrorCause(err, quorum), "quorum not reached")
 	}
 	return nil
@@ -812,13 +1048,34 @@ func isConflict(err error) bool {
 		return false
 	}
 	return err == errConflict ||
-		err == storage.ErrDuplicateSampleForTimestamp ||
-		err == storage.ErrOutOfOrderSample ||
-		err == storage.ErrOutOfBounds ||
-		err == storage.ErrDuplicateExemplar ||
-		err == storage.ErrOutOfOrderExemplar ||
-		err == storage.ErrExemplarLabelLength ||
+		isSampleConflictErr(err) ||
+		isExemplarConflictErr(err) ||
+		isLabelsConflictErr(err) ||
 		status.Code(err) == codes.AlreadyExists
+}
+
+// isSampleConflictErr returns whether or not the given error represents
+// a sample-related conflict.
+func isSampleConflictErr(err error) bool {
+	return err == storage.ErrDuplicateSampleForTimestamp ||
+		err == storage.ErrOutOfOrderSample ||
+		err == storage.ErrOutOfBounds
+}
+
+// isExemplarConflictErr returns whether or not the given error represents
+// a exemplar-related conflict.
+func isExemplarConflictErr(err error) bool {
+	return err == storage.ErrDuplicateExemplar ||
+		err == storage.ErrOutOfOrderExemplar ||
+		err == storage.ErrExemplarLabelLength
+}
+
+// isLabelsConflictErr returns whether or not the given error represents
+// a labels-related conflict.
+func isLabelsConflictErr(err error) bool {
+	return err == labelpb.ErrDuplicateLabels ||
+		err == labelpb.ErrEmptyLabels ||
+		err == labelpb.ErrOutOfOrderLabels
 }
 
 // isNotReady returns whether or not the given error represents a not ready error.

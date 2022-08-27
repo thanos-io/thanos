@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"net"
 	"os"
@@ -102,12 +101,12 @@ func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage str
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create prometheus dir"))
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "prometheus.yml"), []byte(promConfig), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(f.Dir(), "prometheus.yml"), []byte(promConfig), 0600); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating prom config"))
 	}
 
 	if len(webConfig) > 0 {
-		if err := ioutil.WriteFile(filepath.Join(f.Dir(), "web-config.yml"), []byte(webConfig), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(f.Dir(), "web-config.yml"), []byte(webConfig), 0600); err != nil {
 			return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating web-config"))
 		}
 	}
@@ -166,6 +165,45 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, we
 			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		}))
 	return prom, sidecar
+}
+
+type AvalancheOptions struct {
+	MetricCount    string
+	SeriesCount    string
+	MetricInterval string
+	SeriesInterval string
+	ValueInterval  string
+
+	RemoteURL           string
+	RemoteWriteInterval string
+	RemoteBatchSize     string
+	RemoteRequestCount  string
+
+	TenantID string
+}
+
+func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) e2e.InstrumentedRunnable {
+	f := e2e.NewInstrumentedRunnable(e, name).WithPorts(map[string]int{"http": 9001}, "http").Future()
+
+	args := e2e.BuildArgs(map[string]string{
+		"--metric-count":          o.MetricCount,
+		"--series-count":          o.SeriesCount,
+		"--remote-url":            o.RemoteURL,
+		"--remote-write-interval": o.RemoteWriteInterval,
+		"--remote-batch-size":     o.RemoteBatchSize,
+		"--remote-requests-count": o.RemoteRequestCount,
+		"--value-interval":        o.ValueInterval,
+		"--metric-interval":       o.MetricInterval,
+		"--series-interval":       o.SeriesInterval,
+		"--remote-tenant-header":  "THANOS-TENANT",
+		"--remote-tenant":         o.TenantID,
+	})
+
+	// Using this particular image as https://github.com/prometheus-community/avalanche/pull/25 is not merged yet.
+	return f.Init(wrapWithDefaults(e2e.StartOptions{
+		Image:   "quay.io/observatorium/avalanche:make-tenant-header-configurable-2021-10-07-0a2cbf5",
+		Command: e2e.NewCommandWithoutEntrypoint("avalanche", args...),
+	}))
 }
 
 type QuerierBuilder struct {
@@ -339,7 +377,7 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 			return nil, err
 		}
 
-		if err := ioutil.WriteFile(q.Dir()+"/filesd.yaml", b, 0600); err != nil {
+		if err := os.WriteFile(q.Dir()+"/filesd.yaml", b, 0600); err != nil {
 			return nil, errors.Wrap(err, "creating query SD config failed")
 		}
 
@@ -364,12 +402,15 @@ type ReceiveBuilder struct {
 
 	f e2e.FutureInstrumentedRunnable
 
-	maxExemplars    int
-	ingestion       bool
-	hashringConfigs []receive.HashringConfig
-	relabelConfigs  []*relabel.Config
-	replication     int
-	image           string
+	maxExemplars        int
+	ingestion           bool
+	limit               int
+	metamonitoring      string
+	metamonitoringQuery string
+	hashringConfigs     []receive.HashringConfig
+	relabelConfigs      []*relabel.Config
+	replication         int
+	image               string
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -411,6 +452,15 @@ func (r *ReceiveBuilder) WithRelabelConfigs(relabelConfigs []*relabel.Config) *R
 	return r
 }
 
+func (r *ReceiveBuilder) WithValidationEnabled(limit int, metamonitoring string, query ...string) *ReceiveBuilder {
+	r.limit = limit
+	r.metamonitoring = metamonitoring
+	if len(query) > 0 {
+		r.metamonitoringQuery = query[0]
+	}
+	return r
+}
+
 // Init creates a Thanos Receive instance.
 // If ingestion is enabled it will be configured for ingesting samples.
 // If routing is configured (i.e. hashring configuration is provided) it routes samples to other receivers.
@@ -437,6 +487,14 @@ func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
 		args["--receive.local-endpoint"] = r.InternalEndpoint("grpc")
 	}
 
+	if r.limit != 0 && r.metamonitoring != "" {
+		args["--receive.tenant-limits.max-head-series"] = fmt.Sprintf("%v", r.limit)
+		args["--receive.tenant-limits.meta-monitoring-url"] = r.metamonitoring
+		if r.metamonitoringQuery != "" {
+			args["--receive.tenant-limits.meta-monitoring-query"] = r.metamonitoringQuery
+		}
+	}
+
 	if err := os.MkdirAll(filepath.Join(r.Dir(), "data"), 0750); err != nil {
 		return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "create receive dir"))
 	}
@@ -447,7 +505,7 @@ func (r *ReceiveBuilder) Init() e2e.InstrumentedRunnable {
 			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate hashring file: %v", hashring))
 		}
 
-		if err := ioutil.WriteFile(filepath.Join(r.Dir(), "hashrings.json"), b, 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(r.Dir(), "hashrings.json"), b, 0600); err != nil {
 			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "creating receive config"))
 		}
 
@@ -607,7 +665,7 @@ route:
 receivers:
 - name: 'null'
 `
-	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "config.yaml"), []byte(config), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(f.Dir(), "config.yaml"), []byte(config), 0600); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating alertmanager config file failed"))
 	}
 
@@ -719,26 +777,34 @@ func (c *CompactorBuilder) Init(bucketConfig client.BucketConfig, relabelConfig 
 	}))
 }
 
-func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, cacheConfig queryfrontend.CacheProviderConfig) e2e.InstrumentedRunnable {
+func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config queryfrontend.Config, cacheConfig queryfrontend.CacheProviderConfig) e2e.InstrumentedRunnable {
 	cacheConfigBytes, err := yaml.Marshal(cacheConfig)
 	if err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrapf(err, "marshal response cache config file: %v", cacheConfig))
 	}
 
-	args := e2e.BuildArgs(map[string]string{
+	flags := map[string]string{
 		"--debug.name":                        fmt.Sprintf("query-frontend-%s", name),
 		"--http-address":                      ":8080",
 		"--query-frontend.downstream-url":     downstreamURL,
 		"--log.level":                         infoLogLevel,
 		"--query-range.response-cache-config": string(cacheConfigBytes),
-	})
+	}
+
+	if !config.QueryRangeConfig.AlignRangeWithStep {
+		flags["--no-query-range.align-range-with-step"] = ""
+	}
+
+	if config.NumShards > 0 {
+		flags["--query-frontend.vertical-shards"] = strconv.Itoa(config.NumShards)
+	}
 
 	return e2e.NewInstrumentedRunnable(
 		e, fmt.Sprintf("query-frontend-%s", name),
 	).WithPorts(map[string]int{"http": 8080}, "http").Init(
 		e2e.StartOptions{
 			Image:            DefaultImage(),
-			Command:          e2e.NewCommand("query-frontend", args...),
+			Command:          e2e.NewCommand("query-frontend", e2e.BuildArgs(flags)...),
 			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 			User:             strconv.Itoa(os.Getuid()),
 			WaitReadyBackoff: &defaultBackoffConfig,
@@ -773,7 +839,7 @@ http {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "create store dir"))
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(f.Dir(), "nginx.conf"), []byte(conf), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(f.Dir(), "nginx.conf"), []byte(conf), 0600); err != nil {
 		return e2e.NewErrInstrumentedRunnable(name, errors.Wrap(err, "creating nginx config file failed"))
 	}
 
@@ -936,7 +1002,7 @@ func genCerts(certPath, privkeyPath, caPath, serverName string) error {
 		Type:  "CERTIFICATE",
 		Bytes: caBytes,
 	})
-	err = ioutil.WriteFile(caPath, caPEM, 0644)
+	err = os.WriteFile(caPath, caPEM, 0644)
 	if err != nil {
 		return err
 	}
@@ -950,7 +1016,7 @@ func genCerts(certPath, privkeyPath, caPath, serverName string) error {
 		Type:  "CERTIFICATE",
 		Bytes: certBytes,
 	})
-	err = ioutil.WriteFile(certPath, certPEM, 0644)
+	err = os.WriteFile(certPath, certPEM, 0644)
 	if err != nil {
 		return err
 	}
@@ -959,7 +1025,7 @@ func genCerts(certPath, privkeyPath, caPath, serverName string) error {
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
 	})
-	err = ioutil.WriteFile(privkeyPath, certPrivKeyPEM, 0644)
+	err = os.WriteFile(privkeyPath, certPrivKeyPEM, 0644)
 	if err != nil {
 		return err
 	}

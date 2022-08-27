@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math"
 	"math/rand"
 	"net/http"
@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
@@ -29,6 +30,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
+	prometheusMetadata "github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -115,6 +117,16 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			exp:       errConflict,
 		},
 		{
+			name: "matching multierror (labels error)",
+			err: errutil.NonNilMultiError([]error{
+				labelpb.ErrEmptyLabels,
+				errors.New("foo"),
+				errors.New("bar"),
+			}),
+			threshold: 1,
+			exp:       errConflict,
+		},
+		{
 			name: "matching but below threshold multierror",
 			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
@@ -163,7 +175,7 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			exp:       errConflict,
 		},
 		{
-			name: "matching multierror many, both above threshold, conflict have precedence",
+			name: "matching multierror many, both above threshold, conflict has precedence",
 			err: errutil.NonNilMultiError([]error{
 				storage.ErrOutOfOrderSample,
 				errConflict,
@@ -171,6 +183,20 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 				tsdb.ErrNotReady,
 				tsdb.ErrNotReady,
 				status.Error(codes.AlreadyExists, "conflict"),
+				errors.New("foo"),
+			}),
+			threshold: 2,
+			exp:       errConflict,
+		},
+		{
+			name: "matching multierror many, both above threshold, conflict has precedence (labels error)",
+			err: errutil.NonNilMultiError([]error{
+				labelpb.ErrDuplicateLabels,
+				labelpb.ErrDuplicateLabels,
+				tsdb.ErrNotReady,
+				tsdb.ErrNotReady,
+				tsdb.ErrNotReady,
+				labelpb.ErrDuplicateLabels,
 				errors.New("foo"),
 			}),
 			threshold: 2,
@@ -272,6 +298,10 @@ func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppend
 	}
 }
 
+func (f *fakeAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, prometheusMetadata.Metadata) (storage.SeriesRef, error) {
+	return 0, nil
+}
+
 func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
 	f.Lock()
 	defer f.Unlock()
@@ -347,7 +377,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		cfg[0].Endpoints = append(cfg[0].Endpoints, h.options.Endpoint)
 		peers.cache[addr] = &fakeRemoteWriteGRPCServer{h: h}
 	}
-	hashring := newMultiHashring(AlgorithmHashmod, cfg)
+	hashring := newMultiHashring(AlgorithmHashmod, replicationFactor, cfg)
 	for _, h := range handlers {
 		h.Hashring(hashring)
 	}
@@ -685,6 +715,91 @@ func TestReceiveQuorum(t *testing.T) {
 						t.Errorf("handler: %d, labels %q: expected minimum of %d samples, got %d", j, lset.String(), expectedMin, got)
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestReceiveWriteRequestLimits(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		status        int
+		amountSeries  int
+		amountSamples int
+	}{
+		{
+			name:         "Request above limit of series",
+			status:       http.StatusRequestEntityTooLarge,
+			amountSeries: 21,
+		},
+		{
+			name:         "Request under the limit of series",
+			status:       http.StatusOK,
+			amountSeries: 20,
+		},
+		{
+			name:          "Request above limit of samples (series * samples)",
+			status:        http.StatusRequestEntityTooLarge,
+			amountSeries:  30,
+			amountSamples: 15,
+		},
+		{
+			name:          "Request under the limit of samples (series * samples)",
+			status:        http.StatusOK,
+			amountSeries:  10,
+			amountSamples: 2,
+		},
+		{
+			name:          "Request above body size limit",
+			status:        http.StatusRequestEntityTooLarge,
+			amountSeries:  300,
+			amountSamples: 150,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.amountSamples == 0 {
+				tc.amountSamples = 1
+			}
+
+			appendables := []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			}
+			handlers, _ := newTestHandlerHashring(appendables, 3)
+			handler := handlers[0]
+			handler.requestLimiter = newRequestLimiter(int64(1*units.Megabyte), 20, 200, nil)
+			tenant := "test"
+
+			wreq := &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{},
+			}
+
+			for i := 0; i < tc.amountSeries; i += 1 {
+				label := labelpb.ZLabel{Name: "foo", Value: "bar"}
+				series := prompb.TimeSeries{
+					Labels: []labelpb.ZLabel{label},
+				}
+				for j := 0; j < tc.amountSamples; j += 1 {
+					sample := prompb.Sample{Value: float64(j), Timestamp: int64(j)}
+					series.Samples = append(series.Samples, sample)
+				}
+				wreq.Timeseries = append(wreq.Timeseries, series)
+			}
+
+			// Test that the correct status is returned.
+			rec, err := makeRequest(handler, tenant, wreq)
+			if err != nil {
+				t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", tc.status, err)
+			}
+			if rec.Code != tc.status {
+				t.Errorf("handler: got unexpected HTTP status code: expected %d, got %d; body: %s", tc.status, rec.Code, rec.Body.String())
 			}
 		})
 	}
@@ -1143,7 +1258,7 @@ func (a *tsOverrideAppender) GetRef(lset labels.Labels) (storage.SeriesRef, labe
 }
 
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would
-// be send to Thanos receive.
+// be sent to Thanos receive.
 // It has one sample and allow passing multiple series, in same manner as typical Prometheus would batch it.
 func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byte {
 	r := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, 0, len(series))}
@@ -1161,9 +1276,7 @@ func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byt
 }
 
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
-	dir, err := ioutil.TempDir("", "test_receive")
-	testutil.Ok(b, err)
-	defer func() { testutil.Ok(b, os.RemoveAll(dir)) }()
+	dir := b.TempDir()
 
 	handlers, _ := newTestHandlerHashring([]*fakeAppendable{nil}, 1)
 	handler := handlers[0]
@@ -1226,6 +1339,21 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			}()),
 		},
 		{
+			name: "typical labels under 1KB, 20000 of them",
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
+				series := make([][]labelpb.ZLabel, 20000)
+				for s := 0; s < len(series); s++ {
+					lbls := make([]labelpb.ZLabel, 10)
+					for i := 0; i < len(lbls); i++ {
+						// Label ~20B name, 50B value.
+						lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					}
+					series[s] = lbls
+				}
+				return series
+			}()),
+		},
+		{
 			name: "extremely large label value 10MB, 10 of them",
 			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
 				series := make([][]labelpb.ZLabel, 10)
@@ -1265,7 +1393,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					r := httptest.NewRecorder()
-					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
 					testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 				}
 			})
@@ -1289,7 +1417,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 
 			// First request should be fine, since we don't change timestamp, rest is wrong.
 			r := httptest.NewRecorder()
-			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
 			testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
 			b.Run("conflict errors", func(b testutil.TB) {
@@ -1297,9 +1425,9 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				b.ResetTimer()
 				for i := 0; i < n; i++ {
 					r := httptest.NewRecorder()
-					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: ioutil.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
 					testutil.Equals(b, http.StatusConflict, r.Code, "%v-%s", i, func() string {
-						b, _ := ioutil.ReadAll(r.Body)
+						b, _ := io.ReadAll(r.Body)
 						return string(b)
 					}())
 				}
