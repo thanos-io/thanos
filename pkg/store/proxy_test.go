@@ -41,7 +41,7 @@ type testClient struct {
 	minTime          int64
 	maxTime          int64
 	supportsSharding bool
-	storeType StoreType
+	storeType        StoreType
 }
 
 func (c testClient) LabelSets() []labels.Labels {
