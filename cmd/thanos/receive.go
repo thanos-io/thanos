@@ -262,7 +262,7 @@ func runReceive(
 
 		level.Debug(logger).Log("msg", "setting up tsdb")
 		{
-			if err := startTSDBAndUpload(g, logger, reg, dbs, reloadGRPCServer, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt); err != nil {
+			if err := startTSDBAndUpload(g, logger, reg, dbs, reloadGRPCServer, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
 				return err
 			}
 		}
@@ -465,6 +465,7 @@ func setupHashring(g *run.Group,
 	// In the single-node case, which has no configuration
 	// watcher, we close the chan ourselves.
 	updates := make(chan receive.Hashring, 1)
+	algorithm := receive.HashringAlgorithm(conf.hashringsAlgorithm)
 
 	// The Hashrings config file path is given initializing config watcher.
 	if conf.hashringsFilePath != "" {
@@ -483,7 +484,7 @@ func setupHashring(g *run.Group,
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "the hashring initialized with config watcher.")
-			return receive.HashringFromConfigWatcher(ctx, receive.HashringAlgorithm(conf.hashringsAlgorithm), updates, cw)
+			return receive.HashringFromConfigWatcher(ctx, algorithm, conf.replicationFactor, updates, cw)
 		}, func(error) {
 			cancel()
 		})
@@ -494,7 +495,7 @@ func setupHashring(g *run.Group,
 		)
 		// The Hashrings config file content given initialize configuration from content.
 		if len(conf.hashringsFileContent) > 0 {
-			ring, err = receive.HashringFromConfig(receive.HashringAlgorithm(conf.hashringsAlgorithm), conf.hashringsFileContent)
+			ring, err = receive.HashringFromConfig(algorithm, conf.replicationFactor, conf.hashringsFileContent)
 			if err != nil {
 				close(updates)
 				return errors.Wrap(err, "failed to validate hashring configuration file")
@@ -567,7 +568,7 @@ func startTSDBAndUpload(g *run.Group,
 	uploadDone chan struct{},
 	statusProber prober.Probe,
 	bkt objstore.Bucket,
-
+	hashringAlgorithm receive.HashringAlgorithm,
 ) error {
 
 	log.With(logger, "component", "storage")
@@ -605,6 +606,7 @@ func startTSDBAndUpload(g *run.Group,
 			level.Info(logger).Log("msg", "storage is closed")
 		}()
 
+		var initialized bool
 		for {
 			select {
 			case <-cancel:
@@ -613,22 +615,35 @@ func startTSDBAndUpload(g *run.Group,
 				if !ok {
 					return nil
 				}
-				dbUpdatesStarted.Inc()
-				level.Info(logger).Log("msg", "updating storage")
 
-				if err := dbs.Flush(); err != nil {
-					return errors.Wrap(err, "flushing storage")
+				// When using Ketama as the hashring algorithm, there is no need to flush the TSDB head.
+				// If new receivers were added to the hashring, existing receivers will not need to
+				// ingest additional series.
+				// If receivers are removed from the hashring, existing receivers will only need
+				// to ingest a subset of the series that were assigned to the removed receivers.
+				// As a result, changing the hashring produces no churn, hence no need to force
+				// head compaction and upload.
+				flushHead := !initialized || hashringAlgorithm != receive.AlgorithmKetama
+				if flushHead {
+					level.Info(logger).Log("msg", "updating storage")
+					dbUpdatesStarted.Inc()
+					if err := dbs.Flush(); err != nil {
+						return errors.Wrap(err, "flushing storage")
+					}
+					if err := dbs.Open(); err != nil {
+						return errors.Wrap(err, "opening storage")
+					}
+					if upload {
+						uploadC <- struct{}{}
+						<-uploadDone
+					}
+					dbUpdatesCompleted.Inc()
 				}
-				if err := dbs.Open(); err != nil {
-					return errors.Wrap(err, "opening storage")
-				}
-				if upload {
-					uploadC <- struct{}{}
-					<-uploadDone
-				}
+				initialized = true
+
 				statusProber.Ready()
 				level.Info(logger).Log("msg", "storage started, and server is ready to receive web requests")
-				dbUpdatesCompleted.Inc()
+
 				reloadGRPCServer <- struct{}{}
 			}
 		}
