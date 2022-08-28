@@ -18,11 +18,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-const (
-	labelShardable    = "true"
-	labelNonShardable = "false"
-)
-
 // PromQLShardingMiddleware creates a new Middleware that shards PromQL aggregations using grouping labels.
 func PromQLShardingMiddleware(queryAnalyzer *querysharding.QueryAnalyzer, numShards int, limits queryrange.Limits, merger queryrange.Merger, registerer prometheus.Registerer) queryrange.Middleware {
 	return queryrange.MiddlewareFunc(func(next queryrange.Handler) queryrange.Handler {
@@ -32,8 +27,8 @@ func PromQLShardingMiddleware(queryAnalyzer *querysharding.QueryAnalyzer, numSha
 			Help:      "Total number of queries analyzed by the sharding middleware",
 		}, []string{"shardable"})
 
-		queriesTotal.WithLabelValues(labelShardable)
-		queriesTotal.WithLabelValues(labelNonShardable)
+		queriesTotal.WithLabelValues("true")
+		queriesTotal.WithLabelValues("false")
 
 		return querySharder{
 			next:          next,
@@ -65,11 +60,11 @@ func (s querySharder) Do(ctx context.Context, r queryrange.Request) (queryrange.
 	}
 
 	if !analysis.IsShardable() {
-		s.queriesTotal.WithLabelValues(labelNonShardable).Inc()
+		s.queriesTotal.WithLabelValues("false").Inc()
 		return s.next.Do(ctx, r)
 	}
 
-	s.queriesTotal.WithLabelValues(labelShardable).Inc()
+	s.queriesTotal.WithLabelValues("true").Inc()
 	reqs := s.shardQuery(r, analysis)
 
 	reqResps, err := queryrange.DoRequests(ctx, s.next, reqs, s.limits)
