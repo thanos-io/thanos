@@ -3,8 +3,9 @@
 	"name": "Codespaces for Thanos",
 
 	"context": "..",
-
-	"dockerFile": " ",
+		
+	// Using the default image so no need to specify dockerfile
+	"dockerFile": "",
 	
 	
 
