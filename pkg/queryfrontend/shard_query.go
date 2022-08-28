@@ -18,26 +18,30 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
+const (
+	labelShardable    = "true"
+	labelNonShardable = "false"
+)
+
 // PromQLShardingMiddleware creates a new Middleware that shards PromQL aggregations using grouping labels.
 func PromQLShardingMiddleware(queryAnalyzer *querysharding.QueryAnalyzer, numShards int, limits queryrange.Limits, merger queryrange.Merger, registerer prometheus.Registerer) queryrange.Middleware {
 	return queryrange.MiddlewareFunc(func(next queryrange.Handler) queryrange.Handler {
+		queriesTotal := promauto.With(registerer).NewCounterVec(prometheus.CounterOpts{
+			Namespace: "thanos",
+			Name:      "frontend_sharding_middleware_queries_total",
+			Help:      "Total number of queries analyzed by the sharding middleware",
+		}, []string{"shardable"})
+
+		queriesTotal.WithLabelValues(labelShardable)
+		queriesTotal.WithLabelValues(labelNonShardable)
+
 		return querySharder{
 			next:          next,
 			limits:        limits,
 			queryAnalyzer: queryAnalyzer,
 			numShards:     numShards,
 			merger:        merger,
-
-			shardableQueriesCount: promauto.With(registerer).NewCounter(prometheus.CounterOpts{
-				Namespace: "thanos",
-				Name:      "frontend_shardable_queries_total",
-				Help:      "Total number of shardable queries",
-			}),
-			nonShardableQueriesCount: promauto.With(registerer).NewCounter(prometheus.CounterOpts{
-				Namespace: "thanos",
-				Name:      "frontend_non_shardable_queries_total",
-				Help:      "Total number of non-shardable queries",
-			}),
+			queriesTotal:  queriesTotal,
 		}
 	})
 }
@@ -51,8 +55,7 @@ type querySharder struct {
 	merger        queryrange.Merger
 
 	// Metrics
-	shardableQueriesCount    prometheus.Counter
-	nonShardableQueriesCount prometheus.Counter
+	queriesTotal *prometheus.CounterVec
 }
 
 func (s querySharder) Do(ctx context.Context, r queryrange.Request) (queryrange.Response, error) {
@@ -62,11 +65,11 @@ func (s querySharder) Do(ctx context.Context, r queryrange.Request) (queryrange.
 	}
 
 	if !analysis.IsShardable() {
-		s.nonShardableQueriesCount.Inc()
+		s.queriesTotal.WithLabelValues(labelNonShardable).Inc()
 		return s.next.Do(ctx, r)
 	}
 
-	s.shardableQueriesCount.Inc()
+	s.queriesTotal.WithLabelValues(labelShardable).Inc()
 	reqs := s.shardQuery(r, analysis)
 
 	reqResps, err := queryrange.DoRequests(ctx, s.next, reqs, s.limits)
