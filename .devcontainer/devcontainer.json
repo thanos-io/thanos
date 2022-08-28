@@ -11,13 +11,12 @@
 	"customizations": 
 	{
 		"vscode": {
-					"settings": { 
-									"go.toolsManagement.checkForUpdates": "local",
-									"go.useLanguageServer": true,
-									"go.gopath": "/go"
-			
-								}
-				}
+				"settings": { 
+						"go.toolsManagement.checkForUpdates": "local",
+						"go.useLanguageServer": true,
+						"go.gopath": "/go"
+					    }
+			  }
 			
 			
 	},
