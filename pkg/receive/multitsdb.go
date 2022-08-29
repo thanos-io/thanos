@@ -438,6 +438,8 @@ func (t *MultiTSDB) TenantStats(statsByLabelName string, tenantIDs ...string) []
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
+	reg = &UnRegisterer{Registerer: reg}
+
 	lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
 	dataDir := t.defaultTenantDataDir(tenantID)
 
@@ -446,7 +448,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	s, err := tsdb.Open(
 		dataDir,
 		logger,
-		&UnRegisterer{Registerer: reg},
+		reg,
 		&opts,
 		nil,
 	)
