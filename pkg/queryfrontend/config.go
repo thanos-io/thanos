@@ -219,6 +219,7 @@ type QueryRangeConfig struct {
 	AlignRangeWithStep     bool
 	RequestDownsampled     bool
 	SplitQueriesByInterval time.Duration
+	MinQuerySplitInterval  time.Duration
 	MaxRetries             int
 	Limits                 *cortexvalidation.Limits
 }
