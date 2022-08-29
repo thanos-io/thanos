@@ -53,6 +53,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 
 	queryRangeCodec := NewThanosQueryRangeCodec(config.QueryRangeConfig.PartialResponseStrategy)
 	labelsCodec := NewThanosLabelsCodec(config.LabelsConfig.PartialResponseStrategy, config.DefaultTimeRange)
+	queryInstantCodec := NewThanosQueryInstantCodec(config.QueryRangeConfig.PartialResponseStrategy)
 
 	queryRangeTripperware, err := newQueryRangeTripperware(
 		config.QueryRangeConfig,
@@ -70,22 +71,31 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		return nil, err
 	}
 
+	queryInstantTripperware := newInstantQueryTripperware(
+		config.NumShards,
+		queryRangeLimits,
+		queryInstantCodec,
+		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_instant"}, reg),
+		config.ForwardHeaders,
+	)
+
 	return func(next http.RoundTripper) http.RoundTripper {
-		return newRoundTripper(next, queryRangeTripperware(next), labelsTripperware(next), reg)
+		return newRoundTripper(next, queryRangeTripperware(next), labelsTripperware(next), queryInstantTripperware(next), reg)
 	}, nil
 }
 
 type roundTripper struct {
-	next, queryRange, labels http.RoundTripper
+	next, queryInstant, queryRange, labels http.RoundTripper
 
 	queriesCount *prometheus.CounterVec
 }
 
-func newRoundTripper(next, queryRange, metadata http.RoundTripper, reg prometheus.Registerer) roundTripper {
+func newRoundTripper(next, queryRange, metadata, queryInstant http.RoundTripper, reg prometheus.Registerer) roundTripper {
 	r := roundTripper{
-		next:       next,
-		queryRange: queryRange,
-		labels:     metadata,
+		next:         next,
+		queryInstant: queryInstant,
+		queryRange:   queryRange,
+		labels:       metadata,
 		queriesCount: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_query_frontend_queries_total",
 			Help: "Total queries passing through query frontend",
@@ -104,6 +114,7 @@ func (r roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	switch op := getOperation(req); op {
 	case instantQueryOp:
 		r.queriesCount.WithLabelValues(instantQueryOp).Inc()
+		return r.queryInstant.RoundTrip(req)
 	case rangeQueryOp:
 		r.queriesCount.WithLabelValues(rangeQueryOp).Inc()
 		return r.queryRange.RoundTrip(req)
@@ -287,6 +298,31 @@ func newLabelsTripperware(
 			return rt.RoundTrip(r)
 		})
 	}, nil
+}
+
+func newInstantQueryTripperware(
+	numShards int,
+	limits queryrange.Limits,
+	codec queryrange.Codec,
+	reg prometheus.Registerer,
+	forwardHeaders []string,
+) queryrange.Tripperware {
+	instantQueryMiddlewares := []queryrange.Middleware{}
+	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
+	if numShards > 0 {
+		instantQueryMiddlewares = append(
+			instantQueryMiddlewares,
+			queryrange.InstrumentMiddleware("sharding", m),
+			PromQLShardingMiddleware(querysharding.NewQueryAnalyzer(), numShards, limits, codec),
+		)
+	}
+
+	return func(next http.RoundTripper) http.RoundTripper {
+		rt := queryrange.NewRoundTripper(next, codec, forwardHeaders, instantQueryMiddlewares...)
+		return queryrange.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return rt.RoundTrip(r)
+		})
+	}
 }
 
 // shouldCache controls what kind of Thanos request should be cached.

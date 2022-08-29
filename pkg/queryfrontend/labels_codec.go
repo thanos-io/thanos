@@ -35,7 +35,6 @@ var (
 
 // labelsCodec is used to encode/decode Thanos labels and series requests and responses.
 type labelsCodec struct {
-	queryrange.Codec
 	partialResponse          bool
 	defaultMetadataTimeRange time.Duration
 }
@@ -43,7 +42,6 @@ type labelsCodec struct {
 // NewThanosLabelsCodec initializes a labelsCodec.
 func NewThanosLabelsCodec(partialResponse bool, defaultMetadataTimeRange time.Duration) *labelsCodec {
 	return &labelsCodec{
-		Codec:                    queryrange.PrometheusCodec,
 		partialResponse:          partialResponse,
 		defaultMetadataTimeRange: defaultMetadataTimeRange,
 	}
