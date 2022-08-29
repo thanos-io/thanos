@@ -472,6 +472,31 @@ func TestMultiTSDBPrune(t *testing.T) {
 	}
 }
 
+func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
+	dir := t.TempDir()
+
+	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		objstore.NewInMemBucket(),
+		false,
+		metadata.NoneFunc,
+	)
+	defer func() { testutil.Ok(t, m.Close()) }()
+
+	testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10))))
+	testutil.Ok(t, m.Prune(context.Background()))
+	testutil.Equals(t, 0, len(m.TSDBStores()))
+
+	testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10))))
+	testutil.Equals(t, 1, len(m.TSDBStores()))
+}
+
 func TestMultiTSDBStats(t *testing.T) {
 	tests := []struct {
 		name          string
