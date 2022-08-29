@@ -69,7 +69,7 @@ Similarly, we want to reuse this work in Prometheus.
    2. We have gRPC APIs like rules API.
 2. Cons:
    1. There are might be some complexity, edge cases and extra tooling to make the process (define gRPC API and get RESTful APIs with grpc-gateway) work.
-   2. We need to redefine our API service in gPRC since most of Thanos APIs and Prometheus APIs are RESTful APIs.
+   2. We need to redefine our API service in gRPC since most of Thanos APIs and Prometheus APIs are RESTful APIs.
    3. We need to run another sidecar (complexity of running the system).
    4. Semantics of gRPC and HTTP might be different and surprising for end user.
    5. We want to reuse in Prometheus and Prometheus does not support gRPC (gRPC dependency was removed from codebase).
