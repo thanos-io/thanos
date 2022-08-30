@@ -4,6 +4,9 @@
 package queryfrontend
 
 import (
+	"fmt"
+	"github.com/thanos-io/thanos/internal/cortex/chunk/cache"
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"testing"
 	"time"
 
@@ -53,6 +56,27 @@ func TestConfig_Validate(t *testing.T) {
 			},
 			err: "max query split interval should be greater than 0 when query split threshold is enabled",
 		},
+		{
+			name: "valid config with caching",
+			config: Config{
+				DownstreamURL: "localhost:8080",
+				QueryRangeConfig: QueryRangeConfig{
+					SplitQueriesByInterval:      10 * time.Hour,
+					MinHorizontalShards:         0,
+					MaxQuerySplitInterval:       0,
+					QuerySplitThresholdInterval: 0,
+					ResultsCacheConfig: &queryrange.ResultsCacheConfig{
+						CacheConfig:                cache.Config{},
+						Compression:                "",
+						CacheQueryableSamplesStats: false,
+					},
+				},
+				LabelsConfig: LabelsConfig{
+					DefaultTimeRange: day,
+				},
+			},
+			err: "",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -63,6 +87,7 @@ func TestConfig_Validate(t *testing.T) {
 				testutil.Equals(t, tc.err, err.Error())
 			} else {
 				testutil.Ok(t, err)
+				fmt.Println(err)
 			}
 		})
 	}
