@@ -290,10 +290,12 @@ Flags:
                                  Maximum number of retries for a single query
                                  range request; beyond this, the downstream
                                  error is returned.
-      --query-range.min-split-interval=0
-                                 Split query range requests by at least this
-                                 interval.It also should be less than
-                                 query-range.split-interval.
+      --query-range.max-split-interval=0
+                                 Split query range requests using this interval.
+                                 If the query duration is shorter than this
+                                 value, then use
+                                 query-range.split-min-horizontal-shards to
+                                 split query.
       --query-range.partial-response
                                  Enable partial response for query range
                                  requests if no partial_response param is
@@ -319,9 +321,18 @@ Flags:
                                  Split query range requests by an interval and
                                  execute in parallel, it should be greater than
                                  0 when query-range.response-cache-config is
-                                 configured.When used in conjunction with
-                                 query-range.min-split-interval this becomes the
-                                 upper boundary interval to split queries into.
+                                 configured.
+      --query-range.split-min-horizontal-shards=0
+                                 Split queries in at least this amount of
+                                 vertical shards, only when query duration is
+                                 below query-range.max-split-interval.
+      --query-range.split-threshold=0
+                                 Split query range requests which duration are
+                                 over this threshold. Using this parameter is
+                                 not allowed with query-range.split-interval.
+                                 One should also set
+                                 query-range.split-min-horizontal-shards to a
+                                 value greater than 1 to enable splitting.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content of YAML file

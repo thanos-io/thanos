@@ -179,7 +179,7 @@ func newQueryRangeTripperware(
 		)
 	}
 
-	if config.SplitQueriesByInterval != 0 {
+	if config.SplitQueriesByInterval != 0 || config.QuerySplitThresholdInterval != 0 {
 		queryIntervalFn := dynamicIntervalFn(config)
 
 		queryRangeMiddleware = append(
@@ -237,17 +237,19 @@ func newQueryRangeTripperware(
 
 func dynamicIntervalFn(config QueryRangeConfig) queryrange.IntervalFn {
 	return func(r queryrange.Request) time.Duration {
-		if config.MinQuerySplitInterval == 0 && config.SplitQueriesByInterval != 0 {
+		// Use static interval, by default.
+		if config.SplitQueriesByInterval != 0 {
 			return config.SplitQueriesByInterval
 		}
 
 		queryInterval := time.Duration(r.GetEnd()-r.GetStart()) * time.Millisecond
-		// if the query is multiple of max interval, we use the max interval.
-		if queryInterval/config.SplitQueriesByInterval >= 2 {
-			return config.SplitQueriesByInterval
+		// if the query is multiple of max interval, we use the max interval to split.
+		if queryInterval/config.MaxQuerySplitInterval >= 2 {
+			return config.MaxQuerySplitInterval
 		}
 
-		return config.MinQuerySplitInterval
+		// if the query duration is less than max interval, we split it equally in MinHorizontalShards.
+		return time.Duration(queryInterval.Milliseconds()/config.MinHorizontalShards) * time.Millisecond
 	}
 }
 

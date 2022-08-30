@@ -216,13 +216,14 @@ type QueryRangeConfig struct {
 	ResultsCacheConfig *queryrange.ResultsCacheConfig
 	CachePathOrContent extflag.PathOrContent
 
-	AlignRangeWithStep     bool
-	RequestDownsampled     bool
-	SplitQueriesByInterval time.Duration
-	MaxHorizontalShards    int
-	MinQuerySplitInterval  time.Duration
-	MaxRetries             int
-	Limits                 *cortexvalidation.Limits
+	AlignRangeWithStep          bool
+	RequestDownsampled          bool
+	SplitQueriesByInterval      time.Duration
+	QuerySplitThresholdInterval time.Duration
+	MaxQuerySplitInterval       time.Duration
+	MinHorizontalShards         int64
+	MaxRetries                  int
+	Limits                      *cortexvalidation.Limits
 }
 
 // LabelsConfig holds the config for labels tripperware.
@@ -244,7 +245,7 @@ type LabelsConfig struct {
 // Validate a fully initialized config.
 func (cfg *Config) Validate() error {
 	if cfg.QueryRangeConfig.ResultsCacheConfig != nil {
-		if cfg.QueryRangeConfig.SplitQueriesByInterval <= 0 {
+		if cfg.QueryRangeConfig.SplitQueriesByInterval <= 0 || cfg.QueryRangeConfig.QuerySplitThresholdInterval <= 0 {
 			return errors.New("split queries interval should be greater than 0 when caching is enabled")
 		}
 		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(querier.Config{}); err != nil {
@@ -252,8 +253,18 @@ func (cfg *Config) Validate() error {
 		}
 	}
 
-	if cfg.QueryRangeConfig.MinQuerySplitInterval != 0 && cfg.QueryRangeConfig.SplitQueriesByInterval != 0 {
+	if cfg.QueryRangeConfig.QuerySplitThresholdInterval != 0 && cfg.QueryRangeConfig.SplitQueriesByInterval != 0 {
 		return errors.New("split queries interval and dynamic query split interval cannot be set at the same time")
+	}
+
+	if cfg.QueryRangeConfig.QuerySplitThresholdInterval != 0 {
+		if cfg.QueryRangeConfig.MinHorizontalShards <= 0 {
+			return errors.New("min horizontal shards should be greater than 0 when query split threshold is enabled")
+		}
+
+		if cfg.QueryRangeConfig.MaxQuerySplitInterval <= 0 {
+			return errors.New("max query split interval should be greater than 0 when query split threshold is enabled")
+		}
 	}
 
 	if cfg.LabelsConfig.ResultsCacheConfig != nil {

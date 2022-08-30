@@ -4,9 +4,10 @@
 package queryfrontend
 
 import (
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"testing"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestConfig_Validate(t *testing.T) {
@@ -22,12 +23,35 @@ func TestConfig_Validate(t *testing.T) {
 			name: "invalid query range options",
 			config: Config{
 				QueryRangeConfig: QueryRangeConfig{
-					SplitQueriesByInterval: 10 * time.Hour,
-					MaxHorizontalShards:    10,
-					MinQuerySplitInterval:  1 * time.Hour,
+					SplitQueriesByInterval:      10 * time.Hour,
+					MinHorizontalShards:         10,
+					QuerySplitThresholdInterval: 1 * time.Hour,
 				},
 			},
 			err: "split queries interval and dynamic query split interval cannot be set at the same time",
+		},
+		{
+			name: "invalid parameters for dynamic query range split",
+			config: Config{
+				QueryRangeConfig: QueryRangeConfig{
+					SplitQueriesByInterval:      0,
+					MinHorizontalShards:         0,
+					QuerySplitThresholdInterval: 1 * time.Hour,
+				},
+			},
+			err: "min horizontal shards should be greater than 0 when query split threshold is enabled",
+		},
+		{
+			name: "invalid parameters for dynamic query range split - 2",
+			config: Config{
+				QueryRangeConfig: QueryRangeConfig{
+					SplitQueriesByInterval:      0,
+					MinHorizontalShards:         10,
+					MaxQuerySplitInterval:       0,
+					QuerySplitThresholdInterval: 1 * time.Hour,
+				},
+			},
+			err: "max query split interval should be greater than 0 when query split threshold is enabled",
 		},
 	}
 
@@ -42,5 +66,4 @@ func TestConfig_Validate(t *testing.T) {
 			}
 		})
 	}
-
 }
