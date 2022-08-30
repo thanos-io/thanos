@@ -236,19 +236,14 @@ func newMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		cache: make(map[string]Hashring),
 	}
 
-	newHashring := func(endpoints []string) Hashring {
-		switch algorithm {
-		case AlgorithmHashmod:
-			return simpleHashring(endpoints)
-		case AlgorithmKetama:
-			return newKetamaHashring(endpoints, SectionsPerNode, replicationFactor)
-		default:
-			return simpleHashring(endpoints)
-		}
-	}
-
 	for _, h := range cfg {
-		m.hashrings = append(m.hashrings, newHashring(h.Endpoints))
+		var hashring Hashring
+		if h.Algorithm != "" {
+			hashring = newHashring(h.Algorithm, h.Endpoints, replicationFactor)
+		} else {
+			hashring = newHashring(algorithm, h.Endpoints, replicationFactor)
+		}
+		m.hashrings = append(m.hashrings, hashring)
 		var t map[string]struct{}
 		if len(h.Tenants) != 0 {
 			t = make(map[string]struct{})
@@ -298,4 +293,15 @@ func HashringFromConfig(algorithm HashringAlgorithm, replicationFactor uint64, c
 	}
 
 	return newMultiHashring(algorithm, replicationFactor, config), err
+}
+
+func newHashring(algorithm HashringAlgorithm, endpoints []string, replicationFactor uint64) Hashring {
+	switch algorithm {
+	case AlgorithmHashmod:
+		return simpleHashring(endpoints)
+	case AlgorithmKetama:
+		return newKetamaHashring(endpoints, SectionsPerNode, replicationFactor)
+	default:
+		return simpleHashring(endpoints)
+	}
 }
