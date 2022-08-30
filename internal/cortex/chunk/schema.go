@@ -117,19 +117,19 @@ type IndexEntry struct {
 
 type schemaBucketsFunc func(from, through model.Time, userID string) []Bucket
 
-// baseSchema implements BaseSchema given a bucketing function and and set of range key callbacks
+// baseSchema implements BaseSchema given a bucketing function and set of range key callbacks
 type baseSchema struct {
 	buckets schemaBucketsFunc
 	entries baseEntries
 }
 
-// storeSchema implements StoreSchema given a bucketing function and and set of range key callbacks
+// storeSchema implements StoreSchema given a bucketing function and set of range key callbacks
 type storeSchema struct {
 	baseSchema
 	entries storeEntries
 }
 
-// seriesStoreSchema implements SeriesStoreSchema given a bucketing function and and set of range key callbacks
+// seriesStoreSchema implements SeriesStoreSchema given a bucketing function and set of range key callbacks
 type seriesStoreSchema struct {
 	baseSchema
 	entries seriesStoreEntries

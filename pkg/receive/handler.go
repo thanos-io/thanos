@@ -710,7 +710,7 @@ func (a *nopSeriesLimit) isUnderLimit(_ string, _ log.Logger) (bool, error) {
 // forward accepts a write request, batches its time series by
 // corresponding endpoint, and forwards them in parallel to the
 // correct endpoint. Requests destined for the local node are written
-// the the local receiver. For a given write request, at most one outgoing
+// the local receiver. For a given write request, at most one outgoing
 // write request will be made to every other node in the hashring,
 // unless the request needs to be replicated.
 // The function only returns when all requests have finished
