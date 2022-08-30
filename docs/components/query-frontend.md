@@ -290,6 +290,10 @@ Flags:
                                  Maximum number of retries for a single query
                                  range request; beyond this, the downstream
                                  error is returned.
+      --query-range.min-split-interval=0
+                                 Split query range requests by at least this
+                                 interval.It also should be less than
+                                 query-range.split-interval.
       --query-range.partial-response
                                  Enable partial response for query range
                                  requests if no partial_response param is
@@ -315,7 +319,9 @@ Flags:
                                  Split query range requests by an interval and
                                  execute in parallel, it should be greater than
                                  0 when query-range.response-cache-config is
-                                 configured.
+                                 configured.When used in conjunction with
+                                 query-range.min-split-interval this becomes the
+                                 upper boundary interval to split queries into.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content of YAML file
