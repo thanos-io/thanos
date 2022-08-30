@@ -16,6 +16,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 * [#5654](https://github.com/thanos-io/thanos/pull/5654) Query: add `--grpc-compression` flag that controls the compression used in gRPC client. With the flag it is now possible to compress the traffic between Query and StoreAPI nodes - you get lower network usage in exchange for a bit higher CPU/RAM usage.
+- [#5561](https://github.com/thanos-io/thanos/pull/5650) Query Frontend: Add sharded queries metrics.
 
 ### Changed
 
@@ -50,7 +51,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5561](https://github.com/thanos-io/thanos/pull/5561) Query Frontend: Support instant query vertical sharding.
 - [#5453](https://github.com/thanos-io/thanos/pull/5453) Compact: Skip erroneous empty non `*AggrChunk` chunks during 1h downsampling of 5m resolution blocks.
 - [#5607](https://github.com/thanos-io/thanos/pull/5607) Query: Support custom lookback delta from request in query api.
-- [#5561](https://github.com/thanos-io/thanos/pull/5650) Query Frontend: Add sharded queries metrics.
 
 ### Changed
 
