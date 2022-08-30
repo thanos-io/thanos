@@ -73,8 +73,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-range.request-downsampled", "Make additional query for downsampled data in case of empty or incomplete response to range request.").
 		Default("true").BoolVar(&cfg.QueryRangeConfig.RequestDownsampled)
 
-	cmd.Flag("query-range.split-interval", "Split query range requests by an interval and execute in parallel, it should be greater than 0 when query-range.response-cache-config is configured."+
-		"When used in conjunction with query-range.min-split-interval this becomes the upper boundary interval to split queries into.").
+	cmd.Flag("query-range.split-interval", "Split query range requests by an interval and execute in parallel, it should be greater than 0 when query-range.response-cache-config is configured.").
 		Default("24h").DurationVar(&cfg.QueryRangeConfig.SplitQueriesByInterval)
 
 	cmd.Flag("query-range.min-split-interval", "Split query range requests by at least this interval."+

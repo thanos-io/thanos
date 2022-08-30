@@ -219,6 +219,7 @@ type QueryRangeConfig struct {
 	AlignRangeWithStep     bool
 	RequestDownsampled     bool
 	SplitQueriesByInterval time.Duration
+	MaxHorizontalShards    int
 	MinQuerySplitInterval  time.Duration
 	MaxRetries             int
 	Limits                 *cortexvalidation.Limits
@@ -249,6 +250,10 @@ func (cfg *Config) Validate() error {
 		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(querier.Config{}); err != nil {
 			return errors.Wrap(err, "invalid ResultsCache config for query_range tripperware")
 		}
+	}
+
+	if cfg.QueryRangeConfig.MinQuerySplitInterval != 0 && cfg.QueryRangeConfig.SplitQueriesByInterval != 0 {
+		return errors.New("split queries interval and dynamic query split interval cannot be set at the same time")
 	}
 
 	if cfg.LabelsConfig.ResultsCacheConfig != nil {
