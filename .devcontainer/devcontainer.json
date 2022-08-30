@@ -1,0 +1,39 @@
+
+{
+	"name": "Codespaces for Thanos",
+
+	"context": "..",
+		
+	// Using the default image so no need to specify dockerFile
+	"dockerFile": "",
+	
+	
+
+	"customizations": 
+	{
+		"vscode": {
+				"settings": { 
+						"go.toolsManagement.checkForUpdates": "local",
+						"go.useLanguageServer": true,
+						"go.gopath": "/go"
+					    }
+			  }
+			
+			
+	},
+
+	"extensions": 
+	[
+		"ms-azuretools.vscode-docker",
+		"ms-kubernetes-tools.vscode-kubernetes-tools",
+		"davidanson.vscode-markdownlint",
+		"timonwong.shellcheck",
+		"docsmsft.docs-yaml",
+		"Grafana.vscode-jsonnet",
+		"codezombiech.gitignore",
+		"golang.Go"
+
+	]
+
+	
+}
