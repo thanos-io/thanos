@@ -3,8 +3,8 @@
 
 	"context": "..",
 
-    // Using the default image so no need to specify dockerFile
-    "dockerFile": "",
+   	 // Using the default image so no need to specify dockerFile
+    	"dockerFile": "",
 
 	
 	"customizations": 
@@ -32,6 +32,4 @@
 		"golang.Go"
 
 	]
-
-	
 }
