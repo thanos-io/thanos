@@ -5,11 +5,11 @@ package queryfrontend
 
 import (
 	"fmt"
-	"github.com/thanos-io/thanos/internal/cortex/chunk/cache"
-	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"testing"
 	"time"
 
+	"github.com/thanos-io/thanos/internal/cortex/chunk/cache"
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
