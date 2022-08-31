@@ -543,7 +543,7 @@ func TestRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 			expected: 5,
 		},
 		{
-			name:     "same query as before, no requests are executed",
+			name:     "same query as before again, no requests are executed",
 			req:      testRequest,
 			err:      false,
 			expected: 5,
@@ -562,10 +562,6 @@ func TestRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 			}
 
 			testutil.Equals(t, tc.expected, *res)
-
-			//if *res > tc.expected {
-			//	t.Fatalf("Expected to get less than or exactly %d requests, got %d", tc.expected, *res)
-			//}
 		}) {
 			break
 		}
@@ -844,6 +840,8 @@ func promqlResultsWithFailures(numFailures int) (*int, http.Handler) {
 		},
 	}
 
+	cond := sync.NewCond(&sync.Mutex{})
+	cond.L.Lock()
 	return &count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lock.Lock()
 		defer lock.Unlock()
@@ -852,15 +850,21 @@ func promqlResultsWithFailures(numFailures int) (*int, http.Handler) {
 		if numFailures > 0 {
 			numFailures--
 
-			// Allow other requests to execute
-			lock.Unlock()
-			<-time.After(200 * time.Millisecond)
-			lock.Lock()
-
+			// Wait for a successful request.
+			// Release the lock to allow other requests to execute.
+			if numFailures == 0 {
+				lock.Unlock()
+				cond.Wait()
+				<-time.After(500 * time.Millisecond)
+				lock.Lock()
+			}
 			w.WriteHeader(500)
 		}
 		if err := json.NewEncoder(w).Encode(q); err != nil {
 			panic(err)
+		}
+		if numFailures == 0 {
+			cond.Broadcast()
 		}
 		count++
 	})
