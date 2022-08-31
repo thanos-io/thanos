@@ -60,7 +60,7 @@ func TestReceive(t *testing.T) {
 		*/
 
 		t.Parallel()
-		e, err := e2e.NewDockerEnvironment("e2e_receive_single_ingestor")
+		e, err := e2e.NewDockerEnvironment("e2e-receive-single-ingestor")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -125,7 +125,7 @@ func TestReceive(t *testing.T) {
 		*/
 
 		t.Parallel()
-		e, err := e2e.NewDockerEnvironment("e2e_receive_router_replication")
+		e, err := e2e.NewDockerEnvironment("e2e-receive-router-replication")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -224,7 +224,7 @@ func TestReceive(t *testing.T) {
 		*/
 
 		t.Parallel()
-		e, err := e2e.NewDockerEnvironment("e2e_receive_routing_tree")
+		e, err := e2e.NewDockerEnvironment("e2e-receive-routing-tree")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -320,7 +320,7 @@ func TestReceive(t *testing.T) {
 		*/
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("e2e_test_receive_hashring")
+		e, err := e2e.NewDockerEnvironment("e2e-test-receive-hashring")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -387,7 +387,7 @@ func TestReceive(t *testing.T) {
 	t.Run("replication", func(t *testing.T) {
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("e2e_test_receive_replication")
+		e, err := e2e.NewDockerEnvironment("e2e-test-receive-replication")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -455,7 +455,7 @@ func TestReceive(t *testing.T) {
 	t.Run("replication_with_outage", func(t *testing.T) {
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("e2e_test_receive_replication_with_outage")
+		e, err := e2e.NewDockerEnvironment("e2e-test-receive-replication-with-outage")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -514,7 +514,7 @@ func TestReceive(t *testing.T) {
 	t.Run("multitenancy", func(t *testing.T) {
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("e2e_test_for_multitenancy")
+		e, err := e2e.NewDockerEnvironment("e2e-test-for-multitenancy")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -566,7 +566,7 @@ func TestReceive(t *testing.T) {
 
 	t.Run("relabel", func(t *testing.T) {
 		t.Parallel()
-		e, err := e2e.NewDockerEnvironment("e2e_receive_relabel")
+		e, err := e2e.NewDockerEnvironment("e2e-receive-relabel")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -644,7 +644,7 @@ func TestReceive(t *testing.T) {
 		*/
 
 		t.Parallel()
-		e, err := e2e.NewDockerEnvironment("e2e_multitenant_active_series_limiting")
+		e, err := e2e.NewDockerEnvironment("e2e-multitenant-active-series-limiting")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -727,7 +727,7 @@ func TestReceive(t *testing.T) {
 
 		// Here for exceed-tenant we go above limit by 10, which results in 0 value.
 		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-			return "sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e_multitenant_active_series_limiting-receive-i1:8080\", job=\"receive-i1\"}"
+			return "sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e-multitenant-active-series-limiting-receive-i1:8080\", job=\"receive-i1\"}"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
@@ -739,7 +739,7 @@ func TestReceive(t *testing.T) {
 
 		// For under-tenant we stay at -5, as we have only pushed 5 series.
 		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-			return "sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e_multitenant_active_series_limiting-receive-i1:8080\", job=\"receive-i1\"}"
+			return "sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e-multitenant-active-series-limiting-receive-i1:8080\", job=\"receive-i1\"}"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
@@ -776,7 +776,7 @@ func TestReceive(t *testing.T) {
 			&model.Sample{
 				Metric: model.Metric{
 					"__name__": "thanos_receive_head_series_limited_requests_total",
-					"instance": "e2e_multitenant_active_series_limiting-receive-i1:8080",
+					"instance": "e2e-multitenant-active-series-limiting-receive-i1:8080",
 					"job":      "receive-i1",
 					"tenant":   "exceed-tenant",
 				},
