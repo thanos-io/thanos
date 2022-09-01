@@ -32,7 +32,7 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 		e                  *e2e.DockerEnvironment
 	)
 
-	e, err = e2e.NewDockerEnvironment("e2e_test_exemplars_fanout")
+	e, err = e2e.NewDockerEnvironment("e2e-test-exemplars-fanout")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
