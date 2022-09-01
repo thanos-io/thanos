@@ -29,7 +29,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/errutil"
-	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -1379,7 +1378,7 @@ func (f *GatherNoCompactionMarkFilter) NoCompactMarkedBlocks() map[ulid.ULID]*me
 }
 
 // Filter passes all metas, while gathering no compact markers.
-func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, modified *extprom.TxGaugeVec) error {
+func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced block.GaugeVec, modified block.GaugeVec) error {
 	f.noCompactMarkedMap = make(map[ulid.ULID]*metadata.NoCompactMark)
 
 	// Make a copy of block IDs to check, in order to avoid concurrency issues
