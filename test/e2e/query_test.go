@@ -1557,5 +1557,5 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 	_, warnings, err := promclient.NewDefaultClient().QueryInstant(context.Background(), urlParse(t, "http://"+querier2.Endpoint("http")), "test", time.Now(), promclient.QueryOptions{})
 	testutil.Ok(t, err)
 	testutil.Equals(t, 1, len(warnings))
-	testutil.Equals(t, "receive series from Addr: e2e-test-query-lazy-proxy-querier-1:9091 LabelSets:  Mint: -9223372036854775808 Maxt: 9223372036854775807: rpc error: code = Unknown desc = No StoreAPIs matched for this query", warnings[0])
+	testutil.Equals(t, "No StoreAPIs matched for this query", warnings[0])
 }
