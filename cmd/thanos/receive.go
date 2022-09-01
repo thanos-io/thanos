@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/grpc"
+
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -33,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
+	"github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/info"
@@ -47,6 +50,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
+
+const compressionNone = "none"
 
 func registerReceive(app *extkingpin.App) {
 	cmd := app.Command(component.Receive.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
@@ -73,14 +78,15 @@ func registerReceive(app *extkingpin.App) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:       int64(time.Duration(*conf.tsdbMinBlockDuration) / time.Millisecond),
-			MaxBlockDuration:       int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
-			RetentionDuration:      int64(time.Duration(*conf.retention) / time.Millisecond),
-			NoLockfile:             conf.noLockFile,
-			WALCompression:         conf.walCompression,
-			AllowOverlappingBlocks: conf.tsdbAllowOverlappingBlocks,
-			MaxExemplars:           conf.tsdbMaxExemplars,
-			EnableExemplarStorage:  true,
+			MinBlockDuration:         int64(time.Duration(*conf.tsdbMinBlockDuration) / time.Millisecond),
+			MaxBlockDuration:         int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
+			RetentionDuration:        int64(time.Duration(*conf.retention) / time.Millisecond),
+			NoLockfile:               conf.noLockFile,
+			WALCompression:           conf.walCompression,
+			AllowOverlappingBlocks:   conf.tsdbAllowOverlappingBlocks,
+			MaxExemplars:             conf.tsdbMaxExemplars,
+			EnableExemplarStorage:    true,
+			HeadChunksWriteQueueSize: int(conf.tsdbWriteQueueSize),
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -138,6 +144,9 @@ func runReceive(
 	)
 	if err != nil {
 		return err
+	}
+	if conf.compression != compressionNone {
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
 	}
 
 	var bkt objstore.Bucket
@@ -253,7 +262,7 @@ func runReceive(
 
 		level.Debug(logger).Log("msg", "setting up tsdb")
 		{
-			if err := startTSDBAndUpload(g, logger, reg, dbs, reloadGRPCServer, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt); err != nil {
+			if err := startTSDBAndUpload(g, logger, reg, dbs, reloadGRPCServer, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
 				return err
 			}
 		}
@@ -456,6 +465,7 @@ func setupHashring(g *run.Group,
 	// In the single-node case, which has no configuration
 	// watcher, we close the chan ourselves.
 	updates := make(chan receive.Hashring, 1)
+	algorithm := receive.HashringAlgorithm(conf.hashringsAlgorithm)
 
 	// The Hashrings config file path is given initializing config watcher.
 	if conf.hashringsFilePath != "" {
@@ -474,7 +484,7 @@ func setupHashring(g *run.Group,
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "the hashring initialized with config watcher.")
-			return receive.HashringFromConfigWatcher(ctx, receive.HashringAlgorithm(conf.hashringsAlgorithm), updates, cw)
+			return receive.HashringFromConfigWatcher(ctx, algorithm, conf.replicationFactor, updates, cw)
 		}, func(error) {
 			cancel()
 		})
@@ -485,7 +495,7 @@ func setupHashring(g *run.Group,
 		)
 		// The Hashrings config file content given initialize configuration from content.
 		if len(conf.hashringsFileContent) > 0 {
-			ring, err = receive.HashringFromConfig(receive.HashringAlgorithm(conf.hashringsAlgorithm), conf.hashringsFileContent)
+			ring, err = receive.HashringFromConfig(algorithm, conf.replicationFactor, conf.hashringsFileContent)
 			if err != nil {
 				close(updates)
 				return errors.Wrap(err, "failed to validate hashring configuration file")
@@ -558,7 +568,7 @@ func startTSDBAndUpload(g *run.Group,
 	uploadDone chan struct{},
 	statusProber prober.Probe,
 	bkt objstore.Bucket,
-
+	hashringAlgorithm receive.HashringAlgorithm,
 ) error {
 
 	log.With(logger, "component", "storage")
@@ -596,6 +606,7 @@ func startTSDBAndUpload(g *run.Group,
 			level.Info(logger).Log("msg", "storage is closed")
 		}()
 
+		var initialized bool
 		for {
 			select {
 			case <-cancel:
@@ -604,22 +615,35 @@ func startTSDBAndUpload(g *run.Group,
 				if !ok {
 					return nil
 				}
-				dbUpdatesStarted.Inc()
-				level.Info(logger).Log("msg", "updating storage")
 
-				if err := dbs.Flush(); err != nil {
-					return errors.Wrap(err, "flushing storage")
+				// When using Ketama as the hashring algorithm, there is no need to flush the TSDB head.
+				// If new receivers were added to the hashring, existing receivers will not need to
+				// ingest additional series.
+				// If receivers are removed from the hashring, existing receivers will only need
+				// to ingest a subset of the series that were assigned to the removed receivers.
+				// As a result, changing the hashring produces no churn, hence no need to force
+				// head compaction and upload.
+				flushHead := !initialized || hashringAlgorithm != receive.AlgorithmKetama
+				if flushHead {
+					level.Info(logger).Log("msg", "updating storage")
+					dbUpdatesStarted.Inc()
+					if err := dbs.Flush(); err != nil {
+						return errors.Wrap(err, "flushing storage")
+					}
+					if err := dbs.Open(); err != nil {
+						return errors.Wrap(err, "opening storage")
+					}
+					if upload {
+						uploadC <- struct{}{}
+						<-uploadDone
+					}
+					dbUpdatesCompleted.Inc()
 				}
-				if err := dbs.Open(); err != nil {
-					return errors.Wrap(err, "opening storage")
-				}
-				if upload {
-					uploadC <- struct{}{}
-					<-uploadDone
-				}
+				initialized = true
+
 				statusProber.Ready()
 				level.Info(logger).Log("msg", "storage started, and server is ready to receive web requests")
-				dbUpdatesCompleted.Inc()
+
 				reloadGRPCServer <- struct{}{}
 			}
 		}
@@ -782,11 +806,13 @@ type receiveConfig struct {
 	replicaHeader     string
 	replicationFactor uint64
 	forwardTimeout    *model.Duration
+	compression       string
 
 	tsdbMinBlockDuration       *model.Duration
 	tsdbMaxBlockDuration       *model.Duration
 	tsdbAllowOverlappingBlocks bool
 	tsdbMaxExemplars           int64
+	tsdbWriteQueueSize         int64
 
 	walCompression bool
 	noLockFile     bool
@@ -859,6 +885,9 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.replica-header", "HTTP header specifying the replica number of a write request.").Default(receive.DefaultReplicaHeader).StringVar(&rc.replicaHeader)
 
+	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
+	cmd.Flag("receive.grpc-compression", "Compression algorithm to use for gRPC requests to other receivers. Must be one of: "+compressionOptions).Default(snappy.Name).EnumVar(&rc.compression, snappy.Name, compressionNone)
+
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
 
 	cmd.Flag("receive.tenant-limits.max-head-series", "The total number of active (head) series that a tenant is allowed to have within a Receive topology. For more details refer: https://thanos.io/tip/components/receive.md/#limiting").Hidden().Uint64Var(&rc.maxPerTenantLimit)
@@ -888,6 +917,11 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 			" In case the exemplar storage becomes full (number of stored exemplars becomes equal to max-exemplars),"+
 			" ingesting a new exemplar will evict the oldest exemplar from storage. 0 (or less) value of this flag disables exemplars storage.").
 		Default("0").Int64Var(&rc.tsdbMaxExemplars)
+
+	cmd.Flag("tsdb.write-queue-size",
+		"[EXPERIMENTAL] Enables configuring the size of the chunk write queue used in the head chunks mapper. "+
+			"A queue size of zero (default) disables this feature entirely.").
+		Default("0").Hidden().Int64Var(&rc.tsdbWriteQueueSize)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")

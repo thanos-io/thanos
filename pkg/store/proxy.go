@@ -288,7 +288,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	for _, st := range stores {
 		st := st
 
-		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
+		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
 		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, EagerRetrieval, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {

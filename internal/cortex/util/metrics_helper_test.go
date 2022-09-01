@@ -651,12 +651,12 @@ func TestUserRegistries_RemoveUserRegistry_SoftRemoval(t *testing.T) {
 			# TYPE counter counter
 	# No change in counter
 			counter 75
-	
+
 			# HELP counter_labels help
 			# TYPE counter_labels counter
 	# No change in counter per label.
 			counter_labels{label_one="a"} 75
-	
+
 			# HELP counter_user help
 			# TYPE counter_user counter
 	# User 3 is now missing.
@@ -664,17 +664,17 @@ func TestUserRegistries_RemoveUserRegistry_SoftRemoval(t *testing.T) {
 			counter_user{user="2"} 10
 			counter_user{user="4"} 20
 			counter_user{user="5"} 25
-	
+
 			# HELP gauge help
 			# TYPE gauge gauge
 	# Drop in the gauge (value 3, counted 5 times)
 			gauge 60
-	
+
 			# HELP gauge_labels help
 			# TYPE gauge_labels gauge
 	# Drop in the gauge (value 3, counted 5 times)
 			gauge_labels{label_one="a"} 60
-	
+
 			# HELP gauge_user help
 			# TYPE gauge_user gauge
 	# User 3 is now missing.
@@ -682,7 +682,7 @@ func TestUserRegistries_RemoveUserRegistry_SoftRemoval(t *testing.T) {
 			gauge_user{user="2"} 10
 			gauge_user{user="4"} 20
 			gauge_user{user="5"} 25
-	
+
 			# HELP histogram help
 			# TYPE histogram histogram
 	# No change in the histogram
@@ -692,7 +692,7 @@ func TestUserRegistries_RemoveUserRegistry_SoftRemoval(t *testing.T) {
 			histogram_bucket{le="+Inf"} 25
 			histogram_sum 75
 			histogram_count 25
-	
+
 			# HELP histogram_labels help
 			# TYPE histogram_labels histogram
 	# No change in the histogram per label
@@ -702,19 +702,19 @@ func TestUserRegistries_RemoveUserRegistry_SoftRemoval(t *testing.T) {
 			histogram_labels_bucket{label_one="a",le="+Inf"} 25
 			histogram_labels_sum{label_one="a"} 75
 			histogram_labels_count{label_one="a"} 25
-	
+
 			# HELP summary help
 			# TYPE summary summary
 	# No change in the summary
 			summary_sum 75
 			summary_count 25
-	
+
 			# HELP summary_labels help
 			# TYPE summary_labels summary
 	# No change in the summary per label
 			summary_labels_sum{label_one="a"} 75
 			summary_labels_count{label_one="a"} 25
-	
+
 			# HELP summary_user help
 			# TYPE summary_user summary
 	# Summary for user 3 is now missing.
@@ -742,12 +742,12 @@ func TestUserRegistries_RemoveUserRegistry_HardRemoval(t *testing.T) {
 			# TYPE counter counter
 	# Counter drop (reset!)
 			counter 60
-	
+
 			# HELP counter_labels help
 			# TYPE counter_labels counter
 	# Counter drop (reset!)
 			counter_labels{label_one="a"} 60
-	
+
 			# HELP counter_user help
 			# TYPE counter_user counter
 	# User 3 is now missing.
@@ -755,17 +755,17 @@ func TestUserRegistries_RemoveUserRegistry_HardRemoval(t *testing.T) {
 			counter_user{user="2"} 10
 			counter_user{user="4"} 20
 			counter_user{user="5"} 25
-	
+
 			# HELP gauge help
 			# TYPE gauge gauge
 	# Drop in the gauge (value 3, counted 5 times)
 			gauge 60
-	
+
 			# HELP gauge_labels help
 			# TYPE gauge_labels gauge
 	# Drop in the gauge (value 3, counted 5 times)
 			gauge_labels{label_one="a"} 60
-	
+
 			# HELP gauge_user help
 			# TYPE gauge_user gauge
 	# User 3 is now missing.
@@ -773,7 +773,7 @@ func TestUserRegistries_RemoveUserRegistry_HardRemoval(t *testing.T) {
 			gauge_user{user="2"} 10
 			gauge_user{user="4"} 20
 			gauge_user{user="5"} 25
-	
+
 			# HELP histogram help
 			# TYPE histogram histogram
 	# Histogram drop (reset for sum and count!)
@@ -783,7 +783,7 @@ func TestUserRegistries_RemoveUserRegistry_HardRemoval(t *testing.T) {
 			histogram_bucket{le="+Inf"} 20
 			histogram_sum 60
 			histogram_count 20
-	
+
 			# HELP histogram_labels help
 			# TYPE histogram_labels histogram
 	# No change in the histogram per label
@@ -793,19 +793,19 @@ func TestUserRegistries_RemoveUserRegistry_HardRemoval(t *testing.T) {
 			histogram_labels_bucket{label_one="a",le="+Inf"} 20
 			histogram_labels_sum{label_one="a"} 60
 			histogram_labels_count{label_one="a"} 20
-	
+
 			# HELP summary help
 			# TYPE summary summary
 	# Summary drop!
 			summary_sum 60
 			summary_count 20
-	
+
 			# HELP summary_labels help
 			# TYPE summary_labels summary
 	# Summary drop!
 			summary_labels_sum{label_one="a"} 60
 			summary_labels_count{label_one="a"} 20
-	
+
 			# HELP summary_user help
 			# TYPE summary_user summary
 	# Summary for user 3 is now missing.
@@ -834,12 +834,12 @@ func TestUserRegistries_AddUserRegistry_ReplaceRegistry(t *testing.T) {
 			# TYPE counter counter
 	# No change in counter
 			counter 75
-	
+
 			# HELP counter_labels help
 			# TYPE counter_labels counter
 	# No change in counter per label
 			counter_labels{label_one="a"} 75
-	
+
 			# HELP counter_user help
 			# TYPE counter_user counter
 	# Per-user counter now missing.
@@ -847,17 +847,17 @@ func TestUserRegistries_AddUserRegistry_ReplaceRegistry(t *testing.T) {
 			counter_user{user="2"} 10
 			counter_user{user="3"} 15
 			counter_user{user="4"} 20
-	
+
 			# HELP gauge help
 			# TYPE gauge gauge
 	# Gauge drops by 25 (value for user 5, times 5)
 			gauge 50
-	
+
 			# HELP gauge_labels help
 			# TYPE gauge_labels gauge
 	# Gauge drops by 25 (value for user 5, times 5)
 			gauge_labels{label_one="a"} 50
-	
+
 			# HELP gauge_user help
 			# TYPE gauge_user gauge
 	# Gauge for user 5 is missing
@@ -865,7 +865,7 @@ func TestUserRegistries_AddUserRegistry_ReplaceRegistry(t *testing.T) {
 			gauge_user{user="2"} 10
 			gauge_user{user="3"} 15
 			gauge_user{user="4"} 20
-	
+
 			# HELP histogram help
 			# TYPE histogram histogram
 	# No change in histogram
@@ -875,7 +875,7 @@ func TestUserRegistries_AddUserRegistry_ReplaceRegistry(t *testing.T) {
 			histogram_bucket{le="+Inf"} 25
 			histogram_sum 75
 			histogram_count 25
-	
+
 			# HELP histogram_labels help
 			# TYPE histogram_labels histogram
 	# No change in histogram per label.
@@ -885,19 +885,19 @@ func TestUserRegistries_AddUserRegistry_ReplaceRegistry(t *testing.T) {
 			histogram_labels_bucket{label_one="a",le="+Inf"} 25
 			histogram_labels_sum{label_one="a"} 75
 			histogram_labels_count{label_one="a"} 25
-	
+
 			# HELP summary help
 			# TYPE summary summary
 	# No change in summary
 			summary_sum 75
 			summary_count 25
-	
+
 			# HELP summary_labels help
 			# TYPE summary_labels summary
 	# No change in summary per label
 			summary_labels_sum{label_one="a"} 75
 			summary_labels_count{label_one="a"} 25
-	
+
 			# HELP summary_user help
 			# TYPE summary_user summary
 	# Summary for user 5 now zero (reset)

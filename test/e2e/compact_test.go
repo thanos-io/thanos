@@ -333,9 +333,9 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		},
 	)
 
-	name := "e2e_test_compact"
+	name := "e2e-test-compact"
 	if penaltyDedup {
-		name = "e2e_test_compact_penalty_dedup"
+		name = "e2e-test-compact-penalty-dedup"
 	}
 	e, err := e2e.NewDockerEnvironment(name)
 	testutil.Ok(t, err)
@@ -344,7 +344,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	dir := filepath.Join(e.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 
-	const bucket = "compact_test"
+	const bucket = "compact-test"
 	m := e2ethanos.NewMinio(e, "minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
@@ -720,13 +720,14 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, err)
 		operationMatcher, err := matchers.NewMatcher(matchers.MatchEqual, "operation", "get")
 		testutil.Ok(t, err)
-		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2e.Equals(573),
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(
+			e2e.Equals(573),
 			[]string{"thanos_objstore_bucket_operations_total"}, e2e.WithLabelMatchers(
 				bucketMatcher,
 				operationMatcher,
-			)),
+			),
 			e2e.WaitMissingMetrics(),
-		)
+		))
 
 		// Make sure compactor does not modify anything else over time.
 		testutil.Ok(t, c.Stop())

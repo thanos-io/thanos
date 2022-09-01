@@ -146,7 +146,7 @@ func TestShardSummerWithEncoding(t *testing.T) {
 		{
 			shards:   3,
 			input:    `sum(rate(bar1{baz="blip"}[1m]))`,
-			expected: `sum without(__cortex_shard__) (__embedded_queries__{__cortex_queries__="{\"Concat\":[\"sum by(__cortex_shard__) (rate(bar1{__cortex_shard__=\\\"0_of_3\\\",baz=\\\"blip\\\"}[1m]))\",\"sum by(__cortex_shard__) (rate(bar1{__cortex_shard__=\\\"1_of_3\\\",baz=\\\"blip\\\"}[1m]))\",\"sum by(__cortex_shard__) (rate(bar1{__cortex_shard__=\\\"2_of_3\\\",baz=\\\"blip\\\"}[1m]))\"]}"})`,
+			expected: `sum without(__cortex_shard__) (__embedded_queries__{__cortex_queries__="{\"Concat\":[\"sum by (__cortex_shard__) (rate(bar1{__cortex_shard__=\\\"0_of_3\\\",baz=\\\"blip\\\"}[1m]))\",\"sum by (__cortex_shard__) (rate(bar1{__cortex_shard__=\\\"1_of_3\\\",baz=\\\"blip\\\"}[1m]))\",\"sum by (__cortex_shard__) (rate(bar1{__cortex_shard__=\\\"2_of_3\\\",baz=\\\"blip\\\"}[1m]))\"]}"})`,
 		},
 	} {
 		t.Run(fmt.Sprintf("[%d]", i), func(t *testing.T) {

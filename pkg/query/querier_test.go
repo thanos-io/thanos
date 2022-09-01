@@ -299,11 +299,11 @@ func (s series) Iterator() chunkenc.Iterator {
 // To test with real data:
 // Collect the expected results from Prometheus or Thanos through "/api/v1/query_range" and save to a file.
 // Collect raw data to be used for local storage:
-// 	scripts/insecure_grpcurl_series.sh querierGrpcIP:port '[{"name":"type","value":"current"},{"name":"_id","value":"xxx"}]' 1597823000000 1597824600000 > localStorage.json
-// 	Remove all white space from the file and put each series in a new line.
-// 	When collecting the raw data mint should be Prometheus query time minus the default look back delta(default is 5min or 300000ms)
-// 	For example if the Prometheus query mint is 1597823700000 the grpccurl query mint should be 1597823400000.
-//  This is because when promql displays data for a given range it looks back 5min before the requested time window.
+//	scripts/insecure_grpcurl_series.sh querierGrpcIP:port '[{"name":"type","value":"current"},{"name":"_id","value":"xxx"}]' 1597823000000 1597824600000 > localStorage.json
+//	Remove all white space from the file and put each series in a new line.
+//	When collecting the raw data mint should be Prometheus query time minus the default look back delta(default is 5min or 300000ms)
+//	For example if the Prometheus query mint is 1597823700000 the grpccurl query mint should be 1597823400000.
+// This is because when promql displays data for a given range it looks back 5min before the requested time window.
 func TestQuerier_Select_AfterPromQL(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 

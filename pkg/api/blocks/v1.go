@@ -86,22 +86,22 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 	r.Post("/blocks/mark", instr("blocks_mark", bapi.markBlock))
 }
 
-func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
 	idParam := r.FormValue("id")
 	actionParam := r.FormValue("action")
 	detailParam := r.FormValue("detail")
 
 	if idParam == "" {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("ID cannot be empty")}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("ID cannot be empty")}, func() {}
 	}
 
 	if actionParam == "" {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("Action cannot be empty")}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("Action cannot be empty")}, func() {}
 	}
 
 	id, err := ulid.Parse(idParam)
 	if err != nil {
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("ULID %q is not valid: %v", idParam, err)}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("ULID %q is not valid: %v", idParam, err)}, func() {}
 	}
 
 	actionType := parse(actionParam)
@@ -109,25 +109,25 @@ func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.Ap
 	case Deletion:
 		err := block.MarkForDeletion(r.Context(), bapi.logger, bapi.bkt, id, detailParam, promauto.With(nil).NewCounter(prometheus.CounterOpts{}))
 		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 		}
 	case NoCompaction:
 		err := block.MarkForNoCompact(r.Context(), bapi.logger, bapi.bkt, id, metadata.ManualNoCompactReason, detailParam, promauto.With(nil).NewCounter(prometheus.CounterOpts{}))
 		if err != nil {
-			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 		}
 	default:
-		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("not supported marker %v", actionParam)}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("not supported marker %v", actionParam)}, func() {}
 	}
-	return nil, nil, nil
+	return nil, nil, nil, func() {}
 }
 
-func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiError) {
+func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
 	viewParam := r.URL.Query().Get("view")
 	if viewParam == "loaded" {
-		return bapi.loadedBlocksInfo, nil, nil
+		return bapi.loadedBlocksInfo, nil, nil, func() {}
 	}
-	return bapi.globalBlocksInfo, nil, nil
+	return bapi.globalBlocksInfo, nil, nil, func() {}
 }
 
 func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {

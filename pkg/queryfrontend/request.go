@@ -22,6 +22,11 @@ type ThanosRequestStoreMatcherGetter interface {
 	GetStoreMatchers() [][]*labels.Matcher
 }
 
+// ShardedRequest interface represents a query request that can be sharded vertically.
+type ShardedRequest interface {
+	WithShardInfo(info *storepb.ShardInfo) queryrange.Request
+}
+
 type RequestHeader struct {
 	Name   string
 	Values []string
@@ -132,6 +137,97 @@ func (r *ThanosQueryRangeRequest) String() string { return "" }
 // ProtoMessage implements proto.Message interface required by queryrange.Request,
 // which is not used in thanos.
 func (r *ThanosQueryRangeRequest) ProtoMessage() {}
+
+type ThanosQueryInstantRequest struct {
+	Path                string
+	Time                int64
+	Timeout             time.Duration
+	Query               string
+	Dedup               bool
+	PartialResponse     bool
+	AutoDownsampling    bool
+	MaxSourceResolution int64
+	ReplicaLabels       []string
+	StoreMatchers       [][]*labels.Matcher
+	Headers             []*RequestHeader
+	Stats               string
+	ShardInfo           *storepb.ShardInfo
+}
+
+// IsDedupEnabled returns true if deduplication is enabled.
+func (r *ThanosQueryInstantRequest) IsDedupEnabled() bool { return r.Dedup }
+
+// GetStoreMatchers returns store matches.
+func (r *ThanosQueryInstantRequest) GetStoreMatchers() [][]*labels.Matcher { return r.StoreMatchers }
+
+// GetStart returns the start timestamp of the request in milliseconds.
+func (r *ThanosQueryInstantRequest) GetStart() int64 { return 0 }
+
+// GetEnd returns the end timestamp of the request in milliseconds.
+func (r *ThanosQueryInstantRequest) GetEnd() int64 { return 0 }
+
+// GetStep returns the step of the request in milliseconds.
+func (r *ThanosQueryInstantRequest) GetStep() int64 { return 0 }
+
+// GetQuery returns the query of the request.
+func (r *ThanosQueryInstantRequest) GetQuery() string { return r.Query }
+
+func (r *ThanosQueryInstantRequest) GetCachingOptions() queryrange.CachingOptions {
+	return queryrange.CachingOptions{}
+}
+
+func (r *ThanosQueryInstantRequest) GetStats() string { return r.Stats }
+
+func (r *ThanosQueryInstantRequest) WithStats(stats string) queryrange.Request {
+	q := *r
+	q.Stats = stats
+	return &q
+}
+
+// WithStartEnd clone the current request with different start and end timestamp.
+func (r *ThanosQueryInstantRequest) WithStartEnd(_, _ int64) queryrange.Request { return nil }
+
+// WithQuery clone the current request with a different query.
+func (r *ThanosQueryInstantRequest) WithQuery(query string) queryrange.Request {
+	q := *r
+	q.Query = query
+	return &q
+}
+
+// WithShardInfo clones the current request with a different shard info.
+func (r *ThanosQueryInstantRequest) WithShardInfo(info *storepb.ShardInfo) queryrange.Request {
+	q := *r
+	q.ShardInfo = info
+	return &q
+}
+
+// LogToSpan writes information about this request to an OpenTracing span.
+func (r *ThanosQueryInstantRequest) LogToSpan(sp opentracing.Span) {
+	fields := []otlog.Field{
+		otlog.String("query", r.GetQuery()),
+		otlog.Int64("time", r.Time),
+		otlog.Bool("dedup", r.Dedup),
+		otlog.Bool("partial_response", r.PartialResponse),
+		otlog.Object("replicaLabels", r.ReplicaLabels),
+		otlog.Object("storeMatchers", r.StoreMatchers),
+		otlog.Bool("auto-downsampling", r.AutoDownsampling),
+		otlog.Int64("max_source_resolution (ms)", r.MaxSourceResolution),
+	}
+
+	sp.LogFields(fields...)
+}
+
+// Reset implements proto.Message interface required by queryrange.Request,
+// which is not used in thanos.
+func (r *ThanosQueryInstantRequest) Reset() {}
+
+// String implements proto.Message interface required by queryrange.Request,
+// which is not used in thanos.
+func (r *ThanosQueryInstantRequest) String() string { return "" }
+
+// ProtoMessage implements proto.Message interface required by queryrange.Request,
+// which is not used in thanos.
+func (r *ThanosQueryInstantRequest) ProtoMessage() {}
 
 type ThanosLabelsRequest struct {
 	Start           int64

@@ -5,7 +5,6 @@ package indexheader
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -41,9 +40,7 @@ func TestReaderPool_NewBinaryReader(t *testing.T) {
 
 	ctx := context.Background()
 
-	tmpDir, err := os.MkdirTemp("", "test-indexheader")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
 	testutil.Ok(t, err)
@@ -79,9 +76,7 @@ func TestReaderPool_ShouldCloseIdleLazyReaders(t *testing.T) {
 
 	ctx := context.Background()
 
-	tmpDir, err := os.MkdirTemp("", "test-indexheader")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
 	testutil.Ok(t, err)

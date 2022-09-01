@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -39,9 +38,7 @@ func BenchmarkQuerySelect(b *testing.B) {
 }
 
 func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) {
-	tmpDir, err := os.MkdirTemp("", "testorbench-queryselect")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+	tmpDir := t.TempDir()
 
 	const numOfReplicas = 2
 
