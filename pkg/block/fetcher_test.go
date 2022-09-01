@@ -43,7 +43,7 @@ type ulidFilter struct {
 	ulidToDelete *ulid.ULID
 }
 
-func (f *ulidFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, modified *extprom.TxGaugeVec) error {
+func (f *ulidFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
 	if _, ok := metas[*f.ulidToDelete]; ok {
 		synced.WithLabelValues("filtered").Inc()
 		delete(metas, *f.ulidToDelete)
