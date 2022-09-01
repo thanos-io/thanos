@@ -280,6 +280,10 @@ Flags:
                                  and end with their step for better
                                  cache-ability. Note: Grafana dashboards do that
                                  by default.
+      --query-range.horizontal-shards=0
+                                 Split queries in at least this amount of
+                                 vertical shards, only when query duration is
+                                 below query-range.max-split-interval.
       --query-range.max-query-length=0
                                  Limit the query time range (end - start time)
                                  in the query-frontend, 0 disables it.
@@ -296,6 +300,13 @@ Flags:
                                  value, then use
                                  query-range.split-min-horizontal-shards to
                                  split query.
+      --query-range.min-split-interval=0
+                                 Split query range requests which duration are
+                                 over this threshold. Using this parameter is
+                                 not allowed with query-range.split-interval.
+                                 One should also set
+                                 query-range.split-min-horizontal-shards to a
+                                 value greater than 1 to enable splitting.
       --query-range.partial-response
                                  Enable partial response for query range
                                  requests if no partial_response param is
@@ -322,17 +333,6 @@ Flags:
                                  execute in parallel, it should be greater than
                                  0 when query-range.response-cache-config is
                                  configured.
-      --query-range.split-min-horizontal-shards=0
-                                 Split queries in at least this amount of
-                                 vertical shards, only when query duration is
-                                 below query-range.max-split-interval.
-      --query-range.split-threshold=0
-                                 Split query range requests which duration are
-                                 over this threshold. Using this parameter is
-                                 not allowed with query-range.split-interval.
-                                 One should also set
-                                 query-range.split-min-horizontal-shards to a
-                                 value greater than 1 to enable splitting.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content of YAML file

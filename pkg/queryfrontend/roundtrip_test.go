@@ -351,11 +351,11 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 			tpw, err := NewTripperware(
 				Config{
 					QueryRangeConfig: QueryRangeConfig{
-						Limits:                      defaultLimits,
-						SplitQueriesByInterval:      tc.splitInterval,
-						QuerySplitThresholdInterval: tc.querySplitThreshold,
-						MaxQuerySplitInterval:       tc.maxSplitInterval,
-						MinHorizontalShards:         tc.minHorizontalShards,
+						Limits:                 defaultLimits,
+						SplitQueriesByInterval: tc.splitInterval,
+						MinQuerySplitInterval:  tc.querySplitThreshold,
+						MaxQuerySplitInterval:  tc.maxSplitInterval,
+						HorizontalShards:       tc.minHorizontalShards,
 					},
 					LabelsConfig: LabelsConfig{
 						Limits:                 defaultLimits,
