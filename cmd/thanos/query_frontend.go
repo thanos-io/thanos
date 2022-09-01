@@ -76,14 +76,15 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-range.split-interval", "Split query range requests by an interval and execute in parallel, it should be greater than 0 when query-range.response-cache-config is configured.").
 		Default("24h").DurationVar(&cfg.QueryRangeConfig.SplitQueriesByInterval)
 
-	cmd.Flag("query-range.min-split-interval", "Split query range requests which duration are over this threshold. Using this parameter is not allowed with query-range.split-interval. "+
+	cmd.Flag("query-range.min-split-interval", "Split query range requests above this interval in query-range.horizontal-shards requests of equal range. "+
+		"Using this parameter is not allowed with query-range.split-interval. "+
 		"One should also set query-range.split-min-horizontal-shards to a value greater than 1 to enable splitting.").
 		Default("0").DurationVar(&cfg.QueryRangeConfig.MinQuerySplitInterval)
 
-	cmd.Flag("query-range.max-split-interval", "Split query range requests using this interval. If the query duration is shorter than this value, then use query-range.split-min-horizontal-shards to split query.").
+	cmd.Flag("query-range.max-split-interval", "Split query range bellow this interval in query-range.horizontal-shards. Queries with a range longer than this value will be split in multiple requests of this length.").
 		Default("0").DurationVar(&cfg.QueryRangeConfig.MaxQuerySplitInterval)
 
-	cmd.Flag("query-range.horizontal-shards", "Split queries in at least this amount of vertical shards, only when query duration is below query-range.max-split-interval.").
+	cmd.Flag("query-range.horizontal-shards", "Split queries in this many requests when query duration is below query-range.max-split-interval.").
 		Default("0").Int64Var(&cfg.QueryRangeConfig.HorizontalShards)
 
 	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single query range request; beyond this, the downstream error is returned.").

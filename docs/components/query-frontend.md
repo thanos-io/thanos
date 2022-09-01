@@ -281,9 +281,9 @@ Flags:
                                  cache-ability. Note: Grafana dashboards do that
                                  by default.
       --query-range.horizontal-shards=0
-                                 Split queries in at least this amount of
-                                 vertical shards, only when query duration is
-                                 below query-range.max-split-interval.
+                                 Split queries in this many requests when query
+                                 duration is below
+                                 query-range.max-split-interval.
       --query-range.max-query-length=0
                                  Limit the query time range (end - start time)
                                  in the query-frontend, 0 disables it.
@@ -295,16 +295,16 @@ Flags:
                                  range request; beyond this, the downstream
                                  error is returned.
       --query-range.max-split-interval=0
-                                 Split query range requests using this interval.
-                                 If the query duration is shorter than this
-                                 value, then use
-                                 query-range.split-min-horizontal-shards to
-                                 split query.
+                                 Split query range bellow this interval in
+                                 query-range.horizontal-shards. Queries with a
+                                 range longer than this value will be split in
+                                 multiple requests of this length.
       --query-range.min-split-interval=0
-                                 Split query range requests which duration are
-                                 over this threshold. Using this parameter is
-                                 not allowed with query-range.split-interval.
-                                 One should also set
+                                 Split query range requests above this interval
+                                 in query-range.horizontal-shards requests of
+                                 equal range. Using this parameter is not
+                                 allowed with query-range.split-interval. One
+                                 should also set
                                  query-range.split-min-horizontal-shards to a
                                  value greater than 1 to enable splitting.
       --query-range.partial-response
