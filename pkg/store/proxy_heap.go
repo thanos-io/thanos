@@ -566,7 +566,6 @@ type eagerRespSet struct {
 	shardMatcher *storepb.ShardMatcher
 
 	// Internal bookkeeping.
-	err               error
 	bufferedResponses []*storepb.SeriesResponse
 	wg                *sync.WaitGroup
 	i                 int

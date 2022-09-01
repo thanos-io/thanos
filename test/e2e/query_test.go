@@ -1539,3 +1539,23 @@ func TestGrpcQueryRange(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 }
+
+// Trying to repro https://github.com/thanos-io/thanos/pull/5296#issuecomment-1217875271.
+func TestConnectedQueriesWithLazyProxy(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-lazy-proxy")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	querier1 := e2ethanos.NewQuerierBuilder(e, "1").WithProxyStrategy("lazy").WithDisablePartialResponses(true).Init()
+	querier2 := e2ethanos.NewQuerierBuilder(e, "2", querier1.InternalEndpoint("grpc")).WithProxyStrategy("lazy").WithDisablePartialResponses(true).Init()
+
+	testutil.Ok(t, e2e.StartAndWaitReady(querier1, querier2))
+	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+
+	_, warnings, err := promclient.NewDefaultClient().QueryInstant(context.Background(), urlParse(t, "http://"+querier2.Endpoint("http")), "test", time.Now(), promclient.QueryOptions{})
+	testutil.Ok(t, err)
+	testutil.Equals(t, 1, len(warnings))
+	testutil.Equals(t, "receive series from Addr: e2e-test-query-lazy-proxy-querier-1:9091 LabelSets:  Mint: -9223372036854775808 Maxt: 9223372036854775807: rpc error: code = Unknown desc = No StoreAPIs matched for this query", warnings[0])
+}
