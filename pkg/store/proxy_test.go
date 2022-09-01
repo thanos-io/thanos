@@ -1814,10 +1814,11 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 
 	logger := log.NewNopLogger()
 	store := &ProxyStore{
-		logger:          logger,
-		stores:          func() []Client { return clients },
-		metrics:         newProxyStoreMetrics(nil),
-		responseTimeout: 5 * time.Second,
+		logger:            logger,
+		stores:            func() []Client { return clients },
+		metrics:           newProxyStoreMetrics(nil),
+		responseTimeout:   5 * time.Second,
+		retrievalStrategy: EagerRetrieval,
 	}
 
 	var allResps []*storepb.SeriesResponse
@@ -1940,10 +1941,11 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 
 	logger := log.NewNopLogger()
 	p := &ProxyStore{
-		logger:          logger,
-		stores:          func() []Client { return clients },
-		metrics:         newProxyStoreMetrics(nil),
-		responseTimeout: 0,
+		logger:            logger,
+		stores:            func() []Client { return clients },
+		metrics:           newProxyStoreMetrics(nil),
+		responseTimeout:   0,
+		retrievalStrategy: EagerRetrieval,
 	}
 
 	t.Run("failling send", func(t *testing.T) {

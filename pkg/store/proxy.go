@@ -61,8 +61,9 @@ type ProxyStore struct {
 	selectorLabels labels.Labels
 	buffers        sync.Pool
 
-	responseTimeout time.Duration
-	metrics         *proxyStoreMetrics
+	responseTimeout   time.Duration
+	metrics           *proxyStoreMetrics
+	retrievalStrategy RetrievalStrategy
 }
 
 type proxyStoreMetrics struct {
@@ -111,8 +112,9 @@ func NewProxyStore(
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
-		responseTimeout: responseTimeout,
-		metrics:         metrics,
+		responseTimeout:   responseTimeout,
+		metrics:           metrics,
+		retrievalStrategy: retrievalStrategy,
 	}
 	return s
 }
@@ -301,7 +303,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, EagerRetrieval, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
+		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
