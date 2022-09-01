@@ -63,7 +63,7 @@ ARCH ?= $(shell uname -m)
 
 # Tools.
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
-PROTOC_VERSION    ?= 3.4.0
+PROTOC_VERSION    ?= 3.20.1
 GIT               ?= $(shell which git)
 
 # Support gsed on OSX (installed via brew), falling back to sed. On Linux

@@ -16,6 +16,7 @@ is_supported_platform() {
   platform=$1
   found=1
   case "$platform" in
+    darwin/arm64) found=0 ;;
     darwin/amd64) found=0 ;;
     darwin/i386) found=0 ;;
     linux/amd64) found=0 ;;
