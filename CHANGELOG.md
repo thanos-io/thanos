@@ -20,8 +20,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
-* [#5666](https://github.com/thanos-io/thanos/pull/5666) Developer tooling: Update protoc to 3.20.1 for better compatibility with Apple Silicon.
-
 ### Removed
 
 ## [v0.28.0](https://github.com/thanos-io/thanos/tree/release-0.28) - 2022.08.26
