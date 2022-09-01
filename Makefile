@@ -289,7 +289,7 @@ go-format: $(GOIMPORTS)
 .PHONY: proto
 proto: ## Generates Go files from Thanos proto files.
 proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST)
-	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" scripts/genproto.sh
+	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" PROTOC_VERSION="$(PROTOC_VERSION)" scripts/genproto.sh
 
 .PHONY: tarballs-release
 tarballs-release: ## Build tarballs.
