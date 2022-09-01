@@ -4,7 +4,7 @@
 set -e
 set -u
 
-PROTOC_VERSION=${PROTOC_VERSION:-3.4.0}
+PROTOC_VERSION=${PROTOC_VERSION:-3.20.1}
 TMP_GOPATH=${TMP_GOPATH:-/tmp/thanos-go}
 PROTOC_DOWNLOAD_URL="https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}"
 

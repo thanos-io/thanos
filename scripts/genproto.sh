@@ -5,7 +5,7 @@
 set -e
 set -u
 
-PROTOC_VERSION="3.20.1"
+PROTOC_VERSION=${PROTOC_VERSION:-3.20.1}
 PROTOC_BIN=${PROTOC_BIN:-protoc}
 GOIMPORTS_BIN=${GOIMPORTS_BIN:-goimports}
 PROTOC_GEN_GOGOFAST_BIN=${PROTOC_GEN_GOGOFAST_BIN:-protoc-gen-gogofast}
@@ -16,7 +16,7 @@ if ! [[ "scripts/genproto.sh" =~ $0 ]]; then
 fi
 
 if ! [[ $(${PROTOC_BIN} --version) == *"${PROTOC_VERSION}"* ]]; then
-  echo "could not find protoc 3.4.0, is it installed + in PATH?"
+  echo "could not find protoc ${PROTOC_VERSION}, is it installed + in PATH?"
   exit 255
 fi
 
