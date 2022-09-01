@@ -62,11 +62,6 @@ const (
 	queryPushdown        = "query-pushdown"
 )
 
-const (
-	proxyLazyStrategy  = "lazy"
-	proxyEagerStrategy = "eager"
-)
-
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
