@@ -45,9 +45,6 @@ func NewDedupResponseHeap(h *ProxyResponseHeap) *dedupResponseHeap {
 	}
 }
 
-func (d *dedupResponseHeap) Err() error {
-	return d.h.Error()
-}
 func (d *dedupResponseHeap) Next() bool {
 	d.responses = d.responses[:0]
 
@@ -259,13 +256,6 @@ func (h *ProxyResponseHeap) At() *storepb.SeriesResponse {
 	return atResp
 }
 
-func (h *ProxyResponseHeap) Error() error {
-	if len(*h) == 0 || h.Min() == nil {
-		return nil
-	}
-	return h.Min().rs.Err()
-}
-
 func (l *lazyRespSet) StoreID() string {
 	return l.st.String()
 }
@@ -293,17 +283,9 @@ type lazyRespSet struct {
 	bufferedResponsesMtx *sync.Mutex
 	lastResp             *storepb.SeriesResponse
 
-	err        error
-	errMtx     sync.Mutex
 	noMoreData bool
 
 	shardMatcher *storepb.ShardMatcher
-}
-
-func (l *lazyRespSet) Err() error {
-	l.errMtx.Lock()
-	defer l.errMtx.Unlock()
-	return l.err
 }
 
 func (l *lazyRespSet) Empty() bool {
@@ -354,8 +336,6 @@ func newLazyRespSet(
 	st Client,
 	closeSeries context.CancelFunc,
 	cl storepb.Store_SeriesClient,
-	shardInfo *storepb.ShardInfo,
-	logger log.Logger,
 	shardMatcher *storepb.ShardMatcher,
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
@@ -383,15 +363,6 @@ func newLazyRespSet(
 		seriesStats := &storepb.SeriesStatsCounter{}
 
 		defer func() {
-			if shardInfo != nil {
-				level.Info(logger).Log("msg", "Done fetching series",
-					"series", seriesStats.Series,
-					"chunks", seriesStats.Chunks,
-					"samples", seriesStats.Samples,
-					"bytes", bytesProcessed,
-				)
-			}
-
 			l.span.SetTag("processed.series", seriesStats.Series)
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)
@@ -414,9 +385,6 @@ func newLazyRespSet(
 			select {
 			case <-l.ctx.Done():
 				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", st.String())
-				l.errMtx.Lock()
-				l.err = err
-				l.errMtx.Unlock()
 				l.span.SetTag("err", err.Error())
 
 				l.bufferedResponsesMtx.Lock()
@@ -437,10 +405,6 @@ func newLazyRespSet(
 
 				if err != nil {
 					err := errors.Wrapf(err, "receive series from %s", st.String())
-					l.errMtx.Lock()
-					l.err = err
-					l.errMtx.Unlock()
-
 					l.span.SetTag("err", err.Error())
 
 					l.bufferedResponsesMtx.Lock()
@@ -555,8 +519,6 @@ func newAsyncRespSet(ctx context.Context,
 			st,
 			closeSeries,
 			cl,
-			shardInfo,
-			logger,
 			shardMatcher,
 			applySharding,
 			emptyStreamResponses,
@@ -569,8 +531,6 @@ func newAsyncRespSet(ctx context.Context,
 			st,
 			closeSeries,
 			cl,
-			shardInfo,
-			logger,
 			shardMatcher,
 			applySharding,
 			emptyStreamResponses,
@@ -619,8 +579,6 @@ func newEagerRespSet(
 	st Client,
 	closeSeries context.CancelFunc,
 	cl storepb.Store_SeriesClient,
-	shardInfo *storepb.ShardInfo,
-	logger log.Logger,
 	shardMatcher *storepb.ShardMatcher,
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
@@ -668,7 +626,6 @@ func newEagerRespSet(
 			select {
 			case <-l.ctx.Done():
 				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", st.String())
-				l.err = err
 				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
 				l.span.SetTag("err", err.Error())
 				return false
@@ -679,7 +636,6 @@ func newEagerRespSet(
 				}
 				if err != nil {
 					err := errors.Wrapf(err, "receive series from %s", st.String())
-					l.err = err
 					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
 					l.span.SetTag("err", err.Error())
 					return false
@@ -744,10 +700,6 @@ func (l *eagerRespSet) Empty() bool {
 	return len(l.bufferedResponses) == 0
 }
 
-func (l *eagerRespSet) Err() error {
-	return l.err
-}
-
 func (l *eagerRespSet) StoreID() string {
 	return l.st.String()
 }
@@ -760,7 +712,6 @@ type respSet interface {
 	Close()
 	At() *storepb.SeriesResponse
 	Next() bool
-	Err() error
 	StoreID() string
 	Labelset() string
 	Empty() bool
