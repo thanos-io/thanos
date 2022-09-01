@@ -404,11 +404,20 @@ func newLazyRespSet(
 				}
 
 				if err != nil {
-					err := errors.Wrapf(err, "receive series from %s", st.String())
-					l.span.SetTag("err", err.Error())
+					var rerr error
+					if t != nil && !t.Stop() && errors.Is(err, context.Canceled) {
+						// Most likely the per-Recv timeout has been reached.
+						// There's a small race between canceling and the Recv()
+						// but this is most likely true.
+						rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, st.String())
+					} else {
+						rerr = errors.Wrapf(err, "receive series from %s", st.String())
+					}
+
+					l.span.SetTag("err", rerr.Error())
 
 					l.bufferedResponsesMtx.Lock()
-					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
+					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
 					l.noMoreData = true
 					l.dataOrFinishEvent.Signal()
 					l.bufferedResponsesMtx.Unlock()
@@ -634,9 +643,17 @@ func newEagerRespSet(
 					return false
 				}
 				if err != nil {
-					err := errors.Wrapf(err, "receive series from %s", st.String())
-					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
-					l.span.SetTag("err", err.Error())
+					var rerr error
+					if t != nil && !t.Stop() && errors.Is(err, context.Canceled) {
+						// Most likely the per-Recv timeout has been reached.
+						// There's a small race between canceling and the Recv()
+						// but this is most likely true.
+						rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, st.String())
+					} else {
+						rerr = errors.Wrapf(err, "receive series from %s", st.String())
+					}
+					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
+					l.span.SetTag("err", rerr.Error())
 					return false
 				}
 

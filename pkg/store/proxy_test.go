@@ -660,7 +660,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedErr: errors.New("rpc error: code = Aborted desc = receive series from test: context canceled"),
+			expectedErr: errors.New("rpc error: code = Aborted desc = failed to receive any data in 4s from test: context canceled"),
 		},
 		{
 			title: "partial response disabled; 1st store is fast, 2nd store is slow;",
