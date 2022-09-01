@@ -299,11 +299,12 @@ github.com/edsrzf/mmap-go v1.0.0/go.mod h1:YO35OhQPt3KJa3ryjFM5Bs14WD66h8eGKpfaB
 github.com/edsrzf/mmap-go v1.1.0 h1:6EUwBLQ/Mcr1EYLE4Tn1VdW1A4ckqCQWZBw8Hr0kjpQ=
 github.com/edsrzf/mmap-go v1.1.0/go.mod h1:19H/e8pUPLicwkyNgOykDXkJ9F0MHE+Z52B8EIth78Q=
 github.com/efficientgo/e2e v0.12.1/go.mod h1:xDHUyIqAWyVWU29Lf+BaZoavW7xAbDEvTwHWWI/3bhk=
-github.com/efficientgo/e2e v0.12.2-0.20220714084440-2f5240d8c363 h1:Nw7SeBNMBrX3s0BbDlAWuGhEEDcKLteMsMmPThj4sxQ=
-github.com/efficientgo/e2e v0.12.2-0.20220714084440-2f5240d8c363/go.mod h1:0Jrqcog5+GlJkbC8ulPkgyRZwq+GsvjUlNt+B2swzJ8=
+github.com/efficientgo/e2e v0.12.2-0.20220823124751-37e916144e6b h1:y+7RKdlNudsdQDROltH0OE4sNeLHag4sH2GXjSy0VUY=
+github.com/efficientgo/e2e v0.12.2-0.20220823124751-37e916144e6b/go.mod h1:0Jrqcog5+GlJkbC8ulPkgyRZwq+GsvjUlNt+B2swzJ8=
 github.com/efficientgo/tools/core v0.0.0-20210129205121-421d0828c9a6/go.mod h1:OmVcnJopJL8d3X3sSXTiypGoUSgFq1aDGmlrdi9dn/M=
-github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b h1:ZHiD4/yE4idlbqvAO6iYCOYRzOMRpxkW+FKasRA3tsQ=
 github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b/go.mod h1:OmVcnJopJL8d3X3sSXTiypGoUSgFq1aDGmlrdi9dn/M=
+github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd h1:svR6KxSP1xiPw10RN4Pd7g6BAVkEcNN628PAqZH31mM=
+github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd/go.mod h1:OmVcnJopJL8d3X3sSXTiypGoUSgFq1aDGmlrdi9dn/M=
 github.com/efficientgo/tools/extkingpin v0.0.0-20220801101838-3312908f6a9d h1:WZV/mrUyKS9w9r+Jdw+zq/tdGAb5LwB+H37EkMLhEMA=
 github.com/efficientgo/tools/extkingpin v0.0.0-20220801101838-3312908f6a9d/go.mod h1:ZV0utlglOczUWv3ih2AbqPSoLoFzdplUYxwV62eZi6Q=
 github.com/elastic/go-sysinfo v1.1.1/go.mod h1:i1ZYdU10oLNfRzq4vq62BEwD2fH8KaWh6eh0ikPT9F0=
