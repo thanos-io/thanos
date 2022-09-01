@@ -27,7 +27,7 @@ import (
 )
 
 // dedupResponseHeap is a wrapper around ProxyResponseHeap
-// that deduplicates identical chunks identified by the same labelset.
+// that removes duplicated identical chunks identified by the same labelset and checksum.
 // It uses a hashing function to do that.
 type dedupResponseHeap struct {
 	h *ProxyResponseHeap
@@ -48,66 +48,6 @@ func NewDedupResponseHeap(h *ProxyResponseHeap) *dedupResponseHeap {
 func (d *dedupResponseHeap) Err() error {
 	return d.h.Error()
 }
-
-func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
-	defer func() {
-		d.responses = d.responses[:0]
-	}()
-	if len(d.responses) == 0 {
-		return nil
-	} else if len(d.responses) == 1 {
-		return d.responses[0]
-	}
-
-	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
-
-	for _, resp := range d.responses {
-		if resp.GetSeries() == nil {
-			continue
-		}
-		for _, chk := range resp.GetSeries().Chunks {
-			for _, field := range []*storepb.Chunk{
-				chk.Raw, chk.Count, chk.Max, chk.Min, chk.Sum, chk.Counter,
-			} {
-				if field == nil {
-					continue
-				}
-				h := xxhash.Sum64(field.Data)
-
-				if _, ok := chunkDedupMap[h]; !ok {
-					chk := chk
-
-					chunkDedupMap[h] = &chk
-				}
-			}
-
-		}
-	}
-
-	// If no chunks were requested.
-	if len(chunkDedupMap) == 0 {
-		return d.responses[0]
-	}
-
-	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
-	for _, chk := range chunkDedupMap {
-		finalChunks = append(finalChunks, *chk)
-	}
-
-	sort.Slice(finalChunks, func(i, j int) bool {
-		return finalChunks[i].Compare(finalChunks[j]) > 0
-	})
-
-	// Guaranteed to be a series because Next() only buffers one
-	// warning at a time that gets handled in the beginning.
-	lbls := d.responses[0].GetSeries().Labels
-
-	return storepb.NewSeriesResponse(&storepb.Series{
-		Labels: lbls,
-		Chunks: finalChunks,
-	})
-}
-
 func (d *dedupResponseHeap) Next() bool {
 	d.responses = d.responses[:0]
 
@@ -171,6 +111,62 @@ func (d *dedupResponseHeap) Next() bool {
 	}
 
 	return len(d.responses) > 0 || d.previousNext
+}
+
+func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
+	if len(d.responses) == 0 {
+		return nil
+	} else if len(d.responses) == 1 {
+		return d.responses[0]
+	}
+
+	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
+
+	for _, resp := range d.responses {
+		if resp.GetSeries() == nil {
+			continue
+		}
+		for _, chk := range resp.GetSeries().Chunks {
+			for _, field := range []*storepb.Chunk{
+				chk.Raw, chk.Count, chk.Max, chk.Min, chk.Sum, chk.Counter,
+			} {
+				if field == nil {
+					continue
+				}
+				h := xxhash.Sum64(field.Data)
+
+				if _, ok := chunkDedupMap[h]; !ok {
+					chk := chk
+
+					chunkDedupMap[h] = &chk
+				}
+			}
+
+		}
+	}
+
+	// If no chunks were requested.
+	if len(chunkDedupMap) == 0 {
+		return d.responses[0]
+	}
+
+	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
+	for _, chk := range chunkDedupMap {
+		finalChunks = append(finalChunks, *chk)
+	}
+
+	sort.Slice(finalChunks, func(i, j int) bool {
+		return finalChunks[i].Compare(finalChunks[j]) > 0
+	})
+
+	// Guaranteed to be a series because Next() only buffers one
+	// warning at a time that gets handled in the beginning.
+	lbls := d.responses[0].GetSeries().Labels
+
+	return storepb.NewSeriesResponse(&storepb.Series{
+		Labels: lbls,
+		Chunks: finalChunks,
+	})
 }
 
 // ProxyResponseHeap is a heap for storepb.SeriesSets.
@@ -649,15 +645,6 @@ func newEagerRespSet(
 		bytesProcessed := 0
 
 		defer func() {
-			if shardInfo != nil {
-				level.Info(logger).Log("msg", "Done fetching series",
-					"series", seriesStats.Series,
-					"chunks", seriesStats.Chunks,
-					"samples", seriesStats.Samples,
-					"bytes", bytesProcessed,
-				)
-			}
-
 			l.span.SetTag("processed.series", seriesStats.Series)
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)

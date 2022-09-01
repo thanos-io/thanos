@@ -73,7 +73,7 @@ func TestProxyStore_Info(t *testing.T) {
 		nil,
 		func() []Client { return nil },
 		component.Query,
-		nil, 0*time.Second,
+		nil, 0*time.Second, RetrievalStrategy(EagerRetrieval),
 	)
 
 	resp, err := q.Info(ctx, &storepb.InfoRequest{})
@@ -515,30 +515,37 @@ func TestProxyStore_Series(t *testing.T) {
 	} {
 
 		if ok := t.Run(tc.title, func(t *testing.T) {
-			q := NewProxyStore(nil,
-				nil,
-				func() []Client { return tc.storeAPIs },
-				component.Query,
-				tc.selectorLabels,
-				0*time.Second,
-			)
+			for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
+				if ok := t.Run(string(strategy), func(t *testing.T) {
+					q := NewProxyStore(nil,
+						nil,
+						func() []Client { return tc.storeAPIs },
+						component.Query,
+						tc.selectorLabels,
+						0*time.Second, strategy,
+					)
 
-			ctx := context.Background()
-			if len(tc.storeDebugMatchers) > 0 {
-				ctx = context.WithValue(ctx, StoreMatcherKey, tc.storeDebugMatchers)
+					ctx := context.Background()
+					if len(tc.storeDebugMatchers) > 0 {
+						ctx = context.WithValue(ctx, StoreMatcherKey, tc.storeDebugMatchers)
+					}
+
+					s := newStoreSeriesServer(ctx)
+					err := q.Series(tc.req, s)
+					if tc.expectedErr != nil {
+						testutil.NotOk(t, err)
+						testutil.Equals(t, tc.expectedErr.Error(), err.Error())
+						return
+					}
+					testutil.Ok(t, err)
+
+					seriesEquals(t, tc.expectedSeries, s.SeriesSet)
+					testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
+				}); !ok {
+					return
+				}
 			}
 
-			s := newStoreSeriesServer(ctx)
-			err := q.Series(tc.req, s)
-			if tc.expectedErr != nil {
-				testutil.NotOk(t, err)
-				testutil.Equals(t, tc.expectedErr.Error(), err.Error())
-				return
-			}
-			testutil.Ok(t, err)
-
-			seriesEquals(t, tc.expectedSeries, s.SeriesSet)
-			testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
 		}); !ok {
 			return
 		}
@@ -1044,33 +1051,40 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 		},
 	} {
 		if ok := t.Run(tc.title, func(t *testing.T) {
-			q := NewProxyStore(nil,
-				nil,
-				func() []Client { return tc.storeAPIs },
-				component.Query,
-				tc.selectorLabels,
-				4*time.Second,
-			)
+			for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
+				if ok := t.Run(string(strategy), func(t *testing.T) {
+					q := NewProxyStore(nil,
+						nil,
+						func() []Client { return tc.storeAPIs },
+						component.Query,
+						tc.selectorLabels,
+						4*time.Second, strategy,
+					)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			s := newStoreSeriesServer(ctx)
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					s := newStoreSeriesServer(ctx)
 
-			t0 := time.Now()
-			err := q.Series(tc.req, s)
-			elapsedTime := time.Since(t0)
-			if tc.expectedErr != nil {
-				testutil.NotOk(t, err)
-				testutil.Equals(t, tc.expectedErr.Error(), err.Error())
-				return
+					t0 := time.Now()
+					err := q.Series(tc.req, s)
+					elapsedTime := time.Since(t0)
+					if tc.expectedErr != nil {
+						testutil.NotOk(t, err)
+						testutil.Equals(t, tc.expectedErr.Error(), err.Error())
+						return
+					}
+
+					testutil.Ok(t, err)
+
+					seriesEquals(t, tc.expectedSeries, s.SeriesSet)
+					testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
+
+					testutil.Assert(t, elapsedTime < 5010*time.Millisecond, fmt.Sprintf("Request has taken %f, expected: <%d, it seems that responseTimeout doesn't work properly.", elapsedTime.Seconds(), 5))
+
+				}); !ok {
+					return
+				}
 			}
-
-			testutil.Ok(t, err)
-
-			seriesEquals(t, tc.expectedSeries, s.SeriesSet)
-			testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
-
-			testutil.Assert(t, elapsedTime < 5010*time.Millisecond, fmt.Sprintf("Request has taken %f, expected: <%d, it seems that responseTimeout doesn't work properly.", elapsedTime.Seconds(), 5))
 		}); !ok {
 			return
 		}
@@ -1102,7 +1116,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		func() []Client { return cls },
 		component.Query,
 		nil,
-		1*time.Second,
+		1*time.Second, EagerRetrieval,
 	)
 
 	ctx := context.Background()
@@ -1163,7 +1177,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 		func() []Client { return cls },
 		component.Query,
 		labels.FromStrings("fed", "a"),
-		5*time.Second,
+		5*time.Second, EagerRetrieval,
 	)
 
 	ctx := context.Background()
@@ -1210,7 +1224,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 		func() []Client { return cls },
 		component.Query,
 		nil,
-		0*time.Second,
+		0*time.Second, EagerRetrieval,
 	)
 
 	ctx := context.Background()
@@ -1407,7 +1421,7 @@ func TestProxyStore_LabelNames(t *testing.T) {
 				func() []Client { return tc.storeAPIs },
 				component.Query,
 				nil,
-				0*time.Second,
+				0*time.Second, EagerRetrieval,
 			)
 
 			ctx := context.Background()

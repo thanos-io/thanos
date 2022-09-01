@@ -95,6 +95,7 @@ func NewProxyStore(
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
 	responseTimeout time.Duration,
+	retrievalStrategy RetrievalStrategy,
 ) *ProxyStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -283,6 +284,18 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		stores = append(stores, st)
 	}
 
+	if len(stores) == 0 {
+		err := errors.New("No StoreAPIs matched for this query")
+		level.Warn(reqLogger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
+		if sendErr := srv.Send(storepb.NewWarnSeriesResponse(err)); sendErr != nil {
+			level.Error(reqLogger).Log("err", sendErr)
+
+			return status.Error(codes.Unknown, errors.Wrap(sendErr, "send series response").Error())
+		}
+
+		return nil
+	}
+
 	storeResponses := make([]respSet, 0, len(stores))
 
 	for _, st := range stores {
@@ -306,18 +319,6 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		storeResponses = append(storeResponses, respSet)
 		defer respSet.Close()
-	}
-
-	if len(stores) == 0 {
-		err := errors.New("No StoreAPIs matched for this query")
-		level.Warn(reqLogger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
-		if sendErr := srv.Send(storepb.NewWarnSeriesResponse(err)); sendErr != nil {
-			level.Error(reqLogger).Log("err", sendErr)
-
-			return status.Error(codes.Unknown, errors.Wrap(sendErr, "send series response").Error())
-		}
-
-		return nil
 	}
 
 	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
