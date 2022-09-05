@@ -6,8 +6,9 @@ package extkingpin
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/log/level"
 	"os"
+
+	"github.com/go-kit/log/level"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/log"

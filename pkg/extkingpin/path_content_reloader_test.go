@@ -2,12 +2,13 @@ package extkingpin
 
 import (
 	"context"
-	"github.com/go-kit/log"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"os"
 	"path"
 	"sync"
 	"testing"
+
+	"github.com/go-kit/log"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestPathContentReloader(t *testing.T) {
