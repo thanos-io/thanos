@@ -87,6 +87,8 @@ func NewStaticPathContent(fromPath string) (*staticPathContent, error) {
 	return &staticPathContent{content, fromPath}, nil
 }
 
+// Rewrite rewrites the file backing this staticPathContent and swaps the local content cache. The file writing
+// is needed to trigger the file system monitor.
 func (t *staticPathContent) Rewrite(newContent []byte) error {
 	t.content = newContent
 	// Write the file to ensure possible file watcher reloaders get triggered.
