@@ -4,7 +4,7 @@
 set -e
 set -u
 
-PROTOC_VERSION=${PROTOC_VERSION:-3.4.0}
+PROTOC_VERSION=${PROTOC_VERSION:-3.20.1}
 TMP_GOPATH=${TMP_GOPATH:-/tmp/thanos-go}
 PROTOC_DOWNLOAD_URL="https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}"
 
@@ -16,6 +16,7 @@ is_supported_platform() {
   platform=$1
   found=1
   case "$platform" in
+    darwin/arm64) found=0 ;;
     darwin/amd64) found=0 ;;
     darwin/i386) found=0 ;;
     linux/amd64) found=0 ;;
