@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -58,12 +59,13 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 				}
 				// We are watching the file's parent folder (more details on this is done can be found below), but are
 				// only interested in changed to the target file. Discard every other file as quickly as possible.
-				if path.Base(event.Name) != path.Base(filePath) {
+				if event.Name != filePath {
 					break
 				}
-				// Everything but a CHMOD requires rereading.
-				// If the file was removed, we can't read it, so skip.
-				if event.Op&fsnotify.Chmod == fsnotify.Chmod || event.Op&fsnotify.Remove == fsnotify.Remove {
+				// We only react to files being written or created.
+				// On chmod or remove we have nothing to do.
+				// On rename we have the old file name (not useful). A create event for the new file will come later.
+				if event.Op&fsnotify.Write == 0 && event.Op&fsnotify.Create == 0 {
 					break
 				}
 				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", filePath), "eventName", event.Name, "eventOp", event.Op)
