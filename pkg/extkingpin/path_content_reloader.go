@@ -10,10 +10,9 @@ import (
 	"path"
 	"time"
 
-	"github.com/go-kit/log/level"
-
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 )
 
@@ -24,7 +23,7 @@ type fileContent interface {
 
 // PathContentReloader starts a file watcher that monitors the file indicated by fileContent.Path() and runs
 // reloadFunc whenever a change is detected.
-func PathContentReloader(ctx context.Context, fileContent fileContent, logger log.Logger, reloadFunc func()) error {
+func PathContentReloader(ctx context.Context, fileContent fileContent, logger log.Logger, reloadFunc func(), opts ...reloaderOption) error {
 	filePath := fileContent.Path()
 	watcher, err := fsnotify.NewWatcher()
 	if filePath == "" {
@@ -33,19 +32,34 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 	if err != nil {
 		return errors.Wrap(err, "creating file watcher")
 	}
+	config := &reloaderConfig{
+		debounceTime: 1 * time.Second,
+	}
+	for _, opt := range opts {
+		opt(config)
+	}
+
 	go func() {
-		debounceTime := 100 * time.Millisecond
-		lastReload := time.Now().Add(-debounceTime)
+		reloadTimer := time.NewTimer(config.debounceTime)
+		lastReloadEventTime := time.Now()
 		for {
 			select {
 			case <-ctx.Done():
 				return
+			case <-reloadTimer.C:
+				if withinDebounceTime(lastReloadEventTime, config.debounceTime) {
+					break
+				}
+				reloadFunc()
+				level.Debug(logger).Log("msg", "configuration reloaded after debouncing")
 			case event := <-watcher.Events:
 				// fsnotify sometimes sends a bunch of events without name or operation.
 				// It's unclear what they are and why they are sent - filter them out.
 				if event.Name == "" {
 					break
 				}
+				// We are watching the file's parent folder (more details on this is done can be found below), but are
+				// only interested in changed to the target file. Discard every other file as quickly as possible.
 				if path.Base(event.Name) != path.Base(filePath) {
 					break
 				}
@@ -55,19 +69,36 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 					break
 				}
 				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", filePath), "eventName", event.Name, "eventOp", event.Op)
-				if time.Now().After(lastReload.Add(debounceTime)) {
-					reloadFunc()
-					lastReload = time.Now()
+				if withinDebounceTime(lastReloadEventTime, config.debounceTime) {
+					reloadTimer.Reset(config.debounceTime)
 				}
 			case err := <-watcher.Errors:
 				level.Error(logger).Log("msg", "watcher error", "error", err)
 			}
 		}
 	}()
+	// We watch the file's parent folder and not the file itself to better handle DELETE and RENAME events. Check
+	// https://github.com/fsnotify/fsnotify/issues/214 for more details.
 	if err := watcher.Add(path.Dir(filePath)); err != nil {
 		return errors.Wrapf(err, "adding path %s to file watcher", filePath)
 	}
 	return nil
+}
+
+func withinDebounceTime(lastUpdate time.Time, debounceTime time.Duration) bool {
+	return lastUpdate.Add(debounceTime).After(time.Now())
+}
+
+type reloaderConfig struct {
+	debounceTime time.Duration
+}
+
+type reloaderOption func(cfg *reloaderConfig)
+
+func WithDebounceTime(debounceTime time.Duration) func(cfg *reloaderConfig) {
+	return func(cfg *reloaderConfig) {
+		cfg.debounceTime = debounceTime
+	}
 }
 
 type staticPathContent struct {
