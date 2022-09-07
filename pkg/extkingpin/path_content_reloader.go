@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"time"
 
 	"github.com/go-kit/log/level"
 
@@ -33,6 +34,8 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 		return errors.Wrap(err, "creating file watcher")
 	}
 	go func() {
+		debounceTime := 100 * time.Millisecond
+		lastReload := time.Now().Add(-debounceTime)
 		for {
 			select {
 			case <-ctx.Done():
@@ -51,8 +54,10 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 				if event.Op^fsnotify.Chmod == 0 || event.Op^fsnotify.Remove == 0 {
 					break
 				}
-				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", path), "eventName", event.Name, "eventOp", event.Op)
-				reloadFunc()
+				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", filePath), "eventName", event.Name, "eventOp", event.Op)
+				if time.Now().After(lastReload.Add(debounceTime)) {
+					reloadFunc()
+				}
 			case err := <-watcher.Errors:
 				level.Error(logger).Log("msg", "watcher error", "error", err)
 			}
