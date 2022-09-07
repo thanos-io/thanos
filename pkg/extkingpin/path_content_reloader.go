@@ -58,9 +58,8 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 			}
 		}
 	}()
-	if err := watcher.Add(path); err != nil {
-		ctx.Done()
-		return errors.Wrapf(err, "adding path %s to file watcher", path)
+	if err := watcher.Add(path.Dir(filePath)); err != nil {
+		return errors.Wrapf(err, "adding path %s to file watcher", filePath)
 	}
 	return nil
 }
