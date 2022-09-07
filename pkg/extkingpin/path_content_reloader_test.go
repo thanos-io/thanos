@@ -22,12 +22,37 @@ func TestPathContentReloader(t *testing.T) {
 		wantReloads int
 	}{
 		{
-			name: "Many operations, only rewrite triggers reload",
+			name: "Many operations, only rewrite triggers one reload",
 			args: args{
 				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
 					testutil.Ok(t, os.Chmod(testFile, 0777))
 					testutil.Ok(t, os.Remove(testFile))
 					testutil.Ok(t, pathContent.Rewrite([]byte("test modified")))
+				},
+			},
+			wantReloads: 1,
+		},
+		{
+			name: "Many operations, only rename triggers one reload",
+			args: args{
+				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
+					testutil.Ok(t, os.Chmod(testFile, 0777))
+					testutil.Ok(t, os.Rename(testFile, testFile+".tmp"))
+					time.Sleep(2 * time.Second)
+					testutil.Ok(t, os.Rename(testFile+".tmp", testFile))
+				},
+			},
+			wantReloads: 1,
+		},
+		{
+			name: "Many operations, two rewrites trigger two reloads",
+			args: args{
+				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
+					testutil.Ok(t, os.Chmod(testFile, 0777))
+					testutil.Ok(t, os.Remove(testFile))
+					testutil.Ok(t, pathContent.Rewrite([]byte("test modified")))
+					time.Sleep(2 * time.Second)
+					testutil.Ok(t, pathContent.Rewrite([]byte("test modified again")))
 				},
 			},
 			wantReloads: 1,
