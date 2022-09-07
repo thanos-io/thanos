@@ -51,7 +51,7 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 				}
 				// Everything but a CHMOD requires rereading.
 				// If the file was removed, we can't read it, so skip.
-				if event.Op^fsnotify.Chmod == 0 || event.Op^fsnotify.Remove == 0 {
+				if event.Op&fsnotify.Chmod == fsnotify.Chmod || event.Op&fsnotify.Remove == fsnotify.Remove {
 					break
 				}
 				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", filePath), "eventName", event.Name, "eventOp", event.Op)
