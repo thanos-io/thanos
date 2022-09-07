@@ -38,7 +38,6 @@ func TestPathContentReloader(t *testing.T) {
 				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
 					testutil.Ok(t, os.Chmod(testFile, 0777))
 					testutil.Ok(t, os.Rename(testFile, testFile+".tmp"))
-					time.Sleep(2 * time.Second)
 					testutil.Ok(t, os.Rename(testFile+".tmp", testFile))
 				},
 			},
