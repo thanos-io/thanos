@@ -38,7 +38,7 @@ func TestPathContentReloader(t *testing.T) {
 				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
 					testutil.Ok(t, os.Chmod(testFile, 0777))
 					testutil.Ok(t, os.Rename(testFile, testFile+".tmp"))
-					time.Sleep(2 * time.Second)
+					time.Sleep(1 * time.Second)
 					testutil.Ok(t, os.Rename(testFile+".tmp", testFile))
 				},
 			},
@@ -51,7 +51,7 @@ func TestPathContentReloader(t *testing.T) {
 					testutil.Ok(t, os.Chmod(testFile, 0777))
 					testutil.Ok(t, os.Remove(testFile))
 					testutil.Ok(t, pathContent.Rewrite([]byte("test modified")))
-					time.Sleep(2 * time.Second)
+					time.Sleep(1 * time.Second)
 					testutil.Ok(t, pathContent.Rewrite([]byte("test modified again")))
 				},
 			},
@@ -77,9 +77,7 @@ func TestPathContentReloader(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
 			testFile := path.Join(t.TempDir(), "test")
 			testutil.Ok(t, os.WriteFile(testFile, []byte("test"), 0666))
 			pathContent, err := NewStaticPathContent(testFile)
