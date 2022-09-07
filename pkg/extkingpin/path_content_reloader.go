@@ -54,6 +54,9 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 		for {
 			select {
 			case <-ctx.Done():
+				if reloadTimer != nil {
+					reloadTimer.Stop()
+				}
 				return
 			case event := <-watcher.Events:
 				// fsnotify sometimes sends a bunch of events without name or operation.
