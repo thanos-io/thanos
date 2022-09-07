@@ -62,8 +62,8 @@ func TestPathContentReloader(t *testing.T) {
 			wg := &sync.WaitGroup{}
 			wg.Add(tt.wantReloads)
 
-			ctx := context.Background()
-			defer ctx.Done()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			reloadCount := 0
 			err = PathContentReloader(ctx, pathContent, log.NewLogfmtLogger(os.Stdout), func() {
 				reloadCount++
