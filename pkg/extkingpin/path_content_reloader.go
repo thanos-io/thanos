@@ -30,7 +30,11 @@ type fileContent interface {
 // To ensure renames and deletes are properly handled, the file watcher is put at the file's parent folder. See
 // https://github.com/fsnotify/fsnotify/issues/214 for more details.
 func PathContentReloader(ctx context.Context, fileContent fileContent, logger log.Logger, reloadFunc func(), opts ...reloaderOption) error {
-	filePath := fileContent.Path()
+	filePath, err := filepath.Abs(fileContent.Path())
+	if err != nil {
+		return errors.Wrap(err, "getting absolute file path")
+	}
+
 	watcher, err := fsnotify.NewWatcher()
 	if filePath == "" {
 		level.Debug(logger).Log("msg", "no path detected for config reload")
