@@ -57,6 +57,7 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", filePath), "eventName", event.Name, "eventOp", event.Op)
 				if time.Now().After(lastReload.Add(debounceTime)) {
 					reloadFunc()
+					lastReload = time.Now()
 				}
 			case err := <-watcher.Errors:
 				level.Error(logger).Log("msg", "watcher error", "error", err)
