@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 
 	"github.com/go-kit/log/level"
 
@@ -23,9 +24,9 @@ type fileContent interface {
 // PathContentReloader starts a file watcher that monitors the file indicated by fileContent.Path() and runs
 // reloadFunc whenever a change is detected.
 func PathContentReloader(ctx context.Context, fileContent fileContent, logger log.Logger, reloadFunc func()) error {
-	path := fileContent.Path()
+	filePath := fileContent.Path()
 	watcher, err := fsnotify.NewWatcher()
-	if path == "" {
+	if filePath == "" {
 		level.Debug(logger).Log("msg", "no path detected for config reload")
 	}
 	if err != nil {
@@ -40,6 +41,9 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 				// fsnotify sometimes sends a bunch of events without name or operation.
 				// It's unclear what they are and why they are sent - filter them out.
 				if event.Name == "" {
+					break
+				}
+				if path.Base(event.Name) != path.Base(filePath) {
 					break
 				}
 				// Everything but a CHMOD requires rereading.
