@@ -45,18 +45,11 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 	}
 
 	go func() {
-		reloadTimer := time.NewTimer(config.debounceTime)
-		lastReloadEventTime := time.Now()
+		var reloadTimer *time.Timer
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-reloadTimer.C:
-				if withinDebounceTime(lastReloadEventTime, config.debounceTime) {
-					break
-				}
-				reloadFunc()
-				level.Debug(logger).Log("msg", "configuration reloaded after debouncing")
 			case event := <-watcher.Events:
 				// fsnotify sometimes sends a bunch of events without name or operation.
 				// It's unclear what they are and why they are sent - filter them out.
@@ -74,12 +67,13 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 					break
 				}
 				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", filePath), "eventName", event.Name, "eventOp", event.Op)
-				if withinDebounceTime(lastReloadEventTime, config.debounceTime) {
-					if !reloadTimer.Stop() {
-						<-reloadTimer.C
-					}
-					reloadTimer.Reset(config.debounceTime)
+				if reloadTimer != nil {
+					reloadTimer.Stop()
 				}
+				reloadTimer = time.AfterFunc(config.debounceTime, func() {
+					reloadFunc()
+					level.Debug(logger).Log("msg", "configuration reloaded after debouncing")
+				})
 			case err := <-watcher.Errors:
 				level.Error(logger).Log("msg", "watcher error", "error", err)
 			}
@@ -94,7 +88,7 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 }
 
 func withinDebounceTime(lastUpdate time.Time, debounceTime time.Duration) bool {
-	return lastUpdate.Add(debounceTime).After(time.Now())
+	return time.Now().Before(lastUpdate.Add(debounceTime))
 }
 
 type reloaderConfig struct {
