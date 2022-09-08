@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package receive
+package limits
 
 import (
 	"os"
@@ -23,23 +23,23 @@ func TestParseLimiterConfig(t *testing.T) {
 			configFileName: "good_limits.yaml",
 			wantErr:        false,
 			want: &RootLimitsConfig{
-				WriteLimits: writeLimitsConfig{
+				WriteLimits: WriteLimitsConfig{
 					GlobalLimits: globalLimitsConfig{MaxConcurrency: 30},
 					DefaultLimits: defaultLimitsConfig{
-						RequestLimits: *newEmptyRequestLimitsConfig().
+						RequestLimits: *NewEmptyRequestLimitsConfig().
 							SetSizeBytesLimit(1024).
 							SetSeriesLimit(1000).
 							SetSamplesLimit(10),
 					},
-					TenantsLimits: tenantsWriteLimitsConfig{
-						"acme": &writeLimitConfig{
-							RequestLimits: newEmptyRequestLimitsConfig().
+					TenantsLimits: TenantsWriteLimitsConfig{
+						"acme": &WriteLimitConfig{
+							RequestLimits: NewEmptyRequestLimitsConfig().
 								SetSizeBytesLimit(0).
 								SetSeriesLimit(0).
 								SetSamplesLimit(0),
 						},
-						"ajax": &writeLimitConfig{
-							RequestLimits: newEmptyRequestLimitsConfig().
+						"ajax": &WriteLimitConfig{
+							RequestLimits: NewEmptyRequestLimitsConfig().
 								SetSeriesLimit(50000).
 								SetSamplesLimit(500),
 						},

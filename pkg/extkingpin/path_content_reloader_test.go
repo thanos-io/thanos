@@ -83,9 +83,7 @@ func TestPathContentReloader(t *testing.T) {
 			testFile := path.Join(t.TempDir(), "test")
 			testutil.Ok(t, os.WriteFile(testFile, []byte("test"), 0666))
 			pathContent, err := NewStaticPathContent(testFile)
-			if err != nil {
-				t.Fatalf("error trying to save static limit config: %s", err)
-			}
+			testutil.Ok(t, err)
 
 			wg := &sync.WaitGroup{}
 			wg.Add(tt.wantReloads)

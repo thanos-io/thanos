@@ -86,7 +86,7 @@ Thanos Receive has some limits and gates that can be configured to control resou
 
 To configure the gates and limits you can use one of the two options:
 
-- `--receive.limits-config-file=<file-path>`: where `<file-path>` is the path to the YAML file.
+- `--receive.limits-config-file=<file-path>`: where `<file-path>` is the path to the YAML file. Any modification to the indicated file will trigger a configuration reload. If the updated configuration is invalid an error will be logged and it won't replace the previous valid configuration.
 - `--receive.limits-config=<content>`: where `<content>` is the content of YAML file.
 
 By default all the limits and gates are **disabled**.
@@ -114,7 +114,7 @@ From the example configuration below, it's understood that:
 
 The next sections explain what each configuration value means.
 
-```yaml mdox-exec="cat pkg/receive/testdata/limits_config/good_limits.yaml"
+```yaml mdox-exec="cat pkg/receive/limits/testdata/limits_config/good_limits.yaml"
 write:
   global:
     max_concurrency: 30

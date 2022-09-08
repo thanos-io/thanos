@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package receive
+package limits
 
 import (
 	"github.com/thanos-io/thanos/pkg/errors"
@@ -11,7 +11,7 @@ import (
 // RootLimitsConfig is the root configuration for limits.
 type RootLimitsConfig struct {
 	// WriteLimits hold the limits for writing data.
-	WriteLimits writeLimitsConfig `yaml:"write"`
+	WriteLimits WriteLimitsConfig `yaml:"write"`
 }
 
 // ParseRootLimitConfig parses the root limit configuration. Even though
@@ -24,13 +24,13 @@ func ParseRootLimitConfig(content []byte) (*RootLimitsConfig, error) {
 	return &root, nil
 }
 
-type writeLimitsConfig struct {
+type WriteLimitsConfig struct {
 	// GlobalLimits are limits that are shared across all tenants.
 	GlobalLimits globalLimitsConfig `yaml:"global"`
 	// DefaultLimits are the default limits for tenants without specified limits.
 	DefaultLimits defaultLimitsConfig `yaml:"default"`
 	// TenantsLimits are the limits per tenant.
-	TenantsLimits tenantsWriteLimitsConfig `yaml:"tenants"`
+	TenantsLimits TenantsWriteLimitsConfig `yaml:"tenants"`
 }
 
 type globalLimitsConfig struct {
@@ -44,11 +44,12 @@ type defaultLimitsConfig struct {
 	// HeadSeriesConfig *headSeriesLimiter `yaml:"head_series"`
 }
 
-type tenantsWriteLimitsConfig map[string]*writeLimitConfig
+// TenantsWriteLimitsConfig is a map of tenant IDs to their *WriteLimitConfig.
+type TenantsWriteLimitsConfig map[string]*WriteLimitConfig
 
 // A tenant might not always have limits configured, so things here must
 // use pointers.
-type writeLimitConfig struct {
+type WriteLimitConfig struct {
 	// RequestLimits holds the difficult per-request limits.
 	RequestLimits *requestLimitsConfig `yaml:"request"`
 	// HeadSeriesConfig *headSeriesLimiter `yaml:"head_series"`
@@ -60,7 +61,7 @@ type requestLimitsConfig struct {
 	SamplesLimit   *int64 `yaml:"samples_limit"`
 }
 
-func newEmptyRequestLimitsConfig() *requestLimitsConfig {
+func NewEmptyRequestLimitsConfig() *requestLimitsConfig {
 	return &requestLimitsConfig{}
 }
 

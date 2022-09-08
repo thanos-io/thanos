@@ -102,6 +102,7 @@ type reloaderConfig struct {
 
 type reloaderOption func(cfg *reloaderConfig)
 
+// WithDebounceTime is an option to configure the debounce time when using PathContentReloader.
 func WithDebounceTime(debounceTime time.Duration) func(cfg *reloaderConfig) {
 	return func(cfg *reloaderConfig) {
 		cfg.debounceTime = debounceTime

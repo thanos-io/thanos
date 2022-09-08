@@ -43,6 +43,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
+	"github.com/thanos-io/thanos/pkg/receive/limits"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -194,18 +195,6 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
-	var limitsConfig *receive.RootLimitsConfig
-	if conf.limitsConfig != nil {
-		limitsContentYaml, err := conf.limitsConfig.Content()
-		if err != nil {
-			return errors.Wrap(err, "get content of limit configuration")
-		}
-		limitsConfig, err = receive.ParseRootLimitConfig(limitsContentYaml)
-		if err != nil {
-			return errors.Wrap(err, "parse limit configuration")
-		}
-	}
-
 	// Impose active series limit only if Receiver is in Router or RouterIngestor mode, and config is provided.
 	seriesLimitSupported := (receiveMode == receive.RouterOnly || receiveMode == receive.RouterIngestor) && conf.maxPerTenantLimit != 0
 
@@ -221,6 +210,12 @@ func runReceive(
 		hashFunc,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
+
+	limiter, err := limits.NewLimiter(conf.limitsConfig, reg, logger)
+	if err != nil {
+		return errors.Wrap(err, "creating limiter")
+	}
+
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
 		Writer:                   writer,
 		ListenAddress:            conf.rwAddress,
@@ -238,13 +233,26 @@ func runReceive(
 		DialOpts:                 dialOpts,
 		ForwardTimeout:           time.Duration(*conf.forwardTimeout),
 		TSDBStats:                dbs,
-		LimitsConfig:             limitsConfig,
+		Limiter:                  limiter,
 		SeriesLimitSupported:     seriesLimitSupported,
 		MaxPerTenantLimit:        conf.maxPerTenantLimit,
 		MetaMonitoringUrl:        conf.metaMonitoringUrl,
 		MetaMonitoringHttpClient: conf.metaMonitoringHttpClient,
 		MetaMonitoringLimitQuery: conf.metaMonitoringLimitQuery,
 	})
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			level.Info(logger).Log("msg", "limits config initialized with file watcher.")
+			if err := limiter.StartConfigReloader(ctx, nil); err != nil {
+				return err
+			}
+			<-ctx.Done()
+			return nil
+		}, func(err error) {
+			cancel()
+		})
+	}
 
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
