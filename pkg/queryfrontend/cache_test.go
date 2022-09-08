@@ -37,7 +37,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Step:  60 * seconds,
 			},
-			expected: "fe::up:60000:0:2",
+			expected: "fe::up:60000:0:2:-",
 		},
 		{
 			name: "10s step",
@@ -46,7 +46,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Step:  10 * seconds,
 			},
-			expected: "fe::up:10000:0:2",
+			expected: "fe::up:10000:0:2:-",
 		},
 		{
 			name: "1m downsampling resolution",
@@ -56,7 +56,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: 60 * seconds,
 			},
-			expected: "fe::up:10000:0:2",
+			expected: "fe::up:10000:0:2:-",
 		},
 		{
 			name: "5m downsampling resolution, different cache key",
@@ -66,7 +66,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: 300 * seconds,
 			},
-			expected: "fe::up:10000:0:1",
+			expected: "fe::up:10000:0:1:-",
 		},
 		{
 			name: "1h downsampling resolution, different cache key",
@@ -76,7 +76,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: hour,
 			},
-			expected: "fe::up:10000:0:0",
+			expected: "fe::up:10000:0:0:-",
 		},
 		{
 			name: "label names, no matcher",
@@ -134,7 +134,9 @@ func TestGenerateCacheKey(t *testing.T) {
 			expected: `fe::up:[[foo="bar"] [baz="qux"]]:0`,
 		},
 	} {
-		key := splitter.GenerateCacheKey("", tc.req)
-		testutil.Equals(t, tc.expected, key)
+		t.Run(tc.name, func(t *testing.T) {
+			key := splitter.GenerateCacheKey("", tc.req)
+			testutil.Equals(t, tc.expected, key)
+		})
 	}
 }
