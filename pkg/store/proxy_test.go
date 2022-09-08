@@ -513,42 +513,38 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 		},
 	} {
+		for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
+			if ok := t.Run(fmt.Sprintf("%s/%s", tc.title, strategy), func(t *testing.T) {
+				q := NewProxyStore(nil,
+					nil,
+					func() []Client { return tc.storeAPIs },
+					component.Query,
+					tc.selectorLabels,
+					5*time.Second, strategy,
+				)
 
-		if ok := t.Run(tc.title, func(t *testing.T) {
-			for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
-				if ok := t.Run(string(strategy), func(t *testing.T) {
-					q := NewProxyStore(nil,
-						nil,
-						func() []Client { return tc.storeAPIs },
-						component.Query,
-						tc.selectorLabels,
-						0*time.Second, strategy,
-					)
+				ctx := context.Background()
+				if len(tc.storeDebugMatchers) > 0 {
+					ctx = context.WithValue(ctx, StoreMatcherKey, tc.storeDebugMatchers)
+				}
 
-					ctx := context.Background()
-					if len(tc.storeDebugMatchers) > 0 {
-						ctx = context.WithValue(ctx, StoreMatcherKey, tc.storeDebugMatchers)
-					}
-
-					s := newStoreSeriesServer(ctx)
-					err := q.Series(tc.req, s)
-					if tc.expectedErr != nil {
-						testutil.NotOk(t, err)
-						testutil.Equals(t, tc.expectedErr.Error(), err.Error())
-						return
-					}
-					testutil.Ok(t, err)
-
-					seriesEquals(t, tc.expectedSeries, s.SeriesSet)
-					testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
-				}); !ok {
+				s := newStoreSeriesServer(ctx)
+				err := q.Series(tc.req, s)
+				if tc.expectedErr != nil {
+					testutil.NotOk(t, err)
+					testutil.Equals(t, tc.expectedErr.Error(), err.Error())
 					return
 				}
-			}
+				testutil.Ok(t, err)
 
-		}); !ok {
-			return
+				seriesEquals(t, tc.expectedSeries, s.SeriesSet)
+				testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
+
+			}); !ok {
+				return
+			}
 		}
+
 	}
 }
 
@@ -1421,7 +1417,7 @@ func TestProxyStore_LabelNames(t *testing.T) {
 				func() []Client { return tc.storeAPIs },
 				component.Query,
 				nil,
-				0*time.Second, EagerRetrieval,
+				5*time.Second, EagerRetrieval,
 			)
 
 			ctx := context.Background()

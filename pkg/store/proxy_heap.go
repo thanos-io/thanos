@@ -283,7 +283,8 @@ type lazyRespSet struct {
 	bufferedResponsesMtx *sync.Mutex
 	lastResp             *storepb.SeriesResponse
 
-	noMoreData bool
+	noMoreData  bool
+	initialized bool
 
 	shardMatcher *storepb.ShardMatcher
 }
@@ -326,6 +327,14 @@ func (l *lazyRespSet) Next() bool {
 }
 
 func (l *lazyRespSet) At() *storepb.SeriesResponse {
+	// We need to wait for at least one response so that we would be able to properly build the heap.
+	if !l.initialized {
+		l.Next()
+		l.initialized = true
+		return l.lastResp
+	}
+
+	// Next() was called previously.
 	return l.lastResp
 }
 

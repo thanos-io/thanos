@@ -1557,7 +1557,8 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar, querier1, querier2))
 	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
-	instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
-		return "up"
+	result := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
+		return "sum(up)"
 	}, time.Now, promclient.QueryOptions{}, 1)
+	testutil.Equals(t, model.SampleValue(1.0), result[0].Value)
 }
