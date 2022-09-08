@@ -96,10 +96,6 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 	return nil
 }
 
-func withinDebounceTime(lastUpdate time.Time, debounceTime time.Duration) bool {
-	return time.Now().Before(lastUpdate.Add(debounceTime))
-}
-
 type reloaderConfig struct {
 	debounceTime time.Duration
 }
