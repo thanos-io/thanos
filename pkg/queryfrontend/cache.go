@@ -33,11 +33,19 @@ func (t thanosCacheKeyGenerator) GenerateCacheKey(userID string, r queryrange.Re
 		i := 0
 		for ; i < len(t.resolutions) && t.resolutions[i] > tr.MaxSourceResolution; i++ {
 		}
-		return fmt.Sprintf("fe:%s:%s:%d:%d:%d", userID, tr.Query, tr.Step, currentInterval, i)
+		shardInfoKey := generateShardInfoKey(tr)
+		return fmt.Sprintf("fe:%s:%s:%d:%d:%d:%s", userID, tr.Query, tr.Step, currentInterval, i, shardInfoKey)
 	case *ThanosLabelsRequest:
 		return fmt.Sprintf("fe:%s:%s:%s:%d", userID, tr.Label, tr.Matchers, currentInterval)
 	case *ThanosSeriesRequest:
 		return fmt.Sprintf("fe:%s:%s:%d", userID, tr.Matchers, currentInterval)
 	}
 	return fmt.Sprintf("fe:%s:%s:%d:%d", userID, r.GetQuery(), r.GetStep(), currentInterval)
+}
+
+func generateShardInfoKey(r *ThanosQueryRangeRequest) string {
+	if r.ShardInfo == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%d:%d", r.ShardInfo.TotalShards, r.ShardInfo.ShardIndex)
 }

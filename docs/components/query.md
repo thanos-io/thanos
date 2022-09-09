@@ -292,6 +292,8 @@ Flags:
       --grpc-client-tls-skip-verify
                                  Disable TLS certificate verification i.e self
                                  signed, signed by fake CA
+      --grpc-compression=none    Compression algorithm to use for gRPC requests
+                                 to other clients. Must be one of: snappy, none
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
       --grpc-server-max-connection-age=60m

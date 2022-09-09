@@ -21,7 +21,7 @@ import (
 func TestMetadataAPI_Fanout(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_metadata_fanout")
+	e, err := e2e.NewDockerEnvironment("e2e-test-metadata-fanout")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 

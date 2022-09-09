@@ -27,7 +27,7 @@ import (
 func TestTargetsAPI_Fanout(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_targets_fanout")
+	e, err := e2e.NewDockerEnvironment("e2e-test-targets-fanout")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -67,6 +67,8 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 					{Name: "__address__", Value: "localhost:9090"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
+					{Name: "__scrape_interval__", Value: "1s"},
+					{Name: "__scrape_timeout__", Value: "1s"},
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
 				}},
@@ -86,6 +88,8 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 					{Name: "__address__", Value: "localhost:80"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
+					{Name: "__scrape_interval__", Value: "1s"},
+					{Name: "__scrape_timeout__", Value: "1s"},
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
 				}},
