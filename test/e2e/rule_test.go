@@ -259,7 +259,7 @@ func writeTargets(t *testing.T, path string, addrs ...string) {
 func TestRule(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_rule")
+	e, err := e2e.NewDockerEnvironment("e2e-test-rule")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -503,7 +503,7 @@ func TestRule(t *testing.T) {
 func TestRule_CanRemoteWriteData(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_rule_remote_write")
+	e, err := e2e.NewDockerEnvironment("e2e-test-rule-remote-write")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 

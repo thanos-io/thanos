@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
+	"google.golang.org/grpc"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -33,6 +34,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
+	"github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -74,6 +76,8 @@ func registerQuery(app *extkingpin.App) {
 	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
 	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
+	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
+	grpcCompression := cmd.Flag("grpc-compression", "Compression algorithm to use for gRPC requests to other clients. Must be one of: "+compressionOptions).Default(compressionNone).Enum(snappy.Name, compressionNone)
 
 	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Prometheus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
@@ -178,6 +182,7 @@ func registerQuery(app *extkingpin.App) {
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field.").String()
+	grpcProxyStrategy := cmd.Flag("grpc.proxy-strategy", "Strategy to use when proxying Series requests to leaf nodes. Hidden and only used for testing, will be removed after lazy becomes the default.").Default(string(store.EagerRetrieval)).Hidden().Enum(string(store.EagerRetrieval), string(store.LazyRetrieval))
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
@@ -239,6 +244,7 @@ func registerQuery(app *extkingpin.App) {
 			*grpcKey,
 			*grpcClientCA,
 			*grpcMaxConnAge,
+			*grpcCompression,
 			*secure,
 			*skipVerify,
 			*cert,
@@ -287,6 +293,7 @@ func registerQuery(app *extkingpin.App) {
 			*webDisableCORS,
 			enableQueryPushdown,
 			*alertQueryURL,
+			*grpcProxyStrategy,
 			component.Query,
 		)
 	})
@@ -308,6 +315,7 @@ func runQuery(
 	grpcKey string,
 	grpcClientCA string,
 	grpcMaxConnAge time.Duration,
+	grpcCompression string,
 	secure bool,
 	skipVerify bool,
 	cert string,
@@ -356,6 +364,7 @@ func runQuery(
 	disableCORS bool,
 	enableQueryPushdown bool,
 	alertQueryURL string,
+	grpcProxyStrategy string,
 	comp component.Component,
 ) error {
 	if alertQueryURL == "" {
@@ -374,6 +383,9 @@ func runQuery(
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, skipVerify, cert, key, caCert, serverName)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
+	}
+	if grpcCompression != compressionNone {
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(grpcCompression)))
 	}
 
 	fileSDCache := cache.New()
@@ -463,7 +475,7 @@ func runQuery(
 			unhealthyStoreTimeout,
 			endpointInfoTimeout,
 		)
-		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout)
+		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy))
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)

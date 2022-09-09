@@ -68,7 +68,7 @@ const (
 
 // DefaultPrometheusImage sets default Prometheus image used in e2e service.
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.29.2"
+	return "quay.io/prometheus/prometheus:v2.38.0"
 }
 
 // DefaultAlertmanagerImage sets default Alertmanager image used in e2e service.
@@ -199,9 +199,8 @@ func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) e2e.Instru
 		"--remote-tenant":         o.TenantID,
 	})
 
-	// Using this particular image as https://github.com/prometheus-community/avalanche/pull/25 is not merged yet.
 	return f.Init(wrapWithDefaults(e2e.StartOptions{
-		Image:   "quay.io/observatorium/avalanche:make-tenant-header-configurable-2021-10-07-0a2cbf5",
+		Image:   "quay.io/prometheuscommunity/avalanche:main",
 		Command: e2e.NewCommandWithoutEntrypoint("avalanche", args...),
 	}))
 }
@@ -212,14 +211,16 @@ type QuerierBuilder struct {
 	externalPrefix string
 	image          string
 
-	storeAddresses       []string
-	fileSDStoreAddresses []string
-	ruleAddresses        []string
-	metadataAddresses    []string
-	targetAddresses      []string
-	exemplarAddresses    []string
-	enableFeatures       []string
-	endpoints            []string
+	storeAddresses          []string
+	proxyStrategy           string
+	disablePartialResponses bool
+	fileSDStoreAddresses    []string
+	ruleAddresses           []string
+	metadataAddresses       []string
+	targetAddresses         []string
+	exemplarAddresses       []string
+	enableFeatures          []string
+	endpoints               []string
 
 	replicaLabels []string
 	tracingConfig string
@@ -243,6 +244,11 @@ func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string)
 		image:          DefaultImage(),
 		replicaLabels:  []string{replicaLabel},
 	}
+}
+
+func (q *QuerierBuilder) WithProxyStrategy(strategy string) *QuerierBuilder {
+	q.proxyStrategy = strategy
+	return q
 }
 
 func (q *QuerierBuilder) WithEnabledFeatures(enableFeatures []string) *QuerierBuilder {
@@ -311,6 +317,11 @@ func (q *QuerierBuilder) WithReplicaLabels(labels ...string) *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithDisablePartialResponses(disable bool) *QuerierBuilder {
+	q.disablePartialResponses = disable
+	return q
+}
+
 func (q *QuerierBuilder) Init() e2e.InstrumentedRunnable {
 	args, err := q.collectArgs()
 	if err != nil {
@@ -358,6 +369,12 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	for _, feature := range q.enableFeatures {
 		args = append(args, "--enable-feature="+feature)
+	}
+	if q.proxyStrategy != "" {
+		args = append(args, "--grpc.proxy-strategy="+q.proxyStrategy)
+	}
+	if q.disablePartialResponses {
+		args = append(args, "--no-query.partial-response")
 	}
 	for _, addr := range q.endpoints {
 		args = append(args, "--endpoint="+addr)
@@ -856,11 +873,13 @@ http {
 // TODO(@matej-g): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/11;
 // after this is addresses fixed all calls should be replaced with e2edb.NewMinio.
 func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable {
-	image := "minio/minio:RELEASE.2019-12-30T05-45-39Z"
+	image := "minio/minio:RELEASE.2022-07-30T05-21-40Z"
 	minioKESGithubContent := "https://raw.githubusercontent.com/minio/kes/master"
 
+	httpsPort := 8090
+	consolePort := 8080
 	f := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("minio-%s", name)).
-		WithPorts(map[string]int{"https": 8090}, "https").
+		WithPorts(map[string]int{"https": httpsPort, "console": consolePort}, "https").
 		Future()
 
 	if err := os.MkdirAll(filepath.Join(f.Dir(), "certs", "CAs"), 0750); err != nil {
@@ -878,19 +897,19 @@ func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable 
 
 	commands := []string{
 		fmt.Sprintf("curl -sSL --tlsv1.2 -O '%s/root.key' -O '%s/root.cert'", minioKESGithubContent, minioKESGithubContent),
-		fmt.Sprintf("mkdir -p /data/%s && minio server --certs-dir %s/certs --address :%v --quiet /data", bktName, f.InternalDir(), 8090),
+		fmt.Sprintf("mkdir -p /data/%s && minio server --certs-dir %s/certs --address :%v --console-address :%v /data", bktName, f.InternalDir(), httpsPort, consolePort),
 	}
 
-	return f.Init(e2e.StartOptions{
+	minio := f.Init(e2e.StartOptions{
 		Image: image,
 		// Create the required bucket before starting minio.
 		Command:   e2e.NewCommandWithoutEntrypoint("sh", "-c", strings.Join(commands, " && ")),
-		Readiness: e2e.NewHTTPSReadinessProbe("https", "/minio/health/ready", 200, 200),
+		Readiness: e2e.NewHTTPSReadinessProbe("console", "/", 200, 200),
 		EnvVars: map[string]string{
-			"MINIO_ACCESS_KEY": e2edb.MinioAccessKey,
-			"MINIO_SECRET_KEY": e2edb.MinioSecretKey,
-			"MINIO_BROWSER":    "off",
-			"ENABLE_HTTPS":     "1",
+			"MINIO_ROOT_USER":     e2edb.MinioAccessKey,
+			"MINIO_ROOT_PASSWORD": e2edb.MinioSecretKey,
+			"MINIO_BROWSER":       "on",
+			"ENABLE_HTTPS":        "1",
 			// https://docs.min.io/docs/minio-kms-quickstart-guide.html
 			"MINIO_KMS_KES_ENDPOINT":  "https://play.min.io:7373",
 			"MINIO_KMS_KES_KEY_FILE":  "root.key",
@@ -898,6 +917,7 @@ func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable 
 			"MINIO_KMS_KES_KEY_NAME":  "my-minio-key",
 		},
 	})
+	return minio
 }
 
 func NewMemcached(e e2e.Environment, name string) e2e.InstrumentedRunnable {

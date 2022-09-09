@@ -19,6 +19,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -27,15 +28,23 @@ import (
 // NOTE: This requires dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
 // Test requires at least ~11m, so run this with `-test.timeout 9999m`.
 func TestPromQLCompliance(t *testing.T) {
-	testPromQLCompliance(t, false)
+	testPromQLCompliance(t, false, store.EagerRetrieval)
+}
+
+// TestPromQLComplianceWithLazy tests PromQL compatibility against https://github.com/prometheus/compliance/tree/main/promql.
+// NOTE: This requires dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
+// Test requires at least ~11m, so run this with `-test.timeout 9999m`.
+// This uses lazy evaluation to test out how it works in comparison to eager.
+func TestPromQLComplianceWithLazy(t *testing.T) {
+	testPromQLCompliance(t, false, store.LazyRetrieval)
 }
 
 // TestPromQLComplianceWithQueryFrontend tests PromQL compatibility with query frontend with sharding enabled.
 func TestPromQLComplianceWithShardingQueryFrontend(t *testing.T) {
-	testPromQLCompliance(t, true)
+	testPromQLCompliance(t, true, store.EagerRetrieval)
 }
 
-func testPromQLCompliance(t *testing.T, queryFrontend bool) {
+func testPromQLCompliance(t *testing.T, queryFrontend bool, retrievalStrategy store.RetrievalStrategy) {
 	t.Skip("This is interactive test, it requires time to build up (scrape) the data. The data is also obtain from remote promlab servers.")
 
 	e, err := e2e.NewDockerEnvironment("compatibility")
@@ -72,7 +81,8 @@ scrape_configs:
 
 	// Start sidecar + Querier
 	sidecar := e2edb.NewThanosSidecar(e, "sidecar", prom, e2edb.WithImage("thanos"))
-	querySidecar := e2edb.NewThanosQuerier(e, "query_sidecar", []string{sidecar.InternalEndpoint("grpc")}, e2edb.WithImage("thanos"))
+	extraOpts := []e2edb.Option{e2edb.WithImage("thanos"), e2edb.WithFlagOverride(map[string]string{"--grpc.proxy-strategy": string(retrievalStrategy)})}
+	querySidecar := e2edb.NewThanosQuerier(e, "query_sidecar", []string{sidecar.InternalEndpoint("grpc")}, extraOpts...)
 	testutil.Ok(t, e2e.StartAndWaitReady(sidecar, querySidecar))
 
 	// Start noop promql-compliance-tester. See https://github.com/prometheus/compliance/tree/main/promql on how to build local docker image.
@@ -147,7 +157,7 @@ func TestAlertCompliance(t *testing.T) {
 	t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator. This tool is not optimized for CI runs (e.g. it infinitely retries, takes 38 minutes)")
 
 	t.Run("stateful ruler", func(t *testing.T) {
-		e, err := e2e.NewDockerEnvironment("alert_compatibility")
+		e, err := e2e.NewDockerEnvironment("alert-compatibility")
 		testutil.Ok(t, err)
 		t.Cleanup(e.Close)
 
