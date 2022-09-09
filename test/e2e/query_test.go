@@ -1539,3 +1539,26 @@ func TestGrpcQueryRange(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 }
+
+// Repro for https://github.com/thanos-io/thanos/pull/5296#issuecomment-1217875271.
+func TestConnectedQueriesWithLazyProxy(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e-test-query-lazy-proxy")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.LocalPrometheusTarget)
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "")
+
+	querier1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithProxyStrategy("lazy").WithDisablePartialResponses(true).Init()
+	querier2 := e2ethanos.NewQuerierBuilder(e, "2", querier1.InternalEndpoint("grpc")).WithProxyStrategy("lazy").WithDisablePartialResponses(true).Init()
+
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar, querier1, querier2))
+	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+
+	result := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
+		return "sum(up)"
+	}, time.Now, promclient.QueryOptions{}, 1)
+	testutil.Equals(t, model.SampleValue(1.0), result[0].Value)
+}

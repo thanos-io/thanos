@@ -125,6 +125,10 @@ Flags:
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
+      --prometheus.get_config_interval=30s
+                                 How often to get Prometheus config
+      --prometheus.get_config_timeout=5s
+                                 Timeout for getting Prometheus config
       --prometheus.http-client=<content>
                                  Alternative to 'prometheus.http-client-file'
                                  flag (mutually exclusive). Content of YAML file

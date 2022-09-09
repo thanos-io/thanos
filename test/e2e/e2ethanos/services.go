@@ -211,14 +211,16 @@ type QuerierBuilder struct {
 	externalPrefix string
 	image          string
 
-	storeAddresses       []string
-	fileSDStoreAddresses []string
-	ruleAddresses        []string
-	metadataAddresses    []string
-	targetAddresses      []string
-	exemplarAddresses    []string
-	enableFeatures       []string
-	endpoints            []string
+	storeAddresses          []string
+	proxyStrategy           string
+	disablePartialResponses bool
+	fileSDStoreAddresses    []string
+	ruleAddresses           []string
+	metadataAddresses       []string
+	targetAddresses         []string
+	exemplarAddresses       []string
+	enableFeatures          []string
+	endpoints               []string
 
 	replicaLabels []string
 	tracingConfig string
@@ -242,6 +244,11 @@ func NewQuerierBuilder(e e2e.Environment, name string, storeAddresses ...string)
 		image:          DefaultImage(),
 		replicaLabels:  []string{replicaLabel},
 	}
+}
+
+func (q *QuerierBuilder) WithProxyStrategy(strategy string) *QuerierBuilder {
+	q.proxyStrategy = strategy
+	return q
 }
 
 func (q *QuerierBuilder) WithEnabledFeatures(enableFeatures []string) *QuerierBuilder {
@@ -310,6 +317,11 @@ func (q *QuerierBuilder) WithReplicaLabels(labels ...string) *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithDisablePartialResponses(disable bool) *QuerierBuilder {
+	q.disablePartialResponses = disable
+	return q
+}
+
 func (q *QuerierBuilder) Init() e2e.InstrumentedRunnable {
 	args, err := q.collectArgs()
 	if err != nil {
@@ -357,6 +369,12 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	for _, feature := range q.enableFeatures {
 		args = append(args, "--enable-feature="+feature)
+	}
+	if q.proxyStrategy != "" {
+		args = append(args, "--grpc.proxy-strategy="+q.proxyStrategy)
+	}
+	if q.disablePartialResponses {
+		args = append(args, "--no-query.partial-response")
 	}
 	for _, addr := range q.endpoints {
 		args = append(args, "--endpoint="+addr)

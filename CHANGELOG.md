@@ -20,6 +20,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#5255](https://github.com/thanos-io/thanos/pull/5296) Query: Use k-way merging for the proxying logic. The proxying sub-system now uses much less resources (~25-80% less CPU usage, ~30-50% less RAM usage according to our benchmarks). Reduces query duration by a few percent on queries with lots of series.
+
 ### Removed
 
 ## [v0.28.0](https://github.com/thanos-io/thanos/tree/release-0.28) - 2022.08.26
@@ -32,6 +34,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#5573](https://github.com/thanos-io/thanos/pull/5573) Sidecar: Added `--prometheus.get_config_interval` and `--prometheus.get_config_timeout` allowing to configure parameters for getting Prometheus config.
 - [#5440](https://github.com/thanos-io/thanos/pull/5440) HTTP metrics: export number of in-flight HTTP requests.
 - [#5424](https://github.com/thanos-io/thanos/pull/5424) Receive: Export metrics regarding size of remote write requests.
 - [#5420](https://github.com/thanos-io/thanos/pull/5420) Receive: Automatically remove stale tenants.
@@ -51,6 +54,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5561](https://github.com/thanos-io/thanos/pull/5561) Query Frontend: Support instant query vertical sharding.
 - [#5453](https://github.com/thanos-io/thanos/pull/5453) Compact: Skip erroneous empty non `*AggrChunk` chunks during 1h downsampling of 5m resolution blocks.
 - [#5607](https://github.com/thanos-io/thanos/pull/5607) Query: Support custom lookback delta from request in query api.
+- [#5565](https://github.com/thanos-io/thanos/pull/5565) Receive: Allow remote write request limits to be defined per file and tenant.
 
 ### Changed
 
