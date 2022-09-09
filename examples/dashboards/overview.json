@@ -747,7 +747,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "gPRC (Unary) Rate",
+               "title": "gRPC (Unary) Rate",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
@@ -833,7 +833,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "gPRC (Unary) Errors",
+               "title": "gRPC (Unary) Errors",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
@@ -1104,7 +1104,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "gPRC (Unary) Rate",
+               "title": "gRPC (Unary) Rate",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
@@ -1190,7 +1190,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "gPRC (Unary) Errors",
+               "title": "gRPC (Unary) Errors",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
@@ -1292,7 +1292,7 @@
                ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "gPRC (Unary) Latency 99th Percentile",
+               "title": "gRPC (Unary) Latency 99th Percentile",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
