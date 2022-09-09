@@ -55,11 +55,8 @@ type querySharder struct {
 
 func (s querySharder) Do(ctx context.Context, r queryrange.Request) (queryrange.Response, error) {
 	analysis, err := s.queryAnalyzer.Analyze(r.GetQuery())
-	if err != nil {
-		return nil, err
-	}
 
-	if !analysis.IsShardable() {
+	if err != nil || !analysis.IsShardable() {
 		s.queriesTotal.WithLabelValues("false").Inc()
 		return s.next.Do(ctx, r)
 	}
