@@ -86,7 +86,7 @@ func (cfg *Config) RegisterFlagsWithPrefix(flagsPrefix, defaultPrefix string, f 
 // Client is a high-level client for key-value stores (such as Etcd and
 // Consul) that exposes operations such as CAS and Watch which take callbacks.
 // It also deals with serialisation by using a Codec and having a instance of
-// the the desired type passed in to methods ala json.Unmarshal.
+// the desired type passed in to methods ala json.Unmarshal.
 type Client interface {
 	// List returns a list of keys under the given prefix. Returned keys will
 	// include the prefix.
