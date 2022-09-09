@@ -182,6 +182,7 @@ func registerQuery(app *extkingpin.App) {
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field.").String()
+	grpcProxyStrategy := cmd.Flag("grpc.proxy-strategy", "Strategy to use when proxying Series requests to leaf nodes. Hidden and only used for testing, will be removed after lazy becomes the default.").Default(string(store.EagerRetrieval)).Hidden().Enum(string(store.EagerRetrieval), string(store.LazyRetrieval))
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
@@ -292,6 +293,7 @@ func registerQuery(app *extkingpin.App) {
 			*webDisableCORS,
 			enableQueryPushdown,
 			*alertQueryURL,
+			*grpcProxyStrategy,
 			component.Query,
 		)
 	})
@@ -362,6 +364,7 @@ func runQuery(
 	disableCORS bool,
 	enableQueryPushdown bool,
 	alertQueryURL string,
+	grpcProxyStrategy string,
 	comp component.Component,
 ) error {
 	if alertQueryURL == "" {
@@ -472,7 +475,7 @@ func runQuery(
 			unhealthyStoreTimeout,
 			endpointInfoTimeout,
 		)
-		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout)
+		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy))
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)
