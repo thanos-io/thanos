@@ -42,11 +42,6 @@ func (s *ShardMatcher) MatchesZLabels(zLabels []labelpb.ZLabel) bool {
 
 	*s.buf = (*s.buf)[:0]
 	for _, lbl := range zLabels {
-		// Exclude metric name and le label from sharding
-		if lbl.Name == "__name__" || lbl.Name == "le" {
-			continue
-		}
-
 		if shardByLabel(s.shardingLabelset, lbl, s.by) {
 			*s.buf = append(*s.buf, lbl.Name...)
 			*s.buf = append(*s.buf, sep[0])
