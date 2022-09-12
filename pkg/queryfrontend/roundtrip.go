@@ -248,8 +248,12 @@ func dynamicIntervalFn(config QueryRangeConfig) queryrange.IntervalFn {
 			return config.MaxQuerySplitInterval
 		}
 
-		// If the query duration is less than max interval, we split it equally in HorizontalShards.
-		return time.Duration(queryInterval.Milliseconds()/config.HorizontalShards) * time.Millisecond
+		if queryInterval > config.MinQuerySplitInterval {
+			// If the query duration is less than max interval, we split it equally in HorizontalShards.
+			return time.Duration(queryInterval.Milliseconds()/config.HorizontalShards) * time.Millisecond
+		}
+
+		return config.MinQuerySplitInterval
 	}
 }
 

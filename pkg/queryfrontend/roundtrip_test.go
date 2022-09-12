@@ -306,6 +306,17 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 			expected:            2,
 		},
 		{
+			name:                "split to 2 requests, due to maxSplitInterval",
+			req:                 testRequest,
+			handlerFunc:         promqlResults,
+			codec:               queryRangeCodec,
+			splitInterval:       0,
+			querySplitThreshold: 2 * time.Hour,
+			maxSplitInterval:    4 * time.Hour,
+			minHorizontalShards: 4,
+			expected:            1,
+		},
+		{
 			name:          "labels request won't be split",
 			req:           testLabelsRequest,
 			handlerFunc:   labelsResults,
