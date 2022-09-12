@@ -26,11 +26,10 @@ import (
 // NOTE: After instrumentation migration is finished, this bridge should be
 // removed.
 func Bridge(tp *tracesdk.TracerProvider, l log.Logger) (opentracing.Tracer, io.Closer) {
-	compositePropagator := autoprop.NewTextMapPropagator()
 	otel.SetErrorHandler(otelErrHandler(func(err error) {
 		level.Error(l).Log("msg", "OpenTelemetry ErrorHandler", "err", err)
 	}))
-	otel.SetTextMapPropagator(compositePropagator)
+	otel.SetTextMapPropagator(autoprop.NewTextMapPropagator())
 	otel.SetTracerProvider(tp)
 
 	bridgeTracer, _ := bridge.NewTracerPair(tp.Tracer(""))

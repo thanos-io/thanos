@@ -35,6 +35,7 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 
 	tracerOtel := newTraceProvider(
 		context.Background(),
+		"tracerOtel",
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler,
@@ -48,6 +49,7 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 	// Simulate Server process with different tracer, but with client span in context.
 	srvTracerOtel := newTraceProvider(
 		context.Background(),
+		"srvTracerOtel",
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler2, // never sample
@@ -74,6 +76,7 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 	sampler := getSampler(config)
 	tracerOtel := newTraceProvider(
 		context.Background(),
+		"tracerOtel",
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler, // never sample
@@ -88,6 +91,7 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 	// Simulate Server process with different tracer, but with client span in context.
 	srvTracerOtel := newTraceProvider(
 		context.Background(),
+		"srvTracerOtel",
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler2, // never sample
@@ -113,6 +117,7 @@ func TestContextTracing_ForceTracing(t *testing.T) {
 	sampler := getSampler(config)
 	tracerOtel := newTraceProvider(
 		context.Background(),
+		"tracerOtel",
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler,
@@ -130,6 +135,7 @@ func TestContextTracing_ForceTracing(t *testing.T) {
 	// Simulate Server process with different tracer, but with client span in context.
 	srvTracerOtel := newTraceProvider(
 		context.Background(),
+		"srvTracerOtel",
 		log.NewNopLogger(),
 		tracesdk.NewSimpleSpanProcessor(exp),
 		sampler,
