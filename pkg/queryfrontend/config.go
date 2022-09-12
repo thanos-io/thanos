@@ -246,7 +246,7 @@ type LabelsConfig struct {
 func (cfg *Config) Validate() error {
 	if cfg.QueryRangeConfig.ResultsCacheConfig != nil {
 		if cfg.QueryRangeConfig.SplitQueriesByInterval <= 0 && !cfg.isDynamicSplitSet() {
-			return errors.New("split queries  or split threshold interval should be greater than 0 when caching is enabled")
+			return errors.New("split queries or split threshold interval should be greater than 0 when caching is enabled")
 		}
 		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(querier.Config{}); err != nil {
 			return errors.Wrap(err, "invalid ResultsCache config for query_range tripperware")
@@ -258,8 +258,8 @@ func (cfg *Config) Validate() error {
 	}
 
 	if cfg.isDynamicSplitSet() {
-		err := cfg.validateDynamicSplitParams()
-		if err != nil {
+
+		if err := cfg.validateDynamicSplitParams(); err != nil {
 			return err
 		}
 	}

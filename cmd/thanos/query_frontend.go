@@ -81,7 +81,7 @@ func registerQueryFrontend(app *extkingpin.App) {
 		"One should also set query-range.split-min-horizontal-shards to a value greater than 1 to enable splitting.").
 		Default("0").DurationVar(&cfg.QueryRangeConfig.MinQuerySplitInterval)
 
-	cmd.Flag("query-range.max-split-interval", "Split query range bellow this interval in query-range.horizontal-shards. Queries with a range longer than this value will be split in multiple requests of this length.").
+	cmd.Flag("query-range.max-split-interval", "Split query range below this interval in query-range.horizontal-shards. Queries with a range longer than this value will be split in multiple requests of this length.").
 		Default("0").DurationVar(&cfg.QueryRangeConfig.MaxQuerySplitInterval)
 
 	cmd.Flag("query-range.horizontal-shards", "Split queries in this many requests when query duration is below query-range.max-split-interval.").

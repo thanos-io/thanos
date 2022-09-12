@@ -243,12 +243,12 @@ func dynamicIntervalFn(config QueryRangeConfig) queryrange.IntervalFn {
 		}
 
 		queryInterval := time.Duration(r.GetEnd()-r.GetStart()) * time.Millisecond
-		// if the query is multiple of max interval, we use the max interval to split.
+		// If the query is multiple of max interval, we use the max interval to split.
 		if queryInterval/config.MaxQuerySplitInterval >= 2 {
 			return config.MaxQuerySplitInterval
 		}
 
-		// if the query duration is less than max interval, we split it equally in HorizontalShards.
+		// If the query duration is less than max interval, we split it equally in HorizontalShards.
 		return time.Duration(queryInterval.Milliseconds()/config.HorizontalShards) * time.Millisecond
 	}
 }

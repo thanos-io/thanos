@@ -295,7 +295,7 @@ Flags:
                                  range request; beyond this, the downstream
                                  error is returned.
       --query-range.max-split-interval=0
-                                 Split query range bellow this interval in
+                                 Split query range below this interval in
                                  query-range.horizontal-shards. Queries with a
                                  range longer than this value will be split in
                                  multiple requests of this length.
