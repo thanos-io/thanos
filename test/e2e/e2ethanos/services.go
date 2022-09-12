@@ -507,6 +507,17 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 		if r.metaMonitoringQuery != "" {
 			args["--receive.tenant-limits.meta-monitoring-query"] = r.metaMonitoringQuery
 		}
+
+		b, err := yaml.Marshal(cfg)
+		if err != nil {
+			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrapf(err, "generate limiting file: %v", hashring))
+		}
+
+		if err := os.WriteFile(filepath.Join(r.Dir(), "limits.yaml"), b, 0600); err != nil {
+			return e2e.NewErrInstrumentedRunnable(r.Name(), errors.Wrap(err, "creating limits config"))
+		}
+
+		args["--receive.limits-config-file"] = filepath.Join(r.InternalDir(), "limits.yaml")
 	}
 
 	if err := os.MkdirAll(filepath.Join(r.Dir(), "data"), 0750); err != nil {

@@ -4,14 +4,17 @@
 package receive
 
 import (
+	"net/url"
+
 	"github.com/thanos-io/thanos/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"gopkg.in/yaml.v2"
 )
 
 // RootLimitsConfig is the root configuration for limits.
 type RootLimitsConfig struct {
 	// WriteLimits hold the limits for writing data.
-	WriteLimits writeLimitsConfig `yaml:"write"`
+	WriteLimits WriteLimitsConfig `yaml:"write"`
 }
 
 // ParseRootLimitConfig parses the root limit configuration. Even though
@@ -21,37 +24,63 @@ func ParseRootLimitConfig(content []byte) (*RootLimitsConfig, error) {
 	if err := yaml.UnmarshalStrict(content, &root); err != nil {
 		return nil, errors.Wrapf(err, "parsing config YAML file")
 	}
+
+	if root.WriteLimits.GlobalLimits.MetaMonitoringURL != "" {
+		u, err := url.Parse(root.WriteLimits.GlobalLimits.MetaMonitoringURL)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parsing meta-monitoring URL")
+		}
+
+		// url.Parse might pass a URL with only path, so need to check here for scheme and host.
+		// As per docs: https://pkg.go.dev/net/url#Parse.
+		if u.Host == "" || u.Scheme == "" {
+			return nil, errors.Newf("%s is not a valid meta-monitoring URL (scheme: %s,host: %s)", u, u.Scheme, u.Host)
+		}
+		root.WriteLimits.GlobalLimits.metaMonitoringURL = u
+	}
+
+	// Set default query if none specified.
+	if root.WriteLimits.GlobalLimits.MetaMonitoringLimitQuery == "" {
+		root.WriteLimits.GlobalLimits.MetaMonitoringLimitQuery = "sum(prometheus_tsdb_head_series) by (tenant)"
+	}
+
 	return &root, nil
 }
 
-type writeLimitsConfig struct {
+type WriteLimitsConfig struct {
 	// GlobalLimits are limits that are shared across all tenants.
-	GlobalLimits globalLimitsConfig `yaml:"global"`
+	GlobalLimits GlobalLimitsConfig `yaml:"global"`
 	// DefaultLimits are the default limits for tenants without specified limits.
-	DefaultLimits defaultLimitsConfig `yaml:"default"`
+	DefaultLimits DefaultLimitsConfig `yaml:"default"`
 	// TenantsLimits are the limits per tenant.
-	TenantsLimits tenantsWriteLimitsConfig `yaml:"tenants"`
+	TenantsLimits TenantsWriteLimitsConfig `yaml:"tenants"`
 }
 
-type globalLimitsConfig struct {
+type GlobalLimitsConfig struct {
 	// MaxConcurrency represents the maximum concurrency during write operations.
 	MaxConcurrency int64 `yaml:"max_concurrency"`
+	// MetaMonitoring options specify the query, url and client for Query API address used in head series limiting.
+	MetaMonitoringURL        string                   `yaml:"meta_monitoring_url"`
+	MetaMonitoringHTTPClient *httpconfig.ClientConfig `yaml:"meta_monitoring_http_client"`
+	MetaMonitoringLimitQuery string                   `yaml:"meta_monitoring_limit_query"`
+
+	metaMonitoringURL *url.URL
 }
 
-type defaultLimitsConfig struct {
+type DefaultLimitsConfig struct {
 	// RequestLimits holds the difficult per-request limits.
 	RequestLimits requestLimitsConfig `yaml:"request"`
-	// HeadSeriesConfig *headSeriesLimiter `yaml:"head_series"`
+	// HeadSeriesLimit specifies the maximum number of head series allowed for any tenant.
+	HeadSeriesLimit uint64 `yaml:"head_series_limit"`
 }
 
-type tenantsWriteLimitsConfig map[string]*writeLimitConfig
+type TenantsWriteLimitsConfig map[string]*WriteLimitConfig
 
-// A tenant might not always have limits configured, so things here must
-// use pointers.
-type writeLimitConfig struct {
+type WriteLimitConfig struct {
 	// RequestLimits holds the difficult per-request limits.
 	RequestLimits *requestLimitsConfig `yaml:"request"`
-	// HeadSeriesConfig *headSeriesLimiter `yaml:"head_series"`
+	// HeadSeriesLimit specifies the maximum number of head series allowed for a tenant.
+	HeadSeriesLimit uint64 `yaml:"head_series_limit"`
 }
 
 type requestLimitsConfig struct {

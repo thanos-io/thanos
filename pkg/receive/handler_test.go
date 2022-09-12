@@ -775,11 +775,11 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			handlers, _ := newTestHandlerHashring(appendables, 3)
 			handler := handlers[0]
 			tenant := "test"
-			handler.limiter = newLimiter(
+			handler.Limiter = newLimiter(
 				&RootLimitsConfig{
-					WriteLimits: writeLimitsConfig{
-						TenantsLimits: tenantsWriteLimitsConfig{
-							tenant: &writeLimitConfig{
+					WriteLimits: WriteLimitsConfig{
+						TenantsLimits: TenantsWriteLimitsConfig{
+							tenant: &WriteLimitConfig{
 								RequestLimits: newEmptyRequestLimitsConfig().
 									SetSizeBytesLimit(int64(1 * units.Megabyte)).
 									SetSeriesLimit(20).
@@ -789,6 +789,8 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 					},
 				},
 				nil,
+				RouterIngestor,
+				log.NewNopLogger(),
 			)
 
 			wreq := &prompb.WriteRequest{
