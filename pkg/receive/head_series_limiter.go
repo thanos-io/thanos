@@ -19,14 +19,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 )
 
-// activeSeriesLimiter encompasses active series limiting logic.
-type activeSeriesLimiter interface {
+// headSeriesLimiter encompasses active series limiting logic.
+type headSeriesLimiter interface {
 	QueryMetaMonitoring(context.Context, log.Logger) error
 	isUnderLimit(string, log.Logger) (bool, error)
 }
 
-// activeSeriesLimit implements activeSeriesLimiter interface.
-type activeSeriesLimit struct {
+// headSeriesLimit implements activeSeriesLimiter interface.
+type headSeriesLimit struct {
 	mtx                    sync.RWMutex
 	limit                  map[string]uint64
 	tenantCurrentSeriesMap map[string]float64
@@ -42,8 +42,8 @@ type activeSeriesLimit struct {
 	metaMonitoringErr      prometheus.Counter
 }
 
-func NewActiveSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, logger log.Logger) *activeSeriesLimit {
-	limit := &activeSeriesLimit{
+func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, logger log.Logger) *headSeriesLimit {
+	limit := &headSeriesLimit{
 		metaMonitoringURL:   w.GlobalLimits.metaMonitoringURL,
 		metaMonitoringQuery: w.GlobalLimits.MetaMonitoringLimitQuery,
 		configuredTenantLimit: promauto.With(registerer).NewGaugeVec(
@@ -107,24 +107,24 @@ func NewActiveSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer,
 // QueryMetaMonitoring queries any Prometheus Query API compatible meta-monitoring
 // solution with the configured query for getting current active (head) series of all tenants.
 // It then populates tenantCurrentSeries map with result.
-func (a *activeSeriesLimit) QueryMetaMonitoring(ctx context.Context, logger log.Logger) error {
-	c := promclient.NewWithTracingClient(logger, a.metaMonitoringClient, httpconfig.ThanosUserAgent)
+func (h *headSeriesLimit) QueryMetaMonitoring(ctx context.Context, logger log.Logger) error {
+	c := promclient.NewWithTracingClient(logger, h.metaMonitoringClient, httpconfig.ThanosUserAgent)
 
-	vectorRes, _, err := c.QueryInstant(ctx, a.metaMonitoringURL, a.metaMonitoringQuery, time.Now(), promclient.QueryOptions{})
+	vectorRes, _, err := c.QueryInstant(ctx, h.metaMonitoringURL, h.metaMonitoringQuery, time.Now(), promclient.QueryOptions{})
 	if err != nil {
-		a.metaMonitoringErr.Inc()
+		h.metaMonitoringErr.Inc()
 		return err
 	}
 
 	level.Debug(logger).Log("msg", "successfully queried meta-monitoring", "vectors", len(vectorRes))
 
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
 	// Construct map of tenant name and current head series.
 	for _, e := range vectorRes {
 		for k, v := range e.Metric {
 			if k == "tenant" {
-				a.tenantCurrentSeriesMap[string(v)] = float64(e.Value)
+				h.tenantCurrentSeriesMap[string(v)] = float64(e.Value)
 				level.Debug(logger).Log("msg", "tenant value queried", "tenant", string(v), "value", e.Value)
 			}
 		}
@@ -135,10 +135,10 @@ func (a *activeSeriesLimit) QueryMetaMonitoring(ctx context.Context, logger log.
 
 // isUnderLimit ensures that the current number of active series for a tenant does not exceed given limit.
 // It does so in a best-effort way, i.e, in case meta-monitoring is unreachable, it does not impose limits.
-func (a *activeSeriesLimit) isUnderLimit(tenant string, logger log.Logger) (bool, error) {
-	a.mtx.RLock()
-	defer a.mtx.RUnlock()
-	if len(a.limit) == 0 && a.defaultLimit == 0 {
+func (h *headSeriesLimit) isUnderLimit(tenant string, logger log.Logger) (bool, error) {
+	h.mtx.RLock()
+	defer h.mtx.RUnlock()
+	if len(h.limit) == 0 && h.defaultLimit == 0 {
 		return true, nil
 	}
 
@@ -147,7 +147,7 @@ func (a *activeSeriesLimit) isUnderLimit(tenant string, logger log.Logger) (bool
 	// series. As such metric is updated in intervals, it is possible
 	// that Receive ingests more series than the limit, before detecting that
 	// a tenant has exceeded the set limits.
-	v, ok := a.tenantCurrentSeriesMap[tenant]
+	v, ok := h.tenantCurrentSeriesMap[tenant]
 	if !ok {
 		return true, errors.Newf("tenant not in current series map")
 	}
@@ -155,14 +155,14 @@ func (a *activeSeriesLimit) isUnderLimit(tenant string, logger log.Logger) (bool
 	// Check if config has specified limits for this tenant. If not specified,
 	// set to default limit.
 	var limit uint64
-	limit, ok = a.limit[tenant]
+	limit, ok = h.limit[tenant]
 	if !ok {
-		limit = a.defaultLimit
+		limit = h.defaultLimit
 	}
 
 	if v >= float64(limit) {
 		level.Error(logger).Log("msg", "tenant above limit", "currentSeries", v, "limit", limit)
-		a.limitedRequests.WithLabelValues(tenant).Inc()
+		h.limitedRequests.WithLabelValues(tenant).Inc()
 		return false, nil
 	}
 

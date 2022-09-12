@@ -11,16 +11,16 @@ import (
 )
 
 type limiter struct {
-	requestLimiter      requestLimiter
-	writeGate           gate.Gate
-	ActiveSeriesLimiter activeSeriesLimiter
+	requestLimiter    requestLimiter
+	writeGate         gate.Gate
+	HeadSeriesLimiter headSeriesLimiter
 }
 
 func newLimiter(root *RootLimitsConfig, reg prometheus.Registerer, r ReceiverMode, logger log.Logger) *limiter {
 	limiter := &limiter{
-		writeGate:           gate.NewNoop(),
-		requestLimiter:      &noopRequestLimiter{},
-		ActiveSeriesLimiter: NewNopSeriesLimit(),
+		writeGate:         gate.NewNoop(),
+		requestLimiter:    &noopRequestLimiter{},
+		HeadSeriesLimiter: NewNopSeriesLimit(),
 	}
 	if root == nil {
 		return limiter
@@ -41,7 +41,7 @@ func newLimiter(root *RootLimitsConfig, reg prometheus.Registerer, r ReceiverMod
 	// Impose active series limit only if Receiver is in Router or RouterIngestor mode, and config is provided.
 	seriesLimitSupported := (r == RouterOnly || r == RouterIngestor) && (len(root.WriteLimits.TenantsLimits) != 0 || root.WriteLimits.DefaultLimits.HeadSeriesLimit != 0)
 	if seriesLimitSupported {
-		limiter.ActiveSeriesLimiter = NewActiveSeriesLimit(root.WriteLimits, reg, logger)
+		limiter.HeadSeriesLimiter = NewHeadSeriesLimit(root.WriteLimits, reg, logger)
 	}
 
 	return limiter
