@@ -46,6 +46,7 @@ func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, l
 	limit := &headSeriesLimit{
 		metaMonitoringURL:   w.GlobalLimits.metaMonitoringURL,
 		metaMonitoringQuery: w.GlobalLimits.MetaMonitoringLimitQuery,
+		defaultLimit:        w.DefaultLimits.HeadSeriesLimit,
 		configuredTenantLimit: promauto.With(registerer).NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_tenant_head_series_limit",
@@ -72,18 +73,22 @@ func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, l
 		),
 	}
 
+	limit.configuredDefaultLimit.Set(float64(w.DefaultLimits.HeadSeriesLimit))
+
 	// Initialize map for configured limits of each tenant.
 	limit.limit = map[string]uint64{}
 	for t, w := range w.TenantsLimits {
-		if w.HeadSeriesLimit != 0 {
-			limit.limit[t] = w.HeadSeriesLimit
-			limit.configuredTenantLimit.WithLabelValues(t).Set(float64(w.HeadSeriesLimit))
+		// No limit set for tenant so inherit default, which could be unlimited as well.
+		if w.HeadSeriesLimit == nil {
+			limit.limit[t] = limit.defaultLimit
+			limit.configuredTenantLimit.WithLabelValues(t).Set(float64(limit.defaultLimit))
+			continue
 		}
-	}
 
-	if w.DefaultLimits.HeadSeriesLimit != 0 {
-		limit.defaultLimit = w.DefaultLimits.HeadSeriesLimit
-		limit.configuredDefaultLimit.Set(float64(w.DefaultLimits.HeadSeriesLimit))
+		// Limit set to provided one for tenant that could be unlimited or some value.
+		// Default not inherited.
+		limit.limit[t] = *w.HeadSeriesLimit
+		limit.configuredTenantLimit.WithLabelValues(t).Set(float64(*w.HeadSeriesLimit))
 	}
 
 	// Initialize map for current head series of each tenant.
@@ -152,11 +157,10 @@ func (h *headSeriesLimit) isUnderLimit(tenant string, logger log.Logger) (bool, 
 		return true, errors.Newf("tenant not in current series map")
 	}
 
-	// Check if config has specified limits for this tenant. If not specified,
-	// set to default limit.
 	var limit uint64
 	limit, ok = h.limit[tenant]
 	if !ok {
+		// Tenant has not been defined in config, so fallback to default.
 		limit = h.defaultLimit
 	}
 

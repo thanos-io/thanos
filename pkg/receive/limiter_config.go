@@ -76,11 +76,28 @@ type DefaultLimitsConfig struct {
 
 type TenantsWriteLimitsConfig map[string]*WriteLimitConfig
 
+// A tenant might not always have limits configured, so things here must
+// use pointers.
 type WriteLimitConfig struct {
 	// RequestLimits holds the difficult per-request limits.
 	RequestLimits *requestLimitsConfig `yaml:"request"`
 	// HeadSeriesLimit specifies the maximum number of head series allowed for a tenant.
-	HeadSeriesLimit uint64 `yaml:"head_series_limit"`
+	HeadSeriesLimit *uint64 `yaml:"head_series_limit"`
+}
+
+// Utils for initialzing.
+func NewEmptyWriteLimitConfig() *WriteLimitConfig {
+	return &WriteLimitConfig{}
+}
+
+func (w *WriteLimitConfig) SetRequestLimits(rl *requestLimitsConfig) *WriteLimitConfig {
+	w.RequestLimits = rl
+	return w
+}
+
+func (w *WriteLimitConfig) SetHeadSeriesLimit(val uint64) *WriteLimitConfig {
+	w.HeadSeriesLimit = &val
+	return w
 }
 
 type requestLimitsConfig struct {
@@ -89,8 +106,24 @@ type requestLimitsConfig struct {
 	SamplesLimit   *int64 `yaml:"samples_limit"`
 }
 
+// Utils for initialzing.
 func newEmptyRequestLimitsConfig() *requestLimitsConfig {
 	return &requestLimitsConfig{}
+}
+
+func (rl *requestLimitsConfig) SetSizeBytesLimit(value int64) *requestLimitsConfig {
+	rl.SizeBytesLimit = &value
+	return rl
+}
+
+func (rl *requestLimitsConfig) SetSeriesLimit(value int64) *requestLimitsConfig {
+	rl.SeriesLimit = &value
+	return rl
+}
+
+func (rl *requestLimitsConfig) SetSamplesLimit(value int64) *requestLimitsConfig {
+	rl.SamplesLimit = &value
+	return rl
 }
 
 // OverlayWith overlays the current configuration with another one. This means
@@ -106,20 +139,5 @@ func (rl *requestLimitsConfig) OverlayWith(other *requestLimitsConfig) *requestL
 	if rl.SizeBytesLimit == nil {
 		rl.SizeBytesLimit = other.SizeBytesLimit
 	}
-	return rl
-}
-
-func (rl *requestLimitsConfig) SetSizeBytesLimit(value int64) *requestLimitsConfig {
-	rl.SizeBytesLimit = &value
-	return rl
-}
-
-func (rl *requestLimitsConfig) SetSeriesLimit(value int64) *requestLimitsConfig {
-	rl.SeriesLimit = &value
-	return rl
-}
-
-func (rl *requestLimitsConfig) SetSamplesLimit(value int64) *requestLimitsConfig {
-	rl.SamplesLimit = &value
 	return rl
 }
