@@ -70,9 +70,39 @@ Every request against any Thanos component's API with header `X-Thanos-Force-Tra
 
 Currently supported tracing backends:
 
+### OpenTelemetry (OTLP)
+
+Thanos supports exporting traces in the OpenTelemetry Protocol (OTLP). Both gRPC and HTTP clients are supported. Options can be provided also via environment variables. For more details see the [exporter specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#configuration-options).
+
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=otlp.Config"
+type: OTLP
+config:
+  client_type: ""
+  reconnection_period: 0s
+  compression: ""
+  insecure: false
+  endpoint: ""
+  url_path: ""
+  timeout: 0s
+  retry_config:
+    retry_enabled: false
+    retry_initial_interval: 0s
+    retry_max_interval: 0s
+    retry_max_elapsed_time: 0s
+  headers: {}
+  tls_config:
+    ca_file: ""
+    cert_file: ""
+    key_file: ""
+    server_name: ""
+    insecure_skip_verify: false
+```
+
 ### Jaeger
 
-Client for https://github.com/jaegertracing/jaeger tracing. Parent config options are used with ParentBased samplers. This is a [link](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#parentbased) to the OTel specification which details the defaults.
+Client for https://github.com/jaegertracing/jaeger tracing. Options can be provided also via environment variables. For more details see the Jaeger [exporter specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md#jaeger-exporter).
+
+*WARNING: Options `RPC Metrics`, `Gen128Bit` and `Disabled` are now deprecated and won't have any effect if set*
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=jaeger.Config"
 type: JAEGER
