@@ -241,12 +241,15 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 	labelsCodec := NewThanosLabelsCodec(true, 2*time.Hour)
 
 	for _, tc := range []struct {
-		name          string
-		splitInterval time.Duration
-		req           queryrange.Request
-		codec         queryrange.Codec
-		handlerFunc   func(bool) (*int, http.Handler)
-		expected      int
+		name                string
+		splitInterval       time.Duration
+		querySplitThreshold time.Duration
+		maxSplitInterval    time.Duration
+		minHorizontalShards int64
+		req                 queryrange.Request
+		codec               queryrange.Codec
+		handlerFunc         func(bool) (*int, http.Handler)
+		expected            int
 	}{
 		{
 			name:          "split interval == 0, disable split",
@@ -279,6 +282,39 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 			codec:         queryRangeCodec,
 			splitInterval: 1 * time.Hour,
 			expected:      2,
+		},
+		{
+			name:                "split to 4 requests, due to min horizontal shards",
+			req:                 testRequest,
+			handlerFunc:         promqlResults,
+			codec:               queryRangeCodec,
+			splitInterval:       0,
+			querySplitThreshold: 30 * time.Minute,
+			maxSplitInterval:    4 * time.Hour,
+			minHorizontalShards: 4,
+			expected:            4,
+		},
+		{
+			name:                "split to 2 requests, due to maxSplitInterval",
+			req:                 testRequest,
+			handlerFunc:         promqlResults,
+			codec:               queryRangeCodec,
+			splitInterval:       0,
+			querySplitThreshold: 30 * time.Minute,
+			maxSplitInterval:    1 * time.Hour,
+			minHorizontalShards: 4,
+			expected:            2,
+		},
+		{
+			name:                "split to 2 requests, due to maxSplitInterval",
+			req:                 testRequest,
+			handlerFunc:         promqlResults,
+			codec:               queryRangeCodec,
+			splitInterval:       0,
+			querySplitThreshold: 2 * time.Hour,
+			maxSplitInterval:    4 * time.Hour,
+			minHorizontalShards: 4,
+			expected:            1,
 		},
 		{
 			name:          "labels request won't be split",
@@ -320,6 +356,9 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 					QueryRangeConfig: QueryRangeConfig{
 						Limits:                 defaultLimits,
 						SplitQueriesByInterval: tc.splitInterval,
+						MinQuerySplitInterval:  tc.querySplitThreshold,
+						MaxQuerySplitInterval:  tc.maxSplitInterval,
+						HorizontalShards:       tc.minHorizontalShards,
 					},
 					LabelsConfig: LabelsConfig{
 						Limits:                 defaultLimits,
