@@ -5,21 +5,19 @@ package queryfrontend
 
 import (
 	"fmt"
-	"time"
-
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
 
 // thanosCacheKeyGenerator is a utility for using split interval when determining cache keys.
 type thanosCacheKeyGenerator struct {
-	interval    time.Duration
+	interval    queryrange.IntervalFn
 	resolutions []int64
 }
 
-func newThanosCacheKeyGenerator(interval time.Duration) thanosCacheKeyGenerator {
+func newThanosCacheKeyGenerator(intervalFn queryrange.IntervalFn) thanosCacheKeyGenerator {
 	return thanosCacheKeyGenerator{
-		interval:    interval,
+		interval:    intervalFn,
 		resolutions: []int64{downsample.ResLevel2, downsample.ResLevel1, downsample.ResLevel0},
 	}
 }
@@ -27,7 +25,7 @@ func newThanosCacheKeyGenerator(interval time.Duration) thanosCacheKeyGenerator 
 // GenerateCacheKey generates a cache key based on the Request and interval.
 // TODO(yeya24): Add other request params as request key.
 func (t thanosCacheKeyGenerator) GenerateCacheKey(userID string, r queryrange.Request) string {
-	currentInterval := r.GetStart() / t.interval.Milliseconds()
+	currentInterval := r.GetStart() / t.interval(r).Milliseconds()
 	switch tr := r.(type) {
 	case *ThanosQueryRangeRequest:
 		i := 0
