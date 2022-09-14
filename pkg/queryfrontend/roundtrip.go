@@ -179,11 +179,9 @@ func newQueryRangeTripperware(
 		)
 	}
 
-	queryIntervalFn := func(_ queryrange.Request) time.Duration {
-		return config.SplitQueriesByInterval
-	}
+	if config.SplitQueriesByInterval != 0 || config.MinQuerySplitInterval != 0 {
+		queryIntervalFn := dynamicIntervalFn(config)
 
-	if config.SplitQueriesByInterval != 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("split_by_interval", m),
@@ -235,6 +233,28 @@ func newQueryRangeTripperware(
 			return rt.RoundTrip(r)
 		})
 	}, nil
+}
+
+func dynamicIntervalFn(config QueryRangeConfig) queryrange.IntervalFn {
+	return func(r queryrange.Request) time.Duration {
+		// Use static interval, by default.
+		if config.SplitQueriesByInterval != 0 {
+			return config.SplitQueriesByInterval
+		}
+
+		queryInterval := time.Duration(r.GetEnd()-r.GetStart()) * time.Millisecond
+		// If the query is multiple of max interval, we use the max interval to split.
+		if queryInterval/config.MaxQuerySplitInterval >= 2 {
+			return config.MaxQuerySplitInterval
+		}
+
+		if queryInterval > config.MinQuerySplitInterval {
+			// If the query duration is less than max interval, we split it equally in HorizontalShards.
+			return time.Duration(queryInterval.Milliseconds()/config.HorizontalShards) * time.Millisecond
+		}
+
+		return config.MinQuerySplitInterval
+	}
 }
 
 // newLabelsTripperware returns a Tripperware for labels and series requests
