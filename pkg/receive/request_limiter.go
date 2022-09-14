@@ -19,12 +19,7 @@ var unlimitedRequestLimitsConfig = newEmptyRequestLimitsConfig().
 	SetSeriesLimit(0).
 	SetSamplesLimit(0)
 
-type requestLimiter interface {
-	AllowSizeBytes(tenant string, contentLengthBytes int64) bool
-	AllowSeries(tenant string, amount int64) bool
-	AllowSamples(tenant string, amount int64) bool
-}
-
+// configRequestLimiter implements requestLimiter interface.
 type configRequestLimiter struct {
 	tenantLimits        map[string]*requestLimitsConfig
 	cachedDefaultLimits *requestLimitsConfig

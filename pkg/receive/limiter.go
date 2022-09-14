@@ -4,6 +4,8 @@
 package receive
 
 import (
+	"context"
+
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -14,6 +16,19 @@ type limiter struct {
 	requestLimiter    requestLimiter
 	writeGate         gate.Gate
 	HeadSeriesLimiter headSeriesLimiter
+}
+
+// requestLimiter encompasses logic for limiting remote write requests.
+type requestLimiter interface {
+	AllowSizeBytes(tenant string, contentLengthBytes int64) bool
+	AllowSeries(tenant string, amount int64) bool
+	AllowSamples(tenant string, amount int64) bool
+}
+
+// headSeriesLimiter encompasses active/head series limiting logic.
+type headSeriesLimiter interface {
+	QueryMetaMonitoring(context.Context) error
+	isUnderLimit(tenant string) (bool, error)
 }
 
 func newLimiter(root *RootLimitsConfig, reg prometheus.Registerer, r ReceiverMode, logger log.Logger) *limiter {

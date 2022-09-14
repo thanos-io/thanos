@@ -85,7 +85,7 @@ type WriteLimitConfig struct {
 	HeadSeriesLimit *uint64 `yaml:"head_series_limit"`
 }
 
-// Utils for initialzing.
+// Utils for initializing.
 func NewEmptyWriteLimitConfig() *WriteLimitConfig {
 	return &WriteLimitConfig{}
 }
@@ -106,7 +106,7 @@ type requestLimitsConfig struct {
 	SamplesLimit   *int64 `yaml:"samples_limit"`
 }
 
-// Utils for initialzing.
+// Utils for initializing.
 func newEmptyRequestLimitsConfig() *requestLimitsConfig {
 	return &requestLimitsConfig{}
 }

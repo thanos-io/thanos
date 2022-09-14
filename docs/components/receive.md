@@ -175,12 +175,12 @@ Every Receive Router/RouterIngestor node, queries meta-monitoring for active ser
 
 To use the feature, one should specify the following limiting config options:
 
-Under `global`,
+Under `global`:
 - `meta_monitoring_url`: Specifies Prometheus Query API compatible meta-monitoring endpoint.
 - `meta_monitoring_limit_query`: Option to specify PromQL query to execute against meta-monitoring. If not specified it is set to `sum(prometheus_tsdb_head_series) by (tenant)` by default.
 - `meta_monitoring_http_client`: Optional YAML field specifying HTTP client config for meta-monitoring.
 
-Under `default` and per `tenant`,
+Under `default` and per `tenant`:
 - `head_series_limit`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive.
 
 NOTE:
