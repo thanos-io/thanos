@@ -602,8 +602,8 @@ func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("test", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
-	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).Init()
-	testutil.Ok(t, e2e.StartAndWaitReady(q))
+	querier := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(querier))
 
 	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
 		Type: queryfrontend.INMEMORY,
@@ -621,17 +621,17 @@ func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 			SplitQueriesByInterval: 0,
 		},
 	}
-	queryFrontend := e2ethanos.NewQueryFrontend(e, "1", "http://"+q.InternalEndpoint("http"), cfg, inMemoryCacheConfig)
+	queryFrontend := e2ethanos.NewQueryFrontend(e, "1", "http://"+querier.InternalEndpoint("http"), cfg, inMemoryCacheConfig)
 	testutil.Ok(t, e2e.StartAndWaitReady(queryFrontend))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, querier.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
 
 	// Ensure we can get the result from Querier first so that it
 	// doesn't need to retry when we send queries to the frontend later.
-	queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+	queryAndAssertSeries(t, ctx, querier.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 		Deduplicate: false,
 	}, []model.Metric{
 		{
@@ -666,19 +666,20 @@ func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 		[]string{"thanos_query_frontend_queries_total"},
 		e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range")),
 	))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_fetched_keys_total"))
+
+	// make sure that we don't break cortex cache code.
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "cortex_cache_fetched_keys_total"))
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "cortex_cache_hits_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_entries"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_gets_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "querier_cache_added_new_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_added_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_misses_total"))
 
-	// Query is only 2h so it won't be split.
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_frontend_split_queries_total"))
+	// Query interval is 2 hours, which is greater than min-slit-interval, query will be broken down into 4 parts
+	// + rest (of interval)
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(5), "thanos_frontend_split_queries_total"))
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(
-		e2e.Equals(1),
+	testutil.Ok(t, querier.WaitSumMetricsWithOptions(
+		e2e.Equals(5),
 		[]string{"http_requests_total"},
 		e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query_range")),
 	))
