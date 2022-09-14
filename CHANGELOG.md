@@ -11,7 +11,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Fixed
-- []
+- [#5688](https://github.com/thanos-io/thanos/pull/5688) Query Frontend: Fix bug with dynamic horizontal sharding parameters and cache key generator.
 - [#5642](https://github.com/thanos-io/thanos/pull/5642) Receive: Log labels correctly in writer debug messages.
 - [#5655](https://github.com/thanos-io/thanos/pull/5655) Receive: Fix recreating already pruned tenants.
 
