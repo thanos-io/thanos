@@ -816,6 +816,13 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 		flags["--query-frontend.vertical-shards"] = strconv.Itoa(config.NumShards)
 	}
 
+	if config.QueryRangeConfig.MinQuerySplitInterval != 0 {
+		flags["--query-range.min-split-interval"] = config.QueryRangeConfig.MinQuerySplitInterval.String()
+		flags["--query-range.max-split-interval"] = config.QueryRangeConfig.MaxQuerySplitInterval.String()
+		flags["--query-range.horizontal-shards"] = strconv.FormatInt(config.QueryRangeConfig.HorizontalShards, 10)
+		flags["--query-range.split-interval"] = "0"
+	}
+
 	return e2e.NewInstrumentedRunnable(
 		e, fmt.Sprintf("query-frontend-%s", name),
 	).WithPorts(map[string]int{"http": 8080}, "http").Init(
