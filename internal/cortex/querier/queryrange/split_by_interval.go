@@ -5,7 +5,6 @@ package queryrange
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -51,7 +50,6 @@ func (s splitByInterval) Do(ctx context.Context, r Request) (Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("#$#$#: split query into %d parts\n", len(reqs))
 	s.splitByCounter.Add(float64(len(reqs)))
 
 	reqResps, err := DoRequests(ctx, s.next, reqs, s.limits)
