@@ -25,8 +25,8 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
-	"google.golang.org/grpc"
-
+	v1 "github.com/prometheus/prometheus/web/api/v1"
+	"github.com/thanos-community/promql-engine/engine"
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -54,12 +54,20 @@ import (
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
+	"google.golang.org/grpc"
 )
 
 const (
 	promqlNegativeOffset = "promql-negative-offset"
 	promqlAtModifier     = "promql-at-modifier"
 	queryPushdown        = "query-pushdown"
+)
+
+type promqlEngineType string
+
+const (
+	promqlEnginePrometheus promqlEngineType = "prometheus"
+	promqlEngineThanos     promqlEngineType = "thanos"
 )
 
 // registerQuery registers a query command.
@@ -88,6 +96,8 @@ func registerQuery(app *extkingpin.App) {
 
 	queryTimeout := extkingpin.ModelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
+	promqlEngine := cmd.Flag("query.promql-engine", "PromQL engine to use.").Default(string(promqlEnginePrometheus)).Hidden().
+		Enum(string(promqlEnginePrometheus), string(promqlEngineThanos))
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
@@ -295,6 +305,7 @@ func registerQuery(app *extkingpin.App) {
 			*alertQueryURL,
 			*grpcProxyStrategy,
 			component.Query,
+			promqlEngineType(*promqlEngine),
 		)
 	})
 }
@@ -366,6 +377,7 @@ func runQuery(
 	alertQueryURL string,
 	grpcProxyStrategy string,
 	comp component.Component,
+	promqlEngine promqlEngineType,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -487,20 +499,6 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 		)
-
-		engineOpts = promql.EngineOpts{
-			Logger: logger,
-			Reg:    reg,
-			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-			MaxSamples:    math.MaxInt32,
-			Timeout:       queryTimeout,
-			LookbackDelta: lookbackDelta,
-			NoStepSubqueryIntervalFn: func(int64) int64 {
-				return defaultEvaluationInterval.Milliseconds()
-			},
-			EnableNegativeOffset: true,
-			EnableAtModifier:     true,
-		}
 	)
 
 	// Periodically update the store set with the addresses we see in our cluster.
@@ -597,12 +595,36 @@ func runQuery(
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
+	engineOpts := promql.EngineOpts{
+		Logger: logger,
+		Reg:    reg,
+		// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+		MaxSamples:    math.MaxInt32,
+		Timeout:       queryTimeout,
+		LookbackDelta: lookbackDelta,
+		NoStepSubqueryIntervalFn: func(int64) int64 {
+			return defaultEvaluationInterval.Milliseconds()
+		},
+		EnableNegativeOffset: true,
+		EnableAtModifier:     true,
+	}
+
 	// An active query tracker will be added only if the user specifies a non-default path.
 	// Otherwise, the nil active query tracker from existing engine options will be used.
 	if activeQueryDir != "" {
 		engineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
 	}
-	engine := promql.NewEngine(engineOpts)
+
+	var queryEngine v1.QueryEngine
+	switch promqlEngine {
+	case promqlEnginePrometheus:
+		queryEngine = promql.NewEngine(engineOpts)
+	case promqlEngineThanos:
+		queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts})
+	default:
+		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)
+	}
+
 	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts, dynamicLookbackDelta)
 
 	// Start query API + UI HTTP server.
@@ -633,7 +655,7 @@ func runQuery(
 		api := apiv1.NewQueryAPI(
 			logger,
 			endpoints.GetEndpointStatus,
-			engine,
+			queryEngine,
 			lookbackDeltaCreator,
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
@@ -709,7 +731,7 @@ func runQuery(
 			info.WithQueryAPIInfoFunc(),
 		)
 
-		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, engine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
+		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, queryEngine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),

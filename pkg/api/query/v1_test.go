@@ -44,7 +44,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	promgate "github.com/prometheus/prometheus/util/gate"
 	"github.com/prometheus/prometheus/util/stats"
-
 	"github.com/thanos-io/thanos/pkg/compact"
 
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
