@@ -10,10 +10,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
-	e2einteractive "github.com/efficientgo/e2e/interactive"
-	e2emonitoring "github.com/efficientgo/e2e/monitoring"
+	e2edb "github.com/efficientgo/e2e012/db"
+	e2einteractive "github.com/efficientgo/e2e012/interactive"
+	e2emonitoring "github.com/efficientgo/e2e012/monitoring"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/objstore/providers/s3"

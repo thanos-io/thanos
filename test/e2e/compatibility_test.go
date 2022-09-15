@@ -13,8 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
+	e2edb "github.com/efficientgo/e2e012/db"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"

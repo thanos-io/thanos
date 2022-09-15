@@ -18,8 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
+	e2edb "github.com/efficientgo/e2e012/db"
 	"github.com/efficientgo/tools/core/pkg/backoff"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
@@ -877,7 +876,7 @@ http {
 }
 
 // NewMinio returns minio server, used as a local replacement for S3.
-// TODO(@matej-g): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/11;
+// TODO(@matej-g): This is a temporary workaround for https://github.com/efficientgo/e2e012/issues/11;
 // after this is addresses fixed all calls should be replaced with e2edb.NewMinio.
 func NewMinio(e e2e.Environment, name, bktName string) e2e.InstrumentedRunnable {
 	image := "minio/minio:RELEASE.2022-07-30T05-21-40Z"

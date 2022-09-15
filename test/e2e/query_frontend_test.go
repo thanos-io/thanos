@@ -9,8 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efficientgo/e2e"
-	"github.com/efficientgo/e2e/matchers"
+	"github.com/efficientgo/e2e012/matchers"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"

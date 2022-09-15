@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efficientgo/e2e"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/timestamp"
 

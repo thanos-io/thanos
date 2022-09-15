@@ -11,9 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
-	e2emonitoring "github.com/efficientgo/e2e/monitoring"
+	e2edb "github.com/efficientgo/e2e012/db"
+	e2emonitoring "github.com/efficientgo/e2e012/monitoring"
 	"github.com/efficientgo/tools/core/pkg/backoff"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/relabel"

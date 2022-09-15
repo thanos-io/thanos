@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efficientgo/e2e"
 	common_cfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"

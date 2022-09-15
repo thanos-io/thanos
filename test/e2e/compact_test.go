@@ -16,8 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efficientgo/e2e"
-	"github.com/efficientgo/e2e/matchers"
+	"github.com/efficientgo/e2e012/matchers"
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"

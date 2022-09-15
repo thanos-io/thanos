@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efficientgo/e2e"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 

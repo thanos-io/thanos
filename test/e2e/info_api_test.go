@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efficientgo/e2e"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/objstore/client"

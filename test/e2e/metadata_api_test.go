@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efficientgo/e2e"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"

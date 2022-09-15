@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/efficientgo/e2e"
-
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 

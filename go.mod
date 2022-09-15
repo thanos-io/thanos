@@ -15,7 +15,6 @@ require (
 	github.com/chromedp/chromedp v0.8.2
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
-	github.com/efficientgo/e2e v0.12.2-0.20220823124751-37e916144e6b
 	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd
 	github.com/efficientgo/tools/extkingpin v0.0.0-20220801101838-3312908f6a9d
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
@@ -100,6 +99,8 @@ require (
 )
 
 require (
+	github.com/efficientgo/e2e v0.13.0
+	github.com/efficientgo/e2e012 v0.0.0-00010101000000-000000000000
 	go.opentelemetry.io/otel v1.10.0
 	go.opentelemetry.io/otel/bridge/opentracing v1.10.0
 	go.opentelemetry.io/otel/sdk v1.9.0
@@ -250,6 +251,8 @@ replace (
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
+
+	github.com/efficientgo/e2e012 => github.com/efficientgo/e2e v0.12.2-0.20220823124751-37e916144e6b
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
 

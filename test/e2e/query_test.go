@@ -34,7 +34,6 @@ import (
 
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-	"github.com/efficientgo/e2e"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
