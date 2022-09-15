@@ -122,6 +122,8 @@ message SeriesRequest {
   // shard_info is used by the querier to request a specific
   // shard of blocks instead of entire blocks.
   ShardInfo shard_info = 13;
+
+  repeated string replica_labels = 14;
 }
 
 

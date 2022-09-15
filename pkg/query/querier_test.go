@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"reflect"
@@ -14,6 +15,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc"
 
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
@@ -40,7 +43,9 @@ type sample struct {
 }
 
 func TestQueryableCreator_MaxResolution(t *testing.T) {
-	testProxy := &testStoreServer{resps: []*storepb.SeriesResponse{}}
+	testProxy := newEagerRetrievalProxy(
+		&storeClientStub{respSet: nil},
+	)
 	queryableCreator := NewQueryableCreator(nil, nil, testProxy, 2, 5*time.Second)
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
@@ -59,8 +64,8 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 
 // Tests E2E how PromQL works with downsampled data.
 func TestQuerier_DownsampledData(t *testing.T) {
-	testProxy := &testStoreServer{
-		resps: []*storepb.SeriesResponse{
+	testProxy := newEagerRetrievalProxy(&storeClientStub{
+		respSet: []*storepb.SeriesResponse{
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), []sample{{99, 1}, {199, 5}}),                   // Downsampled chunk from Store.
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b", "bbbb", "eee"), []sample{{99, 3}, {199, 8}}),                  // Downsampled chunk from Store.
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "qwe", "wqeqw"), []sample{{99, 5}, {199, 15}}),                // Downsampled chunk from Store.
@@ -68,7 +73,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwewq"), []sample{{22, 5}, {44, 8}, {199, 15}}), // Raw chunk from Sidecar.
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwebb"), []sample{{22, 5}, {44, 8}, {199, 15}}), // Raw chunk from Sidecar.
 		},
-	}
+	})
 
 	timeout := 10 * time.Second
 	q := NewQueryableCreator(nil, nil, testProxy, 2, timeout)(false, nil, nil, 9999999, false, false, false, nil)
@@ -360,12 +365,13 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 				resolution := time.Duration(tcase.hints.Step) * time.Millisecond
 				t.Run(fmt.Sprintf("dedup=%v, resolution=%v", sc.dedup, resolution.String()), func(t *testing.T) {
 					var actual []series
+					proxy := newEagerRetrievalProxy(&localClient{server: tcase.storeAPI})
 					// Boostrap a local store and pass the data through promql.
 					{
 						g := gate.New(2)
 						mq := &mockedQueryable{
 							Creator: func(mint, maxt int64) storage.Querier {
-								return newQuerier(context.Background(), nil, mint, maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil)
+								return newQuerier(context.Background(), nil, mint, maxt, tcase.replicaLabels, nil, proxy, sc.dedup, 0, true, false, false, g, timeout, nil)
 							},
 						}
 						t.Cleanup(func() {
@@ -417,8 +423,8 @@ func TestQuerier_Select(t *testing.T) {
 				resps: []*storepb.SeriesResponse{
 					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
 					storepb.NewWarnSeriesResponse(errors.New("partial error")),
-					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 6}, {7, 7}}),
-					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 66}}), // Overlap samples for some reason.
+					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 66}}),
+					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 6}, {7, 7}}), // Overlap samples for some reason.
 					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
 					storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{100, 1}, {300, 3}, {400, 4}}),
 				},
@@ -426,11 +432,15 @@ func TestQuerier_Select(t *testing.T) {
 			mint: 1, maxt: 300,
 			replicaLabels:   []string{"a"},
 			equivalentQuery: `{a=~"a|b|c"}`,
-
+			matchers: []*labels.Matcher{{
+				Name:  "a",
+				Type:  labels.MatchRegexp,
+				Value: "a|b|c",
+			}},
 			expected: []series{
 				{
 					lset:    labels.FromStrings("a", "a"),
-					samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 6}, {7, 7}},
+					samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 66}, {7, 7}},
 				},
 				{
 					lset:    labels.FromStrings("a", "b"),
@@ -609,10 +619,12 @@ func TestQuerier_Select(t *testing.T) {
 				{dedup: true, expected: []series{tcase.expectedAfterDedup}},
 			} {
 				g := gate.New(2)
-				q := newQuerier(context.Background(), nil, tcase.mint, tcase.maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil)
-				t.Cleanup(func() { testutil.Ok(t, q.Close()) })
 
 				t.Run(fmt.Sprintf("dedup=%v", sc.dedup), func(t *testing.T) {
+					proxy := newEagerRetrievalProxy(&localClient{server: tcase.storeAPI, mint: tcase.mint, maxt: tcase.maxt})
+					q := newQuerier(context.Background(), nil, tcase.mint, tcase.maxt, tcase.replicaLabels, nil, proxy, sc.dedup, 0, true, false, false, g, timeout, nil)
+					t.Cleanup(func() { testutil.Ok(t, q.Close()) })
+
 					t.Run("querier.Select", func(t *testing.T) {
 						res := q.Select(false, tcase.hints, tcase.matchers...)
 						testSelectResponse(t, sc.expected, res)
@@ -836,9 +848,10 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			"gcp", "region", "us-east", "replica", "02", "shard", "default", "stage", "main", "tier", "sv", "type", "web",
 		)
 
+		proxy := newEagerRetrievalProxy(&localClient{server: s})
 		timeout := 100 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, false, 0, true, false, false, g, timeout, nil)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, proxy, false, 0, true, false, false, g, timeout, nil)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -906,9 +919,10 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			"gcp", "region", "us-east", "shard", "default", "stage", "main", "tier", "sv", "type", "web",
 		)
 
+		proxy := newEagerRetrievalProxy(&localClient{server: s})
 		timeout := 5 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, true, 0, true, false, false, g, timeout, nil)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, proxy, true, 0, true, false, false, g, timeout, nil)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -964,68 +978,151 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 	})
 }
 
-func TestSortReplicaLabel(t *testing.T) {
+func TestSelect(t *testing.T) {
 	tests := []struct {
-		input       []storepb.Series
-		exp         []storepb.Series
-		dedupLabels map[string]struct{}
+		name        string
+		input       []store.Client
+		exp         []labels.Labels
+		dedupLabels []string
 	}{
-		// 0 Single deduplication label.
 		{
-			input: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+			name: "single deduplication label",
+			input: []store.Client{
+				&storeClientStub{
+					respSet: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "3")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "3", "d", "4")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "4")),
+					},
+				},
+				&storeClientStub{
+					respSet: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-2", "c", "3")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-2", "c", "4")),
+					},
+				},
 			},
-			exp: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "b", Value: "replica-1"}}},
+			exp: []labels.Labels{
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
 			},
-			dedupLabels: map[string]struct{}{"b": {}},
+			dedupLabels: []string{"b"},
 		},
-		// 1 Multi deduplication labels.
 		{
-			input: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "4"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}, {Name: "c", Value: "3"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+			name: "multiple deduplication labels",
+			input: []store.Client{
+				&storeClientStub{
+					respSet: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "b1", "replica-1", "c", "3")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "b1", "replica-1", "c", "3", "d", "4")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "b1", "replica-1", "c", "4")),
+					},
+				},
+				&storeClientStub{
+					respSet: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-2", "b1", "replica-2", "c", "3")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-2", "c", "3")),
+					},
+				},
 			},
-			exp: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
+			exp: []labels.Labels{
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
 			},
-			dedupLabels: map[string]struct{}{"b": {}, "b1": {}},
+			dedupLabels: []string{"b", "b1"},
 		},
-		// Pushdown label at the end.
 		{
-			input: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}, {Name: dedup.PushdownMarker.Name, Value: dedup.PushdownMarker.Value}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
+			name: "pushdown marker",
+			input: []store.Client{
+				&storeClientStub{
+					respSet: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "3")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "3", "d", "4")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", dedup.PushdownMarker.Name, dedup.PushdownMarker.Value, "c", "4")),
+					},
+				},
+				&storeClientStub{
+					respSet: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-2", "c", "3")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-2", dedup.PushdownMarker.Name, dedup.PushdownMarker.Value, "c", "4")),
+					},
+				},
 			},
-			exp: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: dedup.PushdownMarker.Name, Value: dedup.PushdownMarker.Value}, {Name: "b", Value: "replica-1"}}},
+			exp: []labels.Labels{
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
 			},
-			dedupLabels: map[string]struct{}{"b": {}},
+			dedupLabels: []string{"b"},
+		},
+		{
+			name: "multi-replica response",
+			input: []store.Client{
+				&storeClientStub{
+					respSet: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "3")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "3", "d", "4")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "4")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-2", "c", "3")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-2", "c", "4")),
+					},
+				},
+			},
+			exp: []labels.Labels{
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+			},
+			dedupLabels: []string{"b"},
+		},
+		{
+			name: "unsorted series response",
+			input: []store.Client{
+				&storeClientStub{
+					respSet: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "3", "d", "4")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "4")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "3")),
+					},
+				},
+			},
+			exp: []labels.Labels{
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+			},
+			dedupLabels: []string{"b"},
 		},
 	}
 	for _, test := range tests {
-		t.Run("", func(t *testing.T) {
-			sortDedupLabels(test.input, test.dedupLabels)
-			testutil.Equals(t, test.exp, test.input)
-		})
+		for _, strategy := range []store.RetrievalStrategy{store.EagerRetrieval, store.LazyRetrieval} {
+			t.Run(fmt.Sprintf("%s/%s", test.name, strategy), func(t *testing.T) {
+				testProxy := newProxy(strategy, test.input...)
+
+				timeout := 10 * time.Second
+				qc := NewQueryableCreator(nil, nil, testProxy, 2, timeout)(true, test.dedupLabels, nil, 9999999, false, true, false, nil)
+				qry, err := qc.Querier(context.Background(), 0, math.MaxInt64)
+				testutil.Ok(t, err)
+
+				matcher := []*labels.Matcher{
+					{
+						Type:  labels.MatchRegexp,
+						Name:  "a",
+						Value: ".+",
+					},
+				}
+				result := make([]labels.Labels, 0)
+				sset := qry.Select(false, &storage.SelectHints{Func: "min_over_time"}, matcher...)
+				for sset.Next() {
+					at := sset.At()
+					result = append(result, at.Labels())
+				}
+
+				testutil.Equals(t, test.exp, result)
+			})
+		}
 	}
 }
 
@@ -1060,6 +1157,115 @@ func (s *testStoreServer) Series(_ *storepb.SeriesRequest, srv storepb.Store_Ser
 		}
 	}
 	return nil
+}
+
+func newEagerRetrievalProxy(clients ...store.Client) *store.ProxyStore {
+	return newProxy(store.EagerRetrieval, clients...)
+}
+
+func newProxy(strategy store.RetrievalStrategy, clients ...store.Client) *store.ProxyStore {
+	return store.NewProxyStore(nil, nil, func() []store.Client { return clients }, component.Query, nil, 1*time.Minute, strategy)
+}
+
+func newProxyStoreWithClients(clients []store.Client) *store.ProxyStore {
+	return store.NewProxyStore(nil, nil, func() []store.Client {
+		return clients
+	}, component.Query, nil, 5*time.Second, store.EagerRetrieval)
+}
+
+// storeClientStub is test gRPC store API client.
+// TODO(fpetkovski): Replace with local client from https://github.com/thanos-io/thanos/pull/5552.
+type localClient struct {
+	store.Client
+	mint   int64
+	maxt   int64
+	server storepb.StoreServer
+}
+
+func (l *localClient) Series(ctx context.Context, in *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
+	srv := &seriesServer{}
+	if err := l.server.Series(in, srv); err != nil {
+		return nil, err
+	}
+
+	response := make([]*storepb.SeriesResponse, 0, len(srv.seriesSet)+len(srv.warnings))
+	for i := 0; i < len(srv.seriesSet); i++ {
+		response = append(response, &storepb.SeriesResponse{
+			Result: &storepb.SeriesResponse_Series{
+				Series: &srv.seriesSet[i],
+			},
+		})
+	}
+	for i := 0; i < len(srv.warnings); i++ {
+		response = append(response, &storepb.SeriesResponse{
+			Result: &storepb.SeriesResponse_Warning{
+				Warning: srv.warnings[i],
+			},
+		})
+	}
+
+	return &storeSeriesClient{
+		respSet: response,
+	}, nil
+}
+
+func (s *localClient) LabelSets() []labels.Labels { return nil }
+
+func (s *localClient) TimeRange() (mint int64, maxt int64) { return math.MinInt64, math.MaxInt64 }
+
+func (s *localClient) SupportsSharding() bool { return false }
+
+func (s *localClient) SendsSortedSeries() bool {
+	return true
+}
+
+func (s *localClient) Addr() string { return "" }
+
+// storeClientStub is test gRPC store API client.
+type storeClientStub struct {
+	store.Client
+	respSet []*storepb.SeriesResponse
+}
+
+func (s *storeClientStub) Series(ctx context.Context, req *storepb.SeriesRequest, _ ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
+	return &storeSeriesClient{respSet: s.respSet}, nil
+}
+
+func (s *storeClientStub) LabelSets() []labels.Labels { return nil }
+
+func (s *storeClientStub) TimeRange() (mint int64, maxt int64) { return math.MinInt64, math.MaxInt64 }
+
+func (s *storeClientStub) SupportsSharding() bool { return false }
+
+func (s *storeClientStub) SendsSortedSeries() bool {
+	return sort.SliceIsSorted(s.respSet, func(i, j int) bool {
+		iResp := s.respSet[i]
+		jResp := s.respSet[j]
+
+		return iResp.Less(jResp)
+	})
+}
+
+func (s *storeClientStub) Addr() string { return "" }
+
+func (s *storeClientStub) String() string { return "" }
+
+// storeSeriesClient is test gRPC storeAPI series client.
+type storeSeriesClient struct {
+	// This field just exist to pseudo-implement the unused methods of the interface.
+	storepb.Store_SeriesClient
+	i       int
+	respSet []*storepb.SeriesResponse
+}
+
+func (c *storeSeriesClient) Recv() (*storepb.SeriesResponse, error) {
+	if c.i >= len(c.respSet) {
+		return nil, io.EOF
+	}
+	s := c.respSet[c.i]
+	c.i++
+
+	return s, nil
 }
 
 // storeSeriesResponse creates test storepb.SeriesResponse that includes series with single chunk that stores all the given samples.

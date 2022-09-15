@@ -30,6 +30,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+var ErrUnsortedSeriesSetDetected = errors.New("a store has sent unsorted series or multiple replicas of the same series")
+
 type ctxKey int
 
 // StoreMatcherKey is the context key for the store's allow list.
@@ -264,6 +266,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
 		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		ShardInfo:               originalRequest.ShardInfo,
+		ReplicaLabels:           originalRequest.ReplicaLabels,
 	}
 
 	stores := []Client{}
@@ -287,14 +290,18 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		return nil
 	}
 
-	storeResponses := make([]respSet, 0, len(stores))
+	replicaLabelSet := make(map[string]struct{})
+	for _, lbl := range r.ReplicaLabels {
+		replicaLabelSet[lbl] = struct{}{}
+	}
 
+	storeResponses := make([]respSet, 0, len(stores))
 	for _, st := range stores {
 		st := st
 
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
+		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses, r.ReplicaLabels, replicaLabelSet)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
@@ -311,6 +318,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		storeResponses = append(storeResponses, respSet)
 		defer respSet.Close()
 	}
+	abortOnPartialResponse := r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT
 
 	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
 
@@ -318,12 +326,19 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	for respHeap.Next() {
 		resp := respHeap.At()
 
-		if resp.GetWarning() != "" && (r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT) {
+		warn := resp.GetWarning()
+		if warn != "" && warn != ErrUnsortedSeriesSetDetected.Error() && abortOnPartialResponse {
 			return status.Error(codes.Aborted, resp.GetWarning())
 		}
 
 		if err := srv.Send(resp); err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+		}
+	}
+
+	if respHeap.UnsortedSetDetected() {
+		if err := srv.Send(storepb.NewWarnSeriesResponse(ErrUnsortedSeriesSetDetected)); err != nil {
+			return status.Error(codes.Unknown, errors.Wrap(err, "send warn response").Error())
 		}
 	}
 

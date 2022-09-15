@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log/level"
@@ -20,7 +21,8 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/model/labels"
+
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -32,10 +34,11 @@ import (
 type dedupResponseHeap struct {
 	h *ProxyResponseHeap
 
-	responses []*storepb.SeriesResponse
+	responses []*dedupReadyResponse
 
-	previousResponse *storepb.SeriesResponse
-	previousNext     bool
+	previousResponse    *dedupReadyResponse
+	previousNext        bool
+	unsortedSetDetected bool
 }
 
 func NewDedupResponseHeap(h *ProxyResponseHeap) *dedupResponseHeap {
@@ -56,7 +59,7 @@ func (d *dedupResponseHeap) Next() bool {
 		return len(d.responses) > 0 || d.previousNext
 	}
 
-	var resp *storepb.SeriesResponse
+	var resp *dedupReadyResponse
 	var nextHeap bool
 
 	// If buffered then use it.
@@ -96,11 +99,16 @@ func (d *dedupResponseHeap) Next() bool {
 		}
 
 		lbls := resp.GetSeries().Labels
-		lastLbls := d.responses[len(d.responses)-1].GetSeries().Labels
+		lastResponse := d.responses[len(d.responses)-1]
+		lastLbls := lastResponse.GetSeries().Labels
 
-		if labels.Compare(labelpb.ZLabelsToPromLabels(lbls), labelpb.ZLabelsToPromLabels(lastLbls)) == 0 {
+		// Unless a response comes from query pushdown, it is safe to merge
+		// chunks from replica series together into one slice.
+		labelsEqual := labels.Compare(labelpb.ZLabelsToPromLabels(lbls), labelpb.ZLabelsToPromLabels(lastLbls)) == 0
+		if labelsEqual && !resp.hasPushdownMarker {
 			d.responses = append(d.responses, resp)
 		} else {
+			d.unsortedSetDetected = d.unsortedSetDetected || resp.LessWithoutReplicaLabels(lastResponse)
 			// This one is different. It will be taken care of via the next Next() call.
 			d.previousResponse = resp
 			break
@@ -114,7 +122,7 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 	if len(d.responses) == 0 {
 		panic("BUG: At() called with no responses; please call At() only if Next() returns true")
 	} else if len(d.responses) == 1 {
-		return d.responses[0]
+		return d.responses[0].SeriesResponse
 	}
 
 	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
@@ -144,7 +152,7 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 
 	// If no chunks were requested.
 	if len(chunkDedupMap) == 0 {
-		return d.responses[0]
+		return d.responses[0].SeriesResponse
 	}
 
 	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
@@ -166,6 +174,10 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 	})
 }
 
+func (d *dedupResponseHeap) UnsortedSetDetected() bool {
+	return d.unsortedSetDetected
+}
+
 // ProxyResponseHeap is a heap for storepb.SeriesSets.
 // It performs k-way merge between all of those sets.
 // TODO(GiedriusS): can be improved with a tournament tree.
@@ -178,19 +190,7 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 	iResp := (*h)[i].rs.At()
 	jResp := (*h)[j].rs.At()
 
-	if iResp.GetSeries() != nil && jResp.GetSeries() != nil {
-		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
-		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)
-		return labels.Compare(iLbls, jLbls) < 0
-	} else if iResp.GetSeries() == nil && jResp.GetSeries() != nil {
-		return true
-	} else if iResp.GetSeries() != nil && jResp.GetSeries() == nil {
-		return false
-	}
-
-	// If it is not a series then the order does not matter. What matters
-	// is that we get different types of responses one after another.
-	return false
+	return iResp.LessWithoutReplicaLabels(jResp)
 }
 
 func (h *ProxyResponseHeap) Len() int {
@@ -242,7 +242,7 @@ func (h *ProxyResponseHeap) Next() bool {
 	return !h.Empty()
 }
 
-func (h *ProxyResponseHeap) At() *storepb.SeriesResponse {
+func (h *ProxyResponseHeap) At() *dedupReadyResponse {
 	min := h.Min().rs
 
 	atResp := min.At()
@@ -256,12 +256,92 @@ func (h *ProxyResponseHeap) At() *storepb.SeriesResponse {
 	return atResp
 }
 
-func (l *lazyRespSet) StoreID() string {
-	return l.st.String()
+// dedupReadyResponse contains the original response with replica labels at the end of the labelset.
+// Labels used for query pushdown are placed right before deduplication labels.
+// dedupReadyResponse contains a signature hash calculated from all non-replica labels.
+type dedupReadyResponse struct {
+	*storepb.SeriesResponse
+
+	signature         uint64
+	hasPushdownMarker bool
+	nonReplicaLabels  labels.Labels
 }
 
-func (l *lazyRespSet) Labelset() string {
-	return labelpb.PromLabelSetsToString(l.st.LabelSets())
+func newDedupReadyResponse(resp *storepb.SeriesResponse, replicaLabels []string, replicaLabelSet map[string]struct{}) *dedupReadyResponse {
+	s := resp.GetSeries()
+	if s == nil {
+		return newUnsignedResponse(resp)
+	}
+
+	// TODO(fpetkovski): Push this computation to stores.
+	hasPushdownMarker := false
+	promLabels := labelpb.ZLabelsToPromLabels(resp.GetSeries().Labels)
+	if len(replicaLabels) == 0 {
+		for _, l := range promLabels {
+			if l.Name == dedup.PushdownMarker.Name {
+				hasPushdownMarker = true
+				break
+			}
+		}
+		return &dedupReadyResponse{
+			signature:         promLabels.Hash(),
+			nonReplicaLabels:  promLabels,
+			hasPushdownMarker: hasPushdownMarker,
+			SeriesResponse:    resp,
+		}
+	}
+
+	sort.Slice(s.Labels, func(i, j int) bool {
+		if _, ok := replicaLabelSet[s.Labels[i].Name]; ok {
+			return false
+		}
+		if _, ok := replicaLabelSet[s.Labels[j].Name]; ok {
+			return true
+		}
+		// Ensure that dedup marker goes just right before the replica labels.
+		if s.Labels[i].Name == dedup.PushdownMarker.Name {
+			hasPushdownMarker = true
+			return false
+		}
+		if s.Labels[j].Name == dedup.PushdownMarker.Name {
+			hasPushdownMarker = true
+			return true
+		}
+		return s.Labels[i].Name < s.Labels[j].Name
+	})
+
+	promLabels = labels.NewBuilder(promLabels).Del(replicaLabels...).Labels()
+	return &dedupReadyResponse{
+		signature:         promLabels.Hash(),
+		nonReplicaLabels:  promLabels,
+		hasPushdownMarker: hasPushdownMarker,
+		SeriesResponse:    resp,
+	}
+}
+
+func newUnsignedResponse(series *storepb.SeriesResponse) *dedupReadyResponse {
+	return &dedupReadyResponse{
+		signature:         0,
+		hasPushdownMarker: false,
+		SeriesResponse:    series,
+	}
+}
+
+func (m *dedupReadyResponse) LessWithoutReplicaLabels(other *dedupReadyResponse) bool {
+	if m.GetSeries() != nil && other.GetSeries() != nil {
+		if m.signature == other.signature {
+			return false
+		}
+		return labels.Compare(m.nonReplicaLabels, other.nonReplicaLabels) < 0
+	} else if m.GetSeries() == nil && other.GetSeries() != nil {
+		return true
+	} else if m.GetSeries() != nil && other.GetSeries() == nil {
+		return false
+	}
+
+	// If it is not a series then the order does not matter. What matters
+	// is that we get different types of responses one after another.
+	return false
 }
 
 // lazyRespSet is a lazy storepb.SeriesSet that buffers
@@ -279,14 +359,22 @@ type lazyRespSet struct {
 
 	// Internal bookkeeping.
 	dataOrFinishEvent    *sync.Cond
-	bufferedResponses    []*storepb.SeriesResponse
+	bufferedResponses    []*dedupReadyResponse
 	bufferedResponsesMtx *sync.Mutex
-	lastResp             *storepb.SeriesResponse
+	lastResp             *dedupReadyResponse
 
 	noMoreData  bool
 	initialized bool
 
 	shardMatcher *storepb.ShardMatcher
+}
+
+func (l *lazyRespSet) StoreID() string {
+	return l.st.String()
+}
+
+func (l *lazyRespSet) Labelset() string {
+	return labelpb.PromLabelSetsToString(l.st.LabelSets())
 }
 
 func (l *lazyRespSet) Empty() bool {
@@ -339,7 +427,7 @@ func (l *lazyRespSet) Next() bool {
 	return false
 }
 
-func (l *lazyRespSet) At() *storepb.SeriesResponse {
+func (l *lazyRespSet) At() *dedupReadyResponse {
 	// We need to wait for at least one response so that we would be able to properly build the heap.
 	if !l.initialized {
 		l.Next()
@@ -361,12 +449,12 @@ func newLazyRespSet(
 	shardMatcher *storepb.ShardMatcher,
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
-
+	replicaLabels []string,
+	replicaLabelSet map[string]struct{},
 ) respSet {
-	bufferedResponses := []*storepb.SeriesResponse{}
+	bufferedResponses := []*dedupReadyResponse{}
 	bufferedResponsesMtx := &sync.Mutex{}
 	dataAvailable := sync.NewCond(bufferedResponsesMtx)
-
 	respSet := &lazyRespSet{
 		frameTimeout:         frameTimeout,
 		cl:                   cl,
@@ -410,7 +498,7 @@ func newLazyRespSet(
 				l.span.SetTag("err", err.Error())
 
 				l.bufferedResponsesMtx.Lock()
-				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
+				l.bufferedResponses = append(l.bufferedResponses, newUnsignedResponse(storepb.NewWarnSeriesResponse(err)))
 				l.noMoreData = true
 				l.dataOrFinishEvent.Signal()
 				l.bufferedResponsesMtx.Unlock()
@@ -437,9 +525,8 @@ func newLazyRespSet(
 					}
 
 					l.span.SetTag("err", rerr.Error())
-
 					l.bufferedResponsesMtx.Lock()
-					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
+					l.bufferedResponses = append(l.bufferedResponses, newUnsignedResponse(storepb.NewWarnSeriesResponse(err)))
 					l.noMoreData = true
 					l.dataOrFinishEvent.Signal()
 					l.bufferedResponsesMtx.Unlock()
@@ -457,8 +544,9 @@ func newLazyRespSet(
 					seriesStats.Count(resp.GetSeries())
 				}
 
+				signedResp := newDedupReadyResponse(resp, replicaLabels, replicaLabelSet)
 				l.bufferedResponsesMtx.Lock()
-				l.bufferedResponses = append(l.bufferedResponses, resp)
+				l.bufferedResponses = append(l.bufferedResponses, signedResp)
 				l.dataOrFinishEvent.Signal()
 				l.bufferedResponsesMtx.Unlock()
 				return true
@@ -502,7 +590,10 @@ func newAsyncRespSet(ctx context.Context,
 	buffers *sync.Pool,
 	shardInfo *storepb.ShardInfo,
 	logger log.Logger,
-	emptyStreamResponses prometheus.Counter) (respSet, error) {
+	emptyStreamResponses prometheus.Counter,
+	replicaLabels []string,
+	replicaLabelSet map[string]struct{},
+) (respSet, error) {
 
 	var span opentracing.Span
 	var closeSeries context.CancelFunc
@@ -555,6 +646,8 @@ func newAsyncRespSet(ctx context.Context,
 			shardMatcher,
 			applySharding,
 			emptyStreamResponses,
+			replicaLabels,
+			replicaLabelSet,
 		), nil
 	case EagerRetrieval:
 		return newEagerRespSet(
@@ -567,6 +660,8 @@ func newAsyncRespSet(ctx context.Context,
 			shardMatcher,
 			applySharding,
 			emptyStreamResponses,
+			replicaLabels,
+			replicaLabelSet,
 		), nil
 	default:
 		panic(fmt.Sprintf("unsupported retrieval strategy %s", retrievalStrategy))
@@ -599,7 +694,7 @@ type eagerRespSet struct {
 	shardMatcher *storepb.ShardMatcher
 
 	// Internal bookkeeping.
-	bufferedResponses []*storepb.SeriesResponse
+	bufferedResponses []*dedupReadyResponse
 	wg                *sync.WaitGroup
 	i                 int
 }
@@ -614,6 +709,8 @@ func newEagerRespSet(
 	shardMatcher *storepb.ShardMatcher,
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
+	replicaLabels []string,
+	replicaLabelSet map[string]struct{},
 ) respSet {
 	ret := &eagerRespSet{
 		span:              span,
@@ -622,11 +719,10 @@ func newEagerRespSet(
 		cl:                cl,
 		frameTimeout:      frameTimeout,
 		ctx:               ctx,
-		bufferedResponses: []*storepb.SeriesResponse{},
+		bufferedResponses: []*dedupReadyResponse{},
 		wg:                &sync.WaitGroup{},
 		shardMatcher:      shardMatcher,
 	}
-
 	ret.wg.Add(1)
 
 	// Start a goroutine and immediately buffer everything.
@@ -658,7 +754,7 @@ func newEagerRespSet(
 			select {
 			case <-l.ctx.Done():
 				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", st.String())
-				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(err))
+				l.bufferedResponses = append(l.bufferedResponses, newUnsignedResponse(storepb.NewWarnSeriesResponse(err)))
 				l.span.SetTag("err", err.Error())
 				return false
 			default:
@@ -676,7 +772,7 @@ func newEagerRespSet(
 					} else {
 						rerr = errors.Wrapf(err, "receive series from %s", st.String())
 					}
-					l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
+					l.bufferedResponses = append(l.bufferedResponses, newUnsignedResponse(storepb.NewWarnSeriesResponse(err)))
 					l.span.SetTag("err", rerr.Error())
 					return false
 				}
@@ -692,7 +788,8 @@ func newEagerRespSet(
 					seriesStats.Count(resp.GetSeries())
 				}
 
-				l.bufferedResponses = append(l.bufferedResponses, resp)
+				signedResp := newDedupReadyResponse(resp, replicaLabels, replicaLabelSet)
+				l.bufferedResponses = append(l.bufferedResponses, signedResp)
 				return true
 			}
 		}
@@ -716,7 +813,7 @@ func (l *eagerRespSet) Close() {
 	l.shardMatcher.Close()
 }
 
-func (l *eagerRespSet) At() *storepb.SeriesResponse {
+func (l *eagerRespSet) At() *dedupReadyResponse {
 	l.wg.Wait()
 
 	if len(l.bufferedResponses) == 0 {
@@ -750,7 +847,7 @@ func (l *eagerRespSet) Labelset() string {
 
 type respSet interface {
 	Close()
-	At() *storepb.SeriesResponse
+	At() *dedupReadyResponse
 	Next() bool
 	StoreID() string
 	Labelset() string
