@@ -73,12 +73,7 @@ func TestProxyStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	q := NewProxyStore(nil,
-		nil,
-		func() []Client { return nil },
-		component.Query,
-		nil, 0*time.Second, RetrievalStrategy(EagerRetrieval),
-	)
+	q := NewProxyStore(nil, nil, func() []Client { return nil }, component.Query, nil, 0*time.Second, RetrievalStrategy(EagerRetrieval))
 
 	resp, err := q.Info(ctx, &storepb.InfoRequest{})
 	testutil.Ok(t, err)
@@ -519,13 +514,7 @@ func TestProxyStore_Series(t *testing.T) {
 	} {
 		for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 			if ok := t.Run(fmt.Sprintf("%s/%s", tc.title, strategy), func(t *testing.T) {
-				q := NewProxyStore(nil,
-					nil,
-					func() []Client { return tc.storeAPIs },
-					component.Query,
-					tc.selectorLabels,
-					5*time.Second, strategy,
-				)
+				q := NewProxyStore(nil, nil, func() []Client { return tc.storeAPIs }, component.Query, tc.selectorLabels, 5*time.Second, strategy)
 
 				ctx := context.Background()
 				if len(tc.storeDebugMatchers) > 0 {
@@ -1053,13 +1042,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 				if ok := t.Run(string(strategy), func(t *testing.T) {
-					q := NewProxyStore(nil,
-						nil,
-						func() []Client { return tc.storeAPIs },
-						component.Query,
-						tc.selectorLabels,
-						4*time.Second, strategy,
-					)
+					q := NewProxyStore(nil, nil, func() []Client { return tc.storeAPIs }, component.Query, tc.selectorLabels, 4*time.Second, strategy)
 
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()
@@ -1111,13 +1094,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 			maxTime:     300,
 		},
 	}
-	q := NewProxyStore(nil,
-		nil,
-		func() []Client { return cls },
-		component.Query,
-		nil,
-		1*time.Second, EagerRetrieval,
-	)
+	q := NewProxyStore(nil, nil, func() []Client { return cls }, component.Query, nil, 1*time.Second, EagerRetrieval)
 
 	ctx := context.Background()
 	s := newStoreSeriesServer(ctx)
@@ -1172,13 +1149,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 
 	}
 
-	q := NewProxyStore(nil,
-		nil,
-		func() []Client { return cls },
-		component.Query,
-		labels.FromStrings("fed", "a"),
-		5*time.Second, EagerRetrieval,
-	)
+	q := NewProxyStore(nil, nil, func() []Client { return cls }, component.Query, labels.FromStrings("fed", "a"), 5*time.Second, EagerRetrieval)
 
 	ctx := context.Background()
 	s := newStoreSeriesServer(ctx)
@@ -1219,13 +1190,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 			maxTime: timestamp.FromTime(time.Now()),
 		},
 	}
-	q := NewProxyStore(nil,
-		nil,
-		func() []Client { return cls },
-		component.Query,
-		nil,
-		0*time.Second, EagerRetrieval,
-	)
+	q := NewProxyStore(nil, nil, func() []Client { return cls }, component.Query, nil, 0*time.Second, EagerRetrieval)
 
 	ctx := context.Background()
 	req := &storepb.LabelValuesRequest{
@@ -1415,14 +1380,7 @@ func TestProxyStore_LabelNames(t *testing.T) {
 		},
 	} {
 		if ok := t.Run(tc.title, func(t *testing.T) {
-			q := NewProxyStore(
-				nil,
-				nil,
-				func() []Client { return tc.storeAPIs },
-				component.Query,
-				nil,
-				5*time.Second, EagerRetrieval,
-			)
+			q := NewProxyStore(nil, nil, func() []Client { return tc.storeAPIs }, component.Query, nil, 5*time.Second, EagerRetrieval)
 
 			ctx := context.Background()
 			if len(tc.storeDebugMatchers) > 0 {
@@ -2061,16 +2019,61 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 				testutil.Equals(t, false, h.Next())
 			},
 		},
+		{
+			tname: "dedups replicated series",
+			responses: []*storepb.SeriesResponse{
+				{
+					Result: &storepb.SeriesResponse_Series{
+						Series: &storepb.Series{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar", "replica", "1")),
+							Chunks: []storepb.AggrChunk{
+								{
+									Raw: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Data: []byte(`abcdefgh`),
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Result: &storepb.SeriesResponse_Series{
+						Series: &storepb.Series{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar", "replica", "3")),
+							Chunks: []storepb.AggrChunk{
+								{
+									Raw: &storepb.Chunk{
+										Type: storepb.Chunk_XOR,
+										Data: []byte(`abcdefgh`),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			testFn: func(responses []*storepb.SeriesResponse, h *dedupResponseHeap) {
+				testutil.Equals(t, true, h.Next())
+				resp := h.At()
+				testutil.Equals(t, responses[0], resp)
+				testutil.Equals(t, false, h.Next())
+			},
+		},
 	} {
 		t.Run(tcase.tname, func(t *testing.T) {
-			h := NewDedupResponseHeap(NewProxyResponseHeap(
-				&eagerRespSet{
-					wg:                &sync.WaitGroup{},
-					bufferedResponses: tcase.responses,
-				},
-			))
+			replicaLabels := []string{"replica"}
+			replicaLabelsMap := map[string]struct{}{"replica": {}}
+			seenReplicas := make(map[string]map[string]struct{})
+			resps := make([]*signedResponse, len(tcase.responses))
+			for i, r := range tcase.responses {
+				resps[i] = sortLabelsForDedup(r, replicaLabels, replicaLabelsMap, seenReplicas, nil)
+			}
+			h := NewDedupResponseHeap(nil, NewProxyResponseHeap(&eagerRespSet{
+				wg:                &sync.WaitGroup{},
+				bufferedResponses: resps,
+			}))
 			tcase.testFn(tcase.responses, h)
 		})
 	}
-
 }

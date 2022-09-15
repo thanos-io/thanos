@@ -29,6 +29,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+var ErrMultiReplicaStoreDetected = fmt.Errorf("a store has sent multiple replicas of the same series")
+
 type ctxKey int
 
 // StoreMatcherKey is the context key for the store's allow list.
@@ -279,6 +281,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
 		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		ShardInfo:               originalRequest.ShardInfo,
+		ReplicaLabels:           originalRequest.ReplicaLabels,
 	}
 
 	stores := []Client{}
@@ -309,7 +312,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
+		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses, r.ReplicaLabels)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
@@ -329,7 +332,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
 
-	respHeap := NewDedupResponseHeap(NewProxyResponseHeap(storeResponses...))
+	respHeap := NewDedupResponseHeap(r.ReplicaLabels, NewProxyResponseHeap(storeResponses...))
 	for respHeap.Next() {
 		resp := respHeap.At()
 
@@ -339,6 +342,11 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		if err := srv.Send(resp); err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+		}
+	}
+	if respHeap.MultiReplicaRespSetDetected() {
+		if err := srv.Send(storepb.NewWarnSeriesResponse(ErrMultiReplicaStoreDetected)); err != nil {
+			return status.Error(codes.Unknown, errors.Wrap(err, "send warn response").Error())
 		}
 	}
 

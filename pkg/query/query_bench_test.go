@@ -9,11 +9,13 @@ import (
 	"math/rand"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
@@ -52,9 +54,10 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 	}
 
 	random := rand.New(rand.NewSource(120))
-	var resps []*storepb.SeriesResponse
+	var storeClients []store.Client
 	var expectedSeries []labels.Labels
 	for j := 0; j < numOfReplicas; j++ {
+		var resps []*storepb.SeriesResponse
 		// Note 0 argument - this is because we want to have two replicas for the same time duration.
 		head, created := storetestutil.CreateHeadWithSeries(t, 0, storetestutil.HeadGenOptions{
 			TSDBDir:          filepath.Join(tmpDir, fmt.Sprintf("%d", j)),
@@ -72,37 +75,23 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 				}
 				expectedSeries = append(expectedSeries, lset)
 			}
-
 			resps = append(resps, storepb.NewSeriesResponse(created[i]))
 		}
-
+		storeClients = append(storeClients, &storeClientStub{respSet: resps})
 	}
 
 	logger := log.NewNopLogger()
 	q := &querier{
-		ctx:           context.Background(),
-		logger:        logger,
-		proxy:         &mockedStoreServer{responses: resps},
-		replicaLabels: map[string]struct{}{"a_replica": {}},
-		deduplicate:   dedup,
-		selectGate:    gate.NewNoop(),
+		ctx:             context.Background(),
+		logger:          logger,
+		proxy:           newEagerRetrievalProxy(storeClients...),
+		replicaLabels:   []string{"a_replica"},
+		replicaLabelSet: map[string]struct{}{"a_replica": {}},
+		deduplicate:     dedup,
+		selectGate:      gate.NewNoop(),
+		selectTimeout:   1 * time.Hour,
 	}
 	testSelect(t, q, expectedSeries)
-}
-
-type mockedStoreServer struct {
-	storepb.StoreServer
-
-	responses []*storepb.SeriesResponse
-}
-
-func (m *mockedStoreServer) Series(_ *storepb.SeriesRequest, server storepb.Store_SeriesServer) error {
-	for _, r := range m.responses {
-		if err := server.Send(r); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 var (
@@ -115,8 +104,13 @@ func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels) {
 	t.Run("select", func(t testutil.TB) {
 		t.ResetTimer()
 
+		matcher := &labels.Matcher{
+			Type:  labels.MatchRegexp,
+			Name:  "__name__",
+			Value: ".+",
+		}
 		for i := 0; i < t.N(); i++ {
-			ss := q.Select(true, nil) // Select all.
+			ss := q.Select(true, nil, matcher) // Select all.
 			testutil.Equals(t, 0, len(ss.Warnings()))
 
 			if t.IsBenchmark() {

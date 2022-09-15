@@ -32,15 +32,6 @@ func TestQuerier_Proxy(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 	t.Run("proxy", func(t *testing.T) {
 		var clients []store.Client
-		q := NewQueryableCreator(
-			logger,
-			nil,
-			store.NewProxyStore(logger, nil, func() []store.Client { return clients },
-				component.Debug, nil, 5*time.Minute, store.EagerRetrieval),
-			1000000,
-			5*time.Minute,
-		)
-
 		createQueryableFn := func(stores []*testStore) storage.Queryable {
 			clients = clients[:0]
 			for i, st := range stores {
@@ -54,6 +45,13 @@ func TestQuerier_Proxy(t *testing.T) {
 					name:        fmt.Sprintf("store number %v", i),
 				})
 			}
+			q := NewQueryableCreator(
+				logger,
+				nil,
+				newProxyStoreWithClients(clients),
+				1000000,
+				5*time.Minute,
+			)
 			return q(true, nil, nil, 0, false, false, false, nil)
 		}
 
