@@ -105,12 +105,12 @@ All the configuration for the remote write endpoint of Receive is contained in t
 - `default`: the default values for limits in case a given tenant doesn't have any specified.
 - `tenants`: the limits for a given tenant.
 
-From the example configuration below, it's understood that:
+For a Receive instance with configuration like below, it's understood that:
 
-1. This Receive instance has a max concurrency of 30.
-2. This Receive instance has head series limiting enabled as it has `meta_monitoring_.*` options in `global`.
-3. This Receive instance has some default request limits as well as head series limits that apply of all tenants, **unless** a given tenant has their own limits (i.e. the `acme` tenant and partially for the `ajax` tenant).
-4. Tenant `acme` has no request limits, but as a higher head_series limit.
+1. The Receive instance has a max concurrency of 30.
+2. The Receive instance has head series limiting enabled as it has `meta_monitoring_.*` options in `global`.
+3. The Receive instance has some default request limits as well as head series limits that apply of all tenants, **unless** a given tenant has their own limits (i.e. the `acme` tenant and partially for the `ajax` tenant).
+4. Tenant `acme` has no request limits, but has a higher head_series limit.
 5. Tenant `ajax` has a request series limit of 50000 and samples limit of 500. Their request size bytes limit is inherited from the default, 1024 bytes. Their head series are also inherited from default i.e, 1000.
 
 The next sections explain what each configuration value means.

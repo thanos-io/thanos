@@ -775,7 +775,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			handlers, _ := newTestHandlerHashring(appendables, 3)
 			handler := handlers[0]
 			tenant := "test"
-			handler.Limiter = newLimiter(
+			handler.limiter = NewLimiter(
 				&RootLimitsConfig{
 					WriteLimits: WriteLimitsConfig{
 						TenantsLimits: TenantsWriteLimitsConfig{

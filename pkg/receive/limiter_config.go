@@ -47,6 +47,10 @@ func ParseRootLimitConfig(content []byte) (*RootLimitsConfig, error) {
 	return &root, nil
 }
 
+func (r RootLimitsConfig) AreHeadSeriesLimitsConfigured() bool {
+	return r.WriteLimits.GlobalLimits.MetaMonitoringURL != "" && (len(r.WriteLimits.TenantsLimits) != 0 || r.WriteLimits.DefaultLimits.HeadSeriesLimit != 0)
+}
+
 type WriteLimitsConfig struct {
 	// GlobalLimits are limits that are shared across all tenants.
 	GlobalLimits GlobalLimitsConfig `yaml:"global"`

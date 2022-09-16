@@ -86,7 +86,7 @@ type TransportConfig struct {
 	TLSHandshakeTimeout   int64 `yaml:"tls_handshake_timeout"`
 }
 
-var DefaultTransportConfig TransportConfig = TransportConfig{
+var defaultTransportConfig TransportConfig = TransportConfig{
 	MaxIdleConns:          100,
 	MaxIdleConnsPerHost:   2,
 	ResponseHeaderTimeout: 0,
@@ -97,8 +97,12 @@ var DefaultTransportConfig TransportConfig = TransportConfig{
 	TLSHandshakeTimeout:   int64(10 * time.Second),
 }
 
+func NewDefaultClientConfig() ClientConfig {
+	return ClientConfig{TransportConfig: defaultTransportConfig}
+}
+
 func NewClientConfigFromYAML(cfg []byte) (*ClientConfig, error) {
-	conf := &ClientConfig{TransportConfig: DefaultTransportConfig}
+	conf := &ClientConfig{TransportConfig: defaultTransportConfig}
 	if err := yaml.Unmarshal(cfg, conf); err != nil {
 		return nil, err
 	}

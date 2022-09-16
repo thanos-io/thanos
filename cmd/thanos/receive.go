@@ -204,6 +204,7 @@ func runReceive(
 			return errors.Wrap(err, "parse limit configuration")
 		}
 	}
+	limiter := receive.NewLimiter(limitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"))
 
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
@@ -234,7 +235,7 @@ func runReceive(
 		DialOpts:          dialOpts,
 		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
 		TSDBStats:         dbs,
-		LimitsConfig:      limitsConfig,
+		Limiter:           limiter,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -364,13 +365,13 @@ func runReceive(
 		)
 	}
 
-	if len(limitsConfig.WriteLimits.TenantsLimits) != 0 || limitsConfig.WriteLimits.DefaultLimits.HeadSeriesLimit != 0 {
+	if limitsConfig.AreHeadSeriesLimitsConfigured() {
 		level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
 		{
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
 				return runutil.Repeat(15*time.Second, ctx.Done(), func() error {
-					if err := webHandler.Limiter.HeadSeriesLimiter.QueryMetaMonitoring(ctx); err != nil {
+					if err := limiter.HeadSeriesLimiter.QueryMetaMonitoring(ctx); err != nil {
 						level.Error(logger).Log("msg", "failed to query meta-monitoring", "err", err.Error())
 					}
 					return nil

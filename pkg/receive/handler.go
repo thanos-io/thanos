@@ -99,7 +99,7 @@ type Options struct {
 	ForwardTimeout    time.Duration
 	RelabelConfigs    []*relabel.Config
 	TSDBStats         TSDBStats
-	LimitsConfig      *RootLimitsConfig
+	Limiter           *limiter
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -124,7 +124,7 @@ type Handler struct {
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
 
-	Limiter *limiter
+	limiter *limiter
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -150,7 +150,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
-		Limiter: newLimiter(o.LimitsConfig, registerer, o.ReceiverMode, logger),
+		limiter: o.Limiter,
 		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -408,16 +408,16 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	tLogger := log.With(h.logger, "tenant", tenant)
 
 	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
-		err = h.Limiter.writeGate.Start(r.Context())
+		err = h.limiter.writeGate.Start(r.Context())
 	})
 	if err != nil {
 		level.Error(tLogger).Log("err", err, "msg", "internal server error")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer h.Limiter.writeGate.Done()
+	defer h.limiter.writeGate.Done()
 
-	under, err := h.Limiter.HeadSeriesLimiter.isUnderLimit(tenant)
+	under, err := h.limiter.HeadSeriesLimiter.isUnderLimit(tenant)
 	if err != nil {
 		level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
 	}
@@ -428,7 +428,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestLimiter := h.Limiter.requestLimiter
+	requestLimiter := h.limiter.requestLimiter
 	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}

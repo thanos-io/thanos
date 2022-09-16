@@ -22,7 +22,7 @@ import (
 // headSeriesLimit implements headSeriesLimiter interface.
 type headSeriesLimit struct {
 	mtx                    sync.RWMutex
-	limit                  map[string]uint64
+	limitsPerTenant        map[string]uint64
 	tenantCurrentSeriesMap map[string]float64
 	defaultLimit           uint64
 
@@ -67,18 +67,18 @@ func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, l
 	limit.configuredTenantLimit.WithLabelValues("").Set(float64(limit.defaultLimit))
 
 	// Initialize map for configured limits of each tenant.
-	limit.limit = map[string]uint64{}
+	limit.limitsPerTenant = map[string]uint64{}
 	for t, w := range w.TenantsLimits {
 		// No limit set for tenant so inherit default, which could be unlimited as well.
 		if w.HeadSeriesLimit == nil {
-			limit.limit[t] = limit.defaultLimit
+			limit.limitsPerTenant[t] = limit.defaultLimit
 			limit.configuredTenantLimit.WithLabelValues(t).Set(float64(limit.defaultLimit))
 			continue
 		}
 
 		// Limit set to provided one for tenant that could be unlimited or some value.
 		// Default not inherited.
-		limit.limit[t] = *w.HeadSeriesLimit
+		limit.limitsPerTenant[t] = *w.HeadSeriesLimit
 		limit.configuredTenantLimit.WithLabelValues(t).Set(float64(*w.HeadSeriesLimit))
 	}
 
@@ -86,7 +86,7 @@ func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, l
 	limit.tenantCurrentSeriesMap = map[string]float64{}
 
 	// Use specified HTTPConfig (if any) to make requests to meta-monitoring.
-	c := httpconfig.ClientConfig{TransportConfig: httpconfig.DefaultTransportConfig}
+	c := httpconfig.NewDefaultClientConfig()
 	if w.GlobalLimits.MetaMonitoringHTTPClient != nil {
 		c = *w.GlobalLimits.MetaMonitoringHTTPClient
 	}
@@ -134,7 +134,7 @@ func (h *headSeriesLimit) QueryMetaMonitoring(ctx context.Context) error {
 func (h *headSeriesLimit) isUnderLimit(tenant string) (bool, error) {
 	h.mtx.RLock()
 	defer h.mtx.RUnlock()
-	if len(h.limit) == 0 && h.defaultLimit == 0 {
+	if len(h.limitsPerTenant) == 0 && h.defaultLimit == 0 {
 		return true, nil
 	}
 
@@ -149,7 +149,7 @@ func (h *headSeriesLimit) isUnderLimit(tenant string) (bool, error) {
 	}
 
 	var limit uint64
-	limit, ok = h.limit[tenant]
+	limit, ok = h.limitsPerTenant[tenant]
 	if !ok {
 		// Tenant has not been defined in config, so fallback to default.
 		limit = h.defaultLimit

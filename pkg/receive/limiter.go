@@ -31,7 +31,7 @@ type headSeriesLimiter interface {
 	isUnderLimit(tenant string) (bool, error)
 }
 
-func newLimiter(root *RootLimitsConfig, reg prometheus.Registerer, r ReceiverMode, logger log.Logger) *limiter {
+func NewLimiter(root *RootLimitsConfig, reg prometheus.Registerer, r ReceiverMode, logger log.Logger) *limiter {
 	limiter := &limiter{
 		writeGate:         gate.NewNoop(),
 		requestLimiter:    &noopRequestLimiter{},
