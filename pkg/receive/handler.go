@@ -21,8 +21,6 @@ import (
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
-	"github.com/thanos-io/thanos/pkg/extprom"
-	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -89,31 +87,28 @@ var (
 
 // Options for the web Handler.
 type Options struct {
-	Writer                       *Writer
-	ListenAddress                string
-	Registry                     *prometheus.Registry
-	TenantHeader                 string
-	TenantField                  string
-	DefaultTenantID              string
-	ReplicaHeader                string
-	Endpoint                     string
-	ReplicationFactor            uint64
-	ReceiverMode                 ReceiverMode
-	Tracer                       opentracing.Tracer
-	TLSConfig                    *tls.Config
-	DialOpts                     []grpc.DialOption
-	ForwardTimeout               time.Duration
-	RelabelConfigs               []*relabel.Config
-	TSDBStats                    TSDBStats
-	SeriesLimitSupported         bool
-	MaxPerTenantLimit            uint64
-	MetaMonitoringUrl            *url.URL
-	MetaMonitoringHttpClient     *extflag.PathOrContent
-	MetaMonitoringLimitQuery     string
-	WriteSeriesLimit             int64
-	WriteSamplesLimit            int64
-	WriteRequestSizeLimit        int64
-	WriteRequestConcurrencyLimit int
+	Writer                   *Writer
+	ListenAddress            string
+	Registry                 *prometheus.Registry
+	TenantHeader             string
+	TenantField              string
+	DefaultTenantID          string
+	ReplicaHeader            string
+	Endpoint                 string
+	ReplicationFactor        uint64
+	ReceiverMode             ReceiverMode
+	Tracer                   opentracing.Tracer
+	TLSConfig                *tls.Config
+	DialOpts                 []grpc.DialOption
+	ForwardTimeout           time.Duration
+	RelabelConfigs           []*relabel.Config
+	TSDBStats                TSDBStats
+	LimitsConfig             *RootLimitsConfig
+	SeriesLimitSupported     bool
+	MaxPerTenantLimit        uint64
+	MetaMonitoringUrl        *url.URL
+	MetaMonitoringHttpClient *extflag.PathOrContent
+	MetaMonitoringLimitQuery string
 }
 
 // activeSeriesLimiter encompasses active series limiting logic.
@@ -145,8 +140,7 @@ type Handler struct {
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
 
-	writeGate      gate.Gate
-	requestLimiter requestLimiter
+	limiter *limiter
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -172,13 +166,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
-		writeGate: gate.NewNoop(),
-		requestLimiter: newRequestLimiter(
-			o.WriteRequestSizeLimit,
-			o.WriteSeriesLimit,
-			o.WriteSamplesLimit,
-			registerer,
-		),
+		limiter: newLimiter(o.LimitsConfig, registerer),
 		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -215,13 +203,6 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
 		),
-	}
-
-	if o.WriteRequestConcurrencyLimit > 0 {
-		h.writeGate = gate.New(
-			extprom.WrapRegistererWithPrefix("thanos_receive_write_request_concurrent_", registerer),
-			o.WriteRequestConcurrencyLimit,
-		)
 	}
 
 	h.forwardRequests.WithLabelValues(labelSuccess)
@@ -448,15 +429,14 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	tLogger := log.With(h.logger, "tenant", tenant)
 
 	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
-		err = h.writeGate.Start(r.Context())
+		err = h.limiter.writeGate.Start(r.Context())
 	})
 	if err != nil {
 		level.Error(tLogger).Log("err", err, "msg", "internal server error")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	defer h.writeGate.Done()
+	defer h.limiter.writeGate.Done()
 
 	under, err := h.ActiveSeriesLimit.isUnderLimit(tenant, tLogger)
 	if err != nil {
@@ -469,11 +449,12 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requestLimiter := h.limiter.requestLimiter
 	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}
 	if r.ContentLength >= 0 {
-		if !h.requestLimiter.AllowSizeBytes(tenant, r.ContentLength) {
+		if !requestLimiter.AllowSizeBytes(tenant, r.ContentLength) {
 			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
 			return
 		}
@@ -493,7 +474,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requestLimiter.AllowSizeBytes(tenant, int64(len(reqBuf))) {
+	if !requestLimiter.AllowSizeBytes(tenant, int64(len(reqBuf))) {
 		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -529,7 +510,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.requestLimiter.AllowSeries(tenant, int64(len(wreq.Timeseries))) {
+	if !requestLimiter.AllowSeries(tenant, int64(len(wreq.Timeseries))) {
 		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -538,7 +519,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, timeseries := range wreq.Timeseries {
 		totalSamples += len(timeseries.Samples)
 	}
-	if !h.requestLimiter.AllowSamples(tenant, int64(totalSamples)) {
+	if !requestLimiter.AllowSamples(tenant, int64(totalSamples)) {
 		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -710,7 +691,7 @@ func (a *nopSeriesLimit) isUnderLimit(_ string, _ log.Logger) (bool, error) {
 // forward accepts a write request, batches its time series by
 // corresponding endpoint, and forwards them in parallel to the
 // correct endpoint. Requests destined for the local node are written
-// the the local receiver. For a given write request, at most one outgoing
+// the local receiver. For a given write request, at most one outgoing
 // write request will be made to every other node in the hashring,
 // unless the request needs to be replicated.
 // The function only returns when all requests have finished

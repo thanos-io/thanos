@@ -3,11 +3,65 @@
 
 package receive
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/thanos-io/thanos/pkg/testutil"
+)
+
+func TestRequestLimiter_limitsFor(t *testing.T) {
+	tenantWithLimits := "limited-tenant"
+	tenantWithoutLimits := "unlimited-tenant"
+
+	limits := writeLimitsConfig{
+		DefaultLimits: defaultLimitsConfig{
+			RequestLimits: *newEmptyRequestLimitsConfig().
+				SetSeriesLimit(10),
+		},
+		TenantsLimits: tenantsWriteLimitsConfig{
+			tenantWithLimits: &writeLimitConfig{
+				RequestLimits: newEmptyRequestLimitsConfig().
+					SetSeriesLimit(30),
+			},
+		},
+	}
+	tests := []struct {
+		name       string
+		tenant     string
+		wantLimits *requestLimitsConfig
+	}{
+		{
+			name:   "Gets the default limits when tenant's limits aren't present",
+			tenant: tenantWithoutLimits,
+			wantLimits: newEmptyRequestLimitsConfig().
+				SetSeriesLimit(10).
+				SetSamplesLimit(0).
+				SetSizeBytesLimit(0),
+		},
+		{
+			name:   "Gets the tenant's limits when it is present",
+			tenant: tenantWithLimits,
+			wantLimits: newEmptyRequestLimitsConfig().
+				SetSeriesLimit(30).
+				SetSamplesLimit(0).
+				SetSizeBytesLimit(0),
+		},
+	}
+
+	requestLimiter := newConfigRequestLimiter(nil, &limits)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			limits := requestLimiter.limitsFor(tt.tenant)
+			testutil.Equals(t, tt.wantLimits, limits)
+		})
+	}
+}
 
 func TestRequestLimiter_AllowRequestBodySizeBytes(t *testing.T) {
 	tests := []struct {
 		name          string
+		defaultLimits *requestLimitsConfig
 		sizeByteLimit int64
 		sizeBytes     int64
 		want          bool
@@ -45,10 +99,19 @@ func TestRequestLimiter_AllowRequestBodySizeBytes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := newRequestLimiter(tt.sizeByteLimit, 0, 0, nil)
-			if got := l.AllowSizeBytes("tenant", tt.sizeBytes); got != tt.want {
-				t.Errorf("unexpected AllowRequestBodySizeBytes result (body size: %v), got %v, want %v", tt.sizeBytes, got, tt.want)
+			tenant := "tenant"
+			limits := writeLimitsConfig{
+				DefaultLimits: defaultLimitsConfig{
+					RequestLimits: *newEmptyRequestLimitsConfig().SetSeriesLimit(10),
+				},
+				TenantsLimits: tenantsWriteLimitsConfig{
+					tenant: &writeLimitConfig{
+						RequestLimits: newEmptyRequestLimitsConfig().SetSizeBytesLimit(tt.sizeByteLimit),
+					},
+				},
 			}
+			l := newConfigRequestLimiter(nil, &limits)
+			testutil.Equals(t, tt.want, l.AllowSizeBytes(tenant, tt.sizeBytes))
 		})
 	}
 }
@@ -93,10 +156,20 @@ func TestRequestLimiter_AllowSeries(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := newRequestLimiter(0, tt.seriesLimit, 0, nil)
-			if got := l.AllowSeries("tenant", tt.series); got != tt.want {
-				t.Errorf("unexpected AllowSeries result (series: %v), got %v, want %v", tt.series, got, tt.want)
+			tenant := "tenant"
+			limits := writeLimitsConfig{
+				DefaultLimits: defaultLimitsConfig{
+					RequestLimits: *newEmptyRequestLimitsConfig().SetSeriesLimit(10),
+				},
+				TenantsLimits: tenantsWriteLimitsConfig{
+					tenant: &writeLimitConfig{
+						RequestLimits: newEmptyRequestLimitsConfig().SetSeriesLimit(tt.seriesLimit),
+					},
+				},
 			}
+
+			l := newConfigRequestLimiter(nil, &limits)
+			testutil.Equals(t, tt.want, l.AllowSeries(tenant, tt.series))
 		})
 	}
 }
@@ -141,10 +214,20 @@ func TestRequestLimiter_AllowSamples(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l := newRequestLimiter(0, 0, tt.samplesLimit, nil)
-			if got := l.AllowSamples("tenant", tt.samples); got != tt.want {
-				t.Errorf("unexpected AllowSamples result (samples: %v), got %v, want %v", tt.samples, got, tt.want)
+			tenant := "tenant"
+			limits := writeLimitsConfig{
+				DefaultLimits: defaultLimitsConfig{
+					RequestLimits: *newEmptyRequestLimitsConfig().SetSeriesLimit(10),
+				},
+				TenantsLimits: tenantsWriteLimitsConfig{
+					tenant: &writeLimitConfig{
+						RequestLimits: newEmptyRequestLimitsConfig().SetSamplesLimit(tt.samplesLimit),
+					},
+				},
 			}
+
+			l := newConfigRequestLimiter(nil, &limits)
+			testutil.Equals(t, tt.want, l.AllowSamples("tenant", tt.samples))
 		})
 	}
 }

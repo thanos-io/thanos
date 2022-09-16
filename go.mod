@@ -15,8 +15,8 @@ require (
 	github.com/chromedp/chromedp v0.8.2
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
-	github.com/efficientgo/e2e v0.12.2-0.20220714084440-2f5240d8c363
-	github.com/efficientgo/tools/core v0.0.0-20220225185207-fe763185946b
+	github.com/efficientgo/e2e v0.12.2-0.20220823124751-37e916144e6b
+	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd
 	github.com/efficientgo/tools/extkingpin v0.0.0-20220801101838-3312908f6a9d
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.2.0

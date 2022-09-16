@@ -55,7 +55,7 @@ func WithEnableH2C(enableH2C bool) Option {
 	})
 }
 
-// WithMux overrides the the server's default mux.
+// WithMux overrides the server's default mux.
 func WithMux(mux *http.ServeMux) Option {
 	return optionFunc(func(o *options) {
 		o.mux = mux

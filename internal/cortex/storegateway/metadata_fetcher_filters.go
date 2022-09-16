@@ -13,14 +13,13 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/extprom"
 
 	"github.com/thanos-io/thanos/internal/cortex/storage/tsdb/bucketindex"
 )
 
 type MetadataFilterWithBucketIndex interface {
 	// FilterWithBucketIndex is like Thanos MetadataFilter.Filter() but it provides in input the bucket index too.
-	FilterWithBucketIndex(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, idx *bucketindex.Index, synced *extprom.TxGaugeVec) error
+	FilterWithBucketIndex(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, idx *bucketindex.Index, synced block.GaugeVec) error
 }
 
 // IgnoreDeletionMarkFilter is like the Thanos IgnoreDeletionMarkFilter, but it also implements
@@ -52,12 +51,12 @@ func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.
 }
 
 // Filter implements block.MetadataFilter.
-func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, modified *extprom.TxGaugeVec) error {
+func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced block.GaugeVec, modified block.GaugeVec) error {
 	return f.upstream.Filter(ctx, metas, synced, modified)
 }
 
 // FilterWithBucketIndex implements MetadataFilterWithBucketIndex.
-func (f *IgnoreDeletionMarkFilter) FilterWithBucketIndex(_ context.Context, metas map[ulid.ULID]*metadata.Meta, idx *bucketindex.Index, synced *extprom.TxGaugeVec) error {
+func (f *IgnoreDeletionMarkFilter) FilterWithBucketIndex(_ context.Context, metas map[ulid.ULID]*metadata.Meta, idx *bucketindex.Index, synced block.GaugeVec) error {
 	// Build a map of block deletion marks
 	marks := make(map[ulid.ULID]*metadata.DeletionMark, len(idx.BlockDeletionMarks))
 	for _, mark := range idx.BlockDeletionMarks {
