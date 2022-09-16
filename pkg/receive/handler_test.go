@@ -369,6 +369,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			ReplicationFactor: replicationFactor,
 			ForwardTimeout:    5 * time.Second,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
+			Limiter:           NewLimiter(nil, nil, RouterIngestor, nil),
 		})
 		handlers = append(handlers, h)
 		h.peers = peers
