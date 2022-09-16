@@ -237,25 +237,6 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 	return minTime, maxTime
 }
 
-// cancelableRespSender is a response channel that does need to be exhausted on cancel.
-type cancelableRespSender struct {
-	ctx context.Context
-	ch  chan<- *storepb.SeriesResponse
-}
-
-func newCancelableRespChannel(ctx context.Context, buffer int) (*cancelableRespSender, chan *storepb.SeriesResponse) {
-	respCh := make(chan *storepb.SeriesResponse, buffer)
-	return &cancelableRespSender{ctx: ctx, ch: respCh}, respCh
-}
-
-// send or return on cancel.
-func (s cancelableRespSender) send(r *storepb.SeriesResponse) {
-	select {
-	case <-s.ctx.Done():
-	case s.ch <- r:
-	}
-}
-
 func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	// TODO(bwplotka): This should be part of request logger, otherwise it does not make much sense. Also, could be
 	// tiggered by tracing span to reduce cognitive load.
@@ -349,10 +330,6 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	}
 
 	return nil
-}
-
-type directSender interface {
-	send(*storepb.SeriesResponse)
 }
 
 // storeMatches returns boolean if the given store may hold data for the given label matchers, time ranges and debug store matches gathered from context.
