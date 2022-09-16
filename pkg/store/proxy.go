@@ -249,6 +249,8 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	// tiggered by tracing span to reduce cognitive load.
 	reqLogger := log.With(s.logger, "component", "proxy", "request", originalRequest.String())
 
+	// Add prometheus announced labels to selector labels
+	s.selectorLabels = mergeAnnouncedLabels(s.selectorLabels, s.stores())
 	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -337,6 +339,19 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	}
 
 	return nil
+}
+
+func mergeAnnouncedLabels(selectorLabels labels.Labels, stores []Client) labels.Labels {
+	for _, client := range stores {
+		for _, clientLabels := range client.LabelSets() {
+			for _, label := range clientLabels {
+				if !selectorLabels.Has(label.Name) {
+					selectorLabels = append(selectorLabels, label)
+				}
+			}
+		}
+	}
+	return selectorLabels
 }
 
 type directSender interface {

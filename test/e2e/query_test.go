@@ -719,6 +719,17 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 				},
 			},
 		},
+		{ // Testing pushdown feature with a prometheus announced label (here prometheus)
+			query:        "max (my_fake_metric{prometheus='p1'})",
+			prom1Samples: []fakeMetricSample{{"i1", 1, timeNow}, {"i2", 5, timeNow}, {"i3", 9, timeNow}},
+			prom2Samples: []fakeMetricSample{{"i1", 3, timeNow}, {"i2", 4, timeNow}, {"i3", 10, timeNow}},
+			result: []*model.Sample{
+				{
+					Metric: map[model.LabelName]model.LabelValue{},
+					Value:  9,
+				},
+			},
+		},
 		{
 			query:        "max by (instance) (my_fake_metric)",
 			prom1Samples: []fakeMetricSample{{"i1", 1, timeNow}, {"i2", 5, timeNow}, {"i3", 9, timeNow}},
