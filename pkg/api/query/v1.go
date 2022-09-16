@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,6 +42,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/thanos/pkg/store/metrics"
 
 	"github.com/prometheus/prometheus/util/stats"
 
@@ -106,6 +108,8 @@ type QueryAPI struct {
 	defaultMetadataTimeRange               time.Duration
 
 	queryRangeHist prometheus.Histogram
+
+	seriesStatsAggregator *metrics.SeriesQueryPerformanceMetricsAggregator
 }
 
 // NewQueryAPI returns an initialized QueryAPI type.
@@ -133,6 +137,7 @@ func NewQueryAPI(
 	defaultMetadataTimeRange time.Duration,
 	disableCORS bool,
 	gate gate.Gate,
+	statsAggregator *metrics.SeriesQueryPerformanceMetricsAggregator,
 	reg *prometheus.Registry,
 ) *QueryAPI {
 	return &QueryAPI{
@@ -159,6 +164,7 @@ func NewQueryAPI(
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
 		disableCORS:                            disableCORS,
+		seriesStatsAggregator:                  statsAggregator,
 
 		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "thanos_query_range_requested_timespan_duration_seconds",
@@ -395,7 +401,24 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	qry, err := qapi.queryEngine.NewInstantQuery(qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, qapi.enableQueryPushdown, false, shardInfo), &promql.QueryOpts{LookbackDelta: lookbackDelta}, r.FormValue("query"), ts)
+	var seriesStats []storepb.SeriesStatsCounter
+	qry, err := qapi.queryEngine.NewInstantQuery(
+		qapi.queryableCreate(
+			enableDedup,
+			replicaLabels,
+			storeDebugMatchers,
+			maxSourceResolution,
+			enablePartialResponse,
+			qapi.enableQueryPushdown,
+			false,
+			shardInfo,
+			query.NewAggregateStatsReporter(&seriesStats),
+		),
+		&promql.QueryOpts{LookbackDelta: lookbackDelta},
+		r.FormValue("query"),
+		ts,
+	)
+
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
@@ -408,6 +431,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	}
 	defer qapi.gate.Done()
 
+	beforeRange := time.Now()
 	res := qry.Exec(ctx)
 	if res.Err != nil {
 		switch res.Err.(type) {
@@ -420,6 +444,12 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
+	level.Info(qapi.logger).Log("totalStats", len(seriesStats))
+	for i := range seriesStats {
+		level.Info(qapi.logger).Log("series", seriesStats[i].Series, "samples", seriesStats[i].Samples)
+		qapi.seriesStatsAggregator.Aggregate(seriesStats[i])
+	}
+	qapi.seriesStatsAggregator.Observe(time.Now().Sub(beforeRange).Seconds())
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs stats.QueryStats
@@ -524,8 +554,19 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
+	var seriesStats []storepb.SeriesStatsCounter
 	qry, err := qapi.queryEngine.NewRangeQuery(
-		qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, maxSourceResolution, enablePartialResponse, qapi.enableQueryPushdown, false, shardInfo),
+		qapi.queryableCreate(
+			enableDedup,
+			replicaLabels,
+			storeDebugMatchers,
+			maxSourceResolution,
+			enablePartialResponse,
+			qapi.enableQueryPushdown,
+			false,
+			shardInfo,
+			query.NewAggregateStatsReporter(&seriesStats),
+		),
 		&promql.QueryOpts{LookbackDelta: lookbackDelta},
 		r.FormValue("query"),
 		start,
@@ -544,6 +585,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	}
 	defer qapi.gate.Done()
 
+	beforeRange := time.Now()
 	res := qry.Exec(ctx)
 	if res.Err != nil {
 		switch res.Err.(type) {
@@ -554,6 +596,12 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
+	level.Info(qapi.logger).Log("totalStats", len(seriesStats))
+	for i := range seriesStats {
+		qapi.seriesStatsAggregator.Aggregate(seriesStats[i])
+		level.Info(qapi.logger).Log("series", seriesStats[i].Series, "samples", seriesStats[i].Samples)
+	}
+	qapi.seriesStatsAggregator.Observe(time.Now().Sub(beforeRange).Seconds())
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs stats.QueryStats
@@ -599,8 +647,17 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		matcherSets = append(matcherSets, matchers)
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, qapi.enableQueryPushdown, true, nil).
-		Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := qapi.queryableCreate(
+		true,
+		nil,
+		storeDebugMatchers,
+		0,
+		enablePartialResponse,
+		qapi.enableQueryPushdown,
+		true,
+		nil,
+		query.NoopSeriesStatsReporter,
+	).Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 	}
@@ -686,8 +743,18 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, apiErr, func() {}
 	}
 
-	q, err := qapi.queryableCreate(enableDedup, replicaLabels, storeDebugMatchers, math.MaxInt64, enablePartialResponse, qapi.enableQueryPushdown, true, nil).
-		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := qapi.queryableCreate(
+		enableDedup,
+		replicaLabels,
+		storeDebugMatchers,
+		math.MaxInt64,
+		enablePartialResponse,
+		qapi.enableQueryPushdown,
+		true,
+		nil,
+		query.NoopSeriesStatsReporter,
+	).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 	}
@@ -736,8 +803,17 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		matcherSets = append(matcherSets, matchers)
 	}
 
-	q, err := qapi.queryableCreate(true, nil, storeDebugMatchers, 0, enablePartialResponse, qapi.enableQueryPushdown, true, nil).
-		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := qapi.queryableCreate(
+		true,
+		nil,
+		storeDebugMatchers,
+		0,
+		enablePartialResponse,
+		qapi.enableQueryPushdown,
+		true,
+		nil,
+		query.NoopSeriesStatsReporter,
+	).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/thanos-io/thanos/pkg/store/metrics"
 	"google.golang.org/grpc"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
@@ -184,6 +185,10 @@ func registerQuery(app *extkingpin.App) {
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field.").String()
 	grpcProxyStrategy := cmd.Flag("grpc.proxy-strategy", "Strategy to use when proxying Series requests to leaf nodes. Hidden and only used for testing, will be removed after lazy becomes the default.").Default(string(store.EagerRetrieval)).Hidden().Enum(string(store.EagerRetrieval), string(store.LazyRetrieval))
 
+	queryTelemetryDurationQuantiles := cmd.Flag("query.telemetry.request-duration-seconds-quantiles", "The quantiles for exporting metrics about the request duration quantiles.").Default("0.1", "0.25", "0.75", "1.25", "1.75", "2.5", "3", "5", "10").Float64List()
+	queryTelemetrySamplesQuantiles := cmd.Flag("query.telemetry.request-samples-quantiles", "The quantiles for exporting metrics about the samples count quantiles.").Default("100", "1000", "10000", "100000", "1000000").Int64List()
+	queryTelemetrySeriesQuantiles := cmd.Flag("query.telemetry.request-series-seconds-quantiles", "The quantiles for exporting metrics about the series count quantiles.").Default("10", "100", "1000", "10000", "100000").Int64List()
+
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
@@ -295,6 +300,9 @@ func registerQuery(app *extkingpin.App) {
 			*alertQueryURL,
 			*grpcProxyStrategy,
 			component.Query,
+			*queryTelemetryDurationQuantiles,
+			*queryTelemetrySamplesQuantiles,
+			*queryTelemetrySeriesQuantiles,
 		)
 	})
 }
@@ -366,6 +374,9 @@ func runQuery(
 	alertQueryURL string,
 	grpcProxyStrategy string,
 	comp component.Component,
+	queryTelemetryDurationQuantiles []float64,
+	queryTelemetrySamplesQuantiles []int64,
+	queryTelemetrySeriesQuantiles []int64,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -657,6 +668,12 @@ func runQuery(
 			gate.New(
 				extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg),
 				maxConcurrentQueries,
+			),
+			metrics.NewSeriesQueryPerformanceMetricsAggregator(
+				reg,
+				queryTelemetryDurationQuantiles,
+				queryTelemetrySamplesQuantiles,
+				queryTelemetrySeriesQuantiles,
 			),
 			reg,
 		)

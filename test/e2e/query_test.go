@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	e2edb "github.com/efficientgo/e2e/db"
+	e2emonitoring "github.com/efficientgo/e2e/monitoring"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	config_util "github.com/prometheus/common/config"
@@ -186,6 +188,7 @@ func TestQuery(t *testing.T) {
 			"prometheus": "prom-ha",
 		},
 	})
+	fmt.Println("foobar")
 }
 
 func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
@@ -577,6 +580,123 @@ func newSample(s fakeMetricSample) model.Sample {
 		Value:     model.SampleValue(s.value),
 		Timestamp: model.TimeFromUnixNano(s.timestampUnixNano),
 	}
+}
+
+func TestQueryStoreMetrics(t *testing.T) {
+	t.Parallel()
+
+	// Build up.
+	e, err := e2e.NewDockerEnvironment("e2e-query-store-metrics")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	bucket := "store-gw-test"
+	minio := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(minio))
+
+	l := log.NewLogfmtLogger(os.Stdout)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("https"), minio.Dir()), "test")
+	testutil.Ok(t, err)
+
+	blockSizes := []struct {
+		samples int
+		series  int
+		name    string
+	}{
+		{samples: 10, series: 1, name: "one_series"},
+		{samples: 10, series: 1001, name: "thousand_one_series"},
+	}
+	now := time.Now()
+	externalLabels := labels.FromStrings("prometheus", "p1", "replica", "0")
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), dir), os.ModePerm))
+	for _, blockSize := range blockSizes {
+		series := make([]labels.Labels, blockSize.series, blockSize.series)
+		for i := 0; i < blockSize.series; i++ {
+			bigSeriesLabels := labels.FromStrings("__name__", blockSize.name, "instance", fmt.Sprintf("foo_%d", i))
+			series[i] = bigSeriesLabels
+		}
+		blockID, err := e2eutil.CreateBlockWithBlockDelay(ctx,
+			dir,
+			series,
+			blockSize.samples,
+			timestamp.FromTime(now),
+			timestamp.FromTime(now.Add(2*time.Hour)),
+			30*time.Minute,
+			externalLabels,
+			0,
+			metadata.NoneFunc,
+		)
+		testutil.Ok(t, err)
+		testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID.String()), blockID.String()))
+	}
+
+	s1 := e2ethanos.NewStoreGW(
+		e,
+		"s1",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("https"), minio.InternalDir()),
+		},
+		"",
+		nil,
+	)
+	testutil.Ok(t, e2e.StartAndWaitReady(s1))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(2), "thanos_blocks_meta_synced"))
+
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "max_over_time(one_series{instance='foo_0'}[2h])"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, 1)
+	instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		return "max_over_time(thousand_one_series[2h])"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, 1001)
+
+	mon, err := e2emonitoring.Start(e)
+	testutil.Ok(t, err)
+
+	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+		return "thanos_store_api_query_duration_seconds_count{samples_le='100000',series_le='10000'}"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, model.Vector{
+		&model.Sample{
+			Metric: model.Metric{
+				"__name__":   "thanos_store_api_query_duration_seconds_count",
+				"instance":   "e2e-query-store-metrics-querier-1:8080",
+				"job":        "querier-1",
+				"samples_le": "100000",
+				"series_le":  "10000",
+			},
+			Value: model.SampleValue(1),
+		},
+	})
+
+	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+		return "thanos_store_api_query_duration_seconds_count{samples_le='100',series_le='10'}"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, model.Vector{
+		&model.Sample{
+			Metric: model.Metric{
+				"__name__":   "thanos_store_api_query_duration_seconds_count",
+				"instance":   "e2e-query-store-metrics-querier-1:8080",
+				"job":        "querier-1",
+				"samples_le": "100",
+				"series_le":  "10",
+			},
+			Value: model.SampleValue(1),
+		},
+	})
 }
 
 // Regression test for https://github.com/thanos-io/thanos/issues/5033.

@@ -214,8 +214,8 @@ func TestQueryFrontend(t *testing.T) {
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
 			e2e.Equals(3),
 			[]string{"thanos_query_frontend_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range"))),
-		)
+			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range")),
+		))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "cortex_cache_fetched_keys_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_cache_hits_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
@@ -227,14 +227,14 @@ func TestQueryFrontend(t *testing.T) {
 		// Query is 25h so it will be split to 2 requests.
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
 			e2e.Equals(4), []string{"thanos_frontend_split_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "query_range"))),
-		)
+			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "query_range")),
+		))
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
 			e2e.Equals(4),
 			[]string{"http_requests_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query_range"))),
-		)
+			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query_range")),
+		))
 	})
 
 	t.Run("query frontend splitting works for labels names API", func(t *testing.T) {
