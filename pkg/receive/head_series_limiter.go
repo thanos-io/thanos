@@ -60,7 +60,7 @@ func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, l
 				Help: "The total number of meta-monitoring queries that failed while limiting.",
 			},
 		),
-		logger: log.With(logger, "component", "receive-head-series-limiter"),
+		logger: logger,
 	}
 
 	// Record default limit with empty tenant label.
