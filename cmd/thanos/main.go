@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"syscall"
@@ -73,7 +74,9 @@ func main() {
 	metrics := prometheus.NewRegistry()
 	metrics.MustRegister(
 		version.NewCollector("thanos"),
-		collectors.NewGoCollector(),
+		collectors.NewGoCollector(
+			collectors.WithGoCollectorRuntimeMetrics(collectors.GoRuntimeMetricsRule{Matcher: regexp.MustCompile("/.*")}),
+		),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 
