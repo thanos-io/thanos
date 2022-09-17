@@ -270,6 +270,10 @@ Flags:
                                  prefixed with 'dns+' or 'dnssrv+' to detect
                                  Thanos API servers through respective DNS
                                  lookups.
+      --endpoint.config=<content>  
+                                 Alternative to 'endpoint.config-file' flag
+                                 (mutually exclusive). Content of YAML file that
+                                 contains set of endpoints (e.g Store API)
       --endpoint-strict=<staticendpoint> ...
                                  Addresses of only statically configured Thanos
                                  API servers that are always used, even if the
