@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -20,8 +21,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
@@ -137,6 +138,8 @@ func registerQuery(app *extkingpin.App) {
 	fileSDFiles := cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
 
+	endpointConfig := extflag.RegisterPathOrContent(cmd, "endpoint.config", "YAML file that contains set of endpoints (e.g Store API) with optional TLS options. To enable TLS either use this option or deprecated ones --grpc-client-tls* .", extflag.WithEnvSubstitution())
+
 	fileSDInterval := extkingpin.ModelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
 		Default("5m"))
 
@@ -213,13 +216,13 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		var fileSD *file.Discovery
-		if len(*fileSDFiles) > 0 {
-			conf := &file.SDConfig{
-				Files:           *fileSDFiles,
-				RefreshInterval: *fileSDInterval,
-			}
-			fileSD = file.NewDiscovery(conf, logger)
+		endpointConfigYAML, err := endpointConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		if *secure && len(endpointConfigYAML) != 0 {
+			return errors.Errorf("deprecated flags --grpc-client-tls* and new --endpoint.config flag cannot be specified at the same time; use either of those")
 		}
 
 		if *webRoutePrefix == "" {
@@ -280,8 +283,10 @@ func registerQuery(app *extkingpin.App) {
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
 			*enableExemplarPartialResponse,
+			endpointConfigYAML,
+			*fileSDFiles,
+			*fileSDInterval,
 			*activeQueryDir,
-			fileSD,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
@@ -351,8 +356,10 @@ func runQuery(
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
+	endpointConfigYAML []byte,
+	fileSDFiles []string,
+	fileSDInterval model.Duration,
 	activeQueryDir string,
-	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
@@ -407,6 +414,18 @@ func runQuery(
 		}
 	}
 
+	combinedAddresses := storeAddrs
+	combinedAddresses = append(combinedAddresses, ruleAddrs...)
+	combinedAddresses = append(combinedAddresses, metadataAddrs...)
+	combinedAddresses = append(combinedAddresses, exemplarAddrs...)
+	combinedAddresses = append(combinedAddresses, targetAddrs...)
+
+	// Create endpoint config combining flag-based options with --endpoint.config.
+	endpointConfig, err := query.LoadConfig(logger, endpointConfigYAML, combinedAddresses, fileSDFiles, fileSDInterval)
+	if err != nil {
+		return errors.Wrap(err, "loading endpoint config")
+	}
+
 	dnsEndpointProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_query_endpoints_", reg),
@@ -450,6 +469,12 @@ func runQuery(
 
 				for _, addr := range strictEndpoints {
 					specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
+				}
+
+				for _, config := range endpointConfig {
+					for _, addr := range config.Endpoints {
+						specs = append(specs, query.NewGRPCEndpointSpec(addr, true))
+					}
 				}
 
 				for _, dnsProvider := range []*dns.Provider{
@@ -518,43 +543,46 @@ func runQuery(
 	}
 
 	// Run File Service Discovery and update the store set when the files are modified.
-	if fileSD != nil {
-		var fileSDUpdates chan []*targetgroup.Group
-		ctxRun, cancelRun := context.WithCancel(context.Background())
+	for _, e := range endpointConfig {
+		// Run File Service Discovery and update the store set when the files are modified.
+		if e.EndpointsSDDiscoverer != nil {
+			var fileSDUpdates chan []*targetgroup.Group
+			ctxRun, cancelRun := context.WithCancel(context.Background())
 
-		fileSDUpdates = make(chan []*targetgroup.Group)
+			fileSDUpdates = make(chan []*targetgroup.Group)
 
-		g.Add(func() error {
-			fileSD.Run(ctxRun, fileSDUpdates)
-			return nil
-		}, func(error) {
-			cancelRun()
-		})
+			g.Add(func() error {
+				e.EndpointsSDDiscoverer.Run(ctxRun, fileSDUpdates)
+				return nil
+			}, func(error) {
+				cancelRun()
+			})
 
-		ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
-		g.Add(func() error {
-			for {
-				select {
-				case update := <-fileSDUpdates:
-					// Discoverers sometimes send nil updates so need to check for it to avoid panics.
-					if update == nil {
-						continue
+			ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
+			g.Add(func() error {
+				for {
+					select {
+					case update := <-fileSDUpdates:
+						// Discoverers sometimes send nil updates so need to check for it to avoid panics.
+						if update == nil {
+							continue
+						}
+						fileSDCache.Update(update)
+						endpoints.Update(ctxUpdate)
+
+						if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
+							level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
+						}
+
+						// Rules apis do not support file service discovery as of now.
+					case <-ctxUpdate.Done():
+						return nil
 					}
-					fileSDCache.Update(update)
-					endpoints.Update(ctxUpdate)
-
-					if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
-						level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
-					}
-
-					// Rules apis do not support file service discovery as of now.
-				case <-ctxUpdate.Done():
-					return nil
 				}
-			}
-		}, func(error) {
-			cancelUpdate()
-		})
+			}, func(error) {
+				cancelUpdate()
+			})
+		}
 	}
 	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
 	{

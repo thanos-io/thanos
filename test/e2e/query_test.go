@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -23,11 +24,14 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	config_util "github.com/prometheus/common/config"
+	"github.com/prometheus/prometheus/discovery/file"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/thanos-io/objstore/providers/s3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -49,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -121,9 +126,141 @@ func TestQuery(t *testing.T) {
 	prom4, sidecar4 := e2ethanos.NewPrometheusWithSidecar(e, "ha2", e2ethanos.DefaultPromConfig("prom-ha", 1, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
+	fileSDPath, err := createSDFile(e.SharedDir(), "1", []string{sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")})
+	testutil.Ok(t, err)
+
 	// Querier. Both fileSD and directly by flags.
 	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")).
-		WithFileSDStoreAddresses(sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")).Init()
+		WithFileSDStoreAddresses(fileSDPath).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+		Deduplicate: false,
+	}, []model.Metric{
+		{
+			"job":        "myself",
+			"prometheus": "prom-alone",
+			"replica":    "0",
+		},
+		{
+			"job":        "myself",
+			"prometheus": "prom-both-remote-write-and-sidecar",
+			"receive":    "receive-1",
+			"replica":    "1234",
+			"tenant_id":  "default-tenant",
+		},
+		{
+			"job":        "myself",
+			"prometheus": "prom-both-remote-write-and-sidecar",
+			"replica":    "1234",
+		},
+		{
+			"job":        "myself",
+			"prometheus": "prom-ha",
+			"replica":    "0",
+		},
+		{
+			"job":        "myself",
+			"prometheus": "prom-ha",
+			"replica":    "1",
+		},
+	})
+
+	// With deduplication.
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, []model.Metric{
+		{
+			"job":        "myself",
+			"prometheus": "prom-alone",
+		},
+		{
+			"job":        "myself",
+			"prometheus": "prom-both-remote-write-and-sidecar",
+			"receive":    "receive-1",
+			"tenant_id":  "default-tenant",
+		},
+		{
+			"job":        "myself",
+			"prometheus": "prom-both-remote-write-and-sidecar",
+		},
+		{
+			"job":        "myself",
+			"prometheus": "prom-ha",
+		},
+	})
+}
+
+// NOTE: by using aggregation all results are now unsorted.
+const (
+	queryUpWithoutInstance = "sum(up) without (instance)"
+	ContainerSharedDir     = "/shared"
+)
+
+func createSDFile(sharedDir string, name string, fileSDStoreAddresses []string) (string, error) {
+	if len(fileSDStoreAddresses) > 0 {
+		queryFileSDDir := filepath.Join(sharedDir, "data", "querier", name)
+		container := filepath.Join(ContainerSharedDir, "data", "querier", name)
+		if err := os.MkdirAll(queryFileSDDir, 0750); err != nil {
+			return "", errors.Wrap(err, "create query dir failed")
+		}
+
+		fileSD := []*targetgroup.Group{{}}
+		for _, a := range fileSDStoreAddresses {
+			fileSD[0].Targets = append(fileSD[0].Targets, model.LabelSet{model.AddressLabel: model.LabelValue(a)})
+		}
+
+		b, err := yaml.Marshal(fileSD)
+		if err != nil {
+			return "", err
+		}
+
+		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.yaml", b, 0600); err != nil {
+			return "", errors.Wrap(err, "creating query SD config failed")
+		}
+		return filepath.Join(container, "filesd.yaml"), nil
+	}
+	return "", nil
+}
+
+func TestQueryWithEndpointConfig(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("e2e_endpointconfig")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", e2ethanos.DefaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom3, sidecar3 := e2ethanos.NewPrometheusWithSidecar(e, "ha1", e2ethanos.DefaultPromConfig("prom-ha", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom4, sidecar4 := e2ethanos.NewPrometheusWithSidecar(e, "ha2", e2ethanos.DefaultPromConfig("prom-ha", 1, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
+
+	// Querier. Both fileSD and directly by flags.
+	fileSDPath, err := createSDFile(e.SharedDir(), "1", []string{sidecar3.InternalEndpoint("grpc"), sidecar4.InternalEndpoint("grpc")})
+	testutil.Ok(t, err)
+
+	endpointConfig := []query.EndpointConfig{
+		{
+			Endpoints: []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")},
+		},
+		{
+			Endpoints: []string{receiver.InternalEndpoint("grpc")},
+			EndpointsSD: &file.SDConfig{
+				Files:           []string{fileSDPath},
+				RefreshInterval: model.Duration(time.Minute),
+			},
+		},
+	}
+	q := e2ethanos.NewQuerierBuilder(e, "1").WithEndpointConfig(endpointConfig).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
