@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
@@ -426,6 +427,13 @@ func runQuery(
 		return errors.Wrap(err, "loading endpoint config")
 	}
 
+	var EndpointsSDDiscoverer *file.Discovery
+	for _, config := range endpointConfig {
+		if config.EndpointsSD != nil && len(config.EndpointsSD.Files) > 0 {
+			EndpointsSDDiscoverer = file.NewDiscovery(config.EndpointsSD, logger)
+		}
+	}
+
 	dnsEndpointProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_query_endpoints_", reg),
@@ -543,46 +551,44 @@ func runQuery(
 	}
 
 	// Run File Service Discovery and update the store set when the files are modified.
-	for _, e := range endpointConfig {
-		// Run File Service Discovery and update the store set when the files are modified.
-		if e.EndpointsSDDiscoverer != nil {
-			var fileSDUpdates chan []*targetgroup.Group
-			ctxRun, cancelRun := context.WithCancel(context.Background())
 
-			fileSDUpdates = make(chan []*targetgroup.Group)
+	if EndpointsSDDiscoverer != nil {
+		var fileSDUpdates chan []*targetgroup.Group
+		ctxRun, cancelRun := context.WithCancel(context.Background())
 
-			g.Add(func() error {
-				e.EndpointsSDDiscoverer.Run(ctxRun, fileSDUpdates)
-				return nil
-			}, func(error) {
-				cancelRun()
-			})
+		fileSDUpdates = make(chan []*targetgroup.Group)
 
-			ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
-			g.Add(func() error {
-				for {
-					select {
-					case update := <-fileSDUpdates:
-						// Discoverers sometimes send nil updates so need to check for it to avoid panics.
-						if update == nil {
-							continue
-						}
-						fileSDCache.Update(update)
-						endpoints.Update(ctxUpdate)
+		g.Add(func() error {
+			EndpointsSDDiscoverer.Run(ctxRun, fileSDUpdates)
+			return nil
+		}, func(error) {
+			cancelRun()
+		})
 
-						if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
-							level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
-						}
-
-						// Rules apis do not support file service discovery as of now.
-					case <-ctxUpdate.Done():
-						return nil
+		ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
+		g.Add(func() error {
+			for {
+				select {
+				case update := <-fileSDUpdates:
+					// Discoverers sometimes send nil updates so need to check for it to avoid panics.
+					if update == nil {
+						continue
 					}
+					fileSDCache.Update(update)
+					endpoints.Update(ctxUpdate)
+
+					if err := dnsStoreProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...)); err != nil {
+						level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
+					}
+
+					// Rules apis do not support file service discovery as of now.
+				case <-ctxUpdate.Done():
+					return nil
 				}
-			}, func(error) {
-				cancelUpdate()
-			})
-		}
+			}
+		}, func(error) {
+			cancelUpdate()
+		})
 	}
 	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
 	{

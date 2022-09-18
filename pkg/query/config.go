@@ -8,9 +8,8 @@ import (
 )
 
 type EndpointConfig struct {
-	Endpoints             []string       `yaml:"addresses"`
-	EndpointsSD           *file.SDConfig `yaml:"file_sd_configs"`
-	EndpointsSDDiscoverer *file.Discovery
+	Endpoints   []string       `yaml:"addresses"`
+	EndpointsSD *file.SDConfig `yaml:"file_sd_configs"`
 }
 
 // LoadConfig returns list of per-endpoint TLS config.
@@ -37,10 +36,5 @@ func LoadConfig(logger log.Logger, confYAML []byte, endpointAddrs []string, glob
 		endpointConfig = append(endpointConfig, cfg)
 	}
 
-	for i, config := range endpointConfig {
-		if config.EndpointsSD != nil && len(config.EndpointsSD.Files) > 0 {
-			endpointConfig[i].EndpointsSDDiscoverer = file.NewDiscovery(config.EndpointsSD, logger)
-		}
-	}
 	return endpointConfig, nil
 }
