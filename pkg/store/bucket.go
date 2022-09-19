@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/cespare/xxhash"
 	"io"
 	"math"
 	"os"
@@ -318,8 +319,8 @@ type BucketStore struct {
 	enableSeriesResponseHints bool
 }
 
-func (b *BucketStore) validate() error {
-	if b.blockSyncConcurrency < minBlockSyncConcurrency {
+func (s *BucketStore) validate() error {
+	if s.blockSyncConcurrency < minBlockSyncConcurrency {
 		return errBlockSyncConcurrencyNotValid
 	}
 	return nil
@@ -893,7 +894,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 		if err != nil {
 			return err
 		}
-		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: xxhash.Sum64(b)}
 		return nil
 	}
 	if in.Encoding() != downsample.ChunkEncAggr {
@@ -913,7 +914,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: xxhash.Sum64(b)}
 		case storepb.Aggr_SUM:
 			x, err := ac.Get(downsample.AggrSum)
 			if err != nil {
@@ -923,7 +924,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: xxhash.Sum64(b)}
 		case storepb.Aggr_MIN:
 			x, err := ac.Get(downsample.AggrMin)
 			if err != nil {
@@ -933,7 +934,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: xxhash.Sum64(b)}
 		case storepb.Aggr_MAX:
 			x, err := ac.Get(downsample.AggrMax)
 			if err != nil {
@@ -943,7 +944,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: xxhash.Sum64(b)}
 		case storepb.Aggr_COUNTER:
 			x, err := ac.Get(downsample.AggrCounter)
 			if err != nil {
@@ -953,7 +954,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: xxhash.Sum64(b)}
 		}
 	}
 	return nil

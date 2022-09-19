@@ -1275,14 +1275,14 @@ func (m *WriteRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Replica != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.Replica))
+		i = encodeVariantRpc(dAtA, i, uint64(m.Replica))
 		i--
 		dAtA[i] = 0x18
 	}
 	if len(m.Tenant) > 0 {
 		i -= len(m.Tenant)
 		copy(dAtA[i:], m.Tenant)
-		i = encodeVarintRpc(dAtA, i, uint64(len(m.Tenant)))
+		i = encodeVariantRpc(dAtA, i, uint64(len(m.Tenant)))
 		i--
 		dAtA[i] = 0x12
 	}
@@ -1294,7 +1294,7 @@ func (m *WriteRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 					return 0, err
 				}
 				i -= size
-				i = encodeVarintRpc(dAtA, i, uint64(size))
+				i = encodeVariantRpc(dAtA, i, uint64(size))
 			}
 			i--
 			dAtA[i] = 0xa
@@ -1354,24 +1354,24 @@ func (m *InfoResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 					return 0, err
 				}
 				i -= size
-				i = encodeVarintRpc(dAtA, i, uint64(size))
+				i = encodeVariantRpc(dAtA, i, uint64(size))
 			}
 			i--
 			dAtA[i] = 0x2a
 		}
 	}
 	if m.StoreType != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.StoreType))
+		i = encodeVariantRpc(dAtA, i, uint64(m.StoreType))
 		i--
 		dAtA[i] = 0x20
 	}
 	if m.MaxTime != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.MaxTime))
+		i = encodeVariantRpc(dAtA, i, uint64(m.MaxTime))
 		i--
 		dAtA[i] = 0x18
 	}
 	if m.MinTime != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.MinTime))
+		i = encodeVariantRpc(dAtA, i, uint64(m.MinTime))
 		i--
 		dAtA[i] = 0x10
 	}
@@ -1383,7 +1383,7 @@ func (m *InfoResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				if _, err := m.Labels[iNdEx].MarshalTo(dAtA[i:]); err != nil {
 					return 0, err
 				}
-				i = encodeVarintRpc(dAtA, i, uint64(size))
+				i = encodeVariantRpc(dAtA, i, uint64(size))
 			}
 			i--
 			dAtA[i] = 0xa
@@ -1419,7 +1419,7 @@ func (m *SeriesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0x6a
@@ -1431,18 +1431,18 @@ func (m *SeriesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0x62
 	}
 	if m.Range != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.Range))
+		i = encodeVariantRpc(dAtA, i, uint64(m.Range))
 		i--
 		dAtA[i] = 0x58
 	}
 	if m.Step != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.Step))
+		i = encodeVariantRpc(dAtA, i, uint64(m.Step))
 		i--
 		dAtA[i] = 0x50
 	}
@@ -1453,7 +1453,7 @@ func (m *SeriesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0x4a
@@ -1469,7 +1469,7 @@ func (m *SeriesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		dAtA[i] = 0x40
 	}
 	if m.PartialResponseStrategy != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.PartialResponseStrategy))
+		i = encodeVariantRpc(dAtA, i, uint64(m.PartialResponseStrategy))
 		i--
 		dAtA[i] = 0x38
 	}
@@ -1497,12 +1497,12 @@ func (m *SeriesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		}
 		i -= j4
 		copy(dAtA[i:], dAtA5[:j4])
-		i = encodeVarintRpc(dAtA, i, uint64(j4))
+		i = encodeVariantRpc(dAtA, i, uint64(j4))
 		i--
 		dAtA[i] = 0x2a
 	}
 	if m.MaxResolutionWindow != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.MaxResolutionWindow))
+		i = encodeVariantRpc(dAtA, i, uint64(m.MaxResolutionWindow))
 		i--
 		dAtA[i] = 0x20
 	}
@@ -1514,19 +1514,19 @@ func (m *SeriesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 					return 0, err
 				}
 				i -= size
-				i = encodeVarintRpc(dAtA, i, uint64(size))
+				i = encodeVariantRpc(dAtA, i, uint64(size))
 			}
 			i--
 			dAtA[i] = 0x1a
 		}
 	}
 	if m.MaxTime != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.MaxTime))
+		i = encodeVariantRpc(dAtA, i, uint64(m.MaxTime))
 		i--
 		dAtA[i] = 0x10
 	}
 	if m.MinTime != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.MinTime))
+		i = encodeVariantRpc(dAtA, i, uint64(m.MinTime))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -1560,7 +1560,7 @@ func (m *QueryHints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0x2a
@@ -1572,7 +1572,7 @@ func (m *QueryHints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0x22
@@ -1584,13 +1584,13 @@ func (m *QueryHints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0x12
 	}
 	if m.StepMillis != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.StepMillis))
+		i = encodeVariantRpc(dAtA, i, uint64(m.StepMillis))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -1621,7 +1621,7 @@ func (m *ShardInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Labels[iNdEx])
 			copy(dAtA[i:], m.Labels[iNdEx])
-			i = encodeVarintRpc(dAtA, i, uint64(len(m.Labels[iNdEx])))
+			i = encodeVariantRpc(dAtA, i, uint64(len(m.Labels[iNdEx])))
 			i--
 			dAtA[i] = 0x22
 		}
@@ -1637,12 +1637,12 @@ func (m *ShardInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		dAtA[i] = 0x18
 	}
 	if m.TotalShards != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.TotalShards))
+		i = encodeVariantRpc(dAtA, i, uint64(m.TotalShards))
 		i--
 		dAtA[i] = 0x10
 	}
 	if m.ShardIndex != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.ShardIndex))
+		i = encodeVariantRpc(dAtA, i, uint64(m.ShardIndex))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -1672,7 +1672,7 @@ func (m *Func) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if len(m.Name) > 0 {
 		i -= len(m.Name)
 		copy(dAtA[i:], m.Name)
-		i = encodeVarintRpc(dAtA, i, uint64(len(m.Name)))
+		i = encodeVariantRpc(dAtA, i, uint64(len(m.Name)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1703,7 +1703,7 @@ func (m *Grouping) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Labels[iNdEx])
 			copy(dAtA[i:], m.Labels[iNdEx])
-			i = encodeVarintRpc(dAtA, i, uint64(len(m.Labels[iNdEx])))
+			i = encodeVariantRpc(dAtA, i, uint64(len(m.Labels[iNdEx])))
 			i--
 			dAtA[i] = 0x1a
 		}
@@ -1742,7 +1742,7 @@ func (m *Range) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Millis != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.Millis))
+		i = encodeVariantRpc(dAtA, i, uint64(m.Millis))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -1795,7 +1795,7 @@ func (m *SeriesResponse_Series) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0xa
@@ -1811,7 +1811,7 @@ func (m *SeriesResponse_Warning) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	i := len(dAtA)
 	i -= len(m.Warning)
 	copy(dAtA[i:], m.Warning)
-	i = encodeVarintRpc(dAtA, i, uint64(len(m.Warning)))
+	i = encodeVariantRpc(dAtA, i, uint64(len(m.Warning)))
 	i--
 	dAtA[i] = 0x12
 	return len(dAtA) - i, nil
@@ -1830,7 +1830,7 @@ func (m *SeriesResponse_Hints) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0x1a
@@ -1865,7 +1865,7 @@ func (m *LabelNamesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 					return 0, err
 				}
 				i -= size
-				i = encodeVarintRpc(dAtA, i, uint64(size))
+				i = encodeVariantRpc(dAtA, i, uint64(size))
 			}
 			i--
 			dAtA[i] = 0x32
@@ -1878,23 +1878,23 @@ func (m *LabelNamesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0x2a
 	}
 	if m.End != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.End))
+		i = encodeVariantRpc(dAtA, i, uint64(m.End))
 		i--
 		dAtA[i] = 0x20
 	}
 	if m.Start != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.Start))
+		i = encodeVariantRpc(dAtA, i, uint64(m.Start))
 		i--
 		dAtA[i] = 0x18
 	}
 	if m.PartialResponseStrategy != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.PartialResponseStrategy))
+		i = encodeVariantRpc(dAtA, i, uint64(m.PartialResponseStrategy))
 		i--
 		dAtA[i] = 0x10
 	}
@@ -1938,7 +1938,7 @@ func (m *LabelNamesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0x1a
@@ -1947,7 +1947,7 @@ func (m *LabelNamesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		for iNdEx := len(m.Warnings) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Warnings[iNdEx])
 			copy(dAtA[i:], m.Warnings[iNdEx])
-			i = encodeVarintRpc(dAtA, i, uint64(len(m.Warnings[iNdEx])))
+			i = encodeVariantRpc(dAtA, i, uint64(len(m.Warnings[iNdEx])))
 			i--
 			dAtA[i] = 0x12
 		}
@@ -1956,7 +1956,7 @@ func (m *LabelNamesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		for iNdEx := len(m.Names) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Names[iNdEx])
 			copy(dAtA[i:], m.Names[iNdEx])
-			i = encodeVarintRpc(dAtA, i, uint64(len(m.Names[iNdEx])))
+			i = encodeVariantRpc(dAtA, i, uint64(len(m.Names[iNdEx])))
 			i--
 			dAtA[i] = 0xa
 		}
@@ -1992,7 +1992,7 @@ func (m *LabelValuesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 					return 0, err
 				}
 				i -= size
-				i = encodeVarintRpc(dAtA, i, uint64(size))
+				i = encodeVariantRpc(dAtA, i, uint64(size))
 			}
 			i--
 			dAtA[i] = 0x3a
@@ -2005,23 +2005,23 @@ func (m *LabelValuesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0x32
 	}
 	if m.End != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.End))
+		i = encodeVariantRpc(dAtA, i, uint64(m.End))
 		i--
 		dAtA[i] = 0x28
 	}
 	if m.Start != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.Start))
+		i = encodeVariantRpc(dAtA, i, uint64(m.Start))
 		i--
 		dAtA[i] = 0x20
 	}
 	if m.PartialResponseStrategy != 0 {
-		i = encodeVarintRpc(dAtA, i, uint64(m.PartialResponseStrategy))
+		i = encodeVariantRpc(dAtA, i, uint64(m.PartialResponseStrategy))
 		i--
 		dAtA[i] = 0x18
 	}
@@ -2038,7 +2038,7 @@ func (m *LabelValuesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if len(m.Label) > 0 {
 		i -= len(m.Label)
 		copy(dAtA[i:], m.Label)
-		i = encodeVarintRpc(dAtA, i, uint64(len(m.Label)))
+		i = encodeVariantRpc(dAtA, i, uint64(len(m.Label)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -2072,7 +2072,7 @@ func (m *LabelValuesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				return 0, err
 			}
 			i -= size
-			i = encodeVarintRpc(dAtA, i, uint64(size))
+			i = encodeVariantRpc(dAtA, i, uint64(size))
 		}
 		i--
 		dAtA[i] = 0x1a
@@ -2081,7 +2081,7 @@ func (m *LabelValuesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		for iNdEx := len(m.Warnings) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Warnings[iNdEx])
 			copy(dAtA[i:], m.Warnings[iNdEx])
-			i = encodeVarintRpc(dAtA, i, uint64(len(m.Warnings[iNdEx])))
+			i = encodeVariantRpc(dAtA, i, uint64(len(m.Warnings[iNdEx])))
 			i--
 			dAtA[i] = 0x12
 		}
@@ -2090,7 +2090,7 @@ func (m *LabelValuesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		for iNdEx := len(m.Values) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.Values[iNdEx])
 			copy(dAtA[i:], m.Values[iNdEx])
-			i = encodeVarintRpc(dAtA, i, uint64(len(m.Values[iNdEx])))
+			i = encodeVariantRpc(dAtA, i, uint64(len(m.Values[iNdEx])))
 			i--
 			dAtA[i] = 0xa
 		}
@@ -2098,7 +2098,7 @@ func (m *LabelValuesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func encodeVarintRpc(dAtA []byte, offset int, v uint64) int {
+func encodeVariantRpc(dAtA []byte, offset int, v uint64) int {
 	offset -= sovRpc(v)
 	base := offset
 	for v >= 1<<7 {

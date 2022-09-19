@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/cespare/xxhash"
 	"io"
 	"math"
 	"math/rand"
@@ -2129,6 +2130,99 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 			})
 			testutil.Equals(t, tc.expectedValuesHints, valuesHints)
 		})
+	}
+}
+
+func TestSeries_ChuncksHaveHashRepresentation(t *testing.T) {
+	tb := testutil.NewTB(t)
+
+	tmpDir := t.TempDir()
+
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = filepath.Join(tmpDir, "block")
+
+	h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, h.Close()) }()
+
+	series := labels.FromStrings("__name__", "test")
+	app := h.Appender(context.Background())
+	for ts := int64(0); ts < 10_000; ts++ {
+		_, err := app.Append(0, series, ts, float64(ts))
+		testutil.Ok(t, err)
+	}
+	testutil.Ok(t, app.Commit())
+
+	blk := createBlockFromHead(t, headOpts.ChunkDirRoot, h)
+
+	thanosMeta := metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: "1"}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}
+
+	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(headOpts.ChunkDirRoot, blk.String()), thanosMeta, nil)
+	testutil.Ok(t, err)
+
+	// Create a bucket and upload the block there.
+	bktDir := filepath.Join(tmpDir, "bucket")
+	bkt, err := filesystem.NewBucket(bktDir)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, bkt.Close()) }()
+
+	instrBkt := objstore.WithNoopInstr(bkt)
+	logger := log.NewNopLogger()
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, filepath.Join(headOpts.ChunkDirRoot, blk.String()), metadata.NoneFunc))
+
+	// Instance a real bucket store we'll use to query the series.
+	fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
+	testutil.Ok(tb, err)
+
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+	testutil.Ok(tb, err)
+
+	store, err := NewBucketStore(
+		instrBkt,
+		fetcher,
+		tmpDir,
+		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
+		NewSeriesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		10,
+		false,
+		DefaultPostingOffsetInMemorySampling,
+		true,
+		false,
+		0,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
+	)
+	testutil.Ok(tb, err)
+	testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+	reqMinTime := math.MinInt64
+	reqMaxTime := math.MaxInt64
+
+	req := &storepb.SeriesRequest{
+		MinTime: int64(reqMinTime),
+		MaxTime: int64(reqMaxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "test"},
+		},
+	}
+
+	srv := newStoreSeriesServer(context.Background())
+	err = store.Series(req, srv)
+	testutil.Ok(t, err)
+	testutil.Assert(t, len(srv.SeriesSet) == 1)
+
+	for _, rawChunk := range srv.SeriesSet[0].Chunks {
+		hash := rawChunk.Raw.Hash
+		decodedChunk, err := chunkenc.FromData(chunkenc.EncXOR, rawChunk.Raw.Data)
+		testutil.Ok(t, err)
+
+		expectedHash := xxhash.Sum64(decodedChunk.Bytes())
+		testutil.Equals(t, expectedHash, hash)
 	}
 }
 
