@@ -2204,26 +2204,49 @@ func TestSeries_ChuncksHaveHashRepresentation(t *testing.T) {
 	reqMinTime := math.MinInt64
 	reqMaxTime := math.MaxInt64
 
-	req := &storepb.SeriesRequest{
-		MinTime: int64(reqMinTime),
-		MaxTime: int64(reqMaxTime),
-		Matchers: []storepb.LabelMatcher{
-			{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "test"},
+	testCases := []struct {
+		name              string
+		calculateChecksum bool
+	}{
+		{
+			name:              "calculate checksum",
+			calculateChecksum: true,
+		},
+		{
+			name:              "do not calculate checksum",
+			calculateChecksum: false,
 		},
 	}
 
-	srv := newStoreSeriesServer(context.Background())
-	err = store.Series(req, srv)
-	testutil.Ok(t, err)
-	testutil.Assert(t, len(srv.SeriesSet) == 1)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &storepb.SeriesRequest{
+				MinTime: int64(reqMinTime),
+				MaxTime: int64(reqMaxTime),
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "test"},
+				},
+				CalculateChunkChecksums: tc.calculateChecksum,
+			}
 
-	for _, rawChunk := range srv.SeriesSet[0].Chunks {
-		hash := rawChunk.Raw.Hash
-		decodedChunk, err := chunkenc.FromData(chunkenc.EncXOR, rawChunk.Raw.Data)
-		testutil.Ok(t, err)
+			srv := newStoreSeriesServer(context.Background())
+			err = store.Series(req, srv)
+			testutil.Ok(t, err)
+			testutil.Assert(t, len(srv.SeriesSet) == 1)
 
-		expectedHash := xxhash.Sum64(decodedChunk.Bytes())
-		testutil.Equals(t, expectedHash, hash)
+			for _, rawChunk := range srv.SeriesSet[0].Chunks {
+				hash := rawChunk.Raw.Hash
+				decodedChunk, err := chunkenc.FromData(chunkenc.EncXOR, rawChunk.Raw.Data)
+				testutil.Ok(t, err)
+
+				if tc.calculateChecksum {
+					expectedHash := xxhash.Sum64(decodedChunk.Bytes())
+					testutil.Equals(t, expectedHash, hash)
+				} else {
+					testutil.Equals(t, uint64(0), hash)
+				}
+			}
+		})
 	}
 }
 
@@ -2421,7 +2444,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				indexReader := blk.indexReader()
 				chunkReader := blk.chunkReader()
 
-				seriesSet, _, err := blockSeries(ctx, nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, nil, dummyCounter)
+				seriesSet, _, err := blockSeries(ctx, nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, nil, dummyCounter, false)
 				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).
