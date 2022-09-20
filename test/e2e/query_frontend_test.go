@@ -594,7 +594,7 @@ func TestRangeQueryShardingWithRandomData(t *testing.T) {
 func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("query-frontend")
+	e, err := e2e.NewDockerEnvironment("query-frontend-dynamic-shards")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
