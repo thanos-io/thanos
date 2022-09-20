@@ -122,6 +122,9 @@ message SeriesRequest {
   // shard_info is used by the querier to request a specific
   // shard of blocks instead of entire blocks.
   ShardInfo shard_info = 13;
+
+  // Control whether the store should calculate the checksum/hash of chunks
+  bool calculate_chunk_checksums = 14;
 }
 
 

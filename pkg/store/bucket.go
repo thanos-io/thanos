@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/cespare/xxhash"
 	"io"
 	"math"
 	"os"
@@ -19,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cespare/xxhash"
 
 	"github.com/alecthomas/units"
 	"github.com/go-kit/log"

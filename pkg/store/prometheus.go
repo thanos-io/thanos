@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cespare/xxhash"
+
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/timestamp"
 
@@ -412,6 +414,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 						// has one difference. Prometheus has Chunk_UNKNOWN Chunk_Encoding = 0 vs we start from
 						// XOR as 0. Compensate for that here:
 						Type: storepb.Chunk_Encoding(chk.Type - 1),
+						Hash: xxhash.Sum64(chk.Data),
 					},
 				}
 				seriesStats.Samples += thanosChks[i].Raw.XORNumSamples()
@@ -512,7 +515,7 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 		chks = append(chks, storepb.AggrChunk{
 			MinTime: samples[0].Timestamp,
 			MaxTime: samples[chunkSize-1].Timestamp,
-			Raw:     &storepb.Chunk{Type: enc, Data: cb},
+			Raw:     &storepb.Chunk{Type: enc, Data: cb, Hash: xxhash.Sum64(cb)},
 		})
 
 		samples = samples[chunkSize:]

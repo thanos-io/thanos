@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/cespare/xxhash"
 	"io"
 	"math"
 	"math/rand"
@@ -22,6 +21,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/cespare/xxhash"
 
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
