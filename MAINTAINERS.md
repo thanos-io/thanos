@@ -37,7 +37,7 @@ Full list of triage persons is displayed below:
 | Xiang Dai       | `@daixiang0`       | [@daixiang0](https://github.com/daixiang0)   |         |
 | Jimmie Han      | `@hanjm`           | [@hanjm](https://github.com/hanjm)           | Tencent |
 | Matej Gera      | `@Matej Gera`      | [@matej-g](https://github.com/matej-g)       | Red Hat |
-| Filip Petkovski | `@Filip Petkovski` | [@fpetkovski](https://github.com/fpetkovski) |         |
+| Filip Petkovski | `@Filip Petkovski` | [@fpetkovski](https://github.com/fpetkovski) | Shopify |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 
