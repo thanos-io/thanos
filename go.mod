@@ -68,10 +68,10 @@ require (
 	github.com/prometheus/exporter-toolkit v0.7.1
 	// Prometheus maps version 2.x.y to tags v0.x.y.
 	github.com/prometheus/prometheus v0.38.0
-	github.com/sony/gobreaker v0.4.1
+	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.0
 	github.com/thanos-community/promql-engine v0.0.0-20220920130216-1ec1401acc2c
-	github.com/thanos-io/objstore v0.0.0-20220715165016-ce338803bc1e
+	github.com/thanos-io/objstore v0.0.0-20220825160751-a53cb72ffecc
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
@@ -111,16 +111,11 @@ require (
 	cloud.google.com/go/compute v1.7.0 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
 	cloud.google.com/go/storage v1.22.1 // indirect
-	github.com/Azure/azure-pipeline-go v0.2.3 // indirect
-	github.com/Azure/azure-storage-blob-go v0.14.0 // indirect
-	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
-	github.com/Azure/go-autorest/autorest v0.11.28 // indirect
-	github.com/Azure/go-autorest/autorest/adal v0.9.21 // indirect
-	github.com/Azure/go-autorest/autorest/azure/auth v0.5.11 // indirect
-	github.com/Azure/go-autorest/autorest/azure/cli v0.4.5 // indirect
-	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
-	github.com/Azure/go-autorest/logger v0.2.1 // indirect
-	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.1.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1 // indirect
+	github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.32.3 // indirect
 	github.com/OneOfOne/xxhash v1.2.6 // indirect
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
@@ -149,7 +144,6 @@ require (
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
 	github.com/dennwc/varint v1.0.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
-	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
 	github.com/efficientgo/core v1.0.0-rc.0 // indirect
 	github.com/elastic/go-sysinfo v1.8.1 // indirect
@@ -172,7 +166,9 @@ require (
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.1.0 // indirect
+	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/gogo/googleapis v1.4.0 // indirect
+	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
 	github.com/golang-jwt/jwt/v4 v4.4.1 // indirect
 	github.com/google/btree v1.0.1 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
@@ -195,10 +191,10 @@ require (
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.1.0 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lightstep/lightstep-tracer-common/golang/gogo v0.0.0-20210210170715-a8dfcb80d3a7 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
-	github.com/mattn/go-ieproxy v0.0.1 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
@@ -210,6 +206,8 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mozillazg/go-httpheader v0.2.1 // indirect
 	github.com/ncw/swift v1.0.53 // indirect
+	github.com/oracle/oci-go-sdk/v65 v65.13.0 // indirect
+	github.com/pkg/browser v0.0.0-20210115035449-ce105d075bb4 // indirect
 	github.com/prometheus/common/sigv4 v0.1.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
@@ -265,4 +263,4 @@ replace (
 	k8s.io/klog/v2 => github.com/simonpasquier/klog-gokit/v3 v3.0.0
 )
 
-go 1.17
+go 1.18
