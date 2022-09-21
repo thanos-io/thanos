@@ -767,13 +767,13 @@ func (er *endpointRef) SupportsSharding() bool {
 func (er *endpointRef) String() string {
 	mint, maxt := er.TimeRange()
 	return fmt.Sprintf(
-		"StoreType: %s Addr: %s LabelSets: %v Mint: %d Maxt: %d",
-		store.Remote, er.addr, labelpb.PromLabelSetsToString(er.LabelSets()), mint, maxt,
+		"Addr: %s LabelSets: %v Mint: %d Maxt: %d",
+		er.addr, labelpb.PromLabelSetsToString(er.LabelSets()), mint, maxt,
 	)
 }
 
-func (er *endpointRef) StoreInfo() (store.StoreType, string) {
-	return store.Remote, er.addr
+func (er *endpointRef) Addr() (string, bool) {
+	return er.addr, false
 }
 
 func (er *endpointRef) Close() {

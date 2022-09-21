@@ -116,17 +116,17 @@ func (l *localClient) TimeRange() (mint int64, maxt int64) {
 func (l *localClient) String() string {
 	mint, maxt := l.timeRangeFunc()
 	return fmt.Sprintf(
-		"StoreType: %s LabelSets: %v Mint: %d Maxt: %d",
-		store.Local, labelpb.PromLabelSetsToString(l.LabelSets()), mint, maxt,
+		"LabelSets: %v Mint: %d Maxt: %d",
+		labelpb.PromLabelSetsToString(l.LabelSets()), mint, maxt,
 	)
 }
 
-func (l *localClient) StoreInfo() (store.StoreType, string) {
-	return store.Local, ""
+func (l *localClient) Addr() (string, bool) {
+	return "", true
 }
 
 func (l *localClient) SupportsSharding() bool {
-	return false
+	return true
 }
 
 type tenant struct {

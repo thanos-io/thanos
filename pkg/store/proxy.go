@@ -35,16 +35,6 @@ type ctxKey int
 // StoreMatcherKey is the context key for the store's allow list.
 const StoreMatcherKey = ctxKey(0)
 
-// StoreType determines if the store for a given client is a local store
-// (i.e. using server-as-client with in-process stream) or a store to which
-// the client connects remotely over gRPC.
-type StoreType string
-
-const (
-	Remote StoreType = "remote"
-	Local  StoreType = "local"
-)
-
 // Client holds meta information about a store.
 type Client interface {
 	// StoreClient to access the store.
@@ -59,10 +49,12 @@ type Client interface {
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
 
+	// String returns the string representation of the store client.
 	String() string
 
-	// StoreInfo returns the store type and address (if it's a remote store).
-	StoreInfo() (clientType StoreType, addr string)
+	// Addr returns address of the store client. If second parameter is true, the client
+	// represents a local client (server-as-client) and has no remote address.
+	Addr() (addr string, isLocalClient bool)
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -367,8 +359,8 @@ func storeMatchDebugMetadata(s Client, storeDebugMatchers [][]*labels.Matcher) (
 		return true, ""
 	}
 
-	clientType, addr := s.StoreInfo()
-	if clientType != Remote {
+	addr, isLocal := s.Addr()
+	if isLocal {
 		return false, "the store is not remote, cannot match __address__"
 	}
 
@@ -480,15 +472,15 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 	for _, st := range s.stores() {
 		st := st
 
-		storeClientType, storeAddr := st.StoreInfo()
+		storeAddr, isLocalStore := st.Addr()
 		storeID := labelpb.PromLabelSetsToString(st.LabelSets())
 		if storeID == "" {
 			storeID = "Store Gateway"
 		}
 		span, gctx = tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
-			"store.id":          storeID,
-			"store.addr":        storeAddr,
-			"store.client_type": storeClientType,
+			"store.id":       storeID,
+			"store.addr":     storeAddr,
+			"store.is_local": isLocalStore,
 		})
 		defer span.Finish()
 

@@ -42,7 +42,7 @@ type testClient struct {
 	minTime          int64
 	maxTime          int64
 	supportsSharding bool
-	storeType        StoreType
+	isLocalStore     bool
 }
 
 func (c testClient) LabelSets() []labels.Labels {
@@ -61,12 +61,8 @@ func (c testClient) String() string {
 	return "test"
 }
 
-func (c testClient) StoreInfo() (StoreType, string) {
-	if c.storeType != "" {
-		return c.storeType, "testaddr"
-	}
-
-	return Local, "testaddr"
+func (c testClient) Addr() (string, bool) {
+	return "testaddr", c.isLocalStore
 }
 
 type mockedSeriesServer struct {
@@ -461,7 +457,6 @@ func TestProxyStore_Series(t *testing.T) {
 					minTime:   1,
 					maxTime:   300,
 					labelSets: []labels.Labels{labels.FromStrings("ext", "1")},
-					storeType: Remote,
 				},
 			},
 			req: &storepb.SeriesRequest{
@@ -1424,7 +1419,6 @@ func TestProxyStore_LabelNames(t *testing.T) {
 							Names: []string{"a", "b"},
 						},
 					},
-					storeType: Remote,
 				},
 			},
 			req: &storepb.LabelNamesRequest{
@@ -1987,13 +1981,14 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 
 func TestProxyStore_storeMatchMetadata(t *testing.T) {
 	c := testClient{}
+	c.isLocalStore = true
 
 	ok, reason := storeMatchDebugMetadata(c, [][]*labels.Matcher{{}})
 	testutil.Assert(t, !ok)
 	testutil.Equals(t, "the store is not remote, cannot match __address__", reason)
 
-	// Change type to remote.
-	c.storeType = Remote
+	// Change client to remote.
+	c.isLocalStore = false
 
 	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "wrong")}})
 	testutil.Assert(t, !ok)

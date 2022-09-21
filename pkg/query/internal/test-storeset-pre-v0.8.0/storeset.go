@@ -211,13 +211,13 @@ func (s *storeRef) SupportsSharding() bool {
 func (s *storeRef) String() string {
 	mint, maxt := s.TimeRange()
 	return fmt.Sprintf(
-		"StoreType: %s Addr: %s LabelSets: %v Mint: %d Maxt: %d",
-		store.Remote, s.addr, labelpb.PromLabelSetsToString(s.LabelSets()), mint, maxt,
+		"Addr: %s LabelSets: %v Mint: %d Maxt: %d",
+		s.addr, labelpb.PromLabelSetsToString(s.LabelSets()), mint, maxt,
 	)
 }
 
-func (s *storeRef) StoreInfo() (store.StoreType, string) {
-	return store.Remote, s.addr
+func (s *storeRef) Addr() (string, bool) {
+	return s.addr, false
 }
 
 func (s *storeRef) close() {

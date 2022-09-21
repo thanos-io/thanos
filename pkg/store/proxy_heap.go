@@ -494,7 +494,7 @@ func newAsyncRespSet(ctx context.Context,
 	var span opentracing.Span
 	var closeSeries context.CancelFunc
 
-	storeClientType, storeAddr := st.StoreInfo()
+	storeAddr, isLocalStore := st.Addr()
 	storeID := labelpb.PromLabelSetsToString(st.LabelSets())
 	if storeID == "" {
 		storeID = "Store Gateway"
@@ -505,9 +505,9 @@ func newAsyncRespSet(ctx context.Context,
 	})
 
 	span, seriesCtx = tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
-		"store.id":         storeID,
-		"store.clientType": storeClientType,
-		"store.addr":       storeAddr,
+		"store.id":       storeID,
+		"store.is_local": isLocalStore,
+		"store.addr":     storeAddr,
 	})
 
 	seriesCtx, closeSeries = context.WithCancel(seriesCtx)

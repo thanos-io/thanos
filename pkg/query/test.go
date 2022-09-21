@@ -657,5 +657,5 @@ func (i inProcessClient) SupportsSharding() bool {
 	return false
 }
 
-func (i inProcessClient) String() string                       { return i.name }
-func (i inProcessClient) StoreInfo() (store.StoreType, string) { return store.Local, i.name }
+func (i inProcessClient) String() string       { return i.name }
+func (i inProcessClient) Addr() (string, bool) { return i.name, true }
