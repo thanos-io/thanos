@@ -246,7 +246,7 @@ func runSidecar(
 	{
 		c := promclient.NewWithTracingClient(logger, httpClient, httpconfig.ThanosUserAgent)
 
-		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version)
+		promStore, err := store.NewPrometheusStore(logger, reg, c, conf.prometheus.url, component.Sidecar, m.Labels, m.Timestamps, m.Version, conf.limitMaxMatchedSeries)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -469,15 +469,16 @@ func (s *promMetadata) Version() string {
 }
 
 type sidecarConfig struct {
-	http         httpConfig
-	grpc         grpcConfig
-	prometheus   prometheusConfig
-	tsdb         tsdbConfig
-	reloader     reloaderConfig
-	reqLogConfig *extflag.PathOrContent
-	objStore     extflag.PathOrContent
-	shipper      shipperConfig
-	limitMinTime thanosmodel.TimeOrDurationValue
+	http                  httpConfig
+	grpc                  grpcConfig
+	prometheus            prometheusConfig
+	tsdb                  tsdbConfig
+	reloader              reloaderConfig
+	reqLogConfig          *extflag.PathOrContent
+	objStore              extflag.PathOrContent
+	shipper               shipperConfig
+	limitMinTime          thanosmodel.TimeOrDurationValue
+	limitMaxMatchedSeries int
 }
 
 func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -491,4 +492,5 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.shipper.registerFlag(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&sc.limitMinTime)
+	cmd.Flag("max-matched-series", "Maximum number of series can be matched before reading series data").Default("0").IntVar(&sc.limitMaxMatchedSeries)
 }

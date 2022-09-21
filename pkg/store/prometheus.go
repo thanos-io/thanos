@@ -6,6 +6,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -57,6 +58,8 @@ type PrometheusStore struct {
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 
 	framesRead prometheus.Histogram
+	
+	limitMaxMatchedSeries int
 }
 
 // Label{Values,Names} call with matchers is supported for Prometheus versions >= 2.24.0.
@@ -77,6 +80,7 @@ func NewPrometheusStore(
 	externalLabelsFn func() labels.Labels,
 	timestamps func() (mint int64, maxt int64),
 	promVersion func() string,
+	limitMaxMatchedSeries int,
 ) (*PrometheusStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -101,6 +105,7 @@ func NewPrometheusStore(
 				Buckets: prometheus.ExponentialBuckets(10, 10, 5),
 			},
 		),
+		limitMaxMatchedSeries: limitMaxMatchedSeries,
 	}
 	return p, nil
 }
@@ -153,6 +158,17 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	}
 	if len(matchers) == 0 {
 		return status.Error(codes.InvalidArgument, "no matchers specified (excluding external labels)")
+	}
+
+	if p.limitMaxMatchedSeries > 0 {
+		matchedSeriesCount, err := p.getMatchedSeriesCount(matchers)
+		if err != nil {
+			return errors.Wrap(err, "get matched series count")
+		}
+
+		if matchedSeriesCount > p.limitMaxMatchedSeries {
+			return errors.New("matched series limit reached")
+		}
 	}
 
 	// Don't ask for more than available time. This includes potential `minTime` flag limit.
@@ -698,4 +714,40 @@ func (p *PrometheusStore) LabelSet() []labelpb.ZLabelSet {
 
 func (p *PrometheusStore) Timestamps() (mint int64, maxt int64) {
 	return p.timestamps()
+}
+
+func (p *PrometheusStore) getMatchedSeriesCount(matchers []*labels.Matcher) (int, error) {
+	params := url.Values{}
+	for _, m := range matchers {
+		params.Add("match[]", m.String())
+	}
+
+	req, err := http.NewRequest(http.MethodGet, p.base.String()+"/api/v1/series?only_count=1", nil)
+	if err != nil {
+		return -1, errors.Wrap(err, "new series count request")
+	}
+
+	c := http.Client{}
+	res, err := c.Do(req)
+	if err != nil {
+		return -1, errors.Wrap(err, "execute series count request")
+	}
+
+	if res.StatusCode != 200 {
+		return -1, fmt.Errorf("returned status code: %v", res.StatusCode)
+	}
+
+	defer res.Body.Close()
+
+	type respModel struct {
+		Status string `json:"status"`
+		Data   int    `json:"data"`
+	}
+
+	var resp respModel
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return -1, errors.Wrap(err, "decode resp body")
+	}
+
+	return resp.Data, nil
 }

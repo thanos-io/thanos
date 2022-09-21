@@ -20,6 +20,15 @@ ifeq ($(arch), x86_64)
     # amd64
     BASE_DOCKER_SHA=${amd64}
 else ifeq ($(arch), armv8)
+	# arm64
+	BASE_DOCKER_SHA=${arm64}
+else ifeq ($(arch), arm64)
+	# arm64
+	BASE_DOCKER_SHA=${arm64}
+else ifeq ($(arch), aarch64)
+        # arm64
+        BASE_DOCKER_SHA=${arm64}
+else ifeq ($(arch), armv8)
     # arm64
     BASE_DOCKER_SHA=${arm64}
 else
