@@ -764,6 +764,17 @@ func (er *endpointRef) SupportsSharding() bool {
 	return er.metadata.Store.SupportsSharding
 }
 
+func (er *endpointRef) SendsSortedSeries() bool {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	if er.metadata == nil || er.metadata.Store == nil {
+		return false
+	}
+
+	return er.metadata.Store.SendsSortedSeries
+}
+
 func (er *endpointRef) String() string {
 	mint, maxt := er.TimeRange()
 	return fmt.Sprintf(
