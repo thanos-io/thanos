@@ -58,7 +58,7 @@ type PrometheusStore struct {
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 
 	framesRead prometheus.Histogram
-	
+
 	limitMaxMatchedSeries int
 }
 
@@ -718,11 +718,12 @@ func (p *PrometheusStore) Timestamps() (mint int64, maxt int64) {
 
 func (p *PrometheusStore) getMatchedSeriesCount(matchers []*labels.Matcher) (int, error) {
 	params := url.Values{}
+	params.Set("only_count", "1")
 	for _, m := range matchers {
 		params.Add("match[]", m.String())
 	}
 
-	req, err := http.NewRequest(http.MethodGet, p.base.String()+"/api/v1/series?only_count=1", nil)
+	req, err := http.NewRequest(http.MethodGet, p.base.String()+"/api/v1/series?"+params.Encode(), nil)
 	if err != nil {
 		return -1, errors.Wrap(err, "new series count request")
 	}
