@@ -10,6 +10,8 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/cespare/xxhash"
+
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -197,7 +199,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 				Raw: &storepb.Chunk{
 					Type: storepb.Chunk_Encoding(chk.Chunk.Encoding() - 1), // Proto chunk encoding is one off to TSDB one.
 					Data: chk.Chunk.Bytes(),
-					Hash: hashChunk(chk.Chunk.Bytes(), r.CalculateChunkChecksums),
+					Hash: hashChunk(xxhash.New(), chk.Chunk.Bytes(), r.CalculateChunkChecksums),
 				},
 			}
 			frameBytesLeft -= c.Size()
