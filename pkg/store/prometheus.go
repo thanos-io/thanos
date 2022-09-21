@@ -161,7 +161,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	}
 
 	if p.limitMaxMatchedSeries > 0 {
-		matchedSeriesCount, err := p.getMatchedSeriesCount(matchers)
+		matchedSeriesCount, err := p.getMatchedSeriesCount(matchers, r.MinTime, r.MaxTime)
 		if err != nil {
 			return errors.Wrap(err, "get matched series count")
 		}
@@ -716,8 +716,10 @@ func (p *PrometheusStore) Timestamps() (mint int64, maxt int64) {
 	return p.timestamps()
 }
 
-func (p *PrometheusStore) getMatchedSeriesCount(matchers []*labels.Matcher) (int, error) {
+func (p *PrometheusStore) getMatchedSeriesCount(matchers []*labels.Matcher, start, end int64) (int, error) {
 	params := url.Values{}
+	params.Set("start", fmt.Sprintf("%v", start))
+	params.Set("end", fmt.Sprintf("%v", end))
 	params.Set("only_count", "1")
 	for _, m := range matchers {
 		params.Add("match[]", m.String())
