@@ -312,7 +312,7 @@ func runReceive(
 			dbs.TSDBLocalClients,
 			comp,
 			labels.Labels{},
-			10*time.Second,
+			0,
 			store.EagerRetrieval,
 		)
 		rw := store.ReadWriteTSDBStore{
