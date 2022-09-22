@@ -29,7 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
-var ErrMultiReplicaStoreDetected = fmt.Errorf("a store has sent multiple replicas of the same series")
+var ErrUnsortedSeriesSetDetected = fmt.Errorf("a store has sent unsorted series or multiple replicas of the same series")
 
 type ctxKey int
 
@@ -305,10 +305,13 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		return nil
 	}
 
+	var unsortedSeriesSetDetected bool
 	storeResponses := make([]respSet, 0, len(stores))
-
 	for _, st := range stores {
 		st := st
+		if !st.SendsSortedSeries() {
+			unsortedSeriesSetDetected = true
+		}
 
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
@@ -344,8 +347,9 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 		}
 	}
-	if respHeap.MultiReplicaRespSetDetected() {
-		if err := srv.Send(storepb.NewWarnSeriesResponse(ErrMultiReplicaStoreDetected)); err != nil {
+
+	if unsortedSeriesSetDetected || respHeap.MultiReplicaRespSetDetected() {
+		if err := srv.Send(storepb.NewWarnSeriesResponse(ErrUnsortedSeriesSetDetected)); err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send warn response").Error())
 		}
 	}

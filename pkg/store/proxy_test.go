@@ -56,7 +56,7 @@ func (c testClient) SupportsSharding() bool {
 }
 
 func (c testClient) SendsSortedSeries() bool {
-	return false
+	return true
 }
 
 func (c testClient) String() string {

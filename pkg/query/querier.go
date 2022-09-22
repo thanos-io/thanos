@@ -167,7 +167,7 @@ type seriesServer struct {
 
 func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 	if r.GetWarning() != "" {
-		if r.GetWarning() == store.ErrMultiReplicaStoreDetected.Error() {
+		if r.GetWarning() == store.ErrUnsortedSeriesSetDetected.Error() {
 			s.sortRequired = true
 		} else {
 			s.warnings = append(s.warnings, r.GetWarning())

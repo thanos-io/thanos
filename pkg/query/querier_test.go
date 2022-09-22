@@ -1031,7 +1031,6 @@ func TestSelect(t *testing.T) {
 			},
 			dedupLabels: []string{"b", "b1"},
 		},
-
 		{
 			name: "pushdown marker",
 			input: []store.Client{
@@ -1066,6 +1065,24 @@ func TestSelect(t *testing.T) {
 						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "4")),
 						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-2", "c", "3")),
 						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-2", "c", "4")),
+					},
+				},
+			},
+			exp: []labels.Labels{
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+			},
+			dedupLabels: []string{"b"},
+		},
+		{
+			name: "unsorted series response",
+			input: []store.Client{
+				&storeClientStub{
+					respSet: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "3", "d", "4")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "4")),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "b", "replica-1", "c", "3")),
 					},
 				},
 			},
@@ -1196,6 +1213,10 @@ func (s *localClient) TimeRange() (mint int64, maxt int64) { return math.MinInt6
 
 func (s *localClient) SupportsSharding() bool { return false }
 
+func (s *localClient) SendsSortedSeries() bool {
+	return true
+}
+
 func (s *localClient) Addr() string { return "" }
 
 // storeClientStub is test gRPC store API client.
@@ -1213,6 +1234,15 @@ func (s *storeClientStub) LabelSets() []labels.Labels { return nil }
 func (s *storeClientStub) TimeRange() (mint int64, maxt int64) { return math.MinInt64, math.MaxInt64 }
 
 func (s *storeClientStub) SupportsSharding() bool { return false }
+
+func (s *storeClientStub) SendsSortedSeries() bool {
+	return sort.SliceIsSorted(s.respSet, func(i, j int) bool {
+		iResp := s.respSet[i]
+		jResp := s.respSet[j]
+
+		return store.ResponseEquals(iResp, jResp)
+	})
+}
 
 func (s *storeClientStub) Addr() string { return "" }
 
