@@ -100,7 +100,6 @@ require (
 
 require (
 	github.com/efficientgo/core v1.0.0-rc.0
-	github.com/thanos-io/objstore v0.0.0-20220825160751-a53cb72ffecc
 	go.opentelemetry.io/otel v1.10.0
 	go.opentelemetry.io/otel/bridge/opentracing v1.10.0
 	go.opentelemetry.io/otel/sdk v1.9.0
@@ -258,6 +257,7 @@ replace (
 
 	// Override due to https://github.com/weaveworks/common/issues/239
 	google.golang.org/grpc => google.golang.org/grpc v1.45.0
+
 	// Overriding to use latest commit.
 	gopkg.in/alecthomas/kingpin.v2 => github.com/alecthomas/kingpin v1.3.8-0.20210301060133-17f40c25f497
 
