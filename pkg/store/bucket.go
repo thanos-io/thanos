@@ -103,6 +103,7 @@ const (
 
 var (
 	errBlockSyncConcurrencyNotValid = errors.New("the block sync concurrency must be equal or greater than 1.")
+	hashPool                        = sync.Pool{New: func() interface{} { return xxhash.New() }}
 )
 
 type bucketStoreMetrics struct {
@@ -892,21 +893,12 @@ func blockSeries(
 }
 
 func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, save func([]byte) ([]byte, error), calculateChecksum bool) error {
-
-	hp := sync.Pool{
-		New: func() interface{} {
-			return xxhash.New()
-		},
-	}
-	hasher := hp.Get().(hash.Hash64)
-	defer hp.Put(hasher)
-
 	if in.Encoding() == chunkenc.EncXOR {
 		b, err := save(in.Bytes())
 		if err != nil {
 			return err
 		}
-		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
 		return nil
 	}
 	if in.Encoding() != downsample.ChunkEncAggr {
@@ -926,7 +918,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
 		case storepb.Aggr_SUM:
 			x, err := ac.Get(downsample.AggrSum)
 			if err != nil {
@@ -936,7 +928,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
 		case storepb.Aggr_MIN:
 			x, err := ac.Get(downsample.AggrMin)
 			if err != nil {
@@ -946,7 +938,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
 		case storepb.Aggr_MAX:
 			x, err := ac.Get(downsample.AggrMax)
 			if err != nil {
@@ -956,7 +948,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
 		case storepb.Aggr_COUNTER:
 			x, err := ac.Get(downsample.AggrCounter)
 			if err != nil {
@@ -966,20 +958,23 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
 		}
 	}
 	return nil
 }
 
-func hashChunk(i hash.Hash64, b []byte, doHash bool) uint64 {
+func hashChunk(b []byte, doHash bool) uint64 {
+	hasher := hashPool.Get().(hash.Hash64)
+	defer hashPool.Put(hasher)
+
 	if !doHash {
 		return 0
 	}
-	i.Reset()
+	hasher.Reset()
 	// Write never returns an error on the hasher implementation
-	_, _ = i.Write(b)
-	return i.Sum64()
+	_, _ = hasher.Write(b)
+	return hasher.Sum64()
 }
 
 // debugFoundBlockSetOverview logs on debug level what exactly blocks we used for query in terms of

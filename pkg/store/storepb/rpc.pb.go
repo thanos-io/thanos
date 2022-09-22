@@ -292,7 +292,7 @@ type SeriesRequest struct {
 	// shard_info is used by the querier to request a specific
 	// shard of blocks instead of entire blocks.
 	ShardInfo *ShardInfo `protobuf:"bytes,13,opt,name=shard_info,json=shardInfo,proto3" json:"shard_info,omitempty"`
-	// Control whether the store should calculate the checksum/hash of chunks,
+	// Control whether the store should calculate the checksum/hash of chunks.
 	CalculateChunkChecksums bool `protobuf:"varint,14,opt,name=calculate_chunk_checksums,json=calculateChunkChecksums,proto3" json:"calculate_chunk_checksums,omitempty"`
 }
 
