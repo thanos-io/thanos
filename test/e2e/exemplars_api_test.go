@@ -6,11 +6,11 @@ package e2e_test
 import (
 	"context"
 	"fmt"
-	e2emon "github.com/efficientgo/e2e/monitoring"
 	"testing"
 	"time"
 
 	"github.com/efficientgo/e2e"
+	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/timestamp"
 
