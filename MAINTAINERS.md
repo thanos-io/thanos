@@ -11,6 +11,7 @@
 | Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)   | Polar Signals       |
 | Ben Ye                | yb532204897@gmail.com  | `@yeya24`                | [@yeya24](https://github.com/yeya24)           | Amazon Web Services |
 | Wiard van Rij         | wiard@outlook.com      | `@wiard van Rij`         | [@wiardvanrij](https://github.com/wiardvanrij) | Roku                |
+| Matej Gera            | matejgera@gmail.com    | `@Matej Gera`            | [@matej-g](https://github.com/matej-g)         | Red Hat             |
 
 We are bunch of people from different companies with various interests and skills. We are from different parts of the world: Germany, Italy, Lithuania, Poland, UK, India and China. We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
 
@@ -36,8 +37,7 @@ Full list of triage persons is displayed below:
 | Michael Dai     | `@jojohappy`       | [@jojohappy](https://github.com/jojohappy)   |         |
 | Xiang Dai       | `@daixiang0`       | [@daixiang0](https://github.com/daixiang0)   |         |
 | Jimmie Han      | `@hanjm`           | [@hanjm](https://github.com/hanjm)           | Tencent |
-| Matej Gera      | `@Matej Gera`      | [@matej-g](https://github.com/matej-g)       | Red Hat |
-| Filip Petkovski | `@Filip Petkovski` | [@fpetkovski](https://github.com/fpetkovski) |         |
+| Filip Petkovski | `@Filip Petkovski` | [@fpetkovski](https://github.com/fpetkovski) | Shopify |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 
