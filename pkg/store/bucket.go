@@ -893,12 +893,15 @@ func blockSeries(
 }
 
 func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, save func([]byte) ([]byte, error), calculateChecksum bool) error {
+	hasher := hashPool.Get().(hash.Hash64)
+	defer hashPool.Put(hasher)
+
 	if in.Encoding() == chunkenc.EncXOR {
 		b, err := save(in.Bytes())
 		if err != nil {
 			return err
 		}
-		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
+		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		return nil
 	}
 	if in.Encoding() != downsample.ChunkEncAggr {
@@ -918,7 +921,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
+			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_SUM:
 			x, err := ac.Get(downsample.AggrSum)
 			if err != nil {
@@ -928,7 +931,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
+			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_MIN:
 			x, err := ac.Get(downsample.AggrMin)
 			if err != nil {
@@ -938,7 +941,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
+			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_MAX:
 			x, err := ac.Get(downsample.AggrMax)
 			if err != nil {
@@ -948,7 +951,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
+			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_COUNTER:
 			x, err := ac.Get(downsample.AggrCounter)
 			if err != nil {
@@ -958,16 +961,13 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(b, calculateChecksum)}
+			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		}
 	}
 	return nil
 }
 
-func hashChunk(b []byte, doHash bool) uint64 {
-	hasher := hashPool.Get().(hash.Hash64)
-	defer hashPool.Put(hasher)
-
+func hashChunk(hasher hash.Hash64, b []byte, doHash bool) uint64 {
 	if !doHash {
 		return 0
 	}
