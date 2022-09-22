@@ -6,6 +6,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	e2emon "github.com/efficientgo/e2e/monitoring"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -129,7 +130,7 @@ func TestQuery(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 	queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 		Deduplicate: false,
@@ -356,7 +357,7 @@ func TestQueryWithAuthorizedSidecar(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 	queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 		Deduplicate: false,
@@ -435,7 +436,7 @@ config:
 			t.Cleanup(cancel)
 
 			// We should have single TCP connection, since all APIs are against the same server.
-			testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+			testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 			queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 				Deduplicate: false,
@@ -630,7 +631,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc"), sidecar1.InternalEndpoint("grpc")).WithEnabledFeatures([]string{"query-pushdown"}).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
-	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1), "thanos_blocks_meta_synced"))
 
 	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, []fakeMetricSample{
 		{
@@ -1062,7 +1063,7 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 	}))
 }
 
-func synthesizeFakeMetricSamples(ctx context.Context, prometheus e2e.InstrumentedRunnable, testSamples []fakeMetricSample) error {
+func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, testSamples []fakeMetricSample) error {
 	samples := make([]model.Sample, len(testSamples))
 	for i, s := range testSamples {
 		samples[i] = newSample(s)
@@ -1071,7 +1072,7 @@ func synthesizeFakeMetricSamples(ctx context.Context, prometheus e2e.Instrumente
 	return synthesizeSamples(ctx, prometheus, samples)
 }
 
-func synthesizeSamples(ctx context.Context, prometheus e2e.InstrumentedRunnable, samples []model.Sample) error {
+func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, samples []model.Sample) error {
 	remoteWriteURL, err := url.Parse("http://" + prometheus.Endpoint("http") + "/api/v1/write")
 	if err != nil {
 		return err
@@ -1555,7 +1556,7 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 	querier2 := e2ethanos.NewQuerierBuilder(e, "2", querier1.InternalEndpoint("grpc")).WithProxyStrategy("lazy").WithDisablePartialResponses(true).Init()
 
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar, querier1, querier2))
-	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 	result := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
 		return "sum(up)"

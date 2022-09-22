@@ -13,11 +13,14 @@ import (
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	e2einteractive "github.com/efficientgo/e2e/interactive"
-	e2emonitoring "github.com/efficientgo/e2e/monitoring"
+	e2emon "github.com/efficientgo/e2e/monitoring"
+	"github.com/efficientgo/e2e/monitoring/promconfig"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/objstore/providers/s3"
-	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 	tracingclient "github.com/thanos-io/thanos/pkg/tracing/client"
@@ -118,7 +121,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e.Close)
 
-	m, err := e2emonitoring.Start(e)
+	m, err := e2emon.Start(e)
 	testutil.Ok(t, err)
 
 	// Initialize object storage with two buckets (our long term storage).
@@ -249,27 +252,30 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	testutil.Ok(t, exec("sh", "-c", "find "+prom1Data+"/ -maxdepth 1 -type d | tail -5 | xargs -I {} cp -r {} "+promHA1.Dir())) // Copy only 5 blocks from 9 to mimic replica 1 with partial data set.
 	testutil.Ok(t, exec("cp", "-r", prom2Data+"/.", prom2.Dir()))
 
-	testutil.Ok(t, promHA0.SetConfig(`
-global:
-  external_labels:
-    cluster: eu-1
-    replica: 0
-`,
-	))
-	testutil.Ok(t, promHA1.SetConfig(`
-global:
-  external_labels:
-    cluster: eu-1
-    replica: 1
-`,
-	))
-	testutil.Ok(t, prom2.SetConfig(`
-global:
-  external_labels:
-    cluster: us-1
-    replica: 0
-`,
-	))
+	testutil.Ok(t, promHA0.SetConfig(promconfig.Config{
+		GlobalConfig: promconfig.GlobalConfig{
+			ExternalLabels: map[model.LabelName]model.LabelValue{
+				"cluster": "eu-1",
+				"replica": "0",
+			},
+		},
+	}))
+	testutil.Ok(t, promHA1.SetConfig(promconfig.Config{
+		GlobalConfig: promconfig.GlobalConfig{
+			ExternalLabels: map[model.LabelName]model.LabelValue{
+				"cluster": "eu-1",
+				"replica": "1",
+			},
+		},
+	}))
+	testutil.Ok(t, prom2.SetConfig(promconfig.Config{
+		GlobalConfig: promconfig.GlobalConfig{
+			ExternalLabels: map[model.LabelName]model.LabelValue{
+				"cluster": "us-1",
+				"replica": "0",
+			},
+		},
+	}))
 
 	testutil.Ok(t, e2e.StartAndWaitReady(m1))
 	testutil.Ok(t, e2e.StartAndWaitReady(promHA0, promHA1, prom2, sidecarHA0, sidecarHA1, sidecar2, store1, store2))
@@ -332,7 +338,7 @@ global:
 	testutil.Ok(t, e2e.StartAndWaitReady(query1))
 
 	// Wait until we have 5 gRPC connections.
-	testutil.Ok(t, query1.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, query1.WaitSumMetricsWithOptions(e2emon.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 	const path = "graph?g0.expr=sum(continuous_app_metric0)%20by%20(cluster%2C%20replica)&g0.tab=0&g0.stacked=0&g0.range_input=2w&g0.max_source_resolution=0s&g0.deduplicate=0&g0.partial_response=0&g0.store_matches=%5B%5D&g0.end_input=2021-07-27%2000%3A00%3A00"
 	testutil.Ok(t, e2einteractive.OpenInBrowser(fmt.Sprintf("http://%s/%s", query1.Endpoint("http"), path)))

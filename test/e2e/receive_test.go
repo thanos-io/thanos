@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/backoff"
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
-	e2emonitoring "github.com/efficientgo/e2e/monitoring"
-	"github.com/efficientgo/tools/core/pkg/backoff"
+	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/relabel"
 
@@ -78,7 +78,7 @@ func TestReceive(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 		// We expect the data from each Prometheus instance to be replicated twice across our ingesting instances
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
@@ -157,7 +157,7 @@ func TestReceive(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 		expectedReplicationFactor := 2.0
 
@@ -260,7 +260,7 @@ func TestReceive(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 		expectedReplicationFactor := 3.0
 
@@ -355,7 +355,7 @@ func TestReceive(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
@@ -423,7 +423,7 @@ func TestReceive(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
@@ -489,7 +489,7 @@ func TestReceive(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
@@ -543,7 +543,7 @@ func TestReceive(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		}, []model.Metric{
@@ -592,7 +592,7 @@ func TestReceive(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 		// Label `prometheus` should be dropped.
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
@@ -649,7 +649,7 @@ func TestReceive(t *testing.T) {
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// This can be treated as the meta-monitoring service.
-		meta, err := e2emonitoring.Start(e)
+		meta, err := e2emon.Start(e)
 		testutil.Ok(t, err)
 
 		// Setup 3 RouterIngestors with a limit of 10 active series.
@@ -674,7 +674,7 @@ func TestReceive(t *testing.T) {
 		querier := e2ethanos.NewQuerierBuilder(e, "1", ingestor1.InternalEndpoint("grpc"), ingestor2.InternalEndpoint("grpc"), ingestor3.InternalEndpoint("grpc")).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(querier))
 
-		testutil.Ok(t, querier.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+		testutil.Ok(t, querier.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 		// We run two avalanches, one tenant which exceeds the limit, and one tenant which remains under it.
 
@@ -720,7 +720,7 @@ func TestReceive(t *testing.T) {
 
 		// Here, 3/5 requests are failed due to limiting, as one request fails due to TSDB readiness and we ingest one initial request.
 		// 3 limited requests belong to the exceed-tenant.
-		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2e.Equals(3), []string{"thanos_receive_head_series_limited_requests_total"}, e2e.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2e.WaitMissingMetrics()))
+		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_receive_head_series_limited_requests_total"}, e2emon.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2emon.WaitMissingMetrics()))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)

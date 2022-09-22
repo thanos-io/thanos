@@ -15,8 +15,8 @@ require (
 	github.com/chromedp/chromedp v0.8.2
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
-	github.com/efficientgo/e2e v0.12.2-0.20220823124751-37e916144e6b
-	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd
+	github.com/efficientgo/e2e v0.13.1-0.20220922081603-45de9fc588a8
+	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd // indirect
 	github.com/efficientgo/tools/extkingpin v0.0.0-20220801101838-3312908f6a9d
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.2.0
@@ -100,6 +100,8 @@ require (
 )
 
 require (
+	github.com/efficientgo/core v1.0.0-rc.0
+	github.com/thanos-io/objstore v0.0.0-20220825160751-a53cb72ffecc
 	go.opentelemetry.io/otel v1.10.0
 	go.opentelemetry.io/otel/bridge/opentracing v1.10.0
 	go.opentelemetry.io/otel/sdk v1.9.0
@@ -145,7 +147,6 @@ require (
 	github.com/dennwc/varint v1.0.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
-	github.com/efficientgo/core v1.0.0-rc.0 // indirect
 	github.com/elastic/go-sysinfo v1.8.1 // indirect
 	github.com/elastic/go-windows v1.0.1 // indirect
 	github.com/fatih/color v1.13.0 // indirect
@@ -160,7 +161,7 @@ require (
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.20.0 // indirect
 	github.com/go-openapi/loads v0.21.1 // indirect
-	github.com/go-openapi/spec v0.20.5 // indirect
+	github.com/go-openapi/spec v0.20.4 // indirect
 	github.com/go-openapi/swag v0.21.1 // indirect
 	github.com/go-openapi/validate v0.21.0 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
