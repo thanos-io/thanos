@@ -98,9 +98,11 @@ func (d *dedupResponseHeap) Next() bool {
 			break
 		}
 
+		// Unless a response comes from query pushdown, it is safe to merge
+		// chunks from replica series together into one slice.
 		signature := resp.signature
 		lastSignature := d.responses[len(d.responses)-1].signature
-		if signature == lastSignature {
+		if signature == lastSignature && !resp.hasPushdownMarker {
 			d.responses = append(d.responses, resp)
 		} else {
 			// This one is different. It will be taken care of via the next Next() call.
@@ -281,21 +283,24 @@ func (h *ProxyResponseHeap) At() *signedResponse {
 }
 
 type signedResponse struct {
-	signature uint64
+	signature         uint64
+	hasPushdownMarker bool
 	*storepb.SeriesResponse
 }
 
-func newSignedResponse(signature uint64, series *storepb.SeriesResponse) *signedResponse {
+func newSignedResponse(signature uint64, hasPushdownMarker bool, series *storepb.SeriesResponse) *signedResponse {
 	return &signedResponse{
-		signature:      signature,
-		SeriesResponse: series,
+		signature:         signature,
+		hasPushdownMarker: hasPushdownMarker,
+		SeriesResponse:    series,
 	}
 }
 
 func newUnsignedResponse(series *storepb.SeriesResponse) *signedResponse {
 	return &signedResponse{
-		signature:      0,
-		SeriesResponse: series,
+		signature:         0,
+		hasPushdownMarker: false,
+		SeriesResponse:    series,
 	}
 }
 
@@ -838,12 +843,17 @@ func sortLabelsForDedup(
 	if s == nil {
 		return newUnsignedResponse(resp)
 	}
+
 	if len(replicaLabels) == 0 {
 		signature := labelpb.HashWithPrefix("", s.Labels)
-		return newSignedResponse(signature, resp)
+		return newSignedResponse(signature, false, resp)
 	}
 
+	var hasPushdownMarker bool
 	for _, lbl := range s.Labels {
+		if lbl.Name == dedup.PushdownMarker.Name {
+			hasPushdownMarker = true
+		}
 		if _, ok := replicaLabelSet[lbl.Name]; !ok {
 			continue
 		}
@@ -871,5 +881,5 @@ func sortLabelsForDedup(
 	})
 
 	signature, _ := labelpb.ZLabelsToPromLabels(s.Labels).HashWithoutLabels(buf, replicaLabels...)
-	return newSignedResponse(signature, resp)
+	return newSignedResponse(signature, hasPushdownMarker, resp)
 }
