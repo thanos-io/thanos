@@ -332,6 +332,9 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	respHeap := NewDedupResponseHeap(NewProxyResponseHeap(storeResponses...))
 	for respHeap.Next() {
 		resp := respHeap.At()
+		if resp == nil {
+			continue
+		}
 
 		if resp.GetWarning() != "" && (r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT) {
 			return status.Error(codes.Aborted, resp.GetWarning())
