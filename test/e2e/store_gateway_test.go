@@ -40,7 +40,7 @@ const testQuery = "{a=\"1\"}"
 func TestStoreGateway(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-store-gateway")
+	e, err := e2e.NewDockerEnvironment("store-gateway")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -278,7 +278,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 func TestStoreGatewayMemcachedCache(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-store-gateway-memcached-cache")
+	e, err := e2e.NewDockerEnvironment("store-memcached")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -380,7 +380,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 func TestStoreGatewayGroupCache(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-store-gateway-groupcache")
+	e, err := e2e.NewDockerEnvironment("store-groupcache")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 

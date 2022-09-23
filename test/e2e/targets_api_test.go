@@ -28,7 +28,7 @@ import (
 func TestTargetsAPI_Fanout(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-targets-fanout")
+	e, err := e2e.NewDockerEnvironment("targets-fanout")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 

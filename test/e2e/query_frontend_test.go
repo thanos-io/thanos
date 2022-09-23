@@ -29,7 +29,7 @@ import (
 func TestQueryFrontend(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-frontend")
+	e, err := e2e.NewDockerEnvironment("query-frontend")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -397,7 +397,7 @@ func TestQueryFrontend(t *testing.T) {
 func TestQueryFrontendMemcachedCache(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-frontend-memcached")
+	e, err := e2e.NewDockerEnvironment("qf-memcached")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -524,7 +524,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 func TestRangeQueryShardingWithRandomData(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-range-query-sharding-random-data")
+	e, err := e2e.NewDockerEnvironment("rq-sharding")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -594,7 +594,7 @@ func TestRangeQueryShardingWithRandomData(t *testing.T) {
 func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-frontend")
+	e, err := e2e.NewDockerEnvironment("query-frontend")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -689,7 +689,7 @@ func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 func TestInstantQueryShardingWithRandomData(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-instant-query-sharding-random-data")
+	e, err := e2e.NewDockerEnvironment("query-sharding")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 

@@ -60,7 +60,7 @@ func TestReceive(t *testing.T) {
 		*/
 
 		t.Parallel()
-		e, err := e2e.NewDockerEnvironment("e2e-receive-single-ingestor")
+		e, err := e2e.NewDockerEnvironment("single-ingestor")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -125,7 +125,7 @@ func TestReceive(t *testing.T) {
 		*/
 
 		t.Parallel()
-		e, err := e2e.NewDockerEnvironment("e2e-receive-router-replication")
+		e, err := e2e.NewDockerEnvironment("routerReplica")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -224,7 +224,7 @@ func TestReceive(t *testing.T) {
 		*/
 
 		t.Parallel()
-		e, err := e2e.NewDockerEnvironment("e2e-receive-routing-tree")
+		e, err := e2e.NewDockerEnvironment("routing-tree")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -320,7 +320,7 @@ func TestReceive(t *testing.T) {
 		*/
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("e2e-test-receive-hashring")
+		e, err := e2e.NewDockerEnvironment("hashring")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -387,7 +387,7 @@ func TestReceive(t *testing.T) {
 	t.Run("replication", func(t *testing.T) {
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("e2e-test-receive-replication")
+		e, err := e2e.NewDockerEnvironment("replication")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -455,7 +455,7 @@ func TestReceive(t *testing.T) {
 	t.Run("replication_with_outage", func(t *testing.T) {
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("e2e-test-receive-replication-with-outage")
+		e, err := e2e.NewDockerEnvironment("outage")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -514,7 +514,7 @@ func TestReceive(t *testing.T) {
 	t.Run("multitenancy", func(t *testing.T) {
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("e2e-test-for-multitenancy")
+		e, err := e2e.NewDockerEnvironment("multitenancy")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -566,7 +566,7 @@ func TestReceive(t *testing.T) {
 
 	t.Run("relabel", func(t *testing.T) {
 		t.Parallel()
-		e, err := e2e.NewDockerEnvironment("e2e-receive-relabel")
+		e, err := e2e.NewDockerEnvironment("receive-relabel")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -644,7 +644,7 @@ func TestReceive(t *testing.T) {
 		*/
 
 		t.Parallel()
-		e, err := e2e.NewDockerEnvironment("e2e-multitenant-active-series-limiting")
+		e, err := e2e.NewDockerEnvironment("active-series")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 

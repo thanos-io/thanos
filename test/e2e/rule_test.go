@@ -504,7 +504,7 @@ func TestRule(t *testing.T) {
 func TestRule_CanRemoteWriteData(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-rule-remote-write")
+	e, err := e2e.NewDockerEnvironment("rule-rw")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 

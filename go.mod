@@ -15,7 +15,7 @@ require (
 	github.com/chromedp/chromedp v0.8.2
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
-	github.com/efficientgo/e2e v0.13.1-0.20220922081603-45de9fc588a8
+	github.com/efficientgo/e2e v0.13.1-0.20220923082810-8fa9daa8af8a
 	github.com/efficientgo/tools/extkingpin v0.0.0-20220801101838-3312908f6a9d
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.2.0
@@ -70,7 +70,7 @@ require (
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.0
 	github.com/thanos-community/promql-engine v0.0.0-20220920130216-1ec1401acc2c
-	github.com/thanos-io/objstore v0.0.0-20220825160751-a53cb72ffecc
+	github.com/thanos-io/objstore v0.0.0-20220923084403-cec51c61948b
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
@@ -250,8 +250,6 @@ replace (
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
-
-	github.com/thanos-io/objstore => github.com/yeya24/objstore v0.0.0-20220922180308-1fe6830f03a6
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
 
