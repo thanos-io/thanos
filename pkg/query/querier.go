@@ -374,8 +374,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	return dedup.NewSeriesSet(set, q.replicaLabelSet, hints.Func, q.enableQueryPushdown), nil
 }
 
-// sortSeries re-sorts the set so that the same series with different replica
-// labels are coming right after each other.
+// sortSeries re-sorts the series set. Used in case one server sends unsorted data.
 func sortSeries(set []storepb.Series) {
 	sort.Slice(set, func(i, j int) bool {
 		return labels.Compare(labelpb.ZLabelsToPromLabels(set[i].Labels), labelpb.ZLabelsToPromLabels(set[j].Labels)) < 0
