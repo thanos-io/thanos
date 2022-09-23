@@ -1240,7 +1240,7 @@ func (s *storeClientStub) SendsSortedSeries() bool {
 		iResp := s.respSet[i]
 		jResp := s.respSet[j]
 
-		return store.ResponseEquals(iResp, jResp)
+		return iResp.Less(jResp)
 	})
 }
 

@@ -20,7 +20,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -174,22 +173,6 @@ func (d *dedupResponseHeap) MultiReplicaRespSetDetected() bool {
 	return d.h.HasMultiReplicaRespSets()
 }
 
-func ResponseEquals(iResp *storepb.SeriesResponse, jResp *storepb.SeriesResponse) bool {
-	if iResp.GetSeries() != nil && jResp.GetSeries() != nil {
-		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
-		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)
-		return labels.Compare(iLbls, jLbls) < 0
-	} else if iResp.GetSeries() == nil && jResp.GetSeries() != nil {
-		return true
-	} else if iResp.GetSeries() != nil && jResp.GetSeries() == nil {
-		return false
-	}
-
-	// If it is not a series then the order does not matter. What matters
-	// is that we get different types of responses one after another.
-	return false
-}
-
 // ProxyResponseHeap is a heap for storepb.SeriesSets.
 // It performs k-way merge between all of those sets.
 // TODO(GiedriusS): can be improved with a tournament tree.
@@ -209,7 +192,7 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 		return false
 	}
 
-	return ResponseEquals(iResp.SeriesResponse, jResp.SeriesResponse)
+	return iResp.Less(jResp.SeriesResponse)
 }
 
 func (h *ProxyResponseHeap) Len() int {
