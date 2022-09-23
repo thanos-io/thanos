@@ -511,6 +511,35 @@ func TestProxyStore_Series(t *testing.T) {
 				},
 			},
 		},
+		{
+			title: "ignore unsorted series warning",
+			storeAPIs: []Client{
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+							storepb.NewWarnSeriesResponse(ErrUnsortedSeriesSetDetected),
+						},
+					},
+					minTime:   1,
+					maxTime:   300,
+					labelSets: []labels.Labels{labels.FromStrings("ext", "1")},
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset:   labels.FromStrings("a", "b"),
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
+				},
+			},
+			expectedWarningsLen: 1,
+		},
 	} {
 		for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 			if ok := t.Run(fmt.Sprintf("%s/%s", tc.title, strategy), func(t *testing.T) {

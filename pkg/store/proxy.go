@@ -332,6 +332,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		storeResponses = append(storeResponses, respSet)
 		defer respSet.Close()
 	}
+	abortOnPartialResponse := r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT
 
 	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
 
@@ -339,7 +340,8 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	for respHeap.Next() {
 		resp := respHeap.At()
 
-		if resp.GetWarning() != "" && (r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT) {
+		warn := resp.GetWarning()
+		if warn != "" && warn != ErrUnsortedSeriesSetDetected.Error() && abortOnPartialResponse {
 			return status.Error(codes.Aborted, resp.GetWarning())
 		}
 
