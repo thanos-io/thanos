@@ -29,7 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
-var ErrUnsortedSeriesSetDetected = fmt.Errorf("a store has sent unsorted series or multiple replicas of the same series")
+var ErrUnsortedSeriesSetDetected = errors.New("a store has sent unsorted series or multiple replicas of the same series")
 
 type ctxKey int
 
