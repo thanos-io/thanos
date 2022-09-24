@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -725,9 +726,10 @@ func TestReceive(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
+		ingestor1Name := e.Name() + "-" + ingestor1.Name()
 		// Here for exceed-tenant we go above limit by 10, which results in 0 value.
 		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-			return "sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e-multitenant-active-series-limiting-receive-i1:8080\", job=\"receive-i1\"}"
+			return fmt.Sprintf("sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"%s:8080\", job=\"receive-i1\"}", ingestor1Name)
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
@@ -739,7 +741,7 @@ func TestReceive(t *testing.T) {
 
 		// For under-tenant we stay at -5, as we have only pushed 5 series.
 		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-			return "sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"e2e-multitenant-active-series-limiting-receive-i1:8080\", job=\"receive-i1\"}"
+			return fmt.Sprintf("sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"}) - on() thanos_receive_tenant_head_series_limit{instance=\"%s:8080\", job=\"receive-i1\"}", ingestor1Name)
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
@@ -776,7 +778,7 @@ func TestReceive(t *testing.T) {
 			&model.Sample{
 				Metric: model.Metric{
 					"__name__": "thanos_receive_head_series_limited_requests_total",
-					"instance": "e2e-multitenant-active-series-limiting-receive-i1:8080",
+					"instance": model.LabelValue(fmt.Sprintf("%s:8080", ingestor1Name)),
 					"job":      "receive-i1",
 					"tenant":   "exceed-tenant",
 				},
