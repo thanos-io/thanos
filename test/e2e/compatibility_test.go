@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,6 +16,13 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
+	e2emon "github.com/efficientgo/e2e/monitoring"
+	"github.com/efficientgo/e2e/monitoring/promconfig"
+	sdconfig "github.com/efficientgo/e2e/monitoring/promconfig/discovery/config"
+	"github.com/efficientgo/e2e/monitoring/promconfig/discovery/targetgroup"
+	e2eobs "github.com/efficientgo/e2e/observable"
+	config_util "github.com/prometheus/common/config"
+	"github.com/prometheus/common/model"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
@@ -56,27 +64,42 @@ func testPromQLCompliance(t *testing.T, queryFrontend bool, retrievalStrategy st
 	queryReceive := e2edb.NewThanosQuerier(e, "query_receive", []string{receiverRunnable.InternalEndpoint("grpc")})
 	testutil.Ok(t, e2e.StartAndWaitReady(receiverRunnable, queryReceive))
 
+	rwURL, err := url.Parse(e2ethanos.RemoteWriteEndpoint(receiverRunnable.InternalEndpoint("remote-write")))
+	testutil.Ok(t, err)
 	// Start reference Prometheus.
 	prom := e2edb.NewPrometheus(e, "prom")
-	testutil.Ok(t, prom.SetConfig(`
-global:
-  scrape_interval:     5s
-  evaluation_interval: 5s
-  external_labels:
-    prometheus: 1
-
-remote_write:
-  - url: "`+e2ethanos.RemoteWriteEndpoint(receiverRunnable.InternalEndpoint("remote-write"))+`"
-
-scrape_configs:
-- job_name: 'demo'
-  static_configs:
-    - targets:
-      - 'demo.promlabs.com:10000'
-      - 'demo.promlabs.com:10001'
-      - 'demo.promlabs.com:10002'
-`,
-	))
+	testutil.Ok(t, prom.SetConfig(promconfig.Config{
+		GlobalConfig: promconfig.GlobalConfig{
+			EvaluationInterval: model.Duration(5 * time.Second),
+			ScrapeInterval:     model.Duration(5 * time.Second),
+			ExternalLabels: map[model.LabelName]model.LabelValue{
+				"prometheus": "1",
+			},
+		},
+		RemoteWriteConfigs: []*promconfig.RemoteWriteConfig{
+			{
+				URL: &config_util.URL{URL: rwURL},
+			},
+		},
+		ScrapeConfigs: []*promconfig.ScrapeConfig{
+			{
+				JobName: "demo",
+				ServiceDiscoveryConfig: sdconfig.ServiceDiscoveryConfig{
+					StaticConfigs: []*targetgroup.Group{
+						{
+							Source: "demo.promlabs.com:10000",
+						},
+						{
+							Source: "demo.promlabs.com:10001",
+						},
+						{
+							Source: "demo.promlabs.com:10002",
+						},
+					},
+				},
+			},
+		},
+	}))
 	testutil.Ok(t, e2e.StartAndWaitReady(prom))
 
 	// Start sidecar + Querier
@@ -132,7 +155,7 @@ scrape_configs:
 }
 
 // nolint (it's still used in skipped test).
-func promQLCompatConfig(reference *e2edb.Prometheus, target e2e.Runnable, dropLabels []string) string {
+func promQLCompatConfig(reference *e2emon.Prometheus, target e2e.Runnable, dropLabels []string) string {
 	return `reference_target_config:
   query_url: 'http://` + reference.InternalEndpoint("http") + `'
 
@@ -242,7 +265,7 @@ func alertCompatConfig(receive e2e.Runnable, query e2e.Runnable) string {
 `, e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("remote-write")), query.InternalEndpoint("http"), query.InternalEndpoint("http"))
 }
 
-func newQueryFrontendRunnable(e e2e.Environment, name, downstreamURL string) e2e.InstrumentedRunnable {
+func newQueryFrontendRunnable(e e2e.Environment, name, downstreamURL string) *e2eobs.Observable {
 	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
 		Type: queryfrontend.INMEMORY,
 		Config: queryfrontend.InMemoryResponseCacheConfig{
