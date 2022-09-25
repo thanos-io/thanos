@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"io"
 	"math"
 	"math/rand"
@@ -2286,6 +2287,11 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 	// No limits.
 	chunksLimiter := NewChunksLimiterFactory(0)(nil)
 	seriesLimiter := NewSeriesLimiterFactory(0)(nil)
+	dummyCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "dummy",
+		Help: "dummy help",
+	})
+	ctx := context.Background()
 
 	// Run multiple workers to execute the queries.
 	wg := sync.WaitGroup{}
@@ -2319,7 +2325,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				indexReader := blk.indexReader()
 				chunkReader := blk.chunkReader()
 
-				seriesSet, _, err := blockSeries(context.Background(), nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, nil)
+				seriesSet, _, err := blockSeries(ctx, nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, nil, dummyCounter)
 				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).
