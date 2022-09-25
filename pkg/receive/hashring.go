@@ -6,6 +6,7 @@ package receive
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"strconv"
 	"sync"
@@ -290,6 +291,10 @@ func HashringFromConfig(algorithm HashringAlgorithm, replicationFactor uint64, c
 	// If hashring is empty, return an error.
 	if len(config) == 0 {
 		return nil, errors.Wrapf(err, "failed to load configuration")
+	}
+	
+	if (algorithm != "hashmod") && (algorithm != "ketama") {
+		log.Println("The specified algorithm is incorrect. Fall back to hashmod algorithm")
 	}
 
 	return newMultiHashring(algorithm, replicationFactor, config), err
