@@ -2212,10 +2212,6 @@ func TestSeries_ChuncksHaveHashRepresentation(t *testing.T) {
 			name:              "calculate checksum",
 			calculateChecksum: true,
 		},
-		{
-			name:              "do not calculate checksum",
-			calculateChecksum: false,
-		},
 	}
 
 	for _, tc := range testCases {
@@ -2226,7 +2222,6 @@ func TestSeries_ChuncksHaveHashRepresentation(t *testing.T) {
 				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "test"},
 				},
-				CalculateChunkChecksums: tc.calculateChecksum,
 			}
 
 			srv := newStoreSeriesServer(context.Background())

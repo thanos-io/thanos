@@ -92,25 +92,11 @@ func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 		},
 	}
+
 	err = tsdbStore.Series(req, srv)
 	testutil.Ok(t, err)
 
 	for _, chk := range srv.SeriesSet[0].Chunks {
-		testutil.Equals(t, uint64(0), chk.Raw.Hash)
-	}
-
-	req = &storepb.SeriesRequest{
-		MinTime: 1,
-		MaxTime: 3,
-		Matchers: []storepb.LabelMatcher{
-			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
-		},
-	}
-
-	err = tsdbStore.Series(req, srv)
-	testutil.Ok(t, err)
-
-	for _, chk := range srv.SeriesSet[1].Chunks {
 		want := xxhash.Sum64(chk.Raw.Data)
 		testutil.Equals(t, want, chk.Raw.Hash)
 	}

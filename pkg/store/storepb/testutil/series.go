@@ -6,6 +6,7 @@ package storetestutil
 import (
 	"context"
 	"fmt"
+	"github.com/cespare/xxhash"
 	"math"
 	"math/rand"
 	"os"
@@ -140,7 +141,7 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, storepb.AggrChunk{
 				MinTime: c.MinTime,
 				MaxTime: c.MaxTime,
-				Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: chEnc.Bytes()},
+				Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: chEnc.Bytes(), Hash: xxhash.Sum64(chEnc.Bytes())},
 			})
 		}
 	}
