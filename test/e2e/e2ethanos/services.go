@@ -502,11 +502,28 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 	}
 
 	if r.limit != 0 && r.metaMonitoring != "" {
-		args["--receive.tenant-limits.max-head-series"] = fmt.Sprintf("%v", r.limit)
-		args["--receive.tenant-limits.meta-monitoring-url"] = r.metaMonitoring
-		if r.metaMonitoringQuery != "" {
-			args["--receive.tenant-limits.meta-monitoring-query"] = r.metaMonitoringQuery
+		cfg := receive.RootLimitsConfig{
+			WriteLimits: receive.WriteLimitsConfig{
+				GlobalLimits: receive.GlobalLimitsConfig{
+					MetaMonitoringURL:        r.metaMonitoring,
+					MetaMonitoringLimitQuery: r.metaMonitoringQuery,
+				},
+				DefaultLimits: receive.DefaultLimitsConfig{
+					HeadSeriesLimit: uint64(r.limit),
+				},
+			},
 		}
+
+		b, err := yaml.Marshal(cfg)
+		if err != nil {
+			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate limiting file: %v", hashring))}
+		}
+
+		if err := os.WriteFile(filepath.Join(r.Dir(), "limits.yaml"), b, 0600); err != nil {
+			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrap(err, "creating limitin config"))}
+		}
+
+		args["--receive.limits-config-file"] = filepath.Join(r.InternalDir(), "limits.yaml")
 	}
 
 	if err := os.MkdirAll(filepath.Join(r.Dir(), "data"), 0750); err != nil {
