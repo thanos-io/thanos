@@ -101,16 +101,17 @@ The configuration file follows a few standards:
 
 All the configuration for the remote write endpoint of Receive is contained in the `write` key. Inside it there are 3 subsections:
 
-- `global`: limits and/or gates that are applied considering all the requests.
+- `global`: limits, gates and/or options that are applied considering all the requests.
 - `default`: the default values for limits in case a given tenant doesn't have any specified.
 - `tenants`: the limits for a given tenant.
 
-From the example configuration below, it's understood that:
+For a Receive instance with configuration like below, it's understood that:
 
-1. This Receive instance has a max concurrency of 30.
-2. This Receive instance has some default request limits that apply of all tenants, **unless** a given tenant has their own limits (i.e. the `acme` tenant and partially for the `ajax` tenant).
-3. Tenant `acme` has no request limits.
-4. Tenant `ajax` has a request series limit of 50000 and samples limit of 500. Their request size bytes limit is inherited from the default, 1024 bytes.
+1. The Receive instance has a max concurrency of 30.
+2. The Receive instance has head series limiting enabled as it has `meta_monitoring_.*` options in `global`.
+3. The Receive instance has some default request limits as well as head series limits that apply of all tenants, **unless** a given tenant has their own limits (i.e. the `acme` tenant and partially for the `ajax` tenant).
+4. Tenant `acme` has no request limits, but has a higher head_series limit.
+5. Tenant `ajax` has a request series limit of 50000 and samples limit of 500. Their request size bytes limit is inherited from the default, 1024 bytes. Their head series are also inherited from default i.e, 1000.
 
 The next sections explain what each configuration value means.
 
@@ -118,17 +119,21 @@ The next sections explain what each configuration value means.
 write:
   global:
     max_concurrency: 30
+    meta_monitoring_url: "http://localhost:9090"
+    meta_monitoring_limit_query: "sum(prometheus_tsdb_head_series) by (tenant)"
   default:
     request:
       size_bytes_limit: 1024
       series_limit: 1000
       samples_limit: 10
+    head_series_limit: 1000
   tenants:
     acme:
       request:
         size_bytes_limit: 0
         series_limit: 0
         samples_limit: 0
+      head_series_limit: 2000
     ajax:
       request:
         series_limit: 50000
@@ -168,11 +173,15 @@ Thanos Receive, in Router or RouterIngestor mode, supports limiting tenant activ
 
 Every Receive Router/RouterIngestor node, queries meta-monitoring for active series of all tenants, every 15 seconds, and caches the results in a map. This cached result is used to limit all incoming remote write requests.
 
-To use the feature, one should specify the following (hidden) flags:
-- `--receive.tenant-limits.max-head-series`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive.
-- `--receive.tenant-limits.meta-monitoring-url`: Specifies Prometheus Query API compatible meta-monitoring endpoint.
-- `--receive.tenant-limits.meta-monitoring-query`: Optional flag to specify PromQL query to execute against meta-monitoring.
-- `--receive.tenant-limits.meta-monitoring-client`: Optional YAML file/string specifying HTTP client config for meta-monitoring.
+To use the feature, one should specify the following limiting config options:
+
+Under `global`:
+- `meta_monitoring_url`: Specifies Prometheus Query API compatible meta-monitoring endpoint.
+- `meta_monitoring_limit_query`: Option to specify PromQL query to execute against meta-monitoring. If not specified it is set to `sum(prometheus_tsdb_head_series) by (tenant)` by default.
+- `meta_monitoring_http_client`: Optional YAML field specifying HTTP client config for meta-monitoring.
+
+Under `default` and per `tenant`:
+- `head_series_limit`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive.
 
 NOTE:
 - It is possible that Receive ingests more active series than the specified limit, as it relies on meta-monitoring, which may not have the latest data for current number of active series of a tenant at all times.
