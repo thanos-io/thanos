@@ -6,7 +6,6 @@ package storetestutil
 import (
 	"context"
 	"fmt"
-	"github.com/cespare/xxhash"
 	"math"
 	"math/rand"
 	"os"
@@ -15,6 +14,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/cespare/xxhash"
 
 	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/prometheus/model/labels"
