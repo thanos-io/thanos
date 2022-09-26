@@ -156,6 +156,11 @@ sum by (container) (
 http_requests_total`,
 			shardingLabels: []string{"cluster", "pod"},
 		},
+		{
+			name:           "histogram quantile",
+			expression:     "histogram_quantile(0.95, sum(rate(metric[1m])) without (le, cluster))",
+			shardingLabels: []string{"cluster"},
+		},
 	}
 
 	for _, test := range nonShardable {

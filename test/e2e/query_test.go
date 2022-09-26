@@ -20,31 +20,29 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/golang/snappy"
-	config_util "github.com/prometheus/common/config"
-	"github.com/prometheus/prometheus/prompb"
-	"github.com/prometheus/prometheus/storage/remote"
-	"github.com/thanos-io/objstore/providers/s3"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
-	"github.com/thanos-io/thanos/pkg/api/query/querypb"
-	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/efficientgo/e2e"
+	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/go-kit/log"
+	"github.com/gogo/protobuf/proto"
+	"github.com/golang/snappy"
 	"github.com/pkg/errors"
+	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/rules"
+	"github.com/prometheus/prometheus/storage/remote"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
+	"github.com/thanos-io/objstore/providers/s3"
 
+	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
@@ -52,6 +50,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
@@ -75,7 +74,7 @@ func sortResults(res model.Vector) {
 func TestSidecarNotReady(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-sidecar-not-ready")
+	e, err := e2e.NewDockerEnvironment("sidecar-notReady")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -129,7 +128,7 @@ func TestQuery(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(5), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 	queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 		Deduplicate: false,
@@ -191,7 +190,7 @@ func TestQuery(t *testing.T) {
 func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-route-prefix")
+	e, err := e2e.NewDockerEnvironment("route-prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -207,7 +206,7 @@ func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
 func TestQueryExternalPrefix(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-external-prefix")
+	e, err := e2e.NewDockerEnvironment("external-prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -228,7 +227,7 @@ func TestQueryExternalPrefix(t *testing.T) {
 func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-external-prefix-and-route-prefix")
+	e, err := e2e.NewDockerEnvironment("prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -253,7 +252,7 @@ func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
 func TestQueryLabelNames(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-label-names")
+	e, err := e2e.NewDockerEnvironment("label-names")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -300,7 +299,7 @@ func TestQueryLabelNames(t *testing.T) {
 func TestQueryLabelValues(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-label-values")
+	e, err := e2e.NewDockerEnvironment("label-values")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -343,7 +342,7 @@ func TestQueryLabelValues(t *testing.T) {
 func TestQueryWithAuthorizedSidecar(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-authorized-sidecar")
+	e, err := e2e.NewDockerEnvironment("sidecar-auth")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -356,7 +355,7 @@ func TestQueryWithAuthorizedSidecar(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 	queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 		Deduplicate: false,
@@ -390,7 +389,7 @@ func TestQueryCompatibilityWithPreInfoAPI(t *testing.T) {
 	} {
 		i := i
 		t.Run(fmt.Sprintf("%+v", tcase), func(t *testing.T) {
-			e, err := e2e.NewDockerEnvironment(fmt.Sprintf("e2e-test-query-comp-query-%d", i))
+			e, err := e2e.NewDockerEnvironment(fmt.Sprintf("query-comp-%d", i))
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -435,7 +434,7 @@ config:
 			t.Cleanup(cancel)
 
 			// We should have single TCP connection, since all APIs are against the same server.
-			testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+			testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 			queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 				Deduplicate: false,
@@ -496,25 +495,6 @@ config:
 					ActiveTargets: []*targetspb.ActiveTarget{
 						{
 							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-								{Name: "__address__", Value: fmt.Sprintf("e2e-test-query-comp-query-%d-querier-1:8080", i)},
-								{Name: "__metrics_path__", Value: "/metrics"},
-								{Name: "__scheme__", Value: "http"},
-								{Name: "__scrape_interval__", Value: "1s"},
-								{Name: "__scrape_timeout__", Value: "1s"},
-								{Name: "job", Value: "myself"},
-								{Name: "prometheus", Value: "p1"},
-							}},
-							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-								{Name: "instance", Value: fmt.Sprintf("e2e-test-query-comp-query-%d-querier-1:8080", i)},
-								{Name: "job", Value: "myself"},
-								{Name: "prometheus", Value: "p1"},
-							}},
-							ScrapePool: "myself",
-							ScrapeUrl:  fmt.Sprintf("http://e2e-test-query-comp-query-%d-querier-1:8080/metrics", i),
-							Health:     targetspb.TargetHealth_UP,
-						},
-						{
-							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 								{Name: "__address__", Value: "localhost:9090"},
 								{Name: "__metrics_path__", Value: "/metrics"},
 								{Name: "__scheme__", Value: "http"},
@@ -530,6 +510,25 @@ config:
 							}},
 							ScrapePool: "myself",
 							ScrapeUrl:  "http://localhost:9090/metrics",
+							Health:     targetspb.TargetHealth_UP,
+						},
+						{
+							DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "__address__", Value: fmt.Sprintf("query-comp-%d-querier-1:8080", i)},
+								{Name: "__metrics_path__", Value: "/metrics"},
+								{Name: "__scheme__", Value: "http"},
+								{Name: "__scrape_interval__", Value: "1s"},
+								{Name: "__scrape_timeout__", Value: "1s"},
+								{Name: "job", Value: "myself"},
+								{Name: "prometheus", Value: "p1"},
+							}},
+							Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+								{Name: "instance", Value: fmt.Sprintf("query-comp-%d-querier-1:8080", i)},
+								{Name: "job", Value: "myself"},
+								{Name: "prometheus", Value: "p1"},
+							}},
+							ScrapePool: "myself",
+							ScrapeUrl:  fmt.Sprintf("http://query-comp-%d-querier-1:8080/metrics", i),
 							Health:     targetspb.TargetHealth_UP,
 						},
 					},
@@ -587,7 +586,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 	t.Parallel()
 
 	// Build up.
-	e, err := e2e.NewDockerEnvironment("e2e-sidecar-store-pushdown")
+	e, err := e2e.NewDockerEnvironment("sidecar-pushdown")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -630,7 +629,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc"), sidecar1.InternalEndpoint("grpc")).WithEnabledFeatures([]string{"query-pushdown"}).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
-	testutil.Ok(t, s1.WaitSumMetrics(e2e.Equals(1), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(1), "thanos_blocks_meta_synced"))
 
 	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, []fakeMetricSample{
 		{
@@ -799,7 +798,7 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 
 	for _, tc := range ts {
 		t.Run(tc.query, func(t *testing.T) {
-			e, err := e2e.NewDockerEnvironment("e2e-test-query-pushdown")
+			e, err := e2e.NewDockerEnvironment("query-pushdown")
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1062,7 +1061,7 @@ func queryExemplars(t *testing.T, ctx context.Context, addr, q string, start, en
 	}))
 }
 
-func synthesizeFakeMetricSamples(ctx context.Context, prometheus e2e.InstrumentedRunnable, testSamples []fakeMetricSample) error {
+func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, testSamples []fakeMetricSample) error {
 	samples := make([]model.Sample, len(testSamples))
 	for i, s := range testSamples {
 		samples[i] = newSample(s)
@@ -1071,7 +1070,7 @@ func synthesizeFakeMetricSamples(ctx context.Context, prometheus e2e.Instrumente
 	return synthesizeSamples(ctx, prometheus, samples)
 }
 
-func synthesizeSamples(ctx context.Context, prometheus e2e.InstrumentedRunnable, samples []model.Sample) error {
+func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, samples []model.Sample) error {
 	remoteWriteURL, err := url.Parse("http://" + prometheus.Endpoint("http") + "/api/v1/write")
 	if err != nil {
 		return err
@@ -1213,7 +1212,7 @@ func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
 
 	for _, tc := range ts {
 		t.Run(tc.query, func(t *testing.T) {
-			e, err := e2e.NewDockerEnvironment("e2e-test-query-pushdown-dedup")
+			e, err := e2e.NewDockerEnvironment("pushdown-dedup")
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1253,7 +1252,7 @@ func TestSidecarQueryEvaluationWithDedup(t *testing.T) {
 func TestSidecarAlignmentPushdown(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-pushdown-min-max-time")
+	e, err := e2e.NewDockerEnvironment("pushdown-min-max")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1334,7 +1333,7 @@ func TestSidecarAlignmentPushdown(t *testing.T) {
 func TestGrpcInstantQuery(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-grpc-api-instant")
+	e, err := e2e.NewDockerEnvironment("grpc-api-instant")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1440,7 +1439,7 @@ func TestGrpcInstantQuery(t *testing.T) {
 func TestGrpcQueryRange(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-grpc-api-range")
+	e, err := e2e.NewDockerEnvironment("grpc-api-range")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1544,7 +1543,7 @@ func TestGrpcQueryRange(t *testing.T) {
 func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-lazy-proxy")
+	e, err := e2e.NewDockerEnvironment("lazy-proxy")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1555,7 +1554,7 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 	querier2 := e2ethanos.NewQuerierBuilder(e, "2", querier1.InternalEndpoint("grpc")).WithProxyStrategy("lazy").WithDisablePartialResponses(true).Init()
 
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar, querier1, querier2))
-	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 	result := instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
 		return "sum(up)"

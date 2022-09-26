@@ -19,6 +19,7 @@ var unlimitedRequestLimitsConfig = newEmptyRequestLimitsConfig().
 	SetSeriesLimit(0).
 	SetSamplesLimit(0)
 
+// configRequestLimiter implements requestLimiter interface.
 type configRequestLimiter struct {
 	tenantLimits        map[string]*requestLimitsConfig
 	cachedDefaultLimits *requestLimitsConfig
@@ -26,7 +27,7 @@ type configRequestLimiter struct {
 	configuredLimits    *prometheus.GaugeVec
 }
 
-func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *writeLimitsConfig) *configRequestLimiter {
+func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *WriteLimitsConfig) *configRequestLimiter {
 	// Merge the default limits configuration with an unlimited configuration
 	// to ensure the nils are overwritten with zeroes.
 	defaultRequestLimits := writeLimits.DefaultLimits.RequestLimits.OverlayWith(unlimitedRequestLimitsConfig)
@@ -39,7 +40,9 @@ func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *writeLimits
 	tenantsLimits := writeLimits.TenantsLimits
 	tenantRequestLimits := make(map[string]*requestLimitsConfig)
 	for tenant, limitConfig := range tenantsLimits {
-		tenantRequestLimits[tenant] = limitConfig.RequestLimits.OverlayWith(defaultRequestLimits)
+		if limitConfig.RequestLimits != nil {
+			tenantRequestLimits[tenant] = limitConfig.RequestLimits.OverlayWith(defaultRequestLimits)
+		}
 	}
 
 	limiter := configRequestLimiter{

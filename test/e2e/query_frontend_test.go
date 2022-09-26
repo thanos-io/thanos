@@ -10,7 +10,8 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
-	"github.com/efficientgo/e2e/matchers"
+	e2emon "github.com/efficientgo/e2e/monitoring"
+	"github.com/efficientgo/e2e/monitoring/matchers"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
@@ -28,7 +29,7 @@ import (
 func TestQueryFrontend(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-frontend")
+	e, err := e2e.NewDockerEnvironment("query-frontend")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -55,7 +56,7 @@ func TestQueryFrontend(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 	// Ensure we can get the result from Querier first so that it
 	// doesn't need to retry when we send queries to the frontend later.
@@ -70,7 +71,7 @@ func TestQueryFrontend(t *testing.T) {
 	})
 
 	vals, err := q.SumMetrics([]string{"http_requests_total"})
-	e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query"))
+	e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query"))
 
 	testutil.Ok(t, err)
 	testutil.Equals(t, 1, len(vals))
@@ -88,15 +89,15 @@ func TestQueryFrontend(t *testing.T) {
 		})
 
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(1),
+			e2emon.Equals(1),
 			[]string{"thanos_query_frontend_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query")),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query")),
 		))
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2e.Equals(queryTimes+1),
+			e2emon.Equals(queryTimes+1),
 			[]string{"http_requests_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query")),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query")),
 		))
 	})
 
@@ -121,25 +122,25 @@ func TestQueryFrontend(t *testing.T) {
 		)
 
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(1),
+			e2emon.Equals(1),
 			[]string{"thanos_query_frontend_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range")),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range")),
 		))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_fetched_keys_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "cortex_cache_hits_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_entries"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_gets_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "cortex_cache_fetched_keys_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(0), "cortex_cache_hits_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_added_new_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_added_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_entries"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_gets_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_misses_total"))
 
 		// Query is only 2h so it won't be split.
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_frontend_split_queries_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "thanos_frontend_split_queries_total"))
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2e.Equals(1),
+			e2emon.Equals(1),
 			[]string{"http_requests_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query_range")),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query_range")),
 		))
 	})
 
@@ -165,29 +166,29 @@ func TestQueryFrontend(t *testing.T) {
 		)
 
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(2),
+			e2emon.Equals(2),
 			[]string{"thanos_query_frontend_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range"))),
 		)
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_cache_fetched_keys_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_hits_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "querier_cache_added_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_entries"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "querier_cache_gets_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "cortex_cache_fetched_keys_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "cortex_cache_hits_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_added_new_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "querier_cache_added_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_entries"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "querier_cache_gets_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_misses_total"))
 
 		// Query is only 2h so it won't be split.
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(2), []string{"thanos_frontend_split_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "query_range"))),
+			e2emon.Equals(2), []string{"thanos_frontend_split_queries_total"},
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "query_range"))),
 		)
 
 		// One more request is needed in order to satisfy the req range.
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2e.Equals(2),
+			e2emon.Equals(2),
 			[]string{"http_requests_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query_range"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query_range"))),
 		)
 	})
 
@@ -212,28 +213,28 @@ func TestQueryFrontend(t *testing.T) {
 		)
 
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(3),
+			e2emon.Equals(3),
 			[]string{"thanos_query_frontend_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range"))),
 		)
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "cortex_cache_fetched_keys_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_cache_hits_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_added_new_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_added_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_entries"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_gets_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "querier_cache_misses_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(3), "cortex_cache_fetched_keys_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "cortex_cache_hits_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_added_new_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(3), "querier_cache_added_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_entries"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(3), "querier_cache_gets_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_misses_total"))
 
 		// Query is 25h so it will be split to 2 requests.
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(4), []string{"thanos_frontend_split_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "query_range"))),
+			e2emon.Equals(4), []string{"thanos_frontend_split_queries_total"},
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "query_range"))),
 		)
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2e.Equals(4),
+			e2emon.Equals(4),
 			[]string{"http_requests_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query_range"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query_range"))),
 		)
 	})
 
@@ -243,38 +244,38 @@ func TestQueryFrontend(t *testing.T) {
 			return len(res) > 0
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2e.Equals(1),
+			e2emon.Equals(1),
 			[]string{"http_requests_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "label_names"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "label_names"))),
 		)
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(1),
+			e2emon.Equals(1),
 			[]string{"thanos_query_frontend_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "label_names"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "label_names"))),
 		)
 		// Query is only 2h so it won't be split.
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(1), []string{"thanos_frontend_split_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
+			e2emon.Equals(1), []string{"thanos_frontend_split_queries_total"},
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
 		)
 
 		labelNames(t, ctx, queryFrontend.Endpoint("http"), nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
 			return len(res) > 0
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2e.Equals(3),
+			e2emon.Equals(3),
 			[]string{"http_requests_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "label_names"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "label_names"))),
 		)
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(2),
+			e2emon.Equals(2),
 			[]string{"thanos_query_frontend_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "label_names"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "label_names"))),
 		)
 		// Query is 25h so split to 2 requests.
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(3), []string{"thanos_frontend_split_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
+			e2emon.Equals(3), []string{"thanos_frontend_split_queries_total"},
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
 		)
 	})
 
@@ -283,38 +284,38 @@ func TestQueryFrontend(t *testing.T) {
 			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2e.Equals(1),
+			e2emon.Equals(1),
 			[]string{"http_requests_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "label_values"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "label_values"))),
 		)
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(1),
+			e2emon.Equals(1),
 			[]string{"thanos_query_frontend_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "label_values"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "label_values"))),
 		)
 		// Query is only 2h so it won't be split.
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(4), []string{"thanos_frontend_split_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
+			e2emon.Equals(4), []string{"thanos_frontend_split_queries_total"},
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
 		)
 
 		labelValues(t, ctx, queryFrontend.Endpoint("http"), "instance", nil, timestamp.FromTime(now.Add(-24*time.Hour)), timestamp.FromTime(now.Add(time.Hour)), func(res []string) bool {
 			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2e.Equals(3),
+			e2emon.Equals(3),
 			[]string{"http_requests_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "label_values"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "label_values"))),
 		)
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(2),
+			e2emon.Equals(2),
 			[]string{"thanos_query_frontend_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "label_values"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "label_values"))),
 		)
 		// Query is 25h so split to 2 requests.
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(6), []string{"thanos_frontend_split_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
+			e2emon.Equals(6), []string{"thanos_frontend_split_queries_total"},
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
 		)
 	})
 
@@ -340,19 +341,19 @@ func TestQueryFrontend(t *testing.T) {
 			},
 		)
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2e.Equals(1),
+			e2emon.Equals(1),
 			[]string{"http_requests_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "series"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "series"))),
 		)
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(1),
+			e2emon.Equals(1),
 			[]string{"thanos_query_frontend_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "series"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "series"))),
 		)
 		// Query is only 2h so it won't be split.
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(7), []string{"thanos_frontend_split_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
+			e2emon.Equals(7), []string{"thanos_frontend_split_queries_total"},
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
 		)
 
 		series(
@@ -376,19 +377,19 @@ func TestQueryFrontend(t *testing.T) {
 			},
 		)
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
-			e2e.Equals(3),
+			e2emon.Equals(3),
 			[]string{"http_requests_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "series"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "series"))),
 		)
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(2),
+			e2emon.Equals(2),
 			[]string{"thanos_query_frontend_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "series"))),
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "series"))),
 		)
 		// Query is only 2h so it won't be split.
 		testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-			e2e.Equals(9), []string{"thanos_frontend_split_queries_total"},
-			e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
+			e2emon.Equals(9), []string{"thanos_frontend_split_queries_total"},
+			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
 		)
 	})
 }
@@ -396,7 +397,7 @@ func TestQueryFrontend(t *testing.T) {
 func TestQueryFrontendMemcachedCache(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-frontend-memcached")
+	e, err := e2e.NewDockerEnvironment("qf-memcached")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -434,9 +435,9 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_memcache_client_servers"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "cortex_memcache_client_servers"))
 
 	// Ensure we can get the result from Querier first so that it
 	// doesn't need to retry when we send queries to the frontend later.
@@ -450,7 +451,7 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 		},
 	})
 
-	vals, err := q.SumMetrics([]string{"http_requests_total"}, e2e.WithLabelMatchers(
+	vals, err := q.SumMetrics([]string{"http_requests_total"}, e2emon.WithLabelMatchers(
 		matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query")))
 	testutil.Ok(t, err)
 	testutil.Equals(t, 1, len(vals))
@@ -475,16 +476,16 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 	)
 
 	testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-		e2e.Equals(1),
+		e2emon.Equals(1),
 		[]string{"thanos_query_frontend_queries_total"},
-		e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range"))),
+		e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range"))),
 	)
 
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_fetched_keys_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "cortex_cache_hits_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "cortex_cache_fetched_keys_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(0), "cortex_cache_hits_total"))
 
 	// Query is only 2h so it won't be split.
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "thanos_frontend_split_queries_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "thanos_frontend_split_queries_total"))
 
 	// Run the same range query again, the result can be retrieved from cache directly.
 	rangeQuery(
@@ -507,23 +508,23 @@ func TestQueryFrontendMemcachedCache(t *testing.T) {
 	)
 
 	testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-		e2e.Equals(2),
+		e2emon.Equals(2),
 		[]string{"thanos_query_frontend_queries_total"},
-		e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range"))),
+		e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range"))),
 	)
 
 	// Query is only 2h so it won't be split.
 	// If it was split this would be increase by more then 1.
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "thanos_frontend_split_queries_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "thanos_frontend_split_queries_total"))
 
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "cortex_cache_fetched_keys_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(1), "cortex_cache_hits_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "cortex_cache_fetched_keys_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "cortex_cache_hits_total"))
 }
 
 func TestRangeQueryShardingWithRandomData(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-range-query-sharding-random-data")
+	e, err := e2e.NewDockerEnvironment("rq-sharding")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -593,7 +594,7 @@ func TestRangeQueryShardingWithRandomData(t *testing.T) {
 func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-query-frontend")
+	e, err := e2e.NewDockerEnvironment("query-frontend")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -627,7 +628,7 @@ func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, querier.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, querier.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 	// Ensure we can get the result from Querier first so that it
 	// doesn't need to retry when we send queries to the frontend later.
@@ -662,33 +663,33 @@ func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 	)
 
 	testutil.Ok(t, queryFrontend.WaitSumMetricsWithOptions(
-		e2e.Equals(1),
+		e2emon.Equals(1),
 		[]string{"thanos_query_frontend_queries_total"},
-		e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range")),
+		e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "op", "query_range")),
 	))
 
 	// make sure that we don't break cortex cache code.
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "cortex_cache_fetched_keys_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(0), "cortex_cache_hits_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(2), "querier_cache_added_new_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_added_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(3), "querier_cache_misses_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(3), "cortex_cache_fetched_keys_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(0), "cortex_cache_hits_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "querier_cache_added_new_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(3), "querier_cache_added_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(3), "querier_cache_misses_total"))
 
 	// Query interval is 2 hours, which is greater than min-slit-interval, query will be broken down into 4 parts
 	// + rest (of interval)
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2e.Equals(5), "thanos_frontend_split_queries_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(5), "thanos_frontend_split_queries_total"))
 
 	testutil.Ok(t, querier.WaitSumMetricsWithOptions(
-		e2e.Equals(5),
+		e2emon.Equals(5),
 		[]string{"http_requests_total"},
-		e2e.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query_range")),
+		e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "handler", "query_range")),
 	))
 }
 
 func TestInstantQueryShardingWithRandomData(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e-test-instant-query-sharding-random-data")
+	e, err := e2e.NewDockerEnvironment("query-sharding")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
