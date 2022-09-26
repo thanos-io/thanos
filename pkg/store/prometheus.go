@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,8 +15,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	"github.com/cespare/xxhash"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -388,6 +387,8 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 
 	// TODO(bwplotka): Put read limit as a flag.
 	stream := remote.NewChunkedReader(bodySizer, remote.DefaultChunkedReadLimit, *data)
+	hasher := hashPool.Get().(hash.Hash64)
+	defer hashPool.Put(hasher)
 	for {
 		res := &prompb.ChunkedReadResponse{}
 		err := stream.NextProto(res)
@@ -413,10 +414,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			thanosChks := make([]storepb.AggrChunk, len(series.Chunks))
 
 			for i, chk := range series.Chunks {
-				hash := uint64(0)
-				if calculateChecksums {
-					hash = xxhash.Sum64(chk.Data)
-				}
+				chkHash := hashChunk(hasher, chk.Data, calculateChecksums)
 				thanosChks[i] = storepb.AggrChunk{
 					MaxTime: chk.MaxTimeMs,
 					MinTime: chk.MinTimeMs,
@@ -426,7 +424,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 						// has one difference. Prometheus has Chunk_UNKNOWN Chunk_Encoding = 0 vs we start from
 						// XOR as 0. Compensate for that here:
 						Type: storepb.Chunk_Encoding(chk.Type - 1),
-						Hash: hash,
+						Hash: chkHash,
 					},
 				}
 				seriesStats.Samples += thanosChks[i].Raw.XORNumSamples()
@@ -512,6 +510,8 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 
 func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerChunk int, calculateChecksums bool) (chks []storepb.AggrChunk, err error) {
 	samples := series.Samples
+	hasher := hashPool.Get().(hash.Hash64)
+	defer hashPool.Put(hasher)
 
 	for len(samples) > 0 {
 		chunkSize := len(samples)
@@ -524,14 +524,11 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 			return nil, status.Error(codes.Unknown, err.Error())
 		}
 
-		hash := uint64(0)
-		if calculateChecksums {
-			hash = xxhash.Sum64(cb)
-		}
+		chkHash := hashChunk(hasher, cb, calculateChecksums)
 		chks = append(chks, storepb.AggrChunk{
 			MinTime: samples[0].Timestamp,
 			MaxTime: samples[chunkSize-1].Timestamp,
-			Raw:     &storepb.Chunk{Type: enc, Data: cb, Hash: hash},
+			Raw:     &storepb.Chunk{Type: enc, Data: cb, Hash: chkHash},
 		})
 
 		samples = samples[chunkSize:]
