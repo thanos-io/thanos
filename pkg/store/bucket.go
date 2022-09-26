@@ -99,6 +99,8 @@ const (
 	labelDecode = "decode"
 
 	minBlockSyncConcurrency = 1
+
+	enableChunkHashCalculation = true
 )
 
 var (
@@ -320,6 +322,8 @@ type BucketStore struct {
 
 	// Enables hints in the Series() response.
 	enableSeriesResponseHints bool
+
+	enableChunkHashCalculation bool
 }
 
 func (s *BucketStore) validate() error {
@@ -431,6 +435,7 @@ func NewBucketStore(
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		enableSeriesResponseHints:   enableSeriesResponseHints,
+		enableChunkHashCalculation:  enableChunkHashCalculation,
 	}
 
 	for _, option := range options {
@@ -1113,7 +1118,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					req.Aggregates,
 					shardMatcher,
 					s.metrics.emptyPostingCount,
-					req.CalculateChunkChecksums,
+					s.enableChunkHashCalculation,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)

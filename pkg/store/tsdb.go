@@ -200,7 +200,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 				Raw: &storepb.Chunk{
 					Type: storepb.Chunk_Encoding(chk.Chunk.Encoding() - 1), // Proto chunk encoding is one off to TSDB one.
 					Data: chk.Chunk.Bytes(),
-					Hash: hashChunk(hasher, chk.Chunk.Bytes(), r.CalculateChunkChecksums),
+					Hash: hashChunk(hasher, chk.Chunk.Bytes(), enableChunkHashCalculation),
 				},
 			}
 			frameBytesLeft -= c.Size()

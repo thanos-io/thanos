@@ -465,9 +465,8 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 	srv := newStoreSeriesServer(ctx)
 
 	testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
-		MinTime:                 baseT + 101,
-		MaxTime:                 baseT + 300,
-		CalculateChunkChecksums: true,
+		MinTime: baseT + 101,
+		MaxTime: baseT + 300,
 		Matchers: []storepb.LabelMatcher{
 			{Name: "a", Value: "b"},
 			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
@@ -478,23 +477,6 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 	for _, chunk := range srv.SeriesSet[0].Chunks {
 		got := chunk.Raw.Hash
 		want := xxhash.Sum64(chunk.Raw.Data)
-		testutil.Equals(t, want, got)
-	}
-
-	// by default do not calculate the checksums
-	testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
-		MinTime: baseT + 101,
-		MaxTime: baseT + 300,
-		Matchers: []storepb.LabelMatcher{
-			{Name: "a", Value: "b"},
-			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
-		},
-		CalculateChunkChecksums: false,
-	}, srv))
-	testutil.Equals(t, 2, len(srv.SeriesSet))
-	for _, chunk := range srv.SeriesSet[1].Chunks {
-		got := chunk.Raw.Hash
-		want := uint64(0)
 		testutil.Equals(t, want, got)
 	}
 }

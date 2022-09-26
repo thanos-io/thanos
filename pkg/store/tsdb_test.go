@@ -105,7 +105,6 @@ func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 		},
-		CalculateChunkChecksums: true,
 	}
 
 	err = tsdbStore.Series(req, srv)
