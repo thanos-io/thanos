@@ -447,6 +447,7 @@ Flags:
       --wait-interval=5m        Wait interval between consecutive compaction
                                 runs and bucket refreshes. Only works when
                                 --wait flag specified.
+      --web.disable             Disable Block Viewer UI.
       --web.disable-cors        Whether to disable CORS headers to be set by
                                 Thanos. By default Thanos sets CORS headers to
                                 be allowed by all.
