@@ -1151,7 +1151,6 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			chunkPool := chunkenc.NewPool()
 			changeLog := compactv2.NewChangeLog(io.Discard)
 			stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 			for _, id := range ids {
@@ -1165,7 +1164,15 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				if err != nil {
 					return errors.Wrapf(err, "read meta of %v", id)
 				}
-				b, err := tsdb.OpenBlock(logger, filepath.Join(tbc.tmpDir, id.String()), chunkPool)
+
+				var pool chunkenc.Pool
+				if meta.Thanos.Downsample.Resolution == 0 {
+					pool = chunkenc.NewPool()
+				} else {
+					pool = downsample.NewPool()
+				}
+
+				b, err := tsdb.OpenBlock(logger, filepath.Join(tbc.tmpDir, id.String()), pool)
 				if err != nil {
 					return errors.Wrapf(err, "open block %v", id)
 				}
@@ -1203,9 +1210,9 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 
 				var comp *compactv2.Compactor
 				if tbc.dryRun {
-					comp = compactv2.NewDryRun(tbc.tmpDir, logger, changeLog, chunkPool)
+					comp = compactv2.NewDryRun(tbc.tmpDir, logger, changeLog, pool)
 				} else {
-					comp = compactv2.New(tbc.tmpDir, logger, changeLog, chunkPool)
+					comp = compactv2.New(tbc.tmpDir, logger, changeLog, pool)
 				}
 
 				level.Info(logger).Log("msg", "starting rewrite for block", "source", id, "new", newID, "toDelete", string(deletionsYaml), "toRelabel", string(relabelYaml))
