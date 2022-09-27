@@ -91,7 +91,7 @@ func httpInstrumentationHandler(baseLabels prometheus.Labels, metrics *defaultMe
 								traceID = spanCtx.TraceID().String()
 							}
 
-							OTfound = span != nil && ok
+							OTfound = ok
 						}
 
 						// If OpenTracing span not found, try OTEL.

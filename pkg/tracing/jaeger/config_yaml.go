@@ -210,8 +210,6 @@ func parseTags(sTags string) []attribute.KeyValue {
 	return tags
 }
 
-// can logger have a non-stdout writer passed to it? - for unit tests
-
 // printDeprecationWarnings logs deprecation warnings for config options that are no
 // longer supported.
 func printDeprecationWarnings(config Config, l glog.Logger) {

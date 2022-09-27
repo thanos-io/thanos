@@ -5,6 +5,7 @@ package otlp
 
 import (
 	"context"
+	"strings"
 
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
 
@@ -20,7 +21,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var (
+const (
 	TracingClientGRPC string = "grpc"
 	TracingClientHTTP string = "http"
 )
@@ -34,7 +35,7 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 
 	var exporter *otlptrace.Exporter
 	var err error
-	switch config.ClientType {
+	switch strings.ToLower(config.ClientType) {
 	case TracingClientHTTP:
 		options := traceHTTPOptions(config)
 

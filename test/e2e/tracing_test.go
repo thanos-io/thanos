@@ -51,7 +51,7 @@ func TestJaegerTracing(t *testing.T) {
 			ServiceName:  "thanos-sidecar",
 			SamplerType:  "const",
 			SamplerParam: 1,
-			Endpoint:     "http://" + newJaeger.InternalEndpoint("jaeger.thrift") + "/api/traces", // make this a var
+			Endpoint:     "http://" + newJaeger.InternalEndpoint("jaeger.thrift") + "/api/traces",
 		},
 	})
 	testutil.Ok(t, err)
@@ -89,29 +89,24 @@ config:
 
 	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
 		response, err := client.Do(request)
-		// Retry if we have a connection problem (timeout, etc)
 		if err != nil {
 			return err
 		}
 
-		// Jaeger might give a 404 or 500 before the trace is there.  Retry.
 		if response.StatusCode != http.StatusOK {
 			return errors.New("status code not OK")
 		}
 
-		// We got a 200 response.
 		defer response.Body.Close()
 
 		body, err := io.ReadAll(response.Body)
 		testutil.Ok(t, err)
 
 		resp := string(body)
-		// If we don't see any data, we might have called too early - retry.
 		if strings.Contains(resp, `"data":[]`) {
 			return errors.New("no data returned")
 		}
 
-		// Assert we have a trace / spans for both services
 		testutil.Assert(t, strings.Contains(resp, `"serviceName":"thanos-query"`))
 		testutil.Assert(t, strings.Contains(resp, `"serviceName":"thanos-sidecar"`))
 		return nil
