@@ -50,7 +50,6 @@ func (r *Resolver) lookupSRV(service, proto, name string, currIteration, maxIter
 				Port:     addr.Port,
 			})
 		case *dns.CNAME:
-			var resp []*net.SRV
 			// Recursively resolve it.
 			_, resp, err := r.lookupSRV("", "", addr.Target, currIteration+1, maxIterations)
 			if err != nil {
