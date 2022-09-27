@@ -69,7 +69,7 @@ require (
 	github.com/prometheus/prometheus v0.38.0
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.0
-	github.com/thanos-community/promql-engine v0.0.0-20220920130216-1ec1401acc2c
+	github.com/thanos-community/promql-engine v0.0.0-20220926123320-18a0a4b4be8f
 	github.com/thanos-io/objstore v0.0.0-20220923084403-cec51c61948b
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible
