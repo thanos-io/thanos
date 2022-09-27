@@ -5,6 +5,7 @@ package queryfrontend
 
 import (
 	"testing"
+	"time"
 
 	"github.com/prometheus/prometheus/model/labels"
 
@@ -14,7 +15,8 @@ import (
 )
 
 func TestGenerateCacheKey(t *testing.T) {
-	splitter := newThanosCacheKeyGenerator(hour)
+	intervalFn := func(r queryrange.Request) time.Duration { return hour }
+	splitter := newThanosCacheKeyGenerator(intervalFn)
 
 	for _, tc := range []struct {
 		name     string

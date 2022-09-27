@@ -1,17 +1,16 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package limits
+package receive
 
 import (
 	"context"
 	"fmt"
 	"sync"
 
+	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-
-	"github.com/go-kit/log"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
 	"github.com/pkg/errors"
@@ -25,12 +24,20 @@ import (
 type Limiter struct {
 	sync.RWMutex
 	requestLimiter            requestLimiter
+	HeadSeriesLimiter         headSeriesLimiter
 	writeGate                 gate.Gate
 	registerer                prometheus.Registerer
 	configPathOrContent       fileContent
 	logger                    log.Logger
 	configReloadCounter       prometheus.Counter
 	configReloadFailedCounter prometheus.Counter
+	receiverMode              ReceiverMode
+}
+
+// headSeriesLimiter encompasses active/head series limiting logic.
+type headSeriesLimiter interface {
+	QueryMetaMonitoring(context.Context) error
+	isUnderLimit(tenant string) (bool, error)
 }
 
 type requestLimiter interface {
@@ -47,12 +54,14 @@ type fileContent interface {
 
 // NewLimiter creates a new *Limiter given a configuration and prometheus
 // registerer.
-func NewLimiter(configFile fileContent, reg prometheus.Registerer, logger log.Logger) (*Limiter, error) {
+func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMode, logger log.Logger) (*Limiter, error) {
 	limiter := &Limiter{
-		writeGate:      gate.NewNoop(),
-		requestLimiter: &noopRequestLimiter{},
-		registerer:     reg,
-		logger:         logger,
+		writeGate:         gate.NewNoop(),
+		requestLimiter:    &noopRequestLimiter{},
+		HeadSeriesLimiter: NewNopSeriesLimit(),
+		registerer:        reg,
+		logger:            logger,
+		receiverMode:      r,
 	}
 
 	if reg != nil {
@@ -137,6 +146,10 @@ func (l *Limiter) loadConfig() error {
 		l.registerer,
 		&config.WriteLimits,
 	)
+	seriesLimitSupported := (l.receiverMode == RouterOnly || l.receiverMode == RouterIngestor) && (len(config.WriteLimits.TenantsLimits) != 0 || config.WriteLimits.DefaultLimits.HeadSeriesLimit != 0)
+	if seriesLimitSupported {
+		l.HeadSeriesLimiter = NewHeadSeriesLimit(config.WriteLimits, l.registerer, l.logger)
+	}
 	return nil
 }
 

@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package limits
+package receive
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
@@ -19,6 +19,7 @@ var unlimitedRequestLimitsConfig = NewEmptyRequestLimitsConfig().
 	SetSeriesLimit(0).
 	SetSamplesLimit(0)
 
+// configRequestLimiter implements requestLimiter interface.
 type configRequestLimiter struct {
 	tenantLimits        map[string]*requestLimitsConfig
 	cachedDefaultLimits *requestLimitsConfig
@@ -39,7 +40,9 @@ func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *WriteLimits
 	tenantsLimits := writeLimits.TenantsLimits
 	tenantRequestLimits := make(map[string]*requestLimitsConfig)
 	for tenant, limitConfig := range tenantsLimits {
-		tenantRequestLimits[tenant] = limitConfig.RequestLimits.OverlayWith(defaultRequestLimits)
+		if limitConfig.RequestLimits != nil {
+			tenantRequestLimits[tenant] = limitConfig.RequestLimits.OverlayWith(defaultRequestLimits)
+		}
 	}
 
 	limiter := configRequestLimiter{

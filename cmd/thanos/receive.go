@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -43,7 +42,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
-	"github.com/thanos-io/thanos/pkg/receive/limits"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -195,9 +193,6 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
-	// Impose active series limit only if Receiver is in Router or RouterIngestor mode, and config is provided.
-	seriesLimitSupported := (receiveMode == receive.RouterOnly || receiveMode == receive.RouterIngestor) && conf.maxPerTenantLimit != 0
-
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
@@ -211,34 +206,40 @@ func runReceive(
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 
-	limiter, err := limits.NewLimiter(conf.limitsConfig, reg, logger)
+	var limitsConfig *receive.RootLimitsConfig
+	if conf.limitsConfig != nil {
+		limitsContentYaml, err := conf.limitsConfig.Content()
+		if err != nil {
+			return errors.Wrap(err, "get content of limit configuration")
+		}
+		limitsConfig, err = receive.ParseRootLimitConfig(limitsContentYaml)
+		if err != nil {
+			return errors.Wrap(err, "parse limit configuration")
+		}
+	}
+	limiter, err := receive.NewLimiter(conf.limitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"))
 	if err != nil {
 		return errors.Wrap(err, "creating limiter")
 	}
 
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:                   writer,
-		ListenAddress:            conf.rwAddress,
-		Registry:                 reg,
-		Endpoint:                 conf.endpoint,
-		TenantHeader:             conf.tenantHeader,
-		TenantField:              conf.tenantField,
-		DefaultTenantID:          conf.defaultTenantID,
-		ReplicaHeader:            conf.replicaHeader,
-		ReplicationFactor:        conf.replicationFactor,
-		RelabelConfigs:           relabelConfig,
-		ReceiverMode:             receiveMode,
-		Tracer:                   tracer,
-		TLSConfig:                rwTLSConfig,
-		DialOpts:                 dialOpts,
-		ForwardTimeout:           time.Duration(*conf.forwardTimeout),
-		TSDBStats:                dbs,
-		Limiter:                  limiter,
-		SeriesLimitSupported:     seriesLimitSupported,
-		MaxPerTenantLimit:        conf.maxPerTenantLimit,
-		MetaMonitoringUrl:        conf.metaMonitoringUrl,
-		MetaMonitoringHttpClient: conf.metaMonitoringHttpClient,
-		MetaMonitoringLimitQuery: conf.metaMonitoringLimitQuery,
+		Writer:            writer,
+		ListenAddress:     conf.rwAddress,
+		Registry:          reg,
+		Endpoint:          conf.endpoint,
+		TenantHeader:      conf.tenantHeader,
+		TenantField:       conf.tenantField,
+		DefaultTenantID:   conf.defaultTenantID,
+		ReplicaHeader:     conf.replicaHeader,
+		ReplicationFactor: conf.replicationFactor,
+		RelabelConfigs:    relabelConfig,
+		ReceiverMode:      receiveMode,
+		Tracer:            tracer,
+		TLSConfig:         rwTLSConfig,
+		DialOpts:          dialOpts,
+		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
+		TSDBStats:         dbs,
+		Limiter:           limiter,
 	})
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -263,11 +264,8 @@ func runReceive(
 	)
 
 	// Start all components while we wait for TSDB to open but only load
-	// initial config and mark ourselves as ready after it completed.
+	// initial config and mark ourselves as ready after it completes.
 
-	// reloadGRPCServer signals when - (1)TSDB is ready and the Store gRPC server can start.
-	// (2) The Hashring files have changed if tsdb ingestion is disabled.
-	reloadGRPCServer := make(chan struct{}, 1)
 	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
 	hashringChangedChan := make(chan struct{}, 1)
 
@@ -277,9 +275,9 @@ func runReceive(
 		// uploadDone signals when uploading has finished.
 		uploadDone := make(chan struct{}, 1)
 
-		level.Debug(logger).Log("msg", "setting up tsdb")
+		level.Debug(logger).Log("msg", "setting up TSDB")
 		{
-			if err := startTSDBAndUpload(g, logger, reg, dbs, reloadGRPCServer, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
+			if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
 				return err
 			}
 		}
@@ -287,12 +285,12 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
-		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, reloadGRPCServer, enableIngestion); err != nil {
+		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion); err != nil {
 			return err
 		}
 	}
 
-	level.Debug(logger).Log("msg", "setting up http server")
+	level.Debug(logger).Log("msg", "setting up HTTP server")
 	{
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(*conf.httpBindAddr),
@@ -301,7 +299,6 @@ func runReceive(
 		)
 		g.Add(func() error {
 			statusProber.Healthy()
-
 			return srv.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)
@@ -311,15 +308,69 @@ func runReceive(
 		})
 	}
 
-	level.Debug(logger).Log("msg", "setting up grpc server")
+	level.Debug(logger).Log("msg", "setting up gRPC server")
 	{
-		if err := setupAndRunGRPCServer(g, logger, reg, tracer, conf, reloadGRPCServer, comp, dbs, webHandler, grpcLogOpts,
-			tagOpts, grpcProbe, httpProbe.IsReady); err != nil {
-			return err
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), *conf.grpcCert, *conf.grpcKey, *conf.grpcClientCA)
+		if err != nil {
+			return errors.Wrap(err, "setup gRPC server")
 		}
+
+		mts := store.NewMultiTSDBStore(
+			logger,
+			reg,
+			comp,
+			dbs.TSDBStores,
+		)
+		rw := store.ReadWriteTSDBStore{
+			StoreServer:          mts,
+			WriteableStoreServer: webHandler,
+		}
+
+		infoSrv := info.NewInfoServer(
+			component.Receive.String(),
+			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return mts.LabelSet() }),
+			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
+				if httpProbe.IsReady() {
+					minTime, maxTime := mts.TimeRange()
+					return &infopb.StoreInfo{
+						MinTime:           minTime,
+						MaxTime:           maxTime,
+						SupportsSharding:  true,
+						SendsSortedSeries: true,
+					}
+				}
+				return nil
+			}),
+			info.WithExemplarsInfoFunc(),
+		)
+
+		srv := grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
+			grpcserver.WithServer(store.RegisterStoreServer(rw)),
+			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
+			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
+			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
+			grpcserver.WithListen(*conf.grpcBindAddr),
+			grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
+			grpcserver.WithTLSConfig(tlsCfg),
+			grpcserver.WithMaxConnAge(*conf.grpcMaxConnAge),
+		)
+
+		g.Add(
+			func() error {
+				level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", *conf.grpcBindAddr)
+				statusProber.Healthy()
+				return srv.ListenAndServe()
+			},
+			func(err error) {
+				statusProber.NotReady(err)
+				defer statusProber.NotHealthy(err)
+
+				srv.Shutdown(err)
+			},
+		)
 	}
 
-	level.Debug(logger).Log("msg", "setting up receive http handler")
+	level.Debug(logger).Log("msg", "setting up receive HTTP handler")
 	{
 		g.Add(
 			func() error {
@@ -331,13 +382,13 @@ func runReceive(
 		)
 	}
 
-	if seriesLimitSupported {
+	if limitsConfig.AreHeadSeriesLimitsConfigured() {
 		level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
 		{
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
 				return runutil.Repeat(15*time.Second, ctx.Done(), func() error {
-					if err := webHandler.ActiveSeriesLimit.QueryMetaMonitoring(ctx, log.With(logger, "component", "receive-meta-monitoring")); err != nil {
+					if err := limiter.HeadSeriesLimiter.QueryMetaMonitoring(ctx); err != nil {
 						level.Error(logger).Log("msg", "failed to query meta-monitoring", "err", err.Error())
 					}
 					return nil
@@ -367,104 +418,6 @@ func runReceive(
 	return nil
 }
 
-// setupAndRunGRPCServer sets up the configuration for the gRPC server.
-// It also sets up a handler for reloading the server if tsdb reloads.
-func setupAndRunGRPCServer(g *run.Group,
-	logger log.Logger,
-	reg *prometheus.Registry,
-	tracer opentracing.Tracer,
-	conf *receiveConfig,
-	reloadGRPCServer chan struct{},
-	comp component.SourceStoreAPI,
-	dbs *receive.MultiTSDB,
-	webHandler *receive.Handler,
-	grpcLogOpts []grpc_logging.Option,
-	tagOpts []tags.Option,
-	grpcProbe *prober.GRPCProbe,
-	isReady func() bool,
-) error {
-
-	var s *grpcserver.Server
-	// startGRPCListening re-starts the gRPC server once it receives a signal.
-	startGRPCListening := make(chan struct{})
-
-	g.Add(func() error {
-		defer close(startGRPCListening)
-
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), *conf.grpcCert, *conf.grpcKey, *conf.grpcClientCA)
-		if err != nil {
-			return errors.Wrap(err, "setup gRPC server")
-		}
-
-		for range reloadGRPCServer {
-			if s != nil {
-				s.Shutdown(errors.New("reload hashrings"))
-			}
-
-			mts := store.NewMultiTSDBStore(
-				logger,
-				reg,
-				comp,
-				dbs.TSDBStores,
-			)
-			rw := store.ReadWriteTSDBStore{
-				StoreServer:          mts,
-				WriteableStoreServer: webHandler,
-			}
-
-			infoSrv := info.NewInfoServer(
-				component.Receive.String(),
-				info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return mts.LabelSet() }),
-				info.WithStoreInfoFunc(func() *infopb.StoreInfo {
-					if isReady() {
-						minTime, maxTime := mts.TimeRange()
-						return &infopb.StoreInfo{
-							MinTime:          minTime,
-							MaxTime:          maxTime,
-							SupportsSharding: true,
-						}
-					}
-					return nil
-				}),
-				info.WithExemplarsInfoFunc(),
-			)
-
-			s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
-				grpcserver.WithServer(store.RegisterStoreServer(rw)),
-				grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
-				grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
-				grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
-				grpcserver.WithListen(*conf.grpcBindAddr),
-				grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
-				grpcserver.WithTLSConfig(tlsCfg),
-				grpcserver.WithMaxConnAge(*conf.grpcMaxConnAge),
-			)
-			startGRPCListening <- struct{}{}
-		}
-		if s != nil {
-			s.Shutdown(err)
-		}
-		return nil
-	}, func(error) {})
-
-	// We need to be able to start and stop the gRPC server
-	// whenever the DB changes, thus it needs its own run group.
-	g.Add(func() error {
-		for range startGRPCListening {
-			level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", *conf.grpcBindAddr)
-			if err := s.ListenAndServe(); err != nil {
-				return errors.Wrap(err, "serve gRPC")
-			}
-		}
-		return nil
-	}, func(error) {
-		defer close(reloadGRPCServer)
-	})
-
-	return nil
-
-}
-
 // setupHashring sets up the hashring configuration provided.
 // If no hashring is provided, we setup a single node hashring with local endpoint.
 func setupHashring(g *run.Group,
@@ -474,7 +427,6 @@ func setupHashring(g *run.Group,
 	hashringChangedChan chan struct{},
 	webHandler *receive.Handler,
 	statusProber prober.Probe,
-	reloadGRPCServer chan struct{},
 	enableIngestion bool,
 ) error {
 	// Note: the hashring configuration watcher
@@ -548,18 +500,12 @@ func setupHashring(g *run.Group,
 					return nil
 				}
 				webHandler.Hashring(h)
-				msg := "hashring has changed; server is not ready to receive web requests"
-				statusProber.NotReady(errors.New(msg))
-				level.Info(logger).Log("msg", msg)
-
+				// If ingestion is enabled, send a signal to TSDB to flush.
 				if enableIngestion {
-					// send a signal to tsdb to reload, and then restart the gRPC server.
 					hashringChangedChan <- struct{}{}
 				} else {
-					// we dont need tsdb to reload, so restart the gRPC server.
-					level.Info(logger).Log("msg", "server has reloaded, ready to start accepting requests")
+					// If not, just signal we are ready (this is important during first hashring load)
 					statusProber.Ready()
-					reloadGRPCServer <- struct{}{}
 				}
 			case <-cancel:
 				return nil
@@ -572,13 +518,12 @@ func setupHashring(g *run.Group,
 	return nil
 }
 
-// startTSDBAndUpload starts up the multi-tsdb and sets up the rungroup to flush the tsdb and reload on hashring change.
-// It also uploads the tsdb to object store if upload is enabled.
+// startTSDBAndUpload starts the multi-TSDB and sets up the rungroup to flush the TSDB and reload on hashring change.
+// It also upload blocks to object store, if upload is enabled.
 func startTSDBAndUpload(g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
 	dbs *receive.MultiTSDB,
-	reloadGRPCServer chan struct{},
 	uploadC chan struct{},
 	hashringChangedChan chan struct{},
 	upload bool,
@@ -642,6 +587,10 @@ func startTSDBAndUpload(g *run.Group,
 				// head compaction and upload.
 				flushHead := !initialized || hashringAlgorithm != receive.AlgorithmKetama
 				if flushHead {
+					msg := "hashring has changed; server is not ready to receive requests"
+					statusProber.NotReady(errors.New(msg))
+					level.Info(logger).Log("msg", msg)
+
 					level.Info(logger).Log("msg", "updating storage")
 					dbUpdatesStarted.Inc()
 					if err := dbs.Flush(); err != nil {
@@ -655,13 +604,11 @@ func startTSDBAndUpload(g *run.Group,
 						<-uploadDone
 					}
 					dbUpdatesCompleted.Inc()
+					statusProber.Ready()
+					level.Info(logger).Log("msg", "storage started, and server is ready to receive requests")
+					dbUpdatesCompleted.Inc()
 				}
 				initialized = true
-
-				statusProber.Ready()
-				level.Info(logger).Log("msg", "storage started, and server is ready to receive web requests")
-
-				reloadGRPCServer <- struct{}{}
 			}
 		}
 	}, func(err error) {
@@ -799,11 +746,6 @@ type receiveConfig struct {
 	rwClientServerCA   string
 	rwClientServerName string
 
-	maxPerTenantLimit        uint64
-	metaMonitoringLimitQuery string
-	metaMonitoringUrl        *url.URL
-	metaMonitoringHttpClient *extflag.PathOrContent
-
 	dataDir   string
 	labelStrs []string
 
@@ -903,14 +845,6 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.grpc-compression", "Compression algorithm to use for gRPC requests to other receivers. Must be one of: "+compressionOptions).Default(snappy.Name).EnumVar(&rc.compression, snappy.Name, compressionNone)
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
-
-	cmd.Flag("receive.tenant-limits.max-head-series", "The total number of active (head) series that a tenant is allowed to have within a Receive topology. For more details refer: https://thanos.io/tip/components/receive.md/#limiting").Hidden().Uint64Var(&rc.maxPerTenantLimit)
-
-	cmd.Flag("receive.tenant-limits.meta-monitoring-url", "Meta-monitoring URL which is compatible with Prometheus Query API for active series limiting.").Hidden().URLVar(&rc.metaMonitoringUrl)
-
-	cmd.Flag("receive.tenant-limits.meta-monitoring-query", "PromQL Query to execute against meta-monitoring, to get the current number of active series for each tenant, across Receive replicas.").Default("sum(prometheus_tsdb_head_series) by (tenant)").Hidden().StringVar(&rc.metaMonitoringLimitQuery)
-
-	rc.metaMonitoringHttpClient = extflag.RegisterPathOrContent(cmd, "receive.tenant-limits.meta-monitoring-client", "YAML file or string with http client configs for meta-monitoring.", extflag.WithHidden())
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 

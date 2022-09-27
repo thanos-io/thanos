@@ -51,6 +51,7 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 
 	go func() {
 		var reloadTimer *time.Timer
+		defer watcher.Close()
 		for {
 			select {
 			case <-ctx.Done():

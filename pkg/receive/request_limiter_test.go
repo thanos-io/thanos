@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package limits
+package receive
 
 import (
 	"testing"
@@ -14,7 +14,7 @@ func TestRequestLimiter_limitsFor(t *testing.T) {
 	tenantWithoutLimits := "unlimited-tenant"
 
 	limits := WriteLimitsConfig{
-		DefaultLimits: defaultLimitsConfig{
+		DefaultLimits: DefaultLimitsConfig{
 			RequestLimits: *NewEmptyRequestLimitsConfig().
 				SetSeriesLimit(10),
 		},
@@ -101,7 +101,7 @@ func TestRequestLimiter_AllowRequestBodySizeBytes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tenant := "tenant"
 			limits := WriteLimitsConfig{
-				DefaultLimits: defaultLimitsConfig{
+				DefaultLimits: DefaultLimitsConfig{
 					RequestLimits: *NewEmptyRequestLimitsConfig().SetSeriesLimit(10),
 				},
 				TenantsLimits: TenantsWriteLimitsConfig{
@@ -158,7 +158,7 @@ func TestRequestLimiter_AllowSeries(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tenant := "tenant"
 			limits := WriteLimitsConfig{
-				DefaultLimits: defaultLimitsConfig{
+				DefaultLimits: DefaultLimitsConfig{
 					RequestLimits: *NewEmptyRequestLimitsConfig().SetSeriesLimit(10),
 				},
 				TenantsLimits: TenantsWriteLimitsConfig{
@@ -216,7 +216,7 @@ func TestRequestLimiter_AllowSamples(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tenant := "tenant"
 			limits := WriteLimitsConfig{
-				DefaultLimits: defaultLimitsConfig{
+				DefaultLimits: DefaultLimitsConfig{
 					RequestLimits: *NewEmptyRequestLimitsConfig().SetSeriesLimit(10),
 				},
 				TenantsLimits: TenantsWriteLimitsConfig{

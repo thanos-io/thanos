@@ -1,9 +1,10 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package limits
+package receive
 
 import (
+	"net/url"
 	"os"
 	"path"
 	"testing"
@@ -24,25 +25,37 @@ func TestParseLimiterConfig(t *testing.T) {
 			wantErr:        false,
 			want: &RootLimitsConfig{
 				WriteLimits: WriteLimitsConfig{
-					GlobalLimits: globalLimitsConfig{MaxConcurrency: 30},
-					DefaultLimits: defaultLimitsConfig{
+					GlobalLimits: GlobalLimitsConfig{
+						MaxConcurrency:           30,
+						MetaMonitoringURL:        "http://localhost:9090",
+						MetaMonitoringLimitQuery: "sum(prometheus_tsdb_head_series) by (tenant)",
+						metaMonitoringURL: &url.URL{
+							Scheme: "http",
+							Host:   "localhost:9090",
+						},
+					},
+					DefaultLimits: DefaultLimitsConfig{
 						RequestLimits: *NewEmptyRequestLimitsConfig().
 							SetSizeBytesLimit(1024).
 							SetSeriesLimit(1000).
 							SetSamplesLimit(10),
+						HeadSeriesLimit: 1000,
 					},
 					TenantsLimits: TenantsWriteLimitsConfig{
-						"acme": &WriteLimitConfig{
-							RequestLimits: NewEmptyRequestLimitsConfig().
-								SetSizeBytesLimit(0).
-								SetSeriesLimit(0).
-								SetSamplesLimit(0),
-						},
-						"ajax": &WriteLimitConfig{
-							RequestLimits: NewEmptyRequestLimitsConfig().
-								SetSeriesLimit(50000).
-								SetSamplesLimit(500),
-						},
+						"acme": NewEmptyWriteLimitConfig().
+							SetRequestLimits(
+								NewEmptyRequestLimitsConfig().
+									SetSizeBytesLimit(0).
+									SetSeriesLimit(0).
+									SetSamplesLimit(0),
+							).
+							SetHeadSeriesLimit(2000),
+						"ajax": NewEmptyWriteLimitConfig().
+							SetRequestLimits(
+								NewEmptyRequestLimitsConfig().
+									SetSeriesLimit(50000).
+									SetSamplesLimit(500),
+							),
 					},
 				},
 			},

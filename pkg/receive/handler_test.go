@@ -44,7 +44,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
-	"github.com/thanos-io/thanos/pkg/receive/limits"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -367,15 +366,15 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		},
 	}
 
-	limiter, _ := limits.NewLimiter(limits.NewNopConfig(), nil, log.NewNopLogger())
+	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger())
 	for i := range appendables {
 		h := NewHandler(nil, &Options{
 			TenantHeader:      DefaultTenantHeader,
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
 			ForwardTimeout:    5 * time.Second,
-			Limiter:           limiter,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
+			Limiter:           limiter,
 		})
 		handlers = append(handlers, h)
 		h.peers = peers
@@ -783,11 +782,11 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			handler := handlers[0]
 
 			tenant := "test"
-			tenantConfig, err := yaml.Marshal(&limits.RootLimitsConfig{
-				WriteLimits: limits.WriteLimitsConfig{
-					TenantsLimits: limits.TenantsWriteLimitsConfig{
-						tenant: &limits.WriteLimitConfig{
-							RequestLimits: limits.NewEmptyRequestLimitsConfig().
+			tenantConfig, err := yaml.Marshal(&RootLimitsConfig{
+				WriteLimits: WriteLimitsConfig{
+					TenantsLimits: TenantsWriteLimitsConfig{
+						tenant: &WriteLimitConfig{
+							RequestLimits: NewEmptyRequestLimitsConfig().
 								SetSizeBytesLimit(int64(1 * units.Megabyte)).
 								SetSeriesLimit(20).
 								SetSamplesLimit(200),
@@ -801,8 +800,8 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			tmpLimitsPath := path.Join(t.TempDir(), "limits.yaml")
 			testutil.Ok(t, os.WriteFile(tmpLimitsPath, tenantConfig, 0666))
 			limitConfig, _ := extkingpin.NewStaticPathContent(tmpLimitsPath)
-			handler.Limiter, _ = limits.NewLimiter(
-				limitConfig, nil, log.NewNopLogger(),
+			handler.Limiter, _ = NewLimiter(
+				limitConfig, nil, RouterIngestor, log.NewNopLogger(),
 			)
 
 			wreq := &prompb.WriteRequest{

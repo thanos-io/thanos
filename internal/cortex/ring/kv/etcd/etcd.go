@@ -177,7 +177,7 @@ func (c *Client) CAS(ctx context.Context, key string, f func(in interface{}) (ou
 			lastErr = err
 			continue
 		}
-		// result is not Succeeded if the the comparison was false, meaning if the modify indexes did not match.
+		// result is not Succeeded if the comparison was false, meaning if the modify indexes did not match.
 		if !result.Succeeded {
 			level.Debug(c.logger).Log("msg", "failed to CAS, revision and version did not match in etcd", "key", key, "revision", revision)
 			continue

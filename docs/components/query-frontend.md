@@ -280,6 +280,10 @@ Flags:
                                  and end with their step for better
                                  cache-ability. Note: Grafana dashboards do that
                                  by default.
+      --query-range.horizontal-shards=0
+                                 Split queries in this many requests when query
+                                 duration is below
+                                 query-range.max-split-interval.
       --query-range.max-query-length=0
                                  Limit the query time range (end - start time)
                                  in the query-frontend, 0 disables it.
@@ -290,6 +294,19 @@ Flags:
                                  Maximum number of retries for a single query
                                  range request; beyond this, the downstream
                                  error is returned.
+      --query-range.max-split-interval=0
+                                 Split query range below this interval in
+                                 query-range.horizontal-shards. Queries with a
+                                 range longer than this value will be split in
+                                 multiple requests of this length.
+      --query-range.min-split-interval=0
+                                 Split query range requests above this interval
+                                 in query-range.horizontal-shards requests of
+                                 equal range. Using this parameter is not
+                                 allowed with query-range.split-interval. One
+                                 should also set
+                                 query-range.split-min-horizontal-shards to a
+                                 value greater than 1 to enable splitting.
       --query-range.partial-response
                                  Enable partial response for query range
                                  requests if no partial_response param is

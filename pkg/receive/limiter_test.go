@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package limits
+package receive
 
 import (
 	"context"
@@ -32,11 +32,11 @@ func TestLimiter_StartConfigReloader(t *testing.T) {
 		t.Fatalf("could not load test content at %s: %s", invalidLimitsPath, err)
 	}
 
-	limiter, err := NewLimiter(goodLimits, nil, log.NewLogfmtLogger(os.Stdout))
+	limiter, err := NewLimiter(goodLimits, nil, RouterIngestor, log.NewLogfmtLogger(os.Stdout))
 	testutil.Ok(t, err)
 
-	ctx := context.Background()
-	defer ctx.Done()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	errChan := make(chan error)
 	err = limiter.StartConfigReloader(ctx, errChan)
 	testutil.Ok(t, err)
