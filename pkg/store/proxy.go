@@ -48,6 +48,12 @@ type Client interface {
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
 
+	// SendsSortedSeries returns true if the underlying store sends series sorded by
+	// their labels.
+	// The field can be used to indicate to the querier whether it needs to sort
+	// received series before deduplication.
+	SendsSortedSeries() bool
+
 	String() string
 	// Addr returns address of a Client.
 	Addr() string

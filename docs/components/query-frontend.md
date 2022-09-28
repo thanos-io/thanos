@@ -125,6 +125,13 @@ config:
   get_multi_batch_size: 100
   max_set_multi_concurrency: 100
   set_multi_batch_size: 100
+  tls_enabled: false
+  tls_config:
+    ca_file: ""
+    cert_file: ""
+    key_file: ""
+    server_name: ""
+    insecure_skip_verify: false
   expiration: 24h0m0s
 ```
 
