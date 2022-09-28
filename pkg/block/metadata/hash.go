@@ -4,12 +4,13 @@
 package metadata
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/minio/sha256-simd"
 
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"

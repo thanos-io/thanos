@@ -4,7 +4,6 @@
 package chunk
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -12,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/minio/sha256-simd"
 
 	"fmt"
 
