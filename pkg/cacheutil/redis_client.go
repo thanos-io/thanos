@@ -20,6 +20,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
+	thanos_tls "github.com/thanos-io/thanos/pkg/tls"
 )
 
 var (
@@ -35,8 +36,24 @@ var (
 		GetMultiBatchSize:      100,
 		MaxSetMultiConcurrency: 100,
 		SetMultiBatchSize:      100,
+		TLSEnabled:             false,
+		TLSConfig:              TLSConfig{},
 	}
 )
+
+// TLSConfig configures TLS connections.
+type TLSConfig struct {
+	// The CA cert to use for the targets.
+	CAFile string `yaml:"ca_file"`
+	// The client cert file for the targets.
+	CertFile string `yaml:"cert_file"`
+	// The client key file for the targets.
+	KeyFile string `yaml:"key_file"`
+	// Used to verify the hostname for the targets. See https://tools.ietf.org/html/rfc4366#section-3.1
+	ServerName string `yaml:"server_name"`
+	// Disable target certificate validation.
+	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
+}
 
 // RedisClientConfig is the config accepted by RedisClient.
 type RedisClientConfig struct {
@@ -94,12 +111,19 @@ type RedisClientConfig struct {
 
 	// SetMultiBatchSize specifies the maximum size per batch for pipeline set.
 	SetMultiBatchSize int `yaml:"set_multi_batch_size"`
+
+	// TLSEnabled enable tls for redis connection.
+	TLSEnabled bool `yaml:"tls_enabled"`
+
+	// TLSConfig to use to connect to the redis server.
+	TLSConfig TLSConfig `yaml:"tls_config"`
 }
 
 func (c *RedisClientConfig) validate() error {
 	if c.Addr == "" {
 		return errors.New("no redis addr provided")
 	}
+
 	return nil
 }
 
@@ -136,7 +160,8 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
-	redisClient := redis.NewClient(&redis.Options{
+
+	opts := &redis.Options{
 		Addr:         config.Addr,
 		Username:     config.Username,
 		Password:     config.Password,
@@ -147,8 +172,22 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		MinIdleConns: config.MinIdleConns,
 		MaxConnAge:   config.MaxConnAge,
 		IdleTimeout:  config.IdleTimeout,
-	})
+	}
 
+	if config.TLSEnabled {
+		tlsConfig := config.TLSConfig
+
+		tlsClientConfig, err := thanos_tls.NewClientConfig(logger, tlsConfig.CertFile, tlsConfig.KeyFile,
+			tlsConfig.CAFile, tlsConfig.ServerName, tlsConfig.InsecureSkipVerify)
+
+		if err != nil {
+			return nil, err
+		}
+
+		opts.TLSConfig = tlsClientConfig
+	}
+
+	redisClient := redis.NewClient(opts)
 	if reg != nil {
 		reg = prometheus.WrapRegistererWith(prometheus.Labels{"name": name}, reg)
 	}
