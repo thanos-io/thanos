@@ -612,7 +612,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 	dir := filepath.Join(e.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), dir), os.ModePerm))
 	for _, blockSize := range blockSizes {
-		series := make([]labels.Labels, blockSize.series, blockSize.series)
+		series := make([]labels.Labels, blockSize.series)
 		for i := 0; i < blockSize.series; i++ {
 			bigSeriesLabels := labels.FromStrings("__name__", blockSize.name, "instance", fmt.Sprintf("foo_%d", i))
 			series[i] = bigSeriesLabels

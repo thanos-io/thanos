@@ -450,7 +450,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		level.Info(qapi.logger).Log("series", seriesStats[i].Series, "samples", seriesStats[i].Samples)
 		qapi.seriesStatsAggregator.Aggregate(seriesStats[i])
 	}
-	qapi.seriesStatsAggregator.Observe(time.Now().Sub(beforeRange).Seconds())
+	qapi.seriesStatsAggregator.Observe(time.Since(beforeRange).Seconds())
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs stats.QueryStats
@@ -602,7 +602,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		qapi.seriesStatsAggregator.Aggregate(seriesStats[i])
 		level.Info(qapi.logger).Log("series", seriesStats[i].Series, "samples", seriesStats[i].Samples)
 	}
-	qapi.seriesStatsAggregator.Observe(time.Now().Sub(beforeRange).Seconds())
+	qapi.seriesStatsAggregator.Observe(time.Since(beforeRange).Seconds())
 
 	// Optional stats field in response if parameter "stats" is not empty.
 	var qs stats.QueryStats
