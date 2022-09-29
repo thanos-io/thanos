@@ -169,7 +169,6 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		request.EnableQueryPushdown,
 		false,
 		request.ShardInfo,
-		// TODO(douglascamata): do we need to do something here? Is there GRPC and HTTP?
 		query.NoopSeriesStatsReporter,
 	)
 
