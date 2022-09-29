@@ -147,7 +147,24 @@ type querier struct {
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
 // store API endpoints.
-func newQuerier(ctx context.Context, logger log.Logger, mint, maxt int64, replicaLabels []string, storeDebugMatchers [][]*labels.Matcher, proxy storepb.StoreServer, deduplicate bool, maxResolutionMillis int64, partialResponse, enableQueryPushdown, skipChunks bool, selectGate gate.Gate, selectTimeout time.Duration, shardInfo *storepb.ShardInfo, seriesStatsReporter SeriesStatsReporter) *querier {
+func newQuerier(
+	ctx context.Context,
+	logger log.Logger,
+	mint,
+	maxt int64,
+	replicaLabels []string,
+	storeDebugMatchers [][]*labels.Matcher,
+	proxy storepb.StoreServer,
+	deduplicate bool,
+	maxResolutionMillis int64,
+	partialResponse,
+	enableQueryPushdown,
+	skipChunks bool,
+	selectGate gate.Gate,
+	selectTimeout time.Duration,
+	shardInfo *storepb.ShardInfo,
+	seriesStatsReporter SeriesStatsReporter,
+) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
