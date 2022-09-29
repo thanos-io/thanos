@@ -445,9 +445,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
-	level.Info(qapi.logger).Log("totalStats", len(seriesStats))
 	for i := range seriesStats {
-		level.Info(qapi.logger).Log("series", seriesStats[i].Series, "samples", seriesStats[i].Samples)
 		qapi.seriesStatsAggregator.Aggregate(seriesStats[i])
 	}
 	qapi.seriesStatsAggregator.Observe(time.Since(beforeRange).Seconds())
