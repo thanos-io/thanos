@@ -583,7 +583,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 	t.Parallel()
 
 	// Build up.
-	e, err := e2e.New(e2e.WithName("e2e-query-store-metrics"))
+	e, err := e2e.New(e2e.WithName("storemetrics01"))
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -676,7 +676,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 		&model.Sample{
 			Metric: model.Metric{
 				"__name__":   "thanos_store_api_query_duration_seconds_count",
-				"instance":   "e2e-query-store-metrics-querier-1:8080",
+				"instance":   "storemetrics01-querier-1:8080",
 				"job":        "querier-1",
 				"samples_le": "100000",
 				"series_le":  "10000",
@@ -693,7 +693,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 		&model.Sample{
 			Metric: model.Metric{
 				"__name__":   "thanos_store_api_query_duration_seconds_count",
-				"instance":   "e2e-query-store-metrics-querier-1:8080",
+				"instance":   "storemetrics01-querier-1:8080",
 				"job":        "querier-1",
 				"samples_le": "100",
 				"series_le":  "10",
