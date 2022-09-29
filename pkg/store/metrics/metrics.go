@@ -73,3 +73,13 @@ func (s *SeriesQueryPerformanceMetricsAggregator) findBucket(value float64, quan
 	}
 	return foundBucket
 }
+
+type NopSeriesQueryPerformanceMetricsAggregator struct{}
+
+func (s *NopSeriesQueryPerformanceMetricsAggregator) Aggregate(_ storepb.SeriesStatsCounter) {
+	return
+}
+
+func (s *NopSeriesQueryPerformanceMetricsAggregator) Observe(_ float64) {
+	return
+}

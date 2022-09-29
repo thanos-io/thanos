@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -42,10 +41,9 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/util/stats"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/thanos-io/thanos/pkg/store/metrics"
-
-	"github.com/prometheus/prometheus/util/stats"
 
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -110,7 +108,12 @@ type QueryAPI struct {
 
 	queryRangeHist prometheus.Histogram
 
-	seriesStatsAggregator *metrics.SeriesQueryPerformanceMetricsAggregator
+	seriesStatsAggregator seriesQueryPerformanceMetricsAggregator
+}
+
+type seriesQueryPerformanceMetricsAggregator interface {
+	Aggregate(seriesStats storepb.SeriesStatsCounter)
+	Observe(duration float64)
 }
 
 // NewQueryAPI returns an initialized QueryAPI type.
@@ -138,9 +141,12 @@ func NewQueryAPI(
 	defaultMetadataTimeRange time.Duration,
 	disableCORS bool,
 	gate gate.Gate,
-	statsAggregator *metrics.SeriesQueryPerformanceMetricsAggregator,
+	statsAggregator seriesQueryPerformanceMetricsAggregator,
 	reg *prometheus.Registry,
 ) *QueryAPI {
+	if statsAggregator == nil {
+		statsAggregator = &metrics.NopSeriesQueryPerformanceMetricsAggregator{}
+	}
 	return &QueryAPI{
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:                                 logger,
@@ -595,10 +601,8 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
-	level.Info(qapi.logger).Log("totalStats", len(seriesStats))
 	for i := range seriesStats {
 		qapi.seriesStatsAggregator.Aggregate(seriesStats[i])
-		level.Info(qapi.logger).Log("series", seriesStats[i].Series, "samples", seriesStats[i].Samples)
 	}
 	qapi.seriesStatsAggregator.Observe(time.Since(beforeRange).Seconds())
 
