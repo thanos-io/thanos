@@ -10,9 +10,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/minio/sha256-simd"
-
 	"github.com/go-kit/log"
+	"github.com/minio/sha256-simd"
 	"github.com/pkg/errors"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
