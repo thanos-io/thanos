@@ -186,7 +186,6 @@ func TestQuery(t *testing.T) {
 			"prometheus": "prom-ha",
 		},
 	})
-	fmt.Println("foobar")
 }
 
 func TestQueryExternalPrefixWithoutReverseProxy(t *testing.T) {
@@ -584,7 +583,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 	t.Parallel()
 
 	// Build up.
-	e, err := e2e.NewDockerEnvironment("e2e-query-store-metrics")
+	e, err := e2e.New(e2e.WithName("e2e-query-store-metrics"))
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -599,37 +598,40 @@ func TestQueryStoreMetrics(t *testing.T) {
 	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("https"), minio.Dir()), "test")
 	testutil.Ok(t, err)
 
-	blockSizes := []struct {
-		samples int
-		series  int
-		name    string
-	}{
-		{samples: 10, series: 1, name: "one_series"},
-		{samples: 10, series: 1001, name: "thousand_one_series"},
-	}
-	now := time.Now()
-	externalLabels := labels.FromStrings("prometheus", "p1", "replica", "0")
-	dir := filepath.Join(e.SharedDir(), "tmp")
-	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), dir), os.ModePerm))
-	for _, blockSize := range blockSizes {
-		series := make([]labels.Labels, blockSize.series)
-		for i := 0; i < blockSize.series; i++ {
-			bigSeriesLabels := labels.FromStrings("__name__", blockSize.name, "instance", fmt.Sprintf("foo_%d", i))
-			series[i] = bigSeriesLabels
+	// Preparing 2 different blocks for the tests.
+	{
+		blockSizes := []struct {
+			samples int
+			series  int
+			name    string
+		}{
+			{samples: 10, series: 1, name: "one_series"},
+			{samples: 10, series: 1001, name: "thousand_one_series"},
 		}
-		blockID, err := e2eutil.CreateBlockWithBlockDelay(ctx,
-			dir,
-			series,
-			blockSize.samples,
-			timestamp.FromTime(now),
-			timestamp.FromTime(now.Add(2*time.Hour)),
-			30*time.Minute,
-			externalLabels,
-			0,
-			metadata.NoneFunc,
-		)
-		testutil.Ok(t, err)
-		testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID.String()), blockID.String()))
+		now := time.Now()
+		externalLabels := labels.FromStrings("prometheus", "p1", "replica", "0")
+		dir := filepath.Join(e.SharedDir(), "tmp")
+		testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), dir), os.ModePerm))
+		for _, blockSize := range blockSizes {
+			series := make([]labels.Labels, blockSize.series)
+			for i := 0; i < blockSize.series; i++ {
+				bigSeriesLabels := labels.FromStrings("__name__", blockSize.name, "instance", fmt.Sprintf("foo_%d", i))
+				series[i] = bigSeriesLabels
+			}
+			blockID, err := e2eutil.CreateBlockWithBlockDelay(ctx,
+				dir,
+				series,
+				blockSize.samples,
+				timestamp.FromTime(now),
+				timestamp.FromTime(now.Add(2*time.Hour)),
+				30*time.Minute,
+				externalLabels,
+				0,
+				metadata.NoneFunc,
+			)
+			testutil.Ok(t, err)
+			testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID.String()), blockID.String()))
+		}
 	}
 
 	s1 := e2ethanos.NewStoreGW(
@@ -648,16 +650,20 @@ func TestQueryStoreMetrics(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(2), "thanos_blocks_meta_synced"))
 
-	instantQuery(t, ctx, q.Endpoint("http"), func() string {
-		return "max_over_time(one_series{instance='foo_0'}[2h])"
-	}, time.Now, promclient.QueryOptions{
-		Deduplicate: true,
-	}, 1)
-	instantQuery(t, ctx, q.Endpoint("http"), func() string {
-		return "max_over_time(thousand_one_series[2h])"
-	}, time.Now, promclient.QueryOptions{
-		Deduplicate: true,
-	}, 1001)
+	// Querying the series in the previously created blocks to ensure we produce Store API query metrics.
+	{
+		instantQuery(t, ctx, q.Endpoint("http"), func() string {
+			return "max_over_time(one_series{instance='foo_0'}[2h])"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 1)
+
+		instantQuery(t, ctx, q.Endpoint("http"), func() string {
+			return "max_over_time(thousand_one_series[2h])"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 1001)
+	}
 
 	mon, err := e2emon.Start(e)
 	testutil.Ok(t, err)
