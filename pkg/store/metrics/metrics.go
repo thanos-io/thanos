@@ -74,12 +74,9 @@ func (s *SeriesQueryPerformanceMetricsAggregator) findBucket(value float64, quan
 	return foundBucket
 }
 
+// NopSeriesQueryPerformanceMetricsAggregator is a query performance series aggregator that does nothing.
 type NopSeriesQueryPerformanceMetricsAggregator struct{}
 
-func (s *NopSeriesQueryPerformanceMetricsAggregator) Aggregate(_ storepb.SeriesStatsCounter) {
-	return
-}
+func (s *NopSeriesQueryPerformanceMetricsAggregator) Aggregate(_ storepb.SeriesStatsCounter) {}
 
-func (s *NopSeriesQueryPerformanceMetricsAggregator) Observe(_ float64) {
-	return
-}
+func (s *NopSeriesQueryPerformanceMetricsAggregator) Observe(_ float64) {}
