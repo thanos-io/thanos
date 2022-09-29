@@ -378,6 +378,15 @@ Flags:
                                  able to query without deduplication using
                                  'dedup=false' parameter. Data includes time
                                  series, recording rules, and alerting rules.
+      --query.telemetry.request-duration-seconds-quantiles=0.1... ...
+                                 The quantiles for exporting metrics about the
+                                 request duration quantiles.
+      --query.telemetry.request-samples-quantiles=100... ...
+                                 The quantiles for exporting metrics about the
+                                 samples count quantiles.
+      --query.telemetry.request-series-seconds-quantiles=10... ...
+                                 The quantiles for exporting metrics about the
+                                 series count quantiles.
       --query.timeout=2m         Maximum time to process query by query node.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
