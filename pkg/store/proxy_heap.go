@@ -112,7 +112,7 @@ func (d *dedupResponseHeap) Next() bool {
 
 func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 	if len(d.responses) == 0 {
-		return nil
+		panic("BUG: At() called with no responses; please call At() only if Next() returns true")
 	} else if len(d.responses) == 1 {
 		return d.responses[0]
 	}
