@@ -314,47 +314,47 @@ Flags:
                                 Setting it to "0s" disables it. Now compaction,
                                 downsampling and retention progress are
                                 supported.
-      --consistency-delay=30m   Minimum age of fresh (non-compacted)
-                                blocks before they are being processed.
-                                Malformed blocks older than the maximum of
+      --consistency-delay=30m   Minimum age of fresh (non-compacted) blocks
+                                before they are being processed. Malformed
+                                blocks older than the maximum of
                                 consistency-delay and 48h0m0s will be removed.
       --data-dir="./data"       Data directory in which to cache blocks and
                                 process compactions.
       --deduplication.func=     Experimental. Deduplication algorithm for
                                 merging overlapping blocks. Possible values are:
-                                "", "penalty". If no value is specified,
-                                the default compact deduplication merger
-                                is used, which performs 1:1 deduplication
-                                for samples. When set to penalty, penalty
-                                based deduplication algorithm will be used.
-                                At least one replica label has to be set via
+                                "", "penalty". If no value is specified, the
+                                default compact deduplication merger is used,
+                                which performs 1:1 deduplication for samples.
+                                When set to penalty, penalty based deduplication
+                                algorithm will be used. At least one replica
+                                label has to be set via
                                 --deduplication.replica-label flag.
       --deduplication.replica-label=DEDUPLICATION.REPLICA-LABEL ...
                                 Label to treat as a replica indicator of blocks
                                 that can be deduplicated (repeated flag). This
                                 will merge multiple replica blocks into one.
-                                This process is irreversible.Experimental.
-                                When one or more labels are set, compactor
-                                will ignore the given labels so that vertical
-                                compaction can merge the blocks.Please note
-                                that by default this uses a NAIVE algorithm
-                                for merging which works well for deduplication
-                                of blocks with **precisely the same samples**
-                                like produced by Receiver replication.If you
-                                need a different deduplication algorithm (e.g
-                                one that works well with Prometheus replicas),
-                                please set it via --deduplication.func.
+                                This process is irreversible.Experimental. When
+                                one or more labels are set, compactor will
+                                ignore the given labels so that vertical
+                                compaction can merge the blocks.Please note that
+                                by default this uses a NAIVE algorithm for
+                                merging which works well for deduplication of
+                                blocks with **precisely the same samples** like
+                                produced by Receiver replication.If you need a
+                                different deduplication algorithm (e.g one that
+                                works well with Prometheus replicas), please set
+                                it via --deduplication.func.
       --delete-delay=48h        Time before a block marked for deletion is
                                 deleted from bucket. If delete-delay is non
                                 zero, blocks will be marked for deletion and
                                 compactor component will delete blocks marked
-                                for deletion from the bucket. If delete-delay
-                                is 0, blocks will be deleted straight away.
-                                Note that deleting blocks immediately can cause
-                                query failures, if store gateway still has the
-                                block loaded, or compactor is ignoring the
-                                deletion because it's compacting the block at
-                                the same time.
+                                for deletion from the bucket. If delete-delay is
+                                0, blocks will be deleted straight away. Note
+                                that deleting blocks immediately can cause query
+                                failures, if store gateway still has the block
+                                loaded, or compactor is ignoring the deletion
+                                because it's compacting the block at the same
+                                time.
       --downsample.concurrency=1
                                 Number of goroutines to use when downsampling
                                 blocks.
@@ -364,11 +364,11 @@ Flags:
                                 e.g it is not possible to render all samples for
                                 a human eye anyway
       --hash-func=              Specify which hash function to use when
-                                calculating the hashes of produced files.
-                                If no function has been specified, it does not
-                                happen. This permits avoiding downloading some
-                                files twice albeit at some performance cost.
-                                Possible values are: "", "SHA256".
+                                calculating the hashes of produced files. If no
+                                function has been specified, it does not happen.
+                                This permits avoiding downloading some files
+                                twice albeit at some performance cost. Possible
+                                values are: "", "SHA256".
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --http-address="0.0.0.0:10902"
@@ -382,29 +382,29 @@ Flags:
                                 json.
       --log.level=info          Log filtering level.
       --max-time=9999-12-31T23:59:59Z
-                                End of time range limit to compact.
-                                Thanos Compactor will compact only blocks,
-                                which happened earlier than this value. Option
-                                can be a constant time in RFC3339 format or time
+                                End of time range limit to compact. Thanos
+                                Compactor will compact only blocks, which
+                                happened earlier than this value. Option can be
+                                a constant time in RFC3339 format or time
                                 duration relative to current time, such as -1d
                                 or 2h45m. Valid duration units are ms, s, m, h,
                                 d, w, y.
       --min-time=0000-01-01T00:00:00Z
-                                Start of time range limit to compact.
-                                Thanos Compactor will compact only blocks, which
+                                Start of time range limit to compact. Thanos
+                                Compactor will compact only blocks, which
                                 happened later than this value. Option can be a
                                 constant time in RFC3339 format or time duration
                                 relative to current time, such as -1d or 2h45m.
                                 Valid duration units are ms, s, m, h, d, w, y.
       --objstore.config=<content>
-                                Alternative to 'objstore.config-file'
-                                flag (mutually exclusive). Content of
-                                YAML file that contains object store
-                                configuration. See format details:
+                                Alternative to 'objstore.config-file' flag
+                                (mutually exclusive). Content of YAML file that
+                                contains object store configuration. See format
+                                details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                Path to YAML file that contains object
-                                store configuration. See format details:
+                                Path to YAML file that contains object store
+                                configuration. See format details:
                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --retention.resolution-1h=0d
                                 How long to retain samples of resolution 2 (1
@@ -420,26 +420,26 @@ Flags:
                                 resolution forever
       --selector.relabel-config=<content>
                                 Alternative to 'selector.relabel-config-file'
-                                flag (mutually exclusive). Content of
-                                YAML file that contains relabeling
-                                configuration that allows selecting
-                                blocks. It follows native Prometheus
-                                relabel-config syntax. See format details:
+                                flag (mutually exclusive). Content of YAML file
+                                that contains relabeling configuration that
+                                allows selecting blocks. It follows native
+                                Prometheus relabel-config syntax. See format
+                                details:
                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --selector.relabel-config-file=<file-path>
                                 Path to YAML file that contains relabeling
-                                configuration that allows selecting
-                                blocks. It follows native Prometheus
-                                relabel-config syntax. See format details:
+                                configuration that allows selecting blocks. It
+                                follows native Prometheus relabel-config syntax.
+                                See format details:
                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag
-                                (mutually exclusive). Content of YAML file
-                                with tracing configuration. See format details:
+                                (mutually exclusive). Content of YAML file with
+                                tracing configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                                Path to YAML file with tracing
-                                configuration. See format details:
+                                Path to YAML file with tracing configuration.
+                                See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
       --version                 Show application version.
   -w, --wait                    Do not exit after all compactions have been
@@ -452,20 +452,20 @@ Flags:
                                 Thanos. By default Thanos sets CORS headers to
                                 be allowed by all.
       --web.external-prefix=""  Static prefix for all HTML links and redirect
-                                URLs in the bucket web UI interface.
-                                Actual endpoints are still served on / or the
-                                web.route-prefix. This allows thanos bucket
-                                web UI to be served behind a reverse proxy that
+                                URLs in the bucket web UI interface. Actual
+                                endpoints are still served on / or the
+                                web.route-prefix. This allows thanos bucket web
+                                UI to be served behind a reverse proxy that
                                 strips a URL sub-path.
       --web.prefix-header=""    Name of HTTP request header used for dynamic
-                                prefixing of UI links and redirects.
-                                This option is ignored if web.external-prefix
-                                argument is set. Security risk: enable
-                                this option only if a reverse proxy in
-                                front of thanos is resetting the header.
-                                The --web.prefix-header=X-Forwarded-Prefix
-                                option can be useful, for example, if Thanos
-                                UI is served via Traefik reverse proxy with
+                                prefixing of UI links and redirects. This option
+                                is ignored if web.external-prefix argument is
+                                set. Security risk: enable this option only if a
+                                reverse proxy in front of thanos is resetting
+                                the header. The
+                                --web.prefix-header=X-Forwarded-Prefix option
+                                can be useful, for example, if Thanos UI is
+                                served via Traefik reverse proxy with
                                 PathPrefixStrip option enabled, which sends the
                                 stripped prefix value in X-Forwarded-Prefix
                                 header. This allows thanos UI to be served on a

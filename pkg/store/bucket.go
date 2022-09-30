@@ -495,8 +495,10 @@ func NewBucketStore(
 		return nil, errors.Wrap(err, "validate config")
 	}
 
-	if err := os.MkdirAll(dir, 0750); err != nil {
-		return nil, errors.Wrap(err, "create dir")
+	if dir != "" {
+		if err := os.MkdirAll(dir, 0750); err != nil {
+			return nil, errors.Wrap(err, "create dir")
+		}
 	}
 
 	return s, nil
@@ -591,26 +593,28 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 		return errors.Wrap(err, "sync block")
 	}
 
-	fis, err := os.ReadDir(s.dir)
-	if err != nil {
-		return errors.Wrap(err, "read dir")
-	}
-	names := make([]string, 0, len(fis))
-	for _, fi := range fis {
-		names = append(names, fi.Name())
-	}
-	for _, n := range names {
-		id, ok := block.IsBlockDir(n)
-		if !ok {
-			continue
+	if s.dir != "" {
+		fis, err := os.ReadDir(s.dir)
+		if err != nil {
+			return errors.Wrap(err, "read dir")
 		}
-		if b := s.getBlock(id); b != nil {
-			continue
+		names := make([]string, 0, len(fis))
+		for _, fi := range fis {
+			names = append(names, fi.Name())
 		}
+		for _, n := range names {
+			id, ok := block.IsBlockDir(n)
+			if !ok {
+				continue
+			}
+			if b := s.getBlock(id); b != nil {
+				continue
+			}
 
-		// No such block loaded, remove the local dir.
-		if err := os.RemoveAll(path.Join(s.dir, id.String())); err != nil {
-			level.Warn(s.logger).Log("msg", "failed to remove block which is not needed", "err", err)
+			// No such block loaded, remove the local dir.
+			if err := os.RemoveAll(path.Join(s.dir, id.String())); err != nil {
+				level.Warn(s.logger).Log("msg", "failed to remove block which is not needed", "err", err)
+			}
 		}
 	}
 
@@ -624,15 +628,20 @@ func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
 }
 
 func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err error) {
-	dir := filepath.Join(s.dir, meta.ULID.String())
+	dir := ""
+	if s.dir != "" {
+		dir = filepath.Join(s.dir, meta.ULID.String())
+	}
 	start := time.Now()
 
 	level.Debug(s.logger).Log("msg", "loading new block", "id", meta.ULID)
 	defer func() {
 		if err != nil {
 			s.metrics.blockLoadFailures.Inc()
-			if err2 := os.RemoveAll(dir); err2 != nil {
-				level.Warn(s.logger).Log("msg", "failed to remove block we cannot load", "err", err2)
+			if dir != "" {
+				if err2 := os.RemoveAll(dir); err2 != nil {
+					level.Warn(s.logger).Log("msg", "failed to remove block we cannot load", "err", err2)
+				}
 			}
 			level.Warn(s.logger).Log("msg", "loading block failed", "elapsed", time.Since(start), "id", meta.ULID, "err", err)
 		} else {
@@ -721,6 +730,11 @@ func (s *BucketStore) removeBlock(id ulid.ULID) error {
 	if err := b.Close(); err != nil {
 		return errors.Wrap(err, "close block")
 	}
+
+	if b.dir == "" {
+		return nil
+	}
+
 	return os.RemoveAll(b.dir)
 }
 

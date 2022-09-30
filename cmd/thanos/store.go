@@ -91,7 +91,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.grpcConfig = *sc.grpcConfig.registerFlag(cmd)
 
 	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar.").
-		Default("./data").StringVar(&sc.dataDir)
+		Default("").StringVar(&sc.dataDir)
 
 	cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
 		Default("250MB").BytesVar(&sc.indexCacheSizeBytes)
