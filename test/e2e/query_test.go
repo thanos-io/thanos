@@ -1038,7 +1038,7 @@ func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func()
 		"caller", "queryWaitAndAssert",
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", len(expected), q()),
 	)
-	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.RetryWithLog(logger, 10*time.Second, ctx.Done(), func() error {
 		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 		if err != nil {
 			return err
