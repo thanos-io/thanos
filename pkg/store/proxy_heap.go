@@ -293,6 +293,19 @@ func (l *lazyRespSet) Empty() bool {
 	l.bufferedResponsesMtx.Lock()
 	defer l.bufferedResponsesMtx.Unlock()
 
+	// NOTE(GiedriusS): need to wait here for at least one
+	// response so that we could build the heap properly.
+	if l.noMoreData && len(l.bufferedResponses) == 0 {
+		return true
+	}
+
+	for len(l.bufferedResponses) == 0 {
+		l.dataOrFinishEvent.Wait()
+		if l.noMoreData && len(l.bufferedResponses) == 0 {
+			break
+		}
+	}
+
 	return len(l.bufferedResponses) == 0 && l.noMoreData
 }
 
