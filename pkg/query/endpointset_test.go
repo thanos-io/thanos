@@ -1041,6 +1041,80 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 
 }
 
+func TestEndpointSet_Update_LongExternalLabel(t *testing.T) {
+	endpoints, err := startTestEndpoints([]testEndpointMeta{
+		{
+			InfoResponse: sidecarInfo,
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				labels = []labelpb.ZLabelSet{}
+				for i := 0; i < 1000; i++ {
+					append(labels, labelspb.ZLabelSet{
+						Labels: []labelpb.ZLabel{
+							{
+								Name: "addr",
+								Value: addr
+							}
+						}
+					})
+				}
+				return labels
+			}
+				return []labelpb.ZLabelSet{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "addr",
+								Value: addr,
+							},
+						},
+					},
+				}
+			},
+		},
+		{
+			InfoResponse: sidecarInfo,
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "addr",
+								Value: addr,
+							},
+						},
+					},
+				}
+			},
+		},
+	})
+	testutil.Ok(t, err)
+	defer endpoints.Close()
+
+	initialEndpointAddr := endpoints.EndpointAddresses()
+	endpoints.CloseOne(initialEndpointAddr[0])
+	endpoints.CloseOne(initialEndpointAddr[1])
+
+	endpointSet := NewEndpointSet(time.Now, nil, nil,
+		func() (specs []*GRPCEndpointSpec) {
+			for _, addr := range initialEndpointAddr {
+				specs = append(specs, NewGRPCEndpointSpec(addr, false))
+			}
+			return specs
+		},
+		testGRPCOpts, time.Minute, 2*time.Second)
+	defer endpointSet.Close()
+
+	// Should not matter how many of these we run.
+	endpointSet.Update(context.Background())
+	endpointSet.Update(context.Background())
+	for _
+
+	// Leak test will ensure that we don't keep client connection around.
+	expected := newEndpointAPIStats()
+	testutil.Equals(t, expected, endpointSet.endpointsMetric.storeNodes)
+
+}
+
 // TestEndpoint_Update_QuerierStrict tests what happens when the strict mode is enabled/disabled.
 func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 	endpoints, err := startTestEndpoints([]testEndpointMeta{

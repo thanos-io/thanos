@@ -204,10 +204,14 @@ func newEndpointSetNodeCollector() *endpointSetNodeCollector {
 func (c *endpointSetNodeCollector) Update(nodes map[component.Component]map[string]int) {
 	storeNodes := make(map[component.Component]map[string]int, len(nodes))
 	storePerExtLset := map[string]int{}
+	labelThreshold := 1000
 
 	for k, v := range nodes {
 		storeNodes[k] = make(map[string]int, len(v))
 		for kk, vv := range v {
+			if len(kk) > labelThreshold {
+				kk = kk[:labelThreshold]
+			}
 			storePerExtLset[kk] += vv
 			storeNodes[k][kk] = vv
 		}
