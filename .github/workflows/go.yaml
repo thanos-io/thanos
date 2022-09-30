@@ -60,7 +60,7 @@ jobs:
         run: make go-lint
   e2e:
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         parallelism: [4]
         index: [0, 1, 2, 3]
