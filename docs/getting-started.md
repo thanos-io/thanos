@@ -79,6 +79,7 @@ If you want to add yourself to this list, let us know!
 
 ## Deploying Thanos
 
+* [WIP] Detailed, free, in-browser interactive tutorial [as Katacoda Thanos Course](https://killercoda.com/thanos/)
 * [Quick Tutorial](quick-tutorial.md) on Thanos website.
 
 ## Operating
