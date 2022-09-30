@@ -100,6 +100,7 @@ require (
 
 require (
 	github.com/efficientgo/core v1.0.0-rc.0
+	github.com/minio/sha256-simd v1.0.0
 	go.opentelemetry.io/otel v1.10.0
 	go.opentelemetry.io/otel/bridge/opentracing v1.10.0
 	go.opentelemetry.io/otel/sdk v1.9.0
@@ -200,7 +201,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
-	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
