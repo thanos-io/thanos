@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/pkg/errors"
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -337,6 +339,10 @@ func TestEndpointSetUpdate(t *testing.T) {
 			expectedEndpoints: 1,
 		},
 	}
+	const metadata = `
+	# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
+	# TYPE thanos_store_nodes_grpc_connections
+	`
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -351,6 +357,14 @@ func TestEndpointSetUpdate(t *testing.T) {
 			endpointSet.Update(context.Background())
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetEndpointStatus()))
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetStoreClients()))
+			expectedMetrics := `
+			thanos_store_nodes_grpc_connections{external_labels="{a=\"b\", addr=\"127.0.0.1:33351\"}",store_type="sidecar"} 1
+			`
+			testutil.Ok(t, promtestutil.CollectAndCompare(
+				endpointSet.endpointsMetric,
+				strings.NewReader(metadata+expectedMetrics),
+			))
+			// assert len of ext labels not greater than 100?
 		})
 	}
 }
@@ -576,7 +590,7 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 	wg.Wait()
 }
 
-func TestEndpointSet_Update(t *testing.T) {
+func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
 		{
 			InfoResponse: sidecarInfo,
@@ -1034,80 +1048,6 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 	endpointSet.Update(context.Background())
 	endpointSet.Update(context.Background())
 	testutil.Equals(t, 0, len(endpointSet.GetStoreClients()), "none of services should respond just fine, so we expect no client to be ready.")
-
-	// Leak test will ensure that we don't keep client connection around.
-	expected := newEndpointAPIStats()
-	testutil.Equals(t, expected, endpointSet.endpointsMetric.storeNodes)
-
-}
-
-func TestEndpointSet_Update_LongExternalLabel(t *testing.T) {
-	endpoints, err := startTestEndpoints([]testEndpointMeta{
-		{
-			InfoResponse: sidecarInfo,
-			extlsetFn: func(addr string) []labelpb.ZLabelSet {
-				labels = []labelpb.ZLabelSet{}
-				for i := 0; i < 1000; i++ {
-					append(labels, labelspb.ZLabelSet{
-						Labels: []labelpb.ZLabel{
-							{
-								Name: "addr",
-								Value: addr
-							}
-						}
-					})
-				}
-				return labels
-			}
-				return []labelpb.ZLabelSet{
-					{
-						Labels: []labelpb.ZLabel{
-							{
-								Name:  "addr",
-								Value: addr,
-							},
-						},
-					},
-				}
-			},
-		},
-		{
-			InfoResponse: sidecarInfo,
-			extlsetFn: func(addr string) []labelpb.ZLabelSet {
-				return []labelpb.ZLabelSet{
-					{
-						Labels: []labelpb.ZLabel{
-							{
-								Name:  "addr",
-								Value: addr,
-							},
-						},
-					},
-				}
-			},
-		},
-	})
-	testutil.Ok(t, err)
-	defer endpoints.Close()
-
-	initialEndpointAddr := endpoints.EndpointAddresses()
-	endpoints.CloseOne(initialEndpointAddr[0])
-	endpoints.CloseOne(initialEndpointAddr[1])
-
-	endpointSet := NewEndpointSet(time.Now, nil, nil,
-		func() (specs []*GRPCEndpointSpec) {
-			for _, addr := range initialEndpointAddr {
-				specs = append(specs, NewGRPCEndpointSpec(addr, false))
-			}
-			return specs
-		},
-		testGRPCOpts, time.Minute, 2*time.Second)
-	defer endpointSet.Close()
-
-	// Should not matter how many of these we run.
-	endpointSet.Update(context.Background())
-	endpointSet.Update(context.Background())
-	for _
 
 	// Leak test will ensure that we don't keep client connection around.
 	expected := newEndpointAPIStats()
