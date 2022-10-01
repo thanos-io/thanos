@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 
 	"github.com/efficientgo/e2e"
+	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/tools/core/pkg/testutil"
 	"gopkg.in/yaml.v2"
 )
@@ -31,18 +32,19 @@ func TestJaegerTracing(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(env.Close)
 	name := "testing"
-	newJaeger := e2e.NewInstrumentedRunnable(env, fmt.Sprintf("jaeger-%s", name)).
+	newJaegerRunnable := env.Runnable(fmt.Sprintf("jaeger-%s", name)).
 		WithPorts(
 			map[string]int{
 				"http":                      16686,
 				"http.admin":                14269,
 				"jaeger.thrift-model.proto": 14250,
 				"jaeger.thrift":             14268,
-			}, "http.admin").
+			}).
 		Init(e2e.StartOptions{
 			Image:     "jaegertracing/all-in-one:1.33",
 			Readiness: e2e.NewHTTPReadinessProbe("http.admin", "/", 200, 200),
 		})
+	newJaeger := e2emon.AsInstrumented(newJaegerRunnable, "http.admin")
 	testutil.Ok(t, e2e.StartAndWaitReady(newJaeger))
 
 	jaegerConfig, err := yaml.Marshal(client.TracingConfig{

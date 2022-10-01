@@ -158,11 +158,13 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, we
 	if minTime != "" {
 		args["--min-time"] = minTime
 	}
-	sidecarRunnable := e.Runnable(fmt.Sprintf("sidecar-%s", name)).WithPorts(map[string]int{"http": 8080, "grpc": 9091}).Init(wrapWithDefaults(e2e.StartOptions{
-		Image:     sidecarImage,
-		Command:   e2e.NewCommand("sidecar", e2e.BuildArgs(args)...),
-		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-	}))
+	sidecarRunnable := e.Runnable(fmt.Sprintf("sidecar-%s", name)).
+		WithPorts(map[string]int{"http": 8080, "grpc": 9091}).
+		Init(wrapWithDefaults(e2e.StartOptions{
+			Image:     sidecarImage,
+			Command:   e2e.NewCommand("sidecar", e2e.BuildArgs(args)...),
+			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		}))
 	sidecar := e2emon.AsInstrumented(sidecarRunnable, "http")
 	return prom, sidecar
 }
@@ -206,7 +208,8 @@ func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) *e2emon.In
 }
 
 func NewPrometheusWithJaegerTracingSidecarCustomImage(e e2e.Environment, name, promConfig, webConfig,
-	promImage, minTime, sidecarImage, jaegerConfig string, enableFeatures ...string) (e2e.InstrumentedRunnable, e2e.InstrumentedRunnable) {
+	promImage, minTime, sidecarImage, jaegerConfig string, enableFeatures ...string) (
+	*e2emon.InstrumentedRunnable, *e2emon.InstrumentedRunnable) {
 	prom := NewPrometheus(e, name, promConfig, webConfig, promImage, enableFeatures...)
 
 	args := map[string]string{
@@ -225,13 +228,16 @@ func NewPrometheusWithJaegerTracingSidecarCustomImage(e e2e.Environment, name, p
 	if minTime != "" {
 		args["--min-time"] = minTime
 	}
-	sidecar := e2e.NewInstrumentedRunnable(e, fmt.Sprintf("sidecar-%s", name)).
-		WithPorts(map[string]int{"http": 8080, "grpc": 9091}, "http").
+
+	sidecarRunnable := e.Runnable(fmt.Sprintf("sidecar-%s", name)).
+		WithPorts(map[string]int{"http": 8080, "grpc": 9091}).
 		Init(wrapWithDefaults(e2e.StartOptions{
 			Image:     sidecarImage,
 			Command:   e2e.NewCommand("sidecar", e2e.BuildArgs(args)...),
 			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 		}))
+	sidecar := e2emon.AsInstrumented(sidecarRunnable, "http")
+
 	return prom, sidecar
 }
 
