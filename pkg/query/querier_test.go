@@ -1215,9 +1215,7 @@ func (s *localClient) TimeRange() (mint int64, maxt int64) { return math.MinInt6
 
 func (s *localClient) SupportsSharding() bool { return false }
 
-func (s *localClient) SendsSortedSeries() bool {
-	return true
-}
+func (s *localClient) SendsSortedSeries() bool { return false }
 
 func (s *localClient) Addr() string { return "" }
 
@@ -1237,14 +1235,7 @@ func (s *storeClientStub) TimeRange() (mint int64, maxt int64) { return math.Min
 
 func (s *storeClientStub) SupportsSharding() bool { return false }
 
-func (s *storeClientStub) SendsSortedSeries() bool {
-	return sort.SliceIsSorted(s.respSet, func(i, j int) bool {
-		iResp := s.respSet[i]
-		jResp := s.respSet[j]
-
-		return iResp.Less(jResp)
-	})
-}
+func (s *storeClientStub) SendsSortedSeries() bool { return false }
 
 func (s *storeClientStub) Addr() string { return "" }
 

@@ -58,7 +58,7 @@ func (c testClient) SupportsSharding() bool {
 }
 
 func (c testClient) SendsSortedSeries() bool {
-	return true
+	return false
 }
 
 func (c testClient) String() string {
@@ -94,7 +94,12 @@ func TestProxyStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	q := NewProxyStore(nil, nil, func() []Client { return nil }, component.Query, nil, 0*time.Second, RetrievalStrategy(EagerRetrieval))
+	q := NewProxyStore(nil,
+		nil,
+		func() []Client { return nil },
+		component.Query,
+		nil, 0*time.Second, RetrievalStrategy(EagerRetrieval),
+	)
 
 	resp, err := q.Info(ctx, &storepb.InfoRequest{})
 	testutil.Ok(t, err)
@@ -564,7 +569,13 @@ func TestProxyStore_Series(t *testing.T) {
 	} {
 		for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 			if ok := t.Run(fmt.Sprintf("%s/%s", tc.title, strategy), func(t *testing.T) {
-				q := NewProxyStore(nil, nil, func() []Client { return tc.storeAPIs }, component.Query, tc.selectorLabels, 5*time.Second, strategy)
+				q := NewProxyStore(nil,
+					nil,
+					func() []Client { return tc.storeAPIs },
+					component.Query,
+					tc.selectorLabels,
+					5*time.Second, strategy,
+				)
 
 				ctx := context.Background()
 				if len(tc.storeDebugMatchers) > 0 {
@@ -1092,7 +1103,13 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 				if ok := t.Run(string(strategy), func(t *testing.T) {
-					q := NewProxyStore(nil, nil, func() []Client { return tc.storeAPIs }, component.Query, tc.selectorLabels, 4*time.Second, strategy)
+					q := NewProxyStore(nil,
+						nil,
+						func() []Client { return tc.storeAPIs },
+						component.Query,
+						tc.selectorLabels,
+						4*time.Second, strategy,
+					)
 
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()
@@ -1144,7 +1161,13 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 			maxTime:     300,
 		},
 	}
-	q := NewProxyStore(nil, nil, func() []Client { return cls }, component.Query, nil, 1*time.Second, EagerRetrieval)
+	q := NewProxyStore(nil,
+		nil,
+		func() []Client { return cls },
+		component.Query,
+		nil,
+		1*time.Second, EagerRetrieval,
+	)
 
 	ctx := context.Background()
 	s := newStoreSeriesServer(ctx)
@@ -1199,7 +1222,13 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 
 	}
 
-	q := NewProxyStore(nil, nil, func() []Client { return cls }, component.Query, labels.FromStrings("fed", "a"), 5*time.Second, EagerRetrieval)
+	q := NewProxyStore(nil,
+		nil,
+		func() []Client { return cls },
+		component.Query,
+		labels.FromStrings("fed", "a"),
+		5*time.Second, EagerRetrieval,
+	)
 
 	ctx := context.Background()
 	s := newStoreSeriesServer(ctx)
@@ -1240,7 +1269,13 @@ func TestProxyStore_LabelValues(t *testing.T) {
 			maxTime: timestamp.FromTime(time.Now()),
 		},
 	}
-	q := NewProxyStore(nil, nil, func() []Client { return cls }, component.Query, nil, 0*time.Second, EagerRetrieval)
+	q := NewProxyStore(nil,
+		nil,
+		func() []Client { return cls },
+		component.Query,
+		nil,
+		0*time.Second, EagerRetrieval,
+	)
 
 	ctx := context.Background()
 	req := &storepb.LabelValuesRequest{
@@ -1430,7 +1465,14 @@ func TestProxyStore_LabelNames(t *testing.T) {
 		},
 	} {
 		if ok := t.Run(tc.title, func(t *testing.T) {
-			q := NewProxyStore(nil, nil, func() []Client { return tc.storeAPIs }, component.Query, nil, 5*time.Second, EagerRetrieval)
+			q := NewProxyStore(
+				nil,
+				nil,
+				func() []Client { return tc.storeAPIs },
+				component.Query,
+				nil,
+				5*time.Second, EagerRetrieval,
+			)
 
 			ctx := context.Background()
 			if len(tc.storeDebugMatchers) > 0 {

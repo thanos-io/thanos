@@ -51,22 +51,6 @@ func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
 	}
 }
 
-func (m *SeriesResponse) Less(other *SeriesResponse) bool {
-	if m.GetSeries() != nil && other.GetSeries() != nil {
-		iLbls := labelpb.ZLabelsToPromLabels(m.GetSeries().Labels)
-		jLbls := labelpb.ZLabelsToPromLabels(other.GetSeries().Labels)
-		return labels.Compare(iLbls, jLbls) < 0
-	} else if m.GetSeries() == nil && other.GetSeries() != nil {
-		return true
-	} else if m.GetSeries() != nil && other.GetSeries() == nil {
-		return false
-	}
-
-	// If it is not a series then the order does not matter. What matters
-	// is that we get different types of responses one after another.
-	return false
-}
-
 type emptySeriesSet struct{}
 
 func (emptySeriesSet) Next() bool                       { return false }
