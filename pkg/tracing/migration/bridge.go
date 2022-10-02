@@ -11,10 +11,9 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
-	ot_propagator "go.opentelemetry.io/contrib/propagators/ot"
+	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
 	bridge "go.opentelemetry.io/otel/bridge/opentracing"
-	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -27,18 +26,17 @@ import (
 // NOTE: After instrumentation migration is finished, this bridge should be
 // removed.
 func Bridge(tp *tracesdk.TracerProvider, l log.Logger) (opentracing.Tracer, io.Closer) {
-	compositePropagator := propagation.NewCompositeTextMapPropagator(ot_propagator.OT{}, propagation.TraceContext{}, propagation.Baggage{})
 	otel.SetErrorHandler(otelErrHandler(func(err error) {
 		level.Error(l).Log("msg", "OpenTelemetry ErrorHandler", "err", err)
 	}))
-	otel.SetTextMapPropagator(compositePropagator)
+	otel.SetTextMapPropagator(autoprop.NewTextMapPropagator())
 	otel.SetTracerProvider(tp)
 
 	bridgeTracer, _ := bridge.NewTracerPair(tp.Tracer(""))
 	bridgeTracer.SetWarningHandler(func(warn string) {
 		level.Warn(l).Log("msg", "OpenTelemetry BridgeWarningHandler", "warn", warn)
 	})
-	bridgeTracer.SetTextMapPropagator(propagation.TraceContext{})
+	bridgeTracer.SetTextMapPropagator(autoprop.NewTextMapPropagator())
 
 	tpShutdownFunc := func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

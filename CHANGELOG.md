@@ -24,6 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5723](https://github.com/thanos-io/thanos/pull/5723) Compactor: Support disable block viewer UI.
 - [#5674](https://github.com/thanos-io/thanos/pull/5674) Query Frontend/Store: Add support connecting to redis using TLS.
 - [#5734](https://github.com/thanos-io/thanos/pull/5734) Store: Support disable block viewer UI.
+- [#5411](https://github.com/thanos-io/thanos/pull/5411) Tracing: Add OpenTelemetry Protocol exporter.
 
 ### Changed
 
@@ -33,6 +34,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5641](https://github.com/thanos-io/thanos/pull/5641) Store: Remove hardcoded labels in shard matcher.
 - [#5641](https://github.com/thanos-io/thanos/pull/5641) Query: Inject unshardable le label in query analyzer.
 - [#5685](https://github.com/thanos-io/thanos/pull/5685) Receive: Make active/head series limiting configuration per tenant by adding it to new limiting config.
+- [#5411](https://github.com/thanos-io/thanos/pull/5411) Tracing: Change Jaeger exporter from OpenTracing to OpenTelemetry. *Options `RPC Metrics`, `Gen128Bit` and `Disabled` are now deprecated and won't have any effect when set :warning:.*
 
 ### Removed
 

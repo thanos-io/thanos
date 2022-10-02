@@ -7,15 +7,16 @@ import (
 	"context"
 	"os"
 
+	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/tracing/migration"
+
 	cloudtrace "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/prometheus/common/version"
-	"github.com/thanos-io/thanos/pkg/tracing/migration"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"gopkg.in/yaml.v2"
 )
 
