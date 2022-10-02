@@ -338,10 +338,29 @@ func TestEndpointSetUpdate(t *testing.T) {
 			strict:            true,
 			expectedEndpoints: 1,
 		},
+		{
+			name: "long external labels",
+			endpoints: []testEndpointMeta{
+				{
+					InfoResponse: sidecarInfo,
+					extlsetFn: func(addr string) []labelpb.ZLabelSet {
+						sLabel := []string{}
+						for i := 0; i < 10; i++ {
+							sLabel = append(sLabel, "lbl")
+							sLabel = append(sLabel, "val")
+						}
+						return labelpb.ZLabelSetsFromPromLabels(
+							labels.FromStrings(sLabel...),
+						)
+					},
+				},
+			},
+			expectedEndpoints: 1,
+		},
 	}
 	const metadata = `
 	# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
-	# TYPE thanos_store_nodes_grpc_connections
+	# TYPE thanos_store_nodes_grpc_connections gauge
 	`
 
 	for _, tc := range testCases {
@@ -357,14 +376,19 @@ func TestEndpointSetUpdate(t *testing.T) {
 			endpointSet.Update(context.Background())
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetEndpointStatus()))
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetStoreClients()))
-			expectedMetrics := `
-			thanos_store_nodes_grpc_connections{external_labels="{a=\"b\", addr=\"127.0.0.1:33351\"}",store_type="sidecar"} 1
-			`
-			testutil.Ok(t, promtestutil.CollectAndCompare(
-				endpointSet.endpointsMetric,
-				strings.NewReader(metadata+expectedMetrics),
-			))
-			// assert len of ext labels not greater than 100?
+			if tc.name == "long external labels" {
+				externalLabels := strings.Repeat(`lbl=\"val\", `, 10)
+				externalLabels = "{" + externalLabels[:len(externalLabels)-2] + "}"
+				trimmedExternalLabels := externalLabels[:20]
+				expectedMetrics := fmt.Sprintf(
+					`
+					thanos_store_nodes_grpc_connections{external_labels="%s",store_type="sidecar"} 1
+					`,
+					trimmedExternalLabels,
+				)
+				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(metadata+expectedMetrics)))
+				// assert len of ext labels not greater than 100?
+			}
 		})
 	}
 }
