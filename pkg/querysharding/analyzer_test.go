@@ -543,7 +543,11 @@ func BenchmarkTestAnalyzeQuery(b *testing.B) {
 	for _, v := range value {
 		b.Run(fmt.Sprintf("query: %s", v.name), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				analyze.Analyze(v.expression)
+				_, err := analyze.Analyze(v.expression)
+
+				if err != nil {
+					fmt.Printf("Error while benchmarking =%s ", err)
+				}
 			}
 		})
 	}
