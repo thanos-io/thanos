@@ -8,14 +8,21 @@ import (
 
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/prometheus/prometheus/promql/parser"
-	logging "github.com/thanos-io/thanos/pkg/logging"
 )
 
 // QueryAnalyzer is an analyzer which determines
 // whether a PromQL Query is shardable and using which labels.
 
+type Analyze interface {
+	Analyze(string) (QueryAnalysis, error)
+}
+
 type QueryAnalyzer struct {
-	cache *lru.Cache
+}
+
+type CachedQueryAnalyzer struct {
+	analyzer *QueryAnalyzer
+	cache    *lru.Cache
 }
 
 var nonShardableFuncs = []string{
@@ -24,16 +31,12 @@ var nonShardableFuncs = []string{
 }
 
 // NewQueryAnalyzer creates a new QueryAnalyzer.
-func NewQueryAnalyzer() *QueryAnalyzer {
-	cache, err := lru.New(256)
-	logger := logging.NewLogger("warn", "", "")
+func NewQueryAnalyzer() *CachedQueryAnalyzer {
+	cache, _ := lru.New(256)
 
-	if err != nil {
-		logger.Log("Error Creating LRU Cache: ", err)
-
-	}
-	return &QueryAnalyzer{
-		cache: cache,
+	return &CachedQueryAnalyzer{
+		analyzer: &QueryAnalyzer{},
+		cache:    cache,
 	}
 }
 
@@ -42,16 +45,16 @@ type cachedValue struct {
 	err           error
 }
 
-func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
+func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 	if a.cache.Contains(query) {
 		value, _ := a.cache.Get(query)
 		return value.(cachedValue).QueryAnalysis, value.(cachedValue).err
 	}
 
 	// Analyze if needed
+	analysis, err := a.analyzer.Analyze(query)
 
-	analysis, err := a.queryAnalyzer(query)
-
+	// Adding to cache
 	_ = a.cache.Add(query, cachedValue{QueryAnalysis: analysis, err: err})
 
 	return analysis, err
@@ -71,7 +74,7 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 // * otherwise, treat the query as non-shardable.
 // The le label is excluded from sharding.
 
-func (a *QueryAnalyzer) queryAnalyzer(query string) (QueryAnalysis, error) {
+func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 
 	expr, err := parser.ParseExpr(query)
 	if err != nil {
