@@ -5,13 +5,19 @@ package querysharding
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/go-kit/log"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/prometheus/prometheus/promql/parser"
 )
 
 // QueryAnalyzer is an analyzer which determines
 // whether a PromQL Query is shardable and using which labels.
 type QueryAnalyzer struct{}
+
+var LRU *lru.Cache
+var logger log.Logger
 
 var nonShardableFuncs = []string{
 	"label_join",
@@ -20,26 +26,71 @@ var nonShardableFuncs = []string{
 
 // NewQueryAnalyzer creates a new QueryAnalyzer.
 func NewQueryAnalyzer() *QueryAnalyzer {
+	inIT() // Initializing cache
 	return &QueryAnalyzer{}
+}
+
+func inIT() {
+	lruCache, err := lru.New(256)
+
+	if err != nil {
+		logger.Log("Error: ", err)
+	}
+
+	LRU = lruCache
+
+	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
+}
+
+type cachedValue struct {
+	QueryAnalysis QueryAnalysis
+	err           error
 }
 
 // Analyze analyzes a query and returns a QueryAnalysis.
 
 // Analyze uses the following algorithm:
-// * if a query has subqueries, such as label_join or label_replace,
-//   or has functions which cannot be sharded, then treat the query as non shardable.
-// * if the query's root expression has grouping labels,
-//   then treat the query as shardable by those labels.
-// * if the query's root expression has no grouping labels,
-//   then walk the query and find the least common labelset
-//   used in grouping expressions. If non-empty, treat the query
-//   as shardable by those labels.
-// * otherwise, treat the query as non-shardable.
+//   - if a query has subqueries, such as label_join or label_replace,
+//     or has functions which cannot be sharded, then treat the query as non shardable.
+//   - if the query's root expression has grouping labels,
+//     then treat the query as shardable by those labels.
+//   - if the query's root expression has no grouping labels,
+//     then walk the query and find the least common labelset
+//     used in grouping expressions. If non-empty, treat the query
+//     as shardable by those labels.
+//   - otherwise, treat the query as non-shardable.
+//
 // The le label is excluded from sharding.
 func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
+	nonShardableQuery := nonShardableQuery()
+
+	if LRU.Len() == 0 {
+		inIT()
+	}
+
+	var queryResult cachedValue
+
+	if LRU.Len() != 0 && LRU.Contains(query) {
+		value, ok := LRU.Get(query)
+
+		if !ok {
+			logger.Log("FetchingError=", query)
+		} else {
+			queryResult = value.(cachedValue)
+			return queryResult.QueryAnalysis, queryResult.err
+		}
+	}
+
 	expr, err := parser.ParseExpr(query)
 	if err != nil {
-		return nonShardableQuery(), err
+		if ok := LRU.Add(query, cachedValue{
+			QueryAnalysis: nonShardableQuery,
+			err:           err,
+		}); ok {
+			logger.Log("parsingError=", query)
+		}
+		return nonShardableQuery, err
 	}
 
 	isShardable := true
@@ -71,12 +122,32 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 	})
 
 	if !isShardable {
-		return nonShardableQuery(), nil
+
+		if ok := LRU.Add(query, cachedValue{
+			QueryAnalysis: nonShardableQuery,
+			err:           nil,
+		}); ok {
+			logger.Log("cachingError=", query)
+		}
+		return nonShardableQuery, nil
 	}
 
 	rootAnalysis := analyzeRootExpression(expr)
 	if rootAnalysis.IsShardable() && rootAnalysis.shardBy {
+		if ok := LRU.Add(query, cachedValue{
+			QueryAnalysis: rootAnalysis,
+			err:           nil,
+		}); ok {
+			logger.Log("cachingError=", query)
+		}
 		return rootAnalysis, nil
+	}
+
+	if ok := LRU.Add(query, cachedValue{
+		QueryAnalysis: analysis,
+		err:           nil,
+	}); ok {
+		logger.Log("cachingError=", query)
 	}
 
 	return analysis, nil
