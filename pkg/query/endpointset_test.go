@@ -377,17 +377,23 @@ func TestEndpointSetUpdate(t *testing.T) {
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetEndpointStatus()))
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetStoreClients()))
 			if tc.name == "long external labels" {
-				externalLabels := strings.Repeat(`lbl=\"val\", `, 10)
-				externalLabels = "{" + externalLabels[:len(externalLabels)-2] + "}"
-				trimmedExternalLabels := externalLabels[:20]
+				externalLabelLimit := 20
+				externalLabels := strings.Repeat(`lbl="val", `, 10)[:externalLabelLimit-1]
+				var lbl strings.Builder
+				for _, ch := range externalLabels {
+					if string(ch) == `"` {
+						lbl.WriteString(`\`)
+					}
+					lbl.WriteRune(ch)
+				}
+				fmt.Printf("trimmed: %s\n", lbl.String())
 				expectedMetrics := fmt.Sprintf(
 					`
-					thanos_store_nodes_grpc_connections{external_labels="%s",store_type="sidecar"} 1
+					thanos_store_nodes_grpc_connections{external_labels="{%s}",store_type="sidecar"} 1
 					`,
-					trimmedExternalLabels,
+					lbl.String(),
 				)
 				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(metadata+expectedMetrics)))
-				// assert len of ext labels not greater than 100?
 			}
 		})
 	}
