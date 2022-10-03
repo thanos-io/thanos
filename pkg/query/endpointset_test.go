@@ -358,10 +358,6 @@ func TestEndpointSetUpdate(t *testing.T) {
 			expectedEndpoints: 1,
 		},
 	}
-	const metadata = `
-	# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
-	# TYPE thanos_store_nodes_grpc_connections gauge
-	`
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -387,11 +383,13 @@ func TestEndpointSetUpdate(t *testing.T) {
 				}
 				expectedMetrics := fmt.Sprintf(
 					`
+					# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
+					# TYPE thanos_store_nodes_grpc_connections gauge
 					thanos_store_nodes_grpc_connections{external_labels="{%s}",store_type="sidecar"} 1
 					`,
 					lbl.String(),
 				)
-				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(metadata+expectedMetrics)))
+				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(expectedMetrics)))
 			}
 		})
 	}
