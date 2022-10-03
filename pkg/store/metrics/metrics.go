@@ -49,6 +49,9 @@ func (s *SeriesQueryPerformanceMetricsAggregator) Aggregate(stats storepb.Series
 
 // Observe commits the aggregated SeriesStatsCounter as an observation.
 func (s *SeriesQueryPerformanceMetricsAggregator) Observe(duration float64) {
+	if s.SeriesStats.Series == 0 || s.SeriesStats.Samples == 0 {
+		return
+	}
 	// Bucket matching for series/labels matchSeriesBucket/matchSamplesBucket => float64, float64
 	seriesLeBucket := s.findBucket(float64(s.SeriesStats.Series), s.SeriesLeBuckets)
 	samplesLeBucket := s.findBucket(float64(s.SeriesStats.Samples), s.SamplesLeBuckets)

@@ -650,14 +650,14 @@ func TestQueryStoreMetrics(t *testing.T) {
 
 	// Querying the series in the previously created blocks to ensure we produce Store API query metrics.
 	{
-		_, err := simpleInstantQuery(t, ctx, querier.Endpoint("http"), func() string {
+		instantQuery(t, ctx, querier.Endpoint("http"), func() string {
 			return "max_over_time(one_series{instance='foo_0'}[2h])"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, 1)
 		testutil.Ok(t, err)
 
-		_, err = simpleInstantQuery(t, ctx, querier.Endpoint("http"), func() string {
+		instantQuery(t, ctx, querier.Endpoint("http"), func() string {
 			return "max_over_time(thousand_one_series[2h])"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
