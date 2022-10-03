@@ -39,6 +39,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing/google_cloud"
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/pkg/tracing/lightstep"
+	"github.com/thanos-io/thanos/pkg/tracing/otlp"
 )
 
 var (
@@ -57,10 +58,11 @@ var (
 	}
 
 	tracingConfigs = map[trclient.TracingProvider]interface{}{
-		trclient.Jaeger:      jaeger.Config{},
-		trclient.GoogleCloud: google_cloud.Config{},
-		trclient.ElasticAPM:  elasticapm.Config{},
-		trclient.Lightstep:   lightstep.Config{},
+		trclient.OpenTelemetryProtocol: otlp.Config{},
+		trclient.Jaeger:                jaeger.Config{},
+		trclient.GoogleCloud:           google_cloud.Config{},
+		trclient.ElasticAPM:            elasticapm.Config{},
+		trclient.Lightstep:             lightstep.Config{},
 	}
 	indexCacheConfigs = map[storecache.IndexCacheProvider]interface{}{
 		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},
