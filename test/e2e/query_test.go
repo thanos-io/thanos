@@ -634,7 +634,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 		}
 	}
 
-	s1 := e2ethanos.NewStoreGW(
+	storeGW := e2ethanos.NewStoreGW(
 		e,
 		"s1",
 		client.BucketConfig{
@@ -644,25 +644,27 @@ func TestQueryStoreMetrics(t *testing.T) {
 		"",
 		nil,
 	)
-	testutil.Ok(t, e2e.StartAndWaitReady(s1))
+	testutil.Ok(t, e2e.StartAndWaitReady(storeGW))
 
-	q := e2ethanos.NewQuerierBuilder(e, "1", s1.InternalEndpoint("grpc")).Init()
-	testutil.Ok(t, e2e.StartAndWaitReady(q))
-	testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(2), "thanos_blocks_meta_synced"))
+	querier := e2ethanos.NewQuerierBuilder(e, "1", storeGW.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(querier))
+	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(2), "thanos_blocks_meta_synced"))
 
 	// Querying the series in the previously created blocks to ensure we produce Store API query metrics.
 	{
-		instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		_, err := simpleInstantQuery(t, ctx, querier.Endpoint("http"), func() string {
 			return "max_over_time(one_series{instance='foo_0'}[2h])"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, 1)
+		testutil.Ok(t, err)
 
-		instantQuery(t, ctx, q.Endpoint("http"), func() string {
+		_, err = simpleInstantQuery(t, ctx, querier.Endpoint("http"), func() string {
 			return "max_over_time(thousand_one_series[2h])"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, 1001)
+		testutil.Ok(t, err)
 	}
 
 	mon, err := e2emon.Start(e)
@@ -1008,23 +1010,33 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", expectedSeriesLen, q()),
 	)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+		res, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
 		if err != nil {
 			return err
-		}
-
-		if len(warnings) > 0 {
-			return errors.Errorf("unexpected warnings %s", warnings)
-		}
-
-		if len(res) != expectedSeriesLen {
-			return errors.Errorf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
 		}
 		result = res
 		return nil
 	}))
 	sortResults(result)
 	return result
+}
+
+func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, error) {
+	res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(warnings) > 0 {
+		return nil, errors.Errorf("unexpected warnings %s", warnings)
+	}
+
+	if len(res) != expectedSeriesLen {
+		return nil, errors.Errorf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
+	}
+
+	sortResults(res)
+	return res, nil
 }
 
 func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected model.Vector) {
