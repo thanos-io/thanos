@@ -386,7 +386,6 @@ func TestEndpointSetUpdate(t *testing.T) {
 					}
 					lbl.WriteRune(ch)
 				}
-				fmt.Printf("trimmed: %s\n", lbl.String())
 				expectedMetrics := fmt.Sprintf(
 					`
 					thanos_store_nodes_grpc_connections{external_labels="{%s}",store_type="sidecar"} 1
