@@ -49,7 +49,7 @@ func (s *SeriesQueryPerformanceMetricsAggregator) Aggregate(stats storepb.Series
 
 // Observe commits the aggregated SeriesStatsCounter as an observation.
 func (s *SeriesQueryPerformanceMetricsAggregator) Observe(duration float64) {
-	if s.SeriesStats.Series == 0 || s.SeriesStats.Samples == 0 {
+	if s.SeriesStats.Series == 0 || s.SeriesStats.Samples == 0 || s.SeriesStats.Chunks == 0 {
 		return
 	}
 	// Bucket matching for series/labels matchSeriesBucket/matchSamplesBucket => float64, float64
