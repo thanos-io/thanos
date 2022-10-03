@@ -377,7 +377,6 @@ func TestEndpointSetUpdate(t *testing.T) {
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetEndpointStatus()))
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetStoreClients()))
 			if tc.name == "long external labels" {
-				externalLabelLimit := 20
 				externalLabels := strings.Repeat(`lbl="val", `, 10)[:externalLabelLimit-1]
 				var lbl strings.Builder
 				for _, ch := range externalLabels {
