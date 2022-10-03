@@ -70,9 +70,39 @@ Every request against any Thanos component's API with header `X-Thanos-Force-Tra
 
 Currently supported tracing backends:
 
+### OpenTelemetry (OTLP)
+
+Thanos supports exporting traces in the OpenTelemetry Protocol (OTLP). Both gRPC and HTTP clients are supported. Options can be provided also via environment variables. For more details see the [exporter specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#configuration-options).
+
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=otlp.Config"
+type: OTLP
+config:
+  client_type: ""
+  reconnection_period: 0s
+  compression: ""
+  insecure: false
+  endpoint: ""
+  url_path: ""
+  timeout: 0s
+  retry_config:
+    retry_enabled: false
+    retry_initial_interval: 0s
+    retry_max_interval: 0s
+    retry_max_elapsed_time: 0s
+  headers: {}
+  tls_config:
+    ca_file: ""
+    cert_file: ""
+    key_file: ""
+    server_name: ""
+    insecure_skip_verify: false
+```
+
 ### Jaeger
 
-Client for https://github.com/jaegertracing/jaeger tracing.
+Client for https://github.com/jaegertracing/jaeger tracing. Options can be provided also via environment variables. For more details see the Jaeger [exporter specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md#jaeger-exporter).
+
+*WARNING: Options `RPC Metrics`, `Gen128Bit` and `Disabled` are now deprecated and won't have any effect when set*
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=jaeger.Config"
 type: JAEGER
@@ -86,9 +116,17 @@ config:
   sampler_manager_host_port: ""
   sampler_max_operations: 0
   sampler_refresh_interval: 0s
+  sampler_parent_config:
+    local_parent_sampled: false
+    remote_parent_sampled: false
+  sampling_server_url: ""
+  operation_name_late_binding: false
+  initial_sampler_rate: 0
   reporter_max_queue_size: 0
   reporter_flush_interval: 0s
   reporter_log_spans: false
+  reporter_disable_attempt_reconnecting: false
+  reporter_attempt_reconnect_interval: 0s
   endpoint: ""
   user: ""
   password: ""
