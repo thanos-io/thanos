@@ -647,9 +647,6 @@ func TestQueryStoreMetrics(t *testing.T) {
 	querier := e2ethanos.NewQuerierBuilder(e, "1", storeGW.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(storeGW, querier))
 	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(2), "thanos_blocks_meta_synced"))
-	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(2), "thanos_blocks_meta_syncs_total"))
-	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
-	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_modified"))
 
 	// Querying the series in the previously created blocks to ensure we produce Store API query metrics.
 	{
