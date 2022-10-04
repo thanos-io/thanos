@@ -469,3 +469,13 @@ Flags:
                                  Prometheus.
 
 ```
+
+## Exported metrics
+
+Thanos Query also exports metrics about its own performance. You can find a list with these metrics below.
+
+**Disclaimer**: this list is incomplete. The remaining metrics will be added over time.
+
+| Name                                    | Type      | Labels                | Description                                                                                                       |
+|-----------------------------------------|-----------|-----------------------|-------------------------------------------------------------------------------------------------------------------|
+| thanos_store_api_query_duration_seconds | Histogram | samples_le, series_le | Duration of the Thanos Store API select phase for a query according to the amount of samples and series selected. |
