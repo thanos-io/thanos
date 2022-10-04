@@ -11,62 +11,62 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-// SeriesQueryPerformanceMetricsAggregator aggregates results from fanned-out queries into a histogram given their
+// seriesStatsAggregator aggregates results from fanned-out queries into a histogram given their
 // response's shape.
-type SeriesQueryPerformanceMetricsAggregator struct {
-	QueryDuration *prometheus.HistogramVec
+type seriesStatsAggregator struct {
+	queryDuration *prometheus.HistogramVec
 
-	SeriesLeBuckets  []int64
-	SamplesLeBuckets []int64
-	SeriesStats      storepb.SeriesStatsCounter
+	seriesLeBuckets  []int64
+	samplesLeBuckets []int64
+	seriesStats      storepb.SeriesStatsCounter
 }
 
-// NewSeriesQueryPerformanceMetricsAggregator is a constructor for SeriesQueryPerformanceMetricsAggregator.
-func NewSeriesQueryPerformanceMetricsAggregator(
+// NewSeriesStatsAggregator is a constructor for seriesStatsAggregator.
+func NewSeriesStatsAggregator(
 	reg prometheus.Registerer,
 	durationQuantiles []float64,
 	sampleQuantiles []int64,
 	seriesQuantiles []int64,
-) *SeriesQueryPerformanceMetricsAggregator {
-	return &SeriesQueryPerformanceMetricsAggregator{
-		QueryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+) *seriesStatsAggregator {
+	return &seriesStatsAggregator{
+		queryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "thanos_store_api_query_duration_seconds",
 			Help:    "Duration of the Thanos Store API select phase for a query.",
 			Buckets: durationQuantiles,
 		}, []string{"series_le", "samples_le"}),
-		SeriesLeBuckets:  seriesQuantiles,
-		SamplesLeBuckets: sampleQuantiles,
-		SeriesStats:      storepb.SeriesStatsCounter{},
+		seriesLeBuckets:  seriesQuantiles,
+		samplesLeBuckets: sampleQuantiles,
+		seriesStats:      storepb.SeriesStatsCounter{},
 	}
 }
 
 // Aggregate is an aggregator for merging `storepb.SeriesStatsCounter` for each incoming fanned out query.
-func (s *SeriesQueryPerformanceMetricsAggregator) Aggregate(stats storepb.SeriesStatsCounter) {
-	s.SeriesStats.Series += stats.Series
-	s.SeriesStats.Samples += stats.Samples
-	s.SeriesStats.Chunks += stats.Chunks
+func (s *seriesStatsAggregator) Aggregate(stats storepb.SeriesStatsCounter) {
+	s.seriesStats.Series += stats.Series
+	s.seriesStats.Samples += stats.Samples
+	s.seriesStats.Chunks += stats.Chunks
 }
 
 // Observe commits the aggregated SeriesStatsCounter as an observation.
-func (s *SeriesQueryPerformanceMetricsAggregator) Observe(duration float64) {
-	if s.SeriesStats.Series == 0 || s.SeriesStats.Samples == 0 || s.SeriesStats.Chunks == 0 {
+func (s *seriesStatsAggregator) Observe(duration float64) {
+	if s.seriesStats.Series == 0 || s.seriesStats.Samples == 0 || s.seriesStats.Chunks == 0 {
 		return
 	}
 	// Bucket matching for series/labels matchSeriesBucket/matchSamplesBucket => float64, float64
-	seriesLeBucket := s.findBucket(float64(s.SeriesStats.Series), s.SeriesLeBuckets)
-	samplesLeBucket := s.findBucket(float64(s.SeriesStats.Samples), s.SamplesLeBuckets)
-	s.QueryDuration.With(prometheus.Labels{
+	seriesLeBucket := s.findBucket(float64(s.seriesStats.Series), s.seriesLeBuckets)
+	samplesLeBucket := s.findBucket(float64(s.seriesStats.Samples), s.samplesLeBuckets)
+	s.queryDuration.With(prometheus.Labels{
 		"series_le":  strconv.Itoa(int(seriesLeBucket)),
 		"samples_le": strconv.Itoa(int(samplesLeBucket)),
 	}).Observe(duration)
 	s.reset()
 }
 
-func (s *SeriesQueryPerformanceMetricsAggregator) reset() {
-	s.SeriesStats = storepb.SeriesStatsCounter{}
+func (s *seriesStatsAggregator) reset() {
+	s.seriesStats = storepb.SeriesStatsCounter{}
 }
 
-func (s *SeriesQueryPerformanceMetricsAggregator) findBucket(value float64, quantiles []int64) int64 {
+func (s *seriesStatsAggregator) findBucket(value float64, quantiles []int64) int64 {
 	if len(quantiles) == 0 {
 		return 0
 	}
@@ -80,9 +80,9 @@ func (s *SeriesQueryPerformanceMetricsAggregator) findBucket(value float64, quan
 	return foundBucket
 }
 
-// NopSeriesQueryPerformanceMetricsAggregator is a query performance series aggregator that does nothing.
-type NopSeriesQueryPerformanceMetricsAggregator struct{}
+// NoopSeriesStatsAggregator is a query performance series aggregator that does nothing.
+type NoopSeriesStatsAggregator struct{}
 
-func (s *NopSeriesQueryPerformanceMetricsAggregator) Aggregate(_ storepb.SeriesStatsCounter) {}
+func (s *NoopSeriesStatsAggregator) Aggregate(_ storepb.SeriesStatsCounter) {}
 
-func (s *NopSeriesQueryPerformanceMetricsAggregator) Observe(_ float64) {}
+func (s *NoopSeriesStatsAggregator) Observe(_ float64) {}

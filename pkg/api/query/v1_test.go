@@ -199,7 +199,7 @@ func TestQueryEndpoints(t *testing.T) {
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
 		}),
-		seriesStatsAggregator: &metrics.NopSeriesQueryPerformanceMetricsAggregator{},
+		seriesStatsAggregator: &metrics.NoopSeriesStatsAggregator{},
 	}
 
 	start := time.Unix(0, 0)
@@ -739,7 +739,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
 		}),
-		seriesStatsAggregator: &metrics.NopSeriesQueryPerformanceMetricsAggregator{},
+		seriesStatsAggregator: &metrics.NoopSeriesStatsAggregator{},
 	}
 	apiWithLabelLookback := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
@@ -753,7 +753,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
 		}),
-		seriesStatsAggregator: &metrics.NopSeriesQueryPerformanceMetricsAggregator{},
+		seriesStatsAggregator: &metrics.NoopSeriesStatsAggregator{},
 	}
 
 	var tests = []endpointTestCase{

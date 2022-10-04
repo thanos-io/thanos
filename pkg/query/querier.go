@@ -29,11 +29,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
-type SeriesStatsReporter func(seriesStats storepb.SeriesStatsCounter)
+type seriesStatsReporter func(seriesStats storepb.SeriesStatsCounter)
 
-var NoopSeriesStatsReporter SeriesStatsReporter = func(_ storepb.SeriesStatsCounter) {}
+var NoopSeriesStatsReporter seriesStatsReporter = func(_ storepb.SeriesStatsCounter) {}
 
-func NewAggregateStatsReporter(stats *[]storepb.SeriesStatsCounter) SeriesStatsReporter {
+func NewAggregateStatsReporter(stats *[]storepb.SeriesStatsCounter) seriesStatsReporter {
 	var mutex sync.Mutex
 	return func(s storepb.SeriesStatsCounter) {
 		mutex.Lock()
@@ -57,7 +57,7 @@ type QueryableCreator func(
 	enableQueryPushdown,
 	skipChunks bool,
 	shardInfo *storepb.ShardInfo,
-	seriesStatsReporter SeriesStatsReporter,
+	seriesStatsReporter seriesStatsReporter,
 ) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
@@ -81,7 +81,7 @@ func NewQueryableCreator(
 		enableQueryPushdown,
 		skipChunks bool,
 		shardInfo *storepb.ShardInfo,
-		seriesStatsReporter SeriesStatsReporter,
+		seriesStatsReporter seriesStatsReporter,
 	) storage.Queryable {
 		return &queryable{
 			logger:              logger,
@@ -118,7 +118,7 @@ type queryable struct {
 	selectTimeout        time.Duration
 	enableQueryPushdown  bool
 	shardInfo            *storepb.ShardInfo
-	seriesStatsReporter  SeriesStatsReporter
+	seriesStatsReporter  seriesStatsReporter
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
@@ -142,7 +142,7 @@ type querier struct {
 	selectGate          gate.Gate
 	selectTimeout       time.Duration
 	shardInfo           *storepb.ShardInfo
-	seriesStatsReporter SeriesStatsReporter
+	seriesStatsReporter seriesStatsReporter
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -163,7 +163,7 @@ func newQuerier(
 	selectGate gate.Gate,
 	selectTimeout time.Duration,
 	shardInfo *storepb.ShardInfo,
-	seriesStatsReporter SeriesStatsReporter,
+	seriesStatsReporter seriesStatsReporter,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()

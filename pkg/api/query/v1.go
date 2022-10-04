@@ -145,7 +145,7 @@ func NewQueryAPI(
 	reg *prometheus.Registry,
 ) *QueryAPI {
 	if statsAggregator == nil {
-		statsAggregator = &metrics.NopSeriesQueryPerformanceMetricsAggregator{}
+		statsAggregator = &metrics.NoopSeriesStatsAggregator{}
 	}
 	return &QueryAPI{
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),

@@ -692,7 +692,7 @@ func runQuery(
 				extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg),
 				maxConcurrentQueries,
 			),
-			metrics.NewSeriesQueryPerformanceMetricsAggregator(
+			metrics.NewSeriesStatsAggregator(
 				reg,
 				queryTelemetryDurationQuantiles,
 				queryTelemetrySamplesQuantiles,
