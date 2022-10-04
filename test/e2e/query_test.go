@@ -583,7 +583,7 @@ func TestSidecarPushdownSubquery(t *testing.T) {
 	t.Parallel()
 
 	// Build up.
-	e, err := e2e.NewDockerEnvironment("e2e_sidecar_pushdown_subquery")
+	e, err := e2e.NewDockerEnvironment("pushdown_subq")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
