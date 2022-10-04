@@ -11,7 +11,7 @@ on:
 jobs:
   cross-build-check:
     runs-on: ubuntu-latest
-    name: Go build for different platform"
+    name: Go build for different platforms
     env:
       GOBIN: /tmp/.bin
     steps:
