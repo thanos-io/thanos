@@ -36,15 +36,15 @@ Flags:
                                  Number of goroutines to use when constructing
                                  index-cache.json blocks from object storage.
                                  Must be equal or greater than 1.
-      --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
-                                 reserved strictly to reuse for chunks in
+      --chunk-pool-size=2GB      Maximum size of concurrently allocatable
+                                 bytes reserved strictly to reuse for chunks in
                                  memory.
-      --consistency-delay=0s     Minimum age of all blocks before they are being
-                                 read. Set it to safe value (e.g 30m) if your
-                                 object storage is eventually consistent. GCS
-                                 and S3 are (roughly) strongly consistent.
-      --data-dir="./data"        Local data directory used for caching purposes
-                                 (index-header, in-mem cache items and
+      --consistency-delay=0s     Minimum age of all blocks before they are
+                                 being read. Set it to safe value (e.g 30m) if
+                                 your object storage is eventually consistent.
+                                 GCS and S3 are (roughly) strongly consistent.
+      --data-dir="./data"        Local data directory used for caching
+                                 purposes (index-header, in-mem cache items and
                                  meta.jsons). If removed, no data will be lost,
                                  just store will have to rebuild the cache.
                                  NOTE: Putting raw blocks here will not cause
@@ -59,8 +59,8 @@ Flags:
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-client-ca=""
-                                 TLS CA to verify clients against. If no client
-                                 CA is specified, there is no client
+                                 TLS CA to verify clients against. If no
+                                 client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
@@ -80,32 +80,32 @@ Flags:
                                  is to ignore blocks that are marked for
                                  deletion with some delay. This ensures store
                                  can still serve blocks that are meant to be
-                                 deleted but do not have a replacement yet. If
-                                 delete-delay duration is provided to compactor
-                                 or bucket verify component, it will upload
-                                 deletion-mark.json file to mark after what
-                                 duration the block should be deleted rather
-                                 than deleting the block straight away. If
-                                 delete-delay is non-zero for compactor or
-                                 bucket verify component,
-                                 ignore-deletion-marks-delay should be set to
-                                 (delete-delay)/2 so that blocks marked for
-                                 deletion are filtered out while fetching blocks
-                                 before being deleted from bucket. Default is
-                                 24h, half of the default value for
+                                 deleted but do not have a replacement yet.
+                                 If delete-delay duration is provided to
+                                 compactor or bucket verify component,
+                                 it will upload deletion-mark.json file to
+                                 mark after what duration the block should
+                                 be deleted rather than deleting the block
+                                 straight away. If delete-delay is non-zero
+                                 for compactor or bucket verify component,
+                                 ignore-deletion-marks-delay should be set
+                                 to (delete-delay)/2 so that blocks marked
+                                 for deletion are filtered out while fetching
+                                 blocks before being deleted from bucket.
+                                 Default is 24h, half of the default value for
                                  --delete-delay on compactor.
       --index-cache-size=250MB   Maximum size of items held in the in-memory
                                  index cache. Ignored if --index-cache.config or
                                  --index-cache.config-file option is specified.
       --index-cache.config=<content>
-                                 Alternative to 'index-cache.config-file' flag
-                                 (mutually exclusive). Content of YAML file that
-                                 contains index cache configuration. See format
-                                 details:
+                                 Alternative to 'index-cache.config-file'
+                                 flag (mutually exclusive). Content of
+                                 YAML file that contains index cache
+                                 configuration. See format details:
                                  https://thanos.io/tip/components/store.md/#index-cache
       --index-cache.config-file=<file-path>
-                                 Path to YAML file that contains index cache
-                                 configuration. See format details:
+                                 Path to YAML file that contains index
+                                 cache configuration. See format details:
                                  https://thanos.io/tip/components/store.md/#index-cache
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
@@ -114,8 +114,8 @@ Flags:
                                  End of time range limit to serve. Thanos Store
                                  will serve only blocks, which happened earlier
                                  than this value. Option can be a constant time
-                                 in RFC3339 format or time duration relative to
-                                 current time, such as -1d or 2h45m. Valid
+                                 in RFC3339 format or time duration relative
+                                 to current time, such as -1d or 2h45m. Valid
                                  duration units are ms, s, m, h, d, w, y.
       --min-time=0000-01-01T00:00:00Z
                                  Start of time range limit to serve. Thanos
@@ -125,20 +125,20 @@ Flags:
                                  relative to current time, such as -1d or 2h45m.
                                  Valid duration units are ms, s, m, h, d, w, y.
       --objstore.config=<content>
-                                 Alternative to 'objstore.config-file' flag
-                                 (mutually exclusive). Content of YAML file that
-                                 contains object store configuration. See format
-                                 details:
+                                 Alternative to 'objstore.config-file'
+                                 flag (mutually exclusive). Content of
+                                 YAML file that contains object store
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                 Path to YAML file that contains object store
-                                 configuration. See format details:
+                                 Path to YAML file that contains object
+                                 store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Content of YAML file
-                                 with request logging configuration. See format
-                                 details:
+                                 flag (mutually exclusive). Content
+                                 of YAML file with request logging
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
@@ -146,17 +146,17 @@ Flags:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --selector.relabel-config=<content>
                                  Alternative to 'selector.relabel-config-file'
-                                 flag (mutually exclusive). Content of YAML file
-                                 that contains relabeling configuration that
-                                 allows selecting blocks. It follows native
-                                 Prometheus relabel-config syntax. See format
-                                 details:
+                                 flag (mutually exclusive). Content of
+                                 YAML file that contains relabeling
+                                 configuration that allows selecting
+                                 blocks. It follows native Prometheus
+                                 relabel-config syntax. See format details:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --selector.relabel-config-file=<file-path>
                                  Path to YAML file that contains relabeling
-                                 configuration that allows selecting blocks. It
-                                 follows native Prometheus relabel-config
-                                 syntax. See format details:
+                                 configuration that allows selecting
+                                 blocks. It follows native Prometheus
+                                 relabel-config syntax. See format details:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --store.enable-index-header-lazy-reader
                                  If true, Store Gateway will lazy memory map
@@ -165,29 +165,29 @@ Flags:
       --store.grpc.series-max-concurrency=20
                                  Maximum number of concurrent Series calls.
       --store.grpc.series-sample-limit=0
-                                 Maximum amount of samples returned via a single
-                                 Series call. The Series call fails if this
-                                 limit is exceeded. 0 means no limit. NOTE: For
-                                 efficiency the limit is internally implemented
-                                 as 'chunks limit' considering each chunk
-                                 contains 120 samples (it's the max number of
-                                 samples each chunk can contain), so the actual
-                                 number of samples might be lower, even though
-                                 the maximum could be hit.
+                                 Maximum amount of samples returned via a
+                                 single Series call. The Series call fails
+                                 if this limit is exceeded. 0 means no limit.
+                                 NOTE: For efficiency the limit is internally
+                                 implemented as 'chunks limit' considering
+                                 each chunk contains 120 samples (it's the max
+                                 number of samples each chunk can contain),
+                                 so the actual number of samples might be lower,
+                                 even though the maximum could be hit.
       --store.grpc.touched-series-limit=0
-                                 Maximum amount of touched series returned via a
-                                 single Series call. The Series call fails if
+                                 Maximum amount of touched series returned via
+                                 a single Series call. The Series call fails if
                                  this limit is exceeded. 0 means no limit.
       --sync-block-duration=3m   Repeat interval for syncing the blocks between
                                  local and remote view.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (mutually exclusive). Content of YAML file with
-                                 tracing configuration. See format details:
+                                 (mutually exclusive). Content of YAML file
+                                 with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                                 Path to YAML file with tracing configuration.
-                                 See format details:
+                                 Path to YAML file with tracing
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --version                  Show application version.
       --web.disable              Disable Block Viewer UI.
@@ -195,20 +195,20 @@ Flags:
                                  Thanos. By default Thanos sets CORS headers to
                                  be allowed by all.
       --web.external-prefix=""   Static prefix for all HTML links and redirect
-                                 URLs in the bucket web UI interface. Actual
-                                 endpoints are still served on / or the
-                                 web.route-prefix. This allows thanos bucket web
-                                 UI to be served behind a reverse proxy that
+                                 URLs in the bucket web UI interface.
+                                 Actual endpoints are still served on / or the
+                                 web.route-prefix. This allows thanos bucket
+                                 web UI to be served behind a reverse proxy that
                                  strips a URL sub-path.
       --web.prefix-header=""     Name of HTTP request header used for dynamic
-                                 prefixing of UI links and redirects. This
-                                 option is ignored if web.external-prefix
-                                 argument is set. Security risk: enable this
-                                 option only if a reverse proxy in front of
-                                 thanos is resetting the header. The
-                                 --web.prefix-header=X-Forwarded-Prefix option
-                                 can be useful, for example, if Thanos UI is
-                                 served via Traefik reverse proxy with
+                                 prefixing of UI links and redirects.
+                                 This option is ignored if web.external-prefix
+                                 argument is set. Security risk: enable
+                                 this option only if a reverse proxy in
+                                 front of thanos is resetting the header.
+                                 The --web.prefix-header=X-Forwarded-Prefix
+                                 option can be useful, for example, if Thanos
+                                 UI is served via Traefik reverse proxy with
                                  PathPrefixStrip option enabled, which sends the
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
