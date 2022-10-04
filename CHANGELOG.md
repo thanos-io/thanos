@@ -37,7 +37,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5685](https://github.com/thanos-io/thanos/pull/5685) Receive: Make active/head series limiting configuration per tenant by adding it to new limiting config.
 - [#5411](https://github.com/thanos-io/thanos/pull/5411) Tracing: Change Jaeger exporter from OpenTracing to OpenTelemetry. *Options `RPC Metrics`, `Gen128Bit` and `Disabled` are now deprecated and won't have any effect when set :warning:.*
 
-
 ### Removed
 
 ## [v0.28.0](https://github.com/thanos-io/thanos/tree/release-0.28) - 2022.08.26
