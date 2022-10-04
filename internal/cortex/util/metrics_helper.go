@@ -716,7 +716,7 @@ func FromLabelPairsToLabels(pairs []*dto.LabelPair) labels.Labels {
 	for _, pair := range pairs {
 		builder.Set(pair.GetName(), pair.GetValue())
 	}
-	return builder.Labels()
+	return builder.Labels(nil)
 }
 
 // GetSumOfHistogramSampleCount returns the sum of samples count of histograms matching the provided metric name
@@ -782,7 +782,7 @@ nextMetric:
 
 			lbls.Set(lp.GetName(), lp.GetValue())
 		}
-		result = append(result, lbls.Labels())
+		result = append(result, lbls.Labels(nil))
 	}
 
 	return result, errs.Err()

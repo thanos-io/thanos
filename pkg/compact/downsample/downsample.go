@@ -130,7 +130,7 @@ func Downsample(
 		// While #183 exists, we sanitize the chunks we retrieved from the block
 		// before retrieving their samples.
 		for i, c := range chks {
-			chk, err := chunkr.Chunk(c.Ref)
+			chk, err := chunkr.Chunk(c)
 			if err != nil {
 				return id, errors.Wrapf(err, "get chunk %d, series %d", c.Ref, postings.At())
 			}
