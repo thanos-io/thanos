@@ -190,6 +190,7 @@ Flags:
                                  See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --version                  Show application version.
+      --web.disable              Disable Block Viewer UI.
       --web.disable-cors         Whether to disable CORS headers to be set by
                                  Thanos. By default Thanos sets CORS headers to
                                  be allowed by all.
@@ -328,6 +329,13 @@ config:
   get_multi_batch_size: 100
   max_set_multi_concurrency: 100
   set_multi_batch_size: 100
+  tls_enabled: false
+  tls_config:
+    ca_file: ""
+    cert_file: ""
+    key_file: ""
+    server_name: ""
+    insecure_skip_verify: false
 ```
 
 The **required** settings are:
@@ -336,8 +344,8 @@ The **required** settings are:
 
 While the remaining settings are **optional**:
 
-- `username`: the username to connect redis, only redis 6.0 and grater need this field.
-- `password`: the password to connect redis.
+- `username`: the username to connect to redis, only redis 6.0 and grater need this field.
+- `password`: the password to connect to redis.
 - `db`: the database to be selected after connecting to the server.
 - `dial_timeout`: the redis dial timeout.
 - `read_timeout`: the redis read timeout.
@@ -350,6 +358,13 @@ While the remaining settings are **optional**:
 - `get_multi_batch_size`: specifies the maximum size per batch for mget.
 - `max_set_multi_concurrency`: specifies the maximum number of concurrent SetMulti() operations.
 - `set_multi_batch_size`: specifies the maximum size per batch for pipeline set.
+- `tls_enabled`: enables the use of TLS to connect to redis
+- `tls_config`: TLS connection configuration:
+  - `ca_file`: path to Root CA certificate file to use
+  - `cert_file`: path to Client Certificate file to use
+  - `key_file`: path to the Key file for cert_file (NOTE: Both this and `cert_file` must be set if used)
+  - `servername`: Override the server name used to validate the server certificate
+  - `insecure_skip_verify`: Disable certificate verification
 
 ## Caching Bucket
 
