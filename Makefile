@@ -91,14 +91,14 @@ define require_clean_work_tree
 
 	@if ! git diff-files --quiet --ignore-submodules --; then \
 		echo >&2 "cannot $1: you have unstaged changes."; \
-		git diff-files --name-status -r --ignore-submodules -- >&2; \
+		git diff -r --ignore-submodules -- >&2; \
 		echo >&2 "Please commit or stash them."; \
 		exit 1; \
 	fi
 
 	@if ! git diff-index --cached --quiet HEAD --ignore-submodules --; then \
 		echo >&2 "cannot $1: your index contains uncommitted changes."; \
-		git diff-index --cached --name-status -r --ignore-submodules HEAD -- >&2; \
+		git diff --cached -r --ignore-submodules HEAD -- >&2; \
 		echo >&2 "Please commit or stash them."; \
 		exit 1; \
 	fi
