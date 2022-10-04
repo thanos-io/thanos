@@ -25,7 +25,7 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/thanos-io/thanos/pkg/store/metrics"
+	"github.com/thanos-io/thanos/pkg/store/telemetry"
 	"google.golang.org/grpc"
 
 	v1 "github.com/prometheus/prometheus/web/api/v1"
@@ -692,7 +692,7 @@ func runQuery(
 				extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg),
 				maxConcurrentQueries,
 			),
-			metrics.NewSeriesStatsAggregator(
+			telemetry.NewSeriesStatsAggregator(
 				reg,
 				queryTelemetryDurationQuantiles,
 				queryTelemetrySamplesQuantiles,

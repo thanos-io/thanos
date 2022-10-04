@@ -43,7 +43,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/stats"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
-	"github.com/thanos-io/thanos/pkg/store/metrics"
+	"github.com/thanos-io/thanos/pkg/store/telemetry"
 
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -145,7 +145,7 @@ func NewQueryAPI(
 	reg *prometheus.Registry,
 ) *QueryAPI {
 	if statsAggregator == nil {
-		statsAggregator = &metrics.NoopSeriesStatsAggregator{}
+		statsAggregator = &telemetry.NoopSeriesStatsAggregator{}
 	}
 	return &QueryAPI{
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),

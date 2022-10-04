@@ -45,7 +45,7 @@ import (
 	promgate "github.com/prometheus/prometheus/util/gate"
 	"github.com/prometheus/prometheus/util/stats"
 	"github.com/thanos-io/thanos/pkg/compact"
-	"github.com/thanos-io/thanos/pkg/store/metrics"
+	"github.com/thanos-io/thanos/pkg/store/telemetry"
 
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -199,7 +199,7 @@ func TestQueryEndpoints(t *testing.T) {
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
 		}),
-		seriesStatsAggregator: &metrics.NoopSeriesStatsAggregator{},
+		seriesStatsAggregator: &telemetry.NoopSeriesStatsAggregator{},
 	}
 
 	start := time.Unix(0, 0)
@@ -739,7 +739,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
 		}),
-		seriesStatsAggregator: &metrics.NoopSeriesStatsAggregator{},
+		seriesStatsAggregator: &telemetry.NoopSeriesStatsAggregator{},
 	}
 	apiWithLabelLookback := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
@@ -753,7 +753,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
 		}),
-		seriesStatsAggregator: &metrics.NoopSeriesStatsAggregator{},
+		seriesStatsAggregator: &telemetry.NoopSeriesStatsAggregator{},
 	}
 
 	var tests = []endpointTestCase{
