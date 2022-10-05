@@ -104,7 +104,7 @@ Feel free to mimic following PR: https://github.com/thanos-io/thanos/pull/3861
 
 6. *(Applies only to minor, non-`rc` release)* Update tutorials:
 
-   1. Update the Thanos version used in the [tutorials](../tutorials) manifests.
+   1. Update the Thanos version used in the [tutorials](https://github.com/thanos-io/tutorials) manifests to use the latest version.
    2. In case of any breaking changes or necessary updates adjust the manifests so the tutorial stays up to date.
    3. Update the [scripts/quickstart.sh](https://github.com/thanos-io/thanos/blob/main/scripts/quickstart.sh) script if needed.
 

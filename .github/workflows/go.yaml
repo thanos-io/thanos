@@ -11,14 +11,14 @@ on:
 jobs:
   cross-build-check:
     runs-on: ubuntu-latest
-    name: Go build for different platform"
+    name: Go build for different platforms
     env:
       GOBIN: /tmp/.bin
     steps:
       - name: Install Go.
         uses: actions/setup-go@v3
         with:
-          go-version: 1.18.x
+          go-version: 1.19.x
 
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
@@ -39,12 +39,12 @@ jobs:
       GOBIN: /tmp/.bin
     steps:
       - name: Checkout code into the Go module directory.
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.18.x
+          go-version: 1.19.x
 
       - uses: actions/cache@v3
         with:
@@ -60,7 +60,7 @@ jobs:
         run: make go-lint
   e2e:
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         parallelism: [4]
         index: [0, 1, 2, 3]
@@ -72,10 +72,10 @@ jobs:
       - name: Install Go.
         uses: actions/setup-go@v3
         with:
-          go-version: 1.18.x
+          go-version: 1.19.x
 
       - name: Check out code into the Go module directory.
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - uses: actions/cache@v3
         with:

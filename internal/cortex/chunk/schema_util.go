@@ -4,17 +4,16 @@
 package chunk
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
 
-	"fmt"
-
+	"github.com/minio/sha256-simd"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"

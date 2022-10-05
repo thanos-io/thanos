@@ -2016,7 +2016,15 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 			responses: []*storepb.SeriesResponse{},
 			testFn: func(responses []*storepb.SeriesResponse, h *dedupResponseHeap) {
 				testutil.Equals(t, false, h.Next())
-				testutil.Equals(t, (*storepb.SeriesResponse)(nil), h.At())
+
+				callAtExpectPanic := func() {
+					defer func() {
+						testutil.Assert(t, recover() != nil, "expected a panic from At()")
+					}()
+
+					h.At()
+				}
+				callAtExpectPanic()
 			},
 		},
 		{

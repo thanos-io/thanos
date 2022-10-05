@@ -29,11 +29,11 @@ $(BINGO): $(BINGO_DIR)/bingo.mod
 	@echo "(re)installing $(GOBIN)/bingo-v0.6.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=bingo.mod -o=$(GOBIN)/bingo-v0.6.0 "github.com/bwplotka/bingo"
 
-FAILLINT := $(GOBIN)/faillint-v1.10.0
+FAILLINT := $(GOBIN)/faillint-v1.11.0
 $(FAILLINT): $(BINGO_DIR)/faillint.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/faillint-v1.10.0"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=faillint.mod -o=$(GOBIN)/faillint-v1.10.0 "github.com/fatih/faillint"
+	@echo "(re)installing $(GOBIN)/faillint-v1.11.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=faillint.mod -o=$(GOBIN)/faillint-v1.11.0 "github.com/fatih/faillint"
 
 GO_BINDATA := $(GOBIN)/go-bindata-v3.1.1+incompatible
 $(GO_BINDATA): $(BINGO_DIR)/go-bindata.mod
@@ -53,11 +53,11 @@ $(GOJSONTOYAML): $(BINGO_DIR)/gojsontoyaml.mod
 	@echo "(re)installing $(GOBIN)/gojsontoyaml-v0.1.0"
 	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=gojsontoyaml.mod -o=$(GOBIN)/gojsontoyaml-v0.1.0 "github.com/brancz/gojsontoyaml"
 
-GOLANGCI_LINT := $(GOBIN)/golangci-lint-v1.47.1
+GOLANGCI_LINT := $(GOBIN)/golangci-lint-v1.49.0
 $(GOLANGCI_LINT): $(BINGO_DIR)/golangci-lint.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/golangci-lint-v1.47.1"
-	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.47.1 "github.com/golangci/golangci-lint/cmd/golangci-lint"
+	@echo "(re)installing $(GOBIN)/golangci-lint-v1.49.0"
+	@cd $(BINGO_DIR) && $(GO) build -mod=mod -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v1.49.0 "github.com/golangci/golangci-lint/cmd/golangci-lint"
 
 GOTESPLIT := $(GOBIN)/gotesplit-v0.2.1
 $(GOTESPLIT): $(BINGO_DIR)/gotesplit.mod

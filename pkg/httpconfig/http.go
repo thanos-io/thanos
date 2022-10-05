@@ -97,6 +97,10 @@ var defaultTransportConfig TransportConfig = TransportConfig{
 	TLSHandshakeTimeout:   int64(10 * time.Second),
 }
 
+func NewDefaultClientConfig() ClientConfig {
+	return ClientConfig{TransportConfig: defaultTransportConfig}
+}
+
 func NewClientConfigFromYAML(cfg []byte) (*ClientConfig, error) {
 	conf := &ClientConfig{TransportConfig: defaultTransportConfig}
 	if err := yaml.Unmarshal(cfg, conf); err != nil {

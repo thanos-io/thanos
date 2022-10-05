@@ -4,6 +4,7 @@
 package receive
 
 import (
+	"net/url"
 	"os"
 	"path"
 	"testing"
@@ -23,26 +24,38 @@ func TestParseLimiterConfig(t *testing.T) {
 			configFileName: "good_limits.yaml",
 			wantErr:        false,
 			want: &RootLimitsConfig{
-				WriteLimits: writeLimitsConfig{
-					GlobalLimits: globalLimitsConfig{MaxConcurrency: 30},
-					DefaultLimits: defaultLimitsConfig{
+				WriteLimits: WriteLimitsConfig{
+					GlobalLimits: GlobalLimitsConfig{
+						MaxConcurrency:           30,
+						MetaMonitoringURL:        "http://localhost:9090",
+						MetaMonitoringLimitQuery: "sum(prometheus_tsdb_head_series) by (tenant)",
+						metaMonitoringURL: &url.URL{
+							Scheme: "http",
+							Host:   "localhost:9090",
+						},
+					},
+					DefaultLimits: DefaultLimitsConfig{
 						RequestLimits: *newEmptyRequestLimitsConfig().
 							SetSizeBytesLimit(1024).
 							SetSeriesLimit(1000).
 							SetSamplesLimit(10),
+						HeadSeriesLimit: 1000,
 					},
-					TenantsLimits: tenantsWriteLimitsConfig{
-						"acme": &writeLimitConfig{
-							RequestLimits: newEmptyRequestLimitsConfig().
-								SetSizeBytesLimit(0).
-								SetSeriesLimit(0).
-								SetSamplesLimit(0),
-						},
-						"ajax": &writeLimitConfig{
-							RequestLimits: newEmptyRequestLimitsConfig().
-								SetSeriesLimit(50000).
-								SetSamplesLimit(500),
-						},
+					TenantsLimits: TenantsWriteLimitsConfig{
+						"acme": NewEmptyWriteLimitConfig().
+							SetRequestLimits(
+								newEmptyRequestLimitsConfig().
+									SetSizeBytesLimit(0).
+									SetSeriesLimit(0).
+									SetSamplesLimit(0),
+							).
+							SetHeadSeriesLimit(2000),
+						"ajax": NewEmptyWriteLimitConfig().
+							SetRequestLimits(
+								newEmptyRequestLimitsConfig().
+									SetSeriesLimit(50000).
+									SetSamplesLimit(500),
+							),
 					},
 				},
 			},

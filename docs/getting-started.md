@@ -40,7 +40,7 @@ Thanos can **not** be downloaded nor installed via the `go get` or `go install` 
 
 Thanos uses the directive *replace*. The reason is to provide a way to unblock ourselves promptly while also being flexible in the packages that we (re)use. Support for `go install` is not likely at this point.
 
-If you want to build Thanos from source you would need a working installation of the Go 1.17+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`). Next one should make a clone of our repository:
+If you want to build Thanos from source you would need a working installation of the Go 1.18+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`). Next one should make a clone of our repository:
 
 ```
 git clone git@github.com:thanos-io/thanos.git
@@ -79,6 +79,7 @@ If you want to add yourself to this list, let us know!
 
 ## Deploying Thanos
 
+* [WIP] Detailed, free, in-browser interactive tutorial [as Killercoda Thanos Course](https://killercoda.com/thanos/)
 * [Quick Tutorial](quick-tutorial.md) on Thanos website.
 
 ## Operating

@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.18.x
+          go-version: 1.19.x
 
       - name: Generate
         run: make examples
@@ -29,12 +29,12 @@ jobs:
     name: Linters (Static Analysis) for Jsonnet (mixin)
     steps:
       - name: Checkout code into the Go module directory.
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.18.x
+          go-version: 1.19.x
 
       - name: Format
         run: |
