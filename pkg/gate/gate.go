@@ -32,13 +32,12 @@ var (
 //
 // Example of use:
 //
-//   g := gate.New(r, 5)
+//	g := gate.New(r, 5)
 //
-//   if err := g.Start(ctx); err != nil {
-//      return
-//   }
-//   defer g.Done()
-//
+//	if err := g.Start(ctx); err != nil {
+//	   return
+//	}
+//	defer g.Done()
 type Gate interface {
 	// Start initiates a new request and waits until it's our turn to fulfill a request.
 	Start(ctx context.Context) error
