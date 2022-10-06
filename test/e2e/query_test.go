@@ -45,7 +45,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
@@ -579,61 +578,6 @@ func newSample(s fakeMetricSample) model.Sample {
 	}
 }
 
-func TestSidecarPushdownSubquery(t *testing.T) {
-	t.Parallel()
-
-	// Build up.
-	e, err := e2e.NewDockerEnvironment("pushdown-subq")
-	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, e))
-
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
-	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
-
-	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).WithEnabledFeatures([]string{"query-pushdown"}).Init()
-	testutil.Ok(t, e2e.StartAndWaitReady(q))
-
-	now := model.Now()
-
-	samples := []fakeMetricSample{}
-
-	for ts := now.Add(-15 * time.Minute); ts.Before(now); ts = ts.Add(10 * time.Second) {
-		samples = append(samples, fakeMetricSample{
-			label:             "foo",
-			value:             1,
-			timestampUnixNano: ts.UnixNano(),
-		})
-	}
-
-	testutil.Ok(t, synthesizeFakeMetricSamples(context.TODO(), prom1, samples))
-
-	queryAndAssert(t, context.Background(), q.Endpoint("http"), func() string {
-		return "sum_over_time(min by (instance) (my_fake_metric)[15m:2m])"
-	}, now.Time, promclient.QueryOptions{
-		Deduplicate: true,
-	}, model.Vector{
-		&model.Sample{
-			Metric: model.Metric{
-				"instance": "foo",
-			},
-			Value: model.SampleValue(7),
-		},
-	})
-
-	queryAndAssert(t, context.Background(), q.Endpoint("http"), func() string {
-		return "sum_over_time(min by (instance) (my_fake_metric)[15m:])"
-	}, now.Time, promclient.QueryOptions{
-		Deduplicate: true,
-	}, model.Vector{
-		&model.Sample{
-			Metric: model.Metric{
-				"instance": "foo",
-			},
-			Value: model.SampleValue(15),
-		},
-	})
-}
-
 // Regression test for https://github.com/thanos-io/thanos/issues/5033.
 // Tests whether queries work with mixed sources, and with functions
 // that we are pushing down: min, max, min_over_time, max_over_time,
@@ -938,11 +882,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", expectedSeriesLen, q()),
 	)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
-		httpClient, _ := httpconfig.NewHTTPClient(httpconfig.ClientConfig{}, "")
-
-		client := promclient.NewClient(httpClient, log.NewLogfmtLogger(os.Stderr), "")
-
-		res, warnings, err := client.QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 		if err != nil {
 			return err
 		}
