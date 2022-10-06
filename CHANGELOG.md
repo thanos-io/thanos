@@ -10,6 +10,12 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+## [v0.28.1](https://github.com/thanos-io/thanos/tree/release-0.28) - 2022.10.06
+
+### Fixed
+
+- [#5702](https://github.com/thanos-io/thanos/pull/5702) Store: Upgrade minio-go/v7 to fix panic caused by leaked goroutines.
+
 ## [v0.28.0](https://github.com/thanos-io/thanos/tree/release-0.28) - 2022.08.26
 
 ### Fixed
