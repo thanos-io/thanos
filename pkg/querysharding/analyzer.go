@@ -79,7 +79,6 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 //     used in grouping expressions. If non-empty, treat the query
 //     as shardable by those labels.
 //   - otherwise, treat the query as non-shardable.
-
 // The le label is excluded from sharding.
 
 func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {

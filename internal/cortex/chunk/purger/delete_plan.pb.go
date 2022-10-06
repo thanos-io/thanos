@@ -5,10 +5,10 @@ package purger
 
 import (
 	fmt "fmt"
-	_ "github.com/thanos-io/thanos/internal/cortex/cortexpb"
-	github_com_cortexproject_cortex_pkg_cortexpb "github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/thanos-io/thanos/internal/cortex/cortexpb"
+	github_com_cortexproject_cortex_pkg_cortexpb "github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	io "io"
 	math "math"
 	math_bits "math/bits"
