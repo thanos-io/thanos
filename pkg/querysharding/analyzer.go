@@ -67,18 +67,19 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 	return analysis, err
 }
 
-// queryAnalyzer analyzes a query and returns a QueryAnalysis.
+// Analyze analyzes a query and returns a QueryAnalysis.
 
-// queryAnalyzer uses the following algorithm:
-// * if a query has subqueries, such as label_join or label_replace,
-//   or has functions which cannot be sharded, then treat the query as non shardable.
-// * if the query's root expression has grouping labels,
-//   then treat the query as shardable by those labels.
-// * if the query's root expression has no grouping labels,
-//   then walk the query and find the least common labelset
-//   used in grouping expressions. If non-empty, treat the query
-//   as shardable by those labels.
-// * otherwise, treat the query as non-shardable.
+// Analyze uses the following algorithm:
+//   - if a query has subqueries, such as label_join or label_replace,
+//     or has functions which cannot be sharded, then treat the query as non shardable.
+//   - if the query's root expression has grouping labels,
+//     then treat the query as shardable by those labels.
+//   - if the query's root expression has no grouping labels,
+//     then walk the query and find the least common labelset
+//     used in grouping expressions. If non-empty, treat the query
+//     as shardable by those labels.
+//   - otherwise, treat the query as non-shardable.
+
 // The le label is excluded from sharding.
 
 func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
