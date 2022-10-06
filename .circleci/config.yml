@@ -7,10 +7,10 @@ orbs:
 executors:
   golang:
     docker:
-      - image: cimg/go:1.18-node
+      - image: cimg/go:1.19-node
   golang-test:
     docker:
-      - image: cimg/go:1.18-node
+      - image: cimg/go:1.19-node
       - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1
 
 jobs:
@@ -35,7 +35,7 @@ jobs:
       - run:
           name: "Run unit tests."
           environment:
-            THANOS_TEST_OBJSTORE_SKIP: AZURE,COS,ALIYUNOSS,BOS
+            THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI
             # Variables for Swift testing.
             OS_AUTH_URL: http://127.0.0.1:5000/v2.0
             OS_PASSWORD: s3cr3t
@@ -45,7 +45,7 @@ jobs:
           # taskset sets CPU affinity to 2 (current CPU limit).
           command: |
             if [ -z ${GCP_PROJECT} ]; then
-              export THANOS_TEST_OBJSTORE_SKIP=${THANOS_TEST_OBJSTORE_SKIP},GCS,S3
+              export THANOS_TEST_OBJSTORE_SKIP=${THANOS_TEST_OBJSTORE_SKIP}
             fi
             echo "Skipping tests for object storages: ${THANOS_TEST_OBJSTORE_SKIP}"
             taskset 2 make test

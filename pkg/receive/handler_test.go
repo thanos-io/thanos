@@ -369,6 +369,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			ReplicationFactor: replicationFactor,
 			ForwardTimeout:    5 * time.Second,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
+			Limiter:           NewLimiter(nil, nil, RouterIngestor, nil),
 		})
 		handlers = append(handlers, h)
 		h.peers = peers
@@ -774,8 +775,24 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			}
 			handlers, _ := newTestHandlerHashring(appendables, 3)
 			handler := handlers[0]
-			handler.requestLimiter = newRequestLimiter(int64(1*units.Megabyte), 20, 200, nil)
 			tenant := "test"
+			handler.limiter = NewLimiter(
+				&RootLimitsConfig{
+					WriteLimits: WriteLimitsConfig{
+						TenantsLimits: TenantsWriteLimitsConfig{
+							tenant: &WriteLimitConfig{
+								RequestLimits: newEmptyRequestLimitsConfig().
+									SetSizeBytesLimit(int64(1 * units.Megabyte)).
+									SetSeriesLimit(20).
+									SetSamplesLimit(200),
+							},
+						},
+					},
+				},
+				nil,
+				RouterIngestor,
+				log.NewNopLogger(),
+			)
 
 			wreq := &prompb.WriteRequest{
 				Timeseries: []prompb.TimeSeries{},

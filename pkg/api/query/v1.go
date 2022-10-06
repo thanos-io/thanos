@@ -41,6 +41,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
+	v1 "github.com/prometheus/prometheus/web/api/v1"
 
 	"github.com/prometheus/prometheus/util/stats"
 
@@ -82,7 +83,7 @@ type QueryAPI struct {
 	gate            gate.Gate
 	queryableCreate query.QueryableCreator
 	// queryEngine returns appropriate promql.Engine for a query with a given step.
-	queryEngine         *promql.Engine
+	queryEngine         v1.QueryEngine
 	lookbackDeltaCreate func(int64) time.Duration
 	ruleGroups          rules.UnaryClient
 	targets             targets.UnaryClient
@@ -112,7 +113,7 @@ type QueryAPI struct {
 func NewQueryAPI(
 	logger log.Logger,
 	endpointStatus func() []query.EndpointStatus,
-	qe *promql.Engine,
+	qe v1.QueryEngine,
 	lookbackDeltaCreate func(int64) time.Duration,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
@@ -139,13 +140,13 @@ func NewQueryAPI(
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:                                 logger,
 		queryEngine:                            qe,
+		lookbackDeltaCreate:                    lookbackDeltaCreate,
 		queryableCreate:                        c,
 		gate:                                   gate,
 		ruleGroups:                             ruleGroups,
 		targets:                                targets,
 		metadatas:                              metadatas,
 		exemplars:                              exemplars,
-		lookbackDeltaCreate:                    lookbackDeltaCreate,
 		enableAutodownsampling:                 enableAutodownsampling,
 		enableQueryPartialResponse:             enableQueryPartialResponse,
 		enableRulePartialResponse:              enableRulePartialResponse,

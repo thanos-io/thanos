@@ -27,7 +27,7 @@ local utils = import '../lib/utils.libsonnet';
           g.httpQpsPanel('thanos_query_frontend_queries_total', queryFrontendOpSelector, thanos.queryFrontend.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the the total number of handled requests against Query Frontend.') +
+          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests against Query Frontend.') +
           g.httpErrPanel('http_requests_total', queryFrontendHandlerSelector, thanos.queryFrontend.dashboard.dimensions)
         )
         .addPanel(

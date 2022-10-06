@@ -26,15 +26,17 @@ func NewQueryAnalyzer() *QueryAnalyzer {
 // Analyze analyzes a query and returns a QueryAnalysis.
 
 // Analyze uses the following algorithm:
-// * if a query has subqueries, such as label_join or label_replace,
-//   or has functions which cannot be sharded, then treat the query as non shardable.
-// * if the query's root expression has grouping labels,
-//   then treat the query as shardable by those labels.
-// * if the query's root expression has no grouping labels,
-//   then walk the query and find the least common labelset
-//   used in grouping expressions. If non-empty, treat the query
-//   as shardable by those labels.
-// * otherwise, treat the query as non-shardable.
+//   - if a query has subqueries, such as label_join or label_replace,
+//     or has functions which cannot be sharded, then treat the query as non shardable.
+//   - if the query's root expression has grouping labels,
+//     then treat the query as shardable by those labels.
+//   - if the query's root expression has no grouping labels,
+//     then walk the query and find the least common labelset
+//     used in grouping expressions. If non-empty, treat the query
+//     as shardable by those labels.
+//   - otherwise, treat the query as non-shardable.
+//
+// The le label is excluded from sharding.
 func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 	expr, err := parser.ParseExpr(query)
 	if err != nil {
@@ -55,15 +57,15 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 			}
 		case *parser.BinaryExpr:
 			if n.VectorMatching != nil {
-				analysis = analysis.scopeToLabels(n.VectorMatching.MatchingLabels, n.VectorMatching.On)
+				shardingLabels := without(n.VectorMatching.MatchingLabels, []string{"le"})
+				analysis = analysis.scopeToLabels(shardingLabels, n.VectorMatching.On)
 			}
 		case *parser.AggregateExpr:
-			labels := make([]string, 0)
+			shardingLabels := make([]string, 0)
 			if len(n.Grouping) > 0 {
-				labels = n.Grouping
+				shardingLabels = without(n.Grouping, []string{"le"})
 			}
-
-			analysis = analysis.scopeToLabels(labels, !n.Without)
+			analysis = analysis.scopeToLabels(shardingLabels, !n.Without)
 		}
 
 		return nil
@@ -85,7 +87,8 @@ func analyzeRootExpression(node parser.Node) QueryAnalysis {
 	switch n := node.(type) {
 	case *parser.BinaryExpr:
 		if n.VectorMatching != nil && n.VectorMatching.On {
-			return newShardableByLabels(n.VectorMatching.MatchingLabels, n.VectorMatching.On)
+			shardingLabels := without(n.VectorMatching.MatchingLabels, []string{"le"})
+			return newShardableByLabels(shardingLabels, n.VectorMatching.On)
 		} else {
 			return nonShardableQuery()
 		}
@@ -94,7 +97,8 @@ func analyzeRootExpression(node parser.Node) QueryAnalysis {
 			return nonShardableQuery()
 		}
 
-		return newShardableByLabels(n.Grouping, !n.Without)
+		shardingLabels := without(n.Grouping, []string{"le"})
+		return newShardableByLabels(shardingLabels, !n.Without)
 	}
 
 	return nonShardableQuery()

@@ -34,13 +34,13 @@ import (
 func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_tools_bucket_web_route_prefix")
+	e, err := e2e.NewDockerEnvironment("route-prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	externalPrefix := "testThanos"
 
-	const bucket = "compact_test"
+	const bucket = "compact-test"
 	m := e2ethanos.NewMinio(e, "thanos", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
@@ -67,12 +67,12 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 func TestToolsBucketWebExternalPrefix(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_tools_bucket_web_external_prefix")
+	e, err := e2e.NewDockerEnvironment("external-prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	externalPrefix := "testThanos"
-	const bucket = "toolsBucketWeb_test"
+	const bucket = "toolsBucketWeb-test"
 	m := e2ethanos.NewMinio(e, "thanos", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
@@ -104,13 +104,13 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_tools_bucket_web_and_route_prefix")
+	e, err := e2e.NewDockerEnvironment("route-prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	externalPrefix := "testThanos"
 	routePrefix := "test"
-	const bucket = "toolsBucketWeb_test"
+	const bucket = "toolsBucketWeb-test"
 	m := e2ethanos.NewMinio(e, "thanos", bucket)
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
@@ -143,12 +143,12 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_tools_bucket_web_time_and_relabel_filter")
+	e, err := e2e.NewDockerEnvironment("time-relabel")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	// Create Minio.
-	const bucket = "toolsBucketWeb_test"
+	const bucket = "toolsBucketWeb-test"
 	m := e2ethanos.NewMinio(e, "thanos", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 

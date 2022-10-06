@@ -49,11 +49,6 @@ func NewGRPCEndpointSpec(addr string, isStrictStatic bool) *GRPCEndpointSpec {
 	return &GRPCEndpointSpec{addr: addr, isStrictStatic: isStrictStatic}
 }
 
-// IsStrictStatic returns true if the endpoint has been statically defined and it is under a strict mode.
-func (es *GRPCEndpointSpec) IsStrictStatic() bool {
-	return es.isStrictStatic
-}
-
 func (es *GRPCEndpointSpec) Addr() string {
 	// API address should not change between state changes.
 	return es.addr
@@ -382,7 +377,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 		e.endpoints[addr] = er
 	}
 	for addr, er := range staleRefs {
-		level.Info(er.logger).Log("msg", unhealthyEndpointMessage, "address", er.Addr(), "extLset", labelpb.PromLabelSetsToString(er.LabelSets()))
+		level.Info(er.logger).Log("msg", unhealthyEndpointMessage, "address", er.addr, "extLset", labelpb.PromLabelSetsToString(er.LabelSets()))
 		er.Close()
 		delete(e.endpoints, addr)
 	}
@@ -437,7 +432,7 @@ func (e *EndpointSet) getTimedOutRefs() map[string]*endpointRef {
 
 		lastCheck := er.getStatus().LastCheck
 		if now.Sub(lastCheck) >= e.unhealthyEndpointTimeout {
-			result[er.Addr()] = er
+			result[er.addr] = er
 		}
 	}
 
@@ -599,7 +594,7 @@ func (e *EndpointSet) newEndpointRef(ctx context.Context, spec *GRPCEndpointSpec
 		logger:   e.logger,
 		created:  e.now(),
 		addr:     spec.Addr(),
-		isStrict: spec.IsStrictStatic(),
+		isStrict: spec.isStrictStatic,
 		cc:       conn,
 	}, nil
 }
@@ -769,13 +764,27 @@ func (er *endpointRef) SupportsSharding() bool {
 	return er.metadata.Store.SupportsSharding
 }
 
-func (er *endpointRef) String() string {
-	mint, maxt := er.TimeRange()
-	return fmt.Sprintf("Addr: %s LabelSets: %v Mint: %d Maxt: %d", er.addr, labelpb.PromLabelSetsToString(er.LabelSets()), mint, maxt)
+func (er *endpointRef) SendsSortedSeries() bool {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	if er.metadata == nil || er.metadata.Store == nil {
+		return false
+	}
+
+	return er.metadata.Store.SendsSortedSeries
 }
 
-func (er *endpointRef) Addr() string {
-	return er.addr
+func (er *endpointRef) String() string {
+	mint, maxt := er.TimeRange()
+	return fmt.Sprintf(
+		"Addr: %s LabelSets: %v Mint: %d Maxt: %d",
+		er.addr, labelpb.PromLabelSetsToString(er.LabelSets()), mint, maxt,
+	)
+}
+
+func (er *endpointRef) Addr() (string, bool) {
+	return er.addr, false
 }
 
 func (er *endpointRef) Close() {

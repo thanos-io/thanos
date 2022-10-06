@@ -25,7 +25,8 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
-
+	v1 "github.com/prometheus/prometheus/web/api/v1"
+	"github.com/thanos-community/promql-engine/engine"
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -33,6 +34,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
+	"github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -52,12 +54,20 @@ import (
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
+	"google.golang.org/grpc"
 )
 
 const (
 	promqlNegativeOffset = "promql-negative-offset"
 	promqlAtModifier     = "promql-at-modifier"
 	queryPushdown        = "query-pushdown"
+)
+
+type promqlEngineType string
+
+const (
+	promqlEnginePrometheus promqlEngineType = "prometheus"
+	promqlEngineThanos     promqlEngineType = "thanos"
 )
 
 // registerQuery registers a query command.
@@ -74,6 +84,8 @@ func registerQuery(app *extkingpin.App) {
 	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
 	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
+	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
+	grpcCompression := cmd.Flag("grpc-compression", "Compression algorithm to use for gRPC requests to other clients. Must be one of: "+compressionOptions).Default(compressionNone).Enum(snappy.Name, compressionNone)
 
 	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. Defaults to the value of --web.external-prefix. This option is analogous to --web.route-prefix of Prometheus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
@@ -84,6 +96,8 @@ func registerQuery(app *extkingpin.App) {
 
 	queryTimeout := extkingpin.ModelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
+	promqlEngine := cmd.Flag("query.promql-engine", "PromQL engine to use.").Default(string(promqlEnginePrometheus)).Hidden().
+		Enum(string(promqlEnginePrometheus), string(promqlEngineThanos))
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
@@ -178,6 +192,7 @@ func registerQuery(app *extkingpin.App) {
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field.").String()
+	grpcProxyStrategy := cmd.Flag("grpc.proxy-strategy", "Strategy to use when proxying Series requests to leaf nodes. Hidden and only used for testing, will be removed after lazy becomes the default.").Default(string(store.EagerRetrieval)).Hidden().Enum(string(store.EagerRetrieval), string(store.LazyRetrieval))
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
@@ -239,6 +254,7 @@ func registerQuery(app *extkingpin.App) {
 			*grpcKey,
 			*grpcClientCA,
 			*grpcMaxConnAge,
+			*grpcCompression,
 			*secure,
 			*skipVerify,
 			*cert,
@@ -287,7 +303,9 @@ func registerQuery(app *extkingpin.App) {
 			*webDisableCORS,
 			enableQueryPushdown,
 			*alertQueryURL,
+			*grpcProxyStrategy,
 			component.Query,
+			promqlEngineType(*promqlEngine),
 		)
 	})
 }
@@ -308,6 +326,7 @@ func runQuery(
 	grpcKey string,
 	grpcClientCA string,
 	grpcMaxConnAge time.Duration,
+	grpcCompression string,
 	secure bool,
 	skipVerify bool,
 	cert string,
@@ -356,7 +375,9 @@ func runQuery(
 	disableCORS bool,
 	enableQueryPushdown bool,
 	alertQueryURL string,
+	grpcProxyStrategy string,
 	comp component.Component,
+	promqlEngine promqlEngineType,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -374,6 +395,9 @@ func runQuery(
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, skipVerify, cert, key, caCert, serverName)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
+	}
+	if grpcCompression != compressionNone {
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(grpcCompression)))
 	}
 
 	fileSDCache := cache.New()
@@ -463,7 +487,7 @@ func runQuery(
 			unhealthyStoreTimeout,
 			endpointInfoTimeout,
 		)
-		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout)
+		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy))
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)
@@ -475,20 +499,6 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 		)
-
-		engineOpts = promql.EngineOpts{
-			Logger: logger,
-			Reg:    reg,
-			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-			MaxSamples:    math.MaxInt32,
-			Timeout:       queryTimeout,
-			LookbackDelta: lookbackDelta,
-			NoStepSubqueryIntervalFn: func(int64) int64 {
-				return defaultEvaluationInterval.Milliseconds()
-			},
-			EnableNegativeOffset: true,
-			EnableAtModifier:     true,
-		}
 	)
 
 	// Periodically update the store set with the addresses we see in our cluster.
@@ -585,12 +595,36 @@ func runQuery(
 		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
 
+	engineOpts := promql.EngineOpts{
+		Logger: logger,
+		Reg:    reg,
+		// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+		MaxSamples:    math.MaxInt32,
+		Timeout:       queryTimeout,
+		LookbackDelta: lookbackDelta,
+		NoStepSubqueryIntervalFn: func(int64) int64 {
+			return defaultEvaluationInterval.Milliseconds()
+		},
+		EnableNegativeOffset: true,
+		EnableAtModifier:     true,
+	}
+
 	// An active query tracker will be added only if the user specifies a non-default path.
 	// Otherwise, the nil active query tracker from existing engine options will be used.
 	if activeQueryDir != "" {
 		engineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
 	}
-	engine := promql.NewEngine(engineOpts)
+
+	var queryEngine v1.QueryEngine
+	switch promqlEngine {
+	case promqlEnginePrometheus:
+		queryEngine = promql.NewEngine(engineOpts)
+	case promqlEngineThanos:
+		queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts})
+	default:
+		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)
+	}
+
 	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts, dynamicLookbackDelta)
 
 	// Start query API + UI HTTP server.
@@ -621,7 +655,7 @@ func runQuery(
 		api := apiv1.NewQueryAPI(
 			logger,
 			endpoints.GetEndpointStatus,
-			engine,
+			queryEngine,
 			lookbackDeltaCreator,
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
@@ -683,9 +717,10 @@ func runQuery(
 				if httpProbe.IsReady() {
 					mint, maxt := proxy.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime:          mint,
-						MaxTime:          maxt,
-						SupportsSharding: true,
+						MinTime:           mint,
+						MaxTime:           maxt,
+						SupportsSharding:  true,
+						SendsSortedSeries: true,
 					}
 				}
 				return nil
@@ -697,7 +732,7 @@ func runQuery(
 			info.WithQueryAPIInfoFunc(),
 		)
 
-		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, engine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
+		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, queryEngine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),
 			grpcserver.WithServer(store.RegisterStoreServer(proxy)),

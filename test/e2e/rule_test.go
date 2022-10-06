@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	e2emon "github.com/efficientgo/e2e/monitoring"
 	common_cfg "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
@@ -154,7 +155,7 @@ func reloadRulesHTTP(t *testing.T, ctx context.Context, endpoint string) {
 	testutil.Equals(t, 200, resp.StatusCode)
 }
 
-func reloadRulesSignal(t *testing.T, r e2e.InstrumentedRunnable) {
+func reloadRulesSignal(t *testing.T, r *e2emon.InstrumentedRunnable) {
 	c := e2e.NewCommand("kill", "-1", "1")
 	testutil.Ok(t, r.Exec(c))
 }
@@ -259,7 +260,7 @@ func writeTargets(t *testing.T, path string, addrs ...string) {
 func TestRule(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_rule")
+	e, err := e2e.NewDockerEnvironment("e2e-test-rule")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -322,11 +323,11 @@ func TestRule(t *testing.T) {
 
 	t.Run("no query configured", func(t *testing.T) {
 		// Check for a few evaluations, check all of them failed.
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Greater(10), "prometheus_rule_evaluations_total"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.EqualsAmongTwo, "prometheus_rule_evaluations_total", "prometheus_rule_evaluation_failures_total"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Greater(10), "prometheus_rule_evaluations_total"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.EqualsAmongTwo, "prometheus_rule_evaluations_total", "prometheus_rule_evaluation_failures_total"))
 
 		// No alerts sent.
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_alerts_dropped_total"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(0), "thanos_alert_sender_alerts_dropped_total"))
 	})
 
 	var currentFailures float64
@@ -334,8 +335,8 @@ func TestRule(t *testing.T) {
 		// Attach querier to target files.
 		writeTargets(t, filepath.Join(rFuture.Dir(), queryTargetsSubDir, "targets.yaml"), q.InternalEndpoint("http"))
 
-		testutil.Ok(t, r.WaitSumMetricsWithOptions(e2e.Equals(1), []string{"thanos_rule_query_apis_dns_provider_results"}, e2e.WaitMissingMetrics()))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
+		testutil.Ok(t, r.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_rule_query_apis_dns_provider_results"}, e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
 
 		var currentVal float64
 		testutil.Ok(t, r.WaitSumMetrics(func(sums ...float64) bool {
@@ -345,32 +346,32 @@ func TestRule(t *testing.T) {
 		}, "prometheus_rule_evaluations_total", "prometheus_rule_evaluation_failures_total"))
 
 		// Check for a few evaluations, check all of them failed.
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Greater(currentVal+4), "prometheus_rule_evaluations_total"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Greater(currentVal+4), "prometheus_rule_evaluations_total"))
 		// No failures.
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(currentFailures), "prometheus_rule_evaluation_failures_total"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(currentFailures), "prometheus_rule_evaluation_failures_total"))
 
 		// Alerts sent.
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(0), "thanos_alert_sender_alerts_dropped_total"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Greater(4), "thanos_alert_sender_alerts_sent_total"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(0), "thanos_alert_sender_alerts_dropped_total"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Greater(4), "thanos_alert_sender_alerts_sent_total"))
 
 		// Alerts received.
-		testutil.Ok(t, am2.WaitSumMetrics(e2e.Equals(2), "alertmanager_alerts"))
-		testutil.Ok(t, am2.WaitSumMetrics(e2e.Greater(4), "alertmanager_alerts_received_total"))
-		testutil.Ok(t, am2.WaitSumMetrics(e2e.Equals(0), "alertmanager_alerts_invalid_total"))
+		testutil.Ok(t, am2.WaitSumMetrics(e2emon.Equals(2), "alertmanager_alerts"))
+		testutil.Ok(t, am2.WaitSumMetrics(e2emon.Greater(4), "alertmanager_alerts_received_total"))
+		testutil.Ok(t, am2.WaitSumMetrics(e2emon.Equals(0), "alertmanager_alerts_invalid_total"))
 
 		// am1 not connected, so should not receive anything.
-		testutil.Ok(t, am1.WaitSumMetrics(e2e.Equals(0), "alertmanager_alerts"))
-		testutil.Ok(t, am1.WaitSumMetrics(e2e.Equals(0), "alertmanager_alerts_received_total"))
-		testutil.Ok(t, am1.WaitSumMetrics(e2e.Equals(0), "alertmanager_alerts_invalid_total"))
+		testutil.Ok(t, am1.WaitSumMetrics(e2emon.Equals(0), "alertmanager_alerts"))
+		testutil.Ok(t, am1.WaitSumMetrics(e2emon.Equals(0), "alertmanager_alerts_received_total"))
+		testutil.Ok(t, am1.WaitSumMetrics(e2emon.Equals(0), "alertmanager_alerts_invalid_total"))
 	})
 	t.Run("attach am1", func(t *testing.T) {
 		// Attach am1 to target files.
 		writeTargets(t, filepath.Join(rFuture.Dir(), amTargetsSubDir, "targets.yaml"), am1.InternalEndpoint("http"))
 
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(2), "thanos_rule_alertmanagers_dns_provider_results"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(2), "thanos_rule_alertmanagers_dns_provider_results"))
 
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(currentFailures), "prometheus_rule_evaluation_failures_total"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(currentFailures), "prometheus_rule_evaluation_failures_total"))
 
 		var currentVal float64
 		testutil.Ok(t, am2.WaitSumMetrics(func(sums ...float64) bool {
@@ -379,21 +380,21 @@ func TestRule(t *testing.T) {
 		}, "alertmanager_alerts_received_total"))
 
 		// Alerts received by both am1 and am2.
-		testutil.Ok(t, am2.WaitSumMetrics(e2e.Equals(2), "alertmanager_alerts"))
-		testutil.Ok(t, am2.WaitSumMetrics(e2e.Greater(currentVal+4), "alertmanager_alerts_received_total"))
-		testutil.Ok(t, am2.WaitSumMetrics(e2e.Equals(0), "alertmanager_alerts_invalid_total"))
+		testutil.Ok(t, am2.WaitSumMetrics(e2emon.Equals(2), "alertmanager_alerts"))
+		testutil.Ok(t, am2.WaitSumMetrics(e2emon.Greater(currentVal+4), "alertmanager_alerts_received_total"))
+		testutil.Ok(t, am2.WaitSumMetrics(e2emon.Equals(0), "alertmanager_alerts_invalid_total"))
 
-		testutil.Ok(t, am1.WaitSumMetrics(e2e.Equals(2), "alertmanager_alerts"))
-		testutil.Ok(t, am1.WaitSumMetrics(e2e.Greater(4), "alertmanager_alerts_received_total"))
-		testutil.Ok(t, am1.WaitSumMetrics(e2e.Equals(0), "alertmanager_alerts_invalid_total"))
+		testutil.Ok(t, am1.WaitSumMetrics(e2emon.Equals(2), "alertmanager_alerts"))
+		testutil.Ok(t, am1.WaitSumMetrics(e2emon.Greater(4), "alertmanager_alerts_received_total"))
+		testutil.Ok(t, am1.WaitSumMetrics(e2emon.Equals(0), "alertmanager_alerts_invalid_total"))
 	})
 
 	t.Run("am1 drops again", func(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(filepath.Join(rFuture.Dir(), amTargetsSubDir, "targets.yaml")))
 
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(currentFailures), "prometheus_rule_evaluation_failures_total"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(currentFailures), "prometheus_rule_evaluation_failures_total"))
 
 		var currentValAm1 float64
 		testutil.Ok(t, am1.WaitSumMetrics(func(sums ...float64) bool {
@@ -408,20 +409,20 @@ func TestRule(t *testing.T) {
 		}, "alertmanager_alerts_received_total"))
 
 		// Alerts received by both am1 and am2.
-		testutil.Ok(t, am2.WaitSumMetrics(e2e.Equals(2), "alertmanager_alerts"))
-		testutil.Ok(t, am2.WaitSumMetrics(e2e.Greater(currentValAm2+4), "alertmanager_alerts_received_total"))
-		testutil.Ok(t, am2.WaitSumMetrics(e2e.Equals(0), "alertmanager_alerts_invalid_total"))
+		testutil.Ok(t, am2.WaitSumMetrics(e2emon.Equals(2), "alertmanager_alerts"))
+		testutil.Ok(t, am2.WaitSumMetrics(e2emon.Greater(currentValAm2+4), "alertmanager_alerts_received_total"))
+		testutil.Ok(t, am2.WaitSumMetrics(e2emon.Equals(0), "alertmanager_alerts_invalid_total"))
 
 		// Am1 should not receive more alerts.
-		testutil.Ok(t, am1.WaitSumMetrics(e2e.Equals(currentValAm1), "alertmanager_alerts_received_total"))
+		testutil.Ok(t, am1.WaitSumMetrics(e2emon.Equals(currentValAm1), "alertmanager_alerts_received_total"))
 	})
 
 	t.Run("duplicate am", func(t *testing.T) {
 		// am2 is already registered in static addresses.
 		writeTargets(t, filepath.Join(rFuture.Dir(), amTargetsSubDir, "targets.yaml"), am2.InternalEndpoint("http"))
 
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
-		testutil.Ok(t, r.WaitSumMetrics(e2e.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(1), "thanos_rule_query_apis_dns_provider_results"))
+		testutil.Ok(t, r.WaitSumMetrics(e2emon.Equals(1), "thanos_rule_alertmanagers_dns_provider_results"))
 	})
 
 	t.Run("rule groups have last evaluation and evaluation duration set", func(t *testing.T) {
@@ -503,7 +504,7 @@ func TestRule(t *testing.T) {
 func TestRule_CanRemoteWriteData(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_rule_remote_write")
+	e, err := e2e.NewDockerEnvironment("rule-rw")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -560,7 +561,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
 	// Wait until remote write samples are written to receivers successfully.
-	testutil.Ok(t, r.WaitSumMetricsWithOptions(e2e.GreaterOrEqual(1), []string{"prometheus_remote_storage_samples_total"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, r.WaitSumMetricsWithOptions(e2emon.GreaterOrEqual(1), []string{"prometheus_remote_storage_samples_total"}, e2emon.WaitMissingMetrics()))
 
 	t.Run("can fetch remote-written samples from receiver", func(t *testing.T) {
 		testRecordedSamples := func() string { return "test_absent_metric" }

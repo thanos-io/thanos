@@ -4,93 +4,60 @@
 package receive
 
 import (
+	"context"
+
+	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/gate"
 )
 
-const (
-	seriesLimitName    = "series"
-	samplesLimitName   = "samples"
-	sizeBytesLimitName = "body_size"
-)
-
-type requestLimiter struct {
-	sizeBytesLimit   int64
-	seriesLimit      int64
-	samplesLimit     int64
-	limitsHit        *prometheus.SummaryVec
-	configuredLimits *prometheus.GaugeVec
+type limiter struct {
+	requestLimiter    requestLimiter
+	writeGate         gate.Gate
+	HeadSeriesLimiter headSeriesLimiter
 }
 
-func newRequestLimiter(sizeBytesLimit, seriesLimit, samplesLimit int64, reg prometheus.Registerer) requestLimiter {
-	limiter := requestLimiter{
-		sizeBytesLimit: sizeBytesLimit,
-		seriesLimit:    seriesLimit,
-		samplesLimit:   samplesLimit,
-		limitsHit: promauto.With(reg).NewSummaryVec(
-			prometheus.SummaryOpts{
-				Namespace:  "thanos",
-				Subsystem:  "receive",
-				Name:       "write_limits_hit",
-				Help:       "Summary of how far beyond the limit a refused remote write request was.",
-				Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
-			}, []string{"tenant", "limit"},
-		),
-		configuredLimits: promauto.With(reg).NewGaugeVec(
-			prometheus.GaugeOpts{
-				Namespace: "thanos",
-				Subsystem: "receive",
-				Name:      "write_limits",
-				Help:      "The configured write limits.",
-			}, []string{"limit"},
-		),
+// requestLimiter encompasses logic for limiting remote write requests.
+type requestLimiter interface {
+	AllowSizeBytes(tenant string, contentLengthBytes int64) bool
+	AllowSeries(tenant string, amount int64) bool
+	AllowSamples(tenant string, amount int64) bool
+}
+
+// headSeriesLimiter encompasses active/head series limiting logic.
+type headSeriesLimiter interface {
+	QueryMetaMonitoring(context.Context) error
+	isUnderLimit(tenant string) (bool, error)
+}
+
+func NewLimiter(root *RootLimitsConfig, reg prometheus.Registerer, r ReceiverMode, logger log.Logger) *limiter {
+	limiter := &limiter{
+		writeGate:         gate.NewNoop(),
+		requestLimiter:    &noopRequestLimiter{},
+		HeadSeriesLimiter: NewNopSeriesLimit(),
 	}
-	limiter.configuredLimits.WithLabelValues(sizeBytesLimitName).Set(float64(sizeBytesLimit))
-	limiter.configuredLimits.WithLabelValues(seriesLimitName).Set(float64(seriesLimit))
-	limiter.configuredLimits.WithLabelValues(samplesLimitName).Set(float64(samplesLimit))
+	if root == nil {
+		return limiter
+	}
+
+	maxWriteConcurrency := root.WriteLimits.GlobalLimits.MaxConcurrency
+	if maxWriteConcurrency > 0 {
+		limiter.writeGate = gate.New(
+			extprom.WrapRegistererWithPrefix(
+				"thanos_receive_write_request_concurrent_",
+				reg,
+			),
+			int(maxWriteConcurrency),
+		)
+	}
+	limiter.requestLimiter = newConfigRequestLimiter(reg, &root.WriteLimits)
+
+	// Impose active series limit only if Receiver is in Router or RouterIngestor mode, and config is provided.
+	seriesLimitSupported := (r == RouterOnly || r == RouterIngestor) && (len(root.WriteLimits.TenantsLimits) != 0 || root.WriteLimits.DefaultLimits.HeadSeriesLimit != 0)
+	if seriesLimitSupported {
+		limiter.HeadSeriesLimiter = NewHeadSeriesLimit(root.WriteLimits, reg, logger)
+	}
+
 	return limiter
-}
-
-func (l *requestLimiter) AllowSizeBytes(tenant string, contentLengthBytes int64) bool {
-	if l.sizeBytesLimit <= 0 {
-		return true
-	}
-
-	// This happens when the content length is unknown, then we allow it.
-	if contentLengthBytes < 0 {
-		return true
-	}
-	allowed := l.sizeBytesLimit >= contentLengthBytes
-	if !allowed {
-		l.limitsHit.
-			WithLabelValues(tenant, sizeBytesLimitName).
-			Observe(float64(contentLengthBytes - l.sizeBytesLimit))
-	}
-	return allowed
-}
-
-func (l *requestLimiter) AllowSeries(tenant string, amount int64) bool {
-	if l.seriesLimit <= 0 {
-		return true
-	}
-	allowed := l.seriesLimit >= amount
-	if !allowed {
-		l.limitsHit.
-			WithLabelValues(tenant, seriesLimitName).
-			Observe(float64(amount - l.seriesLimit))
-	}
-	return allowed
-}
-
-func (l *requestLimiter) AllowSamples(tenant string, amount int64) bool {
-	if l.samplesLimit <= 0 {
-		return true
-	}
-	allowed := l.samplesLimit >= amount
-	if !allowed {
-		l.limitsHit.
-			WithLabelValues(tenant, samplesLimitName).
-			Observe(float64(amount - l.samplesLimit))
-	}
-	return allowed
 }

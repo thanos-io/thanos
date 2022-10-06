@@ -156,7 +156,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb chunk querier series")
 	}
 
-	set := q.Select(false, nil, matchers...)
+	set := q.Select(true, nil, matchers...)
 
 	shardMatcher := r.ShardInfo.Matcher(&s.buffers)
 	defer shardMatcher.Close()

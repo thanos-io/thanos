@@ -63,7 +63,7 @@ ARCH ?= $(shell uname -m)
 
 # Tools.
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
-PROTOC_VERSION    ?= 3.4.0
+PROTOC_VERSION    ?= 3.20.1
 GIT               ?= $(shell which git)
 
 # Support gsed on OSX (installed via brew), falling back to sed. On Linux
@@ -91,14 +91,14 @@ define require_clean_work_tree
 
 	@if ! git diff-files --quiet --ignore-submodules --; then \
 		echo >&2 "cannot $1: you have unstaged changes."; \
-		git diff-files --name-status -r --ignore-submodules -- >&2; \
+		git diff -r --ignore-submodules -- >&2; \
 		echo >&2 "Please commit or stash them."; \
 		exit 1; \
 	fi
 
 	@if ! git diff-index --cached --quiet HEAD --ignore-submodules --; then \
 		echo >&2 "cannot $1: your index contains uncommitted changes."; \
-		git diff-index --cached --name-status -r --ignore-submodules HEAD -- >&2; \
+		git diff --cached -r --ignore-submodules HEAD -- >&2; \
 		echo >&2 "Please commit or stash them."; \
 		exit 1; \
 	fi
@@ -289,7 +289,7 @@ go-format: $(GOIMPORTS)
 .PHONY: proto
 proto: ## Generates Go files from Thanos proto files.
 proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST)
-	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" scripts/genproto.sh
+	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" PROTOC_VERSION="$(PROTOC_VERSION)" scripts/genproto.sh
 
 .PHONY: tarballs-release
 tarballs-release: ## Build tarballs.

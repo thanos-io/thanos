@@ -228,12 +228,12 @@ local utils = import '../lib/utils.libsonnet';
     __overviewRows__+:: if thanos.store == null then [] else [
       g.row('Store')
       .addPanel(
-        g.panel('gPRC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
+        g.panel('gRPC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
         g.grpcRequestsPanel('grpc_server_handled_total', utils.joinLabels([thanos.dashboard.overview.selector, 'grpc_type="unary"']), thanos.dashboard.overview.dimensions) +
         g.addDashboardLink(thanos.store.title)
       )
       .addPanel(
-        g.panel('gPRC (Unary) Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
+        g.panel('gRPC (Unary) Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
         g.grpcErrorsPanel('grpc_server_handled_total', utils.joinLabels([thanos.dashboard.overview.selector, 'grpc_type="unary"']), thanos.dashboard.overview.dimensions) +
         g.addDashboardLink(thanos.store.title)
       )

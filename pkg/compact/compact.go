@@ -29,7 +29,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/errutil"
-	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -1010,7 +1009,8 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	uniqueSources := map[ulid.ULID]struct{}{}
 
 	// Once we have a plan we need to download the actual data.
-	begin := time.Now()
+	groupCompactionBegin := time.Now()
+	begin := groupCompactionBegin
 	g, errCtx := errgroup.WithContext(ctx)
 	g.SetLimit(cg.compactBlocksFetchConcurrency)
 
@@ -1062,12 +1062,13 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 		toCompactDirs = append(toCompactDirs, bdir)
 	}
+	sourceBlockStr := fmt.Sprintf("%v", toCompactDirs)
 
 	if err := g.Wait(); err != nil {
 		return false, ulid.ULID{}, err
 	}
 
-	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", fmt.Sprintf("%v", toCompactDirs), "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
+	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", sourceBlockStr, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
 	begin = time.Now()
 	if err := tracing.DoInSpanWithErr(ctx, "compaction", func(ctx context.Context) (e error) {
@@ -1078,7 +1079,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	}
 	if compID == (ulid.ULID{}) {
 		// Prometheus compactor found that the compacted block would have no samples.
-		level.Info(cg.logger).Log("msg", "compacted block would have no samples, deleting source blocks", "blocks", fmt.Sprintf("%v", toCompactDirs))
+		level.Info(cg.logger).Log("msg", "compacted block would have no samples, deleting source blocks", "blocks", sourceBlockStr)
 		for _, meta := range toCompact {
 			if meta.Stats.NumSamples == 0 {
 				if err := cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String())); err != nil {
@@ -1094,7 +1095,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		cg.verticalCompactions.Inc()
 	}
 	level.Info(cg.logger).Log("msg", "compacted blocks", "new", compID,
-		"blocks", fmt.Sprintf("%v", toCompactDirs), "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "overlapping_blocks", overlappingBlocks)
+		"blocks", sourceBlockStr, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "overlapping_blocks", overlappingBlocks)
 
 	bdir := filepath.Join(dir, compID.String())
 	index := filepath.Join(bdir, block.IndexFilename)
@@ -1151,6 +1152,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
 	}
+
+	level.Info(cg.logger).Log("msg", "finished compacting blocks", "result_block", compID, "source_blocks", sourceBlockStr,
+		"duration", time.Since(groupCompactionBegin), "duration_ms", time.Since(groupCompactionBegin).Milliseconds())
 	return true, compID, nil
 }
 
@@ -1362,6 +1366,7 @@ type GatherNoCompactionMarkFilter struct {
 	bkt                objstore.InstrumentedBucketReader
 	noCompactMarkedMap map[ulid.ULID]*metadata.NoCompactMark
 	concurrency        int
+	mtx                sync.Mutex
 }
 
 // NewGatherNoCompactionMarkFilter creates GatherNoCompactionMarkFilter.
@@ -1375,12 +1380,21 @@ func NewGatherNoCompactionMarkFilter(logger log.Logger, bkt objstore.Instrumente
 
 // NoCompactMarkedBlocks returns block ids that were marked for no compaction.
 func (f *GatherNoCompactionMarkFilter) NoCompactMarkedBlocks() map[ulid.ULID]*metadata.NoCompactMark {
-	return f.noCompactMarkedMap
+	f.mtx.Lock()
+	copiedNoCompactMarked := make(map[ulid.ULID]*metadata.NoCompactMark, len(f.noCompactMarkedMap))
+	for k, v := range f.noCompactMarkedMap {
+		copiedNoCompactMarked[k] = v
+	}
+	f.mtx.Unlock()
+
+	return copiedNoCompactMarked
 }
 
 // Filter passes all metas, while gathering no compact markers.
-func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced *extprom.TxGaugeVec, modified *extprom.TxGaugeVec) error {
+func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced block.GaugeVec, modified block.GaugeVec) error {
+	f.mtx.Lock()
 	f.noCompactMarkedMap = make(map[ulid.ULID]*metadata.NoCompactMark)
+	f.mtx.Unlock()
 
 	// Make a copy of block IDs to check, in order to avoid concurrency issues
 	// between the scheduler and workers.
@@ -1390,9 +1404,8 @@ func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[uli
 	}
 
 	var (
-		eg  errgroup.Group
-		ch  = make(chan ulid.ULID, f.concurrency)
-		mtx sync.Mutex
+		eg errgroup.Group
+		ch = make(chan ulid.ULID, f.concurrency)
 	)
 
 	for i := 0; i < f.concurrency; i++ {
@@ -1414,9 +1427,9 @@ func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[uli
 					continue
 				}
 
-				mtx.Lock()
+				f.mtx.Lock()
 				f.noCompactMarkedMap[id] = m
-				mtx.Unlock()
+				f.mtx.Unlock()
 				synced.WithLabelValues(block.MarkedForNoCompactionMeta).Inc()
 			}
 

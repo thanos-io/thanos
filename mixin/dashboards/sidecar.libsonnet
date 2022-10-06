@@ -93,18 +93,18 @@ local utils = import '../lib/utils.libsonnet';
     __overviewRows__+:: if thanos.sidecar == null then [] else [
       g.row('Sidecar')
       .addPanel(
-        g.panel('gPRC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
+        g.panel('gRPC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
         g.grpcRequestsPanel('grpc_server_handled_total', utils.joinLabels([thanos.dashboard.overview.selector, 'grpc_type="unary"']), thanos.dashboard.overview.dimensions) +
         g.addDashboardLink(thanos.sidecar.title)
       )
       .addPanel(
-        g.panel('gPRC (Unary) Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
+        g.panel('gRPC (Unary) Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
         g.grpcErrorsPanel('grpc_server_handled_total', utils.joinLabels([thanos.dashboard.overview.selector, 'grpc_type="unary"']), thanos.dashboard.overview.dimensions) +
         g.addDashboardLink(thanos.sidecar.title)
       )
       .addPanel(
         g.sloLatency(
-          'gPRC (Unary) Latency 99th Percentile',
+          'gRPC (Unary) Latency 99th Percentile',
           'Shows how long has it taken to handle requests from queriers, in quantiles.',
           'grpc_server_handling_seconds_bucket{%s}' % utils.joinLabels([thanos.dashboard.overview.selector, 'grpc_type="unary"']),
           thanos.dashboard.overview.dimensions,

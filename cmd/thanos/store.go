@@ -69,6 +69,7 @@ type storeConfig struct {
 	advertiseCompatibilityLabel bool
 	consistencyDelay            commonmodel.Duration
 	ignoreDeletionMarksDelay    commonmodel.Duration
+	disableWeb                  bool
 	webConfig                   webConfig
 	postingOffsetsInMemSampling int
 	cachingBucketConfig         extflag.PathOrContent
@@ -156,6 +157,8 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("store.index-header-lazy-reader-idle-timeout", "If index-header lazy reader is enabled and this idle timeout setting is > 0, memory map-ed index-headers will be automatically released after 'idle timeout' inactivity.").
 		Hidden().Default("5m").DurationVar(&sc.lazyIndexReaderIdleTimeout)
+
+	cmd.Flag("web.disable", "Disable Block Viewer UI.").Default("false").BoolVar(&sc.disableWeb)
 
 	cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the bucket web UI interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos bucket web UI to be served behind a reverse proxy that strips a URL sub-path.").
 		Default("").StringVar(&sc.webConfig.externalPrefix)
@@ -393,9 +396,10 @@ func runStore(
 			if httpProbe.IsReady() {
 				mint, maxt := bs.TimeRange()
 				return &infopb.StoreInfo{
-					MinTime:          mint,
-					MaxTime:          maxt,
-					SupportsSharding: true,
+					MinTime:           mint,
+					MaxTime:           maxt,
+					SupportsSharding:  true,
+					SendsSortedSeries: true,
 				}
 			}
 			return nil
@@ -430,17 +434,20 @@ func runStore(
 	{
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
-		compactorView := ui.NewBucketUI(logger, conf.webConfig.externalPrefix, conf.webConfig.prefixHeaderName, conf.component)
-		compactorView.Register(r, ins)
+		if !conf.disableWeb {
+			compactorView := ui.NewBucketUI(logger, conf.webConfig.externalPrefix, conf.webConfig.prefixHeaderName, conf.component)
+			compactorView.Register(r, ins)
 
-		// Configure Request Logging for HTTP calls.
-		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
-		api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, "", flagsMap, bkt)
-		api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
+			// Configure Request Logging for HTTP calls.
+			logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
+			api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, "", flagsMap, bkt)
+			api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
-		metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
-			api.SetLoaded(blocks, err)
-		})
+			metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {
+				api.SetLoaded(blocks, err)
+			})
+		}
+
 		srv.Handle("/", r)
 	}
 
