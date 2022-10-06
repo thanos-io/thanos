@@ -474,9 +474,10 @@ func (base64Entries) GetReadMetricLabelValueQueries(bucket Bucket, metricName st
 
 // v4 schema went to two schemas in one:
 // 1) - hash key: <userid>:<hour bucket>:<metric name>:<label name>
-//    - range key: \0<base64(label value)>\0<chunk name>\0<version 2>
+//   - range key: \0<base64(label value)>\0<chunk name>\0<version 2>
+//
 // 2) - hash key: <userid>:<hour bucket>:<metric name>
-//    - range key: \0\0<chunk name>\0<version 3>
+//   - range key: \0\0<chunk name>\0<version 3>
 type labelNameInHashKeyEntries struct{}
 
 func (labelNameInHashKeyEntries) GetWriteEntries(bucket Bucket, metricName string, labels labels.Labels, chunkID string) ([]IndexEntry, error) {

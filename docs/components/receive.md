@@ -203,20 +203,20 @@ Flags:
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
       --grpc-server-max-connection-age=60m
-                                 The grpc server max connection age. This
-                                 controls how often to re-read the tls
+                                 The grpc server max connection age.
+                                 This controls how often to re-read the tls
                                  certificates and redo the TLS handshake
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-client-ca=""
-                                 TLS CA to verify clients against. If no client
-                                 CA is specified, there is no client
+                                 TLS CA to verify clients against. If no
+                                 client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
       --hash-func=               Specify which hash function to use when
-                                 calculating the hashes of produced files. If no
-                                 function has been specified, it does not
+                                 calculating the hashes of produced files.
+                                 If no function has been specified, it does not
                                  happen. This permits avoiding downloading some
                                  files twice albeit at some performance cost.
                                  Possible values are: "", "SHA256".
@@ -236,14 +236,14 @@ Flags:
                                  json.
       --log.level=info           Log filtering level.
       --objstore.config=<content>
-                                 Alternative to 'objstore.config-file' flag
-                                 (mutually exclusive). Content of YAML file that
-                                 contains object store configuration. See format
-                                 details:
+                                 Alternative to 'objstore.config-file'
+                                 flag (mutually exclusive). Content of
+                                 YAML file that contains object store
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                 Path to YAML file that contains object store
-                                 configuration. See format details:
+                                 Path to YAML file that contains object
+                                 store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
@@ -261,8 +261,8 @@ Flags:
                                  the hashrings. Must be one of hashmod, ketama
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
-                                 configuration. A watcher is initialized to
-                                 watch changes and update the hashring
+                                 configuration. A watcher is initialized
+                                 to watch changes and update the hashring
                                  dynamically.
       --receive.hashrings-file-refresh-interval=5m
                                  Refresh interval to re-read the hashring
@@ -287,10 +287,10 @@ Flags:
                                  How many times to replicate incoming write
                                  requests.
       --receive.tenant-certificate-field=
-                                 Use TLS client's certificate field to determine
-                                 tenant for write requests. Must be one of
-                                 organization, organizationalUnit or commonName.
-                                 This setting will cause the
+                                 Use TLS client's certificate field to
+                                 determine tenant for write requests.
+                                 Must be one of organization, organizationalUnit
+                                 or commonName. This setting will cause the
                                  receive.tenant-header flag value to be ignored.
       --receive.tenant-header="THANOS-TENANT"
                                  HTTP header to determine tenant for write
@@ -301,8 +301,8 @@ Flags:
       --remote-write.address="0.0.0.0:19291"
                                  Address to listen on for remote write requests.
       --remote-write.client-server-name=""
-                                 Server name to verify the hostname on the
-                                 returned TLS certificates. See
+                                 Server name to verify the hostname
+                                 on the returned TLS certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --remote-write.client-tls-ca=""
                                  TLS CA Certificates to use to verify servers.
@@ -315,17 +315,17 @@ Flags:
                                  TLS Certificate for HTTP server, leave blank to
                                  disable TLS.
       --remote-write.server-tls-client-ca=""
-                                 TLS CA to verify clients against. If no client
-                                 CA is specified, there is no client
+                                 TLS CA to verify clients against. If no
+                                 client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --remote-write.server-tls-key=""
                                  TLS Key for the HTTP server, leave blank to
                                  disable TLS.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Content of YAML file
-                                 with request logging configuration. See format
-                                 details:
+                                 flag (mutually exclusive). Content
+                                 of YAML file with request logging
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
@@ -333,12 +333,12 @@ Flags:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (mutually exclusive). Content of YAML file with
-                                 tracing configuration. See format details:
+                                 (mutually exclusive). Content of YAML file
+                                 with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                                 Path to YAML file with tracing configuration.
-                                 See format details:
+                                 Path to YAML file with tracing
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tsdb.allow-overlapping-blocks
                                  Allow overlapping blocks, which in turn enables
@@ -357,11 +357,11 @@ Flags:
                                  next startup.
       --tsdb.path="./data"       Data directory of TSDB.
       --tsdb.retention=15d       How long to retain raw samples on local
-                                 storage. 0d - disables this retention. For more
-                                 details on how retention is enforced for
-                                 individual tenants, please refer to the Tenant
-                                 lifecycle management section in the Receive
-                                 documentation:
+                                 storage. 0d - disables this retention.
+                                 For more details on how retention is
+                                 enforced for individual tenants, please
+                                 refer to the Tenant lifecycle management
+                                 section in the Receive documentation:
                                  https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management
       --tsdb.wal-compression     Compress the tsdb WAL.
       --version                  Show application version.
