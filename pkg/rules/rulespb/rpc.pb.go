@@ -36,16 +36,16 @@ var _ = time.Kitchen
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-/// AlertState represents state of the alert. Has to match 1:1 Prometheus AlertState:
+// / AlertState represents state of the alert. Has to match 1:1 Prometheus AlertState:
 //
 // StateInactive is the state of an alert that is neither firing nor pending.
-//StateInactive AlertState = iota
+// StateInactive AlertState = iota
 // StatePending is the state of an alert that has been active for less than
 // the configured threshold duration.
-//StatePending
+// StatePending
 // StateFiring is the state of an alert that has been active for longer than
 // the configured threshold duration.
-//StateFiring
+// StateFiring
 type AlertState int32
 
 const (
@@ -229,12 +229,12 @@ func (*RulesResponse) XXX_OneofWrappers() []interface{} {
 	}
 }
 
-/// RuleGroups is set of rule groups.
-/// This and below APIs are meant to be used for unmarshaling and marshsaling rules from/to Prometheus API.
-/// That's why json tag has to be customized and matching https://github.com/prometheus/prometheus/blob/c530b4b456cc5f9ec249f771dff187eb7715dc9b/web/api/v1/api.go#L955
-/// NOTE: See rules_custom_test.go for compatibility tests.
-///
-/// For rule parsing from YAML configuration other struct is used: https://github.com/prometheus/prometheus/blob/20b1f596f6fb16107ef0c244d240b0ad6da36829/pkg/rulefmt/rulefmt.go#L105
+// / RuleGroups is set of rule groups.
+// / This and below APIs are meant to be used for unmarshaling and marshsaling rules from/to Prometheus API.
+// / That's why json tag has to be customized and matching https://github.com/prometheus/prometheus/blob/c530b4b456cc5f9ec249f771dff187eb7715dc9b/web/api/v1/api.go#L955
+// / NOTE: See rules_custom_test.go for compatibility tests.
+// /
+// / For rule parsing from YAML configuration other struct is used: https://github.com/prometheus/prometheus/blob/20b1f596f6fb16107ef0c244d240b0ad6da36829/pkg/rulefmt/rulefmt.go#L105
 type RuleGroups struct {
 	Groups []*RuleGroup `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups"`
 }
@@ -272,7 +272,7 @@ func (m *RuleGroups) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RuleGroups proto.InternalMessageInfo
 
-/// RuleGroup has info for rules which are part of a group.
+// / RuleGroup has info for rules which are part of a group.
 type RuleGroup struct {
 	Name                      string    `protobuf:"bytes,1,opt,name=name,proto3" json:"name"`
 	File                      string    `protobuf:"bytes,2,opt,name=file,proto3" json:"file"`

@@ -10,6 +10,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+- [#5753](https://github.com/thanos-io/thanos/pull/5753) Build with Go 1.19.
+
 ### Fixed
 - [#5642](https://github.com/thanos-io/thanos/pull/5642) Receive: Log labels correctly in writer debug messages.
 - [#5655](https://github.com/thanos-io/thanos/pull/5655) Receive: Fix recreating already pruned tenants.
