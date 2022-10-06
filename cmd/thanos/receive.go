@@ -298,11 +298,14 @@ func runReceive(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		mts := store.NewMultiTSDBStore(
+		mts := store.NewProxyStore(
 			logger,
 			reg,
+			dbs.TSDBLocalClients,
 			comp,
-			dbs.TSDBStores,
+			labels.Labels{},
+			0,
+			store.LazyRetrieval,
 		)
 		rw := store.ReadWriteTSDBStore{
 			StoreServer:          mts,
