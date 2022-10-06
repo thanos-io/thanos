@@ -70,8 +70,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 	if err != nil {
 		return nil, err
 	}
-
-	queryInstantTripperware := newInstantQueryTripperware(
+	queryInstantTripperware, err := newInstantQueryTripperware(
 		config.NumShards,
 		queryRangeLimits,
 		queryInstantCodec,
@@ -79,6 +78,9 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		config.ForwardHeaders,
 	)
 
+	if err != nil {
+		return nil, err
+	}
 	return func(next http.RoundTripper) http.RoundTripper {
 		return newRoundTripper(next, queryRangeTripperware(next), labelsTripperware(next), queryInstantTripperware(next), reg)
 	}, nil
@@ -190,9 +192,14 @@ func newQueryRangeTripperware(
 	}
 
 	if numShards > 0 {
+		analyzer, err := querysharding.NewQueryAnalyzer()
+
+		if err != nil {
+			return nil, errors.Wrap(err, "create analyzer cache")
+		}
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
-			PromQLShardingMiddleware(querysharding.NewQueryAnalyzer(), numShards, limits, codec, reg),
+			PromQLShardingMiddleware(analyzer, numShards, limits, codec, reg),
 		)
 	}
 
@@ -327,14 +334,18 @@ func newInstantQueryTripperware(
 	codec queryrange.Codec,
 	reg prometheus.Registerer,
 	forwardHeaders []string,
-) queryrange.Tripperware {
+) (queryrange.Tripperware, error) {
 	instantQueryMiddlewares := []queryrange.Middleware{}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 	if numShards > 0 {
+		analyzer, err := querysharding.NewQueryAnalyzer()
+		if err != nil {
+			return nil, errors.Wrap(err, "create analyzer cache")
+		}
 		instantQueryMiddlewares = append(
 			instantQueryMiddlewares,
 			queryrange.InstrumentMiddleware("sharding", m),
-			PromQLShardingMiddleware(querysharding.NewQueryAnalyzer(), numShards, limits, codec, reg),
+			PromQLShardingMiddleware(analyzer, numShards, limits, codec, reg),
 		)
 	}
 
@@ -343,7 +354,7 @@ func newInstantQueryTripperware(
 		return queryrange.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			return rt.RoundTrip(r)
 		})
-	}
+	}, nil
 }
 
 // shouldCache controls what kind of Thanos request should be cached.

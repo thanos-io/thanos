@@ -17,8 +17,7 @@ type Analyze interface {
 	Analyze(string) (QueryAnalysis, error)
 }
 
-type QueryAnalyzer struct {
-}
+type QueryAnalyzer struct{}
 
 type CachedQueryAnalyzer struct {
 	analyzer *QueryAnalyzer
@@ -31,13 +30,17 @@ var nonShardableFuncs = []string{
 }
 
 // NewQueryAnalyzer creates a new QueryAnalyzer.
-func NewQueryAnalyzer() *CachedQueryAnalyzer {
-	cache, _ := lru.New(256)
+func NewQueryAnalyzer() (Analyze, error) {
+	cache, err := lru.New(256)
+
+	if err != nil {
+		return &QueryAnalyzer{}, err
+	}
 
 	return &CachedQueryAnalyzer{
 		analyzer: &QueryAnalyzer{},
 		cache:    cache,
-	}
+	}, nil
 }
 
 type cachedValue struct {
@@ -47,8 +50,12 @@ type cachedValue struct {
 
 func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 	if a.cache.Contains(query) {
-		value, _ := a.cache.Get(query)
-		return value.(cachedValue).QueryAnalysis, value.(cachedValue).err
+		value, ok := a.cache.Get(query)
+		if !ok {
+			return QueryAnalysis{}, fmt.Errorf("failed to fetch query:%s from cache", query)
+		} else {
+			return value.(cachedValue).QueryAnalysis, value.(cachedValue).err
+		}
 	}
 
 	// Analyze if needed
