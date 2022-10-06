@@ -490,7 +490,7 @@ func (t *MultiTSDB) TenantStats(statsByLabelName string, tenantIDs ...string) []
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
-	reg = &UnRegisterer{innerReg: reg}
+	reg = NewUnRegisterer(reg)
 
 	lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
 	dataDir := t.defaultTenantDataDir(tenantID)
@@ -689,6 +689,10 @@ func (a adapter) Close() error {
 // that this type intends to use.
 type UnRegisterer struct {
 	innerReg prometheus.Registerer
+}
+
+func NewUnRegisterer(inner prometheus.Registerer) *UnRegisterer {
+	return &UnRegisterer{innerReg: inner}
 }
 
 // Register registers the given collector. If it's already registered, it will
