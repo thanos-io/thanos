@@ -420,6 +420,15 @@ func runCompact(
 	}
 
 	compactMainFn := func() error {
+		// TODO(bwplotka): Find a way to avoid syncing if no op was done.
+		if err := sy.SyncMetas(ctx); err != nil {
+			return errors.Wrap(err, "sync before retention")
+		}
+
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")); err != nil {
+			return errors.Wrap(err, "retention failed")
+		}
+
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction")
 		}
@@ -452,15 +461,6 @@ func runCompact(
 			level.Info(logger).Log("msg", "downsampling iterations done")
 		} else {
 			level.Info(logger).Log("msg", "downsampling was explicitly disabled")
-		}
-
-		// TODO(bwplotka): Find a way to avoid syncing if no op was done.
-		if err := sy.SyncMetas(ctx); err != nil {
-			return errors.Wrap(err, "sync before retention")
-		}
-
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")); err != nil {
-			return errors.Wrap(err, "retention failed")
 		}
 
 		return cleanPartialMarked()
