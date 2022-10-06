@@ -438,7 +438,7 @@ func (t *MultiTSDB) TenantStats(statsByLabelName string, tenantIDs ...string) []
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
-	reg = &UnRegisterer{Registerer: reg}
+	reg = &UnRegisterer{innerReg: reg}
 
 	lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
 	dataDir := t.defaultTenantDataDir(tenantID)
@@ -628,20 +628,44 @@ func (a adapter) Close() error {
 // by unregistering already-registered collectors.
 // FlushableStorage uses this registerer in order
 // to not lose metric values between DB flushes.
+//
+// This type cannot embed the inner registerer, because Prometheus since
+// v2.39.0 is wrapping the Registry with prometheus.WrapRegistererWithPrefix.
+// This wrapper will call the Register function of the wrapped registerer.
+// If UnRegisterer is the wrapped registerer, this would end up calling the
+// inner registerer's Register, which doesn't implement the "unregister" logic
+// that this type intends to use.
 type UnRegisterer struct {
-	prometheus.Registerer
+	innerReg prometheus.Registerer
 }
 
+// Register registers the given collector. If it's already registered, it will
+// be unregistered and registered.
+func (u *UnRegisterer) Register(c prometheus.Collector) error {
+	if err := u.innerReg.Register(c); err != nil {
+		if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			if ok = u.innerReg.Unregister(c); !ok {
+				panic("unable to unregister existing collector")
+			}
+			u.innerReg.MustRegister(c)
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// Unregister unregisters the given collector.
+func (u *UnRegisterer) Unregister(c prometheus.Collector) bool {
+	return u.innerReg.Unregister(c)
+}
+
+// MustRegister registers the given collectors. It panics if an error happens.
+// Note that if a collector is already registered it will be re-registered
+// without panicking.
 func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
 	for _, c := range cs {
 		if err := u.Register(c); err != nil {
-			if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
-				if ok = u.Unregister(c); !ok {
-					panic("unable to unregister existing collector")
-				}
-				u.Registerer.MustRegister(c)
-				continue
-			}
 			panic(err)
 		}
 	}
