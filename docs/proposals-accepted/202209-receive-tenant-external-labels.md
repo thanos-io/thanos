@@ -8,45 +8,65 @@ menu: proposals-accepted
 
 ## 1 Related links/tickets
 
-* https://github.com/thanos-io/thanos/issues/5434
+https://github.com/thanos-io/thanos/issues/5434
 
-## 2 What problem(s) are we trying to solve?
+## 2 Why
 
-We want to add arbitrary external labels to each tenant in Thanos Receiver.
+We would like to select and query tenant blocks from Receivers in an arbitrary manner.
 
-## 3 How is it going to be helpful?
+## 3 Pitfalls of the current solution
 
-This new functionality is helpful in many use cases. Two typical ones are:
-* Compact tenant blocks based on tenants’ external labels
-* Query data from tenants which share the same external labels
+Currently, we can only add external labels to Receiver itself, not to each tenant in the Receiver. There’s currently no way to select and query tenant blocks in an arbitrary manner.
 
-## 4 Pitfalls of the current solution
+## 4 Goals
 
-Currently, we can only add external labels to Receivers. Each tenant in a Receiver only gets one external label, which is the tenant ID. This is not flexible enough to do complex compact and query works at the tenant level.
+* Allow users to add arbitrary tenants’ external labels in the easiest way possible
+* Allow users to change arbitrary tenants’ external labels in the easiest way possible
+* Changes in tenants’ external labels are handled correctly
+* Backward compatibility (e.g., with Receiver’s external labels) is assured
+* Tenants’ external labels are handled separately in RouterIngestor, RouterOnly, and IngestorOnly modes
 
-## 5 What are the possible solution approaches?
+## 5 Non-goals
 
-We’re seeing two solution approaches:
-* Specify the tenants for each external label in Receiver: Since we already have the functionality of adding external labels to Receiver, is there a way to specify which tenants each external label goes to? Because many tenants may share the same external labels, this may be a straightforward way for users.
-* Add external labels to each tenant directly: This way, we treat each tenant independently, which seems to be a more straightforward way in implementation. If goinf this way, we can start with the tenant configuration file.
+* Logically split RouterOnly and IngestorOnly modes (Issue [#5643](https://github.com/thanos-io/thanos/issues/5643)): If RouterOnly and IngestorOnly modes are logically split, implementing tenants’ external labels in RouterOnly and IngestorOnly modes would be less challenging. However, the split could be tricky and time-consuming, which might distract us from implementing tenants’ external labels. So we will not do it now.
 
-## 6 Which solution approach is the most favorable?
+## 6 Audience
 
-After discussing internally in the issue team (@fpetkovski, @saswatamcode, @haanhvu), we agree the second approach may be the better one to start with since it’s more straightforward in implementation.
+Users who need to have cross-tenant information and do cross-tenant activities
 
-## 7 Potential challenges of the favorable approach?
+## 7 How
 
-We’re seeing two main challenges:
-* Support external labels for decoupled routers and ingesters: Receive routers and ingestors are decoupled functionally, but currently they are not decoupled in code. Issue [#5643](https://github.com/thanos-io/thanos/issues/5643) has already been raised for this. With routers and ingestors intermingled in code, we need to find a way to support external labels for RouterOnly and IngestorOnly. One apparent way is to fix [#5643](https://github.com/thanos-io/thanos/issues/5643) at least partially enough before tackling this challenge.
-* Handling changes for external labels
+We’ll add a new `external_labels` field in the hasring config. Something like this:
+ ```
+ [
+    {
+        "hashring": "tenant-a",
+        "endpoints": ["tenant-a-1.metrics.local:19291/api/v1/receive", "tenant-a-2.metrics.local:19291/api/v1/receive"],
+        "tenants": ["tenant-a"]
+        "external_labels": ["label-1", "label-2", "label-3"]
+    },
+ ]
+ ```
+In [MultiTSDB](https://github.com/thanos-io/thanos/blob/4ce3fe19ebb39a308769fb2a9492295b1f113701/pkg/receive/multitsdb.go#L46), each tenant’s external labels will be mapped to its tenant ID.
+Each tenant’s external labels will also be extended to the [list of labels](https://github.com/thanos-io/thanos/blob/4ce3fe19ebb39a308769fb2a9492295b1f113701/pkg/store/labelpb/label.go#L282) when the tenant’s TSDB instance is created.
+Tenants’ external labels will be first implemented in RouterIngestor, since this is the main mode.
+Once tenants’ external labels are implemented in RouterIngestor, we’ll handle changes in tenants’ external labels. So that when users change the values of `external_labels` field in the hasring config, the changes will appear on users’ query.
+Finally, we will implement tenants’ external labels in RouterOnly and IngestorOnly modes.
+For the tests, the foremost ones are testing backward compatibility (e.g., with Receiver’s external labels), defining one or multiple tenants’ external labels correctly, handling changes in tenants’ external labels correctly, and shipper detecting and uploading tenants’ external labels correctly to block storage. We may add more tests in the future but currently these are the most important ones to do first.
 
-## 8 Implementation plan?
+## 8 Implementation plan
 
-* RouterIngestor:
-  - Add a new `external_labels` field in `tenant` field in hasring config
-  - Map tenant's `external_labels` to tenant's `tenant_id`
-  - Wire tenant’s `external_labels` to the tenant’s TSDB instance
-* RouterOnly
-* IngestorOnly
+* Add a new `external_labels` field in the hasring config
+* Map tenant ID to tenant’s external labels
+* Extend tenant’s external labels to the list of labels when the tenant’s TSDB instance is created
+* Implement tenants’ external labels in RouterIngestor
+* Handle changes for tenant’s external labels
+* Implement tenants’ external labels in RouterOnly
+*Implement tenants’ external labels in IngestorOnly
 
-### 9 Test plan?
+### 9 Test plan
+
+* Backward compatibility (e.g., with Receiver’s external labels)
+* Define one or multiple tenants’ external labels correctly
+* Handle changes in tenants’ external labels correctly
+* Shipper detects and uploads tenants’ external labels correctly to block storage
