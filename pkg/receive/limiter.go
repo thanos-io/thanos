@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -121,7 +122,7 @@ func (l *Limiter) StartConfigReloader(ctx context.Context, errChan chan<- error)
 		if reloadCounter := l.configReloadCounter; reloadCounter != nil {
 			reloadCounter.Inc()
 		}
-	})
+	}, 1*time.Second)
 }
 
 func (l *Limiter) loadConfig() error {

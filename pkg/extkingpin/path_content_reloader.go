@@ -29,7 +29,7 @@ type fileContent interface {
 // after 2 times the debounce timer. By default the debouncer timer is 1 second.
 // To ensure renames and deletes are properly handled, the file watcher is put at the file's parent folder. See
 // https://github.com/fsnotify/fsnotify/issues/214 for more details.
-func PathContentReloader(ctx context.Context, fileContent fileContent, logger log.Logger, reloadFunc func(), opts ...reloaderOption) error {
+func PathContentReloader(ctx context.Context, fileContent fileContent, logger log.Logger, reloadFunc func(), debounceTime time.Duration) error {
 	filePath, err := filepath.Abs(fileContent.Path())
 	if err != nil {
 		return errors.Wrap(err, "getting absolute file path")
@@ -42,15 +42,14 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 	if err != nil {
 		return errors.Wrap(err, "creating file watcher")
 	}
-	config := &reloaderConfig{
-		debounceTime: 1 * time.Second,
-	}
-	for _, opt := range opts {
-		opt(config)
-	}
-
 	go func() {
 		var reloadTimer *time.Timer
+		if debounceTime != 0 {
+			reloadTimer = time.AfterFunc(debounceTime, func() {
+				reloadFunc()
+				level.Debug(logger).Log("msg", "configuration reloaded after debouncing")
+			})
+		}
 		defer watcher.Close()
 		for {
 			select {
@@ -78,12 +77,8 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 				}
 				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", filePath), "eventName", event.Name, "eventOp", event.Op)
 				if reloadTimer != nil {
-					reloadTimer.Stop()
+					reloadTimer.Reset(debounceTime)
 				}
-				reloadTimer = time.AfterFunc(config.debounceTime, func() {
-					reloadFunc()
-					level.Debug(logger).Log("msg", "configuration reloaded after debouncing")
-				})
 			case err := <-watcher.Errors:
 				level.Error(logger).Log("msg", "watcher error", "error", err)
 			}
@@ -95,19 +90,6 @@ func PathContentReloader(ctx context.Context, fileContent fileContent, logger lo
 		return errors.Wrapf(err, "adding path %s to file watcher", filePath)
 	}
 	return nil
-}
-
-type reloaderConfig struct {
-	debounceTime time.Duration
-}
-
-type reloaderOption func(cfg *reloaderConfig)
-
-// WithDebounceTime is an option to configure the debounce time when using PathContentReloader.
-func WithDebounceTime(debounceTime time.Duration) func(cfg *reloaderConfig) {
-	return func(cfg *reloaderConfig) {
-		cfg.debounceTime = debounceTime
-	}
 }
 
 type staticPathContent struct {

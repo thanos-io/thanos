@@ -94,7 +94,7 @@ func TestPathContentReloader(t *testing.T) {
 			err = PathContentReloader(ctx, pathContent, log.NewLogfmtLogger(os.Stdout), func() {
 				reloadCount++
 				wg.Done()
-			}, WithDebounceTime(100*time.Millisecond))
+			}, 100*time.Millisecond)
 			testutil.Ok(t, err)
 
 			tt.args.runSteps(t, testFile, pathContent)
