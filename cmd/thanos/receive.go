@@ -241,19 +241,6 @@ func runReceive(
 		TSDBStats:         dbs,
 		Limiter:           limiter,
 	})
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			level.Info(logger).Log("msg", "limits config initialized with file watcher.")
-			if err := limiter.StartConfigReloader(ctx, nil); err != nil {
-				return err
-			}
-			<-ctx.Done()
-			return nil
-		}, func(err error) {
-			cancel()
-		})
-	}
 
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
@@ -409,6 +396,20 @@ func runReceive(
 				}
 				return nil
 			})
+		}, func(err error) {
+			cancel()
+		})
+	}
+
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			level.Debug(logger).Log("msg", "limits config initialized with file watcher.")
+			if err := limiter.StartConfigReloader(ctx, nil); err != nil {
+				return err
+			}
+			<-ctx.Done()
+			return nil
 		}, func(err error) {
 			cancel()
 		})
