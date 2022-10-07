@@ -89,8 +89,7 @@ func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMod
 
 	limiter.configPathOrContent = configFile
 	if err := limiter.loadConfig(); err != nil {
-		// TODO: wrap error.
-		return nil, err
+		return nil, errors.Wrap(err, "load tenant limits config")
 	}
 
 	return limiter, nil
