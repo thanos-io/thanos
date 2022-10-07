@@ -6,57 +6,56 @@
 //
 // Reloader type is useful when you want to:
 //
-// 	* Watch on changes against certain file e.g (`cfgFile`).
-// 	* Optionally, specify different output file for watched `cfgFile` (`cfgOutputFile`).
-// 	This will also try decompress the `cfgFile` if needed and substitute ALL the envvars using Kubernetes substitution format: (`$(var)`)
-// 	* Watch on changes against certain directories (`watchedDirs`).
+//   - Watch on changes against certain file e.g (`cfgFile`).
+//   - Optionally, specify different output file for watched `cfgFile` (`cfgOutputFile`).
+//     This will also try decompress the `cfgFile` if needed and substitute ALL the envvars using Kubernetes substitution format: (`$(var)`)
+//   - Watch on changes against certain directories (`watchedDirs`).
 //
 // Once any of those two changes, Prometheus on given `reloadURL` will be notified, causing Prometheus to reload configuration and rules.
 //
 // This and below for reloader:
 //
-// 	u, _ := url.Parse("http://localhost:9090")
-// 	rl := reloader.New(nil, nil, &reloader.Options{
-// 		ReloadURL:     reloader.ReloadURLFromBase(u),
-// 		CfgFile:       "/path/to/cfg",
-// 		CfgOutputFile: "/path/to/cfg.out",
-// 		WatchedDirs:      []string{"/path/to/dirs"},
-// 		WatchInterval: 3 * time.Minute,
-// 		RetryInterval: 5 * time.Second,
-//  })
+//		u, _ := url.Parse("http://localhost:9090")
+//		rl := reloader.New(nil, nil, &reloader.Options{
+//			ReloadURL:     reloader.ReloadURLFromBase(u),
+//			CfgFile:       "/path/to/cfg",
+//			CfgOutputFile: "/path/to/cfg.out",
+//			WatchedDirs:      []string{"/path/to/dirs"},
+//			WatchInterval: 3 * time.Minute,
+//			RetryInterval: 5 * time.Second,
+//	 })
 //
 // The url of reloads can be generated with function ReloadURLFromBase().
 // It will append the default path of reload into the given url:
 //
-// 	u, _ := url.Parse("http://localhost:9090")
-// 	reloader.ReloadURLFromBase(u) // It will return "http://localhost:9090/-/reload"
+//	u, _ := url.Parse("http://localhost:9090")
+//	reloader.ReloadURLFromBase(u) // It will return "http://localhost:9090/-/reload"
 //
 // Start watching changes and stopped until the context gets canceled:
 //
-// 	ctx, cancel := context.WithCancel(context.Background())
-// 	go func() {
-// 		if err := rl.Watch(ctx); err != nil {
-// 			log.Fatal(err)
-// 		}
-// 	}()
-// 	// ...
-// 	cancel()
+//	ctx, cancel := context.WithCancel(context.Background())
+//	go func() {
+//		if err := rl.Watch(ctx); err != nil {
+//			log.Fatal(err)
+//		}
+//	}()
+//	// ...
+//	cancel()
 //
 // Reloader will make a schedule to check the given config files and dirs of sum of hash with the last result,
 // even if it is no changes.
 //
 // A basic example of configuration template with environment variables:
 //
-//   global:
-//     external_labels:
-//       replica: '$(HOSTNAME)'
+//	global:
+//	  external_labels:
+//	    replica: '$(HOSTNAME)'
 package reloader
 
 import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"hash"
 	"io"
 	"net/http"
@@ -72,6 +71,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/minio/sha256-simd"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"

@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -41,6 +42,7 @@ type testClient struct {
 	minTime          int64
 	maxTime          int64
 	supportsSharding bool
+	isLocalStore     bool
 }
 
 func (c testClient) LabelSets() []labels.Labels {
@@ -63,9 +65,28 @@ func (c testClient) String() string {
 	return "test"
 }
 
-func (c testClient) Addr() string {
-	return "testaddr"
+func (c testClient) Addr() (string, bool) {
+	return "testaddr", c.isLocalStore
 }
+
+type mockedSeriesServer struct {
+	storepb.Store_SeriesServer
+	ctx context.Context
+
+	send func(*storepb.SeriesResponse) error
+}
+
+func (s *mockedSeriesServer) Send(r *storepb.SeriesResponse) error {
+	return s.send(r)
+}
+func (s *mockedSeriesServer) Context() context.Context { return s.ctx }
+
+type mockedStartTimeDB struct {
+	*tsdb.DBReadOnly
+	startTime int64
+}
+
+func (db *mockedStartTimeDB) StartTime() (int64, error) { return db.startTime, nil }
 
 func TestProxyStore_Info(t *testing.T) {
 	defer testutil.TolerantVerifyLeak(t)
@@ -1964,10 +1985,14 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 
 func TestProxyStore_storeMatchMetadata(t *testing.T) {
 	c := testClient{}
+	c.isLocalStore = true
 
 	ok, reason := storeMatchDebugMetadata(c, [][]*labels.Matcher{{}})
-	testutil.Assert(t, ok)
-	testutil.Equals(t, "", reason)
+	testutil.Assert(t, !ok)
+	testutil.Equals(t, "the store is not remote, cannot match __address__", reason)
+
+	// Change client to remote.
+	c.isLocalStore = false
 
 	ok, reason = storeMatchDebugMetadata(c, [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "wrong")}})
 	testutil.Assert(t, !ok)
@@ -1991,7 +2016,15 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 			responses: []*storepb.SeriesResponse{},
 			testFn: func(responses []*storepb.SeriesResponse, h *dedupResponseHeap) {
 				testutil.Equals(t, false, h.Next())
-				testutil.Equals(t, (*storepb.SeriesResponse)(nil), h.At())
+
+				callAtExpectPanic := func() {
+					defer func() {
+						testutil.Assert(t, recover() != nil, "expected a panic from At()")
+					}()
+
+					h.At()
+				}
+				callAtExpectPanic()
 			},
 		},
 		{

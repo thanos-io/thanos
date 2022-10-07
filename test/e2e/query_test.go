@@ -1560,4 +1560,9 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 		return "sum(up)"
 	}, time.Now, promclient.QueryOptions{}, 1)
 	testutil.Equals(t, model.SampleValue(1.0), result[0].Value)
+
+	instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
+		return "sum(metric_that_does_not_exist)"
+	}, time.Now, promclient.QueryOptions{}, 0)
+
 }

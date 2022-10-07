@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -54,9 +55,12 @@ type Client interface {
 	// received series before deduplication.
 	SendsSortedSeries() bool
 
+	// String returns the string representation of the store client.
 	String() string
-	// Addr returns address of a Client.
-	Addr() string
+
+	// Addr returns address of the store client. If second parameter is true, the client
+	// represents a local client (server-as-client) and has no remote address.
+	Addr() (addr string, isLocalClient bool)
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -231,25 +235,6 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 	return minTime, maxTime
 }
 
-// cancelableRespSender is a response channel that does need to be exhausted on cancel.
-type cancelableRespSender struct {
-	ctx context.Context
-	ch  chan<- *storepb.SeriesResponse
-}
-
-func newCancelableRespChannel(ctx context.Context, buffer int) (*cancelableRespSender, chan *storepb.SeriesResponse) {
-	respCh := make(chan *storepb.SeriesResponse, buffer)
-	return &cancelableRespSender{ctx: ctx, ch: respCh}, respCh
-}
-
-// send or return on cancel.
-func (s cancelableRespSender) send(r *storepb.SeriesResponse) {
-	select {
-	case <-s.ctx.Done():
-	case s.ch <- r:
-	}
-}
-
 func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	// TODO(bwplotka): This should be part of request logger, otherwise it does not make much sense. Also, could be
 	// tiggered by tracing span to reduce cognitive load.
@@ -345,10 +330,6 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	return nil
 }
 
-type directSender interface {
-	send(*storepb.SeriesResponse)
-}
-
 // storeMatches returns boolean if the given store may hold data for the given label matchers, time ranges and debug store matches gathered from context.
 // It also produces tracing span.
 func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*labels.Matcher) (ok bool, reason string) {
@@ -384,12 +365,17 @@ func storeMatchDebugMetadata(s Client, storeDebugMatchers [][]*labels.Matcher) (
 		return true, ""
 	}
 
+	addr, isLocal := s.Addr()
+	if isLocal {
+		return false, "the store is not remote, cannot match __address__"
+	}
+
 	match := false
 	for _, sm := range storeDebugMatchers {
-		match = match || labelSetsMatch(sm, labels.FromStrings("__address__", s.Addr()))
+		match = match || labelSetsMatch(sm, labels.FromStrings("__address__", addr))
 	}
 	if !match {
-		return false, fmt.Sprintf("__address__ %v does not match debug store metadata matchers: %v", s.Addr(), storeDebugMatchers)
+		return false, fmt.Sprintf("__address__ %v does not match debug store metadata matchers: %v", addr, storeDebugMatchers)
 	}
 	return true, ""
 }
@@ -486,10 +472,23 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		mtx            sync.Mutex
 		g, gctx        = errgroup.WithContext(ctx)
 		storeDebugMsgs []string
+		span           opentracing.Span
 	)
 
 	for _, st := range s.stores() {
 		st := st
+
+		storeAddr, isLocalStore := st.Addr()
+		storeID := labelpb.PromLabelSetsToString(st.LabelSets())
+		if storeID == "" {
+			storeID = "Store Gateway"
+		}
+		span, gctx = tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
+			"store.id":       storeID,
+			"store.addr":     storeAddr,
+			"store.is_local": isLocalStore,
+		})
+		defer span.Finish()
 
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(gctx, st, r.Start, r.End); !ok {
@@ -507,13 +506,14 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 				Matchers:                r.Matchers,
 			})
 			if err != nil {
-				err = errors.Wrapf(err, "fetch label values from store %s", st)
+				msg := "fetch label values from store %s"
+				err = errors.Wrapf(err, msg, st)
 				if r.PartialResponseDisabled {
 					return err
 				}
 
 				mtx.Lock()
-				warnings = append(warnings, errors.Wrap(err, "fetch label values").Error())
+				warnings = append(warnings, errors.Wrapf(err, msg, st).Error())
 				mtx.Unlock()
 				return nil
 			}
