@@ -140,7 +140,7 @@ write:
         samples_limit: 500
 ```
 
-**IMPORTANT**: this feature is experimental and a work-in-progres. It might change in the near future, i.e. configuration might move to a file (to allow easy configuration of different request limits per tenant) or its structure could change.
+**IMPORTANT**: this feature is experimental and a work-in-progress. It might change in the near future, i.e. configuration might move to a file (to allow easy configuration of different request limits per tenant) or its structure could change.
 
 ### Remote write request limits
 
