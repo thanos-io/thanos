@@ -875,8 +875,8 @@ github.com/prometheus/procfs v0.6.0/go.mod h1:cz+aTbrPOrUb4q7XlbU9ygM+/jj0fzG6c1
 github.com/prometheus/procfs v0.7.3/go.mod h1:cz+aTbrPOrUb4q7XlbU9ygM+/jj0fzG6c1xBZuNvfVA=
 github.com/prometheus/procfs v0.8.0 h1:ODq8ZFEaYeCaZOJlZZdJA2AbQR98dSHSM1KW/You5mo=
 github.com/prometheus/procfs v0.8.0/go.mod h1:z7EfXMXOkbkqb9IINtpCn86r/to3BnA0uaxHdg830/4=
-github.com/prometheus/prometheus v0.39.0 h1:CAiLYDNORXquaCJQCgnkyEj1iqMEwFQ+SkMu1EOaSjc=
-github.com/prometheus/prometheus v0.39.0/go.mod h1:GjQjgLhHMc0oo4Ko7qt/yBSJMY4hUoiAZwsYQgjaePA=
+github.com/prometheus/prometheus v0.39.1 h1:abZM6A+sKAv2eKTbRIaHq4amM/nT07MuxRm0+QTaTj0=
+github.com/prometheus/prometheus v0.39.1/go.mod h1:GjQjgLhHMc0oo4Ko7qt/yBSJMY4hUoiAZwsYQgjaePA=
 github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
 github.com/rivo/uniseg v0.2.0 h1:S1pD9weZBuJdFmowNwbpi7BJ8TNftyUImj/0WQi72jY=
 github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
