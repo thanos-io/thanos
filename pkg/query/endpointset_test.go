@@ -372,25 +372,41 @@ func TestEndpointSetUpdate(t *testing.T) {
 			endpointSet.Update(context.Background())
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetEndpointStatus()))
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetStoreClients()))
-			if tc.name == "long external labels" {
-				externalLabels := strings.Repeat(`lbl="val", `, 10)[:externalLabelLimit-1]
-				var lbl strings.Builder
-				for _, ch := range externalLabels {
-					if string(ch) == `"` {
-						lbl.WriteString(`\`)
-					}
-					lbl.WriteRune(ch)
-				}
-				expectedMetrics := fmt.Sprintf(
-					`
-					# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
-					# TYPE thanos_store_nodes_grpc_connections gauge
-					thanos_store_nodes_grpc_connections{external_labels="{%s}",store_type="sidecar"} 1
-					`,
-					lbl.String(),
-				)
-				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(expectedMetrics)))
+			// slow or unavailable endpoint should collect nothing
+			if tc.name == "slow endpoint" || tc.name == "unavailable endpoint" {
+				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader("")))
+				return
 			}
+
+			var externalLabels string
+			if tc.name == "long external labels" {
+				externalLabels = strings.Repeat(`lbl="val", `, 1000)
+				externalLabels = externalLabels[:len(externalLabels)-2]
+			} else {
+				externalLabels = fmt.Sprintf(`a="b", addr=%q`, discoveredEndpointAddr[0])
+			}
+			// labels too long must be trimmed
+			if len(externalLabels) > externalLabelLimit {
+				externalLabels = externalLabels[:externalLabelLimit]
+			}
+			// add backslash escape for every quote character
+			var lbl strings.Builder
+			for _, ch := range externalLabels {
+				if string(ch) == `"` {
+					lbl.WriteString(`\`)
+				}
+				lbl.WriteRune(ch)
+			}
+			expectedMetrics := fmt.Sprintf(
+				`
+				# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
+				# TYPE thanos_store_nodes_grpc_connections gauge
+				thanos_store_nodes_grpc_connections{external_labels="{%s}",store_type="sidecar"} %d
+				`,
+				lbl.String(),
+				tc.expectedEndpoints,
+			)
+			testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(expectedMetrics)))
 		})
 	}
 }

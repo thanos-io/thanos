@@ -206,7 +206,7 @@ func (c *endpointSetNodeCollector) Update(nodes map[component.Component]map[stri
 		storeNodes[k] = make(map[string]int, len(v))
 		for kk, vv := range v {
 			if len(kk) > externalLabelLimit {
-				kk = kk[:externalLabelLimit] + "}"
+				kk = kk[:externalLabelLimit+1] + "}"
 			}
 			storePerExtLset[kk] += vv
 			storeNodes[k][kk] = vv
