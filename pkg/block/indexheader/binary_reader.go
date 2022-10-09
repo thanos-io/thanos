@@ -1034,7 +1034,12 @@ func (r *BinaryReader) LabelNames() ([]string, error) {
 	return labelNames, nil
 }
 
-func (r *BinaryReader) Close() error { return r.c.Close() }
+func (r *BinaryReader) Close() error {
+	if r.c == nil {
+		return nil
+	}
+	return r.c.Close()
+}
 
 type realByteSlice []byte
 
