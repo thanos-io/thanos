@@ -30,11 +30,10 @@ var nonShardableFuncs = []string{
 }
 
 // NewQueryAnalyzer creates a new QueryAnalyzer.
-func NewQueryAnalyzer() (Analyze, error) {
+func NewQueryAnalyzer() (*CachedQueryAnalyzer, error) {
 	cache, err := lru.New(256)
-
 	if err != nil {
-		return &QueryAnalyzer{}, err
+		return nil, err
 	}
 
 	return &CachedQueryAnalyzer{
@@ -51,9 +50,7 @@ type cachedValue struct {
 func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 	if a.cache.Contains(query) {
 		value, ok := a.cache.Get(query)
-		if !ok {
-			return QueryAnalysis{}, fmt.Errorf("failed to fetch query:%s from cache", query)
-		} else {
+		if ok {
 			return value.(cachedValue).QueryAnalysis, value.(cachedValue).err
 		}
 	}
@@ -82,7 +79,6 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 //
 // The le label is excluded from sharding.
 func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
-
 	expr, err := parser.ParseExpr(query)
 	if err != nil {
 		return nonShardableQuery(), err

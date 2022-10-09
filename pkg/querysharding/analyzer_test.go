@@ -4,7 +4,6 @@
 package querysharding
 
 import (
-	"fmt"
 	"sort"
 	"testing"
 
@@ -168,9 +167,7 @@ http_requests_total`,
 	for _, test := range nonShardable {
 		t.Run(test.name, func(t *testing.T) {
 			analyzer, err := NewQueryAnalyzer()
-			if err != nil {
-				fmt.Println("error intializing cache: ", err)
-			}
+			require.NoError(t, err)
 			analysis, err := analyzer.Analyze(test.expression)
 			require.NoError(t, err)
 			require.False(t, analysis.IsShardable())
@@ -180,9 +177,7 @@ http_requests_total`,
 	for _, test := range shardableByLabels {
 		t.Run(test.name, func(t *testing.T) {
 			analyzer, err := NewQueryAnalyzer()
-			if err != nil {
-				fmt.Println("error intializing cache: ", err)
-			}
+			require.NoError(t, err)
 			analysis, err := analyzer.Analyze(test.expression)
 			require.NoError(t, err)
 			require.True(t, analysis.IsShardable())
@@ -197,9 +192,7 @@ http_requests_total`,
 	for _, test := range shardableWithoutLabels {
 		t.Run(test.name, func(t *testing.T) {
 			analyzer, err := NewQueryAnalyzer()
-			if err != nil {
-				fmt.Println("error intializing cache: ", err)
-			}
+			require.NoError(t, err)
 			analysis, err := analyzer.Analyze(test.expression)
 			require.NoError(t, err)
 			require.True(t, analysis.IsShardable())

@@ -77,7 +77,6 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_instant"}, reg),
 		config.ForwardHeaders,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -193,9 +192,8 @@ func newQueryRangeTripperware(
 
 	if numShards > 0 {
 		analyzer, err := querysharding.NewQueryAnalyzer()
-
 		if err != nil {
-			return nil, errors.Wrap(err, "create analyzer cache")
+			return nil, errors.Wrap(err, "create query analyzer")
 		}
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
@@ -340,7 +338,7 @@ func newInstantQueryTripperware(
 	if numShards > 0 {
 		analyzer, err := querysharding.NewQueryAnalyzer()
 		if err != nil {
-			return nil, errors.Wrap(err, "create analyzer cache")
+			return nil, errors.Wrap(err, "create query analyzer")
 		}
 		instantQueryMiddlewares = append(
 			instantQueryMiddlewares,
