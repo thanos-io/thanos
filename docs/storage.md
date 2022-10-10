@@ -257,7 +257,7 @@ By default, the `STANDARD` S3 storage class will be used. To specify a storage c
 
 For example, the config file below specifies storage class of `STANDARD_IA`.
 
-``` yaml
+```yaml
 type: S3
 prefix: thanos-test-standard-ia
 config:
