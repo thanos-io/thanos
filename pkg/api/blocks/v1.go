@@ -4,8 +4,14 @@
 package v1
 
 import (
+	"context"
 	"net/http"
+	"strconv"
 	"time"
+
+	"github.com/go-kit/log/level"
+	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/thanos-io/thanos/pkg/compact"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
@@ -31,6 +37,7 @@ type BlocksAPI struct {
 	loadedBlocksInfo *BlocksInfo
 	disableCORS      bool
 	bkt              objstore.Bucket
+	relabelConfig    []*relabel.Config
 }
 
 type BlocksInfo struct {
@@ -46,6 +53,12 @@ const (
 	Deletion ActionType = iota
 	NoCompaction
 	Unknown
+)
+
+const (
+	defaultConsistencyDelay     = time.Minute * 30
+	defaultBlockSyncConcurrency = 20
+	defaultDeleteDelay          = time.Hour * 48
 )
 
 func parse(s string) ActionType {
@@ -84,6 +97,11 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 
 	r.Get("/blocks", instr("blocks", bapi.blocks))
 	r.Post("/blocks/mark", instr("blocks_mark", bapi.markBlock))
+	r.Post("/blocks/cleanup", instr("blocks_cleanup", bapi.cleanupBlocks))
+}
+
+func (bapi *BlocksAPI) SetRelabelConfig(r []*relabel.Config) {
+	bapi.relabelConfig = r
 }
 
 func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
@@ -128,6 +146,125 @@ func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiEr
 		return bapi.loadedBlocksInfo, nil, nil, func() {}
 	}
 	return bapi.globalBlocksInfo, nil, nil, func() {}
+}
+
+func (bapi *BlocksAPI) cleanupBlocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+	consistencyDelay := defaultConsistencyDelay
+	consistencyDelayStr := r.FormValue("consistencyDelay")
+	if consistencyDelayStr != "" {
+		var err error
+		consistencyDelay, err = time.ParseDuration(consistencyDelayStr)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+	}
+
+	blockSyncConcurrency := defaultBlockSyncConcurrency
+	blockSyncConcurrencyStr := r.FormValue("blockSyncConcurrency")
+	if blockSyncConcurrencyStr != "" {
+		var err error
+		blockSyncConcurrency, err = strconv.Atoi(blockSyncConcurrencyStr)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+	}
+
+	deleteDelay := defaultDeleteDelay
+	deleteDelayStr := r.FormValue("deleteDelay")
+	if consistencyDelayStr != "" {
+		var err error
+		deleteDelay, err = time.ParseDuration(deleteDelayStr)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+	}
+
+	sync := false
+	syncStr := r.FormValue("sync")
+	if syncStr != "" {
+		var err error
+		sync, err = strconv.ParseBool(syncStr)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+	}
+
+	cleanup := func() error {
+		stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+
+		bkt := bapi.bkt.(objstore.InstrumentedBucketReader)
+
+		// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
+		// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
+		// This is to make sure compactor will not accidentally perform compactions with gap instead.
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(bapi.logger, bkt, deleteDelay/2, blockSyncConcurrency)
+		duplicateBlocksFilter := block.NewDeduplicateFilter(blockSyncConcurrency)
+		blocksCleaner := compact.NewBlocksCleaner(bapi.logger, bapi.bkt, ignoreDeletionMarkFilter, deleteDelay, stubCounter, stubCounter)
+
+		ctx := context.Background()
+
+		var sy *compact.Syncer
+		{
+			baseMetaFetcher, err := block.NewBaseFetcher(bapi.logger, blockSyncConcurrency, bkt, "", nil)
+			if err != nil {
+				return errors.Wrap(err, "create meta fetcher")
+			}
+			cf := baseMetaFetcher.NewMetaFetcher(
+				nil, []block.MetadataFilter{
+					block.NewLabelShardedMetaFilter(bapi.relabelConfig),
+					block.NewConsistencyDelayMetaFilter(bapi.logger, consistencyDelay, nil),
+					ignoreDeletionMarkFilter,
+					duplicateBlocksFilter,
+				},
+			)
+
+			sy, err = compact.NewMetaSyncer(
+				bapi.logger,
+				nil,
+				bapi.bkt,
+				cf,
+				duplicateBlocksFilter,
+				ignoreDeletionMarkFilter,
+				stubCounter,
+				stubCounter,
+			)
+			if err != nil {
+				return errors.Wrap(err, "create syncer")
+			}
+		}
+
+		level.Info(bapi.logger).Log("msg", "syncing blocks metadata")
+		if err := sy.SyncMetas(ctx); err != nil {
+			return errors.Wrap(err, "sync blocks")
+		}
+
+		level.Info(bapi.logger).Log("msg", "synced blocks done")
+
+		compact.BestEffortCleanAbortedPartialUploads(ctx, bapi.logger, sy.Partial(), bapi.bkt, stubCounter, stubCounter, stubCounter)
+		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+			return errors.Wrap(err, "error cleaning blocks")
+		}
+
+		level.Info(bapi.logger).Log("msg", "cleanup done")
+
+		return nil
+	}
+
+	if sync {
+		if err := cleanup(); err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrap(err, "error cleaning blocks")}, func() {}
+		}
+
+		return "cleanup done", nil, nil, func() {}
+	} else {
+		go func() {
+			if err := cleanup(); err != nil {
+				level.Error(bapi.logger).Log("msg", errors.Wrap(err, "error cleaning blocks").Error())
+			}
+		}()
+
+		return "execute cleanup", nil, nil, func() {}
+	}
 }
 
 func (b *BlocksInfo) set(blocks []metadata.Meta, err error) {

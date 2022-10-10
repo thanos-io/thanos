@@ -631,6 +631,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 		if err != nil {
 			return err
 		}
+		api.SetRelabelConfig(relabelConfig)
 		// TODO(bwplotka): Allow Bucket UI to visualize the state of block as well.
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, bkt, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg),
 			[]block.MetadataFilter{
