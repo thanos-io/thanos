@@ -37,11 +37,64 @@ func TestLimiter_StartConfigReloader(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	errChan := make(chan error)
-	err = limiter.StartConfigReloader(ctx, errChan)
+	err = limiter.StartConfigReloader(ctx)
 	testutil.Ok(t, err)
 
 	time.Sleep(1 * time.Second)
 	testutil.Ok(t, goodLimits.Rewrite(invalidLimits))
-	testutil.NotOk(t, <-errChan)
+}
+
+type emptyPathFile struct{}
+
+func (e emptyPathFile) Content() ([]byte, error) {
+	return []byte{}, nil
+}
+
+func (e emptyPathFile) Path() string {
+	return ""
+}
+
+func TestLimiter_CanReload(t *testing.T) {
+	validLimitsPath, err := extkingpin.NewStaticPathContent(
+		path.Join("testdata", "limits_config", "good_limits.yaml"),
+	)
+	testutil.Ok(t, err)
+	emptyLimitsPath := emptyPathFile{}
+
+	type args struct {
+		configFilePath fileContent
+	}
+	tests := []struct {
+		name       string
+		args       args
+		wantReload bool
+	}{
+		{
+			name:       "Nil config file path cannot be reloaded",
+			args:       args{configFilePath: nil},
+			wantReload: false,
+		},
+		{
+			name:       "Empty config file path cannot be reloaded",
+			args:       args{configFilePath: emptyLimitsPath},
+			wantReload: false,
+		},
+		{
+			name:       "Valid config file path can be reloaded",
+			args:       args{configFilePath: validLimitsPath},
+			wantReload: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configFile := tt.args.configFilePath
+			limiter, err := NewLimiter(configFile, nil, RouterIngestor, log.NewLogfmtLogger(os.Stdout))
+			testutil.Ok(t, err)
+			if tt.wantReload {
+				testutil.Assert(t, limiter.CanReload())
+			} else {
+				testutil.Assert(t, !limiter.CanReload())
+			}
+		})
+	}
 }

@@ -405,17 +405,19 @@ func runReceive(
 	}
 
 	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			level.Debug(logger).Log("msg", "limits config initialized with file watcher.")
-			if err := limiter.StartConfigReloader(ctx, nil); err != nil {
-				return err
-			}
-			<-ctx.Done()
-			return nil
-		}, func(err error) {
-			cancel()
-		})
+		if limiter.CanReload() {
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				level.Debug(logger).Log("msg", "limits config initialized with file watcher.")
+				if err := limiter.StartConfigReloader(ctx); err != nil {
+					return err
+				}
+				<-ctx.Done()
+				return nil
+			}, func(err error) {
+				cancel()
+			})
+		}
 	}
 
 	level.Info(logger).Log("msg", "starting receiver")

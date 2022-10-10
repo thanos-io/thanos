@@ -98,12 +98,9 @@ func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMod
 
 // StartConfigReloader starts the automatic configuration reloader based off of
 // the file indicated by pathOrContent. It starts a Go routine in the given
-// *run.Group. Pushes error parsing the reloaded configuration into errChan.
-func (l *Limiter) StartConfigReloader(ctx context.Context, errChan chan<- error) error {
-	if l.configPathOrContent == nil {
-		return nil
-	}
-	if l.configPathOrContent.Path() == "" {
+// *run.Group.
+func (l *Limiter) StartConfigReloader(ctx context.Context) error {
+	if !l.CanReload() {
 		return nil
 	}
 
@@ -113,9 +110,6 @@ func (l *Limiter) StartConfigReloader(ctx context.Context, errChan chan<- error)
 			if failedReload := l.configReloadCounter; failedReload != nil {
 				failedReload.Inc()
 			}
-			if errChan != nil {
-				errChan <- err
-			}
 			errMsg := fmt.Sprintf("error reloading tenant limits config from %s", l.configPathOrContent.Path())
 			level.Error(l.logger).Log("msg", errMsg, "err", err)
 		}
@@ -123,6 +117,16 @@ func (l *Limiter) StartConfigReloader(ctx context.Context, errChan chan<- error)
 			reloadCounter.Inc()
 		}
 	}, 1*time.Second)
+}
+
+func (l *Limiter) CanReload() bool {
+	if l.configPathOrContent == nil {
+		return false
+	}
+	if l.configPathOrContent.Path() == "" {
+		return false
+	}
+	return true
 }
 
 func (l *Limiter) loadConfig() error {
