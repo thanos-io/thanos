@@ -310,7 +310,7 @@ func newDedupReadyResponse(resp *storepb.SeriesResponse, replicaLabels []string,
 		return s.Labels[i].Name < s.Labels[j].Name
 	})
 
-	promLabels = labels.NewBuilder(promLabels).Del(replicaLabels...).Labels()
+	promLabels = labels.NewBuilder(promLabels).Del(replicaLabels...).Labels(nil)
 	return &dedupReadyResponse{
 		signature:         promLabels.Hash(),
 		nonReplicaLabels:  promLabels,
