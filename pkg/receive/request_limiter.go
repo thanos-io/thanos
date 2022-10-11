@@ -54,9 +54,6 @@ func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *WriteLimits
 }
 
 func (l *configRequestLimiter) registerMetrics(reg prometheus.Registerer) {
-	if reg == nil {
-		return
-	}
 	l.limitsHit = promauto.With(reg).NewSummaryVec(
 		prometheus.SummaryOpts{
 			Namespace:  "thanos",
@@ -106,7 +103,7 @@ func (l *configRequestLimiter) AllowSeries(tenant string, amount int64) bool {
 	}
 
 	allowed := *limit >= amount
-	if !allowed {
+	if !allowed && l.limitsHit != nil {
 		l.limitsHit.
 			WithLabelValues(tenant, seriesLimitName).
 			Observe(float64(amount - *limit))
@@ -120,7 +117,7 @@ func (l *configRequestLimiter) AllowSamples(tenant string, amount int64) bool {
 		return true
 	}
 	allowed := *limit >= amount
-	if !allowed {
+	if !allowed && l.limitsHit != nil {
 		l.limitsHit.
 			WithLabelValues(tenant, samplesLimitName).
 			Observe(float64(amount - *limit))
