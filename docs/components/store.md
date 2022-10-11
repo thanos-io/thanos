@@ -53,8 +53,12 @@ Flags:
                                  --disable-caching-index-header-file option is
                                  specified.
       --disable-caching-index-header-file
-                                 Disable caching purposes (index-header,
-                                 in-mem cache items and meta.jsons).
+                                 Disable caching index-header, and meta.jsons
+                                 file on disk. If set, the store will ignore the
+                                 --data-dir, and will not load the index header
+                                 and meta.jsons files from disk on startup, and
+                                 will not create the index header and meta.jsons
+                                 files when synchronizing blocks.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
