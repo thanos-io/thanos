@@ -60,13 +60,13 @@ func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMod
 		writeGate:         gate.NewNoop(),
 		requestLimiter:    &noopRequestLimiter{},
 		HeadSeriesLimiter: NewNopSeriesLimit(),
-		registerer:        reg,
+		registerer:        NewUnRegisterer(reg),
 		logger:            logger,
 		receiverMode:      r,
 	}
 
 	if reg != nil {
-		limiter.configReloadCounter = promauto.With(reg).NewCounter(
+		limiter.configReloadCounter = promauto.With(limiter.registerer).NewCounter(
 			prometheus.CounterOpts{
 				Namespace: "thanos",
 				Subsystem: "receive",
@@ -74,7 +74,7 @@ func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMod
 				Help:      "How many times the limit configuration was reloaded",
 			},
 		)
-		limiter.configReloadFailedCounter = promauto.With(reg).NewCounter(
+		limiter.configReloadFailedCounter = promauto.With(limiter.registerer).NewCounter(
 			prometheus.CounterOpts{
 				Namespace: "thanos",
 				Subsystem: "receive",
