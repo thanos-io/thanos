@@ -60,12 +60,12 @@ func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMod
 		writeGate:         gate.NewNoop(),
 		requestLimiter:    &noopRequestLimiter{},
 		HeadSeriesLimiter: NewNopSeriesLimit(),
-		registerer:        NewUnRegisterer(reg),
 		logger:            logger,
 		receiverMode:      r,
 	}
 
 	if reg != nil {
+		limiter.registerer = NewUnRegisterer(reg)
 		limiter.configReloadCounter = promauto.With(limiter.registerer).NewCounter(
 			prometheus.CounterOpts{
 				Namespace: "thanos",

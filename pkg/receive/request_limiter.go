@@ -54,6 +54,9 @@ func newConfigRequestLimiter(reg prometheus.Registerer, writeLimits *WriteLimits
 }
 
 func (l *configRequestLimiter) registerMetrics(reg prometheus.Registerer) {
+	if reg == nil {
+		return
+	}
 	l.limitsHit = promauto.With(reg).NewSummaryVec(
 		prometheus.SummaryOpts{
 			Namespace:  "thanos",
