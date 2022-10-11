@@ -251,6 +251,25 @@ If you want to use IAM credential retrieved from an instance profile, Thanos nee
 
 By default Thanos will use endpoint: https://sts.amazonaws.com and AWS region corresponding endpoints.
 
+##### S3 Storage Class
+
+By default, the `STANDARD` S3 storage class will be used. To specify a storage class, add it to the `put_user_metadata` section of the config file.
+
+For example, the config file below specifies storage class of `STANDARD_IA`.
+
+```yaml
+type: S3
+prefix: thanos-test-standard-ia
+config:
+  endpoint: s3.us-east-1.amazonaws.com
+  region: us-east-1
+  bucket: MY_BUCKET
+  put_user_metadata:
+    X-Amz-Storage-Class: STANDARD_IA
+  trace:
+    enable: true
+```
+
 #### GCS
 
 To configure Google Cloud Storage bucket as an object store you need to set `bucket` with GCS bucket name and configure Google Application credentials.
