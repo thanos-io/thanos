@@ -262,26 +262,26 @@ Flags:
       --alert.query-url=ALERT.QUERY-URL
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field.
-      --enable-feature= ...      Comma separated experimental feature names to
-                                 enable.The current list of features is
+      --enable-feature= ...      Comma separated experimental feature names
+                                 to enable.The current list of features is
                                  query-pushdown.
-      --endpoint=<endpoint> ...  Addresses of statically configured Thanos API
-                                 servers (repeatable). The scheme may be
+      --endpoint=<endpoint> ...  Addresses of statically configured Thanos
+                                 API servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
                                  Thanos API servers through respective DNS
                                  lookups.
       --endpoint-strict=<staticendpoint> ...
                                  Addresses of only statically configured Thanos
-                                 API servers that are always used, even if the
-                                 health check fails. Useful if you have a
+                                 API servers that are always used, even if
+                                 the health check fails. Useful if you have a
                                  caching layer on top.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
       --grpc-client-server-name=""
-                                 Server name to verify the hostname on the
-                                 returned gRPC certificates. See
+                                 Server name to verify the hostname on
+                                 the returned gRPC certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --grpc-client-tls-ca=""    TLS CA Certificates to use to verify gRPC
                                  servers
@@ -297,14 +297,14 @@ Flags:
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
       --grpc-server-max-connection-age=60m
-                                 The grpc server max connection age. This
-                                 controls how often to re-read the tls
+                                 The grpc server max connection age.
+                                 This controls how often to re-read the tls
                                  certificates and redo the TLS handshake
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-client-ca=""
-                                 TLS CA to verify clients against. If no client
-                                 CA is specified, there is no client
+                                 TLS CA to verify clients against. If no
+                                 client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
@@ -320,10 +320,10 @@ Flags:
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
-      --log.request.decision=    Deprecation Warning - This flag would be soon
-                                 deprecated, and replaced with
-                                 `request.logging-config`. Request Logging for
-                                 logging the start and end of requests. By
+      --log.request.decision=    Deprecation Warning - This flag would
+                                 be soon deprecated, and replaced with
+                                 `request.logging-config`. Request Logging
+                                 for logging the start and end of requests. By
                                  default this flag is disabled. LogFinishCall:
                                  Logs the finish call of the requests.
                                  LogStartAndFinishCall: Logs the start and
@@ -340,24 +340,24 @@ Flags:
                                  queries.
       --query.default-step=1s    Set default step for range queries. Default
                                  step is only used when step is not set in UI.
-                                 In such cases, Thanos UI will use default step
-                                 to calculate resolution (resolution =
-                                 max(rangeSeconds / 250, defaultStep)). This
-                                 will not work from Grafana, but Grafana has
-                                 __step variable which can be used.
+                                 In such cases, Thanos UI will use default
+                                 step to calculate resolution (resolution
+                                 = max(rangeSeconds / 250, defaultStep)).
+                                 This will not work from Grafana, but Grafana
+                                 has __step variable which can be used.
       --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
-                                 metrics during expression evaluations. PromQL
-                                 always evaluates the query for the certain
-                                 timestamp (query range timestamps are deduced
-                                 by step). Since scrape intervals might be
-                                 different, PromQL looks back for given amount
-                                 of time to get latest sample. If it exceeds the
-                                 maximum lookback delta it assumes series is
-                                 stale and returns none (a gap). This is why
-                                 lookback delta should be set to at least 2
-                                 times of the slowest scrape interval. If unset
-                                 it will use the promql default of 5m.
+                                 metrics during expression evaluations.
+                                 PromQL always evaluates the query for the
+                                 certain timestamp (query range timestamps are
+                                 deduced by step). Since scrape intervals might
+                                 be different, PromQL looks back for given
+                                 amount of time to get latest sample. If it
+                                 exceeds the maximum lookback delta it assumes
+                                 series is stale and returns none (a gap).
+                                 This is why lookback delta should be set to at
+                                 least 2 times of the slowest scrape interval.
+                                 If unset it will use the promql default of 5m.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
       --query.max-concurrent-select=4
@@ -369,13 +369,13 @@ Flags:
                                  when the range parameters are not specified.
                                  The zero value means range covers the time
                                  since the beginning.
-      --query.partial-response   Enable partial response for queries if no
-                                 partial_response param is specified.
+      --query.partial-response   Enable partial response for queries if
+                                 no partial_response param is specified.
                                  --no-query.partial-response for disabling.
       --query.replica-label=QUERY.REPLICA-LABEL ...
                                  Labels to treat as a replica indicator along
-                                 which data is deduplicated. Still you will be
-                                 able to query without deduplication using
+                                 which data is deduplicated. Still you will
+                                 be able to query without deduplication using
                                  'dedup=false' parameter. Data includes time
                                  series, recording rules, and alerting rules.
       --query.telemetry.request-duration-seconds-quantiles=0.1... ...
@@ -390,9 +390,9 @@ Flags:
       --query.timeout=2m         Maximum time to process query by query node.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Content of YAML file
-                                 with request logging configuration. See format
-                                 details:
+                                 flag (mutually exclusive). Content
+                                 of YAML file with request logging
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
@@ -425,48 +425,48 @@ Flags:
                                  Path to files that contain addresses of store
                                  API servers. The path can be a glob pattern
                                  (repeatable).
-      --store.sd-interval=5m     Refresh interval to re-read file SD files. It
-                                 is used as a resync fallback.
+      --store.sd-interval=5m     Refresh interval to re-read file SD files.
+                                 It is used as a resync fallback.
       --store.unhealthy-timeout=5m
                                  Timeout before an unhealthy store is cleaned
                                  from the store UI page.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (mutually exclusive). Content of YAML file with
-                                 tracing configuration. See format details:
+                                 (mutually exclusive). Content of YAML file
+                                 with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                                 Path to YAML file with tracing configuration.
-                                 See format details:
+                                 Path to YAML file with tracing
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --version                  Show application version.
       --web.disable-cors         Whether to disable CORS headers to be set by
                                  Thanos. By default Thanos sets CORS headers to
                                  be allowed by all.
-      --web.external-prefix=""   Static prefix for all HTML links and redirect
-                                 URLs in the UI query web interface. Actual
-                                 endpoints are still served on / or the
+      --web.external-prefix=""   Static prefix for all HTML links and
+                                 redirect URLs in the UI query web interface.
+                                 Actual endpoints are still served on / or the
                                  web.route-prefix. This allows thanos UI to be
                                  served behind a reverse proxy that strips a URL
                                  sub-path.
       --web.prefix-header=""     Name of HTTP request header used for dynamic
-                                 prefixing of UI links and redirects. This
-                                 option is ignored if web.external-prefix
-                                 argument is set. Security risk: enable this
-                                 option only if a reverse proxy in front of
-                                 thanos is resetting the header. The
-                                 --web.prefix-header=X-Forwarded-Prefix option
-                                 can be useful, for example, if Thanos UI is
-                                 served via Traefik reverse proxy with
+                                 prefixing of UI links and redirects.
+                                 This option is ignored if web.external-prefix
+                                 argument is set. Security risk: enable
+                                 this option only if a reverse proxy in
+                                 front of thanos is resetting the header.
+                                 The --web.prefix-header=X-Forwarded-Prefix
+                                 option can be useful, for example, if Thanos
+                                 UI is served via Traefik reverse proxy with
                                  PathPrefixStrip option enabled, which sends the
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
       --web.route-prefix=""      Prefix for API and UI endpoints. This allows
-                                 thanos UI to be served on a sub-path. Defaults
-                                 to the value of --web.external-prefix. This
-                                 option is analogous to --web.route-prefix of
-                                 Prometheus.
+                                 thanos UI to be served on a sub-path.
+                                 Defaults to the value of --web.external-prefix.
+                                 This option is analogous to --web.route-prefix
+                                 of Prometheus.
 
 ```
 

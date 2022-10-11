@@ -82,7 +82,6 @@ func registerReceive(app *extkingpin.App) {
 			RetentionDuration:        int64(time.Duration(*conf.retention) / time.Millisecond),
 			NoLockfile:               conf.noLockFile,
 			WALCompression:           conf.walCompression,
-			AllowOverlappingBlocks:   conf.tsdbAllowOverlappingBlocks,
 			MaxExemplars:             conf.tsdbMaxExemplars,
 			EnableExemplarStorage:    true,
 			HeadChunksWriteQueueSize: int(conf.tsdbWriteQueueSize),
@@ -298,11 +297,14 @@ func runReceive(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		mts := store.NewMultiTSDBStore(
+		mts := store.NewProxyStore(
 			logger,
 			reg,
+			dbs.TSDBLocalClients,
 			comp,
-			dbs.TSDBStores,
+			labels.Labels{},
+			0,
+			store.LazyRetrieval,
 		)
 		rw := store.ReadWriteTSDBStore{
 			StoreServer:          mts,
@@ -327,7 +329,7 @@ func runReceive(
 			info.WithExemplarsInfoFunc(),
 		)
 
-		srv := grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
+		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(rw)),
 			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
@@ -837,7 +839,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.tsdbMaxBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
 
-	cmd.Flag("tsdb.allow-overlapping-blocks", "Allow overlapping blocks, which in turn enables vertical compaction and vertical query merge.").Default("false").BoolVar(&rc.tsdbAllowOverlappingBlocks)
+	cmd.Flag("tsdb.allow-overlapping-blocks", "Allow overlapping blocks, which in turn enables vertical compaction and vertical query merge. Does not do anything, enabled all the time.").Default("false").BoolVar(&rc.tsdbAllowOverlappingBlocks)
 
 	cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").BoolVar(&rc.walCompression)
 

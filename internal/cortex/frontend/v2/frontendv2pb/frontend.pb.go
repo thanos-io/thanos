@@ -6,9 +6,9 @@ package frontendv2pb
 import (
 	context "context"
 	fmt "fmt"
-	stats "github.com/thanos-io/thanos/internal/cortex/querier/stats"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
+	stats "github.com/thanos-io/thanos/internal/cortex/querier/stats"
 	httpgrpc "github.com/weaveworks/common/httpgrpc"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"

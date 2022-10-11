@@ -481,7 +481,7 @@ func TestDownsample(t *testing.T) {
 
 			var got []map[AggrType][]sample
 			for _, c := range chks {
-				chk, err := chunkr.Chunk(c.Ref)
+				chk, err := chunkr.Chunk(c)
 				testutil.Ok(t, err)
 
 				m := map[AggrType][]sample{}
@@ -982,12 +982,12 @@ func (b *memBlock) Series(id storage.SeriesRef, lset *labels.Labels, chks *[]chu
 	return nil
 }
 
-func (b *memBlock) Chunk(id chunks.ChunkRef) (chunkenc.Chunk, error) {
-	if uint64(id) >= b.numberOfChunks {
-		return nil, errors.Wrapf(storage.ErrNotFound, "chunk with ID %d does not exist", id)
+func (b *memBlock) Chunk(m chunks.Meta) (chunkenc.Chunk, error) {
+	if uint64(m.Ref) >= b.numberOfChunks {
+		return nil, errors.Wrapf(storage.ErrNotFound, "chunk with ID %d does not exist", m.Ref)
 	}
 
-	return b.chunks[id], nil
+	return b.chunks[m.Ref], nil
 }
 
 func (b *memBlock) Symbols() index.StringIter {

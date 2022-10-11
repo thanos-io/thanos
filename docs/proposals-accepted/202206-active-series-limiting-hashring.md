@@ -40,7 +40,7 @@ We could scale horizontally automatically during such increased load (once we im
 
 ## 6 Non-Goals
 
-* [Request-based limiting](https://github.com/thanos-io/thanos/issues/5404), i.e, number of samples in a remote wite request
+* [Request-based limiting](https://github.com/thanos-io/thanos/issues/5404), i.e, number of samples in a remote write request
 * Per-replica-tenant limiting which is already being discussed in this [PR](https://github.com/thanos-io/thanos/pull/5333)
 * Using [consistent hashing](https://github.com/thanos-io/thanos/issues/4972) implementation in Receive to make it easily scalable
 

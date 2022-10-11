@@ -207,7 +207,7 @@ Example working AWS IAM policy for user:
 To test the policy, set env vars for S3 access for *empty, not used* bucket as well as:
 
 ```
-THANOS_TEST_OBJSTORE_SKIP=GCS,AZURE,SWIFT,COS,ALIYUNOSS
+THANOS_TEST_OBJSTORE_SKIP=GCS,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI
 THANOS_ALLOW_EXISTING_BUCKET_USE=true
 ```
 
@@ -241,7 +241,7 @@ We need access to CreateBucket and DeleteBucket and access to all buckets:
 }
 ```
 
-With this policy you should be able to run set `THANOS_TEST_OBJSTORE_SKIP=GCS,AZURE,SWIFT,COS,ALIYUNOSS` and unset `S3_BUCKET` and run all tests using `make test`.
+With this policy you should be able to run set `THANOS_TEST_OBJSTORE_SKIP=GCS,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI` and unset `S3_BUCKET` and run all tests using `make test`.
 
 Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html
 
@@ -250,6 +250,25 @@ Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/usin
 If you want to use IAM credential retrieved from an instance profile, Thanos needs to authenticate through AWS STS. For this purposes you can specify your own STS Endpoint.
 
 By default Thanos will use endpoint: https://sts.amazonaws.com and AWS region corresponding endpoints.
+
+##### S3 Storage Class
+
+By default, the `STANDARD` S3 storage class will be used. To specify a storage class, add it to the `put_user_metadata` section of the config file.
+
+For example, the config file below specifies storage class of `STANDARD_IA`.
+
+```yaml
+type: S3
+prefix: thanos-test-standard-ia
+config:
+  endpoint: s3.us-east-1.amazonaws.com
+  region: us-east-1
+  bucket: MY_BUCKET
+  put_user_metadata:
+    X-Amz-Storage-Class: STANDARD_IA
+  trace:
+    enable: true
+```
 
 #### GCS
 

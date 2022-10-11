@@ -818,7 +818,6 @@ func TestSidecarStorePushdown(t *testing.T) {
 			"__name__": "my_fake_metric",
 		},
 	})
-
 }
 
 func TestSidecarQueryEvaluation(t *testing.T) {

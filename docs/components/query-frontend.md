@@ -186,8 +186,8 @@ improve query parallelization and caching.
 
 Flags:
       --cache-compression-type=""
-                                 Use compression in results cache. Supported
-                                 values are: 'snappy' and ” (disable
+                                 Use compression in results cache.
+                                 Supported values are: 'snappy' and ” (disable
                                  compression).
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
@@ -207,10 +207,10 @@ Flags:
                                  scheduled in parallel by the Frontend.
       --labels.max-retries-per-request=5
                                  Maximum number of retries for a single
-                                 label/series API request; beyond this, the
-                                 downstream error is returned.
-      --labels.partial-response  Enable partial response for labels requests if
-                                 no partial_response param is specified.
+                                 label/series API request; beyond this,
+                                 the downstream error is returned.
+      --labels.partial-response  Enable partial response for labels requests
+                                 if no partial_response param is specified.
                                  --no-labels.partial-response for disabling.
       --labels.response-cache-config=<content>
                                  Alternative to
@@ -221,23 +221,23 @@ Flags:
                                  Path to YAML file that contains response cache
                                  configuration.
       --labels.response-cache-max-freshness=1m
-                                 Most recent allowed cacheable result for labels
-                                 requests, to prevent caching very recent
+                                 Most recent allowed cacheable result for
+                                 labels requests, to prevent caching very recent
                                  results that might still be in flux.
       --labels.split-interval=24h
                                  Split labels requests by an interval and
-                                 execute in parallel, it should be greater than
-                                 0 when labels.response-cache-config is
+                                 execute in parallel, it should be greater
+                                 than 0 when labels.response-cache-config is
                                  configured.
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
       --log.level=info           Log filtering level.
-      --log.request.decision=    Deprecation Warning - This flag would be soon
-                                 deprecated, and replaced with
-                                 `request.logging-config`. Request Logging for
-                                 logging the start and end of requests. By
-                                 default this flag is disabled. LogFinishCall :
-                                 Logs the finish call of the requests.
+      --log.request.decision=    Deprecation Warning - This flag would
+                                 be soon deprecated, and replaced with
+                                 `request.logging-config`. Request Logging
+                                 for logging the start and end of requests.
+                                 By default this flag is disabled. LogFinishCall
+                                 : Logs the finish call of the requests.
                                  LogStartAndFinishCall : Logs the start and
                                  finish call of the requests. NoLogCall :
                                  Disable request logging.
@@ -270,26 +270,26 @@ Flags:
                                  enable on all queries.
       --query-frontend.org-id-header=<http-header-name> ...
                                  Request header names used to identify the
-                                 source of slow queries (repeated flag). The
-                                 values of the header will be added to the org
-                                 id field in the slow query log. If multiple
-                                 headers match the request, the first matching
-                                 arg specified will take precedence. If no
-                                 headers match 'anonymous' will be used.
+                                 source of slow queries (repeated flag).
+                                 The values of the header will be added to
+                                 the org id field in the slow query log. If
+                                 multiple headers match the request, the first
+                                 matching arg specified will take precedence.
+                                 If no headers match 'anonymous' will be used.
       --query-frontend.vertical-shards=QUERY-FRONTEND.VERTICAL-SHARDS
-                                 Number of shards to use when distributing
-                                 shardable PromQL queries. For more details, you
-                                 can refer to the Vertical query sharding
-                                 proposal:
+                                 Number of shards to use when
+                                 distributing shardable PromQL queries.
+                                 For more details, you can refer to
+                                 the Vertical query sharding proposal:
                                  https://thanos.io/tip/proposals-accepted/202205-vertical-query-sharding.md
       --query-range.align-range-with-step
-                                 Mutate incoming queries to align their start
-                                 and end with their step for better
+                                 Mutate incoming queries to align their
+                                 start and end with their step for better
                                  cache-ability. Note: Grafana dashboards do that
                                  by default.
       --query-range.horizontal-shards=0
-                                 Split queries in this many requests when query
-                                 duration is below
+                                 Split queries in this many requests
+                                 when query duration is below
                                  query-range.max-split-interval.
       --query-range.max-query-length=0
                                  Limit the query time range (end - start time)
@@ -307,11 +307,11 @@ Flags:
                                  range longer than this value will be split in
                                  multiple requests of this length.
       --query-range.min-split-interval=0
-                                 Split query range requests above this interval
-                                 in query-range.horizontal-shards requests of
-                                 equal range. Using this parameter is not
-                                 allowed with query-range.split-interval. One
-                                 should also set
+                                 Split query range requests above this
+                                 interval in query-range.horizontal-shards
+                                 requests of equal range. Using
+                                 this parameter is not allowed with
+                                 query-range.split-interval. One should also set
                                  query-range.split-min-horizontal-shards to a
                                  value greater than 1 to enable splitting.
       --query-range.partial-response
@@ -342,9 +342,9 @@ Flags:
                                  configured.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Content of YAML file
-                                 with request logging configuration. See format
-                                 details:
+                                 flag (mutually exclusive). Content
+                                 of YAML file with request logging
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
@@ -352,12 +352,12 @@ Flags:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (mutually exclusive). Content of YAML file with
-                                 tracing configuration. See format details:
+                                 (mutually exclusive). Content of YAML file
+                                 with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                                 Path to YAML file with tracing configuration.
-                                 See format details:
+                                 Path to YAML file with tracing
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --version                  Show application version.
       --web.disable-cors         Whether to disable CORS headers to be set by
