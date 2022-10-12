@@ -13,7 +13,7 @@ import (
 // QueryAnalyzer is an analyzer which determines
 // whether a PromQL Query is shardable and using which labels.
 
-type Analyze interface {
+type Analyzer interface {
 	Analyze(string) (QueryAnalysis, error)
 }
 
