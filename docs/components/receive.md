@@ -140,7 +140,7 @@ write:
         samples_limit: 500
 ```
 
-**IMPORTANT**: this feature is experimental and a work-in-progres. It might change in the near future, i.e. configuration might move to a file (to allow easy configuration of different request limits per tenant) or its structure could change.
+**IMPORTANT**: this feature is experimental and a work-in-progress. It might change in the near future, i.e. configuration might move to a file (to allow easy configuration of different request limits per tenant) or its structure could change.
 
 ### Remote write request limits
 
@@ -343,6 +343,7 @@ Flags:
       --tsdb.allow-overlapping-blocks
                                  Allow overlapping blocks, which in turn enables
                                  vertical compaction and vertical query merge.
+                                 Does not do anything, enabled all the time.
       --tsdb.max-exemplars=0     Enables support for ingesting exemplars and
                                  sets the maximum number of exemplars that will
                                  be stored per tenant. In case the exemplar

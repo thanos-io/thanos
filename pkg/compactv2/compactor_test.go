@@ -669,7 +669,7 @@ func readBlockSeries(t *testing.T, bDir string) []seriesSamples {
 		testutil.Ok(t, indexr.Series(all.At(), &s.lset, &chks))
 
 		for _, c := range chks {
-			c.Chunk, err = chunkr.Chunk(c.Ref)
+			c.Chunk, err = chunkr.Chunk(c)
 			testutil.Ok(t, err)
 
 			var chk []sample
