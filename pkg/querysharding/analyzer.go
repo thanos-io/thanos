@@ -55,10 +55,10 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 		}
 	}
 
-	// Analyze if needed
+	// Analyze if needed.
 	analysis, err := a.analyzer.Analyze(query)
 
-	// Adding to cache
+	// Adding to cache.
 	_ = a.cache.Add(query, cachedValue{QueryAnalysis: analysis, err: err})
 
 	return analysis, err
