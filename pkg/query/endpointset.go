@@ -43,7 +43,7 @@ type GRPCEndpointSpec struct {
 	isStrictStatic bool
 }
 
-var externalLabelLimit = 1000
+const externalLabelLimit = 1000
 
 // NewGRPCEndpointSpec creates gRPC endpoint spec.
 // It uses InfoAPI to get Metadata.
