@@ -369,6 +369,8 @@ Flags:
                                  when the range parameters are not specified.
                                  The zero value means range covers the time
                                  since the beginning.
+      --query.metric-label=QUERY.METRIC-LABEL ...
+                                 Optional selection of metrics to be collected
       --query.partial-response   Enable partial response for queries if
                                  no partial_response param is specified.
                                  --no-query.partial-response for disabling.
