@@ -199,6 +199,7 @@ func newEndpointSetNodeCollector(requiredLabels ...string) *endpointSetNodeColle
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
 			requiredLabels, nil,
 		),
+		requiredLabels: requiredLabels,
 	}
 }
 
@@ -237,7 +238,17 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 			if storeType != nil {
 				storeTypeStr = storeType.String()
 			}
-			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), externalLabels, storeTypeStr)
+			// select only required labels
+			lbls := []string{}
+			for _, lbl := range c.requiredLabels {
+				switch lbl {
+				case "external_labels":
+					lbls = append(lbls, externalLabels)
+				case "store_type":
+					lbls = append(lbls, storeTypeStr)
+				}
+			}
+			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), lbls...)
 		}
 	}
 }
@@ -279,7 +290,7 @@ func NewEndpointSet(
 	endpointInfoTimeout time.Duration,
 	endpointMetricLabels ...string,
 ) *EndpointSet {
-	endpointsMetric := newEndpointSetNodeCollector()
+	endpointsMetric := newEndpointSetNodeCollector(endpointMetricLabels...)
 	if reg != nil {
 		reg.MustRegister(endpointsMetric)
 	}
