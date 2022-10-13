@@ -43,7 +43,7 @@ type GRPCEndpointSpec struct {
 	isStrictStatic bool
 }
 
-var externalLabelLimit = 1000
+const externalLabelLimit = 1000
 
 // NewGRPCEndpointSpec creates gRPC endpoint spec.
 // It uses InfoAPI to get Metadata.
@@ -238,7 +238,7 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 			if storeType != nil {
 				storeTypeStr = storeType.String()
 			}
-			// select only required labels
+			// Select only required labels.
 			lbls := []string{}
 			for _, lbl := range c.labels {
 				switch lbl {
