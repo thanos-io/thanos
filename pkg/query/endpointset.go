@@ -185,21 +185,21 @@ type endpointSetNodeCollector struct {
 	storePerExtLset map[string]int
 
 	connectionsDesc *prometheus.Desc
-	requiredLabels  []string
+	labels          []string
 }
 
-func newEndpointSetNodeCollector(requiredLabels ...string) *endpointSetNodeCollector {
-	if len(requiredLabels) == 0 {
-		requiredLabels = []string{"external_labels", "store_type"}
+func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
+	if len(labels) == 0 {
+		labels = []string{"external_labels", "store_type"}
 	}
 	return &endpointSetNodeCollector{
 		storeNodes: map[component.Component]map[string]int{},
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
-			requiredLabels, nil,
+			labels, nil,
 		),
-		requiredLabels: requiredLabels,
+		labels: labels,
 	}
 }
 
@@ -207,14 +207,14 @@ func (c *endpointSetNodeCollector) Update(nodes map[component.Component]map[stri
 	storeNodes := make(map[component.Component]map[string]int, len(nodes))
 	storePerExtLset := map[string]int{}
 
-	for k, v := range nodes {
-		storeNodes[k] = make(map[string]int, len(v))
-		for kk, vv := range v {
-			if len(kk) > externalLabelLimit {
-				kk = kk[:externalLabelLimit+1] + "}"
+	for storeType, occurrencesPerExtLset := range nodes {
+		storeNodes[storeType] = make(map[string]int, len(occurrencesPerExtLset))
+		for external_labels, occurrences := range occurrencesPerExtLset {
+			if len(external_labels) > externalLabelLimit {
+				external_labels = external_labels[:externalLabelLimit+1] + "}"
 			}
-			storePerExtLset[kk] += vv
-			storeNodes[k][kk] = vv
+			storePerExtLset[external_labels] += occurrences
+			storeNodes[storeType][external_labels] = occurrences
 		}
 	}
 
@@ -240,7 +240,7 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 			}
 			// select only required labels
 			lbls := []string{}
-			for _, lbl := range c.requiredLabels {
+			for _, lbl := range c.labels {
 				switch lbl {
 				case "external_labels":
 					lbls = append(lbls, externalLabels)
