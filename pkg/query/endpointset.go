@@ -185,15 +185,19 @@ type endpointSetNodeCollector struct {
 	storePerExtLset map[string]int
 
 	connectionsDesc *prometheus.Desc
+	requiredLabels  []string
 }
 
-func newEndpointSetNodeCollector() *endpointSetNodeCollector {
+func newEndpointSetNodeCollector(requiredLabels ...string) *endpointSetNodeCollector {
+	if len(requiredLabels) == 0 {
+		requiredLabels = []string{"external_labels", "store_type"}
+	}
 	return &endpointSetNodeCollector{
 		storeNodes: map[component.Component]map[string]int{},
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
-			[]string{"external_labels", "store_type"}, nil,
+			requiredLabels, nil,
 		),
 	}
 }
@@ -205,6 +209,9 @@ func (c *endpointSetNodeCollector) Update(nodes map[component.Component]map[stri
 	for k, v := range nodes {
 		storeNodes[k] = make(map[string]int, len(v))
 		for kk, vv := range v {
+			if len(kk) > externalLabelLimit {
+				kk = kk[:externalLabelLimit+1] + "}"
+			}
 			storePerExtLset[kk] += vv
 			storeNodes[k][kk] = vv
 		}
