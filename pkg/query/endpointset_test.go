@@ -386,7 +386,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 
 			discoveredEndpointAddr := endpoints.EndpointAddresses()
 			var endpointSet *EndpointSet
-			// specify only "store_type" to exclude "external_labels"
+			// Specify only "store_type" to exclude "external_labels".
 			if tc.name == "no external labels" {
 				endpointSet = makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now, "store_type")
 			} else {
@@ -397,7 +397,8 @@ func TestEndpointSetUpdate(t *testing.T) {
 			endpointSet.Update(context.Background())
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetEndpointStatus()))
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetStoreClients()))
-			// slow or unavailable endpoint should collect nothing
+
+			// Slow or unavailable endpoint should collect nothing.
 			if tc.name == "slow endpoint" || tc.name == "unavailable endpoint" {
 				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader("")))
 				return
@@ -423,11 +424,11 @@ func TestEndpointSetUpdate(t *testing.T) {
 			} else {
 				externalLabels = fmt.Sprintf(`a="b", addr=%q`, discoveredEndpointAddr[0])
 			}
-			// labels too long must be trimmed
+			// Labels too long must be trimmed.
 			if len(externalLabels) > externalLabelLimit {
 				externalLabels = externalLabels[:externalLabelLimit]
 			}
-			// add backslash escape for every quote character
+			// Add backslash escape for every quote character.
 			var lbl strings.Builder
 			for _, ch := range externalLabels {
 				if string(ch) == `"` {
