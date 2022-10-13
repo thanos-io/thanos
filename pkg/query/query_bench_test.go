@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
@@ -52,43 +53,53 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 	}
 
 	random := rand.New(rand.NewSource(120))
-	var resps []*storepb.SeriesResponse
+	var stores []storepb.StoreServer
 	var expectedSeries []labels.Labels
 	for j := 0; j < numOfReplicas; j++ {
+		resps := make([]*storepb.SeriesResponse, 0)
 		// Note 0 argument - this is because we want to have two replicas for the same time duration.
 		head, created := storetestutil.CreateHeadWithSeries(t, 0, storetestutil.HeadGenOptions{
 			TSDBDir:          filepath.Join(tmpDir, fmt.Sprintf("%d", j)),
 			SamplesPerSeries: samplesPerSeriesPerReplica,
 			Series:           seriesPerReplica,
 			Random:           random,
-			PrependLabels:    labels.FromStrings("a_replica", fmt.Sprintf("%d", j)), // a_ prefix so we keep sorted order.
+			AppendLabels:     labels.FromStrings("z_replica", fmt.Sprintf("%d", j)), // z_ prefix to keep replica label at the end.
 		})
 		testutil.Ok(t, head.Close())
 		for i := 0; i < len(created); i++ {
 			if !dedup || j == 0 {
 				lset := labelpb.ZLabelsToPromLabels(created[i].Labels).Copy()
 				if dedup {
-					lset = lset[1:]
+					lset = lset[:len(lset)-1]
 				}
 				expectedSeries = append(expectedSeries, lset)
 			}
 
 			resps = append(resps, storepb.NewSeriesResponse(created[i]))
 		}
-
+		stores = append(stores, &mockedStoreServer{responses: resps})
 	}
 
 	logger := log.NewNopLogger()
 	q := &querier{
 		ctx:                 context.Background(),
 		logger:              logger,
-		proxy:               &mockedStoreServer{responses: resps},
-		replicaLabels:       map[string]struct{}{"a_replica": {}},
+		proxy:               newProxyForStore(true, stores...),
+		replicaLabels:       []string{"z_replica"},
+		replicaLabelSet:     map[string]struct{}{"z_replica": {}},
 		deduplicate:         dedup,
 		selectGate:          gate.NewNoop(),
+		selectTimeout:       1 * time.Minute,
 		seriesStatsReporter: NoopSeriesStatsReporter,
 	}
-	testSelect(t, q, expectedSeries)
+	matchers := []*labels.Matcher{
+		{
+			Type:  labels.MatchRegexp,
+			Name:  "z_replica",
+			Value: ".+",
+		},
+	}
+	testSelect(t, q, expectedSeries, matchers)
 }
 
 type mockedStoreServer struct {
@@ -112,12 +123,12 @@ var (
 	testLset labels.Labels
 )
 
-func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels) {
+func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels, matchers []*labels.Matcher) {
 	t.Run("select", func(t testutil.TB) {
 		t.ResetTimer()
 
 		for i := 0; i < t.N(); i++ {
-			ss := q.Select(true, nil) // Select all.
+			ss := q.Select(true, nil, matchers...) // Select all.
 			testutil.Equals(t, 0, len(ss.Warnings()))
 
 			if t.IsBenchmark() {
@@ -150,6 +161,7 @@ func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels) {
 					}
 					testutil.Ok(t, iter.Err())
 				}
+
 				testutil.Equals(t, expectedSeries, gotSeries)
 			}
 			testutil.Ok(t, ss.Err())

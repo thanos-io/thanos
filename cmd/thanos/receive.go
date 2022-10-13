@@ -325,10 +325,11 @@ func runReceive(
 				if httpProbe.IsReady() {
 					minTime, maxTime := mts.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime:           minTime,
-						MaxTime:           maxTime,
-						SupportsSharding:  true,
-						SendsSortedSeries: true,
+						MinTime:                        minTime,
+						MaxTime:                        maxTime,
+						SupportsSharding:               true,
+						SendsSortedSeries:              true,
+						SendsSortedSeriesWithoutLabels: true,
 					}
 				}
 				return nil

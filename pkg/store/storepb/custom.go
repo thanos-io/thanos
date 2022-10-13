@@ -533,6 +533,14 @@ func (m *SeriesRequest) ToPromQL() string {
 	return m.QueryHints.toPromQL(m.Matchers)
 }
 
+func (m *SeriesRequest) SortWithoutLabelSet() map[string]struct{} {
+	ls := make(map[string]struct{}, len(m.SortWithoutLabels))
+	for _, l := range m.SortWithoutLabels {
+		ls[l] = struct{}{}
+	}
+	return ls
+}
+
 // IsSafeToExecute returns true if the function or aggregation from the query hint
 // can be safely executed by the underlying Prometheus instance without affecting the
 // result of the query.

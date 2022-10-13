@@ -27,7 +27,7 @@ import (
 	"github.com/prometheus/prometheus/util/gate"
 
 	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/dedup"
+	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -451,11 +451,17 @@ func TestQuerier_Select(t *testing.T) {
 			mint: 1, maxt: 300,
 			replicaLabels:   []string{"a"},
 			equivalentQuery: `{a=~"a|b|c"}`,
-
+			matchers: []*labels.Matcher{
+				{
+					Type:  labels.MatchRegexp,
+					Name:  "a",
+					Value: ".+",
+				},
+			},
 			expected: []series{
 				{
 					lset:    labels.FromStrings("a", "a"),
-					samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 6}, {7, 7}},
+					samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 66}, {7, 7}},
 				},
 				{
 					lset:    labels.FromStrings("a", "b"),
@@ -634,9 +640,11 @@ func TestQuerier_Select(t *testing.T) {
 				{dedup: true, expected: []series{tcase.expectedAfterDedup}},
 			} {
 				g := gate.New(2)
-				q := newQuerier(context.Background(), nil, tcase.mint, tcase.maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil, func(i storepb.SeriesStatsCounter) {})
-				t.Cleanup(func() { testutil.Ok(t, q.Close()) })
 
+				proxy := newProxyForStore(false, tcase.storeAPI)
+				q := newQuerier(context.Background(), nil, tcase.mint, tcase.maxt, tcase.replicaLabels, nil, proxy, sc.dedup, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
+
+				t.Cleanup(func() { testutil.Ok(t, q.Close()) })
 				t.Run(fmt.Sprintf("dedup=%v", sc.dedup), func(t *testing.T) {
 					t.Run("querier.Select", func(t *testing.T) {
 						res := q.Select(false, tcase.hints, tcase.matchers...)
@@ -675,6 +683,20 @@ func TestQuerier_Select(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newProxyForStore(storesWithSortedSeries bool, storeAPI ...storepb.StoreServer) *store.ProxyStore {
+	labelsFunc := func() []labelpb.ZLabelSet { return nil }
+	timeFunc := func() (int64, int64) { return math.MinInt64, math.MaxInt64 }
+	clientsFunc := func() []store.Client {
+		clients := make([]store.Client, 0, len(storeAPI))
+		for _, s := range storeAPI {
+			clients = append(clients, receive.NewLocalClient(storepb.ServerAsClient(s, 0), storesWithSortedSeries, labelsFunc, timeFunc))
+		}
+		return clients
+	}
+
+	return store.NewProxyStore(nil, nil, clientsFunc, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
 }
 
 func testSelectResponse(t *testing.T, expected []series, res storage.SeriesSet) {
@@ -863,7 +885,10 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 100 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, false, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
+
+		proxy := newProxyForStore(false, s)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, proxy, false, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
+
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -933,7 +958,10 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 5 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, true, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
+
+		proxy := newProxyForStore(false, s)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, proxy, true, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
+
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -987,71 +1015,6 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			}, vec)
 		})
 	})
-}
-
-func TestSortReplicaLabel(t *testing.T) {
-	tests := []struct {
-		input       []storepb.Series
-		exp         []storepb.Series
-		dedupLabels map[string]struct{}
-	}{
-		// 0 Single deduplication label.
-		{
-			input: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
-			},
-			exp: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "b", Value: "replica-1"}}},
-			},
-			dedupLabels: map[string]struct{}{"b": {}},
-		},
-		// 1 Multi deduplication labels.
-		{
-			input: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}, {Name: "c", Value: "4"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}, {Name: "c", Value: "3"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
-			},
-			exp: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}, {Name: "b1", Value: "replica-2"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "b", Value: "replica-1"}, {Name: "b1", Value: "replica-1"}}},
-			},
-			dedupLabels: map[string]struct{}{"b": {}, "b1": {}},
-		},
-		// Pushdown label at the end.
-		{
-			input: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-1"}, {Name: "c", Value: "4"}, {Name: dedup.PushdownMarker.Name, Value: dedup.PushdownMarker.Value}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "replica-2"}, {Name: "c", Value: "3"}}},
-			},
-			exp: []storepb.Series{
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "b", Value: "replica-2"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}, {Name: "b", Value: "replica-1"}}},
-				{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: dedup.PushdownMarker.Name, Value: dedup.PushdownMarker.Value}, {Name: "b", Value: "replica-1"}}},
-			},
-			dedupLabels: map[string]struct{}{"b": {}},
-		},
-	}
-	for _, test := range tests {
-		t.Run("", func(t *testing.T) {
-			sortDedupLabels(test.input, test.dedupLabels)
-			testutil.Equals(t, test.exp, test.input)
-		})
-	}
 }
 
 const hackyStaleMarker = float64(-99999999)

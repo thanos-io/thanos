@@ -241,6 +241,10 @@ func getResponses(storeClient store.Client, respCh chan<- *storepb.Series) error
 			return err
 		}
 
+		if resp.GetSeries() == nil {
+			continue
+		}
+
 		respCh <- resp.GetSeries()
 	}
 

@@ -93,16 +93,18 @@ func NewMultiTSDB(
 type localClient struct {
 	storepb.StoreClient
 
-	labelSetFunc  func() []labelpb.ZLabelSet
-	timeRangeFunc func() (int64, int64)
+	sendsSortedSeries bool
+	labelSetFunc      func() []labelpb.ZLabelSet
+	timeRangeFunc     func() (int64, int64)
 }
 
-func newLocalClient(
+func NewLocalClient(
 	c storepb.StoreClient,
+	sendsSortedSeries bool,
 	labelSetFunc func() []labelpb.ZLabelSet,
 	timeRangeFunc func() (int64, int64),
-) *localClient {
-	return &localClient{c, labelSetFunc, timeRangeFunc}
+) store.Client {
+	return &localClient{c, sendsSortedSeries, labelSetFunc, timeRangeFunc}
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
@@ -131,6 +133,10 @@ func (l *localClient) SupportsSharding() bool {
 
 func (l *localClient) SendsSortedSeries() bool {
 	return true
+}
+
+func (l *localClient) SendsSeriesSortedForDedup() bool {
+	return l.sendsSortedSeries
 }
 
 type tenant struct {
@@ -165,7 +171,8 @@ func (t *tenant) client() store.Client {
 
 	store := t.store()
 	client := storepb.ServerAsClient(store, 0)
-	return newLocalClient(client, store.LabelSet, store.TimeRange)
+
+	return NewLocalClient(client, true, store.LabelSet, store.TimeRange)
 }
 
 func (t *tenant) exemplars() *exemplars.TSDB {
