@@ -1076,7 +1076,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
+	sortWithoutLabelSet := req.SortWithoutLabelSet()
 	s.mtx.RLock()
+
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
@@ -1140,7 +1142,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				}
 
 				mtx.Lock()
-				res = append(res, part)
+				res = append(res, newSortedSeriesSet(part, sortWithoutLabelSet))
 				stats = stats.merge(pstats)
 				mtx.Unlock()
 
@@ -2873,4 +2875,29 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 // NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
 func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Bytes, error) {
 	return pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, maxChunkPoolBytes)
+}
+
+// sortedSeriesSet contains series whose labels are sorted
+// by moving ignoreLabelSet at the end.
+type sortedSeriesSet struct {
+	storepb.SeriesSet
+	ignoreLabelSet map[string]struct{}
+}
+
+func newSortedSeriesSet(seriesSet storepb.SeriesSet, ignoreLabelSet map[string]struct{}) storepb.SeriesSet {
+	if len(ignoreLabelSet) == 0 {
+		return seriesSet
+	}
+
+	return &sortedSeriesSet{
+		SeriesSet:      seriesSet,
+		ignoreLabelSet: ignoreLabelSet,
+	}
+}
+
+func (s *sortedSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
+	labelSet, chks := s.SeriesSet.At()
+
+	zlabels := labelpb.ZLabelsFromPromLabels(labelSet)
+	return labelpb.ZLabelsToPromLabels(stripLabels(zlabels, s.ignoreLabelSet)), chks
 }

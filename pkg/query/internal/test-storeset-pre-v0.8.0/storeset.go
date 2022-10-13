@@ -212,6 +212,10 @@ func (s *storeRef) SendsSortedSeries() bool {
 	return false
 }
 
+func (s *storeRef) SendsSeriesSortedForDedup() bool {
+	return false
+}
+
 func (s *storeRef) String() string {
 	mint, maxt := s.TimeRange()
 	return fmt.Sprintf(
