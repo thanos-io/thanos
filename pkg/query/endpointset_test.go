@@ -345,7 +345,26 @@ func TestEndpointSetUpdate(t *testing.T) {
 					InfoResponse: sidecarInfo,
 					extlsetFn: func(addr string) []labelpb.ZLabelSet {
 						sLabel := []string{}
-						for i := 0; i < 10; i++ {
+						for i := 0; i < 1000; i++ {
+							sLabel = append(sLabel, "lbl")
+							sLabel = append(sLabel, "val")
+						}
+						return labelpb.ZLabelSetsFromPromLabels(
+							labels.FromStrings(sLabel...),
+						)
+					},
+				},
+			},
+			expectedEndpoints: 1,
+		},
+		{
+			name: "no external labels",
+			endpoints: []testEndpointMeta{
+				{
+					InfoResponse: sidecarInfo,
+					extlsetFn: func(addr string) []labelpb.ZLabelSet {
+						sLabel := []string{}
+						for i := 0; i < 1000; i++ {
 							sLabel = append(sLabel, "lbl")
 							sLabel = append(sLabel, "val")
 						}
@@ -366,7 +385,13 @@ func TestEndpointSetUpdate(t *testing.T) {
 			defer endpoints.Close()
 
 			discoveredEndpointAddr := endpoints.EndpointAddresses()
-			endpointSet := makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now)
+			var endpointSet *EndpointSet
+			// specify only "store_type" to exclude "external_labels"
+			if tc.name == "no external labels" {
+				endpointSet = makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now, "store_type")
+			} else {
+				endpointSet = makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now)
+			}
 			defer endpointSet.Close()
 
 			endpointSet.Update(context.Background())
@@ -375,6 +400,19 @@ func TestEndpointSetUpdate(t *testing.T) {
 			// slow or unavailable endpoint should collect nothing
 			if tc.name == "slow endpoint" || tc.name == "unavailable endpoint" {
 				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader("")))
+				return
+			}
+
+			if tc.name == "no external labels" {
+				expectedMetrics := fmt.Sprintf(
+					`
+					# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
+					# TYPE thanos_store_nodes_grpc_connections gauge
+					thanos_store_nodes_grpc_connections{store_type="sidecar"} %d
+					`,
+					tc.expectedEndpoints,
+				)
+				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(expectedMetrics)))
 				return
 			}
 
@@ -1549,7 +1587,7 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 	testutil.Equals(t, `null`, string(b))
 }
 
-func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc) *EndpointSet {
+func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc, metricLabels ...string) *EndpointSet {
 	endpointSet := NewEndpointSet(now, nil, nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
@@ -1557,7 +1595,7 @@ func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc) 
 			}
 			return specs
 		},
-		testGRPCOpts, time.Minute, time.Second)
+		testGRPCOpts, time.Minute, time.Second, metricLabels...)
 	return endpointSet
 }
 

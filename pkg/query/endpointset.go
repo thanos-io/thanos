@@ -43,7 +43,7 @@ type GRPCEndpointSpec struct {
 	isStrictStatic bool
 }
 
-var externalLabelLimit = 200
+var externalLabelLimit = 1000
 
 // NewGRPCEndpointSpec creates gRPC endpoint spec.
 // It uses InfoAPI to get Metadata.
@@ -185,16 +185,21 @@ type endpointSetNodeCollector struct {
 	storePerExtLset map[string]int
 
 	connectionsDesc *prometheus.Desc
+	requiredLabels  []string
 }
 
-func newEndpointSetNodeCollector() *endpointSetNodeCollector {
+func newEndpointSetNodeCollector(requiredLabels ...string) *endpointSetNodeCollector {
+	if len(requiredLabels) == 0 {
+		requiredLabels = []string{"external_labels", "store_type"}
+	}
 	return &endpointSetNodeCollector{
 		storeNodes: map[component.Component]map[string]int{},
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
-			[]string{"external_labels", "store_type"}, nil,
+			requiredLabels, nil,
 		),
+		requiredLabels: requiredLabels,
 	}
 }
 
@@ -233,7 +238,17 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 			if storeType != nil {
 				storeTypeStr = storeType.String()
 			}
-			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), externalLabels, storeTypeStr)
+			// select only required labels
+			lbls := []string{}
+			for _, lbl := range c.requiredLabels {
+				switch lbl {
+				case "external_labels":
+					lbls = append(lbls, externalLabels)
+				case "store_type":
+					lbls = append(lbls, storeTypeStr)
+				}
+			}
+			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), lbls...)
 		}
 	}
 }
@@ -273,8 +288,9 @@ func NewEndpointSet(
 	dialOpts []grpc.DialOption,
 	unhealthyEndpointTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
+	endpointsMetricRequiredLabels ...string,
 ) *EndpointSet {
-	endpointsMetric := newEndpointSetNodeCollector()
+	endpointsMetric := newEndpointSetNodeCollector(endpointsMetricRequiredLabels...)
 	if reg != nil {
 		reg.MustRegister(endpointsMetric)
 	}
