@@ -108,6 +108,8 @@ func registerQuery(app *extkingpin.App) {
 	maxConcurrentSelects := cmd.Flag("query.max-concurrent-select", "Maximum number of select requests made concurrently per a query.").
 		Default("4").Int()
 
+	queryMetricLabels := cmd.Flag("query.metric-label", "Optional selection of metrics to be collected").Strings()
+
 	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
 		Strings()
 
@@ -275,6 +277,7 @@ func registerQuery(app *extkingpin.App) {
 			*dynamicLookbackDelta,
 			time.Duration(*defaultEvaluationInterval),
 			time.Duration(*storeResponseTimeout),
+			*queryMetricLabels,
 			*queryReplicaLabels,
 			selectorLset,
 			getFlagsMap(cmd.Flags()),
@@ -347,6 +350,7 @@ func runQuery(
 	dynamicLookbackDelta bool,
 	defaultEvaluationInterval time.Duration,
 	storeResponseTimeout time.Duration,
+	queryMetricLabels []string,
 	queryReplicaLabels []string,
 	selectorLset labels.Labels,
 	flagsMap map[string]string,
@@ -486,6 +490,7 @@ func runQuery(
 			dialOpts,
 			unhealthyStoreTimeout,
 			endpointInfoTimeout,
+			queryMetricLabels...,
 		)
 		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy))
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
