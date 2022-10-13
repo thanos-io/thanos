@@ -43,6 +43,8 @@ type GRPCEndpointSpec struct {
 	isStrictStatic bool
 }
 
+var externalLabelLimit = 1000
+
 // NewGRPCEndpointSpec creates gRPC endpoint spec.
 // It uses InfoAPI to get Metadata.
 func NewGRPCEndpointSpec(addr string, isStrictStatic bool) *GRPCEndpointSpec {
@@ -268,6 +270,7 @@ func NewEndpointSet(
 	dialOpts []grpc.DialOption,
 	unhealthyEndpointTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
+	endpointMetricLabels ...string,
 ) *EndpointSet {
 	endpointsMetric := newEndpointSetNodeCollector()
 	if reg != nil {

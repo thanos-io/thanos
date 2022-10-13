@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/pkg/errors"
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -336,6 +338,44 @@ func TestEndpointSetUpdate(t *testing.T) {
 			strict:            true,
 			expectedEndpoints: 1,
 		},
+		{
+			name: "long external labels",
+			endpoints: []testEndpointMeta{
+				{
+					InfoResponse: sidecarInfo,
+					extlsetFn: func(addr string) []labelpb.ZLabelSet {
+						sLabel := []string{}
+						for i := 0; i < 1000; i++ {
+							sLabel = append(sLabel, "lbl")
+							sLabel = append(sLabel, "val")
+						}
+						return labelpb.ZLabelSetsFromPromLabels(
+							labels.FromStrings(sLabel...),
+						)
+					},
+				},
+			},
+			expectedEndpoints: 1,
+		},
+		{
+			name: "no external labels",
+			endpoints: []testEndpointMeta{
+				{
+					InfoResponse: sidecarInfo,
+					extlsetFn: func(addr string) []labelpb.ZLabelSet {
+						sLabel := []string{}
+						for i := 0; i < 1000; i++ {
+							sLabel = append(sLabel, "lbl")
+							sLabel = append(sLabel, "val")
+						}
+						return labelpb.ZLabelSetsFromPromLabels(
+							labels.FromStrings(sLabel...),
+						)
+					},
+				},
+			},
+			expectedEndpoints: 1,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -345,12 +385,66 @@ func TestEndpointSetUpdate(t *testing.T) {
 			defer endpoints.Close()
 
 			discoveredEndpointAddr := endpoints.EndpointAddresses()
-			endpointSet := makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now)
+			var endpointSet *EndpointSet
+			// specify only "store_type" to exclude "external_labels"
+			if tc.name == "no external labels" {
+				endpointSet = makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now, "store_type")
+			} else {
+				endpointSet = makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now)
+			}
 			defer endpointSet.Close()
 
 			endpointSet.Update(context.Background())
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetEndpointStatus()))
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetStoreClients()))
+			// slow or unavailable endpoint should collect nothing
+			if tc.name == "slow endpoint" || tc.name == "unavailable endpoint" {
+				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader("")))
+				return
+			}
+
+			if tc.name == "no external labels" {
+				expectedMetrics := fmt.Sprintf(
+					`
+					# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
+					# TYPE thanos_store_nodes_grpc_connections gauge
+					thanos_store_nodes_grpc_connections{store_type="sidecar"} %d
+					`,
+					tc.expectedEndpoints,
+				)
+				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(expectedMetrics)))
+				return
+			}
+
+			var externalLabels string
+			if tc.name == "long external labels" {
+				externalLabels = strings.Repeat(`lbl="val", `, 1000)
+				externalLabels = externalLabels[:len(externalLabels)-2]
+			} else {
+				externalLabels = fmt.Sprintf(`a="b", addr=%q`, discoveredEndpointAddr[0])
+			}
+			// labels too long must be trimmed
+			if len(externalLabels) > externalLabelLimit {
+				externalLabels = externalLabels[:externalLabelLimit]
+			}
+			// add backslash escape for every quote character
+			var lbl strings.Builder
+			for _, ch := range externalLabels {
+				if string(ch) == `"` {
+					lbl.WriteString(`\`)
+				}
+				lbl.WriteRune(ch)
+			}
+			expectedMetrics := fmt.Sprintf(
+				`
+				# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
+				# TYPE thanos_store_nodes_grpc_connections gauge
+				thanos_store_nodes_grpc_connections{external_labels="{%s}",store_type="sidecar"} %d
+				`,
+				lbl.String(),
+				tc.expectedEndpoints,
+			)
+			testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(expectedMetrics)))
 		})
 	}
 }
@@ -576,7 +670,7 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 	wg.Wait()
 }
 
-func TestEndpointSet_Update(t *testing.T) {
+func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
 		{
 			InfoResponse: sidecarInfo,
@@ -1493,7 +1587,7 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 	testutil.Equals(t, `null`, string(b))
 }
 
-func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc) *EndpointSet {
+func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc, metricLabels ...string) *EndpointSet {
 	endpointSet := NewEndpointSet(now, nil, nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
@@ -1501,7 +1595,7 @@ func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc) 
 			}
 			return specs
 		},
-		testGRPCOpts, time.Minute, time.Second)
+		testGRPCOpts, time.Minute, time.Second, metricLabels...)
 	return endpointSet
 }
 
