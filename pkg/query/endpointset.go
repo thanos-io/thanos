@@ -775,6 +775,17 @@ func (er *endpointRef) SendsSortedSeries() bool {
 	return er.metadata.Store.SendsSortedSeries
 }
 
+func (er *endpointRef) SendsSeriesSortedForDedup() bool {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	if er.metadata == nil || er.metadata.Store == nil {
+		return false
+	}
+
+	return er.metadata.Store.SendsSortedSeriesWithoutLabels
+}
+
 func (er *endpointRef) String() string {
 	mint, maxt := er.TimeRange()
 	return fmt.Sprintf(

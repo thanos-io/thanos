@@ -180,6 +180,10 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 	iResp := (*h)[i].rs.At()
 	jResp := (*h)[j].rs.At()
 
+	return compareResponses(iResp, jResp)
+}
+
+func compareResponses(iResp *storepb.SeriesResponse, jResp *storepb.SeriesResponse) bool {
 	if iResp.GetSeries() != nil && jResp.GetSeries() != nil {
 		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
 		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)

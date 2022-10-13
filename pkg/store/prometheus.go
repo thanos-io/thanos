@@ -30,6 +30,9 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
@@ -39,8 +42,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
@@ -174,8 +175,11 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		}
 	}
 
+	sortSeriesSet := sortRequired(r.SortWithoutLabelSet(), labelsToMap(extLset))
+	sortedSeriesSrv := newSortedSeriesServer(s, r.SortWithoutLabelSet(), true, sortSeriesSet)
+
 	if r.SkipChunks {
-		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, matchers, r.MinTime, r.MaxTime)
+		labelMaps, err := p.client.SeriesInGRPC(sortedSeriesSrv.Context(), p.base, matchers, r.MinTime, r.MaxTime)
 		if err != nil {
 			return err
 		}
@@ -188,7 +192,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			sort.Slice(lset, func(i, j int) bool {
 				return lset[i].Name < lset[j].Name
 			})
-			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
+			if err = sortedSeriesSrv.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
 				return err
 			}
 		}
@@ -199,7 +203,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	defer shardMatcher.Close()
 
 	if r.QueryHints != nil && r.QueryHints.IsSafeToExecute() && !shardMatcher.IsSharded() {
-		return p.queryPrometheus(s, r)
+		return p.queryPrometheus(sortedSeriesSrv, r)
 	}
 
 	q := &prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
@@ -221,7 +225,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		q.Matchers = append(q.Matchers, pm)
 	}
 
-	queryPrometheusSpan, ctx := tracing.StartSpan(s.Context(), "query_prometheus")
+	queryPrometheusSpan, ctx := tracing.StartSpan(sortedSeriesSrv.Context(), "query_prometheus")
 	queryPrometheusSpan.SetTag("query.request", q.String())
 
 	httpResp, err := p.startPromRemoteRead(ctx, q)
@@ -234,13 +238,13 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	// remote read.
 	contentType := httpResp.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "application/x-protobuf") {
-		return p.handleSampledPrometheusResponse(s, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
+		return p.handleSampledPrometheusResponse(sortedSeriesSrv, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
 	}
 
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
-	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
+	return p.handleStreamedPrometheusResponse(sortedSeriesSrv, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
 }
 
 func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *storepb.SeriesRequest) error {
@@ -311,7 +315,7 @@ func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *store
 }
 
 func (p *PrometheusStore) handleSampledPrometheusResponse(
-	s storepb.Store_SeriesServer,
+	s *sortedSeriesServer,
 	httpResp *http.Response,
 	querySpan tracing.Span,
 	extLset labels.Labels,
@@ -357,11 +361,11 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 		}
 	}
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_SAMPLED request.", "series", len(resp.Results[0].Timeseries))
-	return nil
+	return s.Flush()
 }
 
 func (p *PrometheusStore) handleStreamedPrometheusResponse(
-	s storepb.Store_SeriesServer,
+	s *sortedSeriesServer,
 	shardMatcher *storepb.ShardMatcher,
 	httpResp *http.Response,
 	querySpan tracing.Span,
@@ -452,7 +456,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	querySpan.SetTag("processed.bytes", bodySizer.BytesCount())
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_STREAMED_XOR_CHUNKS request.", "frames", framesNum)
 
-	return nil
+	return s.Flush()
 }
 
 type BytesCounter struct {

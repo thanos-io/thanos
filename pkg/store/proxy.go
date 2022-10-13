@@ -49,11 +49,16 @@ type Client interface {
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
 
+	// Deprecated: Use SendsSeriesSortedForDedup.
 	// SendsSortedSeries returns true if the underlying store sends series sorded by
 	// their labels.
+	SendsSortedSeries() bool
+
+	// SendsSeriesSortedForDedup returns true if a store sends series sorted without
+	// taking replica labels into account.
 	// The field can be used to indicate to the querier whether it needs to sort
 	// received series before deduplication.
-	SendsSortedSeries() bool
+	SendsSeriesSortedForDedup() bool
 
 	// String returns the string representation of the store client.
 	String() string
@@ -264,6 +269,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
 		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		ShardInfo:               originalRequest.ShardInfo,
+		SortWithoutLabels:       originalRequest.SortWithoutLabels,
 	}
 
 	stores := []Client{}
@@ -287,19 +293,29 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		return nil
 	}
 
-	storeResponses := make([]respSet, 0, len(stores))
+	sortSeriesSet := false
+	for _, st := range stores {
+		if !st.SendsSeriesSortedForDedup() {
+			sortSeriesSet = true
+			level.Warn(reqLogger).Log("msg", "store sends unsorted data hence falling back to eager retrieval && explicit sorting; please update Thanos", "st", st.String())
+			break
+		}
+	}
 
+	sortLabels := sortSeriesSet
+	sortedSeriesSrv := newSortedSeriesServer(srv, r.SortWithoutLabelSet(), sortLabels, sortSeriesSet)
+	storeResponses := make([]respSet, 0, len(stores))
 	for _, st := range stores {
 		st := st
 
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
+		respSet, err := newAsyncRespSet(sortedSeriesSrv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
 			if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
-				if err := srv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
+				if err := sortedSeriesSrv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
 					return err
 				}
 				continue
@@ -322,12 +338,12 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			return status.Error(codes.Aborted, resp.GetWarning())
 		}
 
-		if err := srv.Send(resp); err != nil {
+		if err := sortedSeriesSrv.Send(resp); err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 		}
 	}
 
-	return nil
+	return sortedSeriesSrv.Flush()
 }
 
 // storeMatches returns boolean if the given store may hold data for the given label matchers, time ranges and debug store matches gathered from context.

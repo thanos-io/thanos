@@ -1076,7 +1076,19 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
+	sortWithoutLabelSet := req.SortWithoutLabelSet()
 	s.mtx.RLock()
+	sortSeries := false
+	for _, bs := range s.blockSets {
+		if sortRequired(sortWithoutLabelSet, labelsToMap(bs.labels)) {
+			sortSeries = true
+			break
+		}
+	}
+
+	// Label from individual series are already sorted by wrapping responses in sortedSeriesSet.
+	// Because of that, we can set the sortLabels argument to false and save some CPU cycles.
+	sortedSeriesSrv := newSortedSeriesServer(srv, sortWithoutLabelSet, false, sortSeries)
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
@@ -1140,7 +1152,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				}
 
 				mtx.Lock()
-				res = append(res, part)
+				res = append(res, newSortedSeriesSet(part, sortWithoutLabelSet))
 				stats = stats.merge(pstats)
 				mtx.Unlock()
 
@@ -1223,7 +1235,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
 			}
 			series.Labels = labelpb.ZLabelsFromPromLabels(lset)
-			if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
+			if err = sortedSeriesSrv.Send(storepb.NewSeriesResponse(&series)); err != nil {
 				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 				return
 			}
@@ -1246,13 +1258,17 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			return
 		}
 
-		if err = srv.Send(storepb.NewHintsSeriesResponse(anyHints)); err != nil {
+		if err = sortedSeriesSrv.Send(storepb.NewHintsSeriesResponse(anyHints)); err != nil {
 			err = status.Error(codes.Unknown, errors.Wrap(err, "send series response hints").Error())
 			return
 		}
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	return sortedSeriesSrv.Flush()
 }
 
 func chunksSize(chks []storepb.AggrChunk) (size int) {
@@ -2873,4 +2889,39 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 // NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
 func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Bytes, error) {
 	return pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, maxChunkPoolBytes)
+}
+
+// sortedSeriesSet contains series whose labels are sorted
+// by moving ignoreLabelSet at the end.
+type sortedSeriesSet struct {
+	storepb.SeriesSet
+	ignoreLabelSet map[string]struct{}
+}
+
+func newSortedSeriesSet(seriesSet storepb.SeriesSet, ignoreLabelSet map[string]struct{}) storepb.SeriesSet {
+	if len(ignoreLabelSet) == 0 {
+		return seriesSet
+	}
+
+	return &sortedSeriesSet{
+		SeriesSet:      seriesSet,
+		ignoreLabelSet: ignoreLabelSet,
+	}
+}
+
+func (s *sortedSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
+	lbls, chks := s.SeriesSet.At()
+
+	sort.Slice(lbls, func(i, j int) bool {
+		if _, ok := s.ignoreLabelSet[lbls[i].Name]; ok {
+			return false
+		}
+		if _, ok := s.ignoreLabelSet[lbls[j].Name]; ok {
+			return true
+		}
+
+		return lbls[i].Name < lbls[j].Name
+	})
+
+	return lbls, chks
 }

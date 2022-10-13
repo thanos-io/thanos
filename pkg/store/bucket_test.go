@@ -1861,6 +1861,174 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	}
 }
 
+func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
+	tests := map[string]struct {
+		series         [][]labels.Labels
+		replicaLabels  []string
+		expectedSeries []labels.Labels
+	}{
+		"use TSDB label as replica label": {
+			series: [][]labels.Labels{
+				{
+					labels.FromStrings("a", "1", "replica", "1", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "1", "z", "2"),
+					labels.FromStrings("a", "1", "replica", "2", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "2", "z", "2"),
+					labels.FromStrings("a", "2", "replica", "1", "z", "1"),
+					labels.FromStrings("a", "2", "replica", "2", "z", "1"),
+				},
+				{
+					labels.FromStrings("a", "1", "replica", "3", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "3", "z", "2"),
+					labels.FromStrings("a", "2", "replica", "3", "z", "1"),
+				},
+			},
+			replicaLabels: []string{"replica"},
+			expectedSeries: []labels.Labels{
+				unsortedLabelsFromStrings("a", "1", "ext1", "0", "z", "1", "replica", "1"),
+				unsortedLabelsFromStrings("a", "1", "ext1", "0", "z", "1", "replica", "2"),
+				unsortedLabelsFromStrings("a", "1", "ext1", "0", "z", "2", "replica", "1"),
+				unsortedLabelsFromStrings("a", "1", "ext1", "0", "z", "2", "replica", "2"),
+				unsortedLabelsFromStrings("a", "1", "ext1", "1", "z", "1", "replica", "3"),
+				unsortedLabelsFromStrings("a", "1", "ext1", "1", "z", "2", "replica", "3"),
+				unsortedLabelsFromStrings("a", "2", "ext1", "0", "z", "1", "replica", "1"),
+				unsortedLabelsFromStrings("a", "2", "ext1", "0", "z", "1", "replica", "2"),
+				unsortedLabelsFromStrings("a", "2", "ext1", "1", "z", "1", "replica", "3"),
+			},
+		},
+		"use external label as replica label": {
+			series: [][]labels.Labels{
+				{
+					labels.FromStrings("a", "1", "replica", "1", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "1", "z", "2"),
+					labels.FromStrings("a", "1", "replica", "2", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "2", "z", "2"),
+				},
+				{
+					labels.FromStrings("a", "1", "replica", "1", "z", "1"),
+					labels.FromStrings("a", "1", "replica", "1", "z", "2"),
+				},
+			},
+			replicaLabels: []string{"ext1"},
+			expectedSeries: []labels.Labels{
+				unsortedLabelsFromStrings("a", "1", "replica", "1", "z", "1", "ext1", "0"),
+				unsortedLabelsFromStrings("a", "1", "replica", "1", "z", "1", "ext1", "1"),
+
+				unsortedLabelsFromStrings("a", "1", "replica", "1", "z", "2", "ext1", "0"),
+				unsortedLabelsFromStrings("a", "1", "replica", "1", "z", "2", "ext1", "1"),
+
+				unsortedLabelsFromStrings("a", "1", "replica", "2", "z", "1", "ext1", "0"),
+				unsortedLabelsFromStrings("a", "1", "replica", "2", "z", "2", "ext1", "0"),
+			},
+		},
+	}
+
+	for testName, testData := range tests {
+		t.Run(testName, func(t *testing.T) {
+			tb := testutil.NewTB(t)
+
+			tmpDir := t.TempDir()
+
+			bktDir := filepath.Join(tmpDir, "bucket")
+			bkt, err := filesystem.NewBucket(bktDir)
+			testutil.Ok(t, err)
+			defer testutil.Ok(t, bkt.Close())
+
+			instrBkt := objstore.WithNoopInstr(bkt)
+			logger := log.NewNopLogger()
+
+			for i, series := range testData.series {
+				replicaVal := strconv.Itoa(i)
+				head := uploadSeriesToBucket(t, bkt, replicaVal, filepath.Join(tmpDir, replicaVal), series)
+				defer testutil.Ok(t, head.Close())
+			}
+
+			// Instance a real bucket store we'll use to query the series.
+			fetcher, err := block.NewMetaFetcher(logger, 10, instrBkt, tmpDir, nil, nil)
+			testutil.Ok(tb, err)
+
+			indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, storecache.InMemoryIndexCacheConfig{})
+			testutil.Ok(tb, err)
+
+			store, err := NewBucketStore(
+				instrBkt,
+				fetcher,
+				tmpDir,
+				NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
+				NewSeriesLimiterFactory(0),
+				NewGapBasedPartitioner(PartitionerMaxGapSize),
+				10,
+				false,
+				DefaultPostingOffsetInMemorySampling,
+				true,
+				false,
+				0,
+				WithLogger(logger),
+				WithIndexCache(indexCache),
+			)
+			testutil.Ok(tb, err)
+			testutil.Ok(tb, store.SyncBlocks(context.Background()))
+
+			req := &storepb.SeriesRequest{
+				MinTime: math.MinInt,
+				MaxTime: math.MaxInt64,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "a", Value: ".+"},
+				},
+				SortWithoutLabels: testData.replicaLabels,
+			}
+
+			srv := newStoreSeriesServer(context.Background())
+			err = store.Series(req, srv)
+			testutil.Ok(t, err)
+			testutil.Assert(t, len(srv.SeriesSet) == len(testData.expectedSeries))
+
+			var response []labels.Labels
+			for _, respSeries := range srv.SeriesSet {
+				promLabels := labelpb.ZLabelsToPromLabels(respSeries.Labels)
+				response = append(response, promLabels)
+			}
+
+			testutil.Equals(t, testData.expectedSeries, response)
+		})
+	}
+}
+
+func uploadSeriesToBucket(t *testing.T, bkt *filesystem.Bucket, replica string, path string, series []labels.Labels) *tsdb.Head {
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = filepath.Join(path, "block")
+
+	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+	testutil.Ok(t, err)
+
+	for _, s := range series {
+		for ts := int64(0); ts < 100; ts++ {
+			// Appending a single sample is very unoptimised, but guarantees each chunk is always MaxSamplesPerChunk
+			// (except the last one, which could be smaller).
+			app := h.Appender(context.Background())
+			_, err := app.Append(0, s, ts, float64(ts))
+			testutil.Ok(t, err)
+			testutil.Ok(t, app.Commit())
+		}
+	}
+
+	blk := createBlockFromHead(t, headOpts.ChunkDirRoot, h)
+
+	thanosMeta := metadata.Thanos{
+		Labels:     labels.Labels{{Name: "ext1", Value: replica}}.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}
+
+	_, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(headOpts.ChunkDirRoot, blk.String()), thanosMeta, nil)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, block.Upload(context.Background(), log.NewNopLogger(), bkt, filepath.Join(headOpts.ChunkDirRoot, blk.String()), metadata.NoneFunc))
+	testutil.Ok(t, err)
+
+	return h
+}
+
 func mustMarshalAny(pb proto.Message) *types.Any {
 	out, err := types.MarshalAny(pb)
 	if err != nil {

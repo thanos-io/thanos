@@ -40,6 +40,7 @@ type TSDBStore struct {
 	db               TSDBReader
 	component        component.StoreAPI
 	extLset          labels.Labels
+	extLabelsMap     map[string]struct{}
 	buffers          sync.Pool
 	maxBytesPerFrame int
 }
@@ -67,6 +68,7 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 		db:               db,
 		component:        component,
 		extLset:          extLset,
+		extLabelsMap:     labelsToMap(extLset),
 		maxBytesPerFrame: RemoteReadFrameLimit,
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
@@ -146,6 +148,9 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
 	}
 
+	sortSeriesSet := sortRequired(r.SortWithoutLabelSet(), s.extLabelsMap)
+	sortedSeriesSrv := newSortedSeriesServer(srv, r.SortWithoutLabelSet(), true, sortSeriesSet)
+
 	q, err := s.db.ChunkQuerier(context.Background(), r.MinTime, r.MaxTime)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
@@ -173,7 +178,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 
 		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
 		if r.SkipChunks {
-			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
+			if err := sortedSeriesSrv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
 			}
 			continue
@@ -211,7 +216,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 			if frameBytesLeft > 0 && isNext {
 				continue
 			}
-			if err := srv.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: storeSeries.Labels, Chunks: seriesChunks})); err != nil {
+			if err := sortedSeriesSrv.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: storeSeries.Labels, Chunks: seriesChunks})); err != nil {
 				return status.Error(codes.Aborted, err.Error())
 			}
 
@@ -229,11 +234,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		return status.Error(codes.Internal, err.Error())
 	}
 	for _, w := range set.Warnings() {
-		if err := srv.Send(storepb.NewWarnSeriesResponse(w)); err != nil {
+		if err := sortedSeriesSrv.Send(storepb.NewWarnSeriesResponse(w)); err != nil {
 			return status.Error(codes.Aborted, err.Error())
 		}
 	}
-	return nil
+	return sortedSeriesSrv.Flush()
 }
 
 // LabelNames returns all known label names constrained with the given matchers.
@@ -303,4 +308,12 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 	}
 
 	return &storepb.LabelValuesResponse{Values: res}, nil
+}
+
+func labelsToMap(lset labels.Labels) map[string]struct{} {
+	r := make(map[string]struct{}, len(lset))
+	for _, l := range lset {
+		r[l.Name] = struct{}{}
+	}
+	return r
 }

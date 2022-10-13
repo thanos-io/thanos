@@ -62,6 +62,10 @@ func (c testClient) SendsSortedSeries() bool {
 	return false
 }
 
+func (c testClient) SendsSeriesSortedForDedup() bool {
+	return false
+}
+
 func (c testClient) String() string {
 	return "test"
 }
