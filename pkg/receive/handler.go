@@ -17,6 +17,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/api"
+	statusapi "github.com/thanos-io/thanos/pkg/api/status"
+	"github.com/thanos-io/thanos/pkg/logging"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -34,10 +38,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/thanos-io/thanos/pkg/api"
-	statusapi "github.com/thanos-io/thanos/pkg/api/status"
-	"github.com/thanos-io/thanos/pkg/logging"
 
 	"github.com/thanos-io/thanos/pkg/errutil"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -125,8 +125,6 @@ type Handler struct {
 	writeTimeseriesTotal *prometheus.HistogramVec
 
 	limiter *limiter
-	reqPool *requestPool
-	pool    *bytesPool
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -146,8 +144,6 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		options:      o,
 		peers:        newPeerGroup(o.DialOpts...),
 		receiverMode: o.ReceiverMode,
-		reqPool:      newRequestPool(),
-		pool:         newBytesPool(),
 		expBackoff: backoff.Backoff{
 			Factor: 2,
 			Min:    100 * time.Millisecond,
@@ -435,8 +431,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	requestLimiter := h.limiter.requestLimiter
 	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
-	bodyBuf := h.pool.get()
-	compressed := bytes.NewBuffer(*bodyBuf)
+	compressed := bytes.Buffer{}
 	if r.ContentLength >= 0 {
 		if !requestLimiter.AllowSizeBytes(tenant, r.ContentLength) {
 			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
@@ -446,20 +441,17 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		compressed.Grow(512)
 	}
-	_, err = io.Copy(compressed, r.Body)
+	_, err = io.Copy(&compressed, r.Body)
 	if err != nil {
 		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
 	}
-
-	decodeBuf := h.pool.get()
-	reqBuf, err := s2.Decode(*decodeBuf, compressed.Bytes())
+	reqBuf, err := s2.Decode(nil, compressed.Bytes())
 	if err != nil {
 		level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
 		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
 		return
 	}
-	h.pool.put(bodyBuf)
 
 	if !requestLimiter.AllowSizeBytes(tenant, int64(len(reqBuf))) {
 		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
@@ -469,12 +461,11 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
 	// from the whole request. Ensure that we always copy those when we want to
 	// store them for longer time.
-	wreq := h.reqPool.get()
-	if err := proto.Unmarshal(reqBuf, wreq); err != nil {
+	var wreq prompb.WriteRequest
+	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	h.pool.put(decodeBuf)
 
 	rep := uint64(0)
 	// If the header is empty, we assume the request is not yet replicated.
@@ -513,14 +504,14 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply relabeling configs.
-	h.relabel(wreq)
+	h.relabel(&wreq)
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
 		return
 	}
 
 	responseStatusCode := http.StatusOK
-	if err = h.handleRequest(ctx, rep, tenant, wreq); err != nil {
+	if err = h.handleRequest(ctx, rep, tenant, &wreq); err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
 		switch determineWriteErrorCause(err, 1) {
 		case errNotReady:
@@ -552,7 +543,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *prompb.WriteRequest) error {
 	span, ctx := tracing.StartSpan(ctx, "receive_fanout_forward")
 	defer span.Finish()
-	defer h.reqPool.put(wreq)
 
 	// It is possible that hashring is ready in testReady() but unready now,
 	// so need to lock here.
@@ -578,7 +568,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 		}
 		key := endpointReplica{endpoint: endpoint, replica: r}
 		if _, ok := wreqs[key]; !ok {
-			wreqs[key] = h.reqPool.get()
+			wreqs[key] = &prompb.WriteRequest{}
 		}
 		wr := wreqs[key]
 		wr.Timeseries = append(wr.Timeseries, wreq.Timeseries[i])
@@ -600,10 +590,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 
 	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
 	defer func() {
-		for _, w := range wreqs {
-			h.reqPool.put(w)
-		}
-
 		if errs.Err() != nil {
 			// NOTICE: The cancel function is not used on all paths intentionally,
 			// if there is no error when quorum successThreshold is reached,
@@ -821,7 +807,9 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 			}
 			replicatedRequest, ok := replicatedRequests[er]
 			if !ok {
-				replicatedRequest = h.reqPool.get()
+				replicatedRequest = &prompb.WriteRequest{
+					Timeseries: make([]prompb.TimeSeries, 0),
+				}
 				replicatedRequests[er] = replicatedRequest
 			}
 			replicatedRequest.Timeseries = append(replicatedRequest.Timeseries, ts)
