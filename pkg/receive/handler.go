@@ -607,7 +607,15 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		tLogger = log.With(h.logger, logTags)
 	}
 
-	ec := make(chan error)
+	// Create channel to send errors together with replica on which it occurred.
+	ec := make(chan errWithReplicaFunc)
+
+	// replicaGroupReqs counts the number of requests that will be made on behalf
+	// on each replica. This is used to determine write success.
+	replicaGroupReqs := make([]int, h.options.ReplicationFactor)
+	for er := range wreqs {
+		replicaGroupReqs[er.replica.n]++
+	}
 
 	var wg sync.WaitGroup
 	for er := range wreqs {
@@ -629,12 +637,12 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 				})
 				if err != nil {
 					h.replications.WithLabelValues(labelError).Inc()
-					ec <- errors.Wrapf(err, "replicate write request for endpoint %v", endpoint)
+					sendErrWithReplica(ec, r.n, errors.Wrapf(err, "replicate write request for endpoint %v", endpoint))
 					return
 				}
 
 				h.replications.WithLabelValues(labelSuccess).Inc()
-				ec <- nil
+				sendErrWithReplica(ec, r.n, nil)
 			}(endpoint)
 
 			continue
@@ -658,10 +666,10 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
 					// To avoid breaking the counting logic, we need to flatten the error.
 					level.Debug(tLogger).Log("msg", "local tsdb write failed", "err", err.Error())
-					ec <- errors.Wrapf(determineWriteErrorCause(err, 1), "store locally for endpoint %v", endpoint)
+					sendErrWithReplica(ec, r.n, errors.Wrapf(determineWriteErrorCause(err, 1), "store locally for endpoint %v", endpoint))
 					return
 				}
-				ec <- nil
+				sendErrWithReplica(ec, r.n, nil)
 			}(endpoint)
 
 			continue
@@ -686,7 +694,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 
 			cl, err = h.peers.get(fctx, endpoint)
 			if err != nil {
-				ec <- errors.Wrapf(err, "get peer connection for endpoint %v", endpoint)
+				sendErrWithReplica(ec, r.n, errors.Wrapf(err, "get peer connection for endpoint %v", endpoint))
 				return
 			}
 
@@ -695,7 +703,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 			if ok {
 				if time.Now().Before(b.nextAllowed) {
 					h.mtx.RUnlock()
-					ec <- errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpoint)
+					sendErrWithReplica(ec, r.n, errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpoint))
 					return
 				}
 			}
@@ -727,14 +735,14 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 						h.mtx.Unlock()
 					}
 				}
-				ec <- errors.Wrapf(err, "forwarding request to endpoint %v", endpoint)
+				sendErrWithReplica(ec, r.n, errors.Wrapf(err, "forwarding request to endpoint %v", endpoint))
 				return
 			}
 			h.mtx.Lock()
 			delete(h.peerStates, endpoint)
 			h.mtx.Unlock()
 
-			ec <- nil
+			sendErrWithReplica(ec, r.n, nil)
 		}(endpoint)
 	}
 
@@ -747,7 +755,8 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 	// This is needed if context is canceled or if we reached success of fail quorum faster.
 	defer func() {
 		go func() {
-			for err := range ec {
+			for errReplicaFn := range ec {
+				_, err := errReplicaFn()
 				if err != nil {
 					level.Debug(tLogger).Log("msg", "request failed, but not needed to achieve quorum", "err", err)
 				}
@@ -755,26 +764,46 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		}()
 	}()
 
-	var success int
+	var (
+		// success counts how many requests per replica have succedeed.
+		success = make([]int, h.options.ReplicationFactor)
+		// replicaMultiError contains all requests errors per replica.
+		replicaMultiError = make([]errutil.MultiError, h.options.ReplicationFactor)
+		// replicaGroupSuccess counts how many replica groups have succeeded.
+		// This needs to amount to the success threshold (quorum), in order to
+		// claim replication success.
+		replicaGroupSuccess int
+	)
+
 	for {
 		select {
 		case <-fctx.Done():
 			return fctx.Err()
-		case err, more := <-ec:
+		case errReplicaFn, more := <-ec:
 			if !more {
+				for i, rme := range replicaMultiError {
+					// Only if we can determine same error for all requests within replica group,
+					// we return the cause, otherwise fallback to original original.
+					errs.Add(determineWriteErrorCause(rme.Err(), replicaGroupReqs[i]))
+				}
 				return errs.Err()
 			}
+			replica, err := errReplicaFn()
 			if err == nil {
-				success++
-				if success >= successThreshold {
-					// In case the success threshold is lower than the total
-					// number of requests, then we can finish early here. This
-					// is the case for quorum writes for example.
-					return nil
+				success[replica]++
+				for i := range success {
+					if success[i] >= replicaGroupReqs[i] {
+						// If enough replica groups succeed, we can finish early (quorum
+						// is guaranteed).
+						replicaGroupSuccess++
+						if replicaGroupSuccess == successThreshold {
+							return nil
+						}
+					}
 				}
 				continue
 			}
-			errs.Add(err)
+			replicaMultiError[replica].Add(err)
 		}
 	}
 }
@@ -970,7 +999,7 @@ func determineWriteErrorCause(err error, threshold int) error {
 		// If conflict only errors, return it directly regardless of threshold.
 		if exp.err == errConflict && exp.count == len(errs) {
 			return errConflict
-	}
+		}
 	}
 
 	// Determine which error occurred most.
@@ -980,6 +1009,16 @@ func determineWriteErrorCause(err error, threshold int) error {
 	}
 
 	return err
+}
+
+// errWithReplicaFunc is a type to enable sending replica number and err over channel.
+type errWithReplicaFunc func() (uint64, error)
+
+// sendErrWithReplica is a utility func to send replica number and error over channel.
+// Replica number is used to determine write quorum, based on the number of requests,
+// see the comments above.
+func sendErrWithReplica(f chan errWithReplicaFunc, r uint64, err error) {
+	f <- func() (uint64, error) { return r, err }
 }
 
 func newPeerGroup(dialOpts ...grpc.DialOption) *peerGroup {
