@@ -23,7 +23,7 @@ on:
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-latest
+    runs-on: shopify-ubuntu-latest
 
     strategy:
       fail-fast: false
