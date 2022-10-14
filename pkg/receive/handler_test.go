@@ -226,6 +226,15 @@ func TestDetermineWriteErrorCause(t *testing.T) {
 			threshold: 1,
 			exp:       errors.New("baz: 3 errors: 3 errors: qux; rpc error: code = AlreadyExists desc = conflict; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
 		},
+		{
+			name: "below threshold but only conflict errors",
+			err: errutil.NonNilMultiError([]error{
+				status.Error(codes.AlreadyExists, "conflict"),
+				status.Error(codes.AlreadyExists, "conflict"),
+			}),
+			threshold: 3,
+			exp:       errConflict,
+		},
 	} {
 		err := determineWriteErrorCause(tc.err, tc.threshold)
 		if tc.exp != nil {

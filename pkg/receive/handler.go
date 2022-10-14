@@ -966,7 +966,13 @@ func determineWriteErrorCause(err error, threshold int) error {
 				exp.count++
 			}
 		}
+
+		// If conflict only errors, return it directly regardless of threshold.
+		if exp.err == errConflict && exp.count == len(errs) {
+			return errConflict
 	}
+	}
+
 	// Determine which error occurred most.
 	sort.Sort(sort.Reverse(expErrs))
 	if exp := expErrs[0]; exp.count >= threshold {
