@@ -335,6 +335,9 @@ Flags:
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.
+      --query.conn-metric.label=external_labels... ...
+                                 Optional selection of query connection metric
+                                 labels to be collected from endpoint set
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.
@@ -369,8 +372,6 @@ Flags:
                                  when the range parameters are not specified.
                                  The zero value means range covers the time
                                  since the beginning.
-      --query.metric-label=QUERY.METRIC-LABEL ...
-                                 Optional selection of metrics to be collected
       --query.partial-response   Enable partial response for queries if
                                  no partial_response param is specified.
                                  --no-query.partial-response for disabling.
