@@ -461,6 +461,8 @@ type ReceiveBuilder struct {
 	relabelConfigs      []*relabel.Config
 	replication         int
 	image               string
+	hashringAlgo        receive.HashringAlgorithm
+	tracingConfig       string
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -511,6 +513,16 @@ func (r *ReceiveBuilder) WithValidationEnabled(limit int, metaMonitoring string,
 	return r
 }
 
+func (r *ReceiveBuilder) WithHashingAlgorithm(algo receive.HashringAlgorithm) *ReceiveBuilder {
+	r.hashringAlgo = algo
+	return r
+}
+
+func (r *ReceiveBuilder) WithTracingConfig(tracingConfig string) *ReceiveBuilder {
+	r.tracingConfig = tracingConfig
+	return r
+}
+
 // Init creates a Thanos Receive instance.
 // If ingestion is enabled it will be configured for ingesting samples.
 // If routing is configured (i.e. hashring configuration is provided) it routes samples to other receivers.
@@ -528,7 +540,7 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 		"--remote-write.address": ":8081",
 		"--label":                fmt.Sprintf(`receive="%s"`, r.Name()),
 		"--tsdb.path":            filepath.Join(r.InternalDir(), "data"),
-		"--log.level":            infoLogLevel,
+		"--log.level":            "debug",
 		"--tsdb.max-exemplars":   fmt.Sprintf("%v", r.maxExemplars),
 	}
 
@@ -579,6 +591,14 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 		args["--receive.hashrings-file"] = filepath.Join(r.InternalDir(), "hashrings.json")
 		args["--receive.hashrings-file-refresh-interval"] = "5s"
 		args["--receive.replication-factor"] = strconv.Itoa(r.replication)
+	}
+
+	if len(r.hashringAlgo) > 0 {
+		args["--receive.hashrings-algorithm"] = string(r.hashringAlgo)
+	}
+
+	if len(r.tracingConfig) > 0 {
+		args["--tracing.config"] = r.tracingConfig
 	}
 
 	if len(r.relabelConfigs) > 0 {

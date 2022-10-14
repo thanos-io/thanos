@@ -385,184 +385,29 @@ func TestReceive(t *testing.T) {
 		})
 	})
 
-	t.Run("replication", func(t *testing.T) {
+	t.Run("replication_hashmod", func(t *testing.T) {
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("replication")
-		testutil.Ok(t, err)
-		t.Cleanup(e2ethanos.CleanScenario(t, e))
-
-		// The replication suite creates three receivers but only one
-		// receives Prometheus remote-written data. The querier queries all
-		// receivers and the test verifies that the time series are
-		// replicated to all of the nodes.
-
-		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled()
-		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled()
-		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled()
-
-		h := receive.HashringConfig{
-			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
-				r2.InternalEndpoint("grpc"),
-				r3.InternalEndpoint("grpc"),
-			},
-		}
-
-		// Create with hashring config.
-		r1Runnable := r1.WithRouting(3, h).Init()
-		r2Runnable := r2.WithRouting(3, h).Init()
-		r3Runnable := r3.WithRouting(3, h).Init()
-		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r3Runnable))
-
-		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
-
-		q := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")).Init()
-		testutil.Ok(t, e2e.StartAndWaitReady(q))
-
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-		t.Cleanup(cancel)
-
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
-
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
-			Deduplicate: false,
-		}, []model.Metric{
-			{
-				"job":        "myself",
-				"prometheus": "prom1",
-				"receive":    "receive-1",
-				"replica":    "0",
-				"tenant_id":  "default-tenant",
-			},
-			{
-				"job":        "myself",
-				"prometheus": "prom1",
-				"receive":    "receive-2",
-				"replica":    "0",
-				"tenant_id":  "default-tenant",
-			},
-			{
-				"job":        "myself",
-				"prometheus": "prom1",
-				"receive":    "receive-3",
-				"replica":    "0",
-				"tenant_id":  "default-tenant",
-			},
-		})
+		runReplicationTest(t, receive.AlgorithmHashmod, false)
 	})
 
-	t.Run("replication_with_outage", func(t *testing.T) {
+	t.Run("replication_hashmod_with_outage", func(t *testing.T) {
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("outage")
-		testutil.Ok(t, err)
-		t.Cleanup(e2ethanos.CleanScenario(t, e))
+		runReplicationTest(t, receive.AlgorithmHashmod, true)
 
-		// The replication suite creates a three-node hashring but one of the
-		// receivers is dead. In this case, replication should still
-		// succeed and the time series should be replicated to the other nodes.
-
-		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled()
-		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled()
-		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled()
-
-		h := receive.HashringConfig{
-			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
-				r2.InternalEndpoint("grpc"),
-				r3.InternalEndpoint("grpc"),
-			},
-		}
-
-		// Create with hashring config.
-		r1Runnable := r1.WithRouting(3, h).Init()
-		r2Runnable := r2.WithRouting(3, h).Init()
-		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable))
-
-		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
-
-		q := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).Init()
-		testutil.Ok(t, e2e.StartAndWaitReady(q))
-
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-		t.Cleanup(cancel)
-
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
-
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
-			Deduplicate: false,
-		}, []model.Metric{
-			{
-				"job":        "myself",
-				"prometheus": "prom1",
-				"receive":    "receive-1",
-				"replica":    "0",
-				"tenant_id":  "default-tenant",
-			},
-			{
-				"job":        "myself",
-				"prometheus": "prom1",
-				"receive":    "receive-2",
-				"replica":    "0",
-				"tenant_id":  "default-tenant",
-			},
-		})
 	})
 
-	t.Run("multitenancy", func(t *testing.T) {
+	t.Run("replication_ketama", func(t *testing.T) {
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("multitenancy")
-		testutil.Ok(t, err)
-		t.Cleanup(e2ethanos.CleanScenario(t, e))
+		runReplicationTest(t, receive.AlgorithmKetama, false)
+	})
 
-		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled()
+	t.Run("replication_ketama_with_outage", func(t *testing.T) {
+		t.Parallel()
 
-		h := receive.HashringConfig{
-			Endpoints: []string{
-				r1.InternalEndpoint("grpc"),
-			},
-		}
-
-		// Create with hashring config.
-		r1Runnable := r1.WithRouting(1, h).Init()
-		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable))
-
-		rp1 := e2ethanos.NewReverseProxy(e, "1", "tenant-1", "http://"+r1.InternalEndpoint("remote-write"))
-		rp2 := e2ethanos.NewReverseProxy(e, "2", "tenant-2", "http://"+r1.InternalEndpoint("remote-write"))
-		testutil.Ok(t, e2e.StartAndWaitReady(rp1, rp2))
-
-		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, "http://"+rp1.InternalEndpoint("http")+"/api/v1/receive", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, "http://"+rp2.InternalEndpoint("http")+"/api/v1/receive", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2))
-
-		q := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc")).Init()
-		testutil.Ok(t, e2e.StartAndWaitReady(q))
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-		t.Cleanup(cancel)
-
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
-			Deduplicate: false,
-		}, []model.Metric{
-			{
-				"job":        "myself",
-				"prometheus": "prom1",
-				"receive":    "receive-1",
-				"replica":    "0",
-				"tenant_id":  "tenant-1",
-			},
-			{
-				"job":        "myself",
-				"prometheus": "prom2",
-				"receive":    "receive-1",
-				"replica":    "0",
-				"tenant_id":  "tenant-2",
-			},
-		})
+		runReplicationTest(t, receive.AlgorithmKetama, true)
 	})
 
 	t.Run("relabel", func(t *testing.T) {
@@ -608,7 +453,6 @@ func TestReceive(t *testing.T) {
 	})
 
 	t.Run("multitenant_active_series_limiting", func(t *testing.T) {
-
 		/*
 			The multitenant_active_series_limiting suite configures a hashring with
 			two avalanche writers and dedicated meta-monitoring.
@@ -786,4 +630,93 @@ func TestReceive(t *testing.T) {
 			},
 		})
 	})
+}
+
+func runReplicationTest(t *testing.T, hashing receive.HashringAlgorithm, withOutage bool) {
+	e, err := e2e.NewDockerEnvironment(fmt.Sprintf("%s-%v", hashing, withOutage))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// The replication suite creates three receivers but only one
+	// receives Prometheus remote-written data. The querier queries all
+	// receivers and the test verifies that the time series are
+	// replicated to all of the nodes.
+
+	var rg receiverGroup
+
+	r1 := e2ethanos.NewReceiveBuilder(e, "1").WithHashingAlgorithm(hashing).WithIngestionEnabled()
+	rg = append(rg, r1)
+	r2 := e2ethanos.NewReceiveBuilder(e, "2").WithHashingAlgorithm(hashing).WithIngestionEnabled()
+	rg = append(rg, r2)
+
+	if !withOutage {
+		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithHashingAlgorithm(hashing).WithIngestionEnabled()
+		rg = append(rg, r3)
+	}
+
+	h := receive.HashringConfig{
+		Endpoints: rg.endpoints(withOutage),
+	}
+
+	// Create with hashring config.
+	rg.initAndRun(t, 3, h)
+
+	prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", rg.endpoints(withOutage)...).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(float64(len(rg))), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+		Deduplicate: false,
+	}, rg.expectedMetrics())
+}
+
+type receiverGroup []*e2ethanos.ReceiveBuilder
+
+func (r receiverGroup) endpoints(withOutage bool) []string {
+	var e []string
+
+	for _, rg := range r {
+		e = append(e, rg.InternalEndpoint("grpc"))
+	}
+
+	// If we want to simulate an outage, add one node
+	// that won't succeed in replication.
+	if withOutage {
+		e = append(e, "fake:1234")
+	}
+
+	return e
+}
+
+func (r receiverGroup) initAndRun(t *testing.T, replication int, hashringConfigs ...receive.HashringConfig) {
+	var ir []e2e.Runnable
+
+	for _, rg := range r {
+		ir = append(ir, rg.WithRouting(replication, hashringConfigs...).Init())
+	}
+
+	testutil.Ok(t, e2e.StartAndWaitReady(ir...))
+}
+
+func (r receiverGroup) expectedMetrics() []model.Metric {
+	var m []model.Metric
+
+	for _, rg := range r {
+		m = append(m, model.Metric{
+			"job":        "myself",
+			"prometheus": "prom1",
+			"receive":    model.LabelValue(rg.Name()),
+			"replica":    "0",
+			"tenant_id":  "default-tenant",
+		})
+	}
+
+	return m
 }
