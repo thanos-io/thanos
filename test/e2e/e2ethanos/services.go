@@ -540,7 +540,7 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 		"--remote-write.address": ":8081",
 		"--label":                fmt.Sprintf(`receive="%s"`, r.Name()),
 		"--tsdb.path":            filepath.Join(r.InternalDir(), "data"),
-		"--log.level":            "debug",
+		"--log.level":            infoLogLevel,
 		"--tsdb.max-exemplars":   fmt.Sprintf("%v", r.maxExemplars),
 	}
 
