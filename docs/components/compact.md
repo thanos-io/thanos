@@ -17,7 +17,7 @@ Example content of `bucket.yml`:
 ```yaml
 type: GCS
 config:
-  bucket: example-bucket
+  bucket: example-bucke
 ```
 
 By default, `thanos compact` will run to completion which makes it possible to execute it as a cronjob. Using the arguments `--wait` and `--wait-interval=5m` it's possible to keep it running.

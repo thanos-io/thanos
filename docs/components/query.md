@@ -9,9 +9,9 @@ Querier is fully stateless and horizontally scalable.
 Example command to run Querier:
 
 ```bash
-thanos query \
-    --http-address     "0.0.0.0:9090" \
-    --store            "<store-api>:<grpc-port>" \
+thanos query
+    --http-address     "0.0.0.0:9090"
+    --store            "<store-api>:<grpc-port>"
     --store            "<store-api2>:<grpc-port>"
 ```
 
@@ -68,11 +68,11 @@ Two or more series that are only distinguished by the given replica label, will 
 If we configure Querier like this:
 
 ```
-thanos query \
-    --http-address        "0.0.0.0:9090" \
-    --query.replica-label "replica" \
-    --store               "<store-api>:<grpc-port>" \
-    --store               "<store-api2>:<grpc-port>" \
+thanos query
+    --http-address        "0.0.0.0:9090"
+    --query.replica-label "replica"
+    --store               "<store-api>:<grpc-port>"
+    --store               "<store-api2>:<grpc-port>"
 ```
 
 And we query for metric `up{job="prometheus",env="2"}` with this option we will get 2 results:
@@ -93,12 +93,12 @@ WITHOUT this replica flag (deduplication turned off), we will get 3 results:
 * Prometheus + sidecar "A" in different cluster: `cluster=2,env=2,replica=A,replicaX=A`
 
 ```
-thanos query \
-    --http-address        "0.0.0.0:9090" \
-    --query.replica-label "replica" \
-    --query.replica-label "replicaX" \
-    --store               "<store-api>:<grpc-port>" \
-    --store               "<store-api2>:<grpc-port>" \
+thanos query
+    --http-address        "0.0.0.0:9090"
+    --query.replica-label "replica"
+    --query.replica-label "replicaX"
+    --store               "<store-api>:<grpc-port>"
+    --store               "<store-api2>:<grpc-port>"
 ```
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
