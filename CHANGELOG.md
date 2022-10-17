@@ -63,6 +63,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5411](https://github.com/thanos-io/thanos/pull/5411) Tracing: Change Jaeger exporter from OpenTracing to OpenTelemetry. *Options `RPC Metrics`, `Gen128Bit` and `Disabled` are now deprecated and won't have any effect when set :warning:.*
 - [#5767](https://github.com/thanos-io/thanos/pull/5767) *: Upgrade Prometheus to v2.39.0.
 - [#5771](https://github.com/thanos-io/thanos/pull/5771) *: Upgrade Prometheus to v2.39.1.
+- [#5794](https://github.com/thanos-io/thanos/pull/5794) Compact: Always enable vertical compaction and accept overlapping source blocks when vertical compaction enabled.
 
 ### Removed
 
