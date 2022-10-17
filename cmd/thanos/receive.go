@@ -192,19 +192,6 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
-	var limitsConfig *receive.RootLimitsConfig
-	if conf.limitsConfig != nil {
-		limitsContentYaml, err := conf.limitsConfig.Content()
-		if err != nil {
-			return errors.Wrap(err, "get content of limit configuration")
-		}
-		limitsConfig, err = receive.ParseRootLimitConfig(limitsContentYaml)
-		if err != nil {
-			return errors.Wrap(err, "parse limit configuration")
-		}
-	}
-	limiter := receive.NewLimiter(limitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"))
-
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
@@ -217,6 +204,23 @@ func runReceive(
 		hashFunc,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
+
+	var limitsConfig *receive.RootLimitsConfig
+	if conf.limitsConfig != nil {
+		limitsContentYaml, err := conf.limitsConfig.Content()
+		if err != nil {
+			return errors.Wrap(err, "get content of limit configuration")
+		}
+		limitsConfig, err = receive.ParseRootLimitConfig(limitsContentYaml)
+		if err != nil {
+			return errors.Wrap(err, "parse limit configuration")
+		}
+	}
+	limiter, err := receive.NewLimiter(conf.limitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"))
+	if err != nil {
+		return errors.Wrap(err, "creating limiter")
+	}
+
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
 		Writer:            writer,
 		ListenAddress:     conf.rwAddress,
@@ -397,6 +401,22 @@ func runReceive(
 		}, func(err error) {
 			cancel()
 		})
+	}
+
+	{
+		if limiter.CanReload() {
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				level.Debug(logger).Log("msg", "limits config initialized with file watcher.")
+				if err := limiter.StartConfigReloader(ctx); err != nil {
+					return err
+				}
+				<-ctx.Done()
+				return nil
+			}, func(err error) {
+				cancel()
+			})
+		}
 	}
 
 	level.Info(logger).Log("msg", "starting receiver")
