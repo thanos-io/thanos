@@ -397,6 +397,12 @@ func WithDebugLogging() BucketStoreOption {
 	}
 }
 
+func WithChunkHashCalculation(enableChunkHashCalculation bool) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.enableChunkHashCalculation = enableChunkHashCalculation
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
