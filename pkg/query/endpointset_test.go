@@ -271,13 +271,35 @@ func (e *testEndpoints) CloseOne(addr string) {
 	delete(e.srvs, addr)
 }
 
-func TestEndpointSetUpdate(t *testing.T) {
-	testCases := []struct {
-		name      string
-		endpoints []testEndpointMeta
-		strict    bool
+func truncateAndEscapeQuotes(s string) string {
+	// Truncate string.
+	if len(s) > externalLabelLimit {
+		s = s[:externalLabelLimit]
+	}
+	// Add backslash escape for every quote character.
+	var lbl strings.Builder
+	for _, ch := range s {
+		if string(ch) == `"` {
+			lbl.WriteString(`\`)
+		}
+		lbl.WriteRune(ch)
+	}
+	return lbl.String()
+}
 
-		expectedEndpoints int
+func TestEndpointSetUpdate(t *testing.T) {
+	const metricsMeta = `
+	# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
+	# TYPE thanos_store_nodes_grpc_connections gauge
+	`
+	testCases := []struct {
+		name       string
+		endpoints  []testEndpointMeta
+		strict     bool
+		connLabels []string
+
+		expectedEndpoints   int
+		expectedConnMetrics string
 	}{
 		{
 			name: "available endpoint",
@@ -291,7 +313,13 @@ func TestEndpointSetUpdate(t *testing.T) {
 					},
 				},
 			},
+			connLabels: []string{"store_type"},
+
 			expectedEndpoints: 1,
+			expectedConnMetrics: metricsMeta +
+				`
+			thanos_store_nodes_grpc_connections{store_type="sidecar"} 1
+			`,
 		},
 		{
 			name: "unavailable endpoint",
@@ -306,7 +334,9 @@ func TestEndpointSetUpdate(t *testing.T) {
 					},
 				},
 			},
-			expectedEndpoints: 0,
+
+			expectedEndpoints:   0,
+			expectedConnMetrics: "",
 		},
 		{
 			name: "slow endpoint",
@@ -321,7 +351,9 @@ func TestEndpointSetUpdate(t *testing.T) {
 					},
 				},
 			},
-			expectedEndpoints: 0,
+
+			expectedEndpoints:   0,
+			expectedConnMetrics: "",
 		},
 		{
 			name: "strict endpoint",
@@ -336,13 +368,19 @@ func TestEndpointSetUpdate(t *testing.T) {
 				},
 			},
 			strict:            true,
+			connLabels:        []string{"store_type"},
 			expectedEndpoints: 1,
+			expectedConnMetrics: metricsMeta +
+				`
+			thanos_store_nodes_grpc_connections{store_type="sidecar"} 1
+			`,
 		},
 		{
 			name: "long external labels",
 			endpoints: []testEndpointMeta{
 				{
 					InfoResponse: sidecarInfo,
+					// simulate very long external labels
 					extlsetFn: func(addr string) []labelpb.ZLabelSet {
 						sLabel := []string{}
 						for i := 0; i < 1000; i++ {
@@ -356,25 +394,12 @@ func TestEndpointSetUpdate(t *testing.T) {
 				},
 			},
 			expectedEndpoints: 1,
-		},
-		{
-			name: "no external labels",
-			endpoints: []testEndpointMeta{
-				{
-					InfoResponse: sidecarInfo,
-					extlsetFn: func(addr string) []labelpb.ZLabelSet {
-						sLabel := []string{}
-						for i := 0; i < 1000; i++ {
-							sLabel = append(sLabel, "lbl")
-							sLabel = append(sLabel, "val")
-						}
-						return labelpb.ZLabelSetsFromPromLabels(
-							labels.FromStrings(sLabel...),
-						)
-					},
-				},
-			},
-			expectedEndpoints: 1,
+			expectedConnMetrics: metricsMeta + fmt.Sprintf(
+				`
+				thanos_store_nodes_grpc_connections{external_labels="{%s}", store_type="sidecar"} 1
+				`,
+				truncateAndEscapeQuotes(strings.Repeat(`lbl="val", `, 1000)),
+			),
 		},
 	}
 
@@ -387,65 +412,14 @@ func TestEndpointSetUpdate(t *testing.T) {
 			discoveredEndpointAddr := endpoints.EndpointAddresses()
 			var endpointSet *EndpointSet
 			// Specify only "store_type" to exclude "external_labels".
-			if tc.name == "no external labels" {
-				endpointSet = makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now, "store_type")
-			} else {
-				endpointSet = makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now)
-			}
+			endpointSet = makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now, tc.connLabels...)
 			defer endpointSet.Close()
 
 			endpointSet.Update(context.Background())
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetEndpointStatus()))
 			testutil.Equals(t, tc.expectedEndpoints, len(endpointSet.GetStoreClients()))
 
-			// Slow or unavailable endpoint should collect nothing.
-			if tc.name == "slow endpoint" || tc.name == "unavailable endpoint" {
-				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader("")))
-				return
-			}
-
-			if tc.name == "no external labels" {
-				expectedMetrics := fmt.Sprintf(
-					`
-					# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
-					# TYPE thanos_store_nodes_grpc_connections gauge
-					thanos_store_nodes_grpc_connections{store_type="sidecar"} %d
-					`,
-					tc.expectedEndpoints,
-				)
-				testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(expectedMetrics)))
-				return
-			}
-
-			var externalLabels string
-			if tc.name == "long external labels" {
-				externalLabels = strings.Repeat(`lbl="val", `, 1000)
-				externalLabels = externalLabels[:len(externalLabels)-2]
-			} else {
-				externalLabels = fmt.Sprintf(`a="b", addr=%q`, discoveredEndpointAddr[0])
-			}
-			// Labels too long must be trimmed.
-			if len(externalLabels) > externalLabelLimit {
-				externalLabels = externalLabels[:externalLabelLimit]
-			}
-			// Add backslash escape for every quote character.
-			var lbl strings.Builder
-			for _, ch := range externalLabels {
-				if string(ch) == `"` {
-					lbl.WriteString(`\`)
-				}
-				lbl.WriteRune(ch)
-			}
-			expectedMetrics := fmt.Sprintf(
-				`
-				# HELP thanos_store_nodes_grpc_connections Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.
-				# TYPE thanos_store_nodes_grpc_connections gauge
-				thanos_store_nodes_grpc_connections{external_labels="{%s}",store_type="sidecar"} %d
-				`,
-				lbl.String(),
-				tc.expectedEndpoints,
-			)
-			testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(expectedMetrics)))
+			testutil.Ok(t, promtestutil.CollectAndCompare(endpointSet.endpointsMetric, strings.NewReader(tc.expectedConnMetrics)))
 		})
 	}
 }

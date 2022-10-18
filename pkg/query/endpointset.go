@@ -203,18 +203,23 @@ func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
 	}
 }
 
+func truncateExtLabels(s string, threshold int) string {
+	if len(s) > threshold {
+		s = s[:threshold+1] + "}"
+	}
+	return s
+}
+
 func (c *endpointSetNodeCollector) Update(nodes map[component.Component]map[string]int) {
 	storeNodes := make(map[component.Component]map[string]int, len(nodes))
 	storePerExtLset := map[string]int{}
 
 	for storeType, occurrencesPerExtLset := range nodes {
 		storeNodes[storeType] = make(map[string]int, len(occurrencesPerExtLset))
-		for external_labels, occurrences := range occurrencesPerExtLset {
-			if len(external_labels) > externalLabelLimit {
-				external_labels = external_labels[:externalLabelLimit+1] + "}"
-			}
-			storePerExtLset[external_labels] += occurrences
-			storeNodes[storeType][external_labels] = occurrences
+		for externalLabels, occurrences := range occurrencesPerExtLset {
+			externalLabels = truncateExtLabels(externalLabels, externalLabelLimit)
+			storePerExtLset[externalLabels] += occurrences
+			storeNodes[storeType][externalLabels] = occurrences
 		}
 	}
 
