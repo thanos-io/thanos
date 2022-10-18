@@ -80,13 +80,12 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 
 	logger := log.NewNopLogger()
 	q := &querier{
-		ctx:                 context.Background(),
-		logger:              logger,
-		proxy:               &mockedStoreServer{responses: resps},
-		replicaLabels:       map[string]struct{}{"a_replica": {}},
-		deduplicate:         dedup,
-		selectGate:          gate.NewNoop(),
-		seriesStatsReporter: NoopSeriesStatsReporter,
+		ctx:           context.Background(),
+		logger:        logger,
+		proxy:         &mockedStoreServer{responses: resps},
+		replicaLabels: map[string]struct{}{"a_replica": {}},
+		deduplicate:   dedup,
+		selectGate:    gate.NewNoop(),
 	}
 	testSelect(t, q, expectedSeries)
 }
