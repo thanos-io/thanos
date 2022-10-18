@@ -99,6 +99,9 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 		case *parser.BinaryExpr:
 			if n.VectorMatching != nil {
 				shardingLabels := without(n.VectorMatching.MatchingLabels, []string{"le"})
+				if !n.VectorMatching.On && len(shardingLabels) > 0 {
+					shardingLabels = append(shardingLabels, "__name__")
+				}
 				analysis = analysis.scopeToLabels(shardingLabels, n.VectorMatching.On)
 			}
 		case *parser.AggregateExpr:
