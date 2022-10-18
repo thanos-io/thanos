@@ -410,9 +410,8 @@ func TestEndpointSetUpdate(t *testing.T) {
 			defer endpoints.Close()
 
 			discoveredEndpointAddr := endpoints.EndpointAddresses()
-			var endpointSet *EndpointSet
 			// Specify only "store_type" to exclude "external_labels".
-			endpointSet = makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now, tc.connLabels...)
+			endpointSet := makeEndpointSet(discoveredEndpointAddr, tc.strict, time.Now, tc.connLabels...)
 			defer endpointSet.Close()
 
 			endpointSet.Update(context.Background())
