@@ -271,20 +271,39 @@ func (e *testEndpoints) CloseOne(addr string) {
 	delete(e.srvs, addr)
 }
 
-func truncateAndEscapeQuotes(s string) string {
-	// Truncate string.
-	if len(s) > externalLabelLimit {
-		s = s[:externalLabelLimit]
+func TestTruncateExtLabels(t *testing.T) {
+	testCases := []struct {
+		name            string
+		labelToTruncate string
+		lengthLimit     int
+		expectedOutput  string
+	}{
+		{
+			name:            "shorter label length",
+			labelToTruncate: "{xxx}",
+			lengthLimit:     5,
+			expectedOutput:  "{xxx}",
+		},
+		{
+			name:            "longer label length",
+			labelToTruncate: "{xxxxxxxxxxxxxxxxxxx}",
+			lengthLimit:     5,
+			expectedOutput:  "{xxxxx}",
+		},
+		{
+			name:            "exact label length",
+			labelToTruncate: "{xxxxx}",
+			lengthLimit:     5,
+			expectedOutput:  "{xxxxx}",
+		},
 	}
-	// Add backslash escape for every quote character.
-	var lbl strings.Builder
-	for _, ch := range s {
-		if string(ch) == `"` {
-			lbl.WriteString(`\`)
-		}
-		lbl.WriteRune(ch)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := truncateExtLabels(tc.labelToTruncate, tc.lengthLimit)
+			testutil.Equals(t, tc.expectedOutput, got)
+		})
 	}
-	return lbl.String()
 }
 
 func TestEndpointSetUpdate(t *testing.T) {
@@ -394,12 +413,22 @@ func TestEndpointSetUpdate(t *testing.T) {
 				},
 			},
 			expectedEndpoints: 1,
-			expectedConnMetrics: metricsMeta + fmt.Sprintf(
-				`
-				thanos_store_nodes_grpc_connections{external_labels="{%s}", store_type="sidecar"} 1
-				`,
-				truncateAndEscapeQuotes(strings.Repeat(`lbl="val", `, 1000)),
-			),
+			expectedConnMetrics: `lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+			 lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+			  lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+			   lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+			    lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+				 lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+				  lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+				   lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+				    lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+					 lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+					  lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+					   lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+					    lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+						 lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+						  lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\", lbl=\"val\",
+						   lbl=\"val\", lbl=\"val\", lbl=\"val\",`,
 		},
 	}
 
