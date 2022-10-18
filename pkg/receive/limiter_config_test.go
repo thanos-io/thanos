@@ -35,7 +35,7 @@ func TestParseLimiterConfig(t *testing.T) {
 						},
 					},
 					DefaultLimits: DefaultLimitsConfig{
-						RequestLimits: *NewEmptyRequestLimitsConfig().
+						RequestLimits: *newEmptyRequestLimitsConfig().
 							SetSizeBytesLimit(1024).
 							SetSeriesLimit(1000).
 							SetSamplesLimit(10),
@@ -44,7 +44,7 @@ func TestParseLimiterConfig(t *testing.T) {
 					TenantsLimits: TenantsWriteLimitsConfig{
 						"acme": NewEmptyWriteLimitConfig().
 							SetRequestLimits(
-								NewEmptyRequestLimitsConfig().
+								newEmptyRequestLimitsConfig().
 									SetSizeBytesLimit(0).
 									SetSeriesLimit(0).
 									SetSamplesLimit(0),
@@ -52,7 +52,7 @@ func TestParseLimiterConfig(t *testing.T) {
 							SetHeadSeriesLimit(2000),
 						"ajax": NewEmptyWriteLimitConfig().
 							SetRequestLimits(
-								NewEmptyRequestLimitsConfig().
+								newEmptyRequestLimitsConfig().
 									SetSeriesLimit(50000).
 									SetSamplesLimit(500),
 							),

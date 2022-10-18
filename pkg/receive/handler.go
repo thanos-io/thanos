@@ -17,6 +17,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/api"
+	statusapi "github.com/thanos-io/thanos/pkg/api/status"
+	"github.com/thanos-io/thanos/pkg/logging"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -31,9 +35,6 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/thanos-io/thanos/pkg/api"
-	statusapi "github.com/thanos-io/thanos/pkg/api/status"
-	"github.com/thanos-io/thanos/pkg/logging"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -98,7 +99,7 @@ type Options struct {
 	ForwardTimeout    time.Duration
 	RelabelConfigs    []*relabel.Config
 	TSDBStats         TSDBStats
-	Limiter           *Limiter
+	Limiter           *limiter
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -123,7 +124,7 @@ type Handler struct {
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
 
-	Limiter *Limiter
+	limiter *limiter
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -149,7 +150,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			Max:    30 * time.Second,
 			Jitter: true,
 		},
-		Limiter: o.Limiter,
+		limiter: o.Limiter,
 		forwardRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -406,18 +407,17 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tLogger := log.With(h.logger, "tenant", tenant)
 
-	writeGate := h.Limiter.WriteGate()
 	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
-		err = writeGate.Start(r.Context())
+		err = h.limiter.writeGate.Start(r.Context())
 	})
-	defer writeGate.Done()
 	if err != nil {
 		level.Error(tLogger).Log("err", err, "msg", "internal server error")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	defer h.limiter.writeGate.Done()
 
-	under, err := h.Limiter.HeadSeriesLimiter.isUnderLimit(tenant)
+	under, err := h.limiter.HeadSeriesLimiter.isUnderLimit(tenant)
 	if err != nil {
 		level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
 	}
@@ -428,7 +428,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestLimiter := h.Limiter.RequestLimiter()
+	requestLimiter := h.limiter.requestLimiter
 	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}

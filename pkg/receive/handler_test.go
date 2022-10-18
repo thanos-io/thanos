@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
@@ -21,8 +20,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
@@ -43,7 +40,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
-	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -366,7 +362,6 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		},
 	}
 
-	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger())
 	for i := range appendables {
 		h := NewHandler(nil, &Options{
 			TenantHeader:      DefaultTenantHeader,
@@ -374,7 +369,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			ReplicationFactor: replicationFactor,
 			ForwardTimeout:    5 * time.Second,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
-			Limiter:           limiter,
+			Limiter:           NewLimiter(nil, nil, RouterIngestor, nil),
 		})
 		handlers = append(handlers, h)
 		h.peers = peers
@@ -780,28 +775,23 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			}
 			handlers, _ := newTestHandlerHashring(appendables, 3)
 			handler := handlers[0]
-
 			tenant := "test"
-			tenantConfig, err := yaml.Marshal(&RootLimitsConfig{
-				WriteLimits: WriteLimitsConfig{
-					TenantsLimits: TenantsWriteLimitsConfig{
-						tenant: &WriteLimitConfig{
-							RequestLimits: NewEmptyRequestLimitsConfig().
-								SetSizeBytesLimit(int64(1 * units.Megabyte)).
-								SetSeriesLimit(20).
-								SetSamplesLimit(200),
+			handler.limiter = NewLimiter(
+				&RootLimitsConfig{
+					WriteLimits: WriteLimitsConfig{
+						TenantsLimits: TenantsWriteLimitsConfig{
+							tenant: &WriteLimitConfig{
+								RequestLimits: newEmptyRequestLimitsConfig().
+									SetSizeBytesLimit(int64(1 * units.Megabyte)).
+									SetSeriesLimit(20).
+									SetSamplesLimit(200),
+							},
 						},
 					},
 				},
-			})
-			if err != nil {
-				t.Fatal("handler: failed to generate limit configuration")
-			}
-			tmpLimitsPath := path.Join(t.TempDir(), "limits.yaml")
-			testutil.Ok(t, os.WriteFile(tmpLimitsPath, tenantConfig, 0666))
-			limitConfig, _ := extkingpin.NewStaticPathContent(tmpLimitsPath)
-			handler.Limiter, _ = NewLimiter(
-				limitConfig, nil, RouterIngestor, log.NewNopLogger(),
+				nil,
+				RouterIngestor,
+				log.NewNopLogger(),
 			)
 
 			wreq := &prompb.WriteRequest{
