@@ -378,6 +378,15 @@ Flags:
                                  be able to query without deduplication using
                                  'dedup=false' parameter. Data includes time
                                  series, recording rules, and alerting rules.
+      --query.telemetry.request-duration-seconds-quantiles=0.1... ...
+                                 The quantiles for exporting metrics about the
+                                 request duration quantiles.
+      --query.telemetry.request-samples-quantiles=100... ...
+                                 The quantiles for exporting metrics about the
+                                 samples count quantiles.
+      --query.telemetry.request-series-seconds-quantiles=10... ...
+                                 The quantiles for exporting metrics about the
+                                 series count quantiles.
       --query.timeout=2m         Maximum time to process query by query node.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
@@ -460,3 +469,13 @@ Flags:
                                  of Prometheus.
 
 ```
+
+## Exported metrics
+
+Thanos Query also exports metrics about its own performance. You can find a list with these metrics below.
+
+**Disclaimer**: this list is incomplete. The remaining metrics will be added over time.
+
+| Name                                    | Type      | Labels                | Description                                                                                                       |
+|-----------------------------------------|-----------|-----------------------|-------------------------------------------------------------------------------------------------------------------|
+| thanos_store_api_query_duration_seconds | Histogram | samples_le, series_le | Duration of the Thanos Store API select phase for a query according to the amount of samples and series selected. |
