@@ -94,7 +94,6 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		request.EnableQueryPushdown,
 		false,
 		request.ShardInfo,
-		query.NoopSeriesStatsReporter,
 	)
 	qry, err := g.queryEngine.NewInstantQuery(queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, ts)
 	if err != nil {
@@ -169,7 +168,6 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		request.EnableQueryPushdown,
 		false,
 		request.ShardInfo,
-		query.NoopSeriesStatsReporter,
 	)
 
 	startTime := time.Unix(request.StartTimeSeconds, 0)
