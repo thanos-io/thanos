@@ -1010,7 +1010,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	}
 
 	// Success with no refetches.
-	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 100))
+	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 100, nil))
 	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2:  []byte("aaaaaaaaaa"),
 		13: []byte("bbbbbbbbbb"),
@@ -1020,7 +1020,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 
 	// Success with 2 refetches.
 	r.loadedSeries = map[storage.SeriesRef][]byte{}
-	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 15))
+	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 15, nil))
 	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2:  []byte("aaaaaaaaaa"),
 		13: []byte("bbbbbbbbbb"),
@@ -1030,7 +1030,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 
 	// Success with refetch on first element.
 	r.loadedSeries = map[storage.SeriesRef][]byte{}
-	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2}, false, 2, 5))
+	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2}, false, 2, 5, nil))
 	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2: []byte("aaaaaaaaaa"),
 	}, r.loadedSeries)
@@ -1044,7 +1044,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	testutil.Ok(t, bkt.Upload(context.Background(), filepath.Join(b.meta.ULID.String(), block.IndexFilename), bytes.NewReader(buf.Get())))
 
 	// Fail, but no recursion at least.
-	testutil.NotOk(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 1, 15))
+	testutil.NotOk(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 1, 15, nil))
 }
 
 func TestBucketIndexReader_ExpandedPostings(t *testing.T) {
@@ -1223,7 +1223,7 @@ func benchmarkExpandedPostings(
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
-				p, err := indexr.ExpandedPostings(context.Background(), c.matchers)
+				p, err := indexr.ExpandedPostings(context.Background(), c.matchers, nil)
 				testutil.Ok(t, err)
 				testutil.Equals(t, c.expectedLen, len(p))
 			}
@@ -2326,7 +2326,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				indexReader := blk.indexReader()
 				chunkReader := blk.chunkReader()
 
-				seriesSet, _, err := blockSeries(ctx, nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, nil, dummyCounter)
+				seriesSet, _, err := blockSeries(ctx, nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, nil, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, nil, dummyCounter)
 				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).
