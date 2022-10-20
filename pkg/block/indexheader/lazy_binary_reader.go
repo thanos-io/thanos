@@ -98,12 +98,8 @@ func NewLazyBinaryReader(
 	metrics *LazyBinaryReaderMetrics,
 	onClosed func(*LazyBinaryReader),
 ) (*LazyBinaryReader, error) {
-	indexHeaderFile := ""
 	if dir != "" {
-		indexHeaderFile = filepath.Join(dir, id.String(), block.IndexHeaderFilename)
-	}
-
-	if indexHeaderFile != "" {
+		indexHeaderFile := filepath.Join(dir, id.String(), block.IndexHeaderFilename)
 		// If the index-header doesn't exist we should download it.
 		if _, err := os.Stat(indexHeaderFile); err != nil {
 			if !os.IsNotExist(err) {

@@ -91,7 +91,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar. Ignored if --disable-caching-index-header-file option is specified.").
 		Default("./data").StringVar(&sc.dataDir)
 
-	cmd.Flag("disable-caching-index-header-file", "Disable caching index-header, and meta.jsons file on disk. If set, the store will ignore the --data-dir, and will not load the index header and meta.jsons files from disk on startup, and will not create the index header and meta.jsons files when synchronizing blocks.").
+	cmd.Flag("disable-caching-index-header-file", "Disable caching index-header file on disk. Store will create index header from remote object storage on startup, and cache them in memory, no index header file will be created on the disk. If set, the --data-dir will be ignored.").
 		Default("false").BoolVar(&sc.disableCachingIndexHeaderFile)
 
 	cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").

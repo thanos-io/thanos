@@ -495,10 +495,12 @@ func NewBucketStore(
 		return nil, errors.Wrap(err, "validate config")
 	}
 
-	if dir != "" {
-		if err := os.MkdirAll(dir, 0750); err != nil {
-			return nil, errors.Wrap(err, "create dir")
-		}
+	if dir == "" {
+		return s, nil
+	}
+
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return nil, errors.Wrap(err, "create dir")
 	}
 
 	return s, nil
@@ -593,28 +595,30 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 		return errors.Wrap(err, "sync block")
 	}
 
-	if s.dir != "" {
-		fis, err := os.ReadDir(s.dir)
-		if err != nil {
-			return errors.Wrap(err, "read dir")
-		}
-		names := make([]string, 0, len(fis))
-		for _, fi := range fis {
-			names = append(names, fi.Name())
-		}
-		for _, n := range names {
-			id, ok := block.IsBlockDir(n)
-			if !ok {
-				continue
-			}
-			if b := s.getBlock(id); b != nil {
-				continue
-			}
+	if s.dir == "" {
+		return nil
+	}
 
-			// No such block loaded, remove the local dir.
-			if err := os.RemoveAll(path.Join(s.dir, id.String())); err != nil {
-				level.Warn(s.logger).Log("msg", "failed to remove block which is not needed", "err", err)
-			}
+	fis, err := os.ReadDir(s.dir)
+	if err != nil {
+		return errors.Wrap(err, "read dir")
+	}
+	names := make([]string, 0, len(fis))
+	for _, fi := range fis {
+		names = append(names, fi.Name())
+	}
+	for _, n := range names {
+		id, ok := block.IsBlockDir(n)
+		if !ok {
+			continue
+		}
+		if b := s.getBlock(id); b != nil {
+			continue
+		}
+
+		// No such block loaded, remove the local dir.
+		if err := os.RemoveAll(path.Join(s.dir, id.String())); err != nil {
+			level.Warn(s.logger).Log("msg", "failed to remove block which is not needed", "err", err)
 		}
 	}
 
@@ -628,7 +632,7 @@ func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
 }
 
 func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err error) {
-	dir := ""
+	var dir string
 	if s.dir != "" {
 		dir = filepath.Join(s.dir, meta.ULID.String())
 	}
