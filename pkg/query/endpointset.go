@@ -204,14 +204,13 @@ func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
 	}
 }
 
+// truncateExtLabels truncates the stringify external labels with the format of {labels..}.
 func truncateExtLabels(s string, threshold int) string {
-	s = strings.Trim(s, "{}")
 	if len(s) > threshold {
-		s = s[:threshold]
+		return fmt.Sprintf("%s}", s[:threshold-1])
 	}
-	return fmt.Sprintf("{%s}", s)
+	return s
 }
-
 func (c *endpointSetNodeCollector) Update(nodes map[component.Component]map[string]int) {
 	storeNodes := make(map[component.Component]map[string]int, len(nodes))
 	storePerExtLset := map[string]int{}
