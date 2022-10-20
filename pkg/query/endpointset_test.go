@@ -278,23 +278,23 @@ func TestTruncateExtLabels(t *testing.T) {
 		expectedOutput  string
 	}{
 		{
-			labelToTruncate: "{abc}",
-			expectedOutput:  "{abc}",
-		},
-		{
-			labelToTruncate: "{abcdefghij}",
-			expectedOutput:  "{abcde}",
-		},
-		{
-			labelToTruncate: "{abcde}",
-			expectedOutput:  "{abcde}",
+			labelToTruncate: "{a}",
+			expectedOutput:  "{a}",
 		},
 		{
 			labelToTruncate: "{abcd}",
 			expectedOutput:  "{abcd}",
 		},
 		{
+			labelToTruncate: "{abcde}",
+			expectedOutput:  "{abcde}",
+		},
+		{
 			labelToTruncate: "{abcdef}",
+			expectedOutput:  "{abcde}",
+		},
+		{
+			labelToTruncate: "{abcdefghijk}",
 			expectedOutput:  "{abcde}",
 		},
 	}

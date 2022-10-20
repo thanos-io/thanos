@@ -205,9 +205,7 @@ func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
 }
 
 func truncateExtLabels(s string, threshold int) string {
-	// remove enclosing braces
 	s = strings.Trim(s, "{}")
-	// truncate
 	if len(s) > threshold {
 		s = s[:threshold]
 	}
