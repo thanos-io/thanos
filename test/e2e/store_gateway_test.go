@@ -604,7 +604,7 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 				}
 				return err
 			}
-			return nil
+			return fmt.Errorf("expected an error")
 		}))
 
 		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
@@ -620,7 +620,7 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 				}
 				return err
 			}
-			return nil
+			return fmt.Errorf("expected an error")
 		}))
 
 		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
@@ -636,7 +636,7 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 				}
 				return err
 			}
-			return nil
+			return fmt.Errorf("expected an error")
 		}))
 	})
 }

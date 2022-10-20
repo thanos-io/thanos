@@ -1027,6 +1027,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	req.MaxTime = s.limitMaxTime(req.MaxTime)
 
 	var (
+		bytesLimiter     BytesLimiter
 		ctx              = srv.Context()
 		stats            = &queryStats{}
 		res              []storepb.SeriesSet
@@ -1036,8 +1037,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		reqBlockMatchers []*labels.Matcher
 		chunksLimiter    = s.chunksLimiterFactory(s.metrics.queriesDropped.WithLabelValues("chunks"))
 		seriesLimiter    = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series"))
-		bytesLimiter     = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes"))
 	)
+
+	if s.bytesLimiterFactory != nil {
+		bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes"))
+	}
 
 	if req.Hints != nil {
 		reqHints := &hintspb.SeriesRequestHints{}
@@ -2155,12 +2159,14 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		return uint64(ptrs[i].ptr.Start), uint64(ptrs[i].ptr.End)
 	})
 
-	for _, part := range parts {
-		start := int64(part.Start)
-		length := int64(part.End) - start
+	if bytesLimiter != nil {
+		for _, part := range parts {
+			start := int64(part.Start)
+			length := int64(part.End) - start
 
-		if err := bytesLimiter.Reserve(uint64(length)); err != nil {
-			return nil, errors.Wrap(err, "bytes limit exceeded while fetching postings")
+			if err := bytesLimiter.Reserve(uint64(length)); err != nil {
+				return nil, errors.Wrap(err, "bytes limit exceeded while fetching postings")
+			}
 		}
 	}
 
@@ -2343,8 +2349,10 @@ func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.Ser
 func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.SeriesRef, refetch bool, start, end uint64, bytesLimiter BytesLimiter) error {
 	begin := time.Now()
 
-	if err := bytesLimiter.Reserve(uint64(end - start)); err != nil {
-		return errors.Wrap(err, "exceeded bytes limit while fetching series")
+	if bytesLimiter != nil {
+		if err := bytesLimiter.Reserve(uint64(end - start)); err != nil {
+			return errors.Wrap(err, "exceeded bytes limit while fetching series")
+		}
 	}
 
 	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start))
@@ -2607,9 +2615,11 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 			return uint64(pIdxs[i].offset), uint64(pIdxs[i].offset) + EstimatedMaxChunkSize
 		})
 
-		for _, p := range parts {
-			if err := bytesLimiter.Reserve(uint64(p.End - p.Start)); err != nil {
-				return errors.Wrap(err, "bytes limit exceeded while fetching chunks")
+		if bytesLimiter != nil {
+			for _, p := range parts {
+				if err := bytesLimiter.Reserve(uint64(p.End - p.Start)); err != nil {
+					return errors.Wrap(err, "bytes limit exceeded while fetching chunks")
+				}
 			}
 		}
 
