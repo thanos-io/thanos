@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/promql/parser"
 )
 
@@ -100,7 +101,7 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 			if n.VectorMatching != nil {
 				shardingLabels := without(n.VectorMatching.MatchingLabels, []string{"le"})
 				if !n.VectorMatching.On && len(shardingLabels) > 0 {
-					shardingLabels = append(shardingLabels, "__name__")
+					shardingLabels = append(shardingLabels, model.MetricNameLabel)
 				}
 				analysis = analysis.scopeToLabels(shardingLabels, n.VectorMatching.On)
 			}
