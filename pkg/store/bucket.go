@@ -1266,6 +1266,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	var mtx sync.Mutex
 	var sets [][]string
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series"))
+	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes"))
 
 	for _, b := range s.blocks {
 		b := b
@@ -1324,7 +1325,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					reqSeriesMatchersNoExtLabels,
 					nil,
 					seriesLimiter,
-					nil,
+					bytesLimiter,
 					true,
 					req.Start,
 					req.End,
@@ -1432,6 +1433,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var mtx sync.Mutex
 	var sets [][]string
 	var seriesLimiter = s.seriesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("series"))
+	var bytesLimiter = s.bytesLimiterFactory(s.metrics.queriesDropped.WithLabelValues("bytes"))
 
 	for _, b := range s.blocks {
 		b := b
@@ -1493,7 +1495,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					reqSeriesMatchersNoExtLabels,
 					nil,
 					seriesLimiter,
-					nil,
+					bytesLimiter,
 					true,
 					req.Start,
 					req.End,
