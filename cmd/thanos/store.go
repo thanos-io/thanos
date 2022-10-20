@@ -111,7 +111,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("0").Uint64Var(&sc.maxTouchedSeriesCount)
 
 	cmd.Flag("store.grpc.downloaded-bytes-limit",
-		"Maximum amount of downloaded (either fetched or touched) bytes in a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
+		"Maximum amount of downloaded (either fetched or touched) bytes in a single Series/LabelNames/LabelValues call. The Series call fails if this limit is exceeded. 0 means no limit.").
 		Default("0").BytesVar(&sc.maxDownloadedBytes)
 
 	cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").IntVar(&sc.maxConcurrency)
