@@ -274,39 +274,33 @@ func (e *testEndpoints) CloseOne(addr string) {
 func TestTruncateExtLabels(t *testing.T) {
 	const testLength = 5
 	testCases := []struct {
-		name            string
 		labelToTruncate string
 		expectedOutput  string
 	}{
 		{
-			name:            "shorter label length",
 			labelToTruncate: "{abc}",
 			expectedOutput:  "{abc}",
 		},
 		{
-			name:            "longer label length",
 			labelToTruncate: "{abcdefghij}",
 			expectedOutput:  "{abcde}",
 		},
 		{
-			name:            "exact label length",
 			labelToTruncate: "{abcde}",
 			expectedOutput:  "{abcde}",
 		},
 		{
-			name:            "one less length",
 			labelToTruncate: "{abcd}",
 			expectedOutput:  "{abcd}",
 		},
 		{
-			name:            "one more length",
 			labelToTruncate: "{abcdef}",
 			expectedOutput:  "{abcde}",
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
 			got := truncateExtLabels(tc.labelToTruncate, testLength)
 			testutil.Equals(t, tc.expectedOutput, got)
 		})
