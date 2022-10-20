@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -204,10 +205,13 @@ func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
 }
 
 func truncateExtLabels(s string, threshold int) string {
+	// remove enclosing braces
+	s = strings.Trim(s, "{}")
+	// truncate
 	if len(s) > threshold {
-		s = s[:threshold+1] + "}"
+		s = s[:threshold]
 	}
-	return s
+	return fmt.Sprintf("{%s}", s)
 }
 
 func (c *endpointSetNodeCollector) Update(nodes map[component.Component]map[string]int) {
