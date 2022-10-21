@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpclogging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -19,6 +20,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/thanos-io/objstore/client"
+
+	commonmodel "github.com/prometheus/common/model"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 
@@ -52,36 +55,36 @@ const (
 )
 
 type storeConfig struct {
-	indexCacheConfigs           extflag.PathOrContent
-	objStoreConfig              extflag.PathOrContent
-	dataDir                     string
+	indexCacheConfigs             extflag.PathOrContent
+	objStoreConfig                extflag.PathOrContent
+	dataDir                       string
 	disableCachingIndexHeaderFile bool
-	grpcConfig                  grpcConfig
-	httpConfig                  httpConfig
-	indexCacheSizeBytes         units.Base2Bytes
-	chunkPoolSize               units.Base2Bytes
-	seriesBatchSize             int
-	maxSampleCount              uint64
-	maxTouchedSeriesCount       uint64
-	maxDownloadedBytes          units.Base2Bytes
-	maxConcurrency              int
-	component                   component.StoreAPI
-	debugLogging                bool
-	syncInterval                time.Duration
-	blockSyncConcurrency        int
-	blockMetaFetchConcurrency   int
-	filterConf                  *store.FilterConfig
-	selectorRelabelConf         extflag.PathOrContent
-	advertiseCompatibilityLabel bool
-	consistencyDelay            commonmodel.Duration
-	ignoreDeletionMarksDelay    commonmodel.Duration
-	disableWeb                  bool
-	webConfig                   webConfig
-	postingOffsetsInMemSampling int
-	cachingBucketConfig         extflag.PathOrContent
-	reqLogConfig                *extflag.PathOrContent
-	lazyIndexReaderEnabled      bool
-	lazyIndexReaderIdleTimeout  time.Duration
+	grpcConfig                    grpcConfig
+	httpConfig                    httpConfig
+	indexCacheSizeBytes           units.Base2Bytes
+	chunkPoolSize                 units.Base2Bytes
+	seriesBatchSize               int
+	maxSampleCount                uint64
+	maxTouchedSeriesCount         uint64
+	maxDownloadedBytes            units.Base2Bytes
+	maxConcurrency                int
+	component                     component.StoreAPI
+	debugLogging                  bool
+	syncInterval                  time.Duration
+	blockSyncConcurrency          int
+	blockMetaFetchConcurrency     int
+	filterConf                    *store.FilterConfig
+	selectorRelabelConf           extflag.PathOrContent
+	advertiseCompatibilityLabel   bool
+	consistencyDelay              commonmodel.Duration
+	ignoreDeletionMarksDelay      commonmodel.Duration
+	disableWeb                    bool
+	webConfig                     webConfig
+	postingOffsetsInMemSampling   int
+	cachingBucketConfig           extflag.PathOrContent
+	reqLogConfig                  *extflag.PathOrContent
+	lazyIndexReaderEnabled        bool
+	lazyIndexReaderIdleTimeout    time.Duration
 }
 
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
