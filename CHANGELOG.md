@@ -29,6 +29,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5734](https://github.com/thanos-io/thanos/pull/5734) Store: Support disable block viewer UI.
 - [#5411](https://github.com/thanos-io/thanos/pull/5411) Tracing: Add OpenTelemetry Protocol exporter.
 - [#5779](https://github.com/thanos-io/thanos/pull/5779) Objstore: Support specifying S3 storage class.
+- [#5804](https://github.com/thanos-io/thanos/pull/5804) Tools: Add concurrency support for replicating blocks to buckets
 
 ### Changed
 
