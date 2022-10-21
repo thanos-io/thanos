@@ -513,7 +513,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	responseStatusCode := http.StatusOK
 	if err = h.handleRequest(ctx, rep, tenant, &wreq); err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err)
-		switch determineWriteErrorCause(err, 1) {
+		switch determineWriteErrorCause(err, 1, false) {
 		case errNotReady:
 			responseStatusCode = http.StatusServiceUnavailable
 		case errUnavailable:
@@ -586,7 +586,20 @@ func (h *Handler) writeQuorum() int {
 // fanoutForward fans out concurrently given set of write requests. It returns status immediately when quorum of
 // requests succeeds or fails or if context is canceled.
 func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[endpointReplica]*prompb.WriteRequest, successThreshold int) error {
-	var errs errutil.MultiError
+	var (
+		errs errutil.MultiError
+
+		// Create channel to send errors together with endpoint and replica on which it occurred.
+		ec = make(chan errWithReplicaFunc)
+
+		// replicaGroupReqs counts the number of requests that will be made on behalf
+		// on each replica. This is used to determine write success.
+		replicaGroupReqs = make([]int, h.options.ReplicationFactor)
+	)
+
+	for er := range wreqs {
+		replicaGroupReqs[er.replica.n]++
+	}
 
 	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
 	defer func() {
@@ -605,16 +618,6 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 			logTags = append(logTags, "request-id", id)
 		}
 		tLogger = log.With(h.logger, logTags)
-	}
-
-	// Create channel to send errors together with replica on which it occurred.
-	ec := make(chan errWithReplicaFunc)
-
-	// replicaGroupReqs counts the number of requests that will be made on behalf
-	// on each replica. This is used to determine write success.
-	replicaGroupReqs := make([]int, h.options.ReplicationFactor)
-	for er := range wreqs {
-		replicaGroupReqs[er.replica.n]++
 	}
 
 	var wg sync.WaitGroup
@@ -637,12 +640,12 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 				})
 				if err != nil {
 					h.replications.WithLabelValues(labelError).Inc()
-					sendErrWithReplica(ec, r.n, errors.Wrapf(err, "replicate write request for endpoint %v", endpoint))
+					sendErrWithReplica(ec, r.n, endpoint, errors.Wrapf(err, "replicate write request for endpoint %v", endpoint))
 					return
 				}
 
 				h.replications.WithLabelValues(labelSuccess).Inc()
-				sendErrWithReplica(ec, r.n, nil)
+				sendErrWithReplica(ec, r.n, endpoint, nil)
 			}(endpoint)
 
 			continue
@@ -666,10 +669,10 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
 					// To avoid breaking the counting logic, we need to flatten the error.
 					level.Debug(tLogger).Log("msg", "local tsdb write failed", "err", err.Error())
-					sendErrWithReplica(ec, r.n, errors.Wrapf(determineWriteErrorCause(err, 1), "store locally for endpoint %v", endpoint))
+					sendErrWithReplica(ec, r.n, endpoint, errors.Wrapf(determineWriteErrorCause(err, 1, false), "store locally for endpoint %v", endpoint))
 					return
 				}
-				sendErrWithReplica(ec, r.n, nil)
+				sendErrWithReplica(ec, r.n, endpoint, nil)
 			}(endpoint)
 
 			continue
@@ -694,7 +697,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 
 			cl, err = h.peers.get(fctx, endpoint)
 			if err != nil {
-				sendErrWithReplica(ec, r.n, errors.Wrapf(err, "get peer connection for endpoint %v", endpoint))
+				sendErrWithReplica(ec, r.n, endpoint, errors.Wrapf(err, "get peer connection for endpoint %v", endpoint))
 				return
 			}
 
@@ -703,7 +706,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 			if ok {
 				if time.Now().Before(b.nextAllowed) {
 					h.mtx.RUnlock()
-					sendErrWithReplica(ec, r.n, errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpoint))
+					sendErrWithReplica(ec, r.n, endpoint, errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpoint))
 					return
 				}
 			}
@@ -735,14 +738,14 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 						h.mtx.Unlock()
 					}
 				}
-				sendErrWithReplica(ec, r.n, errors.Wrapf(err, "forwarding request to endpoint %v", endpoint))
+				sendErrWithReplica(ec, r.n, endpoint, errors.Wrapf(err, "forwarding request to endpoint %v", endpoint))
 				return
 			}
 			h.mtx.Lock()
 			delete(h.peerStates, endpoint)
 			h.mtx.Unlock()
 
-			sendErrWithReplica(ec, r.n, nil)
+			sendErrWithReplica(ec, r.n, endpoint, nil)
 		}(endpoint)
 	}
 
@@ -756,7 +759,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 	defer func() {
 		go func() {
 			for errReplicaFn := range ec {
-				_, err := errReplicaFn()
+				_, _, err := errReplicaFn()
 				if err != nil {
 					level.Debug(tLogger).Log("msg", "request failed, but not needed to achieve quorum", "err", err)
 				}
@@ -769,10 +772,9 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		success = make([]int, h.options.ReplicationFactor)
 		// replicaMultiError contains all requests errors per replica.
 		replicaMultiError = make([]errutil.MultiError, h.options.ReplicationFactor)
-		// replicaGroupSuccess counts how many replica groups have succeeded.
-		// This needs to amount to the success threshold (quorum), in order to
-		// claim replication success.
-		replicaGroupSuccess int
+
+		endpointFailures    []string
+		maxEndpointFailures = calculateMaxEndpointFailures(int(h.options.ReplicationFactor), successThreshold)
 	)
 
 	for {
@@ -783,27 +785,37 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 			if !more {
 				for i, rme := range replicaMultiError {
 					// Only if we can determine same error for all requests within replica group,
-					// we return the cause, otherwise fallback to original original.
-					errs.Add(determineWriteErrorCause(rme.Err(), replicaGroupReqs[i]))
+					// we return the cause, otherwise inform that replication failed.
+					errs.Add(determineWriteErrorCause(rme.Err(), replicaGroupReqs[i], replicaGroupReqs[i] > 1))
 				}
-				return errs.Err()
+				finalErr := errs.Err()
+				// Second success mode - it is permissible to fail all requests to a number of endpoints,
+				// in which case we still know quorum is reached.
+				// This is useful if e.g. one or few nodes are unresponsive.
+				if len(endpointFailures) <= maxEndpointFailures {
+					level.Debug(tLogger).Log("msg", "some requests failed, but not needed to achieve quorum", "err", finalErr)
+					return nil
+				}
+				return finalErr
 			}
-			replica, err := errReplicaFn()
+			replica, endpoint, err := errReplicaFn()
 			if err == nil {
+				var replicaGroupSuccess int
 				success[replica]++
 				for i := range success {
-					if success[i] >= replicaGroupReqs[i] {
-						// If enough replica groups succeed, we can finish early (quorum
-						// is guaranteed).
+					// First success mode - if enough replica groups succeed, we can finish early (quorum
+					// is guaranteed).
+					if success[i] == replicaGroupReqs[i] {
 						replicaGroupSuccess++
-						if replicaGroupSuccess == successThreshold {
-							return nil
-						}
+					}
+					if replicaGroupSuccess == successThreshold {
+						return nil
 					}
 				}
 				continue
 			}
 			replicaMultiError[replica].Add(err)
+			endpointFailures = countEndpointFailures(endpointFailures, endpoint)
 		}
 	}
 }
@@ -849,7 +861,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	quorum := h.writeQuorum()
 	// fanoutForward only returns an error if successThreshold (quorum) is not reached.
 	if err := h.fanoutForward(ctx, tenant, replicatedRequests, quorum); err != nil {
-		return errors.Wrap(determineWriteErrorCause(err, quorum), "quorum not reached")
+		return errors.Wrap(determineWriteErrorCause(err, quorum, false), "quorum not reached")
 	}
 	return nil
 }
@@ -863,7 +875,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
-	switch determineWriteErrorCause(err, 1) {
+	switch determineWriteErrorCause(err, 1, false) {
 	case nil:
 		return &storepb.WriteResponse{}, nil
 	case errNotReady:
@@ -894,6 +906,27 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest) {
 		timeSeries = append(timeSeries, ts)
 	}
 	wreq.Timeseries = timeSeries
+}
+
+// countEndpointFailures count how many distinct endpoints has responded with an error.
+func countEndpointFailures(endpointFailures []string, endpoint string) []string {
+	for _, ef := range endpointFailures {
+		if ef == endpoint {
+			return endpointFailures
+		}
+	}
+
+	return append(endpointFailures, endpoint)
+}
+
+// calculateMaxEndpointFailures returns maximum number of permissible distinct endpoints
+// that can fail while we can still claim quorum.
+func calculateMaxEndpointFailures(replicationFactor int, quorum int) int {
+	if quorum == 1 {
+		return 0
+	}
+
+	return replicationFactor - quorum
 }
 
 // isConflict returns whether or not the given error represents a conflict.
@@ -962,17 +995,31 @@ func (a expectedErrors) Len() int           { return len(a) }
 func (a expectedErrors) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a expectedErrors) Less(i, j int) bool { return a[i].count < a[j].count }
 
+func (a expectedErrors) moreThanOneCause() bool {
+	var oneCauseFound bool
+	for _, ee := range a {
+		if oneCauseFound && ee.count > 0 {
+			return true
+		} else if ee.count > 0 {
+			oneCauseFound = true
+		}
+	}
+
+	return false
+}
+
 // determineWriteErrorCause extracts a sentinel error that has occurred more than the given threshold from a given fan-out error.
-// It will inspect the error's cause if the error is a MultiError,
-// It will return cause of each contained error but will not traverse any deeper.
-func determineWriteErrorCause(err error, threshold int) error {
+// It will inspect the error's cause if the error is a MultiError. It will return cause of each contained error but will not traverse any deeper.
+// If no cause can be determined, the original error is returned. When forReplication is true,
+// it will return failed replication error on any unknown error cause.
+func determineWriteErrorCause(err error, threshold int, forReplication bool) error {
 	if err == nil {
 		return nil
 	}
 
 	unwrappedErr := errors.Cause(err)
-	errs, ok := unwrappedErr.(errutil.NonNilMultiError)
-	if !ok {
+	errs, isMultiError := unwrappedErr.(errutil.NonNilMultiError)
+	if !isMultiError {
 		errs = []error{unwrappedErr}
 	}
 	if len(errs) == 0 {
@@ -988,6 +1035,7 @@ func determineWriteErrorCause(err error, threshold int) error {
 		{err: errNotReady, cause: isNotReady},
 		{err: errUnavailable, cause: isUnavailable},
 	}
+	var globalCount int
 	for _, exp := range expErrs {
 		exp.count = 0
 		for _, err := range errs {
@@ -997,9 +1045,17 @@ func determineWriteErrorCause(err error, threshold int) error {
 		}
 
 		// If conflict only errors, return it directly regardless of threshold.
-		if exp.err == errConflict && exp.count == len(errs) {
+		if isMultiError && exp.err == errConflict && exp.count == len(errs) {
 			return errConflict
 		}
+
+		globalCount += exp.count
+	}
+
+	// If we're determining for a replication request, we want to
+	// respond with failure on any single unknown error or if there are mixed error causes.
+	if forReplication && (globalCount != len(errs) || expErrs.moreThanOneCause()) {
+		return errors.Wrapf(err, "replicating request failed")
 	}
 
 	// Determine which error occurred most.
@@ -1012,13 +1068,13 @@ func determineWriteErrorCause(err error, threshold int) error {
 }
 
 // errWithReplicaFunc is a type to enable sending replica number and err over channel.
-type errWithReplicaFunc func() (uint64, error)
+type errWithReplicaFunc func() (uint64, string, error)
 
-// sendErrWithReplica is a utility func to send replica number and error over channel.
-// Replica number is used to determine write quorum, based on the number of requests,
+// sendErrWithReplica is a utility func to send replica number, endpoint and error over channel.
+// Replica number and endpoint is used to determine write quorum, based on the number of requests,
 // see the comments above.
-func sendErrWithReplica(f chan errWithReplicaFunc, r uint64, err error) {
-	f <- func() (uint64, error) { return r, err }
+func sendErrWithReplica(f chan errWithReplicaFunc, r uint64, e string, err error) {
+	f <- func() (uint64, string, error) { return r, e, err }
 }
 
 func newPeerGroup(dialOpts ...grpc.DialOption) *peerGroup {
