@@ -85,6 +85,7 @@ func RunReplicate(
 	fromObjStoreConfig *extflag.PathOrContent,
 	toObjStoreConfig *extflag.PathOrContent,
 	singleRun bool,
+	concurrency int,
 	minTime, maxTime *thanosmodel.TimeOrDurationValue,
 	blockIDs []ulid.ULID,
 	ignoreMarkedForDeletion bool,
@@ -196,7 +197,7 @@ func RunReplicate(
 		logger := log.With(logger, "replication-run-id", runID.String())
 		level.Info(logger).Log("msg", "running replication attempt")
 
-		if err := newReplicationScheme(logger, metrics, blockFilter, fetcher, fromBkt, toBkt, reg).execute(ctx); err != nil {
+		if err := newReplicationScheme(logger, metrics, blockFilter, fetcher, fromBkt, toBkt, reg).execute(ctx, concurrency); err != nil {
 			return errors.Wrap(err, "replication execute")
 		}
 

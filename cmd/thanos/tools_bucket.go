@@ -125,6 +125,7 @@ type bucketReplicateConfig struct {
 	compactions []int
 	matcherStrs []string
 	singleRun   bool
+	concurrency int
 }
 
 type bucketDownsampleConfig struct {
@@ -209,6 +210,11 @@ func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.Fla
 	cmd.Flag("matcher", "Only blocks whose external labels exactly match this matcher will be replicated.").PlaceHolder("key=\"value\"").StringsVar(&tbc.matcherStrs)
 
 	cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").BoolVar(&tbc.singleRun)
+
+	cmd.Flag("concurrency", `Number of go-routines to use for replication. WARNING: Value bigger than one enables, concurrent, non-sequential block replication. 
+	This means that the block from 4w ago can be uploaded after the block from 2h ago.
+	In the default Thanos compactor, with a 30m consistency delay (https://thanos.io/tip/components/compact.md/#consistency-delay) if within 30 minutes after uploading those blocks you will have still some blocks to upload between those, the compactor might do compaction assuming a gap!
+	This is solvable with vertical compaction, but it wastes extra computation and is not enabled by default. Use with care.`).Default("1").IntVar(&tbc.concurrency)
 
 	return tbc
 }
@@ -734,6 +740,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			objStoreConfig,
 			toObjStoreConfig,
 			tbc.singleRun,
+			tbc.concurrency,
 			minTime,
 			maxTime,
 			blockIDs,

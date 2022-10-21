@@ -179,8 +179,10 @@ func newReplicationScheme(
 	}
 }
 
-func (rs *replicationScheme) execute(ctx context.Context) error {
+func (rs *replicationScheme) execute(ctx context.Context, concurrency int) error {
 	availableBlocks := []*metadata.Meta{}
+
+	// TODO: figure out how to run concurrency based on external labels only
 
 	metas, partials, err := rs.fetcher.Fetch(ctx)
 	if err != nil {

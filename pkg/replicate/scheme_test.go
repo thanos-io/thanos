@@ -395,7 +395,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 
 		r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), targetBucket, nil)
 
-		err = r.execute(ctx)
+		err = r.execute(ctx, 1)
 		testutil.Ok(t, err)
 
 		c.assert(ctx, t, originBucket, targetBucket)

@@ -509,6 +509,18 @@ with Thanos blocks (meta.json has to have Thanos metadata).
 Flags:
       --compaction=1... ...      Only blocks with these compaction levels will
                                  be replicated. Repeated flag.
+      --concurrency=1            Number of go-routines to use for replication. 
+                                 WARNING: Value bigger than one enables, concurrent, 
+                                 non-sequential block replication. This means that 
+                                 the block from 4w ago can be uploaded after the block
+                                 from 2h ago. In the default Thanos compactor,
+                                 with a 30m consistency delay
+                                 (https://thanos.io/tip/components/compact.md/#consistency-delay)
+                                 if within 30 minutes after uploading those blocks you
+                                 will have still some blocks to upload between those,
+                                 the compactor might do compaction assuming a gap!
+                                 This is solvable with vertical compaction, but it wastes extra
+                                 computation and is not enabled by default. Use with care.
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --http-address="0.0.0.0:10902"
