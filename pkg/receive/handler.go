@@ -592,13 +592,13 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		// Create channel to send errors together with endpoint and replica on which it occurred.
 		ec = make(chan errWithReplicaFunc)
 
-		// replicaGroupReqs counts the number of requests that will be made on behalf
-		// on each replica. This is used to determine write success.
-		replicaGroupReqs = make([]int, h.options.ReplicationFactor)
+		// replicaReqs counts the number of requests that will be made on behalf
+		// of each replica. This is used to determine write success.
+		replicaReqs = make([]int, h.options.ReplicationFactor)
 	)
 
 	for er := range wreqs {
-		replicaGroupReqs[er.replica.n]++
+		replicaReqs[er.replica.n]++
 	}
 
 	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
@@ -768,11 +768,12 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 	}()
 
 	var (
-		// success counts how many requests per replica have succedeed.
-		success = make([]int, h.options.ReplicationFactor)
+		// perReplicaSuccess is used to determine if enough requests succeeded for given replica number.
+		preReplicaSuccess = make([]int, h.options.ReplicationFactor)
 		// replicaMultiError contains all requests errors per replica.
 		replicaMultiError = make([]errutil.MultiError, h.options.ReplicationFactor)
 
+		// endpointFailures keeps list of endpoints to which at least one request failed.
 		endpointFailures    []string
 		maxEndpointFailures = calculateMaxEndpointFailures(int(h.options.ReplicationFactor), successThreshold)
 	)
@@ -786,11 +787,11 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 				for i, rme := range replicaMultiError {
 					// Only if we can determine same error for all requests within replica group,
 					// we return the cause, otherwise inform that replication failed.
-					errs.Add(determineWriteErrorCause(rme.Err(), replicaGroupReqs[i], replicaGroupReqs[i] > 1))
+					errs.Add(determineWriteErrorCause(rme.Err(), replicaReqs[i], replicaReqs[i] > 1))
 				}
 				finalErr := errs.Err()
-				// Second success mode - it is permissible to fail all requests to a number of endpoints,
-				// in which case we still know quorum is reached.
+				// Second success mode - it is permissible to fail all requests to specific endpoints,
+				// up to maxEndpointFailures, in which case we still know quorum is reached.
 				// This is useful if e.g. one or few nodes are unresponsive.
 				if len(endpointFailures) <= maxEndpointFailures {
 					level.Debug(tLogger).Log("msg", "some requests failed, but not needed to achieve quorum", "err", finalErr)
@@ -801,11 +802,11 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 			replica, endpoint, err := errReplicaFn()
 			if err == nil {
 				var replicaGroupSuccess int
-				success[replica]++
-				for i := range success {
+				preReplicaSuccess[replica]++
+				for i := range preReplicaSuccess {
 					// First success mode - if enough replica groups succeed, we can finish early (quorum
 					// is guaranteed).
-					if success[i] == replicaGroupReqs[i] {
+					if preReplicaSuccess[i] == replicaReqs[i] {
 						replicaGroupSuccess++
 					}
 					if replicaGroupSuccess == successThreshold {
