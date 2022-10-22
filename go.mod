@@ -18,8 +18,8 @@ require (
 	github.com/chromedp/chromedp v0.8.2
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
-	github.com/efficientgo/e2e v0.13.1-0.20220923082810-8fa9daa8af8a
-	github.com/efficientgo/tools/extkingpin v0.0.0-20220801101838-3312908f6a9d
+	github.com/efficientgo/e2e v0.13.2-0.20221003194337-cbc7a9c8405f
+	github.com/efficientgo/tools/extkingpin v0.0.0-20220817170617-6c25e3b627dd
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.2.0
 	github.com/felixge/fgprof v0.9.2
@@ -108,6 +108,7 @@ require (
 
 require (
 	github.com/efficientgo/core v1.0.0-rc.0
+	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd
 	github.com/minio/sha256-simd v1.0.0
 )
 
@@ -127,10 +128,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.10.0
 )
 
-require (
-	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd
-	go.opentelemetry.io/contrib/propagators/autoprop v0.34.0
-)
+require go.opentelemetry.io/contrib/propagators/autoprop v0.34.0
 
 require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.32.3 // indirect
