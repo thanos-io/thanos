@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -416,6 +415,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		},
 	}
 
+	ag := addrGen{}
 	for i := range appendables {
 		h := NewHandler(nil, &Options{
 			TenantHeader:      DefaultTenantHeader,
@@ -427,7 +427,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		})
 		handlers = append(handlers, h)
 		h.peers = peers
-		addr := randomAddr()
+		addr := ag.newAddr()
 		h.options.Endpoint = addr
 		cfg[0].Endpoints = append(cfg[0].Endpoints, h.options.Endpoint)
 		peers.cache[addr] = &fakeRemoteWriteGRPCServer{h: h}
@@ -1022,8 +1022,11 @@ func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (*httptes
 	return rec, nil
 }
 
-func randomAddr() string {
-	return fmt.Sprintf("http://%d.%d.%d.%d:%d", rand.Intn(256), rand.Intn(256), rand.Intn(256), rand.Intn(256), rand.Intn(35000)+30000)
+type addrGen struct{ n int }
+
+func (a *addrGen) newAddr() string {
+	a.n++
+	return fmt.Sprintf("http://node-%d:%d", a.n, 12345+a.n)
 }
 
 type fakeRemoteWriteGRPCServer struct {
