@@ -118,6 +118,7 @@ type bucketStoreMetrics struct {
 	seriesMergeDuration   prometheus.Histogram
 	resultSeriesCount     prometheus.Summary
 	chunkSizeBytes        prometheus.Histogram
+	postingsSizeBytes     prometheus.Histogram
 	queriesDropped        *prometheus.CounterVec
 	seriesRefetches       prometheus.Counter
 	emptyPostingCount     prometheus.Counter
@@ -200,6 +201,14 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.chunkSizeBytes = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Name: "thanos_bucket_store_sent_chunk_size_bytes",
 		Help: "Size in bytes of the chunks for the single series, which is adequate to the gRPC message size sent to querier.",
+		Buckets: []float64{
+			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
+		},
+	})
+
+	m.postingsSizeBytes = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name: "thanos_bucket_store_postings_size_bytes",
+		Help: "Size in bytes of the postings for a single series call.",
 		Buckets: []float64{
 			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
 		},
@@ -1137,6 +1146,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.cachedPostingsCompressionTimeSeconds.WithLabelValues(labelDecode).Add(stats.CachedPostingsDecompressionTimeSum.Seconds())
 		s.metrics.cachedPostingsOriginalSizeBytes.Add(float64(stats.CachedPostingsOriginalSizeSum))
 		s.metrics.cachedPostingsCompressedSizeBytes.Add(float64(stats.CachedPostingsCompressedSizeSum))
+		s.metrics.postingsSizeBytes.Observe(float64(int(stats.PostingsFetchedSizeSum) + int(stats.PostingsTouchedSizeSum)))
 
 		level.Debug(s.logger).Log("msg", "stats query processed",
 			"request", req,
