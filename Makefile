@@ -199,7 +199,7 @@ docker: build
 	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
 	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
-	@docker build -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
+	@docker build -t "thanos:demo-3-11-22-v2" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 	@rm ./thanos_tmp_for_docker
 else
 docker: docker-multi-stage

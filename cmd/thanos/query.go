@@ -631,7 +631,7 @@ func runQuery(
 	case promqlEnginePrometheus:
 		queryEngine = promql.NewEngine(engineOpts)
 	case promqlEngineThanos:
-		queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts})
+		queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts, DisableFallback: true})
 	default:
 		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)
 	}

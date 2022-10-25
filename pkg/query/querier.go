@@ -196,6 +196,16 @@ func newQuerier(
 	}
 }
 
+// TODO(bwplotka): YOLO - for demo purposes.
+func (q *querier) SetShardInfo(shard, numShards int, by bool, labels []string) {
+	q.shardInfo = &storepb.ShardInfo{
+		ShardIndex:  int64(shard),
+		TotalShards: int64(numShards),
+		By:          by,
+		Labels:      labels,
+	}
+}
+
 func (q *querier) isDedupEnabled() bool {
 	return q.deduplicate && len(q.replicaLabels) > 0
 }

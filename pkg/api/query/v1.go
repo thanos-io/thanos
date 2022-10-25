@@ -43,6 +43,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/stats"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
+	"github.com/thanos-community/promql-engine/engine"
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -403,6 +404,14 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		lookbackDelta = lookbackDeltaFromReq
 	}
 
+	var explain bool
+	// NOTE(bwplotka): Yolo for demo.
+	queryParam := r.FormValue("query")
+	if strings.HasPrefix(strings.ToLower(queryParam), "explain ") {
+		queryParam = queryParam[8:]
+		explain = true
+	}
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
@@ -421,12 +430,23 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			query.NewAggregateStatsReporter(&seriesStats),
 		),
 		&promql.QueryOpts{LookbackDelta: lookbackDelta},
-		r.FormValue("query"),
+		queryParam,
 		ts,
 	)
-
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+	}
+
+	// NOTE(bwplotka): Yolo for demo.
+	if explain {
+		qd, ok := qry.(engine.Debuggable)
+		if !ok {
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.New("cannot explain query, not a new PromQL engine")}, qry.Close
+		}
+		return &queryData{
+			ResultType: parser.ValueTypeMatrix,
+			Result:     promql.Matrix{},
+		}, []error{errors.New(qd.Explain())}, nil, qry.Close
 	}
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
@@ -460,6 +480,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	if r.FormValue(Stats) != "" {
 		qs = stats.NewQueryStats(qry.Stats())
 	}
+
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
@@ -554,6 +575,14 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	// Record the query range requested.
 	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
 
+	var explain bool
+	// NOTE(bwplotka): Yolo for demo.
+	queryParam := r.FormValue("query")
+	if strings.HasPrefix(strings.ToLower(queryParam), "explain ") {
+		queryParam = queryParam[8:]
+		explain = true
+	}
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
@@ -572,13 +601,25 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			query.NewAggregateStatsReporter(&seriesStats),
 		),
 		&promql.QueryOpts{LookbackDelta: lookbackDelta},
-		r.FormValue("query"),
+		queryParam,
 		start,
 		end,
 		step,
 	)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+	}
+
+	// NOTE(bwplotka): Yolo for demo.
+	if explain {
+		qd, ok := qry.(engine.Debuggable)
+		if !ok {
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.New("cannot explain query, not a new PromQL engine")}, qry.Close
+		}
+		return &queryData{
+			ResultType: parser.ValueTypeMatrix,
+			Result:     promql.Matrix{},
+		}, []error{errors.New(qd.Explain())}, nil, qry.Close
 	}
 
 	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {

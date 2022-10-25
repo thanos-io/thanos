@@ -520,7 +520,7 @@ func newAsyncRespSet(ctx context.Context,
 		"target": storeAddr,
 	})
 
-	span, seriesCtx = tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
+	span, seriesCtx = tracing.StartSpan(seriesCtx, "async_resp_set.series", tracing.Tags{
 		"store.id":       storeID,
 		"store.is_local": isLocalStore,
 		"store.addr":     storeAddr,
