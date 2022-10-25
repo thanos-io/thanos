@@ -332,6 +332,7 @@ func runStore(
 		store.WithQueryGate(queriesGate),
 		store.WithChunkPool(chunkPool),
 		store.WithFilterConfig(conf.filterConf),
+		store.WithChunkHashCalculation(true),
 	}
 
 	if conf.debugLogging {

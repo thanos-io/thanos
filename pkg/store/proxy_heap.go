@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -130,15 +131,16 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 				if field == nil {
 					continue
 				}
-				h := xxhash.Sum64(field.Data)
+				hash := field.Hash
+				if hash == 0 {
+					hash = xxhash.Sum64(field.Data)
+				}
 
-				if _, ok := chunkDedupMap[h]; !ok {
+				if _, ok := chunkDedupMap[hash]; !ok {
 					chk := chk
-
-					chunkDedupMap[h] = &chk
+					chunkDedupMap[hash] = &chk
 				}
 			}
-
 		}
 	}
 
