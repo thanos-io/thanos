@@ -139,6 +139,7 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 				if _, ok := chunkDedupMap[hash]; !ok {
 					chk := chk
 					chunkDedupMap[hash] = &chk
+					break
 				}
 			}
 		}
