@@ -552,6 +552,17 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 		return errors.New("hashring is not ready")
 	}
 
+	wreqs := make(map[endpointReplica]*prompb.WriteRequest)
+
+	// If request was already replicated, we know it's intended for
+	// current endpoint, so we can go to local write directly (taken care of
+	// in fanoutForward)
+	if r.replicated {
+		wreqs[endpointReplica{endpoint: h.options.Endpoint, replica: r}] = wreq
+		h.mtx.RUnlock()
+		return h.fanoutForward(ctx, tenant, wreqs, 1)
+	}
+
 	// Batch all of the time series in the write request
 	// into several smaller write requests that are
 	// grouped by target endpoint. This ensures that
@@ -559,7 +570,6 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 	// at most one outgoing write request will be made
 	// to every other node in the hashring, rather than
 	// one request per time series.
-	wreqs := make(map[endpointReplica]*prompb.WriteRequest)
 	for i := range wreq.Timeseries {
 		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[i], r.n)
 		if err != nil {
@@ -573,8 +583,8 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 		wr := wreqs[key]
 		wr.Timeseries = append(wr.Timeseries, wreq.Timeseries[i])
 	}
-	h.mtx.RUnlock()
 
+	h.mtx.RUnlock()
 	return h.fanoutForward(ctx, tenant, wreqs, len(wreqs))
 }
 
