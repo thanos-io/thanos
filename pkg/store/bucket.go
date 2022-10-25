@@ -168,21 +168,25 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	})
 
 	m.seriesDataTouched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_touched",
-		Help: "How many items of a data type in a block were touched for a single series request.",
+		Name:       "thanos_bucket_store_series_data_touched",
+		Help:       "How many items of a data type in a block were touched for a single series request.",
+		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
 	}, []string{"data_type"})
 	m.seriesDataFetched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_fetched",
-		Help: "How many items of a data type in a block were fetched for a single series request.",
+		Name:       "thanos_bucket_store_series_data_fetched",
+		Help:       "How many items of a data type in a block were fetched for a single series request.",
+		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
 	}, []string{"data_type"})
 
 	m.seriesDataSizeTouched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_size_touched_bytes",
-		Help: "Size of all items of a data type in a block were touched for a single series request.",
+		Name:       "thanos_bucket_store_series_data_size_touched_bytes",
+		Help:       "Size of all items of a data type in a block were touched for a single series request.",
+		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
 	}, []string{"data_type"})
 	m.seriesDataSizeFetched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_size_fetched_bytes",
-		Help: "Size of all items of a data type in a block were fetched for a single series request.",
+		Name:       "thanos_bucket_store_series_data_size_fetched_bytes",
+		Help:       "Size of all items of a data type in a block were fetched for a single series request.",
+		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
 	}, []string{"data_type"})
 
 	m.seriesBlocksQueried = promauto.With(reg).NewSummary(prometheus.SummaryOpts{
@@ -200,8 +204,9 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 	m.resultSeriesCount = promauto.With(reg).NewSummary(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_result_series",
-		Help: "Number of series observed in the final result of a query.",
+		Name:       "thanos_bucket_store_series_result_series",
+		Help:       "Number of series observed in the final result of a query.",
+		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
 	})
 
 	m.chunkSizeBytes = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
