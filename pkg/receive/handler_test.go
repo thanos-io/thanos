@@ -1425,6 +1425,40 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				}
 			})
 
+			handler.options.DefaultTenantID = fmt.Sprintf("%v-ok-w-replicated", tcase.name)
+			handler.options.ReplicaHeader = "test-header"
+			handler.writer.multiTSDB = &tsOverrideTenantStorage{TenantStorage: m, interval: 1}
+
+			// It takes time to create new tenant, wait for it.
+			{
+				app, err := m.TenantAppendable(handler.options.DefaultTenantID)
+				testutil.Ok(b, err)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
+				testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+					_, err = app.Appender(ctx)
+					return err
+				}))
+			}
+
+			b.Run("OK-with-replicated", func(b testutil.TB) {
+				n := b.N()
+				headers := make(http.Header)
+				headers.Set(handler.options.ReplicaHeader, "1")
+				b.ResetTimer()
+				for i := 0; i < n; i++ {
+					r := httptest.NewRecorder()
+					handler.receiveHTTP(r, &http.Request{
+						ContentLength: int64(len(tcase.writeRequest)),
+						Body:          io.NopCloser(bytes.NewReader(tcase.writeRequest)),
+						Header:        headers,
+					})
+					testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
+				}
+			})
+
 			handler.options.DefaultTenantID = fmt.Sprintf("%v-conflicting", tcase.name)
 			handler.writer.multiTSDB = &tsOverrideTenantStorage{TenantStorage: m, interval: -1} // Timestamp can't go down, which will cause conflict error.
 
