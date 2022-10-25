@@ -18,6 +18,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#5819](https://github.com/thanos-io/thanos/pull/5819) Store: Add a few objectives for Store's data touched/fetched amount and sizes. They are: 50, 95, and 99 quantiles.
+
 ## [v0.29.0](https://github.com/thanos-io/thanos/tree/release-0.29) - Release in progress
 
 ### Fixed
