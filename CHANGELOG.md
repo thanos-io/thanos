@@ -18,6 +18,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#5818] Receive: Don't batch requests which are already replicated, this improves performance by removing unecessary operation. *breaking :warning: If you have replication enabled, ensure all your receive nodes are already running at least `v0.28.0` prior to updating to this version.*
+
 ## [v0.29.0](https://github.com/thanos-io/thanos/tree/release-0.29) - Release in progress
 
 ### Fixed
