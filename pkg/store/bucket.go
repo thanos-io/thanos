@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"hash"
 	"io"
 	"math"
 	"os"
@@ -18,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cespare/xxhash"
 
 	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
@@ -96,10 +99,13 @@ const (
 	labelDecode = "decode"
 
 	minBlockSyncConcurrency = 1
+
+	enableChunkHashCalculation = true
 )
 
 var (
 	errBlockSyncConcurrencyNotValid = errors.New("the block sync concurrency must be equal or greater than 1.")
+	hashPool                        = sync.Pool{New: func() interface{} { return xxhash.New() }}
 )
 
 type bucketStoreMetrics struct {
@@ -325,10 +331,12 @@ type BucketStore struct {
 
 	// Enables hints in the Series() response.
 	enableSeriesResponseHints bool
+
+	enableChunkHashCalculation bool
 }
 
-func (b *BucketStore) validate() error {
-	if b.blockSyncConcurrency < minBlockSyncConcurrency {
+func (s *BucketStore) validate() error {
+	if s.blockSyncConcurrency < minBlockSyncConcurrency {
 		return errBlockSyncConcurrencyNotValid
 	}
 	return nil
@@ -398,6 +406,12 @@ func WithDebugLogging() BucketStoreOption {
 	}
 }
 
+func WithChunkHashCalculation(enableChunkHashCalculation bool) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.enableChunkHashCalculation = enableChunkHashCalculation
+	}
+}
+
 // NewBucketStore creates a new bucket backed store that implements the store API against
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
@@ -436,6 +450,7 @@ func NewBucketStore(
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		enableSeriesResponseHints:   enableSeriesResponseHints,
+		enableChunkHashCalculation:  enableChunkHashCalculation,
 	}
 
 	for _, option := range options {
@@ -794,17 +809,18 @@ func (s *bucketSeriesSet) Err() error {
 // blockSeries returns series matching given matchers, that have some data in given time range.
 func blockSeries(
 	ctx context.Context,
-	extLset labels.Labels, // External labels added to the returned series labels.
-	indexr *bucketIndexReader, // Index reader for block.
-	chunkr *bucketChunkReader, // Chunk reader for block.
-	matchers []*labels.Matcher, // Series matchers.
-	chunksLimiter ChunksLimiter, // Rate limiter for loading chunks.
-	seriesLimiter SeriesLimiter, // Rate limiter for loading series.
-	skipChunks bool, // If true, chunks are not loaded.
-	minTime, maxTime int64, // Series must have data in this time range to be returned.
-	loadAggregates []storepb.Aggr, // List of aggregates to load when loading chunks.
+	extLset labels.Labels,
+	indexr *bucketIndexReader,
+	chunkr *bucketChunkReader,
+	matchers []*labels.Matcher,
+	chunksLimiter ChunksLimiter,
+	seriesLimiter SeriesLimiter,
+	skipChunks bool,
+	minTime, maxTime int64,
+	loadAggregates []storepb.Aggr,
 	shardMatcher *storepb.ShardMatcher,
 	emptyPostingsCount prometheus.Counter,
+	calculateChunkHash bool,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(ctx, matchers)
 	if err != nil {
@@ -889,20 +905,23 @@ func blockSeries(
 		return newBucketSeriesSet(res), indexr.stats, nil
 	}
 
-	if err := chunkr.load(ctx, res, loadAggregates); err != nil {
+	if err := chunkr.load(ctx, res, loadAggregates, calculateChunkHash); err != nil {
 		return nil, nil, errors.Wrap(err, "load chunks")
 	}
 
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
 }
 
-func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, save func([]byte) ([]byte, error)) error {
+func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, save func([]byte) ([]byte, error), calculateChecksum bool) error {
+	hasher := hashPool.Get().(hash.Hash64)
+	defer hashPool.Put(hasher)
+
 	if in.Encoding() == chunkenc.EncXOR {
 		b, err := save(in.Bytes())
 		if err != nil {
 			return err
 		}
-		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		return nil
 	}
 	if in.Encoding() != downsample.ChunkEncAggr {
@@ -922,7 +941,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_SUM:
 			x, err := ac.Get(downsample.AggrSum)
 			if err != nil {
@@ -932,7 +951,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_MIN:
 			x, err := ac.Get(downsample.AggrMin)
 			if err != nil {
@@ -942,7 +961,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_MAX:
 			x, err := ac.Get(downsample.AggrMax)
 			if err != nil {
@@ -952,7 +971,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_COUNTER:
 			x, err := ac.Get(downsample.AggrCounter)
 			if err != nil {
@@ -962,10 +981,20 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b}
+			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		}
 	}
 	return nil
+}
+
+func hashChunk(hasher hash.Hash64, b []byte, doHash bool) uint64 {
+	if !doHash {
+		return 0
+	}
+	hasher.Reset()
+	// Write never returns an error on the hasher implementation
+	_, _ = hasher.Write(b)
+	return hasher.Sum64()
 }
 
 // debugFoundBlockSetOverview logs on debug level what exactly blocks we used for query in terms of
@@ -1104,6 +1133,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					req.Aggregates,
 					shardMatcher,
 					s.metrics.emptyPostingCount,
+					s.enableChunkHashCalculation,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
@@ -1326,6 +1356,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					nil,
 					nil,
 					s.metrics.emptyPostingCount,
+					false,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
@@ -1494,6 +1525,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					nil,
 					nil,
 					s.metrics.emptyPostingCount,
+					false,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
@@ -2566,7 +2598,7 @@ func (r *bucketChunkReader) addLoad(id chunks.ChunkRef, seriesEntry, chunk int) 
 }
 
 // load loads all added chunks and saves resulting aggrs to res.
-func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr) error {
+func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, calculateChunkChecksum bool) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	for seq, pIdxs := range r.toLoad {
@@ -2582,7 +2614,7 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 			p := p
 			indices := pIdxs[p.ElemRng[0]:p.ElemRng[1]]
 			g.Go(func() error {
-				return r.loadChunks(ctx, res, aggrs, seq, p, indices)
+				return r.loadChunks(ctx, res, aggrs, seq, p, indices, calculateChunkChecksum)
 			})
 		}
 	}
@@ -2591,7 +2623,7 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 
 // loadChunks will read range [start, end] from the segment file with sequence number seq.
 // This data range covers chunks starting at supplied offsets.
-func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx) error {
+func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx, calculateChunkChecksum bool) error {
 	fetchBegin := time.Now()
 
 	// Get a reader for the required range.
@@ -2670,7 +2702,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		// There is also crc32 after the chunk, but we ignore that.
 		chunkLen = n + 1 + int(chunkDataLen)
 		if chunkLen <= len(cb) {
-			err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk(cb[n:chunkLen]), aggrs, r.save)
+			err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk(cb[n:chunkLen]), aggrs, r.save, calculateChunkChecksum)
 			if err != nil {
 				return errors.Wrap(err, "populate chunk")
 			}
@@ -2701,7 +2733,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		r.stats.chunksFetchCount++
 		r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
 		r.stats.ChunksFetchedSizeSum += units.Base2Bytes(len(*nb))
-		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk((*nb)[n:]), aggrs, r.save)
+		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk((*nb)[n:]), aggrs, r.save, calculateChunkChecksum)
 		if err != nil {
 			r.block.chunkPool.Put(nb)
 			return errors.Wrap(err, "populate chunk")

@@ -481,6 +481,7 @@ func (u *BucketStores) getOrCreateStore(userID string) (*store.BucketStore, erro
 		store.WithIndexCache(u.indexCache),
 		store.WithQueryGate(u.queryGate),
 		store.WithChunkPool(u.chunksPool),
+		store.WithChunkHashCalculation(true),
 	}
 	if u.logLevel.String() == "debug" {
 		bucketStoreOpts = append(bucketStoreOpts, store.WithDebugLogging())
