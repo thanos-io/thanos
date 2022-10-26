@@ -12,6 +12,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cespare/xxhash"
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -59,6 +60,46 @@ func TestTSDBStore_Info(t *testing.T) {
 	testutil.Equals(t, storepb.StoreType_RULE, resp.StoreType)
 	testutil.Equals(t, int64(12), resp.MinTime)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
+}
+
+func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
+	defer testutil.TolerantVerifyLeak(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	db, err := e2eutil.NewTSDB()
+	defer func() { testutil.Ok(t, db.Close()) }()
+	testutil.Ok(t, err)
+
+	tsdbStore := NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
+
+	appender := db.Appender(context.Background())
+
+	for i := 1; i <= 3; i++ {
+		_, err = appender.Append(0, labels.FromStrings("a", "1"), int64(i), float64(i))
+		testutil.Ok(t, err)
+	}
+	err = appender.Commit()
+	testutil.Ok(t, err)
+
+	srv := newStoreSeriesServer(ctx)
+
+	req := &storepb.SeriesRequest{
+		MinTime: 1,
+		MaxTime: 3,
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+		},
+	}
+
+	err = tsdbStore.Series(req, srv)
+	testutil.Ok(t, err)
+
+	for _, chk := range srv.SeriesSet[0].Chunks {
+		want := xxhash.Sum64(chk.Raw.Data)
+		testutil.Equals(t, want, chk.Raw.Hash)
+	}
 }
 
 func TestTSDBStore_Series(t *testing.T) {

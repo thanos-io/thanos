@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
@@ -2079,6 +2080,7 @@ func TestDedupRespHeap_Deduplication(t *testing.T) {
 								{
 									Raw: &storepb.Chunk{
 										Type: storepb.Chunk_XOR,
+										Hash: xxhash.Sum64([]byte(`abcdefgh`)),
 										Data: []byte(`abcdefgh`),
 									},
 								},

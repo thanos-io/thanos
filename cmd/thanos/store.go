@@ -337,7 +337,7 @@ func runStore(
 		store.WithQueryGate(queriesGate),
 		store.WithChunkPool(chunkPool),
 		store.WithFilterConfig(conf.filterConf),
-		store.WithBytesLimiterFactory(store.NewBytesLimiterFactory(conf.maxDownloadedBytes)),
+		store.WithChunkHashCalculation(true),
 	}
 
 	if conf.debugLogging {
@@ -350,6 +350,7 @@ func runStore(
 		conf.dataDir,
 		store.NewChunksLimiterFactory(conf.maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		store.NewSeriesLimiterFactory(conf.maxTouchedSeriesCount),
+		store.NewBytesLimiterFactory(conf.maxDownloadedBytes),
 		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
 		conf.blockSyncConcurrency,
 		conf.advertiseCompatibilityLabel,

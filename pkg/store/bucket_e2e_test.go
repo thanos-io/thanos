@@ -187,6 +187,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		dir,
 		chunksLimiterFactory,
 		seriesLimiterFactory,
+		bytesLimiterFactory,
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		20,
 		true,
@@ -198,7 +199,6 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		WithIndexCache(s.cache),
 		WithFilterConfig(filterConf),
 		WithRegistry(reg),
-		WithBytesLimiterFactory(bytesLimiterFactory),
 	)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, store.Close()) }()
