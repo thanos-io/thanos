@@ -341,11 +341,12 @@ func (h *Handler) Run() error {
 	return httpSrv.Serve(h.listener)
 }
 
-// replica encapsulates the replica number of a request and if the request is
-// already replicated.
+// replica encapsulates the replication index of a request and if the request is
+// already replicated. Replication index represents the number of logical replica to which
+// the request belongs.
 type replica struct {
-	n          uint64
-	replicated bool
+	replicationIndex uint64
+	replicated       bool
 }
 
 // endpointReplica is a pair of a receive endpoint and a write request replica.
@@ -373,11 +374,11 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 		return errBadReplica
 	}
 
-	r := replica{n: rep, replicated: rep != 0}
+	r := replica{replicationIndex: rep, replicated: rep != 0}
 
 	// On the wire, format is 1-indexed and in-code is 0-indexed, so we decrement the value if it was already replicated.
 	if r.replicated {
-		r.n--
+		r.replicationIndex--
 	}
 
 	// Forward any time series as necessary. All time series
@@ -561,7 +562,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 	// one request per time series.
 	wreqs := make(map[endpointReplica]*prompb.WriteRequest)
 	for i := range wreq.Timeseries {
-		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[i], r.n)
+		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[i], r.replicationIndex)
 		if err != nil {
 			h.mtx.RUnlock()
 			return err
@@ -592,13 +593,13 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		// Create channel to send errors together with endpoint and replica on which it occurred.
 		ec = make(chan errWithReplicaFunc)
 
-		// replicaReqs counts the number of requests that will be made on behalf
-		// of each replica. This is used to determine write success.
-		replicaReqs = make([]int, h.options.ReplicationFactor)
+		// requestsPerReplicationIndex counts the number of requests that will be made on behalf
+		// of each logical replica. This is used to determine write success.
+		requestsPerReplicationIndex = make([]int, h.options.ReplicationFactor)
 	)
 
 	for er := range wreqs {
-		replicaReqs[er.replica.n]++
+		requestsPerReplicationIndex[er.replica.replicationIndex]++
 	}
 
 	fctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), pctx), h.options.ForwardTimeout)
@@ -640,12 +641,12 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 				})
 				if err != nil {
 					h.replications.WithLabelValues(labelError).Inc()
-					sendErrWithReplica(ec, r.n, endpoint, errors.Wrapf(err, "replicate write request for endpoint %v", endpoint))
+					sendErrWithReplica(ec, r.replicationIndex, endpoint, errors.Wrapf(err, "replicate write request for endpoint %v", endpoint))
 					return
 				}
 
 				h.replications.WithLabelValues(labelSuccess).Inc()
-				sendErrWithReplica(ec, r.n, endpoint, nil)
+				sendErrWithReplica(ec, r.replicationIndex, endpoint, nil)
 			}(endpoint)
 
 			continue
@@ -669,10 +670,10 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
 					// To avoid breaking the counting logic, we need to flatten the error.
 					level.Debug(tLogger).Log("msg", "local tsdb write failed", "err", err.Error())
-					sendErrWithReplica(ec, r.n, endpoint, errors.Wrapf(determineWriteErrorCause(err, 1, false), "store locally for endpoint %v", endpoint))
+					sendErrWithReplica(ec, r.replicationIndex, endpoint, errors.Wrapf(determineWriteErrorCause(err, 1, false), "store locally for endpoint %v", endpoint))
 					return
 				}
-				sendErrWithReplica(ec, r.n, endpoint, nil)
+				sendErrWithReplica(ec, r.replicationIndex, endpoint, nil)
 			}(endpoint)
 
 			continue
@@ -697,7 +698,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 
 			cl, err = h.peers.get(fctx, endpoint)
 			if err != nil {
-				sendErrWithReplica(ec, r.n, endpoint, errors.Wrapf(err, "get peer connection for endpoint %v", endpoint))
+				sendErrWithReplica(ec, r.replicationIndex, endpoint, errors.Wrapf(err, "get peer connection for endpoint %v", endpoint))
 				return
 			}
 
@@ -706,7 +707,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 			if ok {
 				if time.Now().Before(b.nextAllowed) {
 					h.mtx.RUnlock()
-					sendErrWithReplica(ec, r.n, endpoint, errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpoint))
+					sendErrWithReplica(ec, r.replicationIndex, endpoint, errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpoint))
 					return
 				}
 			}
@@ -719,7 +720,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 					Timeseries: wreqs[er].Timeseries,
 					Tenant:     tenant,
 					// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
-					Replica: int64(r.n + 1),
+					Replica: int64(r.replicationIndex + 1),
 				})
 			})
 			if err != nil {
@@ -738,14 +739,14 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 						h.mtx.Unlock()
 					}
 				}
-				sendErrWithReplica(ec, r.n, endpoint, errors.Wrapf(err, "forwarding request to endpoint %v", endpoint))
+				sendErrWithReplica(ec, r.replicationIndex, endpoint, errors.Wrapf(err, "forwarding request to endpoint %v", endpoint))
 				return
 			}
 			h.mtx.Lock()
 			delete(h.peerStates, endpoint)
 			h.mtx.Unlock()
 
-			sendErrWithReplica(ec, r.n, endpoint, nil)
+			sendErrWithReplica(ec, r.replicationIndex, endpoint, nil)
 		}(endpoint)
 	}
 
@@ -768,10 +769,14 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 	}()
 
 	var (
-		// perReplicaSuccess is used to determine if enough requests succeeded for given replica number.
-		preReplicaSuccess = make([]int, h.options.ReplicationFactor)
-		// replicaMultiError contains all requests errors per replica.
-		replicaMultiError = make([]errutil.MultiError, h.options.ReplicationFactor)
+		// replicaRequestsSuccess tracks how many successful requests have been sent for each logical replica.
+		// Each index in the slice represents given replication index.
+		replicaRequestsSuccess = make([]int, h.options.ReplicationFactor)
+
+		// replicaRequestsError records errors that resulted from replication requests. Each error is recorded
+		// into a multi error that corresponds to given logical replica.
+		// Multi error at each index in the slice represents given replication index.
+		replicaRequestsErrs = make([]errutil.MultiError, h.options.ReplicationFactor)
 
 		// endpointFailures keeps list of endpoints to which at least one request failed.
 		endpointFailures    []string
@@ -784,10 +789,10 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 			return fctx.Err()
 		case errReplicaFn, more := <-ec:
 			if !more {
-				for i, rme := range replicaMultiError {
+				for i, rme := range replicaRequestsErrs {
 					// Only if we can determine same error for all requests within replica group,
 					// we return the cause, otherwise inform that replication failed.
-					errs.Add(determineWriteErrorCause(rme.Err(), replicaReqs[i], replicaReqs[i] > 1))
+					errs.Add(determineWriteErrorCause(rme.Err(), requestsPerReplicationIndex[i], requestsPerReplicationIndex[i] > 1))
 				}
 				finalErr := errs.Err()
 				// Second success mode - it is permissible to fail all requests to specific endpoints,
@@ -801,21 +806,21 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 			}
 			replica, endpoint, err := errReplicaFn()
 			if err == nil {
-				var replicaGroupSuccess int
-				preReplicaSuccess[replica]++
-				for i := range preReplicaSuccess {
-					// First success mode - if enough replica groups succeed, we can finish early (quorum
-					// is guaranteed).
-					if preReplicaSuccess[i] == replicaReqs[i] {
-						replicaGroupSuccess++
+				var replicationsSuccessful int
+				replicaRequestsSuccess[replica]++
+				for i := range replicaRequestsSuccess {
+					// First success mode - if enough logical replica requests succeed,
+					// we can finish early (quorum is guaranteed).
+					if replicaRequestsSuccess[i] == requestsPerReplicationIndex[i] {
+						replicationsSuccessful++
 					}
-					if replicaGroupSuccess == successThreshold {
+					if replicationsSuccessful == successThreshold {
 						return nil
 					}
 				}
 				continue
 			}
-			replicaMultiError[replica].Add(err)
+			replicaRequestsErrs[replica].Add(err)
 			endpointFailures = countEndpointFailures(endpointFailures, endpoint)
 		}
 	}
@@ -845,7 +850,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 
 			er := endpointReplica{
 				endpoint: endpoint,
-				replica:  replica{n: i, replicated: true},
+				replica:  replica{replicationIndex: i, replicated: true},
 			}
 			replicatedRequest, ok := replicatedRequests[er]
 			if !ok {
@@ -1071,7 +1076,7 @@ func determineWriteErrorCause(err error, threshold int, forReplication bool) err
 // errWithReplicaFunc is a type to enable sending replica number and err over channel.
 type errWithReplicaFunc func() (uint64, string, error)
 
-// sendErrWithReplica is a utility func to send replica number, endpoint and error over channel.
+// sendErrWithReplica is a utility func to send replication index, endpoint and error over channel.
 // Replica number and endpoint is used to determine write quorum, based on the number of requests,
 // see the comments above.
 func sendErrWithReplica(f chan errWithReplicaFunc, r uint64, e string, err error) {
