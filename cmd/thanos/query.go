@@ -29,6 +29,7 @@ import (
 
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/thanos-community/promql-engine/engine"
+
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -734,10 +735,11 @@ func runQuery(
 				if httpProbe.IsReady() {
 					mint, maxt := proxy.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime:           mint,
-						MaxTime:           maxt,
-						SupportsSharding:  true,
-						SendsSortedSeries: true,
+						MinTime:                        mint,
+						MaxTime:                        maxt,
+						SupportsSharding:               true,
+						SendsSortedSeries:              true,
+						SendsSortedSeriesWithoutLabels: true,
 					}
 				}
 				return nil

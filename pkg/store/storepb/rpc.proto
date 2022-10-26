@@ -122,6 +122,10 @@ message SeriesRequest {
   // shard_info is used by the querier to request a specific
   // shard of blocks instead of entire blocks.
   ShardInfo shard_info = 13;
+
+  // sort_without_labels are labels which are excluded
+  // from comparison when sorting the response series set.
+  repeated string sort_without_labels = 14;
 }
 
 

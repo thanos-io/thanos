@@ -48,6 +48,7 @@ type HeadGenOptions struct {
 	ScrapeInterval           time.Duration
 
 	WithWAL       bool
+	AppendLabels  labels.Labels
 	PrependLabels labels.Labels
 	SkipChunks    bool // Skips chunks in returned slice (not in generated head!).
 
@@ -124,7 +125,8 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 	all := allPostings(t, ir)
 	for all.Next() {
 		testutil.Ok(t, ir.Series(all.At(), &lset, &chunkMetas))
-		expected = append(expected, &storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(append(opts.PrependLabels.Copy(), lset...))})
+		allLabels := append(append(opts.PrependLabels.Copy(), lset...), opts.AppendLabels.Copy()...)
+		expected = append(expected, &storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(allLabels)})
 
 		if opts.SkipChunks {
 			continue
