@@ -290,7 +290,6 @@ func TestTruncateExtLabels(t *testing.T) {
 			labelToTruncate: "{abcde}",
 			expectedOutput:  "{abc}",
 		},
-
 		{
 			labelToTruncate: "{abcdef}",
 			expectedOutput:  "{abc}",
