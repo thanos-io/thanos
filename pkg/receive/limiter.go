@@ -5,24 +5,34 @@ package receive
 
 import (
 	"context"
+	"fmt"
+	"sync"
+	"time"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
+
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 )
 
-type limiter struct {
-	requestLimiter    requestLimiter
-	writeGate         gate.Gate
-	HeadSeriesLimiter headSeriesLimiter
-}
-
-// requestLimiter encompasses logic for limiting remote write requests.
-type requestLimiter interface {
-	AllowSizeBytes(tenant string, contentLengthBytes int64) bool
-	AllowSeries(tenant string, amount int64) bool
-	AllowSamples(tenant string, amount int64) bool
+// Limiter is responsible for managing the configuration and initialization of
+// different types that apply limits to the Receive instance.
+type Limiter struct {
+	sync.RWMutex
+	requestLimiter            requestLimiter
+	HeadSeriesLimiter         headSeriesLimiter
+	writeGate                 gate.Gate
+	registerer                prometheus.Registerer
+	configPathOrContent       fileContent
+	logger                    log.Logger
+	configReloadCounter       prometheus.Counter
+	configReloadFailedCounter prometheus.Counter
+	receiverMode              ReceiverMode
 }
 
 // headSeriesLimiter encompasses active/head series limiting logic.
@@ -31,33 +41,168 @@ type headSeriesLimiter interface {
 	isUnderLimit(tenant string) (bool, error)
 }
 
-func NewLimiter(root *RootLimitsConfig, reg prometheus.Registerer, r ReceiverMode, logger log.Logger) *limiter {
-	limiter := &limiter{
+type requestLimiter interface {
+	AllowSizeBytes(tenant string, contentLengthBytes int64) bool
+	AllowSeries(tenant string, amount int64) bool
+	AllowSamples(tenant string, amount int64) bool
+}
+
+// fileContent is an interface to avoid a direct dependency on kingpin or extkingpin.
+type fileContent interface {
+	Content() ([]byte, error)
+	Path() string
+}
+
+// NewLimiter creates a new *Limiter given a configuration and prometheus
+// registerer.
+func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMode, logger log.Logger) (*Limiter, error) {
+	limiter := &Limiter{
 		writeGate:         gate.NewNoop(),
 		requestLimiter:    &noopRequestLimiter{},
 		HeadSeriesLimiter: NewNopSeriesLimit(),
-	}
-	if root == nil {
-		return limiter
+		logger:            logger,
+		receiverMode:      r,
 	}
 
-	maxWriteConcurrency := root.WriteLimits.GlobalLimits.MaxConcurrency
+	if reg != nil {
+		limiter.registerer = NewUnRegisterer(reg)
+		limiter.configReloadCounter = promauto.With(limiter.registerer).NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "limits_config_reload_total",
+				Help:      "How many times the limit configuration was reloaded",
+			},
+		)
+		limiter.configReloadFailedCounter = promauto.With(limiter.registerer).NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "limits_config_reload_err_total",
+				Help:      "How many times the limit configuration failed to reload.",
+			},
+		)
+	}
+
+	if configFile == nil {
+		return limiter, nil
+	}
+
+	limiter.configPathOrContent = configFile
+	if err := limiter.loadConfig(); err != nil {
+		return nil, errors.Wrap(err, "load tenant limits config")
+	}
+
+	return limiter, nil
+}
+
+// StartConfigReloader starts the automatic configuration reloader based off of
+// the file indicated by pathOrContent. It starts a Go routine in the given
+// *run.Group.
+func (l *Limiter) StartConfigReloader(ctx context.Context) error {
+	if !l.CanReload() {
+		return nil
+	}
+
+	return extkingpin.PathContentReloader(ctx, l.configPathOrContent, l.logger, func() {
+		level.Info(l.logger).Log("msg", "reloading limit config")
+		if err := l.loadConfig(); err != nil {
+			if failedReload := l.configReloadCounter; failedReload != nil {
+				failedReload.Inc()
+			}
+			errMsg := fmt.Sprintf("error reloading tenant limits config from %s", l.configPathOrContent.Path())
+			level.Error(l.logger).Log("msg", errMsg, "err", err)
+		}
+		if reloadCounter := l.configReloadCounter; reloadCounter != nil {
+			reloadCounter.Inc()
+		}
+	}, 1*time.Second)
+}
+
+func (l *Limiter) CanReload() bool {
+	if l.configPathOrContent == nil {
+		return false
+	}
+	if l.configPathOrContent.Path() == "" {
+		return false
+	}
+	return true
+}
+
+func (l *Limiter) loadConfig() error {
+	config, err := ParseLimitConfigContent(l.configPathOrContent)
+	if err != nil {
+		return err
+	}
+	l.Lock()
+	defer l.Unlock()
+	maxWriteConcurrency := config.WriteLimits.GlobalLimits.MaxConcurrency
 	if maxWriteConcurrency > 0 {
-		limiter.writeGate = gate.New(
+		l.writeGate = gate.New(
 			extprom.WrapRegistererWithPrefix(
 				"thanos_receive_write_request_concurrent_",
-				reg,
+				l.registerer,
 			),
 			int(maxWriteConcurrency),
 		)
 	}
-	limiter.requestLimiter = newConfigRequestLimiter(reg, &root.WriteLimits)
-
-	// Impose active series limit only if Receiver is in Router or RouterIngestor mode, and config is provided.
-	seriesLimitSupported := (r == RouterOnly || r == RouterIngestor) && (len(root.WriteLimits.TenantsLimits) != 0 || root.WriteLimits.DefaultLimits.HeadSeriesLimit != 0)
+	l.requestLimiter = newConfigRequestLimiter(
+		l.registerer,
+		&config.WriteLimits,
+	)
+	seriesLimitSupported := (l.receiverMode == RouterOnly || l.receiverMode == RouterIngestor) && (len(config.WriteLimits.TenantsLimits) != 0 || config.WriteLimits.DefaultLimits.HeadSeriesLimit != 0)
 	if seriesLimitSupported {
-		limiter.HeadSeriesLimiter = NewHeadSeriesLimit(root.WriteLimits, reg, logger)
+		l.HeadSeriesLimiter = NewHeadSeriesLimit(config.WriteLimits, l.registerer, l.logger)
 	}
+	return nil
+}
 
-	return limiter
+// RequestLimiter is a safe getter for the request limiter.
+func (l *Limiter) RequestLimiter() requestLimiter {
+	l.RLock()
+	defer l.RUnlock()
+	return l.requestLimiter
+}
+
+// WriteGate is a safe getter for the write gate.
+func (l *Limiter) WriteGate() gate.Gate {
+	l.RLock()
+	defer l.RUnlock()
+	return l.writeGate
+}
+
+// ParseLimitConfigContent parses the limit configuration from the path or
+// content.
+func ParseLimitConfigContent(limitsConfig fileContent) (*RootLimitsConfig, error) {
+	if limitsConfig == nil {
+		return &RootLimitsConfig{}, nil
+	}
+	limitsContentYaml, err := limitsConfig.Content()
+	if err != nil {
+		return nil, errors.Wrap(err, "get content of limit configuration")
+	}
+	parsedConfig, err := ParseRootLimitConfig(limitsContentYaml)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse limit configuration")
+	}
+	return parsedConfig, nil
+}
+
+type nopConfigContent struct{}
+
+var _ fileContent = (*nopConfigContent)(nil)
+
+// Content returns no content and no error.
+func (n nopConfigContent) Content() ([]byte, error) {
+	return nil, nil
+}
+
+// Path returns an empty path.
+func (n nopConfigContent) Path() string {
+	return ""
+}
+
+// NewNopConfig creates a no-op config content (no configuration).
+func NewNopConfig() nopConfigContent {
+	return nopConfigContent{}
 }

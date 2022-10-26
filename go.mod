@@ -19,7 +19,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.0
 	github.com/efficientgo/e2e v0.13.1-0.20220923082810-8fa9daa8af8a
-	github.com/efficientgo/tools/extkingpin v0.0.0-20220801101838-3312908f6a9d
+	github.com/efficientgo/tools/extkingpin v0.0.0-20220817170617-6c25e3b627dd
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.2.0
 	github.com/felixge/fgprof v0.9.2
@@ -72,8 +72,8 @@ require (
 	github.com/prometheus/prometheus v0.39.1
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.0
-	github.com/thanos-community/promql-engine v0.0.0-20221004075442-da92170150df
-	github.com/thanos-io/objstore v0.0.0-20220923084403-cec51c61948b
+	github.com/thanos-community/promql-engine v0.0.0-20221025072844-52d728e59fa0
+	github.com/thanos-io/objstore v0.0.0-20221006135717-79dcec7fe604
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
@@ -108,6 +108,7 @@ require (
 
 require (
 	github.com/efficientgo/core v1.0.0-rc.0
+	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd
 	github.com/minio/sha256-simd v1.0.0
 )
 
@@ -127,10 +128,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.10.0
 )
 
-require (
-	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd
-	go.opentelemetry.io/contrib/propagators/autoprop v0.34.0
-)
+require go.opentelemetry.io/contrib/propagators/autoprop v0.34.0
 
 require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.32.3 // indirect
@@ -257,6 +255,7 @@ require (
 	go.opentelemetry.io/proto/otlp v0.19.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
+	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1 // indirect
 	golang.org/x/sys v0.0.0-20220919091848-fb04ddd9f9c8 // indirect
