@@ -38,6 +38,13 @@ const (
 	noMetadataEndpointMessage = "cannot obtain metadata: neither info nor store client found"
 )
 
+type queryConnMetricLabel string
+
+const (
+	ExternalLabels queryConnMetricLabel = "external_labels"
+	StoreType      queryConnMetricLabel = "store_type"
+)
+
 type GRPCEndpointSpec struct {
 	addr           string
 	isStrictStatic bool
@@ -190,7 +197,7 @@ type endpointSetNodeCollector struct {
 
 func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
 	if len(labels) == 0 {
-		labels = []string{"external_labels", "store_type"}
+		labels = []string{string(ExternalLabels), string(StoreType)}
 	}
 	return &endpointSetNodeCollector{
 		storeNodes: map[component.Component]map[string]int{},
@@ -247,9 +254,9 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 			lbls := []string{}
 			for _, lbl := range c.labels {
 				switch lbl {
-				case "external_labels":
+				case string(ExternalLabels):
 					lbls = append(lbls, externalLabels)
-				case "store_type":
+				case string(StoreType):
 					lbls = append(lbls, storeTypeStr)
 				}
 			}

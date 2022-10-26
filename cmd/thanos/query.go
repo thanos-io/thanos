@@ -71,13 +71,6 @@ const (
 	promqlEngineThanos     promqlEngineType = "thanos"
 )
 
-type queryConnMetricLabel string
-
-const (
-	externalLabels queryConnMetricLabel = "external_labels"
-	storeType      queryConnMetricLabel = "store_type"
-)
-
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
@@ -117,8 +110,8 @@ func registerQuery(app *extkingpin.App) {
 		Default("4").Int()
 
 	queryConnMetricLabels := cmd.Flag("query.conn-metric.label", "Optional selection of query connection metric labels to be collected from endpoint set").
-		Default(string(externalLabels), string(storeType)).
-		Enums(string(externalLabels), string(storeType))
+		Default(string(query.ExternalLabels), string(query.StoreType)).
+		Enums(string(query.ExternalLabels), string(query.StoreType))
 
 	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
 		Strings()
