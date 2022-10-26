@@ -290,7 +290,6 @@ func TestTruncateExtLabels(t *testing.T) {
 			labelToTruncate: "{abcde}",
 			expectedOutput:  "{abc}",
 		},
-
 		{
 			labelToTruncate: "{abcdef}",
 			expectedOutput:  "{abc}",
@@ -401,7 +400,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 			endpoints: []testEndpointMeta{
 				{
 					InfoResponse: sidecarInfo,
-					// simulate very long external labels
+					// Simulate very long external labels.
 					extlsetFn: func(addr string) []labelpb.ZLabelSet {
 						sLabel := []string{}
 						for i := 0; i < 1000; i++ {
