@@ -204,9 +204,8 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 	m.resultSeriesCount = promauto.With(reg).NewSummary(prometheus.SummaryOpts{
-		Name:       "thanos_bucket_store_series_result_series",
-		Help:       "Number of series observed in the final result of a query.",
-		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
+		Name: "thanos_bucket_store_series_result_series",
+		Help: "Number of series observed in the final result of a query.",
 	})
 
 	m.chunkSizeBytes = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
