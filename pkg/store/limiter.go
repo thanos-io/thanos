@@ -6,6 +6,7 @@ package store
 import (
 	"sync"
 
+	"github.com/alecthomas/units"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
@@ -25,12 +26,22 @@ type SeriesLimiter interface {
 	Reserve(num uint64) error
 }
 
+type BytesLimiter interface {
+	// Reserve bytes out of the total amount of bytes enforced by the limiter.
+	// Returns an error if the limit has been exceeded. This function must be
+	// goroutine safe.
+	Reserve(num uint64) error
+}
+
 // ChunksLimiterFactory is used to create a new ChunksLimiter. The factory is useful for
 // projects depending on Thanos (eg. Cortex) which have dynamic limits.
 type ChunksLimiterFactory func(failedCounter prometheus.Counter) ChunksLimiter
 
 // SeriesLimiterFactory is used to create a new SeriesLimiter.
 type SeriesLimiterFactory func(failedCounter prometheus.Counter) SeriesLimiter
+
+// BytesLimiterFactory is used to create a new BytesLimiter.
+type BytesLimiterFactory func(failedCounter prometheus.Counter) BytesLimiter
 
 // Limiter is a simple mechanism for checking if something has passed a certain threshold.
 type Limiter struct {
@@ -49,6 +60,9 @@ func NewLimiter(limit uint64, ctr prometheus.Counter) *Limiter {
 
 // Reserve implements ChunksLimiter.
 func (l *Limiter) Reserve(num uint64) error {
+	if l == nil {
+		return nil
+	}
 	if l.limit == 0 {
 		return nil
 	}
@@ -72,5 +86,12 @@ func NewChunksLimiterFactory(limit uint64) ChunksLimiterFactory {
 func NewSeriesLimiterFactory(limit uint64) SeriesLimiterFactory {
 	return func(failedCounter prometheus.Counter) SeriesLimiter {
 		return NewLimiter(limit, failedCounter)
+	}
+}
+
+// NewSeriesLimiterFactory makes a new NewSeriesLimiterFactory with a static limit.
+func NewBytesLimiterFactory(limit units.Base2Bytes) BytesLimiterFactory {
+	return func(failedCounter prometheus.Counter) BytesLimiter {
+		return NewLimiter(uint64(limit), failedCounter)
 	}
 }
