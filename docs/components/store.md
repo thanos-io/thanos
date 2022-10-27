@@ -162,6 +162,12 @@ Flags:
                                  If true, Store Gateway will lazy memory map
                                  index-header only once the block is required by
                                  a query.
+      --store.grpc.downloaded-bytes-limit=0
+                                 Maximum amount of downloaded (either
+                                 fetched or touched) bytes in a single
+                                 Series/LabelNames/LabelValues call. The Series
+                                 call fails if this limit is exceeded. 0 means
+                                 no limit.
       --store.grpc.series-max-concurrency=20
                                  Maximum number of concurrent Series calls.
       --store.grpc.series-sample-limit=0

@@ -648,6 +648,7 @@ func TestBucketStore_Info(t *testing.T) {
 		dir,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		20,
 		true,
@@ -889,6 +890,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				dir,
 				NewChunksLimiterFactory(0),
 				NewSeriesLimiterFactory(0),
+				NewBytesLimiterFactory(0),
 				NewGapBasedPartitioner(PartitionerMaxGapSize),
 				20,
 				true,
@@ -1012,7 +1014,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	}
 
 	// Success with no refetches.
-	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 100))
+	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 100, NewBytesLimiterFactory(0)(nil)))
 	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2:  []byte("aaaaaaaaaa"),
 		13: []byte("bbbbbbbbbb"),
@@ -1022,7 +1024,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 
 	// Success with 2 refetches.
 	r.loadedSeries = map[storage.SeriesRef][]byte{}
-	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 15))
+	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 2, 15, NewBytesLimiterFactory(0)(nil)))
 	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2:  []byte("aaaaaaaaaa"),
 		13: []byte("bbbbbbbbbb"),
@@ -1032,7 +1034,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 
 	// Success with refetch on first element.
 	r.loadedSeries = map[storage.SeriesRef][]byte{}
-	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2}, false, 2, 5))
+	testutil.Ok(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2}, false, 2, 5, NewBytesLimiterFactory(0)(nil)))
 	testutil.Equals(t, map[storage.SeriesRef][]byte{
 		2: []byte("aaaaaaaaaa"),
 	}, r.loadedSeries)
@@ -1046,7 +1048,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	testutil.Ok(t, bkt.Upload(context.Background(), filepath.Join(b.meta.ULID.String(), block.IndexFilename), bytes.NewReader(buf.Get())))
 
 	// Fail, but no recursion at least.
-	testutil.NotOk(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 1, 15))
+	testutil.NotOk(t, r.loadSeries(context.TODO(), []storage.SeriesRef{2, 13, 24}, false, 1, 15, NewBytesLimiterFactory(0)(nil)))
 }
 
 func TestBucketIndexReader_ExpandedPostings(t *testing.T) {
@@ -1225,7 +1227,7 @@ func benchmarkExpandedPostings(
 
 			t.ResetTimer()
 			for i := 0; i < t.N(); i++ {
-				p, err := indexr.ExpandedPostings(context.Background(), c.matchers)
+				p, err := indexr.ExpandedPostings(context.Background(), c.matchers, NewBytesLimiterFactory(0)(nil))
 				testutil.Ok(t, err)
 				testutil.Equals(t, c.expectedLen, len(p))
 			}
@@ -1333,6 +1335,7 @@ func benchBucketSeries(t testutil.TB, skipChunk bool, samplesPerSeries, totalSer
 		tmpDir,
 		NewChunksLimiterFactory(0),
 		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		1,
 		false,
@@ -1555,6 +1558,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		queryGate:            gate.NewNoop(),
 		chunksLimiterFactory: NewChunksLimiterFactory(0),
 		seriesLimiterFactory: NewSeriesLimiterFactory(0),
+		bytesLimiterFactory:  NewBytesLimiterFactory(0),
 	}
 
 	t.Run("invoke series for one block. Fill the cache on the way.", func(t *testing.T) {
@@ -1702,6 +1706,7 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		tmpDir,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		10,
 		false,
@@ -1792,6 +1797,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		tmpDir,
 		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		10,
 		false,
@@ -1973,6 +1979,7 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 		tmpDir,
 		NewChunksLimiterFactory(10000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		10,
 		false,
@@ -2188,6 +2195,7 @@ func TestSeries_ChuncksHaveHashRepresentation(t *testing.T) {
 		tmpDir,
 		NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
 		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		10,
 		false,
@@ -2439,7 +2447,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				indexReader := blk.indexReader()
 				chunkReader := blk.chunkReader()
 
-				seriesSet, _, err := blockSeries(ctx, nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, nil, dummyCounter, false)
+				seriesSet, _, err := blockSeries(ctx, nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, NewBytesLimiterFactory(0)(nil), req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, nil, dummyCounter, false)
 				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).
