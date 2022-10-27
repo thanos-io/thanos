@@ -530,20 +530,6 @@ rules:
   for: 3h
   labels:
     severity: critical
-- alert: ThanosReceiveTrafficBelowThreshold
-  annotations:
-    description: At Thanos Receive {{$labels.job}} in {{$labels.namespace}} , the average 1-hr avg. metrics ingestion rate  is {{$value | humanize}}% of 12-hr avg. ingestion rate.
-    runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivetrafficbelowthreshold
-    summary: Thanos Receive is experiencing low avg. 1-hr ingestion rate relative to avg. 12-hr ingestion rate.
-  expr: |
-    (
-      avg_over_time(rate(http_requests_total{job=~".*thanos-receive.*", code=~"2..", handler="receive"}[5m])[1h:5m])
-    /
-      avg_over_time(rate(http_requests_total{job=~".*thanos-receive.*", code=~"2..", handler="receive"}[5m])[12h:5m])
-    ) * 100 < 50
-  for: 1h
-  labels:
-    severity: warning
 ```
 
 ## Replicate
