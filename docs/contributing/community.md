@@ -8,19 +8,23 @@ Follow and interact with us on Twitter: [@ThanosMetrics](https://twitter.com/Tha
 
 ### Thanos Community Office Hours
 
-Thanos Community Office Hour (previously Contributor Office Hour) is a public weekly meeting focused on Thanos community, development and contributions. It’s meant for users, developers and maintainers to meet and get unblocked, pair review, and discuss development aspects of Thanos and related projects. 
+Thanos Community Office Hour (previously Contributor Office Hour) is a public weekly meeting focused on Thanos community, development and contributions. It’s meant for users, developers and maintainers to meet and get unblocked, pair review, and discuss development aspects of Thanos and related projects.
 
 **Everyone is welcome to join & add items to the agenda**.
 
 > NOTE: If no agenda items will be added 1h before the meeting, the meeting will be cancelled.
 
 **Meeting Time:** Every-second Thursday 15:00 CET
+
 **Calendar Event:** https://www.cncf.io/calendar/
+
 **Agenda:** [Google Doc](https://docs.google.com/document/d/137XnxfOT2p1NcNUq6NWZjwmtlSdA6Wyti86Pd6cyQhs)
+
 **Link to join Zoom Meeting:** [https://zoom.us/j/99647108799](https://zoom.us/j/99647108799)
+
 **Meeting Passcode (avoids robot scrapers):** thanos
 
-> NOTE: Maintainers, see [community office hours shepherding](#community-office-hours-shepherding) section. 
+> NOTE: Maintainers, see [community office hours shepherding](#community-office-hours-shepherding) section.
 
 #### How to Bring the Topic you are/want to Contribute to?
 
@@ -83,9 +87,9 @@ Schedule:
 
 Each month we rotate the role of Community Office Shepherds among Team Members. This role is focused on leading the safe and friendly discussions during our [Community Office Hours](#thanos-community-office-hours).
 
-> NOTE: Being shepherd does not mean other team members can chill out completely. (: It's a joint effort, so ideally there are multiple team members on those meetings to make decisions if needed. 
+> NOTE: Being shepherd does not mean other team members can chill out completely. (: It's a joint effort, so ideally there are multiple team members on those meetings to make decisions if needed.
 
-> NOTE: If for some reason you as a shepherd can't make it, find replacement or cancel the meeting. 
+> NOTE: If for some reason you as a shepherd can't make it, find replacement or cancel the meeting.
 
 ##### Responsibilities
 
