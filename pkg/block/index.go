@@ -579,7 +579,7 @@ func rewrite(
 		sort.Sort(lset)
 
 		for i, c := range chks {
-			chks[i].Chunk, err = chunkr.Chunk(c.Ref)
+			chks[i].Chunk, err = chunkr.Chunk(c)
 			if err != nil {
 				return errors.Wrap(err, "chunk read")
 			}

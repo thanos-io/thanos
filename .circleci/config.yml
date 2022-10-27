@@ -3,14 +3,15 @@ version: 2.1
 
 orbs:
   go: circleci/go@1.7.1
+  git-shallow-clone: guitarrapc/git-shallow-clone@2.4.0
 
 executors:
   golang:
     docker:
-      - image: cimg/go:1.18-node
+      - image: cimg/go:1.19-node
   golang-test:
     docker:
-      - image: cimg/go:1.18-node
+      - image: cimg/go:1.19-node
       - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1
 
 jobs:
@@ -19,7 +20,7 @@ jobs:
     environment:
       GO111MODULE: 'on'
     steps:
-      - checkout
+      - git-shallow-clone/checkout
       - go/mod-download-cached
       - setup_remote_docker:
           version: 20.10.12
@@ -35,7 +36,7 @@ jobs:
       - run:
           name: "Run unit tests."
           environment:
-            THANOS_TEST_OBJSTORE_SKIP: AZURE,COS,ALIYUNOSS,BOS
+            THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI
             # Variables for Swift testing.
             OS_AUTH_URL: http://127.0.0.1:5000/v2.0
             OS_PASSWORD: s3cr3t
@@ -45,7 +46,7 @@ jobs:
           # taskset sets CPU affinity to 2 (current CPU limit).
           command: |
             if [ -z ${GCP_PROJECT} ]; then
-              export THANOS_TEST_OBJSTORE_SKIP=${THANOS_TEST_OBJSTORE_SKIP},GCS,S3
+              export THANOS_TEST_OBJSTORE_SKIP=${THANOS_TEST_OBJSTORE_SKIP}
             fi
             echo "Skipping tests for object storages: ${THANOS_TEST_OBJSTORE_SKIP}"
             taskset 2 make test
@@ -58,7 +59,7 @@ jobs:
       GOBIN: "/home/circleci/.go_workspace/go/bin"
       PROMU_VERSION: "0.5.0"
     steps:
-      - checkout
+      - git-shallow-clone/checkout
       - run: mkdir -p ${GOBIN}
       - run: curl -L "https://github.com/prometheus/promu/releases/download/v${PROMU_VERSION}/promu-${PROMU_VERSION}.$(go env GOOS)-$(go env GOARCH).tar.gz" | tar --strip-components=1 -xzf - -C ${GOBIN}
       - run: mv -f ${GOBIN}/promu "${GOBIN}/promu-v${PROMU_VERSION}"
@@ -71,7 +72,7 @@ jobs:
   publish_main:
     executor: golang
     steps:
-      - checkout
+      - git-shallow-clone/checkout
       - go/mod-download-cached
       - setup_remote_docker:
           version: 20.10.12
@@ -93,7 +94,7 @@ jobs:
   publish_release:
     executor: golang
     steps:
-      - checkout
+      - git-shallow-clone/checkout
       - go/mod-download-cached
       - setup_remote_docker:
           version: 20.10.12

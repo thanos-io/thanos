@@ -39,7 +39,7 @@ import (
 const (
 	defaultPrometheusVersion   = "v0.37.0"
 	defaultAlertmanagerVersion = "v0.20.0"
-	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
+	defaultMinioVersion        = "RELEASE.2022-07-30T05-21-40Z"
 
 	// Space delimited list of versions.
 	promPathsEnvVar       = "THANOS_TEST_PROMETHEUS_PATHS"
@@ -429,7 +429,7 @@ func createBlock(
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = filepath.Join(dir, "chunks")
 	headOpts.ChunkRange = 10000000000
-	h, err := tsdb.NewHead(nil, nil, nil, headOpts, nil)
+	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}

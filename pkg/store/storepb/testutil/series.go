@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cespare/xxhash"
+
 	"github.com/gogo/protobuf/types"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
@@ -83,7 +85,7 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = opts.TSDBDir
-	h, err := tsdb.NewHead(nil, nil, w, headOpts, nil)
+	h, err := tsdb.NewHead(nil, nil, w, nil, headOpts, nil)
 	testutil.Ok(t, err)
 
 	app := h.Appender(context.Background())
@@ -129,7 +131,7 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 		}
 
 		for _, c := range chunkMetas {
-			chEnc, err := chks.Chunk(c.Ref)
+			chEnc, err := chks.Chunk(c)
 			testutil.Ok(t, err)
 
 			// Open Chunk.
@@ -140,7 +142,7 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, storepb.AggrChunk{
 				MinTime: c.MinTime,
 				MaxTime: c.MaxTime,
-				Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: chEnc.Bytes()},
+				Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: chEnc.Bytes(), Hash: xxhash.Sum64(chEnc.Bytes())},
 			})
 		}
 	}

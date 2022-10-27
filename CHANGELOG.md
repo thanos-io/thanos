@@ -9,42 +9,108 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
-- [#5453](https://github.com/thanos-io/thanos/pull/5453) Compact: Skip erroneous empty non `*AggrChunk` chunks during 1h downsampling of 5m resolution blocks.
 
 ### Fixed
-- [#5502](https://github.com/thanos-io/thanos/pull/5502) Receive: Handle exemplar storage errors as conflict error.
-- [#5534](https://github.com/thanos-io/thanos/pull/5534) Query: Set struct return by query api alerts same as prometheus api.
-- [#5554](https://github.com/thanos-io/thanos/pull/5554) Query/Receiver: Fix querying exemplars from multi-tenant receivers.
-- [#5583](https://github.com/thanos-io/thanos/pull/5583) Query: fix data race between Respond() and query/queryRange functions. Fixes [#5410](https://github.com/thanos-io/thanos/pull/5410).
 
 ### Added
 
+- [#5814](https://github.com/thanos-io/thanos/pull/5814) Store: Add metric `thanos_bucket_store_postings_size_bytes` that shows the distribution of how many postings (in bytes) were needed for each Series() call in Thanos Store. Useful for determining limits.
+- [#5801](https://github.com/thanos-io/thanos/pull/5801) Store: add a new limiter `--store.grpc.downloaded-bytes-limit` that limits the number of bytes downloaded in each Series/LabelNames/LabelValues call. Use `thanos_bucket_store_postings_size_bytes` for determining the limits.
+
+### Changed
+
+### Removed
+
+- [#5824](https://github.com/thanos-io/thanos/pull/5824) Mixin: Remove noisy `ThanosReceiveTrafficBelowThreshold` alert.
+
+## [v0.29.0](https://github.com/thanos-io/thanos/tree/release-0.29) - Release in progress
+
+### Fixed
+- [#5642](https://github.com/thanos-io/thanos/pull/5642) Receive: Log labels correctly in writer debug messages.
+- [#5655](https://github.com/thanos-io/thanos/pull/5655) Receive: Fix recreating already pruned tenants.
+- [#5702](https://github.com/thanos-io/thanos/pull/5702) Store: Upgrade minio-go/v7 to fix panic caused by leaked goroutines.
+- [#5736](https://github.com/thanos-io/thanos/pull/5736) Compact: Fix crash in GatherNoCompactionMarkFilter.NoCompactMarkedBlocks.
+- [#5763](https://github.com/thanos-io/thanos/pull/5763) Compact: Enable metadata cache.
+- [#5759](https://github.com/thanos-io/thanos/pull/5759) Compact: Fix missing duration log key.
+- [#5799](https://github.com/thanos-io/thanos/pull/5799) Query Frontend: Fixed sharding behaviour for vector matches. Now queries with sharding should work properly where the query looks like: `foo and without (lbl) bar`.
+
+### Added
+- [#5565](https://github.com/thanos-io/thanos/pull/5565) Receive: Allow remote write request limits to be defined per file and tenant (experimental).
+* [#5654](https://github.com/thanos-io/thanos/pull/5654) Query: add `--grpc-compression` flag that controls the compression used in gRPC client. With the flag it is now possible to compress the traffic between Query and StoreAPI nodes - you get lower network usage in exchange for a bit higher CPU/RAM usage.
+- [#5650](https://github.com/thanos-io/thanos/pull/5650) Query Frontend: Add sharded queries metrics. `thanos_frontend_sharding_middleware_queries_total` shows how many queries were sharded or not sharded.
+- [#5658](https://github.com/thanos-io/thanos/pull/5658) Query Frontend: Introduce new optional parameters (`query-range.min-split-interval`, `query-range.max-split-interval`, `query-range.horizontal-shards`) to implement more dynamic horizontal query splitting.
+- [#5721](https://github.com/thanos-io/thanos/pull/5721) Store: Add metric `thanos_bucket_store_empty_postings_total` for number of empty postings when fetching series.
+- [#5723](https://github.com/thanos-io/thanos/pull/5723) Compactor: Support disable block viewer UI.
+- [#5674](https://github.com/thanos-io/thanos/pull/5674) Query Frontend/Store: Add support connecting to redis using TLS.
+- [#5734](https://github.com/thanos-io/thanos/pull/5734) Store: Support disable block viewer UI.
+- [#5411](https://github.com/thanos-io/thanos/pull/5411) Tracing: Add OpenTelemetry Protocol exporter.
+- [#5779](https://github.com/thanos-io/thanos/pull/5779) Objstore: Support specifying S3 storage class.
+- [#5741](https://github.com/thanos-io/thanos/pull/5741) Query: add metrics on how much data is being selected by downstream Store APIs.
+- [#5673](https://github.com/thanos-io/thanos/pull/5673) Receive: Reload tenant limit configuration on file change.
+- [#5749](https://github.com/thanos-io/thanos/pull/5749) Query Frontend: Added small LRU cache to cache query analysis results.
+
+### Changed
+
+- [#5738](https://github.com/thanos-io/thanos/pull/5738) Global: replace `crypto/sha256` with `minio/sha256-simd` to make hash calculation faster in metadata and reloader packages.
+- [#5648](https://github.com/thanos-io/thanos/pull/5648) Query Frontend: cache vertical shards in query-frontend.
+- [#5753](https://github.com/thanos-io/thanos/pull/5753) Build with Go 1.19.
+- [#5255](https://github.com/thanos-io/thanos/pull/5296) Query: Use k-way merging for the proxying logic. The proxying sub-system now uses much less resources (~25-80% less CPU usage, ~30-50% less RAM usage according to our benchmarks). Reduces query duration by a few percent on queries with lots of series.
+- [#5690](https://github.com/thanos-io/thanos/pull/5690) Compact: update `--debug.accept-malformed-index` flag to apply to downsampling. Previously the flag only applied to compaction, and fatal errors would still occur when downsampling was attempted.
+- [#5707](https://github.com/thanos-io/thanos/pull/5707) Objstore: Update objstore to latest version which includes a refactored Azure Storage Account implementation with a new SDK.
+- [#5641](https://github.com/thanos-io/thanos/pull/5641) Store: Remove hardcoded labels in shard matcher.
+- [#5641](https://github.com/thanos-io/thanos/pull/5641) Query: Inject unshardable le label in query analyzer.
+- [#5685](https://github.com/thanos-io/thanos/pull/5685) Receive: Make active/head series limiting configuration per tenant by adding it to new limiting config.
+- [#5411](https://github.com/thanos-io/thanos/pull/5411) Tracing: Change Jaeger exporter from OpenTracing to OpenTelemetry. *Options `RPC Metrics`, `Gen128Bit` and `Disabled` are now deprecated and won't have any effect when set :warning:.*
+- [#5767](https://github.com/thanos-io/thanos/pull/5767) *: Upgrade Prometheus to v2.39.0.
+- [#5771](https://github.com/thanos-io/thanos/pull/5771) *: Upgrade Prometheus to v2.39.1.
+
+### Removed
+
+## [v0.28.1](https://github.com/thanos-io/thanos/tree/release-0.28) - 2022.10.06
+
+### Fixed
+
+- [#5702](https://github.com/thanos-io/thanos/pull/5702) Store: Upgrade minio-go/v7 to fix panic caused by leaked goroutines.
+
+## [v0.28.0](https://github.com/thanos-io/thanos/tree/release-0.28) - 2022.08.26
+
+### Fixed
+- [#5502](https://github.com/thanos-io/thanos/pull/5502) Receive: Handle exemplar storage errors as conflict error.
+- [#5534](https://github.com/thanos-io/thanos/pull/5534) Query: Set struct return by query API alerts same as prometheus API.
+- [#5554](https://github.com/thanos-io/thanos/pull/5554) Query/Receiver: Fix querying exemplars from multi-tenant receivers.
+- [#5583](https://github.com/thanos-io/thanos/pull/5583) Query: Fix data race between Respond() and query/queryRange functions. Fixes [#5410](https://github.com/thanos-io/thanos/pull/5410).
+
+### Added
+
+- [#5573](https://github.com/thanos-io/thanos/pull/5573) Sidecar: Added `--prometheus.get_config_interval` and `--prometheus.get_config_timeout` allowing to configure parameters for getting Prometheus config.
 - [#5440](https://github.com/thanos-io/thanos/pull/5440) HTTP metrics: export number of in-flight HTTP requests.
 - [#5424](https://github.com/thanos-io/thanos/pull/5424) Receive: Export metrics regarding size of remote write requests.
 - [#5420](https://github.com/thanos-io/thanos/pull/5420) Receive: Automatically remove stale tenants.
-- [#5472](https://github.com/thanos-io/thanos/pull/5472) Receive: add new tenant metrics to example dashboard.
-- [#5475](https://github.com/thanos-io/thanos/pull/5475) Compact/Store: Added `--block-files-concurrency` allowing to configure number of go routines for download/upload block files during compaction.
-- [#5470](https://github.com/thanos-io/thanos/pull/5470) Receive: Implement exposing TSDB stats for all tenants
-- [#5493](https://github.com/thanos-io/thanos/pull/5493) Compact: Added `--compact.blocks-fetch-concurrency` allowing to configure number of go routines for download blocks during compactions.
-- [#5480](https://github.com/thanos-io/thanos/pull/5480) Query: Expose endpoint info timeout as a hidden flag.
-- [#5527](https://github.com/thanos-io/thanos/pull/5527) Receive: Add per request limits for remote write.
-- [#5520](https://github.com/thanos-io/thanos/pull/5520) Receive: Meta-monitoring based active series limiting.
+- [#5472](https://github.com/thanos-io/thanos/pull/5472) Receive: Add new tenant metrics to example dashboard.
+- [#5475](https://github.com/thanos-io/thanos/pull/5475) Compact/Store: Added `--block-files-concurrency` allowing to configure number of go routines for downloading and uploading block files during compaction.
+- [#5470](https://github.com/thanos-io/thanos/pull/5470) Receive: Expose TSDB stats as metrics for all tenants.
+- [#5493](https://github.com/thanos-io/thanos/pull/5493) Compact: Added `--compact.blocks-fetch-concurrency` allowing to configure number of goroutines for downloading blocks during compactions.
+- [#5480](https://github.com/thanos-io/thanos/pull/5480) Query: Expose endpoint info timeout as a hidden flag `--endpoint.info-timeout`.
+- [#5527](https://github.com/thanos-io/thanos/pull/5527) Receive: Add per request limits for remote write. Added four new hidden flags `--receive.write-request-limits.max-size-bytes`, `--receive.write-request-limits.max-series`, `--receive.write-request-limits.max-samples` and `--receive.write-request-limits.max-concurrency` for limiting requests max body size, max amount of series, max amount of samples and max amount of concurrent requests.
+- [#5520](https://github.com/thanos-io/thanos/pull/5520) Receive: Meta-monitoring based active series limiting (experimental). This mode is only available if Receiver is in Router or RouterIngestor mode, and config is provided. Added four new hidden flags `receive.tenant-limits.max-head-series` for the max active series for the tenant, `receive.tenant-limits.meta-monitoring-url` for the Meta-monitoring URL, `receive.tenant-limits.meta-monitoring-query` for specifying the PromQL query to execute and `receive.tenant-limits.meta-monitoring-client` for specifying HTTP client configs.
 - [#5555](https://github.com/thanos-io/thanos/pull/5555) Query: Added `--query.active-query-path` flag, allowing the user to configure the directory to create an active query tracking file, `queries.active`, for different resolution.
 - [#5566](https://github.com/thanos-io/thanos/pull/5566) Receive: Added experimental support to enable chunk write queue via `--tsdb.write-queue-size` flag.
 - [#5575](https://github.com/thanos-io/thanos/pull/5575) Receive: Add support for gRPC compression with snappy.
 - [#5508](https://github.com/thanos-io/thanos/pull/5508) Receive: Validate labels in write requests.
 - [#5439](https://github.com/thanos-io/thanos/pull/5439) Mixin: Add Alert ThanosQueryOverload to Mixin.
-- [#5561](https://github.com/thanos-io/thanos/pull/5561) Query Frontend: Support instant query sharding.
+- [#5342](https://github.com/thanos-io/thanos/pull/5342) Query/Query Frontend: Implement vertical sharding at query frontend for range queries.
+- [#5561](https://github.com/thanos-io/thanos/pull/5561) Query Frontend: Support instant query vertical sharding.
+- [#5453](https://github.com/thanos-io/thanos/pull/5453) Compact: Skip erroneous empty non `*AggrChunk` chunks during 1h downsampling of 5m resolution blocks.
+- [#5607](https://github.com/thanos-io/thanos/pull/5607) Query: Support custom lookback delta from request in query api.
 
 ### Changed
 
-- [#5447](https://github.com/thanos-io/thanos/pull/5447) Promclient: Ignore 405 status codes for Prometheus buildVersion requests
+- [#5447](https://github.com/thanos-io/thanos/pull/5447) Promclient: Ignore 405 status codes for Prometheus buildVersion requests.
 - [#5451](https://github.com/thanos-io/thanos/pull/5451) Azure: Reduce memory usage by not buffering file downloads entirely in memory.
 - [#5484](https://github.com/thanos-io/thanos/pull/5484) Update Prometheus deps to v2.36.2.
 - [#5511](https://github.com/thanos-io/thanos/pull/5511) Update Prometheus deps to v2.37.0.
-- [#5588](https://github.com/thanos-io/thanos/pull/5588) Store: improve index header reading performance by sorting values first.
-
-### Removed
+- [#5588](https://github.com/thanos-io/thanos/pull/5588) Store: Improve index header reading performance by sorting values first.
+- [#5596](https://github.com/thanos-io/thanos/pull/5596) Store: Filter external labels from matchers on LabelValues/LabelNames to improve performance.
 
 ## [v0.27.0](https://github.com/thanos-io/thanos/tree/release-0.27) - 2022.07.05
 

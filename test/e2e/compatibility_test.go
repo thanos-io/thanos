@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,10 +16,18 @@ import (
 
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
+	e2emon "github.com/efficientgo/e2e/monitoring"
+	"github.com/efficientgo/e2e/monitoring/promconfig"
+	sdconfig "github.com/efficientgo/e2e/monitoring/promconfig/discovery/config"
+	"github.com/efficientgo/e2e/monitoring/promconfig/discovery/targetgroup"
+	e2eobs "github.com/efficientgo/e2e/observable"
+	config_util "github.com/prometheus/common/config"
+	"github.com/prometheus/common/model"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -27,15 +36,23 @@ import (
 // NOTE: This requires dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
 // Test requires at least ~11m, so run this with `-test.timeout 9999m`.
 func TestPromQLCompliance(t *testing.T) {
-	testPromQLCompliance(t, false)
+	testPromQLCompliance(t, false, store.EagerRetrieval)
+}
+
+// TestPromQLComplianceWithLazy tests PromQL compatibility against https://github.com/prometheus/compliance/tree/main/promql.
+// NOTE: This requires dockerization of compliance framework: https://github.com/prometheus/compliance/pull/46
+// Test requires at least ~11m, so run this with `-test.timeout 9999m`.
+// This uses lazy evaluation to test out how it works in comparison to eager.
+func TestPromQLComplianceWithLazy(t *testing.T) {
+	testPromQLCompliance(t, false, store.LazyRetrieval)
 }
 
 // TestPromQLComplianceWithQueryFrontend tests PromQL compatibility with query frontend with sharding enabled.
 func TestPromQLComplianceWithShardingQueryFrontend(t *testing.T) {
-	testPromQLCompliance(t, true)
+	testPromQLCompliance(t, true, store.EagerRetrieval)
 }
 
-func testPromQLCompliance(t *testing.T, queryFrontend bool) {
+func testPromQLCompliance(t *testing.T, queryFrontend bool, retrievalStrategy store.RetrievalStrategy) {
 	t.Skip("This is interactive test, it requires time to build up (scrape) the data. The data is also obtain from remote promlab servers.")
 
 	e, err := e2e.NewDockerEnvironment("compatibility")
@@ -47,32 +64,48 @@ func testPromQLCompliance(t *testing.T, queryFrontend bool) {
 	queryReceive := e2edb.NewThanosQuerier(e, "query_receive", []string{receiverRunnable.InternalEndpoint("grpc")})
 	testutil.Ok(t, e2e.StartAndWaitReady(receiverRunnable, queryReceive))
 
+	rwURL, err := url.Parse(e2ethanos.RemoteWriteEndpoint(receiverRunnable.InternalEndpoint("remote-write")))
+	testutil.Ok(t, err)
 	// Start reference Prometheus.
 	prom := e2edb.NewPrometheus(e, "prom")
-	testutil.Ok(t, prom.SetConfig(`
-global:
-  scrape_interval:     5s
-  evaluation_interval: 5s
-  external_labels:
-    prometheus: 1
-
-remote_write:
-  - url: "`+e2ethanos.RemoteWriteEndpoint(receiverRunnable.InternalEndpoint("remote-write"))+`"
-
-scrape_configs:
-- job_name: 'demo'
-  static_configs:
-    - targets:
-      - 'demo.promlabs.com:10000'
-      - 'demo.promlabs.com:10001'
-      - 'demo.promlabs.com:10002'
-`,
-	))
+	testutil.Ok(t, prom.SetConfig(promconfig.Config{
+		GlobalConfig: promconfig.GlobalConfig{
+			EvaluationInterval: model.Duration(5 * time.Second),
+			ScrapeInterval:     model.Duration(5 * time.Second),
+			ExternalLabels: map[model.LabelName]model.LabelValue{
+				"prometheus": "1",
+			},
+		},
+		RemoteWriteConfigs: []*promconfig.RemoteWriteConfig{
+			{
+				URL: &config_util.URL{URL: rwURL},
+			},
+		},
+		ScrapeConfigs: []*promconfig.ScrapeConfig{
+			{
+				JobName: "demo",
+				ServiceDiscoveryConfig: sdconfig.ServiceDiscoveryConfig{
+					StaticConfigs: []*targetgroup.Group{
+						{
+							Source: "demo.promlabs.com:10000",
+						},
+						{
+							Source: "demo.promlabs.com:10001",
+						},
+						{
+							Source: "demo.promlabs.com:10002",
+						},
+					},
+				},
+			},
+		},
+	}))
 	testutil.Ok(t, e2e.StartAndWaitReady(prom))
 
 	// Start sidecar + Querier
 	sidecar := e2edb.NewThanosSidecar(e, "sidecar", prom, e2edb.WithImage("thanos"))
-	querySidecar := e2edb.NewThanosQuerier(e, "query_sidecar", []string{sidecar.InternalEndpoint("grpc")}, e2edb.WithImage("thanos"))
+	extraOpts := []e2edb.Option{e2edb.WithImage("thanos"), e2edb.WithFlagOverride(map[string]string{"--grpc.proxy-strategy": string(retrievalStrategy)})}
+	querySidecar := e2edb.NewThanosQuerier(e, "query_sidecar", []string{sidecar.InternalEndpoint("grpc")}, extraOpts...)
 	testutil.Ok(t, e2e.StartAndWaitReady(sidecar, querySidecar))
 
 	// Start noop promql-compliance-tester. See https://github.com/prometheus/compliance/tree/main/promql on how to build local docker image.
@@ -122,7 +155,7 @@ scrape_configs:
 }
 
 // nolint (it's still used in skipped test).
-func promQLCompatConfig(reference *e2edb.Prometheus, target e2e.Runnable, dropLabels []string) string {
+func promQLCompatConfig(reference *e2emon.Prometheus, target e2e.Runnable, dropLabels []string) string {
 	return `reference_target_config:
   query_url: 'http://` + reference.InternalEndpoint("http") + `'
 
@@ -147,7 +180,7 @@ func TestAlertCompliance(t *testing.T) {
 	t.Skip("This is an interactive test, using https://github.com/prometheus/compliance/tree/main/alert_generator. This tool is not optimized for CI runs (e.g. it infinitely retries, takes 38 minutes)")
 
 	t.Run("stateful ruler", func(t *testing.T) {
-		e, err := e2e.NewDockerEnvironment("alert_compatibility")
+		e, err := e2e.NewDockerEnvironment("alert-compatibility")
 		testutil.Ok(t, err)
 		t.Cleanup(e.Close)
 
@@ -232,7 +265,7 @@ func alertCompatConfig(receive e2e.Runnable, query e2e.Runnable) string {
 `, e2ethanos.RemoteWriteEndpoint(receive.InternalEndpoint("remote-write")), query.InternalEndpoint("http"), query.InternalEndpoint("http"))
 }
 
-func newQueryFrontendRunnable(e e2e.Environment, name, downstreamURL string) e2e.InstrumentedRunnable {
+func newQueryFrontendRunnable(e e2e.Environment, name, downstreamURL string) *e2eobs.Observable {
 	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
 		Type: queryfrontend.INMEMORY,
 		Config: queryfrontend.InMemoryResponseCacheConfig{

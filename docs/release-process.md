@@ -23,7 +23,8 @@ Release shepherd responsibilities:
 
 | Release | Time of first RC     | Shepherd (GitHub handle)      |
 |---------|----------------------|-------------------------------|
-| v0.29.0 | (planned) 2022.09.29 | No one ATM                    |
+| v0.30.0 | (planned) 2022.11.21 | No one ATM                    |
+| v0.29.0 | 2022.10.21           | `@GiedriusS`                  |
 | v0.28.0 | 2022.08.22           | `@yeya24`                     |
 | v0.27.0 | 2022.06.21           | `@wiardvanrij` and `@matej-g` |
 | v0.26.0 | 2022.04.29           | `@wiardvanrij`                |
@@ -103,7 +104,7 @@ Feel free to mimic following PR: https://github.com/thanos-io/thanos/pull/3861
 
 6. *(Applies only to minor, non-`rc` release)* Update tutorials:
 
-   1. Update the Thanos version used in the [tutorials](../tutorials) manifests.
+   1. Update the Thanos version used in the [tutorials](https://github.com/thanos-io/tutorials) manifests to use the latest version.
    2. In case of any breaking changes or necessary updates adjust the manifests so the tutorial stays up to date.
    3. Update the [scripts/quickstart.sh](https://github.com/thanos-io/thanos/blob/main/scripts/quickstart.sh) script if needed.
 

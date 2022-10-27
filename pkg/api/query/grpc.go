@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/prometheus/prometheus/promql"
+	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -19,16 +20,25 @@ type GRPCAPI struct {
 	now                         func() time.Time
 	replicaLabels               []string
 	queryableCreate             query.QueryableCreator
-	queryEngine                 func(int64) *promql.Engine
+	queryEngine                 v1.QueryEngine
+	lookbackDeltaCreate         func(int64) time.Duration
 	defaultMaxResolutionSeconds time.Duration
 }
 
-func NewGRPCAPI(now func() time.Time, replicaLabels []string, creator query.QueryableCreator, queryEngine func(int64) *promql.Engine, defaultMaxResolutionSeconds time.Duration) *GRPCAPI {
+func NewGRPCAPI(
+	now func() time.Time,
+	replicaLabels []string,
+	creator query.QueryableCreator,
+	queryEngine v1.QueryEngine,
+	lookbackDeltaCreate func(int64) time.Duration,
+	defaultMaxResolutionSeconds time.Duration,
+) *GRPCAPI {
 	return &GRPCAPI{
 		now:                         now,
 		replicaLabels:               replicaLabels,
 		queryableCreate:             creator,
 		queryEngine:                 queryEngine,
+		lookbackDeltaCreate:         lookbackDeltaCreate,
 		defaultMaxResolutionSeconds: defaultMaxResolutionSeconds,
 	}
 }
@@ -60,6 +70,11 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		maxResolution = g.defaultMaxResolutionSeconds.Milliseconds() / 1000
 	}
 
+	lookbackDelta := g.lookbackDeltaCreate(maxResolution * 1000)
+	if request.LookbackDeltaSeconds > 0 {
+		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
+	}
+
 	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(request.StoreMatchers)
 	if err != nil {
 		return err
@@ -69,7 +84,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	if len(request.ReplicaLabels) != 0 {
 		replicaLabels = request.ReplicaLabels
 	}
-	qe := g.queryEngine(request.MaxResolutionSeconds)
+
 	queryable := g.queryableCreate(
 		request.EnableDedup,
 		replicaLabels,
@@ -79,8 +94,9 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		request.EnableQueryPushdown,
 		false,
 		request.ShardInfo,
+		query.NoopSeriesStatsReporter,
 	)
-	qry, err := qe.NewInstantQuery(queryable, &promql.QueryOpts{}, request.Query, ts)
+	qry, err := g.queryEngine.NewInstantQuery(queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, ts)
 	if err != nil {
 		return err
 	}
@@ -129,6 +145,11 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		maxResolution = g.defaultMaxResolutionSeconds.Milliseconds() / 1000
 	}
 
+	lookbackDelta := g.lookbackDeltaCreate(maxResolution * 1000)
+	if request.LookbackDeltaSeconds > 0 {
+		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
+	}
+
 	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(request.StoreMatchers)
 	if err != nil {
 		return err
@@ -138,7 +159,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	if len(request.ReplicaLabels) != 0 {
 		replicaLabels = request.ReplicaLabels
 	}
-	qe := g.queryEngine(request.MaxResolutionSeconds)
+
 	queryable := g.queryableCreate(
 		request.EnableDedup,
 		replicaLabels,
@@ -148,13 +169,14 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		request.EnableQueryPushdown,
 		false,
 		request.ShardInfo,
+		query.NoopSeriesStatsReporter,
 	)
 
 	startTime := time.Unix(request.StartTimeSeconds, 0)
 	endTime := time.Unix(request.EndTimeSeconds, 0)
 	interval := time.Duration(request.IntervalSeconds) * time.Second
 
-	qry, err := qe.NewRangeQuery(queryable, &promql.QueryOpts{}, request.Query, startTime, endTime, interval)
+	qry, err := g.queryEngine.NewRangeQuery(queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, startTime, endTime, interval)
 	if err != nil {
 		return err
 	}

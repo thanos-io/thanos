@@ -157,7 +157,7 @@ Should the decision be in favor, your new membership will also be announced on t
 
 As a team member, propose the new project on the [Thanos GitHub Issue](https://github.com/thanos-io/thanos/issues). However, currently to maintain project in our organization you have to become Thanos Maintainers.
 
-All are encourage to start their own project related to Thanos. Thanos team is happy to link to your poject inappropriate page e.g https://thanos.io/tip/thanos/integrations.md/
+All are encourage to start their own project related to Thanos. Thanos team is happy to link to your project inappropriate page e.g https://thanos.io/tip/thanos/integrations.md/
 
 ### How do I remove a Maintainer or Triage member?
 

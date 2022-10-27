@@ -54,7 +54,7 @@ func mergeStreams(left, right batchStream, result batchStream, size int) batchSt
 	checkForFullBatch := func() {
 		if b.Index == size {
 			// The batch reached it intended size.
-			// Add another batch the the result
+			// Add another batch the result
 			// and use it for further appending.
 
 			// The Index is the place at which new sample

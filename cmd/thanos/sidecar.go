@@ -216,8 +216,8 @@ func runSidecar(
 
 			// Periodically query the Prometheus config. We use this as a heartbeat as well as for updating
 			// the external labels we apply.
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			return runutil.Repeat(conf.prometheus.getConfigInterval, ctx.Done(), func() error {
+				iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
 				defer iterCancel()
 
 				if err := m.UpdateLabels(iterCtx); err != nil {
@@ -268,9 +268,10 @@ func runSidecar(
 				if httpProbe.IsReady() {
 					mint, maxt := promStore.Timestamps()
 					return &infopb.StoreInfo{
-						MinTime:          mint,
-						MaxTime:          maxt,
-						SupportsSharding: true,
+						MinTime:           mint,
+						MaxTime:           maxt,
+						SupportsSharding:  true,
+						SendsSortedSeries: true,
 					}
 				}
 				return nil

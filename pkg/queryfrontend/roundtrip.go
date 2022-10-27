@@ -70,15 +70,16 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 	if err != nil {
 		return nil, err
 	}
-
-	queryInstantTripperware := newInstantQueryTripperware(
+	queryInstantTripperware, err := newInstantQueryTripperware(
 		config.NumShards,
 		queryRangeLimits,
 		queryInstantCodec,
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_instant"}, reg),
 		config.ForwardHeaders,
 	)
-
+	if err != nil {
+		return nil, err
+	}
 	return func(next http.RoundTripper) http.RoundTripper {
 		return newRoundTripper(next, queryRangeTripperware(next), labelsTripperware(next), queryInstantTripperware(next), reg)
 	}, nil
@@ -179,11 +180,9 @@ func newQueryRangeTripperware(
 		)
 	}
 
-	queryIntervalFn := func(_ queryrange.Request) time.Duration {
-		return config.SplitQueriesByInterval
-	}
+	if config.SplitQueriesByInterval != 0 || config.MinQuerySplitInterval != 0 {
+		queryIntervalFn := dynamicIntervalFn(config)
 
-	if config.SplitQueriesByInterval != 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("split_by_interval", m),
@@ -191,11 +190,22 @@ func newQueryRangeTripperware(
 		)
 	}
 
+	if numShards > 0 {
+		analyzer, err := querysharding.NewQueryAnalyzer()
+		if err != nil {
+			return nil, errors.Wrap(err, "create query analyzer")
+		}
+		queryRangeMiddleware = append(
+			queryRangeMiddleware,
+			PromQLShardingMiddleware(analyzer, numShards, limits, codec, reg),
+		)
+	}
+
 	if config.ResultsCacheConfig != nil {
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
 			*config.ResultsCacheConfig,
-			newThanosCacheKeyGenerator(config.SplitQueriesByInterval),
+			newThanosCacheKeyGenerator(dynamicIntervalFn(config)),
 			limits,
 			codec,
 			queryrange.PrometheusResponseExtractor{},
@@ -222,19 +232,34 @@ func newQueryRangeTripperware(
 		)
 	}
 
-	if numShards > 0 {
-		queryRangeMiddleware = append(
-			queryRangeMiddleware,
-			PromQLShardingMiddleware(querysharding.NewQueryAnalyzer(), numShards, limits, codec),
-		)
-	}
-
 	return func(next http.RoundTripper) http.RoundTripper {
 		rt := queryrange.NewRoundTripper(next, codec, forwardHeaders, queryRangeMiddleware...)
 		return queryrange.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			return rt.RoundTrip(r)
 		})
 	}, nil
+}
+
+func dynamicIntervalFn(config QueryRangeConfig) queryrange.IntervalFn {
+	return func(r queryrange.Request) time.Duration {
+		// Use static interval, by default.
+		if config.SplitQueriesByInterval != 0 {
+			return config.SplitQueriesByInterval
+		}
+
+		queryInterval := time.Duration(r.GetEnd()-r.GetStart()) * time.Millisecond
+		// If the query is multiple of max interval, we use the max interval to split.
+		if queryInterval/config.MaxQuerySplitInterval >= 2 {
+			return config.MaxQuerySplitInterval
+		}
+
+		if queryInterval > config.MinQuerySplitInterval {
+			// If the query duration is less than max interval, we split it equally in HorizontalShards.
+			return time.Duration(queryInterval.Milliseconds()/config.HorizontalShards) * time.Millisecond
+		}
+
+		return config.MinQuerySplitInterval
+	}
 }
 
 // newLabelsTripperware returns a Tripperware for labels and series requests
@@ -263,10 +288,11 @@ func newLabelsTripperware(
 	}
 
 	if config.ResultsCacheConfig != nil {
+		staticIntervalFn := func(_ queryrange.Request) time.Duration { return config.SplitQueriesByInterval }
 		queryCacheMiddleware, _, err := queryrange.NewResultsCacheMiddleware(
 			logger,
 			*config.ResultsCacheConfig,
-			newThanosCacheKeyGenerator(config.SplitQueriesByInterval),
+			newThanosCacheKeyGenerator(staticIntervalFn),
 			limits,
 			codec,
 			ThanosResponseExtractor{},
@@ -306,14 +332,18 @@ func newInstantQueryTripperware(
 	codec queryrange.Codec,
 	reg prometheus.Registerer,
 	forwardHeaders []string,
-) queryrange.Tripperware {
+) (queryrange.Tripperware, error) {
 	instantQueryMiddlewares := []queryrange.Middleware{}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 	if numShards > 0 {
+		analyzer, err := querysharding.NewQueryAnalyzer()
+		if err != nil {
+			return nil, errors.Wrap(err, "create query analyzer")
+		}
 		instantQueryMiddlewares = append(
 			instantQueryMiddlewares,
 			queryrange.InstrumentMiddleware("sharding", m),
-			PromQLShardingMiddleware(querysharding.NewQueryAnalyzer(), numShards, limits, codec),
+			PromQLShardingMiddleware(analyzer, numShards, limits, codec, reg),
 		)
 	}
 
@@ -322,7 +352,7 @@ func newInstantQueryTripperware(
 		return queryrange.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			return rt.RoundTrip(r)
 		})
-	}
+	}, nil
 }
 
 // shouldCache controls what kind of Thanos request should be cached.

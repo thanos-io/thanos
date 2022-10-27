@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/timestamp"
 
@@ -26,13 +27,13 @@ const (
 func TestExemplarsAPI_Fanout(t *testing.T) {
 	t.Parallel()
 	var (
-		prom1, prom2       e2e.InstrumentedRunnable
-		sidecar1, sidecar2 e2e.InstrumentedRunnable
+		prom1, prom2       *e2emon.InstrumentedRunnable
+		sidecar1, sidecar2 *e2emon.InstrumentedRunnable
 		err                error
 		e                  *e2e.DockerEnvironment
 	)
 
-	e, err = e2e.NewDockerEnvironment("e2e_test_exemplars_fanout")
+	e, err = e2e.NewDockerEnvironment("exemplars-fanout")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -79,8 +80,8 @@ config:
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2e.WaitMissingMetrics()))
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2e.Equals(2), []string{"thanos_query_exemplar_apis_dns_provider_results"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_query_exemplar_apis_dns_provider_results"}, e2emon.WaitMissingMetrics()))
 
 	now := time.Now()
 	start := timestamp.FromTime(now.Add(-time.Hour))

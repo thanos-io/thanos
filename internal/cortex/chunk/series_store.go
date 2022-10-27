@@ -532,7 +532,7 @@ func injectShardLabels(chunks []Chunk, shard astmapper.ShardAnnotation) {
 		b := labels.NewBuilder(chunk.Metric)
 		l := shard.Label()
 		b.Set(l.Name, l.Value)
-		chunk.Metric = b.Labels()
+		chunk.Metric = b.Labels(nil)
 		chunks[i] = chunk
 	}
 }

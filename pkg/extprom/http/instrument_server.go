@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/uber/jaeger-client-go"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // InstrumentationMiddleware holds necessary metrics to instrument an http.Server
@@ -78,17 +79,36 @@ func httpInstrumentationHandler(baseLabels prometheus.Labels, metrics *defaultMe
 						observer.Observe(time.Since(now).Seconds())
 
 						// If we find a tracingID we'll expose it as Exemplar.
+						var (
+							traceID string
+							OTfound bool
+						)
+
 						span := opentracing.SpanFromContext(r.Context())
 						if span != nil {
 							spanCtx, ok := span.Context().(jaeger.SpanContext)
 							if ok && spanCtx.IsSampled() {
-								observer.(prometheus.ExemplarObserver).ObserveWithExemplar(
-									time.Since(now).Seconds(),
-									prometheus.Labels{
-										"traceID": spanCtx.TraceID().String(),
-									},
-								)
+								traceID = spanCtx.TraceID().String()
 							}
+
+							OTfound = ok
+						}
+
+						// If OpenTracing span not found, try OTEL.
+						if !OTfound {
+							span := trace.SpanFromContext(r.Context())
+							if span != nil {
+								traceID = span.SpanContext().SpanID().String()
+							}
+						}
+
+						if traceID != "" {
+							observer.(prometheus.ExemplarObserver).ObserveWithExemplar(
+								time.Since(now).Seconds(),
+								prometheus.Labels{
+									"traceID": traceID,
+								},
+							)
 						}
 					}),
 				),

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
@@ -20,6 +21,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
@@ -30,6 +33,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
+	prometheusMetadata "github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -39,6 +43,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -297,6 +302,10 @@ func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppend
 	}
 }
 
+func (f *fakeAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, prometheusMetadata.Metadata) (storage.SeriesRef, error) {
+	return 0, nil
+}
+
 func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
 	f.Lock()
 	defer f.Unlock()
@@ -357,6 +366,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		},
 	}
 
+	limiter, _ := NewLimiter(NewNopConfig(), nil, RouterIngestor, log.NewNopLogger())
 	for i := range appendables {
 		h := NewHandler(nil, &Options{
 			TenantHeader:      DefaultTenantHeader,
@@ -364,6 +374,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			ReplicationFactor: replicationFactor,
 			ForwardTimeout:    5 * time.Second,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
+			Limiter:           limiter,
 		})
 		handlers = append(handlers, h)
 		h.peers = peers
@@ -372,7 +383,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		cfg[0].Endpoints = append(cfg[0].Endpoints, h.options.Endpoint)
 		peers.cache[addr] = &fakeRemoteWriteGRPCServer{h: h}
 	}
-	hashring := newMultiHashring(AlgorithmHashmod, cfg)
+	hashring := newMultiHashring(AlgorithmHashmod, replicationFactor, cfg)
 	for _, h := range handlers {
 		h.Hashring(hashring)
 	}
@@ -769,8 +780,29 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			}
 			handlers, _ := newTestHandlerHashring(appendables, 3)
 			handler := handlers[0]
-			handler.requestLimiter = newRequestLimiter(int64(1*units.Megabyte), 20, 200, nil)
+
 			tenant := "test"
+			tenantConfig, err := yaml.Marshal(&RootLimitsConfig{
+				WriteLimits: WriteLimitsConfig{
+					TenantsLimits: TenantsWriteLimitsConfig{
+						tenant: &WriteLimitConfig{
+							RequestLimits: NewEmptyRequestLimitsConfig().
+								SetSizeBytesLimit(int64(1 * units.Megabyte)).
+								SetSeriesLimit(20).
+								SetSamplesLimit(200),
+						},
+					},
+				},
+			})
+			if err != nil {
+				t.Fatal("handler: failed to generate limit configuration")
+			}
+			tmpLimitsPath := path.Join(t.TempDir(), "limits.yaml")
+			testutil.Ok(t, os.WriteFile(tmpLimitsPath, tenantConfig, 0666))
+			limitConfig, _ := extkingpin.NewStaticPathContent(tmpLimitsPath)
+			handler.Limiter, _ = NewLimiter(
+				limitConfig, nil, RouterIngestor, log.NewNopLogger(),
+			)
 
 			wreq := &prompb.WriteRequest{
 				Timeseries: []prompb.TimeSeries{},
@@ -1253,7 +1285,7 @@ func (a *tsOverrideAppender) GetRef(lset labels.Labels) (storage.SeriesRef, labe
 }
 
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would
-// be send to Thanos receive.
+// be sent to Thanos receive.
 // It has one sample and allow passing multiple series, in same manner as typical Prometheus would batch it.
 func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byte {
 	r := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, 0, len(series))}
@@ -1322,6 +1354,21 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			name: "typical labels under 1KB, 5000 of them",
 			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
 				series := make([][]labelpb.ZLabel, 5000)
+				for s := 0; s < len(series); s++ {
+					lbls := make([]labelpb.ZLabel, 10)
+					for i := 0; i < len(lbls); i++ {
+						// Label ~20B name, 50B value.
+						lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					}
+					series[s] = lbls
+				}
+				return series
+			}()),
+		},
+		{
+			name: "typical labels under 1KB, 20000 of them",
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
+				series := make([][]labelpb.ZLabel, 20000)
 				for s := 0; s < len(series); s++ {
 					lbls := make([]labelpb.ZLabel, 10)
 					for i := 0; i < len(lbls); i++ {

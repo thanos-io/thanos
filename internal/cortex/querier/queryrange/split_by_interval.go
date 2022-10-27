@@ -70,6 +70,11 @@ func (s splitByInterval) Do(ctx context.Context, r Request) (Response, error) {
 }
 
 func splitQuery(r Request, interval time.Duration) ([]Request, error) {
+	// If Start == end we should just run the original request.
+	if r.GetStart() == r.GetEnd() {
+		return []Request{r}, nil
+	}
+
 	// Replace @ modifier function to their respective constant values in the query.
 	// This way subqueries will be evaluated at the same time as the parent query.
 	query, err := evaluateAtModifierFunction(r.GetQuery(), r.GetStart(), r.GetEnd())

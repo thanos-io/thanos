@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -33,6 +34,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type TSDBStats interface {
@@ -88,6 +90,49 @@ func NewMultiTSDB(
 	}
 }
 
+type localClient struct {
+	storepb.StoreClient
+
+	labelSetFunc  func() []labelpb.ZLabelSet
+	timeRangeFunc func() (int64, int64)
+}
+
+func newLocalClient(
+	c storepb.StoreClient,
+	labelSetFunc func() []labelpb.ZLabelSet,
+	timeRangeFunc func() (int64, int64),
+) *localClient {
+	return &localClient{c, labelSetFunc, timeRangeFunc}
+}
+
+func (l *localClient) LabelSets() []labels.Labels {
+	return labelpb.ZLabelSetsToPromLabelSets(l.labelSetFunc()...)
+}
+
+func (l *localClient) TimeRange() (mint int64, maxt int64) {
+	return l.timeRangeFunc()
+}
+
+func (l *localClient) String() string {
+	mint, maxt := l.timeRangeFunc()
+	return fmt.Sprintf(
+		"LabelSets: %v Mint: %d Maxt: %d",
+		labelpb.PromLabelSetsToString(l.LabelSets()), mint, maxt,
+	)
+}
+
+func (l *localClient) Addr() (string, bool) {
+	return "", true
+}
+
+func (l *localClient) SupportsSharding() bool {
+	return true
+}
+
+func (l *localClient) SendsSortedSeries() bool {
+	return true
+}
+
 type tenant struct {
 	readyS        *ReadyStorage
 	storeTSDB     *store.TSDBStore
@@ -112,6 +157,15 @@ func (t *tenant) store() *store.TSDBStore {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	return t.storeTSDB
+}
+
+func (t *tenant) client() store.Client {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+
+	store := t.store()
+	client := storepb.ServerAsClient(store, 0)
+	return newLocalClient(client, store.LabelSet, store.TimeRange)
 }
 
 func (t *tenant) exemplars() *exemplars.TSDB {
@@ -363,17 +417,15 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 	return merr.Err()
 }
 
-func (t *MultiTSDB) TSDBStores() map[string]store.InfoStoreServer {
+func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	res := make(map[string]store.InfoStoreServer, len(t.tenants))
-	for k, tenant := range t.tenants {
-		s := tenant.store()
-		if s != nil {
-			res[k] = s
-		}
+	res := make([]store.Client, 0, len(t.tenants))
+	for _, tenant := range t.tenants {
+		res = append(res, tenant.client())
 	}
+
 	return res
 }
 
@@ -438,6 +490,8 @@ func (t *MultiTSDB) TenantStats(statsByLabelName string, tenantIDs ...string) []
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
+	reg = NewUnRegisterer(reg)
+
 	lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
 	dataDir := t.defaultTenantDataDir(tenantID)
 
@@ -446,7 +500,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	s, err := tsdb.Open(
 		dataDir,
 		logger,
-		&UnRegisterer{Registerer: reg},
+		reg,
 		&opts,
 		nil,
 	)
@@ -626,20 +680,48 @@ func (a adapter) Close() error {
 // by unregistering already-registered collectors.
 // FlushableStorage uses this registerer in order
 // to not lose metric values between DB flushes.
+//
+// This type cannot embed the inner registerer, because Prometheus since
+// v2.39.0 is wrapping the Registry with prometheus.WrapRegistererWithPrefix.
+// This wrapper will call the Register function of the wrapped registerer.
+// If UnRegisterer is the wrapped registerer, this would end up calling the
+// inner registerer's Register, which doesn't implement the "unregister" logic
+// that this type intends to use.
 type UnRegisterer struct {
-	prometheus.Registerer
+	innerReg prometheus.Registerer
 }
 
+func NewUnRegisterer(inner prometheus.Registerer) *UnRegisterer {
+	return &UnRegisterer{innerReg: inner}
+}
+
+// Register registers the given collector. If it's already registered, it will
+// be unregistered and registered.
+func (u *UnRegisterer) Register(c prometheus.Collector) error {
+	if err := u.innerReg.Register(c); err != nil {
+		if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			if ok = u.innerReg.Unregister(c); !ok {
+				panic("unable to unregister existing collector")
+			}
+			u.innerReg.MustRegister(c)
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// Unregister unregisters the given collector.
+func (u *UnRegisterer) Unregister(c prometheus.Collector) bool {
+	return u.innerReg.Unregister(c)
+}
+
+// MustRegister registers the given collectors. It panics if an error happens.
+// Note that if a collector is already registered it will be re-registered
+// without panicking.
 func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
 	for _, c := range cs {
 		if err := u.Register(c); err != nil {
-			if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
-				if ok = u.Unregister(c); !ok {
-					panic("unable to unregister existing collector")
-				}
-				u.Registerer.MustRegister(c)
-				continue
-			}
 			panic(err)
 		}
 	}

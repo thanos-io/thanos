@@ -1,8 +1,9 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-//nolint:unparam
 // TODO(kakkoyun): Fix linter issues - The pattern we use makes linter unhappy (returning unused config pointers).
+//
+//nolint:unparam
 package main
 
 import (
@@ -63,9 +64,11 @@ func (hc *httpConfig) registerFlag(cmd extkingpin.FlagClause) *httpConfig {
 }
 
 type prometheusConfig struct {
-	url          *url.URL
-	readyTimeout time.Duration
-	httpClient   *extflag.PathOrContent
+	url               *url.URL
+	readyTimeout      time.Duration
+	getConfigInterval time.Duration
+	getConfigTimeout  time.Duration
+	httpClient        *extflag.PathOrContent
 }
 
 func (pc *prometheusConfig) registerFlag(cmd extkingpin.FlagClause) *prometheusConfig {
@@ -75,6 +78,12 @@ func (pc *prometheusConfig) registerFlag(cmd extkingpin.FlagClause) *prometheusC
 	cmd.Flag("prometheus.ready_timeout",
 		"Maximum time to wait for the Prometheus instance to start up").
 		Default("10m").DurationVar(&pc.readyTimeout)
+	cmd.Flag("prometheus.get_config_interval",
+		"How often to get Prometheus config").
+		Default("30s").DurationVar(&pc.getConfigInterval)
+	cmd.Flag("prometheus.get_config_timeout",
+		"Timeout for getting Prometheus config").
+		Default("5s").DurationVar(&pc.getConfigTimeout)
 	pc.httpClient = extflag.RegisterPathOrContent(
 		cmd,
 		"prometheus.http-client",

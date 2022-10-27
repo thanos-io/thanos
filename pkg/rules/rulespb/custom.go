@@ -45,9 +45,9 @@ func NewRecordingRule(r *RecordingRule) *Rule {
 
 // Compare compares equal recording rules r1 and r2 and returns:
 //
-//   < 0 if r1 < r2  if rule r1 is lexically before rule r2
-//     0 if r1 == r2
-//   > 0 if r1 > r2  if rule r1 is lexically after rule r2
+//	< 0 if r1 < r2  if rule r1 is lexically before rule r2
+//	  0 if r1 == r2
+//	> 0 if r1 > r2  if rule r1 is lexically after rule r2
 //
 // More formally, the ordering is determined in the following order:
 //
@@ -133,9 +133,9 @@ func (r *Rule) GetLastEvaluation() time.Time {
 
 // Compare compares recording and alerting rules r1 and r2 and returns:
 //
-//   < 0 if r1 < r2  if rule r1 is not equal and lexically before rule r2
-//     0 if r1 == r2 if rule r1 is logically equal to r2 (r1 and r2 are the "same" rules)
-//   > 0 if r1 > r2  if rule r1 is not equal and lexically after rule r2
+//	< 0 if r1 < r2  if rule r1 is not equal and lexically before rule r2
+//	  0 if r1 == r2 if rule r1 is logically equal to r2 (r1 and r2 are the "same" rules)
+//	> 0 if r1 > r2  if rule r1 is not equal and lexically after rule r2
 //
 // More formally, ordering and equality is determined in the following order:
 //
@@ -188,9 +188,9 @@ func (r *RuleGroups) MarshalJSON() ([]byte, error) {
 
 // Compare compares rule group x and y and returns:
 //
-//   < 0 if x < y   if rule group r1 is not equal and lexically before rule group r2
-//     0 if x == y  if rule group r1 is logically equal to r2 (r1 and r2 are the "same" rule groups)
-//   > 0 if x > y   if rule group r1 is not equal and lexically after rule group r2
+//	< 0 if x < y   if rule group r1 is not equal and lexically before rule group r2
+//	  0 if x == y  if rule group r1 is logically equal to r2 (r1 and r2 are the "same" rule groups)
+//	> 0 if x > y   if rule group r1 is not equal and lexically after rule group r2
 func (r1 *RuleGroup) Compare(r2 *RuleGroup) int {
 	return strings.Compare(r1.Key(), r2.Key())
 }
@@ -293,9 +293,9 @@ func (x *AlertState) MarshalJSON() ([]byte, error) {
 
 // Compare compares alert state x and y and returns:
 //
-//   < 0 if x < y  (alert state x is more critical than alert state y)
-//     0 if x == y
-//   > 0 if x > y  (alert state x is less critical than alert state y)
+//	< 0 if x < y  (alert state x is more critical than alert state y)
+//	  0 if x == y
+//	> 0 if x > y  (alert state x is less critical than alert state y)
 //
 // For sorting this makes sure that more "critical" alert states come first.
 func (x AlertState) Compare(y AlertState) int {
@@ -304,9 +304,9 @@ func (x AlertState) Compare(y AlertState) int {
 
 // Compare compares two equal alerting rules a1 and a2 and returns:
 //
-//   < 0 if a1 < a2  if rule a1 is lexically before rule a2
-//     0 if a1 == a2
-//   > 0 if a1 > a2  if rule a1 is lexically after rule a2
+//	< 0 if a1 < a2  if rule a1 is lexically before rule a2
+//	  0 if a1 == a2
+//	> 0 if a1 > a2  if rule a1 is lexically after rule a2
 //
 // More formally, the ordering is determined in the following order:
 //

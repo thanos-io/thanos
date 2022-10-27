@@ -118,7 +118,7 @@
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
-               "description": "Shows ratio of errors compared to the the total number of handled requests against /query.",
+               "description": "Shows ratio of errors compared to the total number of handled requests against /query.",
                "fill": 10,
                "id": 2,
                "legend": {
@@ -423,7 +423,7 @@
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
-               "description": "Shows ratio of errors compared to the the total number of handled requests against /query_range.",
+               "description": "Shows ratio of errors compared to the total number of handled requests against /query_range.",
                "fill": 10,
                "id": 5,
                "legend": {
@@ -780,7 +780,7 @@
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
-               "description": "Shows ratio of errors compared to the the total number of handled requests from other queriers.",
+               "description": "Shows ratio of errors compared to the total number of handled requests from other queriers.",
                "fill": 10,
                "id": 8,
                "legend": {
@@ -1137,7 +1137,7 @@
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
-               "description": "Shows ratio of errors compared to the the total number of handled requests from other queriers.",
+               "description": "Shows ratio of errors compared to the total number of handled requests from other queriers.",
                "fill": 10,
                "id": 11,
                "legend": {
@@ -1422,7 +1422,7 @@
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
-               "description": "Shows ratio of failures compared to the the total number of executed DNS lookups.",
+               "description": "Shows ratio of failures compared to the total number of executed DNS lookups.",
                "fill": 10,
                "id": 14,
                "legend": {
