@@ -83,7 +83,7 @@ Schedule:
 
 Each month we rotate the role of Community Office Shepherds among Team Members. This role is focused on leading the safe and friendly discussions during our [Community Office Hours](#thanos-community-office-hours).
 
-> NOTE: Being shepherd does not mean other team members can chill out completely. (: It's a joined effort, so ideally there are multiple team members on those meetings to make decisions if needed. 
+> NOTE: Being shepherd does not mean other team members can chill out completely. (: It's a joint effort, so ideally there are multiple team members on those meetings to make decisions if needed. 
 
 > NOTE: If for some reason you as a shepherd can't make it, find replacement or cancel the meeting. 
 
