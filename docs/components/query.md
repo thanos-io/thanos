@@ -335,6 +335,9 @@ Flags:
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.
+      --query.conn-metric.label=external_labels... ...
+                                 Optional selection of query connection metric
+                                 labels to be collected from endpoint set
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.
