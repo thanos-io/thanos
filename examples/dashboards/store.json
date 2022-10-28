@@ -1861,15 +1861,15 @@
                      "expr": "thanos_bucket_store_series_data_fetched{job=~\"$job\", quantile=\"0.99\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P99",
+                     "legendFormat": "P99: {{data_type}} / {{job}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(thanos_bucket_store_series_data_fetched_sum{job=~\"$job\"}[$interval])) / sum by (job) (rate(thanos_bucket_store_series_data_fetched_count{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, data_type) (rate(thanos_bucket_store_series_data_fetched_sum{job=~\"$job\"}[$interval])) / sum by (job, data_type) (rate(thanos_bucket_store_series_data_fetched_count{job=~\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "mean {{job}}",
+                     "legendFormat": "mean: {{data_type}} / {{job}}",
                      "legendLink": null,
                      "step": 10
                   },
@@ -1877,7 +1877,7 @@
                      "expr": "thanos_bucket_store_series_data_fetched{job=~\"$job\", quantile=\"0.50\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P50",
+                     "legendFormat": "P50: {{data_type}} / {{job}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -1954,7 +1954,7 @@
                      "expr": "thanos_bucket_store_series_data_touched{job=~\"$job\", quantile=\"0.99\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P99",
+                     "legendFormat": "P99: {{data_type}} / {{job}}",
                      "legendLink": null,
                      "step": 10
                   },
@@ -1962,7 +1962,7 @@
                      "expr": "sum by (job, data_type) (rate(thanos_bucket_store_series_data_touched_sum{job=~\"$job\"}[$interval])) / sum by (job, data_type) (rate(thanos_bucket_store_series_data_touched_count{job=~\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "mean {{job}}",
+                     "legendFormat": "mean: {{data_type}} / {{job}}",
                      "legendLink": null,
                      "step": 10
                   },
@@ -1970,7 +1970,7 @@
                      "expr": "thanos_bucket_store_series_data_touched{job=~\"$job\", quantile=\"0.50\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P50",
+                     "legendFormat": "P50: {{data_type}} / {{job}}",
                      "legendLink": null,
                      "step": 10
                   }
