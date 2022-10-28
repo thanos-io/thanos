@@ -2614,7 +2614,8 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				testutil.Ok(b, err)
 
 				// Ensure at least 1 series has been returned (as expected).
-				testutil.Equals(b, true, seriesSet.Next())
+				_, err = seriesSet.Recv()
+				testutil.Ok(b, err)
 
 				testutil.Ok(b, indexReader.Close())
 				testutil.Ok(b, chunkReader.Close())
