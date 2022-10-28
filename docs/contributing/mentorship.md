@@ -1,4 +1,4 @@
-# Thanos / Prometheus Open Source Mentorship
+# Thanos & Prometheus Mentorship
 
 Both Thanos and Prometheus projects participate in various, periodic mentoring programs.
 
