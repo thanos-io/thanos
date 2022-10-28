@@ -85,6 +85,7 @@ func registerReceive(app *extkingpin.App) {
 			MaxExemplars:             conf.tsdbMaxExemplars,
 			EnableExemplarStorage:    true,
 			HeadChunksWriteQueueSize: int(conf.tsdbWriteQueueSize),
+			OutOfOrderTimeWindow:     int64(time.Duration(*conf.tsdbOutOfOrderTimeWindow) / time.Millisecond),
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -774,6 +775,7 @@ type receiveConfig struct {
 
 	tsdbMinBlockDuration       *model.Duration
 	tsdbMaxBlockDuration       *model.Duration
+	tsdbOutOfOrderTimeWindow   *model.Duration
 	tsdbAllowOverlappingBlocks bool
 	tsdbMaxExemplars           int64
 	tsdbWriteQueueSize         int64
@@ -858,6 +860,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 
 	rc.tsdbMaxBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
+
+	rc.tsdbOutOfOrderTimeWindow = extkingpin.ModelDuration(cmd.Flag("tsdb.out-of-order-time-window", "[EXPERIMENTAL] Configures the allowed time window for ingestion of out-of-order samples. Disabled (0s) by default").Default("0s").Hidden())
 
 	cmd.Flag("tsdb.allow-overlapping-blocks", "Allow overlapping blocks, which in turn enables vertical compaction and vertical query merge. Does not do anything, enabled all the time.").Default("false").BoolVar(&rc.tsdbAllowOverlappingBlocks)
 
