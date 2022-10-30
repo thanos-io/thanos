@@ -18,7 +18,7 @@ Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpo
 
 Note that each Thanos Receive will only expose local stats and replicated series will not be included in the response.
 
-## Tenant lifecycle managemen
+## Tenant lifecycle management
 
 Tenants in Receivers are created dynamically and do not need to be provisioned upfront. When a new value is detected in the tenant HTTP header, Receivers will provision and start managing an independent TSDB for that tenant. TSDB blocks that are sent to S3 will contain a unique `tenant_id` label which can be used to compact blocks independently for each tenant.
 
@@ -29,16 +29,16 @@ Note that because of the built-in decommissioning process, the semantic of the `
 ## Example
 
 ```bash
-thanos receive
-    --tsdb.path "/path/to/receive/data/dir"
-    --grpc-address 0.0.0.0:10907
-    --http-address 0.0.0.0:10909
-    --receive.replication-factor 1
-    --label "receive_replica=\"0\""
-    --label "receive_cluster=\"eu1\""
-    --receive.local-endpoint 127.0.0.1:10907
-    --receive.hashrings-file ./data/hashring.json
-    --remote-write.address 0.0.0.0:10908
+thanos receive \
+    --tsdb.path "/path/to/receive/data/dir" \
+    --grpc-address 0.0.0.0:10907 \
+    --http-address 0.0.0.0:10909 \
+    --receive.replication-factor 1 \
+    --label "receive_replica=\"0\"" \
+    --label "receive_cluster=\"eu1\"" \
+    --receive.local-endpoint 127.0.0.1:10907 \
+    --receive.hashrings-file ./data/hashring.json \
+    --remote-write.address 0.0.0.0:10908 \
     --objstore.config-file "bucket.yml"
 ```
 

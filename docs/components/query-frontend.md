@@ -7,8 +7,8 @@ Query Frontend is fully stateless and horizontally scalable.
 Example command to run Query Frontend:
 
 ```bash
-thanos query-frontend
-    --http-address     "0.0.0.0:9090"
+thanos query-frontend \
+    --http-address     "0.0.0.0:9090" \
     --query-frontend.downstream-url="<thanos-querier>:<querier-http-port>"
 ```
 
@@ -170,9 +170,9 @@ You can find the default values [here](https://github.com/thanos-io/thanos/blob/
 If downstream queriers need basic authentication to access, we can run query-frontend:
 
 ```bash
-thanos query-frontend
-    --http-address     "0.0.0.0:9090"
-    --query-frontend.forward-header "Authorization"
+thanos query-frontend \
+    --http-address     "0.0.0.0:9090" \
+    --query-frontend.forward-header "Authorization" \
     --query-frontend.downstream-url="<thanos-querier>:<querier-http-port>"
 ```
 

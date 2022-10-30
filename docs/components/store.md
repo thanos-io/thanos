@@ -3,8 +3,8 @@
 The `thanos store` command (also known as Store Gateway) implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need significant amounts of local disk space. It joins a Thanos cluster on startup and advertises the data it can access. It keeps a small amount of information about all remote blocks on local disk and keeps it in sync with the bucket. This data is generally safe to delete across restarts at the cost of increased startup times.
 
 ```bash
-thanos store
-    --data-dir        "/local/state/data/dir"
+thanos store \
+    --data-dir        "/local/state/data/dir" \
     --objstore.config-file "bucket.yml"
 ```
 
@@ -372,7 +372,7 @@ While the remaining settings are **optional**:
   - `servername`: Override the server name used to validate the server certificate
   - `insecure_skip_verify`: Disable certificate verification
 
-## Caching Bucke
+## Caching Bucket
 
 Thanos Store Gateway supports a "caching bucket" with [chunks](../design.md#chunk) and metadata caching to speed up loading of [chunks](../design.md#chunk) from TSDB blocks. To configure caching, one needs to use `--store.caching-bucket.config=<yaml content>` or `--store.caching-bucket.config-file=<file.yaml>`.
 

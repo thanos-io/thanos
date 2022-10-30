@@ -84,7 +84,7 @@ Subcommands:
 
 ```
 
-## Bucke
+## Bucket
 
 The `thanos tools bucket` subcommand of Thanos is a set of commands to inspect data in object storage buckets. It is normally run as a standalone command to aid with troubleshooting.
 
@@ -433,7 +433,7 @@ Flags:
 
 ```
 
-### Bucket inspec
+### Bucket inspect
 
 `tools bucket inspect` is used to inspect buckets in a detailed way using stdout in ASCII table format.
 
@@ -590,8 +590,8 @@ Flags:
 `tools bucket downsample` is used to downsample blocks in an object store bucket as a service. It implements the downsample API on top of historical data in an object storage bucket.
 
 ```bash
-thanos tools bucket downsample
-    --data-dir        "/local/state/data/dir"
+thanos tools bucket downsample \
+    --data-dir        "/local/state/data/dir" \
     --objstore.config-file "bucket.yml"
 ```
 
@@ -665,8 +665,8 @@ Flags:
 NOTE: If the [Compactor](compact.md) is currently running and compacting exactly same block, this operation would be potentially a noop."
 
 ```bash
-thanos tools bucket mark
-    --id "01C8320GCGEWBZF51Q46TTQEH9" --id "01C8J352831FXGZQMN2NTJ08DY"
+thanos tools bucket mark \
+    --id "01C8320GCGEWBZF51Q46TTQEH9" --id "01C8J352831FXGZQMN2NTJ08DY" \
     --objstore.config-file "bucket.yml"
 ```
 
@@ -725,13 +725,13 @@ Flags:
 For example we can remove all non counters from the block you have on your disk (e.g in Prometheus dir):
 
 ```bash
-thanos tools bucket rewrite --no-dry-run
-  --id 01DN3SK96XDAEKRB1AN30AAW6E
+thanos tools bucket rewrite --no-dry-run \
+  --id 01DN3SK96XDAEKRB1AN30AAW6E \
   --objstore.config "
 type: FILESYSTEM
 config:
   directory: <local dir>
-"
+" \
   --rewrite.to-delete-config "
 - matchers: \"{__name__!~\\\".*total\\\"}\"
 "

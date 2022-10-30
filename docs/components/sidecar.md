@@ -33,19 +33,19 @@ You can configure watching for changes in directory via `--reloader.rule-dir=DIR
 
 Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, replace environment variables found in there in `$(VARIABLE)` format, and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
 
-## Example basic deploymen
+## Example basic deployment
 
 ```bash
-prometheus
-  --storage.tsdb.max-block-duration=2h
-  --storage.tsdb.min-block-duration=2h
+prometheus \
+  --storage.tsdb.max-block-duration=2h \
+  --storage.tsdb.min-block-duration=2h \
   --web.enable-lifecycle
 ```
 
 ```bash
-thanos sidecar
-    --tsdb.path        "/path/to/prometheus/data/dir"
-    --prometheus.url   "http://localhost:9090"
+thanos sidecar \
+    --tsdb.path        "/path/to/prometheus/data/dir" \
+    --prometheus.url   "http://localhost:9090" \
     --objstore.config-file  "bucket.yml"
 ```
 
@@ -190,7 +190,7 @@ Flags:
 
 ## Configuration
 
-### Prometheus HTTP clien
+### Prometheus HTTP client
 
 You can configure the Prometheus HTTP client for Thanos sidecar with YAML, either by passing the YAML content directly to the `--prometheus.http-client` flag, or by passing the YAML file path to the `--prometheus.http-client-file` flag.
 

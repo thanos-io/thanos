@@ -17,7 +17,7 @@ Example content of `bucket.yml`:
 ```yaml
 type: GCS
 config:
-  bucket: example-bucke
+  bucket: example-bucket
 ```
 
 By default, `thanos compact` will run to completion which makes it possible to execute it as a cronjob. Using the arguments `--wait` and `--wait-interval=5m` it's possible to keep it running.
@@ -89,15 +89,15 @@ The main risk is the **irreversible** implications of potential configuration er
 * If you merge disjoint series in multiple of blocks together, there is currently no easy way to split them back.
 * The `penalty` offline deduplication algorithm has its own limitations. Even though it has been battle-tested for quite a long time, very few issues still come up from time to time (such as [breaking rate/irate](https://github.com/thanos-io/thanos/issues/2890)). If you'd like to enable this deduplication algorithm, do so at your own risk and back up your data first!
 
-#### Enabling Vertical Compaction
+#### Vertical Compaction
 
 **NOTE:** See the ["risks" section](#vertical-compaction-risks) to understand the implications and experimental nature of this feature.
 
-You can enable vertical compaction using the hidden flag `--compact.enable-vertical-compaction`
+Vertical compaction feature is enabled by default.
 
 If you want to "virtually" group blocks differently for deduplication use cases, use `--deduplication.replica-label=LABEL` to set one or more labels to be ignored during block loading.
 
-For example if you have following set of block streams:
+For example if you have the following set of block streams:
 
 ```
 external_labels: {cluster="eu1", replica="1", receive="true", environment="production"}
@@ -308,6 +308,19 @@ Flags:
                                 happen at the end of an iteration.
       --compact.concurrency=1   Number of goroutines to use when compacting
                                 groups.
+      --compact.enable-vertical-compaction
+                                When set to true, compactor
+                                will allow overlaps and perform
+                                **irreversible** vertical compaction. See
+                                https://thanos.io/tip/components/compact.md/#vertical-compactions
+                                to read more. Please note that by default this
+                                uses a NAIVE algorithm for merging. If you
+                                need a different deduplication algorithm (e.g
+                                one that works well with Prometheus replicas),
+                                please set it via --deduplication.func.NOTE:
+                                This flag is ignored and (enabled) when
+                                --deduplication.replica-label flag is set.
+                                Does not do anything, enabled all the time.
       --compact.progress-interval=5m
                                 Frequency of calculating the compaction progress
                                 in the background when --wait has been enabled.

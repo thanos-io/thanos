@@ -15,16 +15,16 @@ You can think of Rule as a simplified Prometheus that does not require a sidecar
 The data of each Rule node can be labeled to satisfy the clusters labeling scheme. High-availability pairs can be run in parallel and should be distinguished by the designated replica label, just like regular Prometheus servers. Read more about Ruler in HA [here](#ruler-ha)
 
 ```bash
-thanos rule
-    --data-dir             "/path/to/data"
-    --eval-interval        "30s"
-    --rule-file            "/path/to/rules/*.rules.yaml"
+thanos rule \
+    --data-dir             "/path/to/data" \
+    --eval-interval        "30s" \
+    --rule-file            "/path/to/rules/*.rules.yaml" \
     --alert.query-url      "http://0.0.0.0:9090" \ # This tells what query URL to link to in UI.
-    --alertmanagers.url    "http://alert.thanos.io"
-    --query                "query.example.org"
-    --query                "query2.example.org"
-    --objstore.config-file "bucket.yml"
-    --label                'monitor_cluster="cluster1"'
+    --alertmanagers.url    "http://alert.thanos.io" \
+    --query                "query.example.org" \
+    --query                "query2.example.org" \
+    --objstore.config-file "bucket.yml" \
+    --label                'monitor_cluster="cluster1"' \
     --label                'replica="A"'
 ```
 
@@ -213,17 +213,17 @@ The WAL only storage reuses the upstream [Prometheus agent](https://prometheus.i
 Stateless mode can be enabled by providing [Prometheus remote write config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write) in file via `--remote-write.config` or inlined `--remote-write.config-file` flag. For example:
 
 ```bash
-thanos rule
-    --data-dir                  "/path/to/data"
-    --eval-interval             "30s"
-    --rule-file                 "/path/to/rules/*.rules.yaml"
+thanos rule \
+    --data-dir                  "/path/to/data" \
+    --eval-interval             "30s" \
+    --rule-file                 "/path/to/rules/*.rules.yaml" \
     --alert.query-url           "http://0.0.0.0:9090" \ # This tells what query URL to link to in UI.
-    --alertmanagers.url         "http://alert.thanos.io"
-    --query                     "query.example.org"
-    --query                     "query2.example.org"
-    --objstore.config-file      "bucket.yml"
-    --label                     'monitor_cluster="cluster1"'
-    --label                     'replica="A"'
+    --alertmanagers.url         "http://alert.thanos.io" \
+    --query                     "query.example.org" \
+    --query                     "query2.example.org" \
+    --objstore.config-file      "bucket.yml" \
+    --label                     'monitor_cluster="cluster1"' \
+    --label                     'replica="A"' \
     --remote-write.config-file  'rw-config.yaml'
 ```
 

@@ -30,7 +30,6 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/objstore/providers/s3"
-
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -40,6 +39,7 @@ import (
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
+//nolint:unused //Ignoring linting as this might be useful
 func isEmptyDir(name string) (bool, error) {
 	f, err := os.Open(name)
 	if err != nil {
@@ -604,69 +604,6 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		}
 	}
 
-	// No replica label with overlaps should halt compactor. This test is sequential
-	// because we do not want two Thanos Compact instances deleting the same partially
-	// uploaded blocks and blocks with deletion marks. We also check that Thanos Compactor
-	// deletes directories inside of a compaction group that do not belong there.
-	{
-		cFuture := e2ethanos.NewCompactorBuilder(e, "expect-to-halt")
-
-		// Precreate a directory. It should be deleted.
-		// In a hypothetical scenario, the directory could be a left-over from
-		// a compaction that had crashed.
-		testutil.Assert(t, len(blocksWithHashes) > 0)
-
-		m, err := block.DownloadMeta(ctx, logger, bkt, blocksWithHashes[0])
-		testutil.Ok(t, err)
-
-		randBlockDir := filepath.Join(cFuture.Dir(), "compact", m.Thanos.GroupKey(), "ITISAVERYRANDULIDFORTESTS0")
-		testutil.Ok(t, os.MkdirAll(randBlockDir, os.ModePerm))
-
-		f, err := os.Create(filepath.Join(randBlockDir, "index"))
-		testutil.Ok(t, err)
-		testutil.Ok(t, f.Close())
-
-		c := cFuture.Init(bktConfig, nil)
-		testutil.Ok(t, e2e.StartAndWaitReady(c))
-
-		// Expect compactor halted and one cleanup iteration to happen.
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(1), "thanos_compact_halted"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(1), "thanos_compact_block_cleanup_loops_total"))
-
-		testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+6)), "thanos_blocks_meta_synced"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_modified"))
-
-		// The compact directory is still there.
-		empty, err := isEmptyDir(c.Dir())
-		testutil.Ok(t, err)
-		testutil.Equals(t, false, empty, "directory %e should not be empty", c.Dir())
-
-		// We expect no ops.
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_iterations_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_block_cleanup_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_blocks_marked_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_group_compactions_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_group_vertical_compactions_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(1), "thanos_compact_group_compactions_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_group_compaction_runs_started_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(1), "thanos_compact_group_compaction_runs_completed_total"))
-
-		// However, the blocks have been cleaned because that happens concurrently.
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_blocks_cleaned_total"))
-
-		// Ensure bucket UI.
-		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.Endpoint("http"), "global"))
-		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.Endpoint("http"), "loaded"))
-
-		testutil.Ok(t, c.Stop())
-
-		_, err = os.Stat(randBlockDir)
-		testutil.NotOk(t, err)
-		testutil.Assert(t, os.IsNotExist(err))
-	}
-
 	// Sequential because we want to check that Thanos Compactor does not
 	// touch files it does not need to.
 	// Dedup enabled; compactor should work as expected.
@@ -695,10 +632,10 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
 		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Greater(0), "thanos_compact_iterations_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_blocks_cleaned_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_blocks_cleaned_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_block_cleanup_failures_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2*4+2+2*3+2), "thanos_compact_blocks_marked_total")) // 18.
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(6), "thanos_compact_group_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(3), "thanos_compact_group_vertical_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_group_compactions_failures_total"))
@@ -768,7 +705,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{"thanos_compact_iterations_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(18), []string{"thanos_compact_blocks_cleaned_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_block_cleanup_failures_total"}, e2emon.WaitMissingMetrics()))
-		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_blocks_marked_total"}, e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.GreaterOrEqual(0), []string{"thanos_compact_blocks_marked_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_aborted_partial_uploads_deletion_attempts_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_group_compactions_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_group_vertical_compactions_total"}, e2emon.WaitMissingMetrics()))
@@ -855,6 +792,110 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 			},
 		)
 	}
+}
+
+func TestCompactorOverlappingSources(t *testing.T) {
+	logger := log.NewLogfmtLogger(os.Stdout)
+
+	justAfterConsistencyDelay := 30 * time.Minute
+	// Make sure to take realistic timestamp for start. This is to align blocks as if they would be aligned on Prometheus.
+	// To have deterministic compaction, let's have fixed date:
+	now, err := time.Parse(time.RFC3339, "2020-03-24T08:00:00Z")
+	testutil.Ok(t, err)
+
+	ctx := context.TODO()
+
+	name := "overlap-source"
+	e, err := e2e.NewDockerEnvironment(name)
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
+
+	const bucket = "compact-test"
+	m := e2ethanos.NewMinio(e, "minio", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	bkt, err := s3.NewBucketWithConfig(logger,
+		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "test-feed")
+	testutil.Ok(t, err)
+
+	blocks := []blockDesc{
+		{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "2")},
+			extLset: labels.FromStrings("replica", "1"),
+			mint:    timestamp.FromTime(now),
+			maxt:    timestamp.FromTime(now.Add(2 * time.Hour)),
+		},
+		{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "3")},
+			extLset: labels.FromStrings("replica", "1"),
+			mint:    timestamp.FromTime(now.Add(2 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(4 * time.Hour)),
+		},
+		{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "4")},
+			extLset: labels.FromStrings("replica", "1"),
+			mint:    timestamp.FromTime(now.Add(4 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(6 * time.Hour)),
+		},
+		{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "5")},
+			extLset: labels.FromStrings("replica", "1"),
+			mint:    timestamp.FromTime(now.Add(6 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(8 * time.Hour)),
+		},
+		{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "6")},
+			extLset: labels.FromStrings("replica", "1"),
+			mint:    timestamp.FromTime(now.Add(8 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(10 * time.Hour)),
+		},
+		{
+			series:  []labels.Labels{labels.FromStrings("a", "1", "b", "7")},
+			extLset: labels.FromStrings("replica", "1"),
+			mint:    timestamp.FromTime(now.Add(10 * time.Hour)),
+			maxt:    timestamp.FromTime(now.Add(12 * time.Hour)),
+		},
+	}
+
+	ids := make([]ulid.ULID, 0, len(blocks))
+	for i := 0; i < len(blocks); i++ {
+		b := blocks[i]
+		id, err := b.Create(ctx, dir, justAfterConsistencyDelay, b.hashFunc, 120)
+		testutil.Ok(t, err)
+		ids = append(ids, id)
+	}
+
+	// We need another ID as part of the source to make sure the block meta is not excluded
+	// by the duplicated source meta filter.
+	anotherID := ulid.MustNew(uint64(time.Now().Unix()), nil)
+	anotherID2 := ulid.MustNew(uint64(time.Now().Add(-1*time.Hour).Unix()), nil)
+	// Modify block metadata to create a block with overlapping sources.
+	err = e2eutil.ModifyMetaCompactionSources(path.Join(dir, ids[1].String()), []ulid.ULID{ids[0], anotherID})
+	testutil.Ok(t, err)
+	err = e2eutil.ModifyMetaCompactionSources(path.Join(dir, ids[0].String()), []ulid.ULID{ids[0], anotherID2})
+	testutil.Ok(t, err)
+
+	for _, id := range ids {
+		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+			return objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String())
+		}))
+	}
+
+	bktConfig := client.BucketConfig{
+		Type:   client.S3,
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+	}
+	cFuture := e2ethanos.NewCompactorBuilder(e, "overlap")
+	c := cFuture.Init(bktConfig, nil)
+	testutil.Ok(t, e2e.StartAndWaitReady(c))
+
+	testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(float64(len(ids))), []string{"thanos_blocks_meta_synced"}, e2emon.WaitMissingMetrics()))
+	// Wait till at least 1 compaction iteration done.
+	testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{"thanos_compact_iterations_total"}, e2emon.WaitMissingMetrics()))
+	testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_compact_group_overlapping_source_blocks_total"}, e2emon.WaitMissingMetrics()))
 }
 
 func ensureGETStatusCode(t testing.TB, code int, url string) {

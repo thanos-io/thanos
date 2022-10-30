@@ -537,3 +537,17 @@ func createBlock(
 
 	return id, nil
 }
+
+// ModifyMetaCompactionSources modifies the meta.json file to
+// use the specified compaction sources.
+func ModifyMetaCompactionSources(blockDir string, compactionSources []ulid.ULID) error {
+	if len(compactionSources) > 0 {
+		meta, err := metadata.ReadFromDir(blockDir)
+		if err != nil {
+			return err
+		}
+		meta.Compaction.Sources = compactionSources
+		return meta.WriteToDir(log.NewNopLogger(), blockDir)
+	}
+	return nil
+}
