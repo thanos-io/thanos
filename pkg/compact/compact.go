@@ -813,7 +813,7 @@ func IsIssue347Error(err error) bool {
 	return ok
 }
 
-// OutOfOrderChunkError is a type wrapper for OOO chunk error from validating block index.
+// OutOfOrderChunksError is a type wrapper for OOO chunk error from validating block index.
 type OutOfOrderChunksError struct {
 	err error
 	id  ulid.ULID
@@ -827,7 +827,7 @@ func outOfOrderChunkError(err error, brokenBlock ulid.ULID) OutOfOrderChunksErro
 	return OutOfOrderChunksError{err: err, id: brokenBlock}
 }
 
-// IsOutOfOrderChunk returns true if the base error is a OutOfOrderChunkError.
+// IsOutOfOrderChunkError returns true if the base error is a OutOfOrderChunksError.
 func IsOutOfOrderChunkError(err error) bool {
 	_, ok := errors.Cause(err).(OutOfOrderChunksError)
 	return ok
