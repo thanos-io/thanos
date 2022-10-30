@@ -605,11 +605,11 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 func TestStatelessRulerAlertStateRestore(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("e2e_test_stateless_rule_alert_state_restore")
+	e, err := e2e.NewDockerEnvironment("stateless-state")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
 	am := e2ethanos.NewAlertmanager(e, "1")
@@ -623,7 +623,7 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 		WithReplicaLabels("replica", "receive").Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 	rulesSubDir := "rules"
-	rulers := []e2e.InstrumentedRunnable{}
+	var rulers []*e2emon.InstrumentedRunnable
 	for i := 1; i <= 2; i++ {
 		rFuture := e2ethanos.NewRulerBuilder(e, fmt.Sprintf("%d", i))
 		rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
@@ -662,13 +662,24 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 	// Start the ruler 1 first.
 	testutil.Ok(t, e2e.StartAndWaitReady(rulers[0]))
 
-	// Wait until remote write samples are written to receivers successfully.
-	testutil.Ok(t, rulers[0].WaitSumMetricsWithOptions(e2e.GreaterOrEqual(1), []string{"prometheus_remote_storage_samples_total"}, e2e.WaitMissingMetrics()))
+	// Wait until the alert firing and ALERTS_FOR_STATE
+	// series has been written to receiver successfully.
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
+		return "ALERTS_FOR_STATE"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, []model.Metric{
+		{
+			"__name__":  "ALERTS_FOR_STATE",
+			"alertname": "TestAlert_RuleHoldDuration",
+			"severity":  "page",
+			"tenant_id": "default-tenant",
+		},
+	})
 
-	// Wait until the alert firing.
 	var alerts []*rulespb.AlertInstance
 	client := promclient.NewDefaultClient()
-	err = runutil.Repeat(time.Second*1, ctx.Done(), func() error {
+	err = runutil.Retry(time.Second*1, ctx.Done(), func() error {
 		alerts, err = client.AlertsInGRPC(ctx, urlParse(t, "http://"+rulers[0].Endpoint("http")))
 		testutil.Ok(t, err)
 		if len(alerts) > 0 {
@@ -688,10 +699,10 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(rulers[1]))
 
 	// Wait for 4 rule evaluation iterations to make sure the alert state is restored.
-	testutil.Ok(t, rulers[1].WaitSumMetricsWithOptions(e2e.GreaterOrEqual(4), []string{"prometheus_rule_group_duration_seconds_count"}, e2e.WaitMissingMetrics()))
+	testutil.Ok(t, rulers[1].WaitSumMetricsWithOptions(e2emon.GreaterOrEqual(4), []string{"prometheus_rule_group_iterations_total"}, e2emon.WaitMissingMetrics()))
 
 	// Wait until the alert is firing on the second ruler.
-	err = runutil.Repeat(time.Second*1, ctx.Done(), func() error {
+	err = runutil.Retry(time.Second*1, ctx.Done(), func() error {
 		alerts, err = client.AlertsInGRPC(ctx, urlParse(t, "http://"+rulers[1].Endpoint("http")))
 		testutil.Ok(t, err)
 		if len(alerts) > 0 {

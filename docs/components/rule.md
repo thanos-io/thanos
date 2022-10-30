@@ -391,8 +391,8 @@ Flags:
                                  https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
-      --query.default-step=1s    Default range query step to use. This is only
-                                 used in stateless Ruler and alert state
+      --query.default-step=1s    Default range query step to use. This is
+                                 only used in stateless Ruler and alert state
                                  restoration.
       --query.http-method=POST   HTTP method to use when sending queries.
                                  Possible options: [GET, POST]
