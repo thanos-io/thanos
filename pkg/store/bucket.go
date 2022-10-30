@@ -992,23 +992,23 @@ func blockSeries(
 	shardMatcher *storepb.ShardMatcher,
 	emptyPostingsCount prometheus.Counter,
 	calculateChunkHash bool,
-) (*blockSeriesClient, *queryStats, error) {
+) (*blockSeriesClient, error) {
 	ps, err := indexr.ExpandedPostings(ctx, matchers, bytesLimiter)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "expanded matching posting")
+		return nil, errors.Wrap(err, "expanded matching posting")
 	}
 
 	if len(ps) == 0 {
 		emptyPostingsCount.Inc()
-		return emptyBlockSeriesClient(), indexr.stats, nil
+		return emptyBlockSeriesClient(), nil
 	}
 
 	// Reserve series seriesLimiter
 	if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
-		return nil, nil, errors.Wrap(err, "exceeded series limit")
+		return nil, errors.Wrap(err, "exceeded series limit")
 	}
 
-	return newBlockSeriesClient(extLset, ps, minTime, maxTime, indexr, chunkr, chunksLimiter, bytesLimiter, skipChunks, loadAggregates, shardMatcher, calculateChunkHash), indexr.stats, nil
+	return newBlockSeriesClient(extLset, ps, minTime, maxTime, indexr, chunkr, chunksLimiter, bytesLimiter, skipChunks, loadAggregates, shardMatcher, calculateChunkHash), nil
 }
 
 func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, save func([]byte) ([]byte, error), calculateChecksum bool) error {
@@ -1220,10 +1220,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				})
 				defer span.Finish()
 
-				ctx, cancel := context.WithCancel(ctx)
-
 				shardMatcher := req.ShardInfo.Matcher(&s.buffers)
-				blockClient, pstats, err := blockSeries(
+				blockClient, err := blockSeries(
 					srv.Context(),
 					b.extLset,
 					indexr,
@@ -1240,16 +1238,19 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					s.enableChunkHashCalculation,
 				)
 				if err != nil {
-					defer cancel()
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 				}
 				part := newLazyRespSet(
-					ctx,
+					srv.Context(),
 					span,
 					10*time.Minute,
-					"object-store-block",
+					b.meta.ULID.String(),
 					[]labels.Labels{b.extLset},
-					cancel,
+					func() {
+						mtx.Lock()
+						stats = stats.merge(indexr.stats)
+						mtx.Unlock()
+					},
 					blockClient,
 					shardMatcher,
 					false,
@@ -1257,13 +1258,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				)
 
 				mtx.Lock()
-				res = append(res, newSortedSeriesSet(part, sortWithoutLabelSet))
-				stats = stats.merge(pstats)
+				res = append(res, part)
 				mtx.Unlock()
-
-				// No info about samples exactly, so pass at least chunks.
-				span.SetTag("processed.series", len(indexr.loadedSeries))
-				span.SetTag("processed.chunks", pstats.chunksFetched)
 
 				return nil
 			})
@@ -1325,17 +1321,14 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		begin := time.Now()
 		set := NewProxyResponseHeap(res...)
 		for set.Next() {
-			var series storepb.Series
-
-			stats.mergedSeriesCount++
-
-			if req.SkipChunks {
-				stats.mergedChunksCount += len(series.Chunks)
-				s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
-			}
 			at := set.At()
-			if at == nil {
-				continue
+			series := at.GetSeries()
+			if series != nil {
+				stats.mergedSeriesCount++
+				if !req.SkipChunks {
+					stats.mergedChunksCount += len(series.Chunks)
+					s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
+				}
 			}
 			if err = srv.Send(at); err != nil {
 				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
@@ -1453,7 +1446,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 				result = strutil.MergeSlices(res, extRes)
 			} else {
-				seriesSet, _, err := blockSeries(
+				seriesSet, err := blockSeries(
 					newCtx,
 					b.extLset,
 					indexr,
@@ -1634,7 +1627,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				}
 				result = res
 			} else {
-				seriesSet, _, err := blockSeries(
+				seriesSet, err := blockSeries(
 					newCtx,
 					b.extLset,
 					indexr,
