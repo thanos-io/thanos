@@ -892,7 +892,7 @@ func TestCompactorOverlappingSources(t *testing.T) {
 	c := cFuture.Init(bktConfig, nil)
 	testutil.Ok(t, e2e.StartAndWaitReady(c))
 
-	testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(float64(len(ids))), []string{"thanos_blocks_meta_synced"}, e2emon.WaitMissingMetrics()))
+	testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.GreaterOrEqual(float64(len(ids))), []string{"thanos_blocks_meta_synced"}, e2emon.WaitMissingMetrics()))
 	// Wait till at least 1 compaction iteration done.
 	testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{"thanos_compact_iterations_total"}, e2emon.WaitMissingMetrics()))
 	testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_compact_group_overlapping_source_blocks_total"}, e2emon.WaitMissingMetrics()))
