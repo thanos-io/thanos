@@ -20,6 +20,14 @@ type Resolver struct {
 }
 
 func (r *Resolver) LookupSRV(ctx context.Context, service, proto, name string) (cname string, addrs []*net.SRV, err error) {
+	return r.lookupSRV(service, proto, name, 1, 8)
+}
+
+func (r *Resolver) lookupSRV(service, proto, name string, currIteration, maxIterations int) (cname string, addrs []*net.SRV, err error) {
+	// We want to protect from infinite loops when resolving DNS records recursively.
+	if currIteration > maxIterations {
+		return "", nil, errors.Errorf("maximum number of recursive iterations reached (%d)", maxIterations)
+	}
 	var target string
 	if service == "" && proto == "" {
 		target = name
@@ -41,6 +49,13 @@ func (r *Resolver) LookupSRV(ctx context.Context, service, proto, name string) (
 				Priority: addr.Priority,
 				Port:     addr.Port,
 			})
+		case *dns.CNAME:
+			// Recursively resolve it.
+			_, resp, err := r.lookupSRV("", "", addr.Target, currIteration+1, maxIterations)
+			if err != nil {
+				return "", nil, errors.Wrapf(err, "recursively resolve %s", addr.Target)
+			}
+			addrs = append(addrs, resp...)
 		default:
 			return "", nil, errors.Errorf("invalid SRV response record %s", record)
 		}
