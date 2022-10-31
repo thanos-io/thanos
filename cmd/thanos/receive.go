@@ -77,15 +77,15 @@ func registerReceive(app *extkingpin.App) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:         int64(time.Duration(*conf.tsdbMinBlockDuration) / time.Millisecond),
-			MaxBlockDuration:         int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
-			RetentionDuration:        int64(time.Duration(*conf.retention) / time.Millisecond),
-			NoLockfile:               conf.noLockFile,
-			WALCompression:           conf.walCompression,
-			AllowOverlappingBlocks:   conf.tsdbAllowOverlappingBlocks,
-			MaxExemplars:             conf.tsdbMaxExemplars,
-			EnableExemplarStorage:    true,
-			HeadChunksWriteQueueSize: int(conf.tsdbWriteQueueSize),
+			MinBlockDuration:               int64(time.Duration(*conf.tsdbMinBlockDuration) / time.Millisecond),
+			MaxBlockDuration:               int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
+			RetentionDuration:              int64(time.Duration(*conf.retention) / time.Millisecond),
+			NoLockfile:                     conf.noLockFile,
+			WALCompression:                 conf.walCompression,
+			MaxExemplars:                   conf.tsdbMaxExemplars,
+			EnableExemplarStorage:          true,
+			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
+			EnableMemorySnapshotOnShutdown: conf.tsdbMemorySnapshotOnShutdown,
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -193,19 +193,6 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
-	var limitsConfig *receive.RootLimitsConfig
-	if conf.limitsConfig != nil {
-		limitsContentYaml, err := conf.limitsConfig.Content()
-		if err != nil {
-			return errors.Wrap(err, "get content of limit configuration")
-		}
-		limitsConfig, err = receive.ParseRootLimitConfig(limitsContentYaml)
-		if err != nil {
-			return errors.Wrap(err, "parse limit configuration")
-		}
-	}
-	limiter := receive.NewLimiter(limitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"))
-
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
@@ -218,6 +205,23 @@ func runReceive(
 		hashFunc,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
+
+	var limitsConfig *receive.RootLimitsConfig
+	if conf.limitsConfig != nil {
+		limitsContentYaml, err := conf.limitsConfig.Content()
+		if err != nil {
+			return errors.Wrap(err, "get content of limit configuration")
+		}
+		limitsConfig, err = receive.ParseRootLimitConfig(limitsContentYaml)
+		if err != nil {
+			return errors.Wrap(err, "parse limit configuration")
+		}
+	}
+	limiter, err := receive.NewLimiter(conf.limitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"))
+	if err != nil {
+		return errors.Wrap(err, "creating limiter")
+	}
+
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
 		Writer:            writer,
 		ListenAddress:     conf.rwAddress,
@@ -298,11 +302,14 @@ func runReceive(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		mts := store.NewMultiTSDBStore(
+		mts := store.NewProxyStore(
 			logger,
 			reg,
+			dbs.TSDBLocalClients,
 			comp,
-			dbs.TSDBStores,
+			labels.Labels{},
+			0,
+			store.LazyRetrieval,
 		)
 		rw := store.ReadWriteTSDBStore{
 			StoreServer:          mts,
@@ -327,7 +334,7 @@ func runReceive(
 			info.WithExemplarsInfoFunc(),
 		)
 
-		srv := grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
+		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(rw)),
 			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
@@ -395,6 +402,22 @@ func runReceive(
 		}, func(err error) {
 			cancel()
 		})
+	}
+
+	{
+		if limiter.CanReload() {
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				level.Debug(logger).Log("msg", "limits config initialized with file watcher.")
+				if err := limiter.StartConfigReloader(ctx); err != nil {
+					return err
+				}
+				<-ctx.Done()
+				return nil
+			}, func(err error) {
+				cancel()
+			})
+		}
 	}
 
 	level.Info(logger).Log("msg", "starting receiver")
@@ -750,11 +773,12 @@ type receiveConfig struct {
 	forwardTimeout    *model.Duration
 	compression       string
 
-	tsdbMinBlockDuration       *model.Duration
-	tsdbMaxBlockDuration       *model.Duration
-	tsdbAllowOverlappingBlocks bool
-	tsdbMaxExemplars           int64
-	tsdbWriteQueueSize         int64
+	tsdbMinBlockDuration         *model.Duration
+	tsdbMaxBlockDuration         *model.Duration
+	tsdbAllowOverlappingBlocks   bool
+	tsdbMaxExemplars             int64
+	tsdbWriteQueueSize           int64
+	tsdbMemorySnapshotOnShutdown bool
 
 	walCompression bool
 	noLockFile     bool
@@ -837,7 +861,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.tsdbMaxBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
 
-	cmd.Flag("tsdb.allow-overlapping-blocks", "Allow overlapping blocks, which in turn enables vertical compaction and vertical query merge.").Default("false").BoolVar(&rc.tsdbAllowOverlappingBlocks)
+	cmd.Flag("tsdb.allow-overlapping-blocks", "Allow overlapping blocks, which in turn enables vertical compaction and vertical query merge. Does not do anything, enabled all the time.").Default("false").BoolVar(&rc.tsdbAllowOverlappingBlocks)
 
 	cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").BoolVar(&rc.walCompression)
 
@@ -853,6 +877,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"[EXPERIMENTAL] Enables configuring the size of the chunk write queue used in the head chunks mapper. "+
 			"A queue size of zero (default) disables this feature entirely.").
 		Default("0").Hidden().Int64Var(&rc.tsdbWriteQueueSize)
+
+	cmd.Flag("tsdb.memory-snapshot-on-shutdown",
+		"[EXPERIMENTAL] Enables feature to snapshot in-memory chunks on shutdown for faster restarts.").
+		Default("false").Hidden().BoolVar(&rc.tsdbMemorySnapshotOnShutdown)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")

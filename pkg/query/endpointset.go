@@ -38,20 +38,24 @@ const (
 	noMetadataEndpointMessage = "cannot obtain metadata: neither info nor store client found"
 )
 
+type queryConnMetricLabel string
+
+const (
+	ExternalLabels queryConnMetricLabel = "external_labels"
+	StoreType      queryConnMetricLabel = "store_type"
+)
+
 type GRPCEndpointSpec struct {
 	addr           string
 	isStrictStatic bool
 }
 
+const externalLabelLimit = 1000
+
 // NewGRPCEndpointSpec creates gRPC endpoint spec.
 // It uses InfoAPI to get Metadata.
 func NewGRPCEndpointSpec(addr string, isStrictStatic bool) *GRPCEndpointSpec {
 	return &GRPCEndpointSpec{addr: addr, isStrictStatic: isStrictStatic}
-}
-
-// IsStrictStatic returns true if the endpoint has been statically defined and it is under a strict mode.
-func (es *GRPCEndpointSpec) IsStrictStatic() bool {
-	return es.isStrictStatic
 }
 
 func (es *GRPCEndpointSpec) Addr() string {
@@ -188,28 +192,41 @@ type endpointSetNodeCollector struct {
 	storePerExtLset map[string]int
 
 	connectionsDesc *prometheus.Desc
+	labels          []string
 }
 
-func newEndpointSetNodeCollector() *endpointSetNodeCollector {
+func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
+	if len(labels) == 0 {
+		labels = []string{string(ExternalLabels), string(StoreType)}
+	}
 	return &endpointSetNodeCollector{
 		storeNodes: map[component.Component]map[string]int{},
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
-			[]string{"external_labels", "store_type"}, nil,
+			labels, nil,
 		),
+		labels: labels,
 	}
 }
 
+// truncateExtLabels truncates the stringify external labels with the format of {labels..}.
+func truncateExtLabels(s string, threshold int) string {
+	if len(s) > threshold {
+		return fmt.Sprintf("%s}", s[:threshold-1])
+	}
+	return s
+}
 func (c *endpointSetNodeCollector) Update(nodes map[component.Component]map[string]int) {
 	storeNodes := make(map[component.Component]map[string]int, len(nodes))
 	storePerExtLset := map[string]int{}
 
-	for k, v := range nodes {
-		storeNodes[k] = make(map[string]int, len(v))
-		for kk, vv := range v {
-			storePerExtLset[kk] += vv
-			storeNodes[k][kk] = vv
+	for storeType, occurrencesPerExtLset := range nodes {
+		storeNodes[storeType] = make(map[string]int, len(occurrencesPerExtLset))
+		for externalLabels, occurrences := range occurrencesPerExtLset {
+			externalLabels = truncateExtLabels(externalLabels, externalLabelLimit)
+			storePerExtLset[externalLabels] += occurrences
+			storeNodes[storeType][externalLabels] = occurrences
 		}
 	}
 
@@ -233,7 +250,17 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 			if storeType != nil {
 				storeTypeStr = storeType.String()
 			}
-			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), externalLabels, storeTypeStr)
+			// Select only required labels.
+			lbls := []string{}
+			for _, lbl := range c.labels {
+				switch lbl {
+				case string(ExternalLabels):
+					lbls = append(lbls, externalLabels)
+				case string(StoreType):
+					lbls = append(lbls, storeTypeStr)
+				}
+			}
+			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), lbls...)
 		}
 	}
 }
@@ -273,8 +300,9 @@ func NewEndpointSet(
 	dialOpts []grpc.DialOption,
 	unhealthyEndpointTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
+	endpointMetricLabels ...string,
 ) *EndpointSet {
-	endpointsMetric := newEndpointSetNodeCollector()
+	endpointsMetric := newEndpointSetNodeCollector(endpointMetricLabels...)
 	if reg != nil {
 		reg.MustRegister(endpointsMetric)
 	}
@@ -382,7 +410,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 		e.endpoints[addr] = er
 	}
 	for addr, er := range staleRefs {
-		level.Info(er.logger).Log("msg", unhealthyEndpointMessage, "address", er.Addr(), "extLset", labelpb.PromLabelSetsToString(er.LabelSets()))
+		level.Info(er.logger).Log("msg", unhealthyEndpointMessage, "address", er.addr, "extLset", labelpb.PromLabelSetsToString(er.LabelSets()))
 		er.Close()
 		delete(e.endpoints, addr)
 	}
@@ -437,7 +465,7 @@ func (e *EndpointSet) getTimedOutRefs() map[string]*endpointRef {
 
 		lastCheck := er.getStatus().LastCheck
 		if now.Sub(lastCheck) >= e.unhealthyEndpointTimeout {
-			result[er.Addr()] = er
+			result[er.addr] = er
 		}
 	}
 
@@ -599,7 +627,7 @@ func (e *EndpointSet) newEndpointRef(ctx context.Context, spec *GRPCEndpointSpec
 		logger:   e.logger,
 		created:  e.now(),
 		addr:     spec.Addr(),
-		isStrict: spec.IsStrictStatic(),
+		isStrict: spec.isStrictStatic,
 		cc:       conn,
 	}, nil
 }
@@ -782,11 +810,14 @@ func (er *endpointRef) SendsSortedSeries() bool {
 
 func (er *endpointRef) String() string {
 	mint, maxt := er.TimeRange()
-	return fmt.Sprintf("Addr: %s LabelSets: %v Mint: %d Maxt: %d", er.addr, labelpb.PromLabelSetsToString(er.LabelSets()), mint, maxt)
+	return fmt.Sprintf(
+		"Addr: %s LabelSets: %v Mint: %d Maxt: %d",
+		er.addr, labelpb.PromLabelSetsToString(er.LabelSets()), mint, maxt,
+	)
 }
 
-func (er *endpointRef) Addr() string {
-	return er.addr
+func (er *endpointRef) Addr() (string, bool) {
+	return er.addr, false
 }
 
 func (er *endpointRef) Close() {

@@ -1,8 +1,9 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-//nolint:unparam
 // TODO(kakkoyun): Fix linter issues - The pattern we use makes linter unhappy (returning unused config pointers).
+//
+//nolint:unparam
 package main
 
 import (

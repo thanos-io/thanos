@@ -20,16 +20,18 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/pkg/tracing/lightstep"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
+	"github.com/thanos-io/thanos/pkg/tracing/otlp"
 )
 
 type TracingProvider string
 
 const (
-	Stackdriver TracingProvider = "STACKDRIVER"
-	GoogleCloud TracingProvider = "GOOGLE_CLOUD"
-	Jaeger      TracingProvider = "JAEGER"
-	ElasticAPM  TracingProvider = "ELASTIC_APM"
-	Lightstep   TracingProvider = "LIGHTSTEP"
+	Stackdriver           TracingProvider = "STACKDRIVER"
+	GoogleCloud           TracingProvider = "GOOGLE_CLOUD"
+	Jaeger                TracingProvider = "JAEGER"
+	ElasticAPM            TracingProvider = "ELASTIC_APM"
+	Lightstep             TracingProvider = "LIGHTSTEP"
+	OpenTelemetryProtocol TracingProvider = "OTLP"
 )
 
 type TracingConfig struct {
@@ -63,11 +65,23 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 		tracer, closerFunc := migration.Bridge(tracerProvider, logger)
 		return tracer, closerFunc, nil
 	case string(Jaeger):
-		return jaeger.NewTracer(ctx, logger, metrics, config)
+		tracerProvider, err := jaeger.NewTracerProvider(ctx, logger, config)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "new tracer provider err")
+		}
+		tracer, closerFunc := migration.Bridge(tracerProvider, logger)
+		return tracer, closerFunc, nil
 	case string(ElasticAPM):
 		return elasticapm.NewTracer(config)
 	case string(Lightstep):
 		return lightstep.NewTracer(ctx, config)
+	case string(OpenTelemetryProtocol):
+		tracerProvider, err := otlp.NewTracerProvider(ctx, logger, config)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "new tracer provider err")
+		}
+		tracer, closerFunc := migration.Bridge(tracerProvider, logger)
+		return tracer, closerFunc, nil
 	default:
 		return nil, nil, errors.Errorf("tracing with type %s is not supported", tracingConf.Type)
 	}

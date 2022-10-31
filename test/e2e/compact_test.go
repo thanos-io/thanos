@@ -76,6 +76,7 @@ func TestCompactWithStoreGateway(t *testing.T) {
 }
 
 func TestCompactWithStoreGatewayWithPenaltyDedup(t *testing.T) {
+	t.Skip("Flaky test, needs deeper investigation before re-enabling, details are in https://github.com/thanos-io/thanos/issues/4866")
 	testCompactWithStoreGateway(t, true)
 }
 

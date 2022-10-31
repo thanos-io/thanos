@@ -44,7 +44,17 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 	queryableCreator := NewQueryableCreator(nil, nil, testProxy, 2, 5*time.Second)
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
-	queryable := queryableCreator(false, nil, nil, oneHourMillis, false, false, false, nil)
+	queryable := queryableCreator(
+		false,
+		nil,
+		nil,
+		oneHourMillis,
+		false,
+		false,
+		false,
+		nil,
+		NoopSeriesStatsReporter,
+	)
 
 	q, err := queryable.Querier(context.Background(), 0, 42)
 	testutil.Ok(t, err)
@@ -71,7 +81,22 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	}
 
 	timeout := 10 * time.Second
-	q := NewQueryableCreator(nil, nil, testProxy, 2, timeout)(false, nil, nil, 9999999, false, false, false, nil)
+	q := NewQueryableCreator(
+		nil,
+		nil,
+		testProxy,
+		2,
+		timeout,
+	)(false,
+		nil,
+		nil,
+		9999999,
+		false,
+		false,
+		false,
+		nil,
+		NoopSeriesStatsReporter,
+	)
 	engine := promql.NewEngine(
 		promql.EngineOpts{
 			MaxSamples: math.MaxInt32,
@@ -299,10 +324,12 @@ func (s series) Iterator() chunkenc.Iterator {
 // To test with real data:
 // Collect the expected results from Prometheus or Thanos through "/api/v1/query_range" and save to a file.
 // Collect raw data to be used for local storage:
+//
 //	scripts/insecure_grpcurl_series.sh querierGrpcIP:port '[{"name":"type","value":"current"},{"name":"_id","value":"xxx"}]' 1597823000000 1597824600000 > localStorage.json
 //	Remove all white space from the file and put each series in a new line.
 //	When collecting the raw data mint should be Prometheus query time minus the default look back delta(default is 5min or 300000ms)
 //	For example if the Prometheus query mint is 1597823700000 the grpccurl query mint should be 1597823400000.
+//
 // This is because when promql displays data for a given range it looks back 5min before the requested time window.
 func TestQuerier_Select_AfterPromQL(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
@@ -363,7 +390,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 						g := gate.New(2)
 						mq := &mockedQueryable{
 							Creator: func(mint, maxt int64) storage.Querier {
-								return newQuerier(context.Background(), nil, mint, maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil)
+								return newQuerier(context.Background(), nil, mint, maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
 							},
 						}
 						t.Cleanup(func() {
@@ -607,7 +634,7 @@ func TestQuerier_Select(t *testing.T) {
 				{dedup: true, expected: []series{tcase.expectedAfterDedup}},
 			} {
 				g := gate.New(2)
-				q := newQuerier(context.Background(), nil, tcase.mint, tcase.maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil)
+				q := newQuerier(context.Background(), nil, tcase.mint, tcase.maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil, func(i storepb.SeriesStatsCounter) {})
 				t.Cleanup(func() { testutil.Ok(t, q.Close()) })
 
 				t.Run(fmt.Sprintf("dedup=%v", sc.dedup), func(t *testing.T) {
@@ -836,7 +863,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 100 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, false, 0, true, false, false, g, timeout, nil)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, false, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -906,7 +933,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 5 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, true, 0, true, false, false, g, timeout, nil)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, true, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})

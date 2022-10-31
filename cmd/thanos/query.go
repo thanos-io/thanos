@@ -25,6 +25,8 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
+	"google.golang.org/grpc"
+
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/thanos-community/promql-engine/engine"
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
@@ -54,7 +56,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -107,6 +108,10 @@ func registerQuery(app *extkingpin.App) {
 
 	maxConcurrentSelects := cmd.Flag("query.max-concurrent-select", "Maximum number of select requests made concurrently per a query.").
 		Default("4").Int()
+
+	queryConnMetricLabels := cmd.Flag("query.conn-metric.label", "Optional selection of query connection metric labels to be collected from endpoint set").
+		Default(string(query.ExternalLabels), string(query.StoreType)).
+		Enums(string(query.ExternalLabels), string(query.StoreType))
 
 	queryReplicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter. Data includes time series, recording rules, and alerting rules.").
 		Strings()
@@ -194,6 +199,10 @@ func registerQuery(app *extkingpin.App) {
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field.").String()
 	grpcProxyStrategy := cmd.Flag("grpc.proxy-strategy", "Strategy to use when proxying Series requests to leaf nodes. Hidden and only used for testing, will be removed after lazy becomes the default.").Default(string(store.EagerRetrieval)).Hidden().Enum(string(store.EagerRetrieval), string(store.LazyRetrieval))
 
+	queryTelemetryDurationQuantiles := cmd.Flag("query.telemetry.request-duration-seconds-quantiles", "The quantiles for exporting metrics about the request duration quantiles.").Default("0.1", "0.25", "0.75", "1.25", "1.75", "2.5", "3", "5", "10").Float64List()
+	queryTelemetrySamplesQuantiles := cmd.Flag("query.telemetry.request-samples-quantiles", "The quantiles for exporting metrics about the samples count quantiles.").Default("100", "1000", "10000", "100000", "1000000").Int64List()
+	queryTelemetrySeriesQuantiles := cmd.Flag("query.telemetry.request-series-seconds-quantiles", "The quantiles for exporting metrics about the series count quantiles.").Default("10", "100", "1000", "10000", "100000").Int64List()
+
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
@@ -275,6 +284,7 @@ func registerQuery(app *extkingpin.App) {
 			*dynamicLookbackDelta,
 			time.Duration(*defaultEvaluationInterval),
 			time.Duration(*storeResponseTimeout),
+			*queryConnMetricLabels,
 			*queryReplicaLabels,
 			selectorLset,
 			getFlagsMap(cmd.Flags()),
@@ -305,6 +315,9 @@ func registerQuery(app *extkingpin.App) {
 			*alertQueryURL,
 			*grpcProxyStrategy,
 			component.Query,
+			*queryTelemetryDurationQuantiles,
+			*queryTelemetrySamplesQuantiles,
+			*queryTelemetrySeriesQuantiles,
 			promqlEngineType(*promqlEngine),
 		)
 	})
@@ -347,6 +360,7 @@ func runQuery(
 	dynamicLookbackDelta bool,
 	defaultEvaluationInterval time.Duration,
 	storeResponseTimeout time.Duration,
+	queryConnMetricLabels []string,
 	queryReplicaLabels []string,
 	selectorLset labels.Labels,
 	flagsMap map[string]string,
@@ -377,6 +391,9 @@ func runQuery(
 	alertQueryURL string,
 	grpcProxyStrategy string,
 	comp component.Component,
+	queryTelemetryDurationQuantiles []float64,
+	queryTelemetrySamplesQuantiles []int64,
+	queryTelemetrySeriesQuantiles []int64,
 	promqlEngine promqlEngineType,
 ) error {
 	if alertQueryURL == "" {
@@ -486,6 +503,7 @@ func runQuery(
 			dialOpts,
 			unhealthyStoreTimeout,
 			endpointInfoTimeout,
+			queryConnMetricLabels...,
 		)
 		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy))
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
@@ -679,6 +697,12 @@ func runQuery(
 			gate.New(
 				extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg),
 				maxConcurrentQueries,
+			),
+			store.NewSeriesStatsAggregator(
+				reg,
+				queryTelemetryDurationQuantiles,
+				queryTelemetrySamplesQuantiles,
+				queryTelemetrySeriesQuantiles,
 			),
 			reg,
 		)

@@ -4,7 +4,7 @@ The `thanos receive` command implements the [Prometheus Remote Write API](https:
 
 We recommend this component to users who can only push into a Thanos due to air-gapped, or egress only environments. Please note the [various pros and cons of pushing metrics](https://docs.google.com/document/d/1H47v7WfyKkSLMrR8_iku6u9VB73WrVzBHb2SB6dL9_g/edit#heading=h.2v27snv0lsur).
 
-Thanos Receive supports multi-tenancy by using labels. See [Multitenancy documentation here](../operating/multi-tenancy.md).
+Thanos Receive supports multi-tenancy by using labels. See [Multi-tenancy documentation here](../operating/multi-tenancy.md).
 
 Thanos Receive supports ingesting [exemplars](https://github.com/OpenObservability/OpenMetrics/blob/main/specification/OpenMetrics.md#exemplars) via remote-write. By default, the exemplars are silently discarded as `--tsdb.max-exemplars` is set to `0`. To enable exemplars storage, set the `--tsdb.max-exemplars` flag to a non-zero value. It exposes the ExemplarsAPI so that the [Thanos Queriers](query.md) can query the stored exemplars. Take a look at the documentation for [exemplars storage in Prometheus](https://prometheus.io/docs/prometheus/latest/disabled_features/#exemplars-storage) to know more about it.
 
@@ -86,7 +86,7 @@ Thanos Receive has some limits and gates that can be configured to control resou
 
 To configure the gates and limits you can use one of the two options:
 
-- `--receive.limits-config-file=<file-path>`: where `<file-path>` is the path to the YAML file.
+- `--receive.limits-config-file=<file-path>`: where `<file-path>` is the path to the YAML file. Any modification to the indicated file will trigger a configuration reload. If the updated configuration is invalid an error will be logged and it won't replace the previous valid configuration.
 - `--receive.limits-config=<content>`: where `<content>` is the content of YAML file.
 
 By default all the limits and gates are **disabled**.
@@ -140,7 +140,7 @@ write:
         samples_limit: 500
 ```
 
-**IMPORTANT**: this feature is experimental and a work-in-progres. It might change in the near future, i.e. configuration might move to a file (to allow easy configuration of different request limits per tenant) or its structure could change.
+**IMPORTANT**: this feature is experimental and a work-in-progress. It might change in the near future, i.e. configuration might move to a file (to allow easy configuration of different request limits per tenant) or its structure could change.
 
 ### Remote write request limits
 
@@ -161,10 +161,11 @@ Future work that can improve this scenario:
 - Proper handling of 413 responses in clients, given Receive can somehow communicate which limit was reached.
 - Including in the 413 response which are the current limits that apply to the tenant.
 
+By default, all these limits are disabled.
+
 ### Remote write request gates
 
 The available request gates in Thanos Receive can be configured within the `global` key:
-
 - `max_concurrency`: the maximum amount of remote write requests that will be concurrently worked on. Any request request that would exceed this limit will be accepted, but wait until the gate allows it to be processed.
 
 ## Active Series Limiting (experimental)
@@ -185,7 +186,7 @@ Under `default` and per `tenant`:
 
 NOTE:
 - It is possible that Receive ingests more active series than the specified limit, as it relies on meta-monitoring, which may not have the latest data for current number of active series of a tenant at all times.
-- Thanos Receive performs best-effort limiting. In case meta-monitoring is down/unreachable, Thanos Receive will not impose limits and only log errors for meta-monitoring being unreachable. Similaly to when one receiver cannot be scraped.
+- Thanos Receive performs best-effort limiting. In case meta-monitoring is down/unreachable, Thanos Receive will not impose limits and only log errors for meta-monitoring being unreachable. Similarly to when one receiver cannot be scraped.
 - Support for different limit configuration for different tenants is planned for the future.
 
 ## Flags
@@ -203,20 +204,20 @@ Flags:
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
       --grpc-server-max-connection-age=60m
-                                 The grpc server max connection age. This
-                                 controls how often to re-read the tls
+                                 The grpc server max connection age.
+                                 This controls how often to re-read the tls
                                  certificates and redo the TLS handshake
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-client-ca=""
-                                 TLS CA to verify clients against. If no client
-                                 CA is specified, there is no client
+                                 TLS CA to verify clients against. If no
+                                 client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
       --hash-func=               Specify which hash function to use when
-                                 calculating the hashes of produced files. If no
-                                 function has been specified, it does not
+                                 calculating the hashes of produced files.
+                                 If no function has been specified, it does not
                                  happen. This permits avoiding downloading some
                                  files twice albeit at some performance cost.
                                  Possible values are: "", "SHA256".
@@ -236,14 +237,14 @@ Flags:
                                  json.
       --log.level=info           Log filtering level.
       --objstore.config=<content>
-                                 Alternative to 'objstore.config-file' flag
-                                 (mutually exclusive). Content of YAML file that
-                                 contains object store configuration. See format
-                                 details:
+                                 Alternative to 'objstore.config-file'
+                                 flag (mutually exclusive). Content of
+                                 YAML file that contains object store
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                 Path to YAML file that contains object store
-                                 configuration. See format details:
+                                 Path to YAML file that contains object
+                                 store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --receive.default-tenant-id="default-tenant"
                                  Default tenant ID to use when none is provided
@@ -261,8 +262,8 @@ Flags:
                                  the hashrings. Must be one of hashmod, ketama
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
-                                 configuration. A watcher is initialized to
-                                 watch changes and update the hashring
+                                 configuration. A watcher is initialized
+                                 to watch changes and update the hashring
                                  dynamically.
       --receive.hashrings-file-refresh-interval=5m
                                  Refresh interval to re-read the hashring
@@ -287,10 +288,10 @@ Flags:
                                  How many times to replicate incoming write
                                  requests.
       --receive.tenant-certificate-field=
-                                 Use TLS client's certificate field to determine
-                                 tenant for write requests. Must be one of
-                                 organization, organizationalUnit or commonName.
-                                 This setting will cause the
+                                 Use TLS client's certificate field to
+                                 determine tenant for write requests.
+                                 Must be one of organization, organizationalUnit
+                                 or commonName. This setting will cause the
                                  receive.tenant-header flag value to be ignored.
       --receive.tenant-header="THANOS-TENANT"
                                  HTTP header to determine tenant for write
@@ -301,8 +302,8 @@ Flags:
       --remote-write.address="0.0.0.0:19291"
                                  Address to listen on for remote write requests.
       --remote-write.client-server-name=""
-                                 Server name to verify the hostname on the
-                                 returned TLS certificates. See
+                                 Server name to verify the hostname
+                                 on the returned TLS certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --remote-write.client-tls-ca=""
                                  TLS CA Certificates to use to verify servers.
@@ -315,17 +316,17 @@ Flags:
                                  TLS Certificate for HTTP server, leave blank to
                                  disable TLS.
       --remote-write.server-tls-client-ca=""
-                                 TLS CA to verify clients against. If no client
-                                 CA is specified, there is no client
+                                 TLS CA to verify clients against. If no
+                                 client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --remote-write.server-tls-key=""
                                  TLS Key for the HTTP server, leave blank to
                                  disable TLS.
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Content of YAML file
-                                 with request logging configuration. See format
-                                 details:
+                                 flag (mutually exclusive). Content
+                                 of YAML file with request logging
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --request.logging-config-file=<file-path>
                                  Path to YAML file with request logging
@@ -333,16 +334,17 @@ Flags:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
-                                 (mutually exclusive). Content of YAML file with
-                                 tracing configuration. See format details:
+                                 (mutually exclusive). Content of YAML file
+                                 with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                                 Path to YAML file with tracing configuration.
-                                 See format details:
+                                 Path to YAML file with tracing
+                                 configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
       --tsdb.allow-overlapping-blocks
                                  Allow overlapping blocks, which in turn enables
                                  vertical compaction and vertical query merge.
+                                 Does not do anything, enabled all the time.
       --tsdb.max-exemplars=0     Enables support for ingesting exemplars and
                                  sets the maximum number of exemplars that will
                                  be stored per tenant. In case the exemplar
@@ -356,11 +358,11 @@ Flags:
                                  next startup.
       --tsdb.path="./data"       Data directory of TSDB.
       --tsdb.retention=15d       How long to retain raw samples on local
-                                 storage. 0d - disables this retention. For more
-                                 details on how retention is enforced for
-                                 individual tenants, please refer to the Tenant
-                                 lifecycle management section in the Receive
-                                 documentation:
+                                 storage. 0d - disables this retention.
+                                 For more details on how retention is
+                                 enforced for individual tenants, please
+                                 refer to the Tenant lifecycle management
+                                 section in the Receive documentation:
                                  https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management
       --tsdb.wal-compression     Compress the tsdb WAL.
       --version                  Show application version.

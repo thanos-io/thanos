@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -112,7 +113,7 @@ func (d *dedupResponseHeap) Next() bool {
 
 func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 	if len(d.responses) == 0 {
-		return nil
+		panic("BUG: At() called with no responses; please call At() only if Next() returns true")
 	} else if len(d.responses) == 1 {
 		return d.responses[0]
 	}
@@ -130,15 +131,17 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 				if field == nil {
 					continue
 				}
-				h := xxhash.Sum64(field.Data)
+				hash := field.Hash
+				if hash == 0 {
+					hash = xxhash.Sum64(field.Data)
+				}
 
-				if _, ok := chunkDedupMap[h]; !ok {
+				if _, ok := chunkDedupMap[hash]; !ok {
 					chk := chk
-
-					chunkDedupMap[h] = &chk
+					chunkDedupMap[hash] = &chk
+					break
 				}
 			}
-
 		}
 	}
 
@@ -292,6 +295,19 @@ type lazyRespSet struct {
 func (l *lazyRespSet) Empty() bool {
 	l.bufferedResponsesMtx.Lock()
 	defer l.bufferedResponsesMtx.Unlock()
+
+	// NOTE(GiedriusS): need to wait here for at least one
+	// response so that we could build the heap properly.
+	if l.noMoreData && len(l.bufferedResponses) == 0 {
+		return true
+	}
+
+	for len(l.bufferedResponses) == 0 {
+		l.dataOrFinishEvent.Wait()
+		if l.noMoreData && len(l.bufferedResponses) == 0 {
+			break
+		}
+	}
 
 	return len(l.bufferedResponses) == 0 && l.noMoreData
 }
@@ -494,18 +510,20 @@ func newAsyncRespSet(ctx context.Context,
 	var span opentracing.Span
 	var closeSeries context.CancelFunc
 
+	storeAddr, isLocalStore := st.Addr()
 	storeID := labelpb.PromLabelSetsToString(st.LabelSets())
 	if storeID == "" {
 		storeID = "Store Gateway"
 	}
 
 	seriesCtx := grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
-		"target": st.Addr(),
+		"target": storeAddr,
 	})
 
 	span, seriesCtx = tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
-		"store.id":   storeID,
-		"store.addr": st.Addr(),
+		"store.id":       storeID,
+		"store.is_local": isLocalStore,
+		"store.addr":     storeAddr,
 	})
 
 	seriesCtx, closeSeries = context.WithCancel(seriesCtx)

@@ -115,6 +115,31 @@ For example, the config file below specifies deletion for all series that match:
 - matchers: '{__name__="k8s_app_metric1"}'
 ```
 
+It is also possible to specify a time range in case you do not want to delete the matching series from the entire block. The interval is specified via millisecond timestamps `mint` and `maxt`.
+
+```yaml
+- matchers: '{__name__="k8s_app_metric1"}'
+  intervals:
+    - mint: 1663279200000
+      maxt: 1663292160000
+```
+
+For reference, you can convert the dates via GNU `date(1)`:
+
+```shell
+$ TZ=UTC date --date='2022-09-15 22:00:00' '+%s'
+1663279200
+
+$ TZ=UTC date --date='2022-09-16 01:36:00' '+%s'
+1663292160
+
+$ TZ=UTC date -d @1663279200 --iso=seconds
+2022-09-15T22:00:00+00:00
+
+$ TZ=UTC date -d @1663292160 --iso=seconds
+2022-09-16T01:36:00+00:00
+```
+
 ## Relabel series
 
 ```shell

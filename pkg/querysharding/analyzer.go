@@ -6,12 +6,24 @@ package querysharding
 import (
 	"fmt"
 
+	lru "github.com/hashicorp/golang-lru"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/promql/parser"
 )
 
 // QueryAnalyzer is an analyzer which determines
 // whether a PromQL Query is shardable and using which labels.
+
+type Analyzer interface {
+	Analyze(string) (QueryAnalysis, error)
+}
+
 type QueryAnalyzer struct{}
+
+type CachedQueryAnalyzer struct {
+	analyzer *QueryAnalyzer
+	cache    *lru.Cache
+}
 
 var nonShardableFuncs = []string{
 	"label_join",
@@ -19,22 +31,53 @@ var nonShardableFuncs = []string{
 }
 
 // NewQueryAnalyzer creates a new QueryAnalyzer.
-func NewQueryAnalyzer() *QueryAnalyzer {
-	return &QueryAnalyzer{}
+func NewQueryAnalyzer() (*CachedQueryAnalyzer, error) {
+	cache, err := lru.New(256)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CachedQueryAnalyzer{
+		analyzer: &QueryAnalyzer{},
+		cache:    cache,
+	}, nil
+}
+
+type cachedValue struct {
+	QueryAnalysis QueryAnalysis
+	err           error
+}
+
+func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
+	if a.cache.Contains(query) {
+		value, ok := a.cache.Get(query)
+		if ok {
+			return value.(cachedValue).QueryAnalysis, value.(cachedValue).err
+		}
+	}
+
+	// Analyze if needed.
+	analysis, err := a.analyzer.Analyze(query)
+
+	// Adding to cache.
+	_ = a.cache.Add(query, cachedValue{QueryAnalysis: analysis, err: err})
+
+	return analysis, err
 }
 
 // Analyze analyzes a query and returns a QueryAnalysis.
 
 // Analyze uses the following algorithm:
-// * if a query has subqueries, such as label_join or label_replace,
-//   or has functions which cannot be sharded, then treat the query as non shardable.
-// * if the query's root expression has grouping labels,
-//   then treat the query as shardable by those labels.
-// * if the query's root expression has no grouping labels,
-//   then walk the query and find the least common labelset
-//   used in grouping expressions. If non-empty, treat the query
-//   as shardable by those labels.
-// * otherwise, treat the query as non-shardable.
+//   - if a query has subqueries, such as label_join or label_replace,
+//     or has functions which cannot be sharded, then treat the query as non shardable.
+//   - if the query's root expression has grouping labels,
+//     then treat the query as shardable by those labels.
+//   - if the query's root expression has no grouping labels,
+//     then walk the query and find the least common labelset
+//     used in grouping expressions. If non-empty, treat the query
+//     as shardable by those labels.
+//   - otherwise, treat the query as non-shardable.
+//
 // The le label is excluded from sharding.
 func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 	expr, err := parser.ParseExpr(query)
@@ -57,6 +100,9 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 		case *parser.BinaryExpr:
 			if n.VectorMatching != nil {
 				shardingLabels := without(n.VectorMatching.MatchingLabels, []string{"le"})
+				if !n.VectorMatching.On && len(shardingLabels) > 0 {
+					shardingLabels = append(shardingLabels, model.MetricNameLabel)
+				}
 				analysis = analysis.scopeToLabels(shardingLabels, n.VectorMatching.On)
 			}
 		case *parser.AggregateExpr:

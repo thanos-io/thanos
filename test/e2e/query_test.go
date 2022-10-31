@@ -23,6 +23,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
@@ -578,6 +579,130 @@ func newSample(s fakeMetricSample) model.Sample {
 	}
 }
 
+func TestQueryStoreMetrics(t *testing.T) {
+	t.Parallel()
+
+	// Build up.
+	e, err := e2e.New(e2e.WithName("storemetrics01"))
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	bucket := "store-gw-test"
+	minio := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(minio))
+
+	l := log.NewLogfmtLogger(os.Stdout)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("https"), minio.Dir()), "test")
+	testutil.Ok(t, err)
+
+	// Preparing 2 different blocks for the tests.
+	{
+		blockSizes := []struct {
+			samples int
+			series  int
+			name    string
+		}{
+			{samples: 10, series: 1, name: "one_series"},
+			{samples: 10, series: 1001, name: "thousand_one_series"},
+		}
+		now := time.Now()
+		externalLabels := labels.FromStrings("prometheus", "p1", "replica", "0")
+		dir := filepath.Join(e.SharedDir(), "tmp")
+		testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), dir), os.ModePerm))
+		for _, blockSize := range blockSizes {
+			series := make([]labels.Labels, blockSize.series)
+			for i := 0; i < blockSize.series; i++ {
+				bigSeriesLabels := labels.FromStrings("__name__", blockSize.name, "instance", fmt.Sprintf("foo_%d", i))
+				series[i] = bigSeriesLabels
+			}
+			blockID, err := e2eutil.CreateBlockWithBlockDelay(ctx,
+				dir,
+				series,
+				blockSize.samples,
+				timestamp.FromTime(now),
+				timestamp.FromTime(now.Add(2*time.Hour)),
+				30*time.Minute,
+				externalLabels,
+				0,
+				metadata.NoneFunc,
+			)
+			testutil.Ok(t, err)
+			testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, blockID.String()), blockID.String()))
+		}
+	}
+
+	storeGW := e2ethanos.NewStoreGW(
+		e,
+		"s1",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("https"), minio.InternalDir()),
+		},
+		"",
+		nil,
+	)
+	querier := e2ethanos.NewQuerierBuilder(e, "1", storeGW.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(storeGW, querier))
+	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(2), "thanos_blocks_meta_synced"))
+
+	// Querying the series in the previously created blocks to ensure we produce Store API query metrics.
+	{
+		instantQuery(t, ctx, querier.Endpoint("http"), func() string {
+			return "max_over_time(one_series{instance='foo_0'}[2h])"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 1)
+		testutil.Ok(t, err)
+
+		instantQuery(t, ctx, querier.Endpoint("http"), func() string {
+			return "max_over_time(thousand_one_series[2h])"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 1001)
+		testutil.Ok(t, err)
+	}
+
+	mon, err := e2emon.Start(e)
+	testutil.Ok(t, err)
+
+	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+		return "thanos_store_api_query_duration_seconds_count{samples_le='100000',series_le='10000'}"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, model.Vector{
+		&model.Sample{
+			Metric: model.Metric{
+				"__name__":   "thanos_store_api_query_duration_seconds_count",
+				"instance":   "storemetrics01-querier-1:8080",
+				"job":        "querier-1",
+				"samples_le": "100000",
+				"series_le":  "10000",
+			},
+			Value: model.SampleValue(1),
+		},
+	})
+
+	queryWaitAndAssert(t, ctx, mon.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+		return "thanos_store_api_query_duration_seconds_count{samples_le='100',series_le='10'}"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, model.Vector{
+		&model.Sample{
+			Metric: model.Metric{
+				"__name__":   "thanos_store_api_query_duration_seconds_count",
+				"instance":   "storemetrics01-querier-1:8080",
+				"job":        "querier-1",
+				"samples_le": "100",
+				"series_le":  "10",
+			},
+			Value: model.SampleValue(1),
+		},
+	})
+}
+
 // Regression test for https://github.com/thanos-io/thanos/issues/5033.
 // Tests whether queries work with mixed sources, and with functions
 // that we are pushing down: min, max, min_over_time, max_over_time,
@@ -693,7 +818,6 @@ func TestSidecarStorePushdown(t *testing.T) {
 			"__name__": "my_fake_metric",
 		},
 	})
-
 }
 
 func TestSidecarQueryEvaluation(t *testing.T) {
@@ -883,23 +1007,33 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", expectedSeriesLen, q()),
 	)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
-		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+		res, err := simpleInstantQuery(t, ctx, addr, q, ts, opts, expectedSeriesLen)
 		if err != nil {
 			return err
-		}
-
-		if len(warnings) > 0 {
-			return errors.Errorf("unexpected warnings %s", warnings)
-		}
-
-		if len(res) != expectedSeriesLen {
-			return errors.Errorf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
 		}
 		result = res
 		return nil
 	}))
 	sortResults(result)
 	return result
+}
+
+func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, error) {
+	res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(warnings) > 0 {
+		return nil, errors.Errorf("unexpected warnings %s", warnings)
+	}
+
+	if len(res) != expectedSeriesLen {
+		return nil, errors.Errorf("unexpected result size, expected %d; result %d: %v", expectedSeriesLen, len(res), res)
+	}
+
+	sortResults(res)
+	return res, nil
 }
 
 func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expected model.Vector) {
@@ -913,7 +1047,7 @@ func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func()
 		"caller", "queryWaitAndAssert",
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", len(expected), q()),
 	)
-	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.RetryWithLog(logger, 10*time.Second, ctx.Done(), func() error {
 		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 		if err != nil {
 			return err
@@ -1560,4 +1694,9 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 		return "sum(up)"
 	}, time.Now, promclient.QueryOptions{}, 1)
 	testutil.Equals(t, model.SampleValue(1.0), result[0].Value)
+
+	instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
+		return "sum(metric_that_does_not_exist)"
+	}, time.Now, promclient.QueryOptions{}, 0)
+
 }

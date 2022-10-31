@@ -78,6 +78,7 @@ type DefaultLimitsConfig struct {
 	HeadSeriesLimit uint64 `yaml:"head_series_limit"`
 }
 
+// TenantsWriteLimitsConfig is a map of tenant IDs to their *WriteLimitConfig.
 type TenantsWriteLimitsConfig map[string]*WriteLimitConfig
 
 // A tenant might not always have limits configured, so things here must
@@ -110,8 +111,7 @@ type requestLimitsConfig struct {
 	SamplesLimit   *int64 `yaml:"samples_limit"`
 }
 
-// Utils for initializing.
-func newEmptyRequestLimitsConfig() *requestLimitsConfig {
+func NewEmptyRequestLimitsConfig() *requestLimitsConfig {
 	return &requestLimitsConfig{}
 }
 

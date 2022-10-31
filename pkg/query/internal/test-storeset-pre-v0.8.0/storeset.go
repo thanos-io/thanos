@@ -214,11 +214,14 @@ func (s *storeRef) SendsSortedSeries() bool {
 
 func (s *storeRef) String() string {
 	mint, maxt := s.TimeRange()
-	return fmt.Sprintf("Addr: %s LabelSets: %v Mint: %d Maxt: %d", s.addr, labelpb.PromLabelSetsToString(s.LabelSets()), mint, maxt)
+	return fmt.Sprintf(
+		"Addr: %s LabelSets: %v Mint: %d Maxt: %d",
+		s.addr, labelpb.PromLabelSetsToString(s.LabelSets()), mint, maxt,
+	)
 }
 
-func (s *storeRef) Addr() string {
-	return s.addr
+func (s *storeRef) Addr() (string, bool) {
+	return s.addr, false
 }
 
 func (s *storeRef) close() {

@@ -158,11 +158,13 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, we
 	if minTime != "" {
 		args["--min-time"] = minTime
 	}
-	sidecarRunnable := e.Runnable(fmt.Sprintf("sidecar-%s", name)).WithPorts(map[string]int{"http": 8080, "grpc": 9091}).Init(wrapWithDefaults(e2e.StartOptions{
-		Image:     sidecarImage,
-		Command:   e2e.NewCommand("sidecar", e2e.BuildArgs(args)...),
-		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-	}))
+	sidecarRunnable := e.Runnable(fmt.Sprintf("sidecar-%s", name)).
+		WithPorts(map[string]int{"http": 8080, "grpc": 9091}).
+		Init(wrapWithDefaults(e2e.StartOptions{
+			Image:     sidecarImage,
+			Command:   e2e.NewCommand("sidecar", e2e.BuildArgs(args)...),
+			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		}))
 	sidecar := e2emon.AsInstrumented(sidecarRunnable, "http")
 	return prom, sidecar
 }
@@ -203,6 +205,40 @@ func NewAvalanche(e e2e.Environment, name string, o AvalancheOptions) *e2emon.In
 		Image:   "quay.io/prometheuscommunity/avalanche:main",
 		Command: e2e.NewCommandWithoutEntrypoint("avalanche", args...),
 	})), "http")
+}
+
+func NewPrometheusWithJaegerTracingSidecarCustomImage(e e2e.Environment, name, promConfig, webConfig,
+	promImage, minTime, sidecarImage, jaegerConfig string, enableFeatures ...string) (
+	*e2emon.InstrumentedRunnable, *e2emon.InstrumentedRunnable) {
+	prom := NewPrometheus(e, name, promConfig, webConfig, promImage, enableFeatures...)
+
+	args := map[string]string{
+		"--debug.name":        fmt.Sprintf("sidecar-%v", name),
+		"--grpc-address":      ":9091",
+		"--grpc-grace-period": "0s",
+		"--http-address":      ":8080",
+		"--prometheus.url":    "http://" + prom.InternalEndpoint("http"),
+		"--tsdb.path":         prom.InternalDir(),
+		"--log.level":         "debug",
+		"--tracing.config":    jaegerConfig,
+	}
+	if len(webConfig) > 0 {
+		args["--prometheus.http-client"] = defaultPromHttpConfig()
+	}
+	if minTime != "" {
+		args["--min-time"] = minTime
+	}
+
+	sidecarRunnable := e.Runnable(fmt.Sprintf("sidecar-%s", name)).
+		WithPorts(map[string]int{"http": 8080, "grpc": 9091}).
+		Init(wrapWithDefaults(e2e.StartOptions{
+			Image:     sidecarImage,
+			Command:   e2e.NewCommand("sidecar", e2e.BuildArgs(args)...),
+			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		}))
+	sidecar := e2emon.AsInstrumented(sidecarRunnable, "http")
+
+	return prom, sidecar
 }
 
 type QuerierBuilder struct {
