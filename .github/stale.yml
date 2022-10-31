@@ -10,8 +10,8 @@ exemptLabels:
   # This label is hardcoded on remind bot (https://probot.github.io/apps/reminders/) and is used by remind bot when
   # issue is being reminded.
   - reminder
-  - 'state: someone-working-on-it' 
-  - 'dont-go-stale' 
+  - "state: someone-working-on-it"
+  - dont-go-stale
 
 # Set to true to ignore issues in a project (defaults to false)
 exemptProjects: false
@@ -22,7 +22,7 @@ exemptAssignees: false
 # Label to use when marking as stale
 staleLabel: stale
 
-pull:
+pulls:
   daysUntilClose: 7
   daysUntilStale: 30
   markComment: >

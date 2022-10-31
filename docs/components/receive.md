@@ -4,7 +4,7 @@ The `thanos receive` command implements the [Prometheus Remote Write API](https:
 
 We recommend this component to users who can only push into a Thanos due to air-gapped, or egress only environments. Please note the [various pros and cons of pushing metrics](https://docs.google.com/document/d/1H47v7WfyKkSLMrR8_iku6u9VB73WrVzBHb2SB6dL9_g/edit#heading=h.2v27snv0lsur).
 
-Thanos Receive supports multi-tenancy by using labels. See [Multitenancy documentation here](../operating/multi-tenancy.md).
+Thanos Receive supports multi-tenancy by using labels. See [Multi-tenancy documentation here](../operating/multi-tenancy.md).
 
 Thanos Receive supports ingesting [exemplars](https://github.com/OpenObservability/OpenMetrics/blob/main/specification/OpenMetrics.md#exemplars) via remote-write. By default, the exemplars are silently discarded as `--tsdb.max-exemplars` is set to `0`. To enable exemplars storage, set the `--tsdb.max-exemplars` flag to a non-zero value. It exposes the ExemplarsAPI so that the [Thanos Queriers](query.md) can query the stored exemplars. Take a look at the documentation for [exemplars storage in Prometheus](https://prometheus.io/docs/prometheus/latest/disabled_features/#exemplars-storage) to know more about it.
 
@@ -161,10 +161,11 @@ Future work that can improve this scenario:
 - Proper handling of 413 responses in clients, given Receive can somehow communicate which limit was reached.
 - Including in the 413 response which are the current limits that apply to the tenant.
 
+By default, all these limits are disabled.
+
 ### Remote write request gates
 
 The available request gates in Thanos Receive can be configured within the `global` key:
-
 - `max_concurrency`: the maximum amount of remote write requests that will be concurrently worked on. Any request request that would exceed this limit will be accepted, but wait until the gate allows it to be processed.
 
 ## Active Series Limiting (experimental)
@@ -185,7 +186,7 @@ Under `default` and per `tenant`:
 
 NOTE:
 - It is possible that Receive ingests more active series than the specified limit, as it relies on meta-monitoring, which may not have the latest data for current number of active series of a tenant at all times.
-- Thanos Receive performs best-effort limiting. In case meta-monitoring is down/unreachable, Thanos Receive will not impose limits and only log errors for meta-monitoring being unreachable. Similaly to when one receiver cannot be scraped.
+- Thanos Receive performs best-effort limiting. In case meta-monitoring is down/unreachable, Thanos Receive will not impose limits and only log errors for meta-monitoring being unreachable. Similarly to when one receiver cannot be scraped.
 - Support for different limit configuration for different tenants is planned for the future.
 
 ## Flags

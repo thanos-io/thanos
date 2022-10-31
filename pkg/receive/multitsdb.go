@@ -59,7 +59,7 @@ type MultiTSDB struct {
 }
 
 // NewMultiTSDB creates new MultiTSDB.
-// NOTE: Passed labels has to be sorted by name.
+// NOTE: Passed labels must be sorted lexicographically (alphabetically).
 func NewMultiTSDB(
 	dataDir string,
 	l log.Logger,

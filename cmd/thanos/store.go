@@ -58,6 +58,7 @@ type storeConfig struct {
 	chunkPoolSize               units.Base2Bytes
 	maxSampleCount              uint64
 	maxTouchedSeriesCount       uint64
+	maxDownloadedBytes          units.Base2Bytes
 	maxConcurrency              int
 	component                   component.StoreAPI
 	debugLogging                bool
@@ -108,6 +109,10 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("store.grpc.touched-series-limit",
 		"Maximum amount of touched series returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
 		Default("0").Uint64Var(&sc.maxTouchedSeriesCount)
+
+	cmd.Flag("store.grpc.downloaded-bytes-limit",
+		"Maximum amount of downloaded (either fetched or touched) bytes in a single Series/LabelNames/LabelValues call. The Series call fails if this limit is exceeded. 0 means no limit.").
+		Default("0").BytesVar(&sc.maxDownloadedBytes)
 
 	cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").IntVar(&sc.maxConcurrency)
 
@@ -345,6 +350,7 @@ func runStore(
 		conf.dataDir,
 		store.NewChunksLimiterFactory(conf.maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		store.NewSeriesLimiterFactory(conf.maxTouchedSeriesCount),
+		store.NewBytesLimiterFactory(conf.maxDownloadedBytes),
 		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
 		conf.blockSyncConcurrency,
 		conf.advertiseCompatibilityLabel,
