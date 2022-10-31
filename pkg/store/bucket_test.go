@@ -2444,7 +2444,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				// must be called only from the goroutine running the Benchmark function.
 				testutil.Ok(b, err)
 
-				blockClient := newBlockSeriesClient(ctx, nil, blk, req, chunksLimiter, NewBytesLimiterFactory(0)(nil), nil, false)
+				blockClient := newBlockSeriesClient(ctx, nil, blk, req, chunksLimiter, NewBytesLimiterFactory(0)(nil), nil, false, defaultSeriesBatchSize)
 				testutil.Ok(b, blockClient.ExpandPostings(matchers, seriesLimiter, dummyCounter))
 				defer blockClient.Close()
 
