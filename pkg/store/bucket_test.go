@@ -2607,18 +2607,13 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				// must be called only from the goroutine running the Benchmark function.
 				testutil.Ok(b, err)
 
-				indexReader := blk.indexReader()
-				chunkReader := blk.chunkReader()
-
-				seriesSet, err := blockSeries(ctx, nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, NewBytesLimiterFactory(0)(nil), req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, nil, dummyCounter, false)
-				testutil.Ok(b, err)
+				blockClient := newBlockSeriesClient(ctx, nil, blk, req, chunksLimiter, NewBytesLimiterFactory(0)(nil), nil, false)
+				testutil.Ok(b, blockClient.ExpandPostings(matchers, seriesLimiter, dummyCounter))
+				defer blockClient.Close()
 
 				// Ensure at least 1 series has been returned (as expected).
-				_, err = seriesSet.Recv()
+				_, err = blockClient.Recv()
 				testutil.Ok(b, err)
-
-				testutil.Ok(b, indexReader.Close())
-				testutil.Ok(b, chunkReader.Close())
 			}
 		}()
 	}
