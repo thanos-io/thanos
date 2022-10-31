@@ -50,19 +50,8 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 
 	srvRoot, srvCtx := tracing.StartSpan(tracing.ContextWithTracer(clientCtx, srvTracer), "b")
 	srvChild, _ := tracing.StartSpan(srvCtx, "bb")
-	testutil.Equals(t, 0, len(exp.GetSpans()))
 
-	srvChild.Finish()
-	testutil.Equals(t, 1, len(exp.GetSpans()))
-	testutil.Equals(t, 1, countSampledSpans(exp.GetSpans()))
-
-	srvRoot.Finish()
-	testutil.Equals(t, 2, len(exp.GetSpans()))
-	testutil.Equals(t, 2, countSampledSpans(exp.GetSpans()))
-
-	clientRoot.Finish()
-	testutil.Equals(t, 3, len(exp.GetSpans()))
-	testutil.Equals(t, 3, countSampledSpans(exp.GetSpans()))
+	tracing.CountSpans_ClientEnablesTracing(t, exp, clientRoot, srvRoot, srvChild)
 }
 
 // This test shows that if sample factor will disable tracing on client process,  when it would be enabled on server
@@ -92,17 +81,8 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 
 	srvRoot, srvCtx := tracing.StartSpan(tracing.ContextWithTracer(clientCtx, srvTracer), "b")
 	srvChild, _ := tracing.StartSpan(srvCtx, "bb")
-	testutil.Equals(t, 0, len(exp.GetSpans()))
 
-	// Since we are not recording neither sampling, no spans should show up.
-	srvChild.Finish()
-	testutil.Equals(t, 0, len(exp.GetSpans()))
-
-	srvRoot.Finish()
-	testutil.Equals(t, 0, len(exp.GetSpans()))
-
-	clientRoot.Finish()
-	testutil.Equals(t, 0, len(exp.GetSpans()))
+	tracing.ContextTracing_ClientDisablesTracing(t, exp, clientRoot, srvRoot, srvChild)
 }
 
 // This test shows that if span will contain special baggage (for example from special HTTP header), even when sample
@@ -137,28 +117,6 @@ func TestContextTracing_ForceTracing(t *testing.T) {
 
 	srvRoot, srvCtx := tracing.StartSpan(tracing.ContextWithTracer(clientCtx, srvTracer), "b")
 	srvChild, _ := tracing.StartSpan(srvCtx, "bb")
-	testutil.Equals(t, 0, len(exp.GetSpans()))
 
-	srvChild.Finish()
-	testutil.Equals(t, 1, len(exp.GetSpans()))
-	testutil.Equals(t, 1, countSampledSpans(exp.GetSpans()))
-
-	srvRoot.Finish()
-	testutil.Equals(t, 2, len(exp.GetSpans()))
-	testutil.Equals(t, 2, countSampledSpans(exp.GetSpans()))
-
-	clientRoot.Finish()
-	testutil.Equals(t, 3, len(exp.GetSpans()))
-	testutil.Equals(t, 3, countSampledSpans(exp.GetSpans()))
-}
-
-func countSampledSpans(ss tracetest.SpanStubs) int {
-	var count int
-	for _, s := range ss {
-		if s.SpanContext.IsSampled() {
-			count++
-		}
-	}
-
-	return count
+	tracing.ContextTracing_ForceTracing(t, exp, clientRoot, srvRoot, srvChild)
 }

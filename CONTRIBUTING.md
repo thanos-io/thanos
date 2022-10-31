@@ -67,14 +67,14 @@ The following section explains various suggestions and procedures to note during
 ### Prerequisites
 
 * It is strongly recommended that you use Linux distributions systems or OSX for development.
-* Go 1.17.x or higher.
+* Go 1.19.x or higher.
 * For React UI, you will need a working NodeJS environment and the npm package manager to compile the Web UI assets.
 
 ### First Steps
 
 It's key to get familiarized with the style guide and mechanics of Thanos, especially if your contribution touches more than one component of the Thanos distributed system. We recommend:
 
-* Reading the [getting started docs](docs/getting-started.md) and working through them.
+* Reading the [getting started docs](docs/getting-started.md) and working through them, or alternatively working through the [Thanos tutorial](https://killercoda.com/thanos).
 * Familiarizing yourself with our [coding style guidelines.](docs/contributing/coding-style-guide.md).
 * Familiarizing yourself with the [Makefile](Makefile) commands, for example `format`, `build`, `proto`, `docker` and `test`. `make help` will print most of available commands with relevant details.
 * Spin up a prebuilt dev environment using Gitpod.io [![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos)

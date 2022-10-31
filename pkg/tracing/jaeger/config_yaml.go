@@ -4,165 +4,194 @@
 package jaeger
 
 import (
-	"net"
-	"net/url"
+	"log"
+	"math"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-	"github.com/uber/jaeger-client-go"
-	"github.com/uber/jaeger-client-go/config"
-	"gopkg.in/yaml.v2"
+	glog "github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+	"go.opentelemetry.io/contrib/samplers/jaegerremote"
+	"go.opentelemetry.io/otel/attribute"
+	otel_jaeger "go.opentelemetry.io/otel/exporters/jaeger"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 )
+
+type ParentBasedSamplerConfig struct {
+	LocalParentSampled  bool `yaml:"local_parent_sampled"`
+	RemoteParentSampled bool `yaml:"remote_parent_sampled"`
+}
 
 // Config - YAML configuration. For details see to https://github.com/jaegertracing/jaeger-client-go#environment-variables.
 type Config struct {
-	ServiceName            string        `yaml:"service_name"`
-	Disabled               bool          `yaml:"disabled"`
-	RPCMetrics             bool          `yaml:"rpc_metrics"`
-	Tags                   string        `yaml:"tags"`
-	SamplerType            string        `yaml:"sampler_type"`
-	SamplerParam           float64       `yaml:"sampler_param"`
-	SamplerManagerHostPort string        `yaml:"sampler_manager_host_port"`
-	SamplerMaxOperations   int           `yaml:"sampler_max_operations"`
-	SamplerRefreshInterval time.Duration `yaml:"sampler_refresh_interval"`
-	ReporterMaxQueueSize   int           `yaml:"reporter_max_queue_size"`
-	ReporterFlushInterval  time.Duration `yaml:"reporter_flush_interval"`
-	ReporterLogSpans       bool          `yaml:"reporter_log_spans"`
-	Endpoint               string        `yaml:"endpoint"`
-	User                   string        `yaml:"user"`
-	Password               string        `yaml:"password"`
-	AgentHost              string        `yaml:"agent_host"`
-	AgentPort              int           `yaml:"agent_port"`
-	Gen128Bit              bool          `yaml:"traceid_128bit"`
+	ServiceName                        string                   `yaml:"service_name"`
+	Disabled                           bool                     `yaml:"disabled"`
+	RPCMetrics                         bool                     `yaml:"rpc_metrics"`
+	Tags                               string                   `yaml:"tags"`
+	SamplerType                        string                   `yaml:"sampler_type"`
+	SamplerParam                       float64                  `yaml:"sampler_param"`
+	SamplerManagerHostPort             string                   `yaml:"sampler_manager_host_port"`
+	SamplerMaxOperations               int                      `yaml:"sampler_max_operations"`
+	SamplerRefreshInterval             time.Duration            `yaml:"sampler_refresh_interval"`
+	SamplerParentConfig                ParentBasedSamplerConfig `yaml:"sampler_parent_config"`
+	SamplingServerURL                  string                   `yaml:"sampling_server_url"`
+	OperationNameLateBinding           bool                     `yaml:"operation_name_late_binding"`
+	InitialSamplingRate                float64                  `yaml:"initial_sampler_rate"`
+	ReporterMaxQueueSize               int                      `yaml:"reporter_max_queue_size"`
+	ReporterFlushInterval              time.Duration            `yaml:"reporter_flush_interval"`
+	ReporterLogSpans                   bool                     `yaml:"reporter_log_spans"`
+	ReporterDisableAttemptReconnecting bool                     `yaml:"reporter_disable_attempt_reconnecting"`
+	ReporterAttemptReconnectInterval   time.Duration            `yaml:"reporter_attempt_reconnect_interval"`
+	Endpoint                           string                   `yaml:"endpoint"`
+	User                               string                   `yaml:"user"`
+	Password                           string                   `yaml:"password"`
+	AgentHost                          string                   `yaml:"agent_host"`
+	AgentPort                          int                      `yaml:"agent_port"`
+	Gen128Bit                          bool                     `yaml:"traceid_128bit"`
+	// Remove the above field. Ref: https://github.com/open-telemetry/opentelemetry-specification/issues/525#issuecomment-605519217
+	// Ref: https://opentelemetry.io/docs/reference/specification/trace/api/#spancontext
 }
 
-// ParseConfigFromYaml uses config YAML to set the tracer's Configuration.
-func ParseConfigFromYaml(cfg []byte) (*config.Configuration, error) {
-	conf := &Config{}
-
-	if err := yaml.Unmarshal(cfg, &conf); err != nil {
-		return nil, err
+// getCollectorEndpoints returns Jaeger options populated with collector related options.
+func getCollectorEndpoints(config Config) []otel_jaeger.CollectorEndpointOption {
+	var collectorOptions []otel_jaeger.CollectorEndpointOption
+	if config.User != "" {
+		collectorOptions = append(collectorOptions, otel_jaeger.WithUsername(config.User))
 	}
-
-	c := &config.Configuration{}
-
-	if conf.ServiceName != "" {
-		c.ServiceName = conf.ServiceName
+	if config.Password != "" {
+		collectorOptions = append(collectorOptions, otel_jaeger.WithPassword(config.Password))
 	}
+	collectorOptions = append(collectorOptions, otel_jaeger.WithEndpoint(config.Endpoint))
 
-	if conf.RPCMetrics {
-		c.RPCMetrics = conf.RPCMetrics
-	}
-
-	if conf.Gen128Bit {
-		c.Gen128Bit = conf.Gen128Bit
-	}
-
-	if conf.Disabled {
-		c.Disabled = conf.Disabled
-	}
-
-	if conf.Tags != "" {
-		c.Tags = parseTags(conf.Tags)
-	}
-
-	c.Sampler = samplerConfigFromConfig(*conf)
-
-	if r, err := reporterConfigFromConfig(*conf); err == nil {
-		c.Reporter = r
-	} else {
-		return nil, errors.Wrap(err, "cannot obtain reporter config from YAML")
-	}
-
-	return c, nil
+	return collectorOptions
 }
 
-// samplerConfigFromConfig creates a new SamplerConfig based on the YAML Config.
-func samplerConfigFromConfig(cfg Config) *config.SamplerConfig {
-	sc := &config.SamplerConfig{}
+// getAgentEndpointOptions returns Jaeger options populated with agent related options.
+func getAgentEndpointOptions(config Config) []otel_jaeger.AgentEndpointOption {
+	var endpointOptions []otel_jaeger.AgentEndpointOption
+	endpointOptions = append(endpointOptions, otel_jaeger.WithAgentHost(config.AgentHost))
+	endpointOptions = append(endpointOptions, otel_jaeger.WithAgentPort(strconv.Itoa(config.AgentPort)))
 
-	if cfg.SamplerType != "" {
-		sc.Type = cfg.SamplerType
+	// This option, as part of the Jaeger config, was JAEGER_REPORTER_ATTEMPT_RECONNECTING_DISABLED.
+	if config.ReporterDisableAttemptReconnecting {
+		endpointOptions = append(endpointOptions, otel_jaeger.WithDisableAttemptReconnecting())
+		if config.ReporterAttemptReconnectInterval != 0 {
+			endpointOptions = append(endpointOptions, otel_jaeger.WithAttemptReconnectingInterval(config.ReporterAttemptReconnectInterval))
+		}
 	}
 
-	if cfg.SamplerParam != 0 {
-		sc.Param = cfg.SamplerParam
+	if config.ReporterLogSpans {
+		var logger *log.Logger
+		endpointOptions = append(endpointOptions, otel_jaeger.WithLogger(logger))
 	}
 
-	if cfg.SamplerManagerHostPort != "" {
-		sc.SamplingServerURL = cfg.SamplerManagerHostPort
-	}
-
-	if cfg.SamplerMaxOperations != 0 {
-		sc.MaxOperations = cfg.SamplerMaxOperations
-	}
-
-	if cfg.SamplerRefreshInterval != 0 {
-		sc.SamplingRefreshInterval = cfg.SamplerRefreshInterval
-	}
-
-	return sc
+	return endpointOptions
 }
 
-// reporterConfigFromConfig creates a new ReporterConfig based on the YAML Config.
-func reporterConfigFromConfig(cfg Config) (*config.ReporterConfig, error) {
-	rc := &config.ReporterConfig{}
+// getSamplingFraction returns the sampling fraction based on the sampler type.
+// Ref: https://www.jaegertracing.io/docs/1.35/sampling/#client-sampling-configuration
+func getSamplingFraction(samplerType string, samplingFactor float64) float64 {
+	switch samplerType {
+	case "const":
+		if samplingFactor > 1 {
+			return 1.0
+		} else if samplingFactor < 0 {
+			return 0.0
+		}
+		return math.Round(samplingFactor)
 
-	if cfg.ReporterMaxQueueSize != 0 {
-		rc.QueueSize = cfg.ReporterMaxQueueSize
+	case "probabilistic":
+		return samplingFactor
+
+	case "ratelimiting":
+		return math.Round(samplingFactor) // Needs to be an integer
 	}
 
-	if cfg.ReporterFlushInterval != 0 {
-		rc.BufferFlushInterval = cfg.ReporterFlushInterval
-	}
-
-	if cfg.ReporterLogSpans {
-		rc.LogSpans = cfg.ReporterLogSpans
-	}
-
-	if cfg.Endpoint != "" {
-		u, err := url.ParseRequestURI(cfg.Endpoint)
-		if err != nil {
-			return nil, errors.Wrapf(err, "cannot parse endpoint=%s", cfg.Endpoint)
-		}
-		rc.CollectorEndpoint = u.String()
-		user := cfg.User
-		pswd := cfg.Password
-		if user != "" && pswd == "" || user == "" && pswd != "" {
-			return nil, errors.Errorf("you must set %s and %s parameters together", cfg.User, cfg.Password)
-		}
-		rc.User = user
-		rc.Password = pswd
-	} else {
-		host := jaeger.DefaultUDPSpanServerHost
-		if cfg.AgentHost != "" {
-			host = cfg.AgentHost
-		}
-
-		port := jaeger.DefaultUDPSpanServerPort
-		if cfg.AgentPort != 0 {
-			port = cfg.AgentPort
-		}
-		rc.LocalAgentHostPort = net.JoinHostPort(host, strconv.Itoa(port))
-	}
-
-	return rc, nil
+	return samplingFactor
 }
 
-// parseTags parses the given string into a collection of Tags.
+func getSampler(config Config) tracesdk.Sampler {
+	samplerType := config.SamplerType
+	samplingFraction := getSamplingFraction(samplerType, config.SamplerParam)
+
+	var sampler tracesdk.Sampler
+	switch samplerType {
+	case "probabilistic":
+		sampler = tracesdk.ParentBased(tracesdk.TraceIDRatioBased(samplingFraction))
+	case "const":
+		if samplingFraction == 1.0 {
+			sampler = tracesdk.AlwaysSample()
+		} else {
+			sampler = tracesdk.NeverSample()
+		}
+	case "remote":
+		remoteOptions := getRemoteOptions(config)
+		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
+	case "ratelimiting":
+		// The same config options are applicable to both remote and rate-limiting samplers.
+		remoteOptions := getRemoteOptions(config)
+		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
+		sampler, ok := sampler.(*rateLimitingSampler)
+		if ok {
+			sampler.Update(config.SamplerParam)
+		}
+	default:
+		var root tracesdk.Sampler
+		var parentOptions []tracesdk.ParentBasedSamplerOption
+		if config.SamplerParentConfig.LocalParentSampled {
+			parentOptions = append(parentOptions, tracesdk.WithLocalParentSampled(root))
+		}
+		if config.SamplerParentConfig.RemoteParentSampled {
+			parentOptions = append(parentOptions, tracesdk.WithRemoteParentSampled(root))
+		}
+		sampler = tracesdk.ParentBased(root, parentOptions...)
+	}
+	return sampler
+}
+
+func getRemoteOptions(config Config) []jaegerremote.Option {
+	var remoteOptions []jaegerremote.Option
+	if config.SamplerRefreshInterval != 0 {
+		remoteOptions = append(remoteOptions, jaegerremote.WithSamplingRefreshInterval(config.SamplerRefreshInterval))
+	}
+	if config.SamplingServerURL != "" {
+		remoteOptions = append(remoteOptions, jaegerremote.WithSamplingServerURL(config.SamplingServerURL))
+	}
+	if config.SamplerMaxOperations != 0 {
+		remoteOptions = append(remoteOptions, jaegerremote.WithMaxOperations(config.SamplerMaxOperations))
+	}
+	if config.OperationNameLateBinding {
+		remoteOptions = append(remoteOptions, jaegerremote.WithOperationNameLateBinding(true))
+	}
+	// SamplerRefreshInterval is the interval for polling the backend for sampling strategies.
+	// Ref: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md#general-sdk-configuration.
+	if config.SamplerRefreshInterval != 0 {
+		remoteOptions = append(remoteOptions, jaegerremote.WithSamplingRefreshInterval(config.SamplerRefreshInterval))
+	}
+	// InitialSamplingRate is the sampling probability when the backend is unreachable.
+	if config.InitialSamplingRate != 0.0 {
+		remoteOptions = append(remoteOptions, jaegerremote.WithInitialSampler(tracesdk.TraceIDRatioBased(config.InitialSamplingRate)))
+	}
+
+	return remoteOptions
+}
+
+// parseTags parses the given string into a collection of attributes.
 // Spec for this value:
 // - comma separated list of key=value
 // - value can be specified using the notation ${envVar:defaultValue}, where `envVar`
 // is an environment variable and `defaultValue` is the value to use in case the env var is not set.
-func parseTags(sTags string) []opentracing.Tag {
+// TODO(aditi): when Lighstep and Elastic APM have been migrated, move 'parseTags()' to the common 'tracing' package.
+func parseTags(sTags string) []attribute.KeyValue {
 	pairs := strings.Split(sTags, ",")
-	tags := make([]opentracing.Tag, 0)
+	tags := make([]attribute.KeyValue, 0)
 	for _, p := range pairs {
 		kv := strings.SplitN(p, "=", 2)
+		if len(kv) < 2 {
+			continue // to avoid panic
+		}
 		k, v := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
 
 		if strings.HasPrefix(v, "${") && strings.HasSuffix(v, "}") {
@@ -174,9 +203,24 @@ func parseTags(sTags string) []opentracing.Tag {
 			}
 		}
 
-		tag := opentracing.Tag{Key: k, Value: v}
+		tag := attribute.String(k, v)
 		tags = append(tags, tag)
 	}
 
 	return tags
+}
+
+// printDeprecationWarnings logs deprecation warnings for config options that are no
+// longer supported.
+func printDeprecationWarnings(config Config, l glog.Logger) {
+	commonDeprecationMessage := " has been deprecated as a config option."
+	if config.RPCMetrics {
+		level.Info(l).Log("msg", "RPC Metrics"+commonDeprecationMessage)
+	}
+	if config.Gen128Bit {
+		level.Info(l).Log("msg", "Gen128Bit"+commonDeprecationMessage)
+	}
+	if config.Disabled {
+		level.Info(l).Log("msg", "Disabled"+commonDeprecationMessage)
+	}
 }

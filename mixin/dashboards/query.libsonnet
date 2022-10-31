@@ -25,7 +25,7 @@ local utils = import '../lib/utils.libsonnet';
           g.httpQpsPanel('http_requests_total', queryHandlerSelector, thanos.query.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the the total number of handled requests against /query.') +
+          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests against /query.') +
           g.httpErrPanel('http_requests_total', queryHandlerSelector, thanos.query.dashboard.dimensions)
         )
         .addPanel(
@@ -40,7 +40,7 @@ local utils = import '../lib/utils.libsonnet';
           g.httpQpsPanel('http_requests_total', queryRangeHandlerSelector, thanos.query.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the the total number of handled requests against /query_range.') +
+          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests against /query_range.') +
           g.httpErrPanel('http_requests_total', queryRangeHandlerSelector, thanos.query.dashboard.dimensions)
         )
         .addPanel(
@@ -55,7 +55,7 @@ local utils = import '../lib/utils.libsonnet';
           g.grpcRequestsPanel('grpc_client_handled_total', grpcUnarySelector, thanos.query.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the the total number of handled requests from other queriers.') +
+          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from other queriers.') +
           g.grpcErrorsPanel('grpc_client_handled_total', grpcUnarySelector, thanos.query.dashboard.dimensions)
         )
         .addPanel(
@@ -70,7 +70,7 @@ local utils = import '../lib/utils.libsonnet';
           g.grpcRequestsPanel('grpc_client_handled_total', grpcServerStreamSelector, thanos.query.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the the total number of handled requests from other queriers.') +
+          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from other queriers.') +
           g.grpcErrorsPanel('grpc_client_handled_total', grpcServerStreamSelector, thanos.query.dashboard.dimensions)
         )
         .addPanel(
@@ -88,11 +88,21 @@ local utils = import '../lib/utils.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of failures compared to the the total number of executed DNS lookups.') +
+          g.panel('Errors', 'Shows ratio of failures compared to the total number of executed DNS lookups.') +
           g.qpsErrTotalPanel(
             'thanos_query_store_apis_dns_failures_total{%s}' % thanos.query.dashboard.selector,
             'thanos_query_store_apis_dns_lookups_total{%s}' % thanos.query.dashboard.selector,
             thanos.query.dashboard.dimensions
+          )
+        )
+      )
+      .addRow(
+        g.row('Query Concurrency')
+        .addPanel(
+          g.panel('Concurrent Capacity', 'Shows available capacity of processing queries in parallel.') +
+          g.queryPanel(
+            'max_over_time(thanos_query_concurrent_gate_queries_max{%s}[$__rate_interval]) - avg_over_time(thanos_query_concurrent_gate_queries_in_flight{%s}[$__rate_interval])' % [thanos.query.dashboard.selector, thanos.query.dashboard.selector],
+            '{{job}} - {{pod}}'
           )
         )
       )
@@ -108,7 +118,7 @@ local utils = import '../lib/utils.libsonnet';
         g.addDashboardLink(thanos.query.title)
       )
       .addPanel(
-        g.panel('Requests Errors', 'Shows ratio of errors compared to the the total number of handled requests against /query.') +
+        g.panel('Requests Errors', 'Shows ratio of errors compared to the total number of handled requests against /query.') +
         g.httpErrPanel('http_requests_total', utils.joinLabels([thanos.dashboard.overview.selector, 'handler="query"']), thanos.dashboard.overview.dimensions) +
         g.addDashboardLink(thanos.query.title)
       )
@@ -132,7 +142,7 @@ local utils = import '../lib/utils.libsonnet';
         g.addDashboardLink(thanos.query.title)
       )
       .addPanel(
-        g.panel('Requests Errors', 'Shows ratio of errors compared to the the total number of handled requests against /query_range.') +
+        g.panel('Requests Errors', 'Shows ratio of errors compared to the total number of handled requests against /query_range.') +
         g.httpErrPanel('http_requests_total', utils.joinLabels([thanos.dashboard.overview.selector, 'handler="query_range"']), thanos.dashboard.overview.dimensions) +
         g.addDashboardLink(thanos.query.title)
       )

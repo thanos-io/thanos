@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"hash"
 	"io"
 	"math"
 	"sort"
@@ -156,10 +157,12 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb chunk querier series")
 	}
 
-	set := q.Select(false, nil, matchers...)
+	set := q.Select(true, nil, matchers...)
 
 	shardMatcher := r.ShardInfo.Matcher(&s.buffers)
 	defer shardMatcher.Close()
+	hasher := hashPool.Get().(hash.Hash64)
+	defer hashPool.Put(hasher)
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
@@ -197,6 +200,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 				Raw: &storepb.Chunk{
 					Type: storepb.Chunk_Encoding(chk.Chunk.Encoding() - 1), // Proto chunk encoding is one off to TSDB one.
 					Data: chk.Chunk.Bytes(),
+					Hash: hashChunk(hasher, chk.Chunk.Bytes(), enableChunkHashCalculation),
 				},
 			}
 			frameBytesLeft -= c.Size()

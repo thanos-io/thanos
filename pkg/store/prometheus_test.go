@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cespare/xxhash"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -428,6 +430,55 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 
 	// No series.
 	testutil.Equals(t, 0, len(srv.SeriesSet))
+}
+
+func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
+	defer testutil.TolerantVerifyLeak(t)
+
+	p, err := e2eutil.NewPrometheus()
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, p.Stop()) }()
+
+	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
+
+	a := p.Appender()
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+100, 1)
+	testutil.Ok(t, err)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+200, 2)
+	testutil.Ok(t, err)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+300, 3)
+	testutil.Ok(t, err)
+	testutil.Ok(t, a.Commit())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	testutil.Ok(t, p.Start())
+
+	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
+	testutil.Ok(t, err)
+
+	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
+		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
+		func() (int64, int64) { return 0, math.MaxInt64 }, nil)
+	testutil.Ok(t, err)
+	srv := newStoreSeriesServer(ctx)
+
+	testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
+		MinTime: baseT + 101,
+		MaxTime: baseT + 300,
+		Matchers: []storepb.LabelMatcher{
+			{Name: "a", Value: "b"},
+			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
+		},
+	}, srv))
+	testutil.Equals(t, 1, len(srv.SeriesSet))
+
+	for _, chunk := range srv.SeriesSet[0].Chunks {
+		got := chunk.Raw.Hash
+		want := xxhash.Sum64(chunk.Raw.Data)
+		testutil.Equals(t, want, got)
+	}
 }
 
 func TestPrometheusStore_Info(t *testing.T) {

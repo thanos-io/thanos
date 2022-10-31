@@ -4,93 +4,205 @@
 package receive
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
+
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/gate"
 )
 
-const (
-	seriesLimitName    = "series"
-	samplesLimitName   = "samples"
-	sizeBytesLimitName = "body_size"
-)
-
-type requestLimiter struct {
-	sizeBytesLimit   int64
-	seriesLimit      int64
-	samplesLimit     int64
-	limitsHit        *prometheus.SummaryVec
-	configuredLimits *prometheus.GaugeVec
+// Limiter is responsible for managing the configuration and initialization of
+// different types that apply limits to the Receive instance.
+type Limiter struct {
+	sync.RWMutex
+	requestLimiter            requestLimiter
+	HeadSeriesLimiter         headSeriesLimiter
+	writeGate                 gate.Gate
+	registerer                prometheus.Registerer
+	configPathOrContent       fileContent
+	logger                    log.Logger
+	configReloadCounter       prometheus.Counter
+	configReloadFailedCounter prometheus.Counter
+	receiverMode              ReceiverMode
 }
 
-func newRequestLimiter(sizeBytesLimit, seriesLimit, samplesLimit int64, reg prometheus.Registerer) requestLimiter {
-	limiter := requestLimiter{
-		sizeBytesLimit: sizeBytesLimit,
-		seriesLimit:    seriesLimit,
-		samplesLimit:   samplesLimit,
-		limitsHit: promauto.With(reg).NewSummaryVec(
-			prometheus.SummaryOpts{
-				Namespace:  "thanos",
-				Subsystem:  "receive",
-				Name:       "write_limits_hit",
-				Help:       "Summary of how far beyond the limit a refused remote write request was.",
-				Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
-			}, []string{"tenant", "limit"},
-		),
-		configuredLimits: promauto.With(reg).NewGaugeVec(
-			prometheus.GaugeOpts{
+// headSeriesLimiter encompasses active/head series limiting logic.
+type headSeriesLimiter interface {
+	QueryMetaMonitoring(context.Context) error
+	isUnderLimit(tenant string) (bool, error)
+}
+
+type requestLimiter interface {
+	AllowSizeBytes(tenant string, contentLengthBytes int64) bool
+	AllowSeries(tenant string, amount int64) bool
+	AllowSamples(tenant string, amount int64) bool
+}
+
+// fileContent is an interface to avoid a direct dependency on kingpin or extkingpin.
+type fileContent interface {
+	Content() ([]byte, error)
+	Path() string
+}
+
+// NewLimiter creates a new *Limiter given a configuration and prometheus
+// registerer.
+func NewLimiter(configFile fileContent, reg prometheus.Registerer, r ReceiverMode, logger log.Logger) (*Limiter, error) {
+	limiter := &Limiter{
+		writeGate:         gate.NewNoop(),
+		requestLimiter:    &noopRequestLimiter{},
+		HeadSeriesLimiter: NewNopSeriesLimit(),
+		logger:            logger,
+		receiverMode:      r,
+	}
+
+	if reg != nil {
+		limiter.registerer = NewUnRegisterer(reg)
+		limiter.configReloadCounter = promauto.With(limiter.registerer).NewCounter(
+			prometheus.CounterOpts{
 				Namespace: "thanos",
 				Subsystem: "receive",
-				Name:      "write_limits",
-				Help:      "The configured write limits.",
-			}, []string{"limit"},
-		),
+				Name:      "limits_config_reload_total",
+				Help:      "How many times the limit configuration was reloaded",
+			},
+		)
+		limiter.configReloadFailedCounter = promauto.With(limiter.registerer).NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "limits_config_reload_err_total",
+				Help:      "How many times the limit configuration failed to reload.",
+			},
+		)
 	}
-	limiter.configuredLimits.WithLabelValues(sizeBytesLimitName).Set(float64(sizeBytesLimit))
-	limiter.configuredLimits.WithLabelValues(seriesLimitName).Set(float64(seriesLimit))
-	limiter.configuredLimits.WithLabelValues(samplesLimitName).Set(float64(samplesLimit))
-	return limiter
+
+	if configFile == nil {
+		return limiter, nil
+	}
+
+	limiter.configPathOrContent = configFile
+	if err := limiter.loadConfig(); err != nil {
+		return nil, errors.Wrap(err, "load tenant limits config")
+	}
+
+	return limiter, nil
 }
 
-func (l *requestLimiter) AllowSizeBytes(tenant string, contentLengthBytes int64) bool {
-	if l.sizeBytesLimit <= 0 {
-		return true
+// StartConfigReloader starts the automatic configuration reloader based off of
+// the file indicated by pathOrContent. It starts a Go routine in the given
+// *run.Group.
+func (l *Limiter) StartConfigReloader(ctx context.Context) error {
+	if !l.CanReload() {
+		return nil
 	}
 
-	// This happens when the content length is unknown, then we allow it.
-	if contentLengthBytes < 0 {
-		return true
-	}
-	allowed := l.sizeBytesLimit >= contentLengthBytes
-	if !allowed {
-		l.limitsHit.
-			WithLabelValues(tenant, sizeBytesLimitName).
-			Observe(float64(contentLengthBytes - l.sizeBytesLimit))
-	}
-	return allowed
+	return extkingpin.PathContentReloader(ctx, l.configPathOrContent, l.logger, func() {
+		level.Info(l.logger).Log("msg", "reloading limit config")
+		if err := l.loadConfig(); err != nil {
+			if failedReload := l.configReloadCounter; failedReload != nil {
+				failedReload.Inc()
+			}
+			errMsg := fmt.Sprintf("error reloading tenant limits config from %s", l.configPathOrContent.Path())
+			level.Error(l.logger).Log("msg", errMsg, "err", err)
+		}
+		if reloadCounter := l.configReloadCounter; reloadCounter != nil {
+			reloadCounter.Inc()
+		}
+	}, 1*time.Second)
 }
 
-func (l *requestLimiter) AllowSeries(tenant string, amount int64) bool {
-	if l.seriesLimit <= 0 {
-		return true
+func (l *Limiter) CanReload() bool {
+	if l.configPathOrContent == nil {
+		return false
 	}
-	allowed := l.seriesLimit >= amount
-	if !allowed {
-		l.limitsHit.
-			WithLabelValues(tenant, seriesLimitName).
-			Observe(float64(amount - l.seriesLimit))
+	if l.configPathOrContent.Path() == "" {
+		return false
 	}
-	return allowed
+	return true
 }
 
-func (l *requestLimiter) AllowSamples(tenant string, amount int64) bool {
-	if l.samplesLimit <= 0 {
-		return true
+func (l *Limiter) loadConfig() error {
+	config, err := ParseLimitConfigContent(l.configPathOrContent)
+	if err != nil {
+		return err
 	}
-	allowed := l.samplesLimit >= amount
-	if !allowed {
-		l.limitsHit.
-			WithLabelValues(tenant, samplesLimitName).
-			Observe(float64(amount - l.samplesLimit))
+	l.Lock()
+	defer l.Unlock()
+	maxWriteConcurrency := config.WriteLimits.GlobalLimits.MaxConcurrency
+	if maxWriteConcurrency > 0 {
+		l.writeGate = gate.New(
+			extprom.WrapRegistererWithPrefix(
+				"thanos_receive_write_request_concurrent_",
+				l.registerer,
+			),
+			int(maxWriteConcurrency),
+		)
 	}
-	return allowed
+	l.requestLimiter = newConfigRequestLimiter(
+		l.registerer,
+		&config.WriteLimits,
+	)
+	seriesLimitSupported := (l.receiverMode == RouterOnly || l.receiverMode == RouterIngestor) && (len(config.WriteLimits.TenantsLimits) != 0 || config.WriteLimits.DefaultLimits.HeadSeriesLimit != 0)
+	if seriesLimitSupported {
+		l.HeadSeriesLimiter = NewHeadSeriesLimit(config.WriteLimits, l.registerer, l.logger)
+	}
+	return nil
+}
+
+// RequestLimiter is a safe getter for the request limiter.
+func (l *Limiter) RequestLimiter() requestLimiter {
+	l.RLock()
+	defer l.RUnlock()
+	return l.requestLimiter
+}
+
+// WriteGate is a safe getter for the write gate.
+func (l *Limiter) WriteGate() gate.Gate {
+	l.RLock()
+	defer l.RUnlock()
+	return l.writeGate
+}
+
+// ParseLimitConfigContent parses the limit configuration from the path or
+// content.
+func ParseLimitConfigContent(limitsConfig fileContent) (*RootLimitsConfig, error) {
+	if limitsConfig == nil {
+		return &RootLimitsConfig{}, nil
+	}
+	limitsContentYaml, err := limitsConfig.Content()
+	if err != nil {
+		return nil, errors.Wrap(err, "get content of limit configuration")
+	}
+	parsedConfig, err := ParseRootLimitConfig(limitsContentYaml)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse limit configuration")
+	}
+	return parsedConfig, nil
+}
+
+type nopConfigContent struct{}
+
+var _ fileContent = (*nopConfigContent)(nil)
+
+// Content returns no content and no error.
+func (n nopConfigContent) Content() ([]byte, error) {
+	return nil, nil
+}
+
+// Path returns an empty path.
+func (n nopConfigContent) Path() string {
+	return ""
+}
+
+// NewNopConfig creates a no-op config content (no configuration).
+func NewNopConfig() nopConfigContent {
+	return nopConfigContent{}
 }

@@ -36,7 +36,7 @@ func TestQuerier_Proxy(t *testing.T) {
 			logger,
 			nil,
 			store.NewProxyStore(logger, nil, func() []store.Client { return clients },
-				component.Debug, nil, 5*time.Minute),
+				component.Debug, nil, 5*time.Minute, store.EagerRetrieval),
 			1000000,
 			5*time.Minute,
 		)
@@ -54,7 +54,16 @@ func TestQuerier_Proxy(t *testing.T) {
 					name:        fmt.Sprintf("store number %v", i),
 				})
 			}
-			return q(true, nil, nil, 0, false, false, false, nil)
+			return q(true,
+				nil,
+				nil,
+				0,
+				false,
+				false,
+				false,
+				nil,
+				NoopSeriesStatsReporter,
+			)
 		}
 
 		for _, fn := range files {

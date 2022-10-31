@@ -19,7 +19,7 @@ import (
 )
 
 // PromQLShardingMiddleware creates a new Middleware that shards PromQL aggregations using grouping labels.
-func PromQLShardingMiddleware(queryAnalyzer *querysharding.QueryAnalyzer, numShards int, limits queryrange.Limits, merger queryrange.Merger, registerer prometheus.Registerer) queryrange.Middleware {
+func PromQLShardingMiddleware(queryAnalyzer querysharding.Analyzer, numShards int, limits queryrange.Limits, merger queryrange.Merger, registerer prometheus.Registerer) queryrange.Middleware {
 	return queryrange.MiddlewareFunc(func(next queryrange.Handler) queryrange.Handler {
 		queriesTotal := promauto.With(registerer).NewCounterVec(prometheus.CounterOpts{
 			Namespace: "thanos",
@@ -45,7 +45,7 @@ type querySharder struct {
 	next   queryrange.Handler
 	limits queryrange.Limits
 
-	queryAnalyzer *querysharding.QueryAnalyzer
+	queryAnalyzer querysharding.Analyzer
 	numShards     int
 	merger        queryrange.Merger
 
@@ -55,11 +55,8 @@ type querySharder struct {
 
 func (s querySharder) Do(ctx context.Context, r queryrange.Request) (queryrange.Response, error) {
 	analysis, err := s.queryAnalyzer.Analyze(r.GetQuery())
-	if err != nil {
-		return nil, err
-	}
 
-	if !analysis.IsShardable() {
+	if err != nil || !analysis.IsShardable() {
 		s.queriesTotal.WithLabelValues("false").Inc()
 		return s.next.Do(ctx, r)
 	}

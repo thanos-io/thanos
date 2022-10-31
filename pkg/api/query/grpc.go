@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/prometheus/prometheus/promql"
+	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -19,19 +20,26 @@ type GRPCAPI struct {
 	now                         func() time.Time
 	replicaLabels               []string
 	queryableCreate             query.QueryableCreator
-	queryEngine                 *promql.Engine
+	queryEngine                 v1.QueryEngine
 	lookbackDeltaCreate         func(int64) time.Duration
 	defaultMaxResolutionSeconds time.Duration
 }
 
-func NewGRPCAPI(now func() time.Time, replicaLabels []string, creator query.QueryableCreator, queryEngine *promql.Engine, lookbackDeltaCreate func(int64) time.Duration, defaultMaxResolutionSeconds time.Duration) *GRPCAPI {
+func NewGRPCAPI(
+	now func() time.Time,
+	replicaLabels []string,
+	creator query.QueryableCreator,
+	queryEngine v1.QueryEngine,
+	lookbackDeltaCreate func(int64) time.Duration,
+	defaultMaxResolutionSeconds time.Duration,
+) *GRPCAPI {
 	return &GRPCAPI{
 		now:                         now,
 		replicaLabels:               replicaLabels,
 		queryableCreate:             creator,
 		queryEngine:                 queryEngine,
-		defaultMaxResolutionSeconds: defaultMaxResolutionSeconds,
 		lookbackDeltaCreate:         lookbackDeltaCreate,
+		defaultMaxResolutionSeconds: defaultMaxResolutionSeconds,
 	}
 }
 
@@ -86,6 +94,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		request.EnableQueryPushdown,
 		false,
 		request.ShardInfo,
+		query.NoopSeriesStatsReporter,
 	)
 	qry, err := g.queryEngine.NewInstantQuery(queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, ts)
 	if err != nil {
@@ -160,6 +169,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		request.EnableQueryPushdown,
 		false,
 		request.ShardInfo,
+		query.NoopSeriesStatsReporter,
 	)
 
 	startTime := time.Unix(request.StartTimeSeconds, 0)

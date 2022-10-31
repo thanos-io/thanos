@@ -538,6 +538,7 @@ func (m *PrometheusInstantQueryData) GetStats() *PrometheusResponseStats {
 
 type PrometheusInstantQueryResult struct {
 	// Types that are valid to be assigned to Result:
+	//
 	//	*PrometheusInstantQueryResult_Scalar
 	//	*PrometheusInstantQueryResult_StringSample
 	//	*PrometheusInstantQueryResult_Vector
