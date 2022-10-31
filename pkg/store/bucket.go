@@ -796,70 +796,101 @@ const batchSize = 10000
 // single TSDB block in object storage.
 type blockSeriesClient struct {
 	grpc.ClientStream
-	ctx     context.Context
-	extLset labels.Labels
+	ctx           context.Context
+	logger        log.Logger
+	extLset       labels.Labels
+	blockMatchers []*labels.Matcher
 
-	ps             []storage.SeriesRef
+	postings       []storage.SeriesRef
 	i              int
 	mint           int64
 	maxt           int64
 	indexr         *bucketIndexReader
 	chunkr         *bucketChunkReader
+	loadAggregates []storepb.Aggr
 	limiter        ChunksLimiter
 	bytesLimiter   BytesLimiter
-	loadAggregates []storepb.Aggr
 
-	skipChunks   bool
-	shardMatcher *storepb.ShardMatcher
-
+	skipChunks         bool
+	shardMatcher       *storepb.ShardMatcher
 	calculateChunkHash bool
 
-	// Transform all series into the response types and mark their relevant chunks
-	// for preloading.
+	// Internal state
 	symbolizedLset  []symbolizedLabel
 	entries         []seriesEntry
 	batch           []*storepb.SeriesResponse
 	hasMorePostings bool
 }
 
-func emptyBlockSeriesClient() *blockSeriesClient {
-	return &blockSeriesClient{
-		hasMorePostings: false,
-	}
-}
-
 func newBlockSeriesClient(
-	extLset labels.Labels,
-	ps []storage.SeriesRef,
-	minTime int64,
-	maxTime int64,
-	indexr *bucketIndexReader,
-	chunkr *bucketChunkReader,
+	ctx context.Context,
+	logger log.Logger,
+	b *bucketBlock,
+	req *storepb.SeriesRequest,
 	limiter ChunksLimiter,
 	bytesLimiter BytesLimiter,
-	skipChunks bool,
-	loadAggregates []storepb.Aggr,
 	shardMatcher *storepb.ShardMatcher,
 	calculateChunkHash bool,
 ) *blockSeriesClient {
+	var chunkr *bucketChunkReader
+	if !req.SkipChunks {
+		chunkr = b.chunkReader()
+	}
+
 	return &blockSeriesClient{
-		ctx:          context.Background(),
-		extLset:      extLset,
-		ps:           ps,
-		mint:         minTime,
-		maxt:         maxTime,
-		indexr:       indexr,
+		ctx:          ctx,
+		logger:       logger,
+		extLset:      b.extLset,
+		mint:         req.MinTime,
+		maxt:         req.MaxTime,
+		indexr:       b.indexReader(),
 		chunkr:       chunkr,
 		limiter:      limiter,
 		bytesLimiter: bytesLimiter,
-		skipChunks:   skipChunks,
+		skipChunks:   req.SkipChunks,
 
-		loadAggregates:     loadAggregates,
+		loadAggregates:     req.Aggregates,
 		shardMatcher:       shardMatcher,
 		calculateChunkHash: calculateChunkHash,
 		entries:            make([]seriesEntry, 0, batchSize),
 		hasMorePostings:    true,
 	}
+}
+
+func (b *blockSeriesClient) Close() {
+	if !b.skipChunks {
+		runutil.CloseWithLogOnErr(b.logger, b.chunkr, "series block")
+	}
+
+	runutil.CloseWithLogOnErr(b.logger, b.indexr, "series block")
+}
+
+func (b *blockSeriesClient) MergeStats(stats *queryStats) *queryStats {
+	return stats.merge(b.indexr.stats)
+}
+
+func (b *blockSeriesClient) ExpandPostings(
+	matchers []*labels.Matcher,
+	limiter SeriesLimiter,
+	emptyPostingsCount prometheus.Counter,
+) error {
+	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter)
+	if err != nil {
+		return errors.Wrap(err, "expanded matching posting")
+	}
+
+	if len(ps) == 0 {
+		emptyPostingsCount.Inc()
+		return nil
+	}
+
+	// Reserve series seriesLimiter
+	if err := limiter.Reserve(uint64(len(ps))); err != nil {
+		return errors.Wrap(err, "exceeded series limit")
+	}
+
+	b.postings = ps
+	return nil
 }
 
 func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
@@ -882,34 +913,32 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 func (b *blockSeriesClient) nextBatch() error {
 	start := b.i
 	end := start + batchSize
-	if end > len(b.ps) {
-		end = len(b.ps)
+	if end > len(b.postings) {
+		end = len(b.postings)
 	}
 	b.i = end
 
-	b.batch = b.batch[:0]
-	ps := b.ps[start:end]
-	if len(ps) == 0 {
+	postingsBatch := b.postings[start:end]
+	if len(postingsBatch) == 0 {
 		b.hasMorePostings = false
 		return nil
 	}
+
 	b.entries = b.entries[:0]
+	b.batch = b.batch[:0]
 
 	b.indexr.reset()
 	if !b.skipChunks {
 		b.chunkr.reset()
 	}
 
-	// Preload all series index data.
-	// TODO(bwplotka): Consider not keeping all series in memory all the time.
-	// TODO(bwplotka): Do lazy loading in one step as `ExpandingPostings` method.
-	if err := b.indexr.PreloadSeries(b.ctx, ps, b.bytesLimiter); err != nil {
+	if err := b.indexr.PreloadSeries(b.ctx, postingsBatch, b.bytesLimiter); err != nil {
 		return errors.Wrap(err, "preload series")
 	}
 
-	for i := 0; i < len(ps); i++ {
+	for i := 0; i < len(postingsBatch); i++ {
 		var chks []chunks.Meta
-		ok, err := b.indexr.LoadSeriesForTime(ps[i], &b.symbolizedLset, &chks, b.skipChunks, b.mint, b.maxt)
+		ok, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &chks, b.skipChunks, b.mint, b.maxt)
 		if err != nil {
 			b.batch = append(b.batch, storepb.NewWarnSeriesResponse(errors.Wrap(err, "read series")))
 			continue
@@ -974,41 +1003,6 @@ func (b *blockSeriesClient) nextBatch() error {
 	}
 
 	return nil
-}
-
-// blockSeries returns series matching given matchers, that have some data in given time range.
-func blockSeries(
-	ctx context.Context,
-	extLset labels.Labels,
-	indexr *bucketIndexReader,
-	chunkr *bucketChunkReader,
-	matchers []*labels.Matcher,
-	chunksLimiter ChunksLimiter,
-	seriesLimiter SeriesLimiter,
-	bytesLimiter BytesLimiter, // Rate limiter for used bytes.
-	skipChunks bool,
-	minTime, maxTime int64,
-	loadAggregates []storepb.Aggr,
-	shardMatcher *storepb.ShardMatcher,
-	emptyPostingsCount prometheus.Counter,
-	calculateChunkHash bool,
-) (*blockSeriesClient, error) {
-	ps, err := indexr.ExpandedPostings(ctx, matchers, bytesLimiter)
-	if err != nil {
-		return nil, errors.Wrap(err, "expanded matching posting")
-	}
-
-	if len(ps) == 0 {
-		emptyPostingsCount.Inc()
-		return emptyBlockSeriesClient(), nil
-	}
-
-	// Reserve series seriesLimiter
-	if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
-		return nil, errors.Wrap(err, "exceeded series limit")
-	}
-
-	return newBlockSeriesClient(extLset, ps, minTime, maxTime, indexr, chunkr, chunksLimiter, bytesLimiter, skipChunks, loadAggregates, shardMatcher, calculateChunkHash), nil
 }
 
 func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr, save func([]byte) ([]byte, error), calculateChecksum bool) error {
@@ -1190,69 +1184,55 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 
 		for _, b := range blocks {
-			b := b
+			blk := b
 			gctx := gctx
 
 			if s.enableSeriesResponseHints {
 				// Keep track of queried blocks.
-				resHints.AddQueriedBlock(b.meta.ULID)
+				resHints.AddQueriedBlock(blk.meta.ULID)
 			}
 
-			var chunkr *bucketChunkReader
-			// We must keep the readers open until all their data has been sent.
-			indexr := b.indexReader()
-			if !req.SkipChunks {
-				chunkr = b.chunkReader()
-				defer runutil.CloseWithLogOnErr(s.logger, chunkr, "series block")
-			}
-
-			// Defer all closes to the end of Series method.
-			defer runutil.CloseWithLogOnErr(s.logger, indexr, "series block")
+			shardMatcher := req.ShardInfo.Matcher(&s.buffers)
+			blockClient := newBlockSeriesClient(
+				srv.Context(),
+				s.logger,
+				blk,
+				req,
+				chunksLimiter,
+				bytesLimiter,
+				shardMatcher,
+				s.enableChunkHashCalculation,
+			)
+			defer blockClient.Close()
 
 			g.Go(func() error {
 				span, _ := tracing.StartSpan(gctx, "bucket_store_block_series", tracing.Tags{
-					"block.id":         b.meta.ULID,
-					"block.mint":       b.meta.MinTime,
-					"block.maxt":       b.meta.MaxTime,
-					"block.resolution": b.meta.Thanos.Downsample.Resolution,
+					"block.id":         blk.meta.ULID,
+					"block.mint":       blk.meta.MinTime,
+					"block.maxt":       blk.meta.MaxTime,
+					"block.resolution": blk.meta.Thanos.Downsample.Resolution,
 				})
-				defer span.Finish()
 
-				shardMatcher := req.ShardInfo.Matcher(&s.buffers)
-				blockClient, err := blockSeries(
-					srv.Context(),
-					b.extLset,
-					indexr,
-					chunkr,
-					blockMatchers,
-					chunksLimiter,
-					seriesLimiter,
-					bytesLimiter,
-					req.SkipChunks,
-					req.MinTime, req.MaxTime,
-					req.Aggregates,
-					shardMatcher,
-					s.metrics.emptyPostingCount,
-					s.enableChunkHashCalculation,
-				)
-				if err != nil {
-					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
+				if err := blockClient.ExpandPostings(blockMatchers, seriesLimiter, s.metrics.emptyPostingCount); err != nil {
+					span.Finish()
+					return errors.Wrapf(err, "fetch series for block %s", blk.meta.ULID)
+				}
+				onClose := func() {
+					mtx.Lock()
+					stats = blockClient.MergeStats(stats)
+					mtx.Unlock()
 				}
 				part := newLazyRespSet(
 					srv.Context(),
 					span,
 					10*time.Minute,
-					b.meta.ULID.String(),
-					[]labels.Labels{b.extLset},
-					func() {
-						mtx.Lock()
-						stats = stats.merge(indexr.stats)
-						mtx.Unlock()
-					},
+					blk.meta.ULID.String(),
+					[]labels.Labels{blk.extLset},
+					onClose,
 					blockClient,
 					shardMatcher,
 					false,
-					b.metrics.emptyStreamResponses,
+					blk.metrics.emptyStreamResponses,
 				)
 
 				mtx.Lock()
@@ -1444,25 +1424,19 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 
 				result = strutil.MergeSlices(res, extRes)
 			} else {
-				seriesSet, err := blockSeries(
-					newCtx,
-					b.extLset,
-					indexr,
-					nil,
+				seriesReq := &storepb.SeriesRequest{
+					MinTime:    req.Start,
+					MaxTime:    req.End,
+					SkipChunks: true,
+				}
+				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true)
+
+				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
-					nil,
 					seriesLimiter,
-					bytesLimiter,
-					true,
-					req.Start,
-					req.End,
-					nil,
-					nil,
 					s.metrics.emptyPostingCount,
-					false,
-				)
-				if err != nil {
-					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
+				); err != nil {
+					return err
 				}
 
 				// Extract label names from all series. Many label names will be the same, so we need to deduplicate them.
@@ -1470,7 +1444,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 				// to add them again.
 				labelNames := map[string]struct{}{}
 				for {
-					ls, err := seriesSet.Recv()
+					ls, err := blockClient.Recv()
 					if err == io.EOF {
 						break
 					}
@@ -1625,32 +1599,26 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				}
 				result = res
 			} else {
-				seriesSet, err := blockSeries(
-					newCtx,
-					b.extLset,
-					indexr,
-					nil,
+				seriesReq := &storepb.SeriesRequest{
+					MinTime:    req.Start,
+					MaxTime:    req.End,
+					SkipChunks: true,
+				}
+				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true)
+
+				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
-					nil,
 					seriesLimiter,
-					bytesLimiter,
-					true,
-					req.Start,
-					req.End,
-					nil,
-					nil,
 					s.metrics.emptyPostingCount,
-					false,
-				)
-				if err != nil {
-					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
+				); err != nil {
+					return err
 				}
 
 				// Extract given label's value from all series and deduplicate them.
 				// We don't need to deal with external labels, since they are already added by blockSeries.
 				values := map[string]struct{}{}
 				for {
-					ls, err := seriesSet.Recv()
+					ls, err := blockClient.Recv()
 					if err == io.EOF {
 						break
 					}
