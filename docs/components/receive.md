@@ -356,6 +356,10 @@ Flags:
       --tsdb.no-lockfile         Do not create lockfile in TSDB data directory.
                                  In any case, the lockfiles will be deleted on
                                  next startup.
+      --tsdb.out-of-order.cap-max=0
+                                 [EXPERIMENTAL] Configures the maximum capacity
+                                 for out-of-order chunks (in samples). If set to
+                                 <=0, default value 32 is assumed.
       --tsdb.path="./data"       Data directory of TSDB.
       --tsdb.retention=15d       How long to retain raw samples on local
                                  storage. 0d - disables this retention.
