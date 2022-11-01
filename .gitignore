@@ -17,7 +17,7 @@ kube/.minikube
 data/
 test/e2e/e2e_*
 
-# Ignore benchmarks dir
+# Ignore benchmarks dir.
 benchmarks/
 
 # Ignore promu artifacts.
