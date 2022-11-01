@@ -104,8 +104,8 @@ const (
 
 	enableChunkHashCalculation = true
 
-	// The default batch size when fetching series from object storage.
-	defaultSeriesBatchSize = 10000
+	// SeriesBatchSize is the default batch size when fetching series from object storage.
+	SeriesBatchSize = 10000
 )
 
 var (
@@ -283,8 +283,8 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	})
 
 	m.emptyStreamResponses = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_bucket_store_empty_stream_responses_total",
-		Help: "Total number of empty responses received.",
+		Name: "thanos_bucket_store_empty_blocks_total",
+		Help: "Total number of queried blocks that have no matching series.",
 	})
 
 	return &m
@@ -474,7 +474,7 @@ func NewBucketStore(
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
 		enableSeriesResponseHints:   enableSeriesResponseHints,
 		enableChunkHashCalculation:  enableChunkHashCalculation,
-		seriesBatchSize:             defaultSeriesBatchSize,
+		seriesBatchSize:             SeriesBatchSize,
 	}
 
 	for _, option := range options {
@@ -821,7 +821,7 @@ type blockSeriesClient struct {
 	shardMatcher       *storepb.ShardMatcher
 	calculateChunkHash bool
 
-	// Internal state
+	// Internal state.
 	i               int
 	postings        []storage.SeriesRef
 	symbolizedLset  []symbolizedLabel
@@ -884,7 +884,7 @@ func (b *blockSeriesClient) MergeStats(stats *queryStats) *queryStats {
 
 func (b *blockSeriesClient) ExpandPostings(
 	matchers []*labels.Matcher,
-	limiter SeriesLimiter,
+	seriesLimiter SeriesLimiter,
 	emptyPostingsCount prometheus.Counter,
 ) error {
 	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter)
@@ -897,8 +897,7 @@ func (b *blockSeriesClient) ExpandPostings(
 		return nil
 	}
 
-	// Reserve series seriesLimiter
-	if err := limiter.Reserve(uint64(len(ps))); err != nil {
+	if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
 		return errors.Wrap(err, "exceeded series limit")
 	}
 
@@ -925,7 +924,7 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 
 func (b *blockSeriesClient) nextBatch() error {
 	start := b.i
-	end := start + defaultSeriesBatchSize
+	end := start + SeriesBatchSize
 	if end > len(b.postings) {
 		end = len(b.postings)
 	}
@@ -1459,7 +1458,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, defaultSeriesBatchSize)
+				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize)
 
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
@@ -1634,7 +1633,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, defaultSeriesBatchSize)
+				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize)
 
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
