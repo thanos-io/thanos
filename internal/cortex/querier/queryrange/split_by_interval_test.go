@@ -383,7 +383,7 @@ func Test_evaluateAtModifier(t *testing.T) {
 		tt := tt
 		t.Run(tt.in, func(t *testing.T) {
 			t.Parallel()
-			out, err := evaluateAtModifierFunction(tt.in, start, end)
+			out, err := EvaluateAtModifierFunction(tt.in, start, end)
 			if tt.expectedErrorCode != 0 {
 				require.Error(t, err)
 				httpResp, ok := httpgrpc.HTTPResponseFromError(err)
