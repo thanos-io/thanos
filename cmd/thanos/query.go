@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/grpc"
-
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
