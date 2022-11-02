@@ -89,9 +89,6 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 	var analysis QueryAnalysis
 	parser.Inspect(expr, func(node parser.Node, nodes []parser.Node) error {
 		switch n := node.(type) {
-		case *parser.SubqueryExpr:
-			isShardable = false
-			return fmt.Errorf("expressions with subqueries are not shardable")
 		case *parser.Call:
 			if n.Func != nil && contains(n.Func.Name, nonShardableFuncs) {
 				isShardable = false
