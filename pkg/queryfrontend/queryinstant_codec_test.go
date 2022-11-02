@@ -140,6 +140,17 @@ func TestQueryInstantCodec_DecodeRequest(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:            "lookback_delta",
+			url:             "/api/v1/query?lookback_delta=1000",
+			partialResponse: false,
+			expectedRequest: &ThanosQueryInstantRequest{
+				Path:          "/api/v1/query",
+				Dedup:         true,
+				LookbackDelta: 1000000,
+				StoreMatchers: [][]*labels.Matcher{},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r, err := http.NewRequest(http.MethodGet, tc.url, nil)

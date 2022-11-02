@@ -123,6 +123,11 @@ func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request, forwa
 		return nil, err
 	}
 
+	result.LookbackDelta, err = parseLookbackDelta(r.Form, queryv1.LookbackDeltaParam)
+	if err != nil {
+		return nil, err
+	}
+
 	result.Query = r.FormValue("query")
 	result.Path = r.URL.Path
 
@@ -177,6 +182,10 @@ func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request
 			return nil, err
 		}
 		params[queryv1.ShardInfoParam] = []string{data}
+	}
+
+	if thanosReq.LookbackDelta > 0 {
+		params[queryv1.LookbackDeltaParam] = []string{encodeDurationMillis(thanosReq.LookbackDelta)}
 	}
 
 	req, err := http.NewRequest(http.MethodPost, thanosReq.Path, bytes.NewBufferString(params.Encode()))
@@ -260,13 +269,18 @@ func parseMatchersParam(ss url.Values, matcherParam string) ([][]*labels.Matcher
 	return matchers, nil
 }
 
-func parseShardInfo(ss url.Values, key string) (*storepb.ShardInfo, error) {
+func parseLookbackDelta(ss url.Values, key string) (int64, error) {
 	data, ok := ss[key]
-	if !ok {
-		return nil, nil
+	if !ok || len(data) == 0 {
+		return 0, nil
 	}
 
-	if len(data) == 0 {
+	return parseDurationMillis(data[0])
+}
+
+func parseShardInfo(ss url.Values, key string) (*storepb.ShardInfo, error) {
+	data, ok := ss[key]
+	if !ok || len(data) == 0 {
 		return nil, nil
 	}
 

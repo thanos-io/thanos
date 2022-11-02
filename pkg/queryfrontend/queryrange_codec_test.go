@@ -167,6 +167,20 @@ func TestQueryRangeCodec_DecodeRequest(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:            "lookback_delta",
+			url:             `/api/v1/query_range?start=123&end=456&step=1&lookback_delta=1000`,
+			partialResponse: false,
+			expectedRequest: &ThanosQueryRangeRequest{
+				Path:          "/api/v1/query_range",
+				Start:         123000,
+				End:           456000,
+				Step:          1000,
+				Dedup:         true,
+				LookbackDelta: 1000000,
+				StoreMatchers: [][]*labels.Matcher{},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r, err := http.NewRequest(http.MethodGet, tc.url, nil)
@@ -267,6 +281,21 @@ func TestQueryRangeCodec_EncodeRequest(t *testing.T) {
 					r.FormValue("end") == "456" &&
 					r.FormValue("step") == "1" &&
 					r.FormValue(queryv1.MaxSourceResolutionParam) == "3600"
+			},
+		},
+		{
+			name: "Lookback delta",
+			req: &ThanosQueryRangeRequest{
+				Start:         123000,
+				End:           456000,
+				Step:          1000,
+				LookbackDelta: 1000,
+			},
+			checkFunc: func(r *http.Request) bool {
+				return r.FormValue("start") == "123" &&
+					r.FormValue("end") == "456" &&
+					r.FormValue("step") == "1" &&
+					r.FormValue(queryv1.LookbackDeltaParam) == "1"
 			},
 		},
 	} {
