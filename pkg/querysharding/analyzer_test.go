@@ -33,11 +33,11 @@ func TestAnalyzeQuery(t *testing.T) {
 			expression: "count(sum without (pod) (http_requests_total))",
 		},
 		{
-			name:       "aggregate expression with subquery",
+			name:       "aggregate expression with label_replace",
 			expression: `sum by (pod) (label_replace(metric, "dst_label", "$1", "src_label", "re"))`,
 		},
 		{
-			name:       "aggregate without expression with subquery",
+			name:       "aggregate without expression with label_replace",
 			expression: `sum without (pod) (label_replace(metric, "dst_label", "$1", "src_label", "re"))`,
 		},
 		{
@@ -57,7 +57,7 @@ func TestAnalyzeQuery(t *testing.T) {
 			expression: `sum by (pod) (http_requests_total{code="400"}) / sum by (cluster) (http_requests_total)`,
 		},
 		{
-			name:       "binary expression with vector matching and subquery",
+			name:       "binary expression with vector matching and label_replace",
 			expression: `http_requests_total{code="400"} / on (pod) label_replace(metric, "dst_label", "$1", "src_label", "re")`,
 		},
 		{
@@ -126,6 +126,16 @@ sum by (container) (
 			name:           "histogram quantile",
 			expression:     "histogram_quantile(0.95, sum(rate(metric[1m])) by (le, cluster))",
 			shardingLabels: []string{"cluster"},
+		},
+		{
+			name:           "subquery",
+			expression:     "sum(http_requests_total) by (pod, cluster) [1h:1m]",
+			shardingLabels: []string{"cluster", "pod"},
+		},
+		{
+			name:           "subquery with function",
+			expression:     "increase(sum(http_requests_total) by (pod, cluster) [1h:1m])",
+			shardingLabels: []string{"cluster", "pod"},
 		},
 	}
 

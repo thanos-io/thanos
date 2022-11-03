@@ -33,7 +33,7 @@ func (t thanosCacheKeyGenerator) GenerateCacheKey(userID string, r queryrange.Re
 		for ; i < len(t.resolutions) && t.resolutions[i] > tr.MaxSourceResolution; i++ {
 		}
 		shardInfoKey := generateShardInfoKey(tr)
-		return fmt.Sprintf("fe:%s:%s:%d:%d:%d:%s", userID, tr.Query, tr.Step, currentInterval, i, shardInfoKey)
+		return fmt.Sprintf("fe:%s:%s:%d:%d:%d:%s:%d", userID, tr.Query, tr.Step, currentInterval, i, shardInfoKey, tr.LookbackDelta)
 	case *ThanosLabelsRequest:
 		return fmt.Sprintf("fe:%s:%s:%s:%d", userID, tr.Label, tr.Matchers, currentInterval)
 	case *ThanosSeriesRequest:

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -499,5 +501,142 @@ metafile_content_ttl: 0s`
 		resp, err := http.Get(fmt.Sprintf("http://%s/_galaxycache/groupcache_test_group/content:%s/meta.json", store1.Endpoint("http"), id.String()))
 		testutil.Ok(t, err)
 		testutil.Equals(t, 200, resp.StatusCode)
+	})
+}
+
+func TestStoreGatewayBytesLimit(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("store-limit")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	const bucket = "store-gateway-test"
+	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	store1 := e2ethanos.NewStoreGW(
+		e,
+		"1",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+		},
+		"",
+		[]string{"--store.grpc.downloaded-bytes-limit=1B"},
+	)
+
+	store2 := e2ethanos.NewStoreGW(
+		e,
+		"2",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+		},
+		"",
+		[]string{"--store.grpc.downloaded-bytes-limit=100B"},
+	)
+	store3 := e2ethanos.NewStoreGW(
+		e,
+		"3",
+		client.BucketConfig{
+			Type:   client.S3,
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+		},
+		"",
+		[]string{"--store.grpc.downloaded-bytes-limit=196627B"},
+	)
+
+	testutil.Ok(t, e2e.StartAndWaitReady(store1, store2, store3))
+
+	q1 := e2ethanos.NewQuerierBuilder(e, "1", store1.InternalEndpoint("grpc")).Init()
+	q2 := e2ethanos.NewQuerierBuilder(e, "2", store2.InternalEndpoint("grpc")).Init()
+	q3 := e2ethanos.NewQuerierBuilder(e, "3", store3.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q1, q2, q3))
+
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(filepath.Join(e.SharedDir(), dir), os.ModePerm))
+
+	series := []labels.Labels{labels.FromStrings("a", "1", "b", "2")}
+	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
+	extLset2 := labels.FromStrings("ext1", "value1", "replica", "2")
+	extLset3 := labels.FromStrings("ext1", "value2", "replica", "3")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	now := time.Now()
+	id1, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset, 0, metadata.NoneFunc)
+	testutil.Ok(t, err)
+	id2, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset2, 0, metadata.NoneFunc)
+	testutil.Ok(t, err)
+	id3, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset3, 0, metadata.NoneFunc)
+	testutil.Ok(t, err)
+	id4, err := e2eutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0, metadata.NoneFunc)
+	testutil.Ok(t, err)
+	l := log.NewLogfmtLogger(os.Stdout)
+	bkt, err := s3.NewBucketWithConfig(l,
+		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "test-feed")
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id2.String()), id2.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id3.String()), id3.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id4.String()), id4.String()))
+
+	// Wait for store to sync blocks.
+	testutil.Ok(t, store1.WaitSumMetrics(e2emon.Equals(4), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, store2.WaitSumMetrics(e2emon.Equals(4), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, store3.WaitSumMetrics(e2emon.Equals(4), "thanos_blocks_meta_synced"))
+
+	t.Run("Series() limits", func(t *testing.T) {
+
+		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
+			_, err := simpleInstantQuery(t,
+				ctx,
+				q1.Endpoint("http"),
+				func() string { return testQuery },
+				time.Now,
+				promclient.QueryOptions{Deduplicate: true}, 0)
+			if err != nil {
+				if strings.Contains(err.Error(), "expanded matching posting: get postings: bytes limit exceeded while fetching postings: limit 1 violated") {
+					return nil
+				}
+				return err
+			}
+			return fmt.Errorf("expected an error")
+		}))
+
+		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
+			_, err := simpleInstantQuery(t,
+				ctx,
+				q2.Endpoint("http"),
+				func() string { return testQuery },
+				time.Now,
+				promclient.QueryOptions{Deduplicate: true}, 0)
+			if err != nil {
+				if strings.Contains(err.Error(), "preload series: exceeded bytes limit while fetching series: limit 100 violated") {
+					return nil
+				}
+				return err
+			}
+			return fmt.Errorf("expected an error")
+		}))
+
+		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
+			_, err := simpleInstantQuery(t,
+				ctx,
+				q3.Endpoint("http"),
+				func() string { return testQuery },
+				time.Now,
+				promclient.QueryOptions{Deduplicate: true}, 0)
+			if err != nil {
+				if strings.Contains(err.Error(), "load chunks: bytes limit exceeded while fetching chunks: limit 196627 violated") {
+					return nil
+				}
+				return err
+			}
+			return fmt.Errorf("expected an error")
+		}))
 	})
 }
