@@ -112,6 +112,11 @@ func (c queryInstantCodec) DecodeRequest(_ context.Context, r *http.Request, for
 		return nil, err
 	}
 
+	result.LookbackDelta, err = parseLookbackDelta(r.Form, queryv1.LookbackDeltaParam)
+	if err != nil {
+		return nil, err
+	}
+
 	result.Query = r.FormValue("query")
 	result.Path = r.URL.Path
 
@@ -159,6 +164,10 @@ func (c queryInstantCodec) EncodeRequest(ctx context.Context, r queryrange.Reque
 			return nil, err
 		}
 		params[queryv1.ShardInfoParam] = []string{data}
+	}
+
+	if thanosReq.LookbackDelta > 0 {
+		params[queryv1.LookbackDeltaParam] = []string{encodeDurationMillis(thanosReq.LookbackDelta)}
 	}
 
 	req, err := http.NewRequest(http.MethodPost, thanosReq.Path, bytes.NewBufferString(params.Encode()))
