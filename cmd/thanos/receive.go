@@ -872,7 +872,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("tsdb.out-of-order.cap-max",
 		"[EXPERIMENTAL] Configures the maximum capacity for out-of-order chunks (in samples). If set to <=0, default value 32 is assumed.",
-	).Default("0").Int64Var(&rc.tsdbOutOfOrderCapMax)
+	).Default("0").Hidden().Int64Var(&rc.tsdbOutOfOrderCapMax)
 
 	cmd.Flag("tsdb.allow-overlapping-blocks", "Allow overlapping blocks, which in turn enables vertical compaction and vertical query merge. Does not do anything, enabled all the time.").Default("false").BoolVar(&rc.tsdbAllowOverlappingBlocks)
 
