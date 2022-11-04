@@ -98,6 +98,7 @@ func registerQuery(app *extkingpin.App) {
 
 	queryTimeout := extkingpin.ModelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
+
 	promqlEngine := cmd.Flag("query.promql-engine", "PromQL engine to use.").Default(string(promqlEnginePrometheus)).Hidden().
 		Enum(string(promqlEnginePrometheus), string(promqlEngineThanos))
 

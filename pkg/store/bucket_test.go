@@ -31,8 +31,6 @@ import (
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
@@ -2572,10 +2570,6 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 	// No limits.
 	chunksLimiter := NewChunksLimiterFactory(0)(nil)
 	seriesLimiter := NewSeriesLimiterFactory(0)(nil)
-	dummyCounter := promauto.NewCounter(prometheus.CounterOpts{
-		Name: "dummy",
-		Help: "dummy help",
-	})
 	ctx := context.Background()
 
 	// Run multiple workers to execute the queries.
@@ -2608,7 +2602,7 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				testutil.Ok(b, err)
 
 				blockClient := newBlockSeriesClient(ctx, nil, blk, req, chunksLimiter, NewBytesLimiterFactory(0)(nil), nil, false, SeriesBatchSize)
-				testutil.Ok(b, blockClient.ExpandPostings(matchers, seriesLimiter, dummyCounter))
+				testutil.Ok(b, blockClient.ExpandPostings(matchers, seriesLimiter))
 				defer blockClient.Close()
 
 				// Ensure at least 1 series has been returned (as expected).

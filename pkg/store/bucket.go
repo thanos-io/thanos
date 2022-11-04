@@ -133,7 +133,6 @@ type bucketStoreMetrics struct {
 	queriesDropped        *prometheus.CounterVec
 	seriesRefetches       prometheus.Counter
 	emptyPostingCount     prometheus.Counter
-	emptyStreamResponses  prometheus.Counter
 
 	cachedPostingsCompressions           *prometheus.CounterVec
 	cachedPostingsCompressionErrors      *prometheus.CounterVec
@@ -280,11 +279,6 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.emptyPostingCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_empty_postings_total",
 		Help: "Total number of empty postings when fetching block series.",
-	})
-
-	m.emptyStreamResponses = promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_bucket_store_empty_blocks_total",
-		Help: "Total number of queried blocks that have no matching series.",
 	})
 
 	return &m
@@ -885,7 +879,6 @@ func (b *blockSeriesClient) MergeStats(stats *queryStats) *queryStats {
 func (b *blockSeriesClient) ExpandPostings(
 	matchers []*labels.Matcher,
 	seriesLimiter SeriesLimiter,
-	emptyPostingsCount prometheus.Counter,
 ) error {
 	ps, err := b.indexr.ExpandedPostings(b.ctx, matchers, b.bytesLimiter)
 	if err != nil {
@@ -893,7 +886,6 @@ func (b *blockSeriesClient) ExpandPostings(
 	}
 
 	if len(ps) == 0 {
-		emptyPostingsCount.Inc()
 		return nil
 	}
 
@@ -1227,7 +1219,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					"block.resolution": blk.meta.Thanos.Downsample.Resolution,
 				})
 
-				if err := blockClient.ExpandPostings(blockMatchers, seriesLimiter, s.metrics.emptyPostingCount); err != nil {
+				if err := blockClient.ExpandPostings(blockMatchers, seriesLimiter); err != nil {
 					span.Finish()
 					return errors.Wrapf(err, "fetch series for block %s", blk.meta.ULID)
 				}
@@ -1246,7 +1238,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					blockClient,
 					shardMatcher,
 					false,
-					blk.metrics.emptyStreamResponses,
+					s.metrics.emptyPostingCount,
 				)
 
 				mtx.Lock()
@@ -1465,7 +1457,6 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
 					seriesLimiter,
-					s.metrics.emptyPostingCount,
 				); err != nil {
 					return err
 				}
@@ -1640,7 +1631,6 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
 					seriesLimiter,
-					s.metrics.emptyPostingCount,
 				); err != nil {
 					return err
 				}
