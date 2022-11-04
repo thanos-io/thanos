@@ -264,6 +264,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
 		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		ShardInfo:               originalRequest.ShardInfo,
+		ProjectionInfo:          originalRequest.ProjectionInfo,
 	}
 
 	stores := []Client{}

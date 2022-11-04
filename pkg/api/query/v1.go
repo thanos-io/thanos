@@ -72,6 +72,7 @@ const (
 	Step                     = "step"
 	Stats                    = "stats"
 	ShardInfoParam           = "shard_info"
+	ProjectionInfoParam      = "projection_info"
 	LookbackDeltaParam       = "lookback_delta"
 )
 
@@ -345,6 +346,24 @@ func (qapi *QueryAPI) parseShardInfo(r *http.Request) (*storepb.ShardInfo, *api.
 	return &info, nil
 }
 
+func (qapi *QueryAPI) parseProjectionInfo(r *http.Request) (*storepb.ProjectionInfo, *api.ApiError) {
+	data := r.FormValue(ProjectionInfoParam)
+	if data == "" {
+		return nil, nil
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var info storepb.ProjectionInfo
+	if err := json.Unmarshal([]byte(data), &info); err != nil {
+		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "could not unmarshal parameter %s", ProjectionInfoParam)}
+	}
+
+	return &info, nil
+}
+
 func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
 	ts, err := parseTimeParam(r, "time", qapi.baseAPI.Now())
 	if err != nil {
@@ -393,6 +412,11 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr, func() {}
 	}
 
+	projectionInfo, apiErr := qapi.parseProjectionInfo(r)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
+	}
+
 	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
 	// Get custom lookback delta from request.
 	lookbackDeltaFromReq, apiErr := qapi.parseLookbackDeltaParam(r)
@@ -419,6 +443,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
+			projectionInfo,
 		),
 		&promql.QueryOpts{LookbackDelta: lookbackDelta},
 		r.FormValue("query"),
@@ -541,6 +566,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr, func() {}
 	}
 
+	projectionInfo, apiErr := qapi.parseProjectionInfo(r)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
+	}
+
 	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
 	// Get custom lookback delta from request.
 	lookbackDeltaFromReq, apiErr := qapi.parseLookbackDeltaParam(r)
@@ -570,6 +600,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
+			projectionInfo,
 		),
 		&promql.QueryOpts{LookbackDelta: lookbackDelta},
 		r.FormValue("query"),
@@ -659,6 +690,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
@@ -755,6 +787,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 
 	if err != nil {
@@ -815,6 +848,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}

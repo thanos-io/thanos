@@ -58,6 +58,7 @@ type QueryableCreator func(
 	skipChunks bool,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
+	projectionInfo *storepb.ProjectionInfo,
 ) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
@@ -82,6 +83,7 @@ func NewQueryableCreator(
 		skipChunks bool,
 		shardInfo *storepb.ShardInfo,
 		seriesStatsReporter seriesStatsReporter,
+		projectionInfo *storepb.ProjectionInfo,
 	) storage.Queryable {
 		return &queryable{
 			logger:              logger,
@@ -100,6 +102,7 @@ func NewQueryableCreator(
 			enableQueryPushdown:  enableQueryPushdown,
 			shardInfo:            shardInfo,
 			seriesStatsReporter:  seriesStatsReporter,
+			projectionInfo:       projectionInfo,
 		}
 	}
 }
@@ -119,11 +122,12 @@ type queryable struct {
 	enableQueryPushdown  bool
 	shardInfo            *storepb.ShardInfo
 	seriesStatsReporter  seriesStatsReporter
+	projectionInfo       *storepb.ProjectionInfo
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.projectionInfo), nil
 }
 
 type querier struct {
@@ -142,7 +146,9 @@ type querier struct {
 	selectGate          gate.Gate
 	selectTimeout       time.Duration
 	shardInfo           *storepb.ShardInfo
+	projectionInfo      *storepb.ProjectionInfo
 	seriesStatsReporter seriesStatsReporter
+	buffers             sync.Pool
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -164,6 +170,7 @@ func newQuerier(
 	selectTimeout time.Duration,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
+	projectionInfo *storepb.ProjectionInfo,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -192,7 +199,12 @@ func newQuerier(
 		skipChunks:          skipChunks,
 		enableQueryPushdown: enableQueryPushdown,
 		shardInfo:           shardInfo,
+		projectionInfo:      projectionInfo,
 		seriesStatsReporter: seriesStatsReporter,
+		buffers: sync.Pool{New: func() interface{} {
+			b := make([]byte, 0)
+			return &b
+		}},
 	}
 }
 
@@ -356,6 +368,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		Aggregates:              aggrs,
 		QueryHints:              queryHints,
 		ShardInfo:               q.shardInfo,
+		ProjectionInfo:          q.projectionInfo,
 		PartialResponseDisabled: !q.partialResponse,
 		SkipChunks:              q.skipChunks,
 		Step:                    hints.Step,
@@ -385,14 +398,19 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		}
 	}
 
+	projectionMatcher := q.projectionInfo.Matcher(&q.buffers, nil)
+	defer projectionMatcher.Close()
 	if !q.isDedupEnabled() {
 		// Return data without any deduplication.
-		return &promSeriesSet{
-			mint:  q.mint,
-			maxt:  q.maxt,
-			set:   newStoreSeriesSet(resp.seriesSet),
-			aggrs: aggrs,
-			warns: warns,
+		return &projectionSeriesSet{
+			SeriesSet: &promSeriesSet{
+				mint:  q.mint,
+				maxt:  q.maxt,
+				set:   newStoreSeriesSet(resp.seriesSet),
+				aggrs: aggrs,
+				warns: warns,
+			},
+			projectionMatcher: projectionMatcher,
 		}, resp.seriesSetStats, nil
 	}
 
@@ -408,7 +426,10 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 
 	// The merged series set assembles all potentially-overlapping time ranges of the same series into a single one.
 	// TODO(bwplotka): We could potentially dedup on chunk level, use chunk iterator for that when available.
-	return dedup.NewSeriesSet(set, q.replicaLabels, hints.Func, q.enableQueryPushdown), resp.seriesSetStats, nil
+	return &projectionSeriesSet{
+		SeriesSet:         dedup.NewSeriesSet(set, q.replicaLabels, hints.Func, q.enableQueryPushdown),
+		projectionMatcher: projectionMatcher,
+	}, resp.seriesSetStats, nil
 }
 
 // sortDedupLabels re-sorts the set so that the same series with different replica

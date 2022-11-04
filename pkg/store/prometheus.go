@@ -198,6 +198,9 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	shardMatcher := r.ShardInfo.Matcher(&p.buffers)
 	defer shardMatcher.Close()
 
+	projectionMatcher := r.ProjectionInfo.Matcher(&p.buffers, extLset)
+	defer projectionMatcher.Close()
+
 	if r.QueryHints != nil && r.QueryHints.IsSafeToExecute() && !shardMatcher.IsSharded() {
 		return p.queryPrometheus(s, r)
 	}
@@ -240,7 +243,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
-	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
+	return p.handleStreamedPrometheusResponse(s, shardMatcher, projectionMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
 }
 
 func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *storepb.SeriesRequest) error {
@@ -363,6 +366,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	s storepb.Store_SeriesServer,
 	shardMatcher *storepb.ShardMatcher,
+	projectionMatcher *storepb.ProjectionMatcher,
 	httpResp *http.Response,
 	querySpan tracing.Span,
 	extLset labels.Labels,
@@ -389,6 +393,11 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	stream := remote.NewChunkedReader(bodySizer, remote.DefaultChunkedReadLimit, *data)
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
+
+	extLabelSet := make(map[string]struct{})
+	for _, lbl := range extLset {
+		extLabelSet[lbl.Name] = struct{}{}
+	}
 	for {
 		res := &prompb.ChunkedReadResponse{}
 		err := stream.NextProto(res)
@@ -409,6 +418,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			if !shardMatcher.MatchesLabels(completeLabelset) {
 				continue
 			}
+			projectedLabels := projectionMatcher.ModifyLabels(completeLabelset, true)
 
 			seriesStats.CountSeries(series.Labels)
 			thanosChks := make([]storepb.AggrChunk, len(series.Chunks))
@@ -436,7 +446,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 
 			r := storepb.NewSeriesResponse(&storepb.Series{
 				Labels: labelpb.ZLabelsFromPromLabels(
-					completeLabelset,
+					projectedLabels,
 				),
 				Chunks: thanosChks,
 			})

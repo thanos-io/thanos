@@ -846,6 +846,8 @@ func newBlockSeriesClient(
 	limiter ChunksLimiter,
 	bytesLimiter BytesLimiter,
 	shardMatcher *storepb.ShardMatcher,
+	projectionMatcher *storepb.ProjectionMatcher,
+	emptyPostingsCount prometheus.Counter,
 	calculateChunkHash bool,
 	batchSize int,
 	chunkFetchDuration prometheus.Histogram,

@@ -41,6 +41,7 @@ message QueryRequest {
   ShardInfo shard_info = 11;
 
   int64 lookback_delta_seconds = 12;
+  ProjectionInfo projection_info = 13;
 }
 
 message StoreMatchers {
@@ -78,6 +79,7 @@ message QueryRangeRequest {
 
   ShardInfo shard_info = 13;
   int64 lookback_delta_seconds = 14;
+  ProjectionInfo projection_info = 15;
 }
 
 message QueryRangeResponse {

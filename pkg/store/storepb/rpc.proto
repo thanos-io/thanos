@@ -122,6 +122,8 @@ message SeriesRequest {
   // shard_info is used by the querier to request a specific
   // shard of blocks instead of entire blocks.
   ShardInfo shard_info = 13;
+
+  ProjectionInfo projection_info = 14;
 }
 
 
@@ -153,6 +155,12 @@ message ShardInfo {
 
   // Labels on which to partition series.
   repeated string labels = 4;
+}
+
+message ProjectionInfo {
+  bool grouping = 1;
+  bool by = 2;
+  repeated string labels = 3;
 }
 
 message Func {

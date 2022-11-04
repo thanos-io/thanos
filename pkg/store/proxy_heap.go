@@ -394,6 +394,7 @@ func newLazyRespSet(
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)
 			l.span.SetTag("processed.bytes", bytesProcessed)
+			fmt.Printf("processed.bytes: %d processed.series: %d", bytesProcessed, seriesStats)
 			l.span.Finish()
 		}()
 
@@ -645,6 +646,7 @@ func newEagerRespSet(
 			l.span.SetTag("processed.chunks", seriesStats.Chunks)
 			l.span.SetTag("processed.samples", seriesStats.Samples)
 			l.span.SetTag("processed.bytes", bytesProcessed)
+			fmt.Printf("processed.bytes: %d processed.series: %d", bytesProcessed, seriesStats)
 			l.span.Finish()
 			ret.wg.Done()
 		}()
