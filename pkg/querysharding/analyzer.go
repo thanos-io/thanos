@@ -66,8 +66,8 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 // Analyze analyzes a query and returns a QueryAnalysis.
 
 // Analyze uses the following algorithm:
-//   - if a query has subqueries, such as label_join or label_replace,
-//     or has functions which cannot be sharded, then treat the query as non shardable.
+//   - if a query has functions which cannot be sharded such as
+//     label_join or label_replace, then treat the query as non shardable.
 //   - Walk the query and find the least common labelset
 //     used in grouping expressions. If non-empty, treat the query
 //     as shardable by those labels.
