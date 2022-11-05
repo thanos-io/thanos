@@ -576,6 +576,15 @@ func runCompact(
 				return runutil.Repeat(conf.progressCalculateInterval, ctx.Done(), func() error {
 
 					if err := sy.SyncMetas(ctx); err != nil {
+						// The RetryError signals that we hit an retriable error (transient error, no connection).
+						// You should alert on this being triggered too frequently.
+						if compact.IsRetryError(err) {
+							level.Error(logger).Log("msg", "retriable error", "err", err)
+							compactMetrics.retried.Inc()
+
+							return nil
+						}
+
 						return errors.Wrapf(err, "could not sync metas")
 					}
 
