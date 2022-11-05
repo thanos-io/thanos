@@ -1,0 +1,32 @@
+name                                                          old time/op    new time/op    delta
+BucketSeries/1000000SeriesWith1Samples/1of1000000-8             53.0ms ± 2%    37.7ms ± 1%   -28.86%  (p=0.000 n=20+20)
+BucketSeries/1000000SeriesWith1Samples/10of1000000-8            52.8ms ± 2%    37.4ms ± 1%   -29.11%  (p=0.000 n=20+18)
+BucketSeries/1000000SeriesWith1Samples/1000000of1000000-8        513ms ± 3%     412ms ± 3%   -19.71%  (p=0.000 n=20+16)
+BucketSeries/100000SeriesWith100Samples/1of10000000-8           3.80ms ± 2%    4.10ms ± 2%    +7.84%  (p=0.000 n=20+18)
+BucketSeries/100000SeriesWith100Samples/100of10000000-8         3.75ms ± 1%    4.07ms ± 1%    +8.29%  (p=0.000 n=19+18)
+BucketSeries/100000SeriesWith100Samples/10000000of10000000-8    49.0ms ± 2%    41.4ms ± 3%   -15.49%  (p=0.000 n=20+20)
+BucketSeries/1SeriesWith10000000Samples/1of10000000-8            138µs ± 6%     221µs ± 4%   +60.40%  (p=0.000 n=18+19)
+BucketSeries/1SeriesWith10000000Samples/100of10000000-8          137µs ± 1%     218µs ± 1%   +58.87%  (p=0.000 n=20+20)
+BucketSeries/1SeriesWith10000000Samples/10000000of10000000-8    12.6ms ± 7%    12.2ms ± 0%    -3.43%  (p=0.002 n=20+18)
+
+name                                                          old alloc/op   new alloc/op   delta
+BucketSeries/1000000SeriesWith1Samples/1of1000000-8             60.9MB ± 0%    54.2MB ± 0%   -10.94%  (p=0.000 n=20+19)
+BucketSeries/1000000SeriesWith1Samples/10of1000000-8            60.9MB ± 0%    54.2MB ± 0%   -10.94%  (p=0.000 n=20+20)
+BucketSeries/1000000SeriesWith1Samples/1000000of1000000-8       1.29GB ± 0%    0.86GB ± 0%   -33.08%  (p=0.000 n=19+20)
+BucketSeries/100000SeriesWith100Samples/1of10000000-8           4.58MB ± 0%    5.98MB ± 0%   +30.61%  (p=0.000 n=20+20)
+BucketSeries/100000SeriesWith100Samples/100of10000000-8         4.58MB ± 0%    5.98MB ± 0%   +30.56%  (p=0.000 n=19+20)
+BucketSeries/100000SeriesWith100Samples/10000000of10000000-8     119MB ± 3%      94MB ± 3%   -20.91%  (p=0.000 n=20+20)
+BucketSeries/1SeriesWith10000000Samples/1of10000000-8            200kB ± 0%     933kB ± 0%  +366.27%  (p=0.000 n=18+19)
+BucketSeries/1SeriesWith10000000Samples/100of10000000-8          200kB ± 0%     933kB ± 0%  +366.17%  (p=0.000 n=20+20)
+BucketSeries/1SeriesWith10000000Samples/10000000of10000000-8    46.8MB ± 0%    49.6MB ± 0%    +6.17%  (p=0.000 n=20+20)
+
+name                                                          old allocs/op  new allocs/op  delta
+BucketSeries/1000000SeriesWith1Samples/1of1000000-8              9.62k ± 0%     4.64k ± 0%   -51.75%  (p=0.000 n=20+19)
+BucketSeries/1000000SeriesWith1Samples/10of1000000-8             9.71k ± 1%     4.76k ± 0%   -50.96%  (p=0.000 n=20+20)
+BucketSeries/1000000SeriesWith1Samples/1000000of1000000-8        10.0M ± 0%     12.0M ± 0%   +19.77%  (p=0.000 n=20+20)
+BucketSeries/100000SeriesWith100Samples/1of10000000-8            1.08k ± 0%     0.69k ± 0%   -35.79%  (p=0.000 n=19+20)
+BucketSeries/100000SeriesWith100Samples/100of10000000-8          1.11k ± 0%     0.73k ± 0%   -33.88%  (p=0.000 n=20+20)
+BucketSeries/100000SeriesWith100Samples/10000000of10000000-8     1.00M ± 0%     1.20M ± 0%   +19.77%  (p=0.000 n=20+20)
+BucketSeries/1SeriesWith10000000Samples/1of10000000-8              282 ± 0%       281 ± 0%    -0.35%  (p=0.000 n=20+20)
+BucketSeries/1SeriesWith10000000Samples/100of10000000-8            282 ± 0%       281 ± 0%    -0.35%  (p=0.000 n=20+20)
+BucketSeries/1SeriesWith10000000Samples/10000000of10000000-8      168k ± 0%      168k ± 0%    +0.01%  (p=0.000 n=14+19)

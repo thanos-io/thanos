@@ -1,0 +1,118 @@
+Creating 250000 1-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries1000000SeriesWith1Samples2622420240/001/0
+Creating 250000 1-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries1000000SeriesWith1Samples2622420240/001/1
+Creating 250000 1-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries1000000SeriesWith1Samples2622420240/001/2
+Creating 250000 1-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries1000000SeriesWith1Samples2622420240/001/3
+goos: darwin
+goarch: arm64
+pkg: github.com/thanos-io/thanos/pkg/store
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1of1000000-8         	      33	  38468922 ns/op	54216549 B/op	    4651 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1of1000000-8         	      36	  38422035 ns/op	54222347 B/op	    4664 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1of1000000-8         	      34	  39076100 ns/op	54218485 B/op	    4646 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1of1000000-8         	      36	  41720426 ns/op	54216582 B/op	    4631 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1of1000000-8         	      25	  40784195 ns/op	54218978 B/op	    4631 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1of1000000-8         	      26	  42656335 ns/op	54233395 B/op	    4667 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1of1000000-8         	      36	  39284576 ns/op	54218737 B/op	    4639 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1of1000000-8         	      31	  38154102 ns/op	54221240 B/op	    4663 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1of1000000-8         	      36	  38519323 ns/op	54222043 B/op	    4663 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1of1000000-8         	      36	  38447377 ns/op	54226009 B/op	    4639 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/10of1000000-8        	      36	  39518868 ns/op	54237190 B/op	    4795 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/10of1000000-8        	      36	  38594781 ns/op	54229021 B/op	    4760 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/10of1000000-8        	      36	  38599314 ns/op	54231951 B/op	    4789 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/10of1000000-8        	      36	  38305781 ns/op	54230626 B/op	    4759 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/10of1000000-8        	      36	  38071051 ns/op	54234757 B/op	    4774 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/10of1000000-8        	      36	  38552247 ns/op	54224178 B/op	    4768 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/10of1000000-8        	      36	  38547818 ns/op	54224988 B/op	    4759 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/10of1000000-8        	      36	  38564723 ns/op	54217649 B/op	    4758 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/10of1000000-8        	      36	  38271696 ns/op	54224676 B/op	    4763 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/10of1000000-8        	      36	  38330414 ns/op	54231415 B/op	    4775 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1000000of1000000-8   	       3	 470476028 ns/op	860528093 B/op	12022223 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1000000of1000000-8   	       3	 481051250 ns/op	862594845 B/op	12022271 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1000000of1000000-8   	       3	 451291195 ns/op	859923509 B/op	12022149 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1000000of1000000-8   	       3	 458551000 ns/op	860000301 B/op	12022148 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1000000of1000000-8   	       3	 443938111 ns/op	860005146 B/op	12022011 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1000000of1000000-8   	       3	 460045903 ns/op	860575130 B/op	12022070 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1000000of1000000-8   	       3	 458485472 ns/op	860577701 B/op	12022176 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1000000of1000000-8   	       3	 475675778 ns/op	860764789 B/op	12022206 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1000000of1000000-8   	       3	 462119278 ns/op	860638400 B/op	12022234 allocs/op
+BenchmarkBucketSeries/1000000SeriesWith1Samples/1000000of1000000-8   	       3	 446812389 ns/op	859532042 B/op	12021988 allocs/op
+Creating 25000 25-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries100000SeriesWith100Samples2287858398/001/0
+Creating 25000 25-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries100000SeriesWith100Samples2287858398/001/1
+Creating 25000 25-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries100000SeriesWith100Samples2287858398/001/2
+Creating 25000 25-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries100000SeriesWith100Samples2287858398/001/3
+BenchmarkBucketSeries/100000SeriesWith100Samples/1of10000000-8       	     286	   4099416 ns/op	 5981294 B/op	     700 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/1of10000000-8       	     290	   4051805 ns/op	 5981039 B/op	     700 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/1of10000000-8       	     296	   4064498 ns/op	 5979929 B/op	     701 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/1of10000000-8       	     294	   4083997 ns/op	 5981235 B/op	     701 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/1of10000000-8       	     292	   4042392 ns/op	 5984566 B/op	     702 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/1of10000000-8       	     298	   4096748 ns/op	 5981262 B/op	     700 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/1of10000000-8       	     297	   4059958 ns/op	 5979840 B/op	     700 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/1of10000000-8       	     295	   4177995 ns/op	 5980613 B/op	     700 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/1of10000000-8       	     280	   4268943 ns/op	 5976294 B/op	     698 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/1of10000000-8       	     283	   4291869 ns/op	 5979446 B/op	     702 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/100of10000000-8     	     282	   4212471 ns/op	 5981547 B/op	     745 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/100of10000000-8     	     284	   4154355 ns/op	 5983911 B/op	     741 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/100of10000000-8     	     288	   4204996 ns/op	 5979774 B/op	     743 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/100of10000000-8     	     273	   4201951 ns/op	 5980496 B/op	     743 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/100of10000000-8     	     283	   4115234 ns/op	 5981998 B/op	     743 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/100of10000000-8     	     290	   4168489 ns/op	 5980139 B/op	     743 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/100of10000000-8     	     285	   4317083 ns/op	 5981567 B/op	     743 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/100of10000000-8     	     270	   4194303 ns/op	 5977676 B/op	     742 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/100of10000000-8     	     288	   4124776 ns/op	 5981475 B/op	     743 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/100of10000000-8     	     284	   4403375 ns/op	 5980513 B/op	     743 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/10000000of10000000-8         	      25	  46606990 ns/op	92149119 B/op	 1202958 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/10000000of10000000-8         	      25	  45808250 ns/op	92589206 B/op	 1202970 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/10000000of10000000-8         	      24	  46531790 ns/op	92571532 B/op	 1202970 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/10000000of10000000-8         	      24	  46515342 ns/op	92877761 B/op	 1202980 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/10000000of10000000-8         	      22	  45706515 ns/op	93267534 B/op	 1202981 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/10000000of10000000-8         	      22	  45733587 ns/op	93744795 B/op	 1203006 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/10000000of10000000-8         	      26	  45764942 ns/op	93253138 B/op	 1202988 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/10000000of10000000-8         	      27	  45380782 ns/op	92426599 B/op	 1202958 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/10000000of10000000-8         	      26	  45294668 ns/op	92817447 B/op	 1202970 allocs/op
+BenchmarkBucketSeries/100000SeriesWith100Samples/10000000of10000000-8         	      26	  44775011 ns/op	94099743 B/op	 1203031 allocs/op
+Creating 1 2500000-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries1SeriesWith10000000Samples1430298063/001/0
+Creating 1 2500000-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries1SeriesWith10000000Samples1430298063/001/1
+Creating 1 2500000-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries1SeriesWith10000000Samples1430298063/001/2
+Creating 1 2500000-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkBucketSeries1SeriesWith10000000Samples1430298063/001/3
+BenchmarkBucketSeries/1SeriesWith10000000Samples/1of10000000-8                	    5125	    227786 ns/op	  933385 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/1of10000000-8                	    5352	    225368 ns/op	  932014 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/1of10000000-8                	    5335	    224589 ns/op	  933453 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/1of10000000-8                	    5440	    222247 ns/op	  932566 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/1of10000000-8                	    5317	    224802 ns/op	  933197 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/1of10000000-8                	    5389	    226248 ns/op	  933511 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/1of10000000-8                	    5252	    224819 ns/op	  932982 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/1of10000000-8                	    5222	    220488 ns/op	  932687 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/1of10000000-8                	    5509	    223183 ns/op	  933238 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/1of10000000-8                	    5780	    224913 ns/op	  933576 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/100of10000000-8              	    5234	    229968 ns/op	  934017 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/100of10000000-8              	    5301	    222520 ns/op	  932937 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/100of10000000-8              	    5181	    226846 ns/op	  933391 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/100of10000000-8              	    4813	    223331 ns/op	  933423 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/100of10000000-8              	    5506	    226189 ns/op	  933011 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/100of10000000-8              	    5560	    227923 ns/op	  934010 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/100of10000000-8              	    5018	    225615 ns/op	  933471 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/100of10000000-8              	    5528	    227056 ns/op	  934319 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/100of10000000-8              	    5031	    228537 ns/op	  933789 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/100of10000000-8              	    5234	    229338 ns/op	  933759 B/op	     289 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/10000000of10000000-8         	      88	  13449152 ns/op	49638931 B/op	  167635 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/10000000of10000000-8         	      97	  13246747 ns/op	49647080 B/op	  167634 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/10000000of10000000-8         	      98	  13023990 ns/op	49644798 B/op	  167636 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/10000000of10000000-8         	      99	  13319343 ns/op	49641162 B/op	  167634 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/10000000of10000000-8         	      98	  12967776 ns/op	49644044 B/op	  167635 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/10000000of10000000-8         	      97	  12970601 ns/op	49645086 B/op	  167635 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/10000000of10000000-8         	      98	  13008833 ns/op	49646116 B/op	  167635 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/10000000of10000000-8         	      99	  12946428 ns/op	49643182 B/op	  167636 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/10000000of10000000-8         	      99	  12878111 ns/op	49647737 B/op	  167635 allocs/op
+BenchmarkBucketSeries/1SeriesWith10000000Samples/10000000of10000000-8         	      98	  12888386 ns/op	49644438 B/op	  167635 allocs/op
+PASS
+ok  	github.com/thanos-io/thanos/pkg/store	162.590s
+PASS
+ok  	github.com/thanos-io/thanos/pkg/store/cache	0.379s
+PASS
+ok  	github.com/thanos-io/thanos/pkg/store/cache/cachekey	0.233s
+?   	github.com/thanos-io/thanos/pkg/store/hintspb	[no test files]
+PASS
+ok  	github.com/thanos-io/thanos/pkg/store/labelpb	0.252s
+PASS
+ok  	github.com/thanos-io/thanos/pkg/store/storepb	0.324s
+?   	github.com/thanos-io/thanos/pkg/store/storepb/prompb	[no test files]
+?   	github.com/thanos-io/thanos/pkg/store/storepb/testutil	[no test files]
