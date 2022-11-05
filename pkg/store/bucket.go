@@ -1235,7 +1235,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					blk.meta.ULID.String(),
 					[]labels.Labels{blk.extLset},
 					onClose,
-					blockClient,
+					newSortedSeriesClient(blockClient, sortWithoutLabelSet),
 					shardMatcher,
 					false,
 					s.metrics.emptyPostingCount,
@@ -3035,24 +3035,32 @@ func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Bytes, error) {
 // sortedSeriesSet contains series whose labels are sorted
 // by moving ignoreLabelSet at the end.
 type sortedSeriesSet struct {
-	storepb.SeriesSet
+	grpc.ClientStream
+	upstream       storepb.Store_SeriesClient
 	ignoreLabelSet map[string]struct{}
 }
 
-func newSortedSeriesSet(seriesSet storepb.SeriesSet, ignoreLabelSet map[string]struct{}) storepb.SeriesSet {
+func newSortedSeriesClient(seriesClient storepb.Store_SeriesClient, ignoreLabelSet map[string]struct{}) storepb.Store_SeriesClient {
 	if len(ignoreLabelSet) == 0 {
-		return seriesSet
+		return seriesClient
 	}
 
 	return &sortedSeriesSet{
-		SeriesSet:      seriesSet,
+		upstream:       seriesClient,
 		ignoreLabelSet: ignoreLabelSet,
 	}
 }
 
-func (s *sortedSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
-	labelSet, chks := s.SeriesSet.At()
+func (s *sortedSeriesSet) Recv() (*storepb.SeriesResponse, error) {
+	resp, err := s.upstream.Recv()
+	if err != nil {
+		return nil, err
+	}
+	series := resp.GetSeries()
+	if series == nil {
+		return resp, nil
+	}
 
-	zlabels := labelpb.ZLabelsFromPromLabels(labelSet)
-	return labelpb.ZLabelsToPromLabels(stripLabels(zlabels, s.ignoreLabelSet)), chks
+	series.Labels = stripLabels(series.Labels, s.ignoreLabelSet)
+	return resp, nil
 }
