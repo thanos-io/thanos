@@ -818,6 +818,7 @@ type blockSeriesClient struct {
 	// Internal state.
 	i               int
 	postings        []storage.SeriesRef
+	chkMetas        []chunks.Meta
 	symbolizedLset  []symbolizedLabel
 	entries         []seriesEntry
 	batch           []*storepb.SeriesResponse
@@ -941,8 +942,7 @@ func (b *blockSeriesClient) nextBatch() error {
 	}
 
 	for i := 0; i < len(postingsBatch); i++ {
-		var chks []chunks.Meta
-		ok, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &chks, b.skipChunks, b.mint, b.maxt)
+		ok, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &b.chkMetas, b.skipChunks, b.mint, b.maxt)
 		if err != nil {
 			return errors.Wrap(err, "read series")
 		}
@@ -970,10 +970,10 @@ func (b *blockSeriesClient) nextBatch() error {
 		s := seriesEntry{}
 		// Schedule loading chunks.
 		s.lset = completeLabelset
-		s.refs = make([]chunks.ChunkRef, 0, len(chks))
-		s.chks = make([]storepb.AggrChunk, 0, len(chks))
+		s.refs = make([]chunks.ChunkRef, 0, len(b.chkMetas))
+		s.chks = make([]storepb.AggrChunk, 0, len(b.chkMetas))
 
-		for j, meta := range chks {
+		for j, meta := range b.chkMetas {
 			if err := b.chunkr.addLoad(meta.Ref, len(b.entries), j); err != nil {
 				return errors.Wrap(err, "add chunk load")
 			}
@@ -985,7 +985,7 @@ func (b *blockSeriesClient) nextBatch() error {
 		}
 
 		// Ensure sample limit through chunksLimiter if we return chunks.
-		if err := b.chunksLimiter.Reserve(uint64(len(chks))); err != nil {
+		if err := b.chunksLimiter.Reserve(uint64(len(b.chkMetas))); err != nil {
 			return errors.Wrap(err, "exceeded chunks limit")
 		}
 
