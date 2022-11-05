@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#5844](https://github.com/thanos-io/thanos/pull/5844) Query Frontend: Fixes @ modifier time range when splitting queries by interval.
+- [#5854](https://github.com/thanos-io/thanos/pull/5854) Query Frontend: Handles `lookback_delta` param in query frontend.
 
 ### Added
 
@@ -24,14 +25,16 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Changed
 
 - [#5716](https://github.com/thanos-io/thanos/pull/5716) DNS: Fix miekgdns resolver LookupSRV to work with CNAME records.
+- [#5846](https://github.com/thanos-io/thanos/pull/5846) Query Frontend: vertical query sharding supports subqueries.
 
 ### Removed
 
 - [#5824](https://github.com/thanos-io/thanos/pull/5824) Mixin: Remove noisy `ThanosReceiveTrafficBelowThreshold` alert.
 
-## [v0.29.0](https://github.com/thanos-io/thanos/tree/release-0.29) - Release in progress
+## [v0.29.0](https://github.com/thanos-io/thanos/tree/release-0.29) - 2022.11.03
 
 ### Fixed
+
 - [#5642](https://github.com/thanos-io/thanos/pull/5642) Receive: Log labels correctly in writer debug messages.
 - [#5655](https://github.com/thanos-io/thanos/pull/5655) Receive: Fix recreating already pruned tenants.
 - [#5702](https://github.com/thanos-io/thanos/pull/5702) Store: Upgrade minio-go/v7 to fix panic caused by leaked goroutines.
@@ -41,6 +44,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5799](https://github.com/thanos-io/thanos/pull/5799) Query Frontend: Fixed sharding behaviour for vector matches. Now queries with sharding should work properly where the query looks like: `foo and without (lbl) bar`.
 
 ### Added
+
 - [#5565](https://github.com/thanos-io/thanos/pull/5565) Receive: Allow remote write request limits to be defined per file and tenant (experimental).
 * [#5654](https://github.com/thanos-io/thanos/pull/5654) Query: add `--grpc-compression` flag that controls the compression used in gRPC client. With the flag it is now possible to compress the traffic between Query and StoreAPI nodes - you get lower network usage in exchange for a bit higher CPU/RAM usage.
 - [#5650](https://github.com/thanos-io/thanos/pull/5650) Query Frontend: Add sharded queries metrics. `thanos_frontend_sharding_middleware_queries_total` shows how many queries were sharded or not sharded.

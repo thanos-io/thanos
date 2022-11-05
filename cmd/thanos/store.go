@@ -200,6 +200,8 @@ func registerStore(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
+		conf.debugLogging = debugLogging
+
 		return runStore(g,
 			logger,
 			reg,
