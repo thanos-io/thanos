@@ -823,6 +823,7 @@ type blockSeriesClient struct {
 	entries         []seriesEntry
 	batch           []*storepb.SeriesResponse
 	hasMorePostings bool
+	batchSize       int
 }
 
 func newBlockSeriesClient(
@@ -856,8 +857,8 @@ func newBlockSeriesClient(
 		loadAggregates:     req.Aggregates,
 		shardMatcher:       shardMatcher,
 		calculateChunkHash: calculateChunkHash,
-		entries:            make([]seriesEntry, 0, batchSize),
 		hasMorePostings:    true,
+		batchSize:          batchSize,
 	}
 }
 
@@ -895,6 +896,11 @@ func (b *blockSeriesClient) ExpandPostings(
 	}
 
 	b.postings = ps
+	if b.batchSize > len(ps) {
+		b.batchSize = len(ps)
+	}
+	b.batch = make([]*storepb.SeriesResponse, 0, b.batchSize)
+	b.entries = make([]seriesEntry, 0, b.batchSize)
 	return nil
 }
 
