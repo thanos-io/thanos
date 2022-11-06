@@ -819,6 +819,7 @@ type blockSeriesClient struct {
 	i               int
 	postings        []storage.SeriesRef
 	chkMetas        []chunks.Meta
+	lset            labels.Labels
 	symbolizedLset  []symbolizedLabel
 	entries         []seriesEntry
 	hasMorePostings bool
@@ -946,6 +947,7 @@ func (b *blockSeriesClient) nextBatch() error {
 		return errors.Wrap(err, "preload series")
 	}
 
+	b.entries = b.entries[:0]
 	for i := 0; i < len(postingsBatch); i++ {
 		ok, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &b.chkMetas, b.skipChunks, b.mint, b.maxt)
 		if err != nil {
@@ -955,12 +957,11 @@ func (b *blockSeriesClient) nextBatch() error {
 			continue
 		}
 
-		var lset labels.Labels
-		if err := b.indexr.LookupLabelsSymbols(b.symbolizedLset, &lset); err != nil {
+		if err := b.indexr.LookupLabelsSymbols(b.symbolizedLset, &b.lset); err != nil {
 			return errors.Wrap(err, "Lookup labels symbols")
 		}
 
-		completeLabelset := labelpb.ExtendSortedLabels(lset, b.extLset)
+		completeLabelset := labelpb.ExtendSortedLabels(b.lset, b.extLset)
 		if !b.shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
