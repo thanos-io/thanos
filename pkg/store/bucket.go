@@ -821,7 +821,6 @@ type blockSeriesClient struct {
 	chkMetas        []chunks.Meta
 	symbolizedLset  []symbolizedLabel
 	entries         []seriesEntry
-	batch           []*storepb.SeriesResponse
 	hasMorePostings bool
 	batchSize       int
 }
@@ -899,26 +898,28 @@ func (b *blockSeriesClient) ExpandPostings(
 	if b.batchSize > len(ps) {
 		b.batchSize = len(ps)
 	}
-	b.batch = make([]*storepb.SeriesResponse, 0, b.batchSize)
 	b.entries = make([]seriesEntry, 0, b.batchSize)
 	return nil
 }
 
 func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
-	for len(b.batch) == 0 && b.hasMorePostings {
+	for len(b.entries) == 0 && b.hasMorePostings {
 		if err := b.nextBatch(); err != nil {
 			return nil, err
 		}
 	}
 
-	if len(b.batch) == 0 {
+	if len(b.entries) == 0 {
 		return nil, io.EOF
 	}
 
-	next := b.batch[0]
-	b.batch = b.batch[1:]
+	next := b.entries[0]
+	b.entries = b.entries[1:]
 
-	return next, nil
+	return storepb.NewSeriesResponse(&storepb.Series{
+		Labels: labelpb.ZLabelsFromPromLabels(next.lset),
+		Chunks: next.chks,
+	}), nil
 }
 
 func (b *blockSeriesClient) nextBatch() error {
@@ -936,8 +937,6 @@ func (b *blockSeriesClient) nextBatch() error {
 	}
 
 	b.entries = b.entries[:0]
-	b.batch = b.batch[:0]
-
 	b.indexr.reset()
 	if !b.skipChunks {
 		b.chunkr.reset()
@@ -966,16 +965,13 @@ func (b *blockSeriesClient) nextBatch() error {
 			continue
 		}
 
+		s := seriesEntry{lset: completeLabelset}
 		if b.skipChunks {
-			b.batch = append(b.batch, storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.ZLabelsFromPromLabels(completeLabelset),
-			}))
+			b.entries = append(b.entries, s)
 			continue
 		}
 
-		s := seriesEntry{}
 		// Schedule loading chunks.
-		s.lset = completeLabelset
 		s.refs = make([]chunks.ChunkRef, 0, len(b.chkMetas))
 		s.chks = make([]storepb.AggrChunk, 0, len(b.chkMetas))
 
@@ -1002,13 +998,6 @@ func (b *blockSeriesClient) nextBatch() error {
 		if err := b.chunkr.load(b.ctx, b.entries, b.loadAggregates, b.calculateChunkHash, b.bytesLimiter); err != nil {
 			return errors.Wrap(err, "load chunks")
 		}
-	}
-
-	for _, entry := range b.entries {
-		b.batch = append(b.batch, storepb.NewSeriesResponse(&storepb.Series{
-			Labels: labelpb.ZLabelsFromPromLabels(entry.lset),
-			Chunks: entry.chks,
-		}))
 	}
 
 	return nil
