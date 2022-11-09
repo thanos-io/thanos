@@ -70,7 +70,7 @@ One of the key principles of the architectural design was to construct the Thano
 
 This solution was elegant and relatively easy to support. The colocation data centers are sufficiently large to easily accommodate all the Thanos and Prometheus components.
 
-However, by late 2020 a shift in operating strategy for Medallia was to make use of public cloud providers such as Amazon Web Services (AWS) and Oracle Cloud Infrastructure (OCI). So, the POE team faced a new mandate – incorporate metrics generated within these virtual data centers into the global view.
+However, by late 2020 Medallia had expanded its strategy to make more use of public cloud providers such as Amazon Web Services (AWS) and Oracle Cloud Infrastructure (OCI). So, the POE team faced a new mandate – incorporate metrics generated within these virtual data centers into the global view.
 
 In general, these virtual data centers are small Kubernetes clusters, with compute nodes that are much smaller in terms of CPU and memory capacity than what we enjoy in the colocation data centers. Deploying the full complement of Thanos and Prometheus components in such an environment would require an unacceptably high percentage of capacity within those environments.
 
@@ -85,6 +85,8 @@ For the past two years, this hybrid solution – both federated queries and remo
 ### Architecture
 
 ![Giraffe Architecture](img/architecture.png)
+
+Note that the architecture diagram is representative, intended so show how it can, by design, easily be extended to all the major public clouds.
 
 ### Traffic and Data Size
 
