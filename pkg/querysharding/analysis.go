@@ -20,15 +20,6 @@ func nonShardableQuery() QueryAnalysis {
 	}
 }
 
-func newShardableByLabels(labels []string, by bool) QueryAnalysis {
-	labels = without(labels, excludedLabels)
-
-	return QueryAnalysis{
-		shardBy:        by,
-		shardingLabels: labels,
-	}
-}
-
 func (q *QueryAnalysis) scopeToLabels(labels []string, by bool) QueryAnalysis {
 	labels = without(labels, excludedLabels)
 
@@ -39,16 +30,29 @@ func (q *QueryAnalysis) scopeToLabels(labels []string, by bool) QueryAnalysis {
 		}
 	}
 
-	if by {
+	if q.shardBy && by {
 		return QueryAnalysis{
 			shardBy:        true,
 			shardingLabels: intersect(q.shardingLabels, labels),
 		}
 	}
 
+	if !q.shardBy && !by {
+		return QueryAnalysis{
+			shardBy:        false,
+			shardingLabels: union(q.shardingLabels, labels),
+		}
+	}
+
+	// If we are sharding by and without the same time,
+	// keep the sharding by labels that are not in the without labels set.
+	labelsBy, labelsWithout := q.shardingLabels, labels
+	if !q.shardBy {
+		labelsBy, labelsWithout = labelsWithout, labelsBy
+	}
 	return QueryAnalysis{
-		shardBy:        false,
-		shardingLabels: union(q.shardingLabels, labels),
+		shardBy:        true,
+		shardingLabels: without(labelsBy, labelsWithout),
 	}
 }
 

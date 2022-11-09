@@ -191,10 +191,7 @@ func newQueryRangeTripperware(
 	}
 
 	if numShards > 0 {
-		analyzer, err := querysharding.NewQueryAnalyzer()
-		if err != nil {
-			return nil, errors.Wrap(err, "create query analyzer")
-		}
+		analyzer := querysharding.NewQueryAnalyzer()
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			PromQLShardingMiddleware(analyzer, numShards, limits, codec, reg),
@@ -336,10 +333,7 @@ func newInstantQueryTripperware(
 	instantQueryMiddlewares := []queryrange.Middleware{}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 	if numShards > 0 {
-		analyzer, err := querysharding.NewQueryAnalyzer()
-		if err != nil {
-			return nil, errors.Wrap(err, "create query analyzer")
-		}
+		analyzer := querysharding.NewQueryAnalyzer()
 		instantQueryMiddlewares = append(
 			instantQueryMiddlewares,
 			queryrange.InstrumentMiddleware("sharding", m),
