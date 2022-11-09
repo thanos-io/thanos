@@ -96,7 +96,7 @@ The following screenshots from our dashboards about the query pipeline show how 
 ![Grafana Request Duration](/assets/blog/2022-09-08/grafana-request-duration.png)
 
 ### Instant queries, as perceived by the global-scoped Thanos Query (includes Thanos Ruler queries):
-![Instant Query Latency](/assets/blog/2022-09-08/instance-query-latency.png)
+![Instant Query Latency](/assets/blog/2022-09-08/instant-query-latency.png)
 
 ### Range queries, as perceived by the global-scoped Thanos Query:
 ![Range Query Latency](/assets/blog/2022-09-08/range-query-latency.png)
