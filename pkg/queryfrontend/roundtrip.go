@@ -70,16 +70,13 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 	if err != nil {
 		return nil, err
 	}
-	queryInstantTripperware, err := newInstantQueryTripperware(
+	queryInstantTripperware := newInstantQueryTripperware(
 		config.NumShards,
 		queryRangeLimits,
 		queryInstantCodec,
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_instant"}, reg),
 		config.ForwardHeaders,
 	)
-	if err != nil {
-		return nil, err
-	}
 	return func(next http.RoundTripper) http.RoundTripper {
 		return newRoundTripper(next, queryRangeTripperware(next), labelsTripperware(next), queryInstantTripperware(next), reg)
 	}, nil
@@ -329,7 +326,7 @@ func newInstantQueryTripperware(
 	codec queryrange.Codec,
 	reg prometheus.Registerer,
 	forwardHeaders []string,
-) (queryrange.Tripperware, error) {
+) queryrange.Tripperware {
 	instantQueryMiddlewares := []queryrange.Middleware{}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 	if numShards > 0 {
@@ -346,7 +343,7 @@ func newInstantQueryTripperware(
 		return queryrange.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			return rt.RoundTrip(r)
 		})
-	}, nil
+	}
 }
 
 // shouldCache controls what kind of Thanos request should be cached.
