@@ -65,7 +65,7 @@ To solve these two issues, we decided to experiment with deploying Prometheus in
 For the past two years, this hybrid solution – both federated queries and remote-write – has met our needs very well. We are fully committed to Prometheus-based dashboards and alerting. Strategically, at this point, our ongoing focus will be to minimize total cost of ownership both in terms of labor and compute resources.
 # Our Setup
 ## Architecture
-![Giraffe Architecture](/assets/blog/2022-09-08/architecture.png)
+![Giraffe Architecture](/docs/blog/architecture.png)
 ## Traffic and Data Size
 As mentioned earlier, at any given moment in time, the current number of active series is in the ballpark of 1 Billion, with our ingestion throughput at approximately 15 million samples per second due to our once-per-minute scrape frequency. We retain samples for 366 days – long enough to accommodate a full leap year.
 
@@ -93,16 +93,16 @@ Over the course of a week, total resource utilization for all of our Thanos and 
 The following screenshots from our dashboards about the query pipeline show how query performance varies in a typical week.
 
 ### As perceived by Grafana:
-![Grafana Request Duration](/assets/blog/2022-09-08/grafana-request-duration.png)
+![Grafana Request Duration](/docs/blog/grafana-request-duration.png)
 
 ### Instant queries, as perceived by the global-scoped Thanos Query (includes Thanos Ruler queries):
-![Instant Query Latency](/assets/blog/2022-09-08/instant-query-latency.png)
+![Instant Query Latency](/docs/blog//instant-query-latency.png)
 
 ### Range queries, as perceived by the global-scoped Thanos Query:
-![Range Query Latency](/assets/blog/2022-09-08/range-query-latency.png)
+![Range Query Latency](/docs/blog/range-query-latency.png)
 
 A trace showing the large number of components involved in serving a query across multiple data centers:
-![Query Trace](/assets/blog/2022-09-08/query-trace.png)
+![Query Trace](/docs/blog/query-trace.png)
 # Future Steps - the next chapter
 ## Current issues
 The hybrid architecture has given us the flexibility that we needed to scale our solution organically and to meet our needs as we encountered them. But, the solution requires understanding, maintaining, and integrating two different architectures, with all their nuances. From both a technical and a human perspective, we recognize that simplicity is a key to our ability to scale our observability solutions cost-effectively as the business continues to grow rapidly.
