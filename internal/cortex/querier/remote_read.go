@@ -9,6 +9,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/ingester/client"
@@ -85,7 +86,7 @@ func seriesSetToQueryResponse(s storage.SeriesSet) (*client.QueryResponse, error
 		series := s.At()
 		samples := []cortexpb.Sample{}
 		it := series.Iterator()
-		for it.Next() {
+		for it.Next() != chunkenc.ValNone {
 			t, v := it.At()
 			samples = append(samples, cortexpb.Sample{
 				TimestampMs: t,

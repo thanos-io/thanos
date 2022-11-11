@@ -10,6 +10,7 @@ import (
 	"os"
 
 	trace "cloud.google.com/go/trace/apiv1"
+	pb "cloud.google.com/go/trace/apiv1/tracepb"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/googleapis/gax-go"
@@ -17,7 +18,6 @@ import (
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/version"
-	pb "google.golang.org/genproto/googleapis/devtools/cloudtrace/v1"
 
 	"github.com/thanos-io/thanos/pkg/tracing"
 )

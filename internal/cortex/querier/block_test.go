@@ -81,7 +81,7 @@ func TestBlockQuerierSeries(t *testing.T) {
 			sampleIx := 0
 
 			it := series.Iterator()
-			for it.Next() {
+			for it.Next() != chunkenc.ValNone {
 				ts, val := it.At()
 				require.True(t, sampleIx < len(testData.expectedSamples))
 				assert.Equal(t, int64(testData.expectedSamples[sampleIx].Timestamp), ts)
@@ -211,7 +211,7 @@ func verifyNextSeries(t *testing.T, ss storage.SeriesSet, labels labels.Labels, 
 
 	prevTS := int64(0)
 	count := 0
-	for it := s.Iterator(); it.Next(); {
+	for it := s.Iterator(); it.Next() != chunkenc.ValNone; {
 		count++
 		ts, v := it.At()
 		require.Equal(t, math.Sin(float64(ts)), v)
@@ -336,7 +336,7 @@ func Benchmark_blockQuerierSeriesSet_iteration(b *testing.B) {
 		set := blockQuerierSeriesSet{series: series}
 
 		for set.Next() {
-			for t := set.At().Iterator(); t.Next(); {
+			for t := set.At().Iterator(); t.Next() != chunkenc.ValNone; {
 				t.At()
 			}
 		}

@@ -156,7 +156,7 @@ type sample struct {
 }
 
 func expandChunk(cit chunkenc.Iterator) (res []sample) {
-	for cit.Next() {
+	for cit.Next() != chunkenc.ValNone {
 		t, v := cit.At()
 		res = append(res, sample{t, v})
 	}
