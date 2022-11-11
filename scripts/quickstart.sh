@@ -260,7 +260,7 @@ QUERIER_JAEGER_CONFIG=$(
 
 REMOTE_WRITE_FLAGS=""
 if [ -n "${STATELESS_RULER_ENABLED}" ]; then
-  cat > data/rule-remote-write.yaml <<-EOF
+  cat >data/rule-remote-write.yaml <<-EOF
   remote_write:
   - url: "http://localhost:10908/api/v1/receive"
     name: "receive-0"
