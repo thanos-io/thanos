@@ -380,7 +380,7 @@ func BenchmarkTransformWithAndWithoutCopy(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			ReAllocZLabelsStrings(&lbls)
+			ReAllocZLabelsStrings(&lbls, make(map[string]string))
 			ret = ZLabelsToPromLabels(lbls)
 		}
 	})

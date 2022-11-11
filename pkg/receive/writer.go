@@ -72,8 +72,9 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	getRef := app.(storage.GetRef)
 
 	var (
-		ref  storage.SeriesRef
-		errs errutil.MultiError
+		ref       storage.SeriesRef
+		errs      errutil.MultiError
+		internMap = make(map[string]string)
 	)
 	for _, t := range wreq.Timeseries {
 		// Check if time series labels are valid. If not, skip the time series
@@ -104,7 +105,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
-			labelpb.ReAllocZLabelsStrings(&t.Labels)
+			labelpb.ReAllocZLabelsStrings(&t.Labels, internMap)
 			lset = labelpb.ZLabelsToPromLabels(t.Labels)
 		}
 

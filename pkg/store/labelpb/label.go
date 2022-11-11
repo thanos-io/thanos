@@ -50,12 +50,34 @@ func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 }
 
 // ReAllocZLabelsStrings re-allocates all underlying bytes for string, detaching it from bigger memory pool.
-func ReAllocZLabelsStrings(lset *[]ZLabel) {
+// It also takes a 'cache' argument, which is custom map type labelInterningMap. This map is used to do string
+// interning, i.e. reusing already allocated strings, to make the reallocation method more efficient.
+//
+// Due to the charaterstics of this method described above, it should be used with care and only
+// for immutable label sets. This is primarily intended to be used before labels are written into TSDB
+// which can hold label strings in the memory long term.
+func ReAllocZLabelsStrings(lset *[]ZLabel, cache labelInterningMap) {
 	for j, l := range *lset {
-		// NOTE: This trick converts from string to byte without copy, but copy when creating string.
-		(*lset)[j].Name = string(noAllocBytes(l.Name))
-		(*lset)[j].Value = string(noAllocBytes(l.Value))
+		(*lset)[j].Name = cache.internOrReallocateString(l.Name)
+		(*lset)[j].Value = cache.internOrReallocateString(l.Value)
 	}
+}
+
+// labelInterningMap is type to enable string interning for labels.
+type labelInterningMap map[string]string
+
+// internOrReallocateString is a method that checks the interning map
+// for an existing (cached) string. If it exists, the interned string is
+// returned. If not, a new string is allocated and cached in the map.
+func (l labelInterningMap) internOrReallocateString(s string) string {
+	interned, ok := l[s]
+	if ok {
+		return interned
+	}
+
+	reAllocStr := string(noAllocBytes(s))
+	l[reAllocStr] = reAllocStr
+	return reAllocStr
 }
 
 // LabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.
