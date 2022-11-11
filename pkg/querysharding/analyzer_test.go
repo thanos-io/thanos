@@ -163,6 +163,11 @@ sum by (container) (
 			expression:     `label_join(sum by (pod) (label_join(metric, "dst_label", ",", "src_label")), "dst_label1", ",", "dst_label")`,
 			shardingLabels: []string{"pod"},
 		},
+		{
+			name:           "complex query with label_replace, binary expr and aggregations on dynamic label",
+			expression:     `sum(sum_over_time(container_memory_working_set_bytes{container_name!="POD",container_name!="",namespace="kube-system"}[1d:5m])) by (instance, cluster) / avg(label_replace(sum(sum_over_time(kube_node_status_capacity_memory_bytes[1d:5m])) by (node, cluster), "instance", "$1", "node", "(.*)")) by (instance, cluster)`,
+			shardingLabels: []string{"cluster"},
+		},
 	}
 
 	shardableWithoutLabels := []testCase{
