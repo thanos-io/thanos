@@ -5,6 +5,7 @@ package batch
 
 import (
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/thanos-io/thanos/internal/cortex/chunk"
@@ -84,22 +85,23 @@ func newIteratorAdapter(underlying iterator) chunkenc.Iterator {
 	}
 }
 
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
 // Seek implements chunkenc.Iterator.
-func (a *iteratorAdapter) Seek(t int64) bool {
+func (a *iteratorAdapter) Seek(t int64) chunkenc.ValueType {
 
 	// Optimisation: fulfill the seek using current batch if possible.
 	if a.curr.Length > 0 && a.curr.Index < a.curr.Length {
 		if t <= a.curr.Timestamps[a.curr.Index] {
 			//In this case, the interface's requirement is met, so state of this
 			//iterator does not need any change.
-			return true
+			return chunkenc.ValFloat
 		} else if t <= a.curr.Timestamps[a.curr.Length-1] {
 			//In this case, some timestamp between current sample and end of batch can fulfill
 			//the seek. Let's find it.
 			for a.curr.Index < a.curr.Length && t > a.curr.Timestamps[a.curr.Index] {
 				a.curr.Index++
 			}
-			return true
+			return chunkenc.ValFloat
 		}
 	}
 
@@ -107,13 +109,15 @@ func (a *iteratorAdapter) Seek(t int64) bool {
 	a.batchSize = 1
 	if a.underlying.Seek(t, a.batchSize) {
 		a.curr = a.underlying.Batch()
-		return a.curr.Index < a.curr.Length
+		if a.curr.Index < a.curr.Length {
+			return chunkenc.ValFloat
+		}
 	}
-	return false
+	return chunkenc.ValNone
 }
 
 // Next implements chunkenc.Iterator.
-func (a *iteratorAdapter) Next() bool {
+func (a *iteratorAdapter) Next() chunkenc.ValueType {
 	a.curr.Index++
 	for a.curr.Index >= a.curr.Length && a.underlying.Next(a.batchSize) {
 		a.curr = a.underlying.Batch()
@@ -122,12 +126,30 @@ func (a *iteratorAdapter) Next() bool {
 			a.batchSize = promchunk.BatchSize
 		}
 	}
-	return a.curr.Index < a.curr.Length
+
+	if a.curr.Index < a.curr.Length {
+		return chunkenc.ValFloat
+	}
+
+	return chunkenc.ValNone
 }
 
 // At implements chunkenc.Iterator.
 func (a *iteratorAdapter) At() (int64, float64) {
 	return a.curr.Timestamps[a.curr.Index], a.curr.Values[a.curr.Index]
+}
+
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (a *iteratorAdapter) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (a *iteratorAdapter) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (a *iteratorAdapter) AtT() int64 {
+	return a.curr.Timestamps[a.curr.Index]
 }
 
 // Err implements chunkenc.Iterator.

@@ -1484,7 +1484,7 @@ func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 
 			j := 0
 			iter := c.Iterator(nil)
-			for iter.Next() {
+			for iter.Next() != chunkenc.ValNone {
 				testutil.Assert(t, j < len(expected[i].chunks[k]), "more samples than expected for %v chunk %d", series.Labels, k)
 
 				tv, v := iter.At()

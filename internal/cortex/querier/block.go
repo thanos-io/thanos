@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -142,17 +143,18 @@ type blockQuerierSeriesIterator struct {
 	lastT     int64
 }
 
-func (it *blockQuerierSeriesIterator) Seek(t int64) bool {
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
+func (it *blockQuerierSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	// We generally expect the chunks already to be cut down
 	// to the range we are interested in. There's not much to be gained from
 	// hopping across chunks so we just call next until we reach t.
 	for {
 		ct, _ := it.At()
 		if ct >= t {
-			return true
+			return chunkenc.ValFloat
 		}
-		if !it.Next() {
-			return false
+		if it.Next() == chunkenc.ValNone {
+			return chunkenc.ValNone
 		}
 	}
 }
@@ -167,30 +169,44 @@ func (it *blockQuerierSeriesIterator) At() (int64, float64) {
 	return t, v
 }
 
-func (it *blockQuerierSeriesIterator) Next() bool {
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (it *blockQuerierSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (it *blockQuerierSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (it *blockQuerierSeriesIterator) AtT() int64 {
+	t, _ := it.At()
+	return t
+}
+
+func (it *blockQuerierSeriesIterator) Next() chunkenc.ValueType {
 	if it.i >= len(it.iterators) {
-		return false
+		return chunkenc.ValNone
 	}
 
-	if it.iterators[it.i].Next() {
-		return true
+	if valueType := it.iterators[it.i].Next(); valueType != chunkenc.ValNone {
+		return valueType
 	}
 	if it.iterators[it.i].Err() != nil {
-		return false
+		return chunkenc.ValNone
 	}
 
 	for {
 		it.i++
 
 		if it.i >= len(it.iterators) {
-			return false
+			return chunkenc.ValNone
 		}
 
 		// we must advance iterator first, to see if it has any samples.
 		// Seek will call At() as its first operation.
-		if !it.iterators[it.i].Next() {
+		if it.iterators[it.i].Next() == chunkenc.ValNone {
 			if it.iterators[it.i].Err() != nil {
-				return false
+				return chunkenc.ValNone
 			}
 
 			// Found empty iterator without error, skip it.
