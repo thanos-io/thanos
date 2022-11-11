@@ -139,7 +139,7 @@ sum by (container) (
 		},
 		{
 			name:           "ignore vector matching with 2 aggregations",
-			expression:     `sum(rate(node_cpu_seconds_total[3h]offset 1m)) by (cluster_id, mode) / ignoring(mode) group_left sum(rate(node_cpu_seconds_total[3h]offset 1m)) by (cluster_id)`,
+			expression:     `sum(rate(node_cpu_seconds_total[3h])) by (cluster_id, mode) / ignoring(mode) group_left sum(rate(node_cpu_seconds_total[3h])) by (cluster_id)`,
 			shardingLabels: []string{"cluster_id"},
 		},
 	}
