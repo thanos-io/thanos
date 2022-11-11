@@ -276,6 +276,9 @@ replace (
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
 
+	// Until https://github.com/weaveworks/common/pull/262 is merged
+	github.com/weaveworks/common => github.com/rabenhorst/common v0.0.0-20221114111857-9eb1f146696e
+
 	// Override due to https://github.com/weaveworks/common/issues/239
 	google.golang.org/grpc => google.golang.org/grpc v1.45.0
 

@@ -139,7 +139,6 @@ func registerProbes(mux *http.ServeMux, p *prober.HTTPProbe, logger log.Logger) 
 	}
 }
 
-// Helper for exporter toolkit FlagConfig.
 func ofBool(i bool) *bool {
 	return &i
 }
