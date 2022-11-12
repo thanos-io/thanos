@@ -142,6 +142,7 @@ type bucketStoreMetrics struct {
 
 	seriesFetchDuration   prometheus.Histogram
 	postingsFetchDuration prometheus.Histogram
+	chunkFetchDuration    prometheus.Histogram
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
@@ -273,6 +274,12 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	m.postingsFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Name:    "thanos_bucket_store_cached_postings_fetch_duration_seconds",
 		Help:    "The time it takes to fetch postings to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses.",
+		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+	})
+
+	m.chunkFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_chunks_fetch_duration_seconds",
+		Help:    "The total time spent fetching chunks within a single request a store gateway.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
 
@@ -814,6 +821,7 @@ type blockSeriesClient struct {
 	skipChunks         bool
 	shardMatcher       *storepb.ShardMatcher
 	calculateChunkHash bool
+	chunkFetchDuration prometheus.Histogram
 
 	// Internal state.
 	i               int
@@ -836,6 +844,7 @@ func newBlockSeriesClient(
 	shardMatcher *storepb.ShardMatcher,
 	calculateChunkHash bool,
 	batchSize int,
+	chunkFetchDuration prometheus.Histogram,
 ) *blockSeriesClient {
 	var chunkr *bucketChunkReader
 	if !req.SkipChunks {
@@ -843,16 +852,17 @@ func newBlockSeriesClient(
 	}
 
 	return &blockSeriesClient{
-		ctx:           ctx,
-		logger:        logger,
-		extLset:       b.extLset,
-		mint:          req.MinTime,
-		maxt:          req.MaxTime,
-		indexr:        b.indexReader(),
-		chunkr:        chunkr,
-		chunksLimiter: limiter,
-		bytesLimiter:  bytesLimiter,
-		skipChunks:    req.SkipChunks,
+		ctx:                ctx,
+		logger:             logger,
+		extLset:            b.extLset,
+		mint:               req.MinTime,
+		maxt:               req.MaxTime,
+		indexr:             b.indexReader(),
+		chunkr:             chunkr,
+		chunksLimiter:      limiter,
+		bytesLimiter:       bytesLimiter,
+		skipChunks:         req.SkipChunks,
+		chunkFetchDuration: chunkFetchDuration,
 
 		loadAggregates:     req.Aggregates,
 		shardMatcher:       shardMatcher,
@@ -911,6 +921,9 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 	}
 
 	if len(b.entries) == 0 {
+		if b.chunkr != nil {
+			b.chunkFetchDuration.Observe(float64(b.chunkr.stats.ChunksFetchDurationSum))
+		}
 		return nil, io.EOF
 	}
 
@@ -1201,6 +1214,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				shardMatcher,
 				s.enableChunkHashCalculation,
 				s.seriesBatchSize,
+				s.metrics.chunkFetchDuration,
 			)
 			defer blockClient.Close()
 
@@ -1445,7 +1459,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize)
+				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
 
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
@@ -1619,7 +1633,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize)
+				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
 
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
