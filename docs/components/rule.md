@@ -311,6 +311,12 @@ Flags:
                                  prefix for the regular Alertmanager API path.
       --data-dir="data/"         data directory
       --eval-interval=1m         The default evaluation interval to use.
+      --for-grace-period=10m     Minimum duration between alert and restored
+                                 "for" state. This is maintained only for alerts
+                                 with configured "for" time greater than grace
+                                 period.
+      --for-outage-tolerance=1h  Max time to tolerate prometheus outage for
+                                 restoring "for" state of alert.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -385,6 +391,9 @@ Flags:
                                  https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
+      --query.default-step=1s    Default range query step to use. This is
+                                 only used in stateless Ruler and alert state
+                                 restoration.
       --query.http-method=POST   HTTP method to use when sending queries.
                                  Possible options: [GET, POST]
       --query.sd-dns-interval=30s
@@ -429,6 +438,10 @@ Flags:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --resend-delay=1m          Minimum amount of time to wait before resending
                                  an alert to Alertmanager.
+      --restore-ignored-label=RESTORE-IGNORED-LABEL ...
+                                 Label names to be ignored when restoring alerts
+                                 from the remote storage. This is only used in
+                                 stateless mode.
       --rule-file=rules/ ...     Rule files that should be used by rule
                                  manager. Can be in glob format (repeated).
                                  Note that rules are not automatically detected,

@@ -31,16 +31,14 @@ var nonShardableFuncs = []string{
 }
 
 // NewQueryAnalyzer creates a new QueryAnalyzer.
-func NewQueryAnalyzer() (*CachedQueryAnalyzer, error) {
-	cache, err := lru.New(256)
-	if err != nil {
-		return nil, err
-	}
-
+func NewQueryAnalyzer() *CachedQueryAnalyzer {
+	// Ignore the error check since it throws error
+	// only if size is <= 0.
+	cache, _ := lru.New(256)
 	return &CachedQueryAnalyzer{
 		analyzer: &QueryAnalyzer{},
 		cache:    cache,
-	}, nil
+	}
 }
 
 type cachedValue struct {
@@ -70,10 +68,7 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 // Analyze uses the following algorithm:
 //   - if a query has subqueries, such as label_join or label_replace,
 //     or has functions which cannot be sharded, then treat the query as non shardable.
-//   - if the query's root expression has grouping labels,
-//     then treat the query as shardable by those labels.
-//   - if the query's root expression has no grouping labels,
-//     then walk the query and find the least common labelset
+//   - Walk the query and find the least common labelset
 //     used in grouping expressions. If non-empty, treat the query
 //     as shardable by those labels.
 //   - otherwise, treat the query as non-shardable.
@@ -117,33 +112,7 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 		return nonShardableQuery(), nil
 	}
 
-	rootAnalysis := analyzeRootExpression(expr)
-	if rootAnalysis.IsShardable() && rootAnalysis.shardBy {
-		return rootAnalysis, nil
-	}
-
 	return analysis, nil
-}
-
-func analyzeRootExpression(node parser.Node) QueryAnalysis {
-	switch n := node.(type) {
-	case *parser.BinaryExpr:
-		if n.VectorMatching != nil && n.VectorMatching.On {
-			shardingLabels := without(n.VectorMatching.MatchingLabels, []string{"le"})
-			return newShardableByLabels(shardingLabels, n.VectorMatching.On)
-		} else {
-			return nonShardableQuery()
-		}
-	case *parser.AggregateExpr:
-		if len(n.Grouping) == 0 {
-			return nonShardableQuery()
-		}
-
-		shardingLabels := without(n.Grouping, []string{"le"})
-		return newShardableByLabels(shardingLabels, !n.Without)
-	}
-
-	return nonShardableQuery()
 }
 
 func contains(needle string, haystack []string) bool {
