@@ -52,6 +52,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/metadata"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/queryprojection"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -72,7 +73,6 @@ const (
 	Step                     = "step"
 	Stats                    = "stats"
 	ShardInfoParam           = "shard_info"
-	ProjectionInfoParam      = "projection_info"
 	LookbackDeltaParam       = "lookback_delta"
 )
 
@@ -109,6 +109,8 @@ type QueryAPI struct {
 	queryRangeHist prometheus.Histogram
 
 	seriesStatsAggregator seriesQueryPerformanceMetricsAggregator
+
+	projectionAnalyzer queryprojection.Analyzer
 }
 
 type seriesQueryPerformanceMetricsAggregator interface {
@@ -143,6 +145,7 @@ func NewQueryAPI(
 	gate gate.Gate,
 	statsAggregator seriesQueryPerformanceMetricsAggregator,
 	reg *prometheus.Registry,
+	projectionAnalyzer queryprojection.Analyzer,
 ) *QueryAPI {
 	if statsAggregator == nil {
 		statsAggregator = &store.NoopSeriesStatsAggregator{}
@@ -172,6 +175,7 @@ func NewQueryAPI(
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
 		disableCORS:                            disableCORS,
 		seriesStatsAggregator:                  statsAggregator,
+		projectionAnalyzer:                     projectionAnalyzer,
 
 		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "thanos_query_range_requested_timespan_duration_seconds",
@@ -346,24 +350,6 @@ func (qapi *QueryAPI) parseShardInfo(r *http.Request) (*storepb.ShardInfo, *api.
 	return &info, nil
 }
 
-func (qapi *QueryAPI) parseProjectionInfo(r *http.Request) (*storepb.ProjectionInfo, *api.ApiError) {
-	data := r.FormValue(ProjectionInfoParam)
-	if data == "" {
-		return nil, nil
-	}
-
-	if len(data) == 0 {
-		return nil, nil
-	}
-
-	var info storepb.ProjectionInfo
-	if err := json.Unmarshal([]byte(data), &info); err != nil {
-		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "could not unmarshal parameter %s", ProjectionInfoParam)}
-	}
-
-	return &info, nil
-}
-
 func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
 	ts, err := parseTimeParam(r, "time", qapi.baseAPI.Now())
 	if err != nil {
@@ -412,11 +398,6 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr, func() {}
 	}
 
-	projectionInfo, apiErr := qapi.parseProjectionInfo(r)
-	if apiErr != nil {
-		return nil, nil, apiErr, func() {}
-	}
-
 	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
 	// Get custom lookback delta from request.
 	lookbackDeltaFromReq, apiErr := qapi.parseLookbackDeltaParam(r)
@@ -430,6 +411,17 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
+
+	q := r.FormValue("query")
+	var projectionInfo *storepb.ProjectionInfo
+	analysis, err := qapi.projectionAnalyzer.Analyze(q)
+	if err == nil {
+		projectionInfo = &storepb.ProjectionInfo{
+			Grouping: analysis.Grouping(),
+			By:       analysis.By(),
+			Labels:   analysis.Labels(),
+		}
+	}
 
 	var seriesStats []storepb.SeriesStatsCounter
 	qry, err := qapi.queryEngine.NewInstantQuery(
@@ -446,7 +438,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			projectionInfo,
 		),
 		&promql.QueryOpts{LookbackDelta: lookbackDelta},
-		r.FormValue("query"),
+		q,
 		ts,
 	)
 
@@ -566,11 +558,6 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr, func() {}
 	}
 
-	projectionInfo, apiErr := qapi.parseProjectionInfo(r)
-	if apiErr != nil {
-		return nil, nil, apiErr, func() {}
-	}
-
 	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
 	// Get custom lookback delta from request.
 	lookbackDeltaFromReq, apiErr := qapi.parseLookbackDeltaParam(r)
@@ -588,6 +575,17 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
+	q := r.FormValue("query")
+	var projectionInfo *storepb.ProjectionInfo
+	analysis, err := qapi.projectionAnalyzer.Analyze(q)
+	if err == nil {
+		projectionInfo = &storepb.ProjectionInfo{
+			Grouping: analysis.Grouping(),
+			By:       analysis.By(),
+			Labels:   analysis.Labels(),
+		}
+	}
+
 	var seriesStats []storepb.SeriesStatsCounter
 	qry, err := qapi.queryEngine.NewRangeQuery(
 		qapi.queryableCreate(
@@ -603,7 +601,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			projectionInfo,
 		),
 		&promql.QueryOpts{LookbackDelta: lookbackDelta},
-		r.FormValue("query"),
+		q,
 		start,
 		end,
 		step,

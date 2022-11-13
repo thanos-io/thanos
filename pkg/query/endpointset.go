@@ -797,6 +797,17 @@ func (er *endpointRef) SupportsSharding() bool {
 	return er.metadata.Store.SupportsSharding
 }
 
+func (er *endpointRef) SupportsProjection() bool {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	if er.metadata == nil || er.metadata.Store == nil {
+		return false
+	}
+
+	return er.metadata.Store.SupportsProjection
+}
+
 func (er *endpointRef) SendsSortedSeries() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()

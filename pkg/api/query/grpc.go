@@ -9,11 +9,14 @@ import (
 
 	"github.com/prometheus/prometheus/promql"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
+	"google.golang.org/grpc"
+
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/queryprojection"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"google.golang.org/grpc"
 )
 
 type GRPCAPI struct {
@@ -23,6 +26,7 @@ type GRPCAPI struct {
 	queryEngine                 v1.QueryEngine
 	lookbackDeltaCreate         func(int64) time.Duration
 	defaultMaxResolutionSeconds time.Duration
+	projectionAnalyzer          queryprojection.Analyzer
 }
 
 func NewGRPCAPI(
@@ -32,6 +36,7 @@ func NewGRPCAPI(
 	queryEngine v1.QueryEngine,
 	lookbackDeltaCreate func(int64) time.Duration,
 	defaultMaxResolutionSeconds time.Duration,
+	projectionAnalyzer queryprojection.Analyzer,
 ) *GRPCAPI {
 	return &GRPCAPI{
 		now:                         now,
@@ -40,6 +45,7 @@ func NewGRPCAPI(
 		queryEngine:                 queryEngine,
 		lookbackDeltaCreate:         lookbackDeltaCreate,
 		defaultMaxResolutionSeconds: defaultMaxResolutionSeconds,
+		projectionAnalyzer:          projectionAnalyzer,
 	}
 }
 
@@ -85,6 +91,16 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		replicaLabels = request.ReplicaLabels
 	}
 
+	var projectionInfo *storepb.ProjectionInfo
+	analysis, err := g.projectionAnalyzer.Analyze(request.Query)
+	if err == nil {
+		projectionInfo = &storepb.ProjectionInfo{
+			Grouping: analysis.Grouping(),
+			By:       analysis.By(),
+			Labels:   analysis.Labels(),
+		}
+	}
+
 	queryable := g.queryableCreate(
 		request.EnableDedup,
 		replicaLabels,
@@ -95,7 +111,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		false,
 		request.ShardInfo,
 		query.NoopSeriesStatsReporter,
-		request.ProjectionInfo,
+		projectionInfo,
 	)
 	qry, err := g.queryEngine.NewInstantQuery(queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, ts)
 	if err != nil {
@@ -161,6 +177,16 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		replicaLabels = request.ReplicaLabels
 	}
 
+	var projectionInfo *storepb.ProjectionInfo
+	analysis, err := g.projectionAnalyzer.Analyze(request.Query)
+	if err == nil {
+		projectionInfo = &storepb.ProjectionInfo{
+			Grouping: analysis.Grouping(),
+			By:       analysis.By(),
+			Labels:   analysis.Labels(),
+		}
+	}
+
 	queryable := g.queryableCreate(
 		request.EnableDedup,
 		replicaLabels,
@@ -171,7 +197,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		false,
 		request.ShardInfo,
 		query.NoopSeriesStatsReporter,
-		request.ProjectionInfo,
+		projectionInfo,
 	)
 
 	startTime := time.Unix(request.StartTimeSeconds, 0)

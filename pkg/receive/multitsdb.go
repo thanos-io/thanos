@@ -129,6 +129,10 @@ func (l *localClient) SupportsSharding() bool {
 	return true
 }
 
+func (l *localClient) SupportsProjection() bool {
+	return true
+}
+
 func (l *localClient) SendsSortedSeries() bool {
 	return true
 }

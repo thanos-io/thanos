@@ -657,6 +657,10 @@ func (i inProcessClient) SupportsSharding() bool {
 	return false
 }
 
+func (i inProcessClient) SupportsProjection() bool {
+	return false
+}
+
 func (i inProcessClient) SendsSortedSeries() bool { return false }
 func (i inProcessClient) String() string          { return i.name }
 func (i inProcessClient) Addr() (string, bool)    { return i.name, true }

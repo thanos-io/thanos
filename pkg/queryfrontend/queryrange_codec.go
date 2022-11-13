@@ -184,14 +184,6 @@ func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request
 		params[queryv1.ShardInfoParam] = []string{data}
 	}
 
-	if thanosReq.ProjectionInfo != nil {
-		data, err := encode(thanosReq.ProjectionInfo)
-		if err != nil {
-			return nil, err
-		}
-		params[queryv1.ProjectionInfoParam] = []string{data}
-	}
-
 	if thanosReq.LookbackDelta > 0 {
 		params[queryv1.LookbackDeltaParam] = []string{encodeDurationMillis(thanosReq.LookbackDelta)}
 	}

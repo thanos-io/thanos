@@ -49,6 +49,9 @@ type Client interface {
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
 
+	// SupportsProjection returns true if projection is supported by the underlying store.
+	SupportsProjection() bool
+
 	// SendsSortedSeries returns true if the underlying store sends series sorded by
 	// their labels.
 	// The field can be used to indicate to the querier whether it needs to sort
@@ -264,10 +267,10 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
 		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		ShardInfo:               originalRequest.ShardInfo,
-		ProjectionInfo:          originalRequest.ProjectionInfo,
 	}
 
 	stores := []Client{}
+	enableProjection := true
 	for _, st := range s.stores() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(srv.Context(), st, originalRequest.MinTime, originalRequest.MaxTime, matchers...); !ok {
@@ -275,6 +278,9 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			continue
 		}
 
+		if !st.SupportsProjection() {
+			enableProjection = false
+		}
 		stores = append(stores, st)
 	}
 
@@ -288,6 +294,11 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		return nil
 	}
 
+	// Only enable projection pushdown if all stores that possibly
+	// contain matched series supports projection.
+	if enableProjection {
+		r.ProjectionInfo = originalRequest.ProjectionInfo
+	}
 	storeResponses := make([]respSet, 0, len(stores))
 
 	for _, st := range stores {

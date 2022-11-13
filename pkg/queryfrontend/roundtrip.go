@@ -16,7 +16,6 @@ import (
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/internal/cortex/util/validation"
-	"github.com/thanos-io/thanos/pkg/queryprojection"
 	"github.com/thanos-io/thanos/pkg/querysharding"
 )
 
@@ -187,12 +186,6 @@ func newQueryRangeTripperware(
 		)
 	}
 
-	projectionAnalyzer := queryprojection.NewQueryAnalyzer()
-	queryRangeMiddleware = append(
-		queryRangeMiddleware,
-		PromQLProjectionMiddleware(projectionAnalyzer),
-	)
-
 	if numShards > 0 {
 		analyzer := querysharding.NewQueryAnalyzer()
 		queryRangeMiddleware = append(
@@ -335,11 +328,6 @@ func newInstantQueryTripperware(
 ) queryrange.Tripperware {
 	instantQueryMiddlewares := []queryrange.Middleware{}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
-	projectionAnalyzer := queryprojection.NewQueryAnalyzer()
-	instantQueryMiddlewares = append(
-		instantQueryMiddlewares,
-		PromQLProjectionMiddleware(projectionAnalyzer),
-	)
 	if numShards > 0 {
 		analyzer := querysharding.NewQueryAnalyzer()
 		instantQueryMiddlewares = append(

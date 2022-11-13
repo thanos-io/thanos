@@ -27,10 +27,6 @@ type ShardedRequest interface {
 	WithShardInfo(info *storepb.ShardInfo) queryrange.Request
 }
 
-type ProjectionRequest interface {
-	WithProjectionInfo(info *storepb.ProjectionInfo) queryrange.Request
-}
-
 type RequestHeader struct {
 	Name   string
 	Values []string
@@ -58,7 +54,6 @@ type ThanosQueryRangeRequest struct {
 	Headers             []*RequestHeader
 	Stats               string
 	ShardInfo           *storepb.ShardInfo
-	ProjectionInfo      *storepb.ProjectionInfo
 	LookbackDelta       int64
 }
 
@@ -114,12 +109,6 @@ func (r *ThanosQueryRangeRequest) WithShardInfo(info *storepb.ShardInfo) queryra
 	return &q
 }
 
-func (r *ThanosQueryRangeRequest) WithProjectionInfo(info *storepb.ProjectionInfo) queryrange.Request {
-	q := *r
-	q.ProjectionInfo = info
-	return &q
-}
-
 // LogToSpan writes information about this request to an OpenTracing span.
 func (r *ThanosQueryRangeRequest) LogToSpan(sp opentracing.Span) {
 	fields := []otlog.Field{
@@ -164,7 +153,6 @@ type ThanosQueryInstantRequest struct {
 	Headers             []*RequestHeader
 	Stats               string
 	ShardInfo           *storepb.ShardInfo
-	ProjectionInfo      *storepb.ProjectionInfo
 	LookbackDelta       int64 // in milliseconds.
 }
 
@@ -212,12 +200,6 @@ func (r *ThanosQueryInstantRequest) WithQuery(query string) queryrange.Request {
 func (r *ThanosQueryInstantRequest) WithShardInfo(info *storepb.ShardInfo) queryrange.Request {
 	q := *r
 	q.ShardInfo = info
-	return &q
-}
-
-func (r *ThanosQueryInstantRequest) WithProjectionInfo(info *storepb.ProjectionInfo) queryrange.Request {
-	q := *r
-	q.ProjectionInfo = info
 	return &q
 }
 
