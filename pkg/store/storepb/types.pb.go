@@ -26,7 +26,7 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-/// PartialResponseStrategy controls partial response handling.
+// / PartialResponseStrategy controls partial response handling.
 type PartialResponseStrategy int32
 
 const (
