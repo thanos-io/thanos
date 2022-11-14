@@ -38,8 +38,8 @@ func NewThanosQueryInstantCodec(partialResponse bool) *queryInstantCodec {
 	}
 }
 
-// MergeResponse merges multiple responses into a single response.
-// For instant query only vector responses will be merged because other types of queries
+// MergeResponse merges multiple responses into a single response. For instant query
+// only vector and matrix responses will be merged because other types of queries
 // are not shardable like number literal, string literal, scalar, etc.
 func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (queryrange.Response, error) {
 	if len(responses) == 0 {
@@ -52,18 +52,36 @@ func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (quer
 	for _, resp := range responses {
 		promResponses = append(promResponses, resp.(*queryrange.PrometheusInstantQueryResponse))
 	}
-	res := &queryrange.PrometheusInstantQueryResponse{
-		Status: queryrange.StatusSuccess,
-		Data: queryrange.PrometheusInstantQueryData{
-			ResultType: model.ValVector.String(),
-			Result: queryrange.PrometheusInstantQueryResult{
-				Result: &queryrange.PrometheusInstantQueryResult_Vector{
-					Vector: vectorMerge(promResponses),
+	var res queryrange.Response
+	switch promResponses[0].Data.ResultType {
+	case model.ValMatrix.String():
+		res = &queryrange.PrometheusInstantQueryResponse{
+			Status: queryrange.StatusSuccess,
+			Data: queryrange.PrometheusInstantQueryData{
+				ResultType: model.ValMatrix.String(),
+				Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+						Matrix: matrixMerge(promResponses),
+					},
 				},
+				Stats: queryrange.StatsMerge(responses),
 			},
-			Stats: queryrange.StatsMerge(responses),
-		},
+		}
+	default:
+		res = &queryrange.PrometheusInstantQueryResponse{
+			Status: queryrange.StatusSuccess,
+			Data: queryrange.PrometheusInstantQueryData{
+				ResultType: model.ValVector.String(),
+				Result: queryrange.PrometheusInstantQueryResult{
+					Result: &queryrange.PrometheusInstantQueryResult_Vector{
+						Vector: vectorMerge(promResponses),
+					},
+				},
+				Stats: queryrange.StatsMerge(responses),
+			},
+		}
 	}
+
 	return res, nil
 }
 
@@ -280,5 +298,58 @@ func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange
 	for _, key := range keys {
 		result.Samples = append(result.Samples, output[key])
 	}
+	return result
+}
+
+func matrixMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Matrix {
+	output := map[string]*queryrange.SampleStream{}
+	for _, resp := range resps {
+		if resp == nil {
+			continue
+		}
+		// Merge matrix result samples only. Skip other types such as
+		// string, scalar as those are not sharable.
+		if resp.Data.Result.GetMatrix() == nil {
+			continue
+		}
+		for _, stream := range resp.Data.Result.GetMatrix().SampleStreams {
+			metric := cortexpb.FromLabelAdaptersToLabels(stream.Labels).String()
+			existing, ok := output[metric]
+			if !ok {
+				existing = &queryrange.SampleStream{
+					Labels: stream.Labels,
+				}
+			}
+			// We need to make sure we don't repeat samples. This causes some visualizations to be broken in Grafana.
+			// The prometheus API is inclusive of start and end timestamps.
+			if len(existing.Samples) > 0 && len(stream.Samples) > 0 {
+				existingEndTs := existing.Samples[len(existing.Samples)-1].TimestampMs
+				if existingEndTs == stream.Samples[0].TimestampMs {
+					// Typically this the cases where only 1 sample point overlap,
+					// so optimize with simple code.
+					stream.Samples = stream.Samples[1:]
+				} else if existingEndTs > stream.Samples[0].TimestampMs {
+					// Overlap might be big, use heavier algorithm to remove overlap.
+					stream.Samples = queryrange.SliceSamples(stream.Samples, existingEndTs)
+				} // else there is no overlap, yay!
+			}
+			existing.Samples = append(existing.Samples, stream.Samples...)
+			output[metric] = existing
+		}
+	}
+
+	keys := make([]string, 0, len(output))
+	for key := range output {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	result := &queryrange.Matrix{
+		SampleStreams: make([]*queryrange.SampleStream, 0, len(output)),
+	}
+	for _, key := range keys {
+		result.SampleStreams = append(result.SampleStreams, output[key])
+	}
+
 	return result
 }

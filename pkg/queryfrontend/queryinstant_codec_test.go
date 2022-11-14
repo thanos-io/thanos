@@ -514,6 +514,184 @@ func TestMergeResponse(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "merge two matrix responses with non-duplicate samples",
+			resps: []queryrange.Response{
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValMatrix.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+								Matrix: &queryrange.Matrix{
+									SampleStreams: []*queryrange.SampleStream{
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValMatrix.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+								Matrix: &queryrange.Matrix{
+									SampleStreams: []*queryrange.SampleStream{
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 2, Value: 3}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 2, Value: 3}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedResp: &queryrange.PrometheusInstantQueryResponse{
+				Status: queryrange.StatusSuccess,
+				Data: queryrange.PrometheusInstantQueryData{
+					ResultType: model.ValMatrix.String(),
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+							Matrix: &queryrange.Matrix{
+								SampleStreams: []*queryrange.SampleStream{
+									{
+										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}, {TimestampMs: 2, Value: 3}},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "bar",
+										})),
+									},
+									{
+										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}, {TimestampMs: 2, Value: 3}},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "foo",
+										})),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "merge two matrix responses with duplicate samples",
+			resps: []queryrange.Response{
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValMatrix.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+								Matrix: &queryrange.Matrix{
+									SampleStreams: []*queryrange.SampleStream{
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValMatrix.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+								Matrix: &queryrange.Matrix{
+									SampleStreams: []*queryrange.SampleStream{
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedResp: &queryrange.PrometheusInstantQueryResponse{
+				Status: queryrange.StatusSuccess,
+				Data: queryrange.PrometheusInstantQueryData{
+					ResultType: model.ValMatrix.String(),
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+							Matrix: &queryrange.Matrix{
+								SampleStreams: []*queryrange.SampleStream{
+									{
+										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "bar",
+										})),
+									},
+									{
+										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "foo",
+										})),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := codec.MergeResponse(tc.resps...)
