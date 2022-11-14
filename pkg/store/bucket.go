@@ -824,7 +824,7 @@ type blockSeriesClient struct {
 	chunkFetchDuration prometheus.Histogram
 
 	// Internal state.
-	i               int
+	i               uint64
 	postings        []storage.SeriesRef
 	chkMetas        []chunks.Meta
 	lset            labels.Labels
@@ -939,8 +939,8 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 func (b *blockSeriesClient) nextBatch() error {
 	start := b.i
 	end := start + SeriesBatchSize
-	if end > len(b.postings) {
-		end = len(b.postings)
+	if end > uint64(len(b.postings)) {
+		end = uint64(len(b.postings))
 	}
 	b.i = end
 
