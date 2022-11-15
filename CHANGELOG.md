@@ -8,6 +8,18 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## Unreleased
+
+## [v0.29.1](https://github.com/thanos-io/thanos/tree/release-0.29) - In progress
+
+### Fixed
+
+- [#5887](https://github.com/thanos-io/thanos/pull/5887) Tracing: Make sure rate limiting sampler is the default, as was the case in version pre-0.29.0.
+
+### Added
+
+### Changed
+
 ## [v0.29.0](https://github.com/thanos-io/thanos/tree/release-0.29) - 2022.11.03
 
 ### Fixed
