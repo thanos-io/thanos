@@ -33,14 +33,6 @@ func TestAnalyzeQuery(t *testing.T) {
 			expression: "count(sum without (pod) (http_requests_total))",
 		},
 		{
-			name:       "aggregate expression with label_replace",
-			expression: `sum by (pod) (label_replace(metric, "dst_label", "$1", "src_label", "re"))`,
-		},
-		{
-			name:       "aggregate without expression with label_replace",
-			expression: `sum without (pod) (label_replace(metric, "dst_label", "$1", "src_label", "re"))`,
-		},
-		{
 			name:       "binary expression",
 			expression: `http_requests_total{code="400"} / http_requests_total`,
 		},
@@ -57,10 +49,6 @@ func TestAnalyzeQuery(t *testing.T) {
 			expression: `sum by (pod) (http_requests_total{code="400"}) / sum by (cluster) (http_requests_total)`,
 		},
 		{
-			name:       "binary expression with vector matching and label_replace",
-			expression: `http_requests_total{code="400"} / on (pod) label_replace(metric, "dst_label", "$1", "src_label", "re")`,
-		},
-		{
 			name:       "multiple binary expressions",
 			expression: `(http_requests_total{code="400"} + http_requests_total{code="500"}) / http_requests_total`,
 		},
@@ -70,6 +58,14 @@ func TestAnalyzeQuery(t *testing.T) {
 (http_requests_total{code="400"} + on (cluster, pod) http_requests_total{code="500"})
 / on ()
 http_requests_total`,
+		},
+		{
+			name:       "aggregate by expression with label_replace, sharding label is dynamic",
+			expression: `sum by (dst_label) (label_replace(metric, "dst_label", "$1", "src_label", "re"))`,
+		},
+		{
+			name:       "aggregate by expression with label_join, sharding label is dynamic",
+			expression: `sum by (dst_label) (label_join(metric, "dst_label", ",", "src_label"))`,
 		},
 	}
 
@@ -142,6 +138,36 @@ sum by (container) (
 			expression:     `sum(rate(node_cpu_seconds_total[3h])) by (cluster_id, mode) / ignoring(mode) group_left sum(rate(node_cpu_seconds_total[3h])) by (cluster_id)`,
 			shardingLabels: []string{"cluster_id"},
 		},
+		{
+			name:           "aggregate by expression with label_replace, sharding label is not dynamic",
+			expression:     `sum by (pod) (label_replace(metric, "dst_label", "$1", "src_label", "re"))`,
+			shardingLabels: []string{"pod"},
+		},
+		{
+			name:           "aggregate by expression with label_join, sharding label is not dynamic",
+			expression:     `sum by (pod) (label_join(metric, "dst_label", ",", "src_label"))`,
+			shardingLabels: []string{"pod"},
+		},
+		{
+			name:           "label_join and aggregation on multiple labels. Can be sharded by the static one",
+			expression:     `sum by (pod, dst_label) (label_join(metric, "dst_label", ",", "src_label"))`,
+			shardingLabels: []string{"pod"},
+		},
+		{
+			name:           "binary expression with vector matching and label_replace",
+			expression:     `http_requests_total{code="400"} / on (pod) label_replace(metric, "dst_label", "$1", "src_label", "re")`,
+			shardingLabels: []string{"pod"},
+		},
+		{
+			name:           "nested label joins",
+			expression:     `label_join(sum by (pod) (label_join(metric, "dst_label", ",", "src_label")), "dst_label1", ",", "dst_label")`,
+			shardingLabels: []string{"pod"},
+		},
+		{
+			name:           "complex query with label_replace, binary expr and aggregations on dynamic label",
+			expression:     `sum(sum_over_time(container_memory_working_set_bytes{container_name!="POD",container_name!="",namespace="kube-system"}[1d:5m])) by (instance, cluster) / avg(label_replace(sum(sum_over_time(kube_node_status_capacity_memory_bytes[1d:5m])) by (node, cluster), "instance", "$1", "node", "(.*)")) by (instance, cluster)`,
+			shardingLabels: []string{"cluster"},
+		},
 	}
 
 	shardableWithoutLabels := []testCase{
@@ -177,6 +203,21 @@ http_requests_total`,
 			name:           "histogram quantile",
 			expression:     "histogram_quantile(0.95, sum(rate(metric[1m])) without (le, cluster))",
 			shardingLabels: []string{"cluster"},
+		},
+		{
+			name:           "aggregate without expression with label_replace, sharding label is not dynamic",
+			expression:     `sum without (dst_label) (label_replace(metric, "dst_label", "$1", "src_label", "re"))`,
+			shardingLabels: []string{"dst_label"},
+		},
+		{
+			name:           "aggregate without expression with label_join, sharding label is not dynamic",
+			expression:     `sum without (dst_label) (label_join(metric, "dst_label", ",", "src_label"))`,
+			shardingLabels: []string{"dst_label"},
+		},
+		{
+			name:           "aggregate without expression with label_replace",
+			expression:     `sum without (pod) (label_replace(metric, "dst_label", "$1", "src_label", "re"))`,
+			shardingLabels: []string{"pod", "dst_label"},
 		},
 	}
 
