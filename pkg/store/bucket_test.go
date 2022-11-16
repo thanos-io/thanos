@@ -1957,6 +1957,7 @@ func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
 				tmpDir,
 				NewChunksLimiterFactory(100000/MaxSamplesPerChunk),
 				NewSeriesLimiterFactory(0),
+				NewBytesLimiterFactory(0),
 				NewGapBasedPartitioner(PartitionerMaxGapSize),
 				10,
 				false,
