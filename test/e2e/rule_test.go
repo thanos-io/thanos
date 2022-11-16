@@ -124,6 +124,22 @@ groups:
   - record: test_absent_metric
     expr: absent(nonexistent{job='thanos-receive'})
 `
+
+	testAlertRuleHoldDuration = `
+groups:
+- name: example_rule_hold_duration
+  interval: 1s
+  rules:
+  - alert: TestAlert_RuleHoldDuration
+    # It must be based on actual metric, otherwise call to StoreAPI would be not involved.
+    expr: absent(some_metric)
+    for: 2s
+    labels:
+      severity: page
+    annotations:
+      summary: "I always complain and allow partial response in query."
+`
+
 	amTimeout = model.Duration(10 * time.Second)
 )
 
@@ -584,6 +600,125 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 			},
 		})
 	})
+}
+
+func TestStatelessRulerAlertStateRestore(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("stateless-state")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	am := e2ethanos.NewAlertmanager(e, "1")
+	testutil.Ok(t, e2e.StartAndWaitReady(am))
+
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+	rwURL := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc")).
+		WithReplicaLabels("replica", "receive").Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+	rulesSubDir := "rules"
+	var rulers []*e2emon.InstrumentedRunnable
+	for i := 1; i <= 2; i++ {
+		rFuture := e2ethanos.NewRulerBuilder(e, fmt.Sprintf("%d", i))
+		rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
+		testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+		for i, rule := range []string{testAlertRuleHoldDuration} {
+			createRuleFile(t, filepath.Join(rulesPath, fmt.Sprintf("rules-%d.yaml", i)), rule)
+		}
+		r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
+			{
+				EndpointsConfig: httpconfig.EndpointsConfig{
+					StaticAddresses: []string{
+						am.InternalEndpoint("http"),
+					},
+					Scheme: "http",
+				},
+				Timeout:    amTimeout,
+				APIVersion: alert.APIv1,
+			},
+		}).WithForGracePeriod("500ms").
+			WithRestoreIgnoredLabels("tenant_id").
+			InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+				{
+					EndpointsConfig: httpconfig.EndpointsConfig{
+						StaticAddresses: []string{
+							q.InternalEndpoint("http"),
+						},
+						Scheme: "http",
+					},
+				},
+			}, []*config.RemoteWriteConfig{
+				{URL: &common_cfg.URL{URL: rwURL}, Name: "thanos-receiver"},
+			})
+		rulers = append(rulers, r)
+	}
+
+	// Start the ruler 1 first.
+	testutil.Ok(t, e2e.StartAndWaitReady(rulers[0]))
+
+	// Wait until the alert firing and ALERTS_FOR_STATE
+	// series has been written to receiver successfully.
+	queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string {
+		return "ALERTS_FOR_STATE"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, []model.Metric{
+		{
+			"__name__":  "ALERTS_FOR_STATE",
+			"alertname": "TestAlert_RuleHoldDuration",
+			"severity":  "page",
+			"tenant_id": "default-tenant",
+		},
+	})
+
+	var alerts []*rulespb.AlertInstance
+	client := promclient.NewDefaultClient()
+	err = runutil.Retry(time.Second*1, ctx.Done(), func() error {
+		alerts, err = client.AlertsInGRPC(ctx, urlParse(t, "http://"+rulers[0].Endpoint("http")))
+		testutil.Ok(t, err)
+		if len(alerts) > 0 {
+			if alerts[0].State == rulespb.AlertState_FIRING {
+				return nil
+			}
+		}
+		return fmt.Errorf("alert is not firing")
+	})
+	testutil.Ok(t, err)
+	// Record the alert active time.
+	alertActiveAt := alerts[0].ActiveAt
+	testutil.Ok(t, rulers[0].Stop())
+
+	// Start the ruler 2 now and ruler 2 should be able
+	// to restore the firing alert state.
+	testutil.Ok(t, e2e.StartAndWaitReady(rulers[1]))
+
+	// Wait for 4 rule evaluation iterations to make sure the alert state is restored.
+	testutil.Ok(t, rulers[1].WaitSumMetricsWithOptions(e2emon.GreaterOrEqual(4), []string{"prometheus_rule_group_iterations_total"}, e2emon.WaitMissingMetrics()))
+
+	// Wait until the alert is firing on the second ruler.
+	err = runutil.Retry(time.Second*1, ctx.Done(), func() error {
+		alerts, err = client.AlertsInGRPC(ctx, urlParse(t, "http://"+rulers[1].Endpoint("http")))
+		testutil.Ok(t, err)
+		if len(alerts) > 0 {
+			if alerts[0].State == rulespb.AlertState_FIRING {
+				// The second ruler alert's active at time is the same as the previous one,
+				// which means the alert state is restored successfully.
+				if alertActiveAt.Unix() == alerts[0].ActiveAt.Unix() {
+					return nil
+				} else {
+					return fmt.Errorf("alert active time is not restored")
+				}
+			}
+		}
+		return fmt.Errorf("alert is not firing")
+	})
+	testutil.Ok(t, err)
 }
 
 // TestRule_CanPersistWALData checks that in stateless mode, Thanos Ruler can persist rule evaluations

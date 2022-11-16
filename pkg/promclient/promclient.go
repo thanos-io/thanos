@@ -780,6 +780,29 @@ func (c *Client) RulesInGRPC(ctx context.Context, base *url.URL, typeRules strin
 	return m.Data.Groups, nil
 }
 
+// AlertsInGRPC returns the rules from Prometheus alerts API. It uses gRPC errors.
+// NOTE: This method is tested in pkg/store/prometheus_test.go against Prometheus.
+func (c *Client) AlertsInGRPC(ctx context.Context, base *url.URL) ([]*rulespb.AlertInstance, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/alerts")
+
+	var m struct {
+		Data struct {
+			Alerts []*rulespb.AlertInstance `json:"alerts"`
+		} `json:"data"`
+	}
+
+	if err := c.get2xxResultWithGRPCErrors(ctx, "/prom_alerts HTTP[client]", &u, &m); err != nil {
+		return nil, err
+	}
+
+	// Prometheus does not support PartialResponseStrategy, and probably would never do. Make it Abort by default.
+	for _, g := range m.Data.Alerts {
+		g.PartialResponseStrategy = storepb.PartialResponseStrategy_ABORT
+	}
+	return m.Data.Alerts, nil
+}
+
 // MetricMetadataInGRPC returns the metadata from Prometheus metric metadata API. It uses gRPC errors.
 func (c *Client) MetricMetadataInGRPC(ctx context.Context, base *url.URL, metric string, limit int) (map[string][]metadatapb.Meta, error) {
 	u := *base
