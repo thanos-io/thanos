@@ -430,7 +430,6 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		it.useA = true
 		it.lastT, it.lastV = it.a.At()
 		it.penA = 0
-		// TODO(rabenhorst): Need to check if this is correct.
 		return it.aval
 	}
 	// General case where both iterators still have data. We pick the one
@@ -460,7 +459,6 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		it.penA = 0
 		it.lastT = ta
 		it.lastV = va
-		// TODO(rabenhorst): Need to check if this is correct.
 		return it.aval
 	}
 	if it.lastT != math.MinInt64 {
@@ -471,7 +469,6 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	it.penB = 0
 	it.lastT = tb
 	it.lastV = vb
-	// TODO(rabenhorst): Need to check if this is correct.
 	return it.bval
 }
 

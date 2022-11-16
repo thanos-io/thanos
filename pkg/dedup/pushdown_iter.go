@@ -62,7 +62,6 @@ func (it *pushdownSeriesIterator) Next() chunkenc.ValueType {
 	it.aused = false
 	it.bused = false
 
-	// TODO(rabenhorst): Need to check if this is correct.
 	if it.aval != chunkenc.ValNone {
 		return it.aval
 	}
