@@ -754,7 +754,7 @@ func TestCounterSeriesIteratorSeek(t *testing.T) {
 	x := NewApplyCounterResetsIterator(its...)
 
 	valueType := x.Seek(150)
-	testutil.Equals(t, chunkenc.ValFloat, valueType, "Seek should return true")
+	testutil.Equals(t, chunkenc.ValFloat, valueType, "Seek should return float value type")
 	testutil.Ok(t, x.Err())
 	for {
 		ts, v := x.At()
@@ -780,7 +780,7 @@ func TestCounterSeriesIteratorSeekExtendTs(t *testing.T) {
 	x := NewApplyCounterResetsIterator(its...)
 
 	valueType := x.Seek(500)
-	testutil.Equals(t, chunkenc.ValNone, valueType, "Seek should return false")
+	testutil.Equals(t, chunkenc.ValNone, valueType, "Seek should return none value type")
 }
 
 func TestCounterSeriesIteratorSeekAfterNext(t *testing.T) {
@@ -802,7 +802,7 @@ func TestCounterSeriesIteratorSeekAfterNext(t *testing.T) {
 	x.Next()
 
 	valueType := x.Seek(50)
-	testutil.Equals(t, chunkenc.ValFloat, valueType, "Seek should return true")
+	testutil.Equals(t, chunkenc.ValFloat, valueType, "Seek should return float value type")
 	testutil.Ok(t, x.Err())
 	for {
 		ts, v := x.At()

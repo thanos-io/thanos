@@ -258,7 +258,6 @@ func (p *delSeriesIterator) Seek(t int64) chunkenc.ValueType {
 		return valueType
 	}
 	for p.Next() != chunkenc.ValNone {
-		// TODO(rabenhorst): Need to check if this is correct.
 		if valueType := p.curr.Seek(t); valueType != chunkenc.ValNone {
 			return valueType
 		}
