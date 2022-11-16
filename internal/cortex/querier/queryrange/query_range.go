@@ -654,7 +654,7 @@ func matrixMerge(resps []*PrometheusResponse) []SampleStream {
 					stream.Samples = stream.Samples[1:]
 				} else if existingEndTs > stream.Samples[0].TimestampMs {
 					// Overlap might be big, use heavier algorithm to remove overlap.
-					stream.Samples = sliceSamples(stream.Samples, existingEndTs)
+					stream.Samples = SliceSamples(stream.Samples, existingEndTs)
 				} // else there is no overlap, yay!
 			}
 			existing.Samples = append(existing.Samples, stream.Samples...)
@@ -676,11 +676,11 @@ func matrixMerge(resps []*PrometheusResponse) []SampleStream {
 	return result
 }
 
-// sliceSamples assumes given samples are sorted by timestamp in ascending order and
+// SliceSamples assumes given samples are sorted by timestamp in ascending order and
 // return a sub slice whose first element's is the smallest timestamp that is strictly
 // bigger than the given minTs. Empty slice is returned if minTs is bigger than all the
 // timestamps in samples.
-func sliceSamples(samples []cortexpb.Sample, minTs int64) []cortexpb.Sample {
+func SliceSamples(samples []cortexpb.Sample, minTs int64) []cortexpb.Sample {
 	if len(samples) <= 0 || minTs < samples[0].TimestampMs {
 		return samples
 	}
