@@ -333,7 +333,7 @@ type BucketStore struct {
 	postingOffsetsInMemSampling int
 
 	// Enables hints in the Series() response.
-	enableSeriesResponseHints bool
+	enableQueriedBlocksHints bool
 
 	enableChunkHashCalculation bool
 }
@@ -454,7 +454,7 @@ func NewBucketStore(
 		partitioner:                 partitioner,
 		enableCompatibilityLabel:    enableCompatibilityLabel,
 		postingOffsetsInMemSampling: postingOffsetsInMemSampling,
-		enableSeriesResponseHints:   enableSeriesResponseHints,
+		enableQueriedBlocksHints:    enableSeriesResponseHints,
 		enableChunkHashCalculation:  enableChunkHashCalculation,
 	}
 
@@ -1083,6 +1083,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
+	lookupTable := newLookupTableBuilder(req.MaximumStringSlots)
+
 	s.mtx.RLock()
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
@@ -1100,7 +1102,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			b := b
 			gctx := gctx
 
-			if s.enableSeriesResponseHints {
+			if s.enableQueriedBlocksHints {
 				// Keep track of queried blocks.
 				resHints.AddQueriedBlock(b.meta.ULID)
 			}
@@ -1231,9 +1233,38 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
 			}
 			series.Labels = labelpb.ZLabelsFromPromLabels(lset)
-			if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
-				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
-				return
+
+			var compressedResponse bool
+			compressedLabels := make([]labelpb.CompressedLabel, 0, len(lset))
+
+			for _, lbl := range lset {
+				nameRef, nerr := lookupTable.putString(lbl.Name)
+				valueRef, verr := lookupTable.putString(lbl.Value)
+
+				if nerr != nil || verr != nil {
+					compressedResponse = false
+					break
+				} else if compressedResponse && nerr == nil && verr == nil {
+					compressedLabels = append(compressedLabels, labelpb.CompressedLabel{
+						NameRef:  nameRef,
+						ValueRef: valueRef,
+					})
+				}
+			}
+
+			if compressedResponse {
+				if err = srv.Send(storepb.NewCompressedSeriesResponse(&storepb.CompressedSeries{
+					Labels: compressedLabels,
+					Chunks: series.Chunks,
+				})); err != nil {
+					err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+					return
+				}
+			} else {
+				if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
+					err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+					return
+				}
 			}
 		}
 		if set.Err() != nil {
@@ -1246,7 +1277,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		err = nil
 	})
 
-	if s.enableSeriesResponseHints {
+	resHints.StringSymbolTable = lookupTable.getTable()
+
+	{
 		var anyHints *types.Any
 
 		if anyHints, err = types.MarshalAny(resHints); err != nil {

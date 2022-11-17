@@ -5,12 +5,14 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/gogo/protobuf/types"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -24,6 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -208,6 +211,47 @@ type seriesServer struct {
 	seriesSet      []storepb.Series
 	seriesSetStats storepb.SeriesStatsCounter
 	warnings       []string
+	symbolTables   []map[uint64]string
+
+	compressedSeriesSet []storepb.CompressedSeries
+}
+
+func (s *seriesServer) DecompressSeries() error {
+	for _, cs := range s.compressedSeriesSet {
+		newSeries := &storepb.Series{
+			Chunks: cs.Chunks,
+		}
+
+		lbls := labels.Labels{}
+
+		for _, cLabel := range cs.Labels {
+			var name, val string
+			for _, symTable := range s.symbolTables {
+				if foundName, ok := symTable[uint64(cLabel.NameRef)]; ok {
+					name = foundName
+				}
+
+				if foundValue, ok := symTable[uint64(cLabel.ValueRef)]; ok {
+					val = foundValue
+				}
+			}
+			if name == "" {
+				return fmt.Errorf("found no reference for name ref %d", cLabel.NameRef)
+			}
+			if val == "" {
+				return fmt.Errorf("found no reference for value ref %d", cLabel.ValueRef)
+			}
+
+			lbls = append(lbls, labels.Label{
+				Name:  name,
+				Value: val,
+			})
+		}
+
+		newSeries.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+		s.seriesSet = append(s.seriesSet, *newSeries)
+	}
+	return nil
 }
 
 func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
@@ -219,6 +263,23 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 	if r.GetSeries() != nil {
 		s.seriesSet = append(s.seriesSet, *r.GetSeries())
 		s.seriesSetStats.Count(r.GetSeries())
+		return nil
+	}
+
+	if r.GetCompressedSeries() != nil {
+		s.compressedSeriesSet = append(s.compressedSeriesSet, *r.GetCompressedSeries())
+		return nil
+	}
+
+	if r.GetHints() != nil {
+		var seriesResponseHints hintspb.SeriesResponseHints
+
+		// Some other, unknown type. Skip it.
+		if err := types.UnmarshalAny(r.GetHints(), &seriesResponseHints); err != nil {
+			return nil
+		}
+
+		s.symbolTables = append(s.symbolTables, seriesResponseHints.StringSymbolTable)
 		return nil
 	}
 
@@ -367,6 +428,10 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	var warns storage.Warnings
 	for _, w := range resp.warnings {
 		warns = append(warns, errors.New(w))
+	}
+
+	if err := resp.DecompressSeries(); err != nil {
+		return nil, storepb.SeriesStatsCounter{}, errors.Wrap(err, "decompressing series")
 	}
 
 	// Delete the metric's name from the result because that's what the

@@ -122,6 +122,12 @@ message SeriesRequest {
   // shard_info is used by the querier to request a specific
   // shard of blocks instead of entire blocks.
   ShardInfo shard_info = 13;
+
+  // maximum_string_slots is the number of maximum strings
+  // that the receiver can send. It is safe to ignore this by
+  // the receiver if it does not intend on sending a symbol table
+  // via hints later on.
+  uint64 maximum_string_slots = 14;
 }
 
 
@@ -196,6 +202,10 @@ message SeriesResponse {
     /// multiple SeriesResponse frames contain hints for a single Series() request and how should they
     /// be handled in such case (ie. merged vs keep the first/last one).
     google.protobuf.Any hints = 3;
+
+    /// CompressedSeries is like series but instead of raw strings for label names/values,
+    /// it contains references to strings that are later sent via hints.
+    CompressedSeries compressed_series = 4;
   }
 }
 

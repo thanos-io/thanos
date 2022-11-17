@@ -1698,5 +1698,62 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 	instantQuery(t, context.Background(), querier2.Endpoint("http"), func() string {
 		return "sum(metric_that_does_not_exist)"
 	}, time.Now, promclient.QueryOptions{}, 0)
+}
 
+// TestCompressionCompatibility tests whether symbol (string) table
+// compression is compatible with older versions.
+func TestCompressionCompatibility(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("compr-compat")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.LocalPrometheusTarget)
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "")
+
+	querier1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithDisablePartialResponses(true).Init()
+	querier2 := e2ethanos.NewQuerierBuilder(e, "2", sidecar.InternalEndpoint("grpc")).WithDisablePartialResponses(true).WithImage("quay.io/thanos/thanos:v0.26.0").Init()
+	querierConnecting := e2ethanos.NewQuerierBuilder(e, "3", querier2.InternalEndpoint("grpc")).WithDisablePartialResponses(true).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar, querier1, querier2, querierConnecting))
+
+	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+	testutil.Ok(t, querier1.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+	testutil.Ok(t, querierConnecting.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+
+	for _, querier := range []*e2emon.InstrumentedRunnable{querier1, querier2, querierConnecting} {
+		result := instantQuery(t, context.Background(), querier.Endpoint("http"), func() string {
+			return "sum(up)"
+		}, time.Now, promclient.QueryOptions{}, 1)
+		testutil.Equals(t, model.SampleValue(1.0), result[0].Value)
+	}
+
+}
+
+// TestCompressionReferenceAdjustments tests whether symbol (string) table
+// compression adjusts references properly in the case of a Querier
+// connected to a Querier.
+func TestCompressionReferenceAdjustments(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("compr-adjust")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.LocalPrometheusTarget)
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "")
+
+	querier1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithDisablePartialResponses(true).Init()
+	querier2 := e2ethanos.NewQuerierBuilder(e, "2", sidecar.InternalEndpoint("grpc")).WithDisablePartialResponses(true).Init()
+	querierGlobal := e2ethanos.NewQuerierBuilder(e, "3", querier1.InternalEndpoint("grpc"), querier2.InternalEndpoint("grpc")).WithDisablePartialResponses(true).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar, querier1, querier2, querierGlobal))
+
+	testutil.Ok(t, querier2.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+	testutil.Ok(t, querier1.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+	testutil.Ok(t, querierGlobal.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+
+	result := instantQuery(t, context.Background(), querierGlobal.Endpoint("http"), func() string {
+		return "up"
+	}, time.Now, promclient.QueryOptions{}, 1)
+	testutil.Equals(t, `up{instance="localhost:9090", job="myself", prometheus="p1", replica="0"}`, result[0].Metric.String())
 }

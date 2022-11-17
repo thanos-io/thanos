@@ -1155,6 +1155,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		},
 		PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
 		MaxResolutionWindow:     1234,
+		MaximumStringSlots:      math.MaxUint64,
 	}
 	testutil.Ok(t, q.Series(req, s))
 

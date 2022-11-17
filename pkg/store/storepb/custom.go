@@ -43,6 +43,14 @@ func NewSeriesResponse(series *Series) *SeriesResponse {
 	}
 }
 
+func NewCompressedSeriesResponse(series *CompressedSeries) *SeriesResponse {
+	return &SeriesResponse{
+		Result: &SeriesResponse_CompressedSeries{
+			CompressedSeries: series,
+		},
+	}
+}
+
 func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
 	return &SeriesResponse{
 		Result: &SeriesResponse_Hints{

@@ -515,6 +515,11 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
+	const cacheCfg = `type: IN-MEMORY
+config:
+  max_size: 2B
+  max_item_size: 1B`
+
 	store1 := e2ethanos.NewStoreGW(
 		e,
 		"1",
@@ -522,7 +527,7 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 		},
-		"",
+		string(cacheCfg),
 		[]string{"--store.grpc.downloaded-bytes-limit=1B"},
 	)
 
@@ -533,7 +538,7 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 		},
-		"",
+		string(cacheCfg),
 		[]string{"--store.grpc.downloaded-bytes-limit=100B"},
 	)
 	store3 := e2ethanos.NewStoreGW(
@@ -543,7 +548,7 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 			Type:   client.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 		},
-		"",
+		string(cacheCfg),
 		[]string{"--store.grpc.downloaded-bytes-limit=196627B"},
 	)
 

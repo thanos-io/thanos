@@ -24,6 +24,11 @@ message Label {
     string value = 2;
 }
 
+message CompressedLabel {
+    uint64 name_ref = 1;
+    uint64 value_ref = 2;
+}
+
 message LabelSet {
     repeated Label labels = 1 [(gogoproto.nullable) = false];
 }

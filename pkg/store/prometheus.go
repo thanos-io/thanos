@@ -23,6 +23,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/types"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,6 +36,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -174,6 +176,8 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		}
 	}
 
+	lookupTable := newLookupTableBuilder(r.MaximumStringSlots)
+
 	if r.SkipChunks {
 		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, matchers, r.MinTime, r.MaxTime)
 		if err != nil {
@@ -188,7 +192,24 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			sort.Slice(lset, func(i, j int) bool {
 				return lset[i].Name < lset[j].Name
 			})
+
 			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
+				return err
+			}
+		}
+
+		{
+			var anyHints *types.Any
+
+			resHints := &hintspb.SeriesResponseHints{StringSymbolTable: lookupTable.getTable()}
+
+			if anyHints, err = types.MarshalAny(resHints); err != nil {
+				err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
+				return err
+			}
+
+			if err = s.Send(storepb.NewHintsSeriesResponse(anyHints)); err != nil {
+				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response hints").Error())
 				return err
 			}
 		}
@@ -240,7 +261,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
-	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
+	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation, lookupTable)
 }
 
 func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *storepb.SeriesRequest) error {
@@ -367,6 +388,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	querySpan tracing.Span,
 	extLset labels.Labels,
 	calculateChecksums bool,
+	lookupTable *lookupTableBuilder,
 ) error {
 	level.Debug(p.logger).Log("msg", "started handling ReadRequest_STREAMED_XOR_CHUNKS streamed read response.")
 
@@ -410,6 +432,23 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 				continue
 			}
 
+			compressedLabels := make([]labelpb.CompressedLabel, 0, len(completeLabelset))
+			var compressedResponse bool = true
+			for _, lbl := range completeLabelset {
+				nameRef, nerr := lookupTable.putString(lbl.Name)
+				valueRef, verr := lookupTable.putString(lbl.Value)
+
+				if nerr != nil || verr != nil {
+					compressedResponse = false
+					break
+				} else if compressedResponse && nerr == nil && verr == nil {
+					compressedLabels = append(compressedLabels, labelpb.CompressedLabel{
+						NameRef:  nameRef,
+						ValueRef: valueRef,
+					})
+				}
+			}
+
 			seriesStats.CountSeries(series.Labels)
 			thanosChks := make([]storepb.AggrChunk, len(series.Chunks))
 
@@ -434,15 +473,40 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 				series.Chunks[i].Data = nil
 			}
 
-			r := storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.ZLabelsFromPromLabels(
-					completeLabelset,
-				),
-				Chunks: thanosChks,
-			})
+			var r *storepb.SeriesResponse
+
+			if compressedResponse {
+				r = storepb.NewCompressedSeriesResponse(&storepb.CompressedSeries{
+					Chunks: thanosChks,
+					Labels: compressedLabels,
+				})
+			} else {
+				r = storepb.NewSeriesResponse(&storepb.Series{
+					Labels: labelpb.ZLabelsFromPromLabels(completeLabelset),
+					Chunks: thanosChks,
+				})
+			}
+
 			if err := s.Send(r); err != nil {
 				return err
 			}
+		}
+	}
+
+	{
+		var anyHints *types.Any
+		var err error
+
+		resHints := &hintspb.SeriesResponseHints{StringSymbolTable: lookupTable.getTable()}
+
+		if anyHints, err = types.MarshalAny(resHints); err != nil {
+			err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
+			return err
+		}
+
+		if err = s.Send(storepb.NewHintsSeriesResponse(anyHints)); err != nil {
+			err = status.Error(codes.Unknown, errors.Wrap(err, "send series response hints").Error())
+			return err
 		}
 	}
 

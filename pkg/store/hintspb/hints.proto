@@ -29,6 +29,9 @@ message SeriesRequestHints {
 message SeriesResponseHints {
     /// queried_blocks is the list of blocks that have been queried.
     repeated Block queried_blocks = 1 [(gogoproto.nullable) = false];
+
+    // Symbol table for label names/values.
+    map<uint64, string> string_symbol_table = 2 [(gogoproto.nullable) = false];
 }
 
 message Block {
