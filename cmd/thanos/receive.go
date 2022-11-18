@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -274,7 +275,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
-		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion); err != nil {
+		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion, conf.endpoint); err != nil {
 			return err
 		}
 	}
@@ -436,12 +437,13 @@ func setupHashring(g *run.Group,
 	webHandler *receive.Handler,
 	statusProber prober.Probe,
 	enableIngestion bool,
+	ownEndpoint string,
 ) error {
 	// Note: the hashring configuration watcher
 	// is the sender and thus closes the chan.
 	// In the single-node case, which has no configuration
 	// watcher, we close the chan ourselves.
-	updates := make(chan receive.Hashring, 1)
+	updates := make(chan receive.HashringUpdate, 1)
 	algorithm := receive.HashringAlgorithm(conf.hashringsAlgorithm)
 
 	// The Hashrings config file path is given initializing config watcher.
@@ -467,12 +469,13 @@ func setupHashring(g *run.Group,
 		})
 	} else {
 		var (
-			ring receive.Hashring
-			err  error
+			ring   receive.Hashring
+			config []receive.HashringConfig
+			err    error
 		)
 		// The Hashrings config file content given initialize configuration from content.
 		if len(conf.hashringsFileContent) > 0 {
-			ring, err = receive.HashringFromConfig(algorithm, conf.replicationFactor, conf.hashringsFileContent)
+			ring, config, err = receive.HashringFromConfig(algorithm, conf.replicationFactor, conf.hashringsFileContent)
 			if err != nil {
 				close(updates)
 				return errors.Wrap(err, "failed to validate hashring configuration file")
@@ -486,7 +489,7 @@ func setupHashring(g *run.Group,
 		cancel := make(chan struct{})
 		g.Add(func() error {
 			defer close(updates)
-			updates <- ring
+			updates <- receive.NewHashringUpdate(nil, config, ring)
 			<-cancel
 			return nil
 		}, func(error) {
@@ -496,20 +499,21 @@ func setupHashring(g *run.Group,
 
 	cancel := make(chan struct{})
 	g.Add(func() error {
-
 		if enableIngestion {
 			defer close(hashringChangedChan)
 		}
 
 		for {
 			select {
-			case h, ok := <-updates:
+			case update, ok := <-updates:
 				if !ok {
 					return nil
 				}
-				webHandler.Hashring(h)
+				webHandler.Hashring(update.Hashring)
+
 				// If ingestion is enabled, send a signal to TSDB to flush.
-				if enableIngestion {
+				if enableIngestion && update.IsUpdatedForEndpoint(ownEndpoint) {
+					fmt.Println("Triggering update")
 					hashringChangedChan <- struct{}{}
 				} else {
 					// If not, just signal we are ready (this is important during first hashring load)
@@ -521,8 +525,7 @@ func setupHashring(g *run.Group,
 		}
 	}, func(err error) {
 		close(cancel)
-	},
-	)
+	})
 	return nil
 }
 

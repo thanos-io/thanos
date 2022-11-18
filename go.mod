@@ -128,7 +128,10 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.10.0
 )
 
-require go.opentelemetry.io/contrib/propagators/autoprop v0.34.0
+require (
+	go.opentelemetry.io/contrib/propagators/autoprop v0.34.0
+	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
+)
 
 require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.32.3 // indirect

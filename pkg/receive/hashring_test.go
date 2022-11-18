@@ -13,7 +13,104 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
+
+func TestHashringUpdated(t *testing.T) {
+	tests := []struct {
+		name       string
+		update     HashringUpdate
+		endpoint   string
+		hasUpdates bool
+	}{
+		{
+			name: "hashring added",
+			update: HashringUpdate{
+				PreviousConfig: nil,
+				NewConfig: []HashringConfig{
+					{
+						Tenants:   []string{"tenant-1"},
+						Endpoints: []string{"endpoint-1", "endpoint-2"},
+					},
+				},
+			},
+			endpoint:   "endpoint-1",
+			hasUpdates: false,
+		},
+		{
+			name: "hashring removed",
+			update: HashringUpdate{
+				PreviousConfig: []HashringConfig{
+					{
+						Tenants:   []string{"tenant-1"},
+						Endpoints: []string{"endpoint-1", "endpoint-2"},
+					},
+				},
+				NewConfig: nil,
+			},
+			endpoint:   "endpoint-1",
+			hasUpdates: true,
+		},
+		{
+			name: "hashring removed, endpoint not part of it",
+			update: HashringUpdate{
+				PreviousConfig: []HashringConfig{
+					{
+						Tenants:   []string{"tenant-1"},
+						Endpoints: []string{"endpoint-1", "endpoint-2"},
+					},
+				},
+				NewConfig: nil,
+			},
+			endpoint:   "endpoint-3",
+			hasUpdates: false,
+		},
+		{
+			name: "hashring with endpoint updated",
+			update: HashringUpdate{
+				PreviousConfig: []HashringConfig{
+					{
+						Tenants:   []string{"tenant-1"},
+						Endpoints: []string{"endpoint-1", "endpoint-2"},
+					},
+				},
+				NewConfig: []HashringConfig{
+					{
+						Tenants:   []string{"tenant-1"},
+						Endpoints: []string{"endpoint-1", "endpoint-3"},
+					},
+				},
+			},
+			endpoint:   "endpoint-1",
+			hasUpdates: true,
+		},
+		{
+			name: "hashring without endpoint updated",
+			update: HashringUpdate{
+				PreviousConfig: []HashringConfig{
+					{
+						Tenants:   []string{"tenant-1"},
+						Endpoints: []string{"endpoint-1", "endpoint-2"},
+					},
+				},
+				NewConfig: []HashringConfig{
+					{
+						Tenants:   []string{"tenant-1"},
+						Endpoints: []string{"endpoint-1", "endpoint-3"},
+					},
+				},
+			},
+			endpoint:   "endpoint-4",
+			hasUpdates: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			testutil.Equals(t, tc.hasUpdates, tc.update.IsUpdatedForEndpoint(tc.endpoint))
+		})
+	}
+}
 
 func TestHashringGet(t *testing.T) {
 	ts := &prompb.TimeSeries{

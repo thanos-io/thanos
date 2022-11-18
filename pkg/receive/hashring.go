@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/cespare/xxhash"
+	"k8s.io/utils/strings/slices"
 
 	"github.com/pkg/errors"
 
@@ -261,6 +262,64 @@ func newMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 	return m
 }
 
+type HashringUpdate struct {
+	PreviousConfig []HashringConfig
+	NewConfig      []HashringConfig
+	Hashring       Hashring
+}
+
+// IsUpdatedForEndpoint returns true if any of the hashrings where
+// the given endpoint is present has been updated.
+func (h HashringUpdate) IsUpdatedForEndpoint(endpoint string) bool {
+	newHashrings := hashringsByTenant(h.NewConfig)
+	oldHashrings := hashringsByTenant(h.PreviousConfig)
+
+	// Return true if a hashring was removed and the endpoint was a part of it.
+	for t, h := range oldHashrings {
+		hasEndpoint := slices.Contains(h.Endpoints, endpoint)
+		if _, ok := newHashrings[t]; !ok && hasEndpoint {
+			return true
+		}
+	}
+
+	hasUpdates := false
+	for t, newHashring := range newHashrings {
+		oldHashring, ok := oldHashrings[t]
+		if !ok {
+			continue
+		}
+
+		endpointInHashring := slices.Contains(oldHashring.Endpoints, endpoint) || slices.Contains(newHashring.Endpoints, endpoint)
+		if !endpointInHashring {
+			continue
+		}
+
+		if !slices.Equal(oldHashring.Endpoints, newHashring.Endpoints) {
+			hasUpdates = true
+			break
+		}
+	}
+	return hasUpdates
+}
+
+func hashringsByTenant(configs []HashringConfig) map[string]HashringConfig {
+	byTenant := make(map[string]HashringConfig)
+	for _, newHashring := range configs {
+		for _, t := range newHashring.Tenants {
+			byTenant[t] = newHashring
+		}
+	}
+	return byTenant
+}
+
+func NewHashringUpdate(previousConfig []HashringConfig, currentConfig []HashringConfig, hashring Hashring) HashringUpdate {
+	return HashringUpdate{
+		PreviousConfig: previousConfig,
+		NewConfig:      currentConfig,
+		Hashring:       hashring,
+	}
+}
+
 // HashringFromConfigWatcher creates multi-tenant hashrings from a
 // hashring configuration file watcher.
 // The configuration file is watched for updates.
@@ -268,17 +327,20 @@ func newMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
 // The updates chan is closed before exiting.
-func HashringFromConfigWatcher(ctx context.Context, algorithm HashringAlgorithm, replicationFactor uint64, updates chan<- Hashring, cw *ConfigWatcher) error {
+func HashringFromConfigWatcher(ctx context.Context, algorithm HashringAlgorithm, replicationFactor uint64, updates chan<- HashringUpdate, cw *ConfigWatcher) error {
 	defer close(updates)
 	go cw.Run(ctx)
 
+	var prevCfg []HashringConfig
 	for {
 		select {
 		case cfg, ok := <-cw.C():
 			if !ok {
 				return errors.New("hashring config watcher stopped unexpectedly")
 			}
-			updates <- newMultiHashring(algorithm, replicationFactor, cfg)
+			hashring := newMultiHashring(algorithm, replicationFactor, cfg)
+			updates <- NewHashringUpdate(prevCfg, cfg, hashring)
+			prevCfg = cfg
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -286,16 +348,16 @@ func HashringFromConfigWatcher(ctx context.Context, algorithm HashringAlgorithm,
 }
 
 // HashringFromConfig loads raw configuration content and returns a Hashring if the given configuration is not valid.
-func HashringFromConfig(algorithm HashringAlgorithm, replicationFactor uint64, content string) (Hashring, error) {
+func HashringFromConfig(algorithm HashringAlgorithm, replicationFactor uint64, content string) (Hashring, []HashringConfig, error) {
 	config, err := parseConfig([]byte(content))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse configuration")
+		return nil, nil, errors.Wrapf(err, "failed to parse configuration")
 	}
 
 	// If hashring is empty, return an error.
 	if len(config) == 0 {
-		return nil, errors.Wrapf(err, "failed to load configuration")
+		return nil, nil, errors.Wrapf(err, "failed to load configuration")
 	}
 
-	return newMultiHashring(algorithm, replicationFactor, config), err
+	return newMultiHashring(algorithm, replicationFactor, config), config, err
 }
