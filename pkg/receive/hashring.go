@@ -11,12 +11,10 @@ import (
 	"sync"
 
 	"github.com/cespare/xxhash"
-	"k8s.io/utils/strings/slices"
-
 	"github.com/pkg/errors"
+	"golang.org/x/exp/slices"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 

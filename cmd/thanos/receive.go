@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -513,7 +512,6 @@ func setupHashring(g *run.Group,
 
 				// If ingestion is enabled, send a signal to TSDB to flush.
 				if enableIngestion && update.IsUpdatedForEndpoint(ownEndpoint) {
-					fmt.Println("Triggering update")
 					hashringChangedChan <- struct{}{}
 				} else {
 					// If not, just signal we are ready (this is important during first hashring load)
