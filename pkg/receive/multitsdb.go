@@ -219,10 +219,30 @@ func (t *MultiTSDB) Flush() error {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
+	return t.flush(t.tenants)
+}
+
+func (t *MultiTSDB) FlushTenants(tenants []string) error {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+
+	tenantsToFlush := make(map[string]*tenant)
+	for _, tenantName := range tenants {
+		tenantInstance, ok := t.tenants[tenantName]
+		if !ok {
+			continue
+		}
+		tenantsToFlush[tenantName] = tenantInstance
+	}
+
+	return t.flush(tenantsToFlush)
+}
+
+func (t *MultiTSDB) flush(tenants map[string]*tenant) error {
 	errmtx := &sync.Mutex{}
 	merr := errutil.MultiError{}
 	wg := &sync.WaitGroup{}
-	for id, tenant := range t.tenants {
+	for id, tenant := range tenants {
 		db := tenant.readyStorage().Get()
 		if db == nil {
 			level.Error(t.logger).Log("msg", "flushing TSDB failed; not ready", "tenant", id)

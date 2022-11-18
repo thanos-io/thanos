@@ -266,38 +266,39 @@ type HashringUpdate struct {
 	Hashring       Hashring
 }
 
-// HasUpdateForEndpoint returns true if any of the hashrings where
-// the given endpoint is present has been updated.
-func (h HashringUpdate) HasUpdateForEndpoint(endpoint string) bool {
+// UpdatedTenants returns all tenants whose hashrings have been updated.
+// Tenants whose hashrings do not include ownEndpoint are not considered
+// as updated. This allows for minimizing disruptions when flushing the
+// TSDB head when hashrings change.
+func (h HashringUpdate) UpdatedTenants(ownEndpoint string) []string {
 	newHashrings := hashringsByTenant(h.NewConfig)
 	oldHashrings := hashringsByTenant(h.PreviousConfig)
 
-	// Return true if a hashring was removed and the endpoint was a part of it.
+	var updates []string
+	// Include tenants that were removed and the endpoint was a part of their hashring.
 	for t, h := range oldHashrings {
-		hasEndpoint := slices.Contains(h.Endpoints, endpoint)
-		if _, ok := newHashrings[t]; !ok && hasEndpoint {
-			return true
+		hasEndpoint := slices.Contains(h.Endpoints, ownEndpoint)
+		if _, kept := newHashrings[t]; !kept && hasEndpoint {
+			updates = append(updates, t)
 		}
 	}
 
-	hasUpdates := false
 	for t, newHashring := range newHashrings {
 		oldHashring, ok := oldHashrings[t]
 		if !ok {
 			continue
 		}
 
-		endpointInHashring := slices.Contains(oldHashring.Endpoints, endpoint) || slices.Contains(newHashring.Endpoints, endpoint)
+		endpointInHashring := slices.Contains(oldHashring.Endpoints, ownEndpoint) || slices.Contains(newHashring.Endpoints, ownEndpoint)
 		if !endpointInHashring {
 			continue
 		}
 
 		if !slices.Equal(oldHashring.Endpoints, newHashring.Endpoints) {
-			hasUpdates = true
-			break
+			updates = append(updates, t)
 		}
 	}
-	return hasUpdates
+	return updates
 }
 
 func hashringsByTenant(configs []HashringConfig) map[string]HashringConfig {

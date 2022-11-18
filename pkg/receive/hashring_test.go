@@ -18,10 +18,10 @@ import (
 
 func TestHashringUpdated(t *testing.T) {
 	tests := []struct {
-		name       string
-		update     HashringUpdate
-		endpoint   string
-		hasUpdates bool
+		name           string
+		update         HashringUpdate
+		endpoint       string
+		updatedTenants []string
 	}{
 		{
 			name: "hashring added",
@@ -34,8 +34,8 @@ func TestHashringUpdated(t *testing.T) {
 					},
 				},
 			},
-			endpoint:   "endpoint-1",
-			hasUpdates: false,
+			endpoint:       "endpoint-1",
+			updatedTenants: nil,
 		},
 		{
 			name: "hashring removed",
@@ -48,8 +48,8 @@ func TestHashringUpdated(t *testing.T) {
 				},
 				NewConfig: nil,
 			},
-			endpoint:   "endpoint-1",
-			hasUpdates: true,
+			endpoint:       "endpoint-1",
+			updatedTenants: []string{"tenant-1"},
 		},
 		{
 			name: "hashring removed, endpoint not part of it",
@@ -62,8 +62,8 @@ func TestHashringUpdated(t *testing.T) {
 				},
 				NewConfig: nil,
 			},
-			endpoint:   "endpoint-3",
-			hasUpdates: false,
+			endpoint:       "endpoint-3",
+			updatedTenants: nil,
 		},
 		{
 			name: "hashring with endpoint updated",
@@ -73,16 +73,24 @@ func TestHashringUpdated(t *testing.T) {
 						Tenants:   []string{"tenant-1"},
 						Endpoints: []string{"endpoint-1", "endpoint-2"},
 					},
+					{
+						Tenants:   []string{"tenant-2"},
+						Endpoints: []string{"endpoint-3", "endpoint-4"},
+					},
 				},
 				NewConfig: []HashringConfig{
 					{
 						Tenants:   []string{"tenant-1"},
 						Endpoints: []string{"endpoint-1", "endpoint-3"},
 					},
+					{
+						Tenants:   []string{"tenant-2"},
+						Endpoints: []string{"endpoint-3", "endpoint-5"},
+					},
 				},
 			},
-			endpoint:   "endpoint-1",
-			hasUpdates: true,
+			endpoint:       "endpoint-1",
+			updatedTenants: []string{"tenant-1"},
 		},
 		{
 			name: "hashring without endpoint updated",
@@ -100,14 +108,14 @@ func TestHashringUpdated(t *testing.T) {
 					},
 				},
 			},
-			endpoint:   "endpoint-4",
-			hasUpdates: false,
+			endpoint:       "endpoint-4",
+			updatedTenants: nil,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			testutil.Equals(t, tc.hasUpdates, tc.update.HasUpdateForEndpoint(tc.endpoint))
+			testutil.Equals(t, tc.updatedTenants, tc.update.UpdatedTenants(tc.endpoint))
 		})
 	}
 }

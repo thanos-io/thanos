@@ -256,7 +256,8 @@ func runReceive(
 	// initial config and mark ourselves as ready after it completes.
 
 	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
-	hashringChangedChan := make(chan struct{}, 1)
+	// It contains tenants whose TSDBs need to be flushed.
+	hashringChangedChan := make(chan []string, 1)
 
 	if enableIngestion {
 		// uploadC signals when new blocks should be uploaded.
@@ -432,7 +433,7 @@ func setupHashring(g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
 	conf *receiveConfig,
-	hashringChangedChan chan struct{},
+	hashringChangedChan chan []string,
 	webHandler *receive.Handler,
 	statusProber prober.Probe,
 	enableIngestion bool,
@@ -509,9 +510,10 @@ func setupHashring(g *run.Group,
 				}
 				webHandler.Hashring(update.Hashring)
 
+				updatedTenants := update.UpdatedTenants(conf.endpoint)
 				// If ingestion is enabled, send a signal to TSDB to flush.
-				if enableIngestion && update.HasUpdateForEndpoint(conf.endpoint) {
-					hashringChangedChan <- struct{}{}
+				if enableIngestion && len(updatedTenants) > 0 {
+					hashringChangedChan <- updatedTenants
 				} else {
 					// If not, just signal we are ready (this is important during first hashring load)
 					statusProber.Ready()
@@ -533,7 +535,7 @@ func startTSDBAndUpload(g *run.Group,
 	reg *prometheus.Registry,
 	dbs *receive.MultiTSDB,
 	uploadC chan struct{},
-	hashringChangedChan chan struct{},
+	hashringChangedChan chan []string,
 	upload bool,
 	uploadDone chan struct{},
 	statusProber prober.Probe,
@@ -581,7 +583,7 @@ func startTSDBAndUpload(g *run.Group,
 			select {
 			case <-cancel:
 				return nil
-			case _, ok := <-hashringChangedChan:
+			case tenants, ok := <-hashringChangedChan:
 				if !ok {
 					return nil
 				}
@@ -601,7 +603,7 @@ func startTSDBAndUpload(g *run.Group,
 
 					level.Info(logger).Log("msg", "updating storage")
 					dbUpdatesStarted.Inc()
-					if err := dbs.Flush(); err != nil {
+					if err := dbs.FlushTenants(tenants); err != nil {
 						return errors.Wrap(err, "flushing storage")
 					}
 					if err := dbs.Open(); err != nil {
