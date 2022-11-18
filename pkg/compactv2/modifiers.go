@@ -236,7 +236,11 @@ type delSeriesIterator struct {
 }
 
 func (p *delSeriesIterator) Next() chunkenc.ValueType {
-	if valueType := p.curr.Next(); p.curr != nil && valueType != chunkenc.ValNone {
+	if p.curr == nil {
+		return chunkenc.ValNone
+	}
+
+	if valueType := p.curr.Next(); valueType != chunkenc.ValNone {
 		return valueType
 	}
 
@@ -254,7 +258,11 @@ func (p *delSeriesIterator) Next() chunkenc.ValueType {
 }
 
 func (p *delSeriesIterator) Seek(t int64) chunkenc.ValueType {
-	if valueType := p.curr.Seek(t); p.curr != nil && valueType != chunkenc.ValNone {
+	if p.curr == nil {
+		return chunkenc.ValNone
+	}
+
+	if valueType := p.curr.Seek(t); valueType != chunkenc.ValNone {
 		return valueType
 	}
 	for p.Next() != chunkenc.ValNone {
