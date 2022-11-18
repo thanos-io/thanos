@@ -274,7 +274,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
-		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion, conf.endpoint); err != nil {
+		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion); err != nil {
 			return err
 		}
 	}
@@ -436,7 +436,6 @@ func setupHashring(g *run.Group,
 	webHandler *receive.Handler,
 	statusProber prober.Probe,
 	enableIngestion bool,
-	ownEndpoint string,
 ) error {
 	// Note: the hashring configuration watcher
 	// is the sender and thus closes the chan.
@@ -511,7 +510,7 @@ func setupHashring(g *run.Group,
 				webHandler.Hashring(update.Hashring)
 
 				// If ingestion is enabled, send a signal to TSDB to flush.
-				if enableIngestion && update.HasUpdateForEndpoint(ownEndpoint) {
+				if enableIngestion && update.HasUpdateForEndpoint(conf.endpoint) {
 					hashringChangedChan <- struct{}{}
 				} else {
 					// If not, just signal we are ready (this is important during first hashring load)
