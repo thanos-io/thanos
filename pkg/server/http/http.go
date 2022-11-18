@@ -78,7 +78,7 @@ func (s *Server) ListenAndServe() error {
 
 	flags := &toolkit_web.FlagConfig{
 		WebListenAddresses: &([]string{s.opts.listen}),
-		WebSystemdSocket:   OfBool(false),
+		WebSystemdSocket:   ofBool(false),
 		WebConfigFile:      &s.opts.tlsConfigPath,
 	}
 
@@ -139,6 +139,7 @@ func registerProbes(mux *http.ServeMux, p *prober.HTTPProbe, logger log.Logger) 
 	}
 }
 
-func OfBool(i bool) *bool {
+// Helper for exporter toolkit FlagConfig
+func ofBool(i bool) *bool {
 	return &i
 }

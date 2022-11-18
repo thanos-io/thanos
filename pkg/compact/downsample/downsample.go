@@ -706,7 +706,7 @@ func (it *AverageChunkIterator) Next() chunkenc.ValueType {
 	cok, sok := it.cntIt.Next(), it.sumIt.Next()
 	if cok != sok {
 		it.err = errors.New("sum and count iterator not aligned")
-		return chunkenc.ValFloat
+		return chunkenc.ValNone
 	}
 	if cok == chunkenc.ValNone {
 		return chunkenc.ValNone
