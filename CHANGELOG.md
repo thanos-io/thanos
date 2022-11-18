@@ -30,7 +30,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#5716](https://github.com/thanos-io/thanos/pull/5716) DNS: Fix miekgdns resolver LookupSRV to work with CNAME records.
 - [#5846](https://github.com/thanos-io/thanos/pull/5846) Query Frontend: vertical query sharding supports subqueries.
-- [#5905](https://github.com/thanos-io/thanos/pull/5905) Receive: reduce occurrences of forced head compaction. 
+- [#5905](https://github.com/thanos-io/thanos/pull/5905) Receive: reduce occurrences of forced head compaction.
 
 ### Removed
 
