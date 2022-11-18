@@ -107,7 +107,7 @@ func TestHashringUpdated(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			testutil.Equals(t, tc.hasUpdates, tc.update.IsUpdatedForEndpoint(tc.endpoint))
+			testutil.Equals(t, tc.hasUpdates, tc.update.HasUpdateForEndpoint(tc.endpoint))
 		})
 	}
 }

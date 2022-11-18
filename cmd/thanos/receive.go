@@ -511,7 +511,7 @@ func setupHashring(g *run.Group,
 				webHandler.Hashring(update.Hashring)
 
 				// If ingestion is enabled, send a signal to TSDB to flush.
-				if enableIngestion && update.IsUpdatedForEndpoint(ownEndpoint) {
+				if enableIngestion && update.HasUpdateForEndpoint(ownEndpoint) {
 					hashringChangedChan <- struct{}{}
 				} else {
 					// If not, just signal we are ready (this is important during first hashring load)

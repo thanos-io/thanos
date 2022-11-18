@@ -266,9 +266,9 @@ type HashringUpdate struct {
 	Hashring       Hashring
 }
 
-// IsUpdatedForEndpoint returns true if any of the hashrings where
+// HasUpdateForEndpoint returns true if any of the hashrings where
 // the given endpoint is present has been updated.
-func (h HashringUpdate) IsUpdatedForEndpoint(endpoint string) bool {
+func (h HashringUpdate) HasUpdateForEndpoint(endpoint string) bool {
 	newHashrings := hashringsByTenant(h.NewConfig)
 	oldHashrings := hashringsByTenant(h.PreviousConfig)
 
