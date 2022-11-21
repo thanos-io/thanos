@@ -50,6 +50,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		numSamplesOutOfOrder  = 0
 		numSamplesDuplicates  = 0
 		numSamplesOutOfBounds = 0
+		numSamplesTooOld      = 0
 
 		numExemplarsOutOfOrder  = 0
 		numExemplarsDuplicate   = 0
@@ -120,6 +121,9 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			case storage.ErrOutOfBounds:
 				numSamplesOutOfBounds++
 				level.Debug(tLogger).Log("msg", "Out of bounds metric", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
+			case storage.ErrTooOldSample:
+				numSamplesTooOld++
+				level.Debug(tLogger).Log("msg", "Sample is too old", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
 			default:
 				if err != nil {
 					level.Debug(tLogger).Log("msg", "Error ingesting sample", "err", err)
@@ -184,6 +188,10 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	if numSamplesOutOfBounds > 0 {
 		level.Warn(tLogger).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "numDropped", numSamplesOutOfBounds)
 		errs.Add(errors.Wrapf(storage.ErrOutOfBounds, "add %d samples", numSamplesOutOfBounds))
+	}
+	if numSamplesTooOld > 0 {
+		level.Warn(tLogger).Log("msg", "Error on ingesting samples that are outside of the allowed out-of-order time window", "numDropped", numSamplesTooOld)
+		errs.Add(errors.Wrapf(storage.ErrTooOldSample, "add %d samples", numSamplesTooOld))
 	}
 
 	if numExemplarsOutOfOrder > 0 {

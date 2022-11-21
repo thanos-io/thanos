@@ -140,6 +140,17 @@ func TestQueryInstantCodec_DecodeRequest(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:            "lookback_delta",
+			url:             "/api/v1/query?lookback_delta=1000",
+			partialResponse: false,
+			expectedRequest: &ThanosQueryInstantRequest{
+				Path:          "/api/v1/query",
+				Dedup:         true,
+				LookbackDelta: 1000000,
+				StoreMatchers: [][]*labels.Matcher{},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r, err := http.NewRequest(http.MethodGet, tc.url, nil)
@@ -497,6 +508,184 @@ func TestMergeResponse(t *testing.T) {
 						Result: &queryrange.PrometheusInstantQueryResult_Vector{
 							Vector: &queryrange.Vector{
 								Samples: []*queryrange.Sample{},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "merge two matrix responses with non-duplicate samples",
+			resps: []queryrange.Response{
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValMatrix.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+								Matrix: &queryrange.Matrix{
+									SampleStreams: []*queryrange.SampleStream{
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValMatrix.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+								Matrix: &queryrange.Matrix{
+									SampleStreams: []*queryrange.SampleStream{
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 2, Value: 3}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 2, Value: 3}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedResp: &queryrange.PrometheusInstantQueryResponse{
+				Status: queryrange.StatusSuccess,
+				Data: queryrange.PrometheusInstantQueryData{
+					ResultType: model.ValMatrix.String(),
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+							Matrix: &queryrange.Matrix{
+								SampleStreams: []*queryrange.SampleStream{
+									{
+										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}, {TimestampMs: 2, Value: 3}},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "bar",
+										})),
+									},
+									{
+										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}, {TimestampMs: 2, Value: 3}},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "foo",
+										})),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "merge two matrix responses with duplicate samples",
+			resps: []queryrange.Response{
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValMatrix.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+								Matrix: &queryrange.Matrix{
+									SampleStreams: []*queryrange.SampleStream{
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValMatrix.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+								Matrix: &queryrange.Matrix{
+									SampleStreams: []*queryrange.SampleStream{
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+										{
+											Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedResp: &queryrange.PrometheusInstantQueryResponse{
+				Status: queryrange.StatusSuccess,
+				Data: queryrange.PrometheusInstantQueryData{
+					ResultType: model.ValMatrix.String(),
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+							Matrix: &queryrange.Matrix{
+								SampleStreams: []*queryrange.SampleStream{
+									{
+										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "bar",
+										})),
+									},
+									{
+										Samples: []cortexpb.Sample{{TimestampMs: 1, Value: 2}},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "foo",
+										})),
+									},
+								},
 							},
 						},
 					},

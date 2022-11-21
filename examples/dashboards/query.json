@@ -1501,6 +1501,95 @@
          "titleSize": "h6"
       },
       {
+         "collapse": false,
+         "height": "250px",
+         "panels": [
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "description": "Shows available capacity of processing queries in parallel.",
+               "fill": 1,
+               "id": 15,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 12,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "max_over_time(thanos_query_concurrent_gate_queries_max{job=~\"$job\"}[$__rate_interval]) - avg_over_time(thanos_query_concurrent_gate_queries_in_flight{job=~\"$job\"}[$__rate_interval])",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "{{job}} - {{pod}}",
+                     "legendLink": null,
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Concurrent Capacity",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            }
+         ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Query Concurrency",
+         "titleSize": "h6"
+      },
+      {
          "collapse": true,
          "height": "250px",
          "panels": [
@@ -1511,7 +1600,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 15,
+               "id": 16,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1627,7 +1716,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 16,
+               "id": 17,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1703,7 +1792,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 17,
+               "id": 18,
                "legend": {
                   "avg": false,
                   "current": false,

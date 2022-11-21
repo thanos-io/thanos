@@ -39,7 +39,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Step:  60 * seconds,
 			},
-			expected: "fe::up:60000:0:2:-",
+			expected: "fe::up:60000:0:2:-:0",
 		},
 		{
 			name: "10s step",
@@ -48,7 +48,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Start: 0,
 				Step:  10 * seconds,
 			},
-			expected: "fe::up:10000:0:2:-",
+			expected: "fe::up:10000:0:2:-:0",
 		},
 		{
 			name: "1m downsampling resolution",
@@ -58,7 +58,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: 60 * seconds,
 			},
-			expected: "fe::up:10000:0:2:-",
+			expected: "fe::up:10000:0:2:-:0",
 		},
 		{
 			name: "5m downsampling resolution, different cache key",
@@ -68,7 +68,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: 300 * seconds,
 			},
-			expected: "fe::up:10000:0:1:-",
+			expected: "fe::up:10000:0:1:-:0",
 		},
 		{
 			name: "1h downsampling resolution, different cache key",
@@ -78,7 +78,18 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:                10 * seconds,
 				MaxSourceResolution: hour,
 			},
-			expected: "fe::up:10000:0:0:-",
+			expected: "fe::up:10000:0:0:-:0",
+		},
+		{
+			name: "1h downsampling resolution with lookback delta",
+			req: &ThanosQueryRangeRequest{
+				Query:               "up",
+				Start:               0,
+				Step:                10 * seconds,
+				MaxSourceResolution: hour,
+				LookbackDelta:       1000,
+			},
+			expected: "fe::up:10000:0:0:-:1000",
 		},
 		{
 			name: "label names, no matcher",
