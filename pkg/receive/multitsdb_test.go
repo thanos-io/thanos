@@ -388,14 +388,14 @@ func TestMultiTSDBPrune(t *testing.T) {
 		{
 			name:            "prune tsdbs without object storage",
 			bucket:          nil,
-			expectedTenants: 1,
+			expectedTenants: 2,
 			expectedUploads: 0,
 		},
 		{
 			name:            "prune tsdbs with object storage",
 			bucket:          objstore.NewInMemBucket(),
-			expectedTenants: 1,
-			expectedUploads: 2,
+			expectedTenants: 2,
+			expectedUploads: 1,
 		},
 	}
 
@@ -419,7 +419,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 
 			for i := 0; i < 100; i++ {
 				testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10+i))))
-				testutil.Ok(t, appendSample(m, "bar", time.UnixMilli(int64(10+i))))
+				testutil.Ok(t, appendSample(m, "bar", time.Now().Add(-4*time.Hour)))
 				testutil.Ok(t, appendSample(m, "baz", time.Now().Add(time.Duration(i)*time.Second)))
 			}
 			testutil.Equals(t, 3, len(m.TSDBLocalClients()))
