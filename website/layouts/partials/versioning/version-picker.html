@@ -3,6 +3,7 @@
     <div class="dropdown-menu" aria-labelledby="dropdownMenuLink">
         {{- range .Site.Sections.Reverse }}
       {{- $version := .Section }}
+      {{- if eq $version "blog" }}{{continue}}{{end}}
       <a class="dropdown-item" href="{{ printf "../../../../%s" $version }}/thanos/getting-started.md">
         {{ $version }}
       </a>

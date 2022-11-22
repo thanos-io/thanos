@@ -77,17 +77,20 @@ func removeExactDuplicates(chks []storepb.AggrChunk) []storepb.AggrChunk {
 	if len(chks) <= 1 {
 		return chks
 	}
-
-	ret := make([]storepb.AggrChunk, 0, len(chks))
-	ret = append(ret, chks[0])
-
-	for _, c := range chks[1:] {
-		if ret[len(ret)-1].Compare(c) == 0 {
+	head := 0
+	for i, c := range chks[1:] {
+		if chks[head].Compare(c) == 0 {
 			continue
 		}
-		ret = append(ret, c)
+		head++
+		if i+1 == head {
+			// `chks[head] == chks[i+1] == c` so this is a no-op.
+			// This way we get no copies in case the input had no duplicates.
+			continue
+		}
+		chks[head] = c
 	}
-	return ret
+	return chks[:head+1]
 }
 
 func (s *promSeriesSet) At() storage.Series {

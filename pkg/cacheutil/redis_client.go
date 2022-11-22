@@ -239,8 +239,9 @@ func (c *RedisClient) SetMulti(ctx context.Context, data map[string][]byte, ttl 
 		keys = append(keys, k)
 	}
 	err := doWithBatch(ctx, len(data), c.config.SetMultiBatchSize, c.setMultiGate, func(startIndex, endIndex int) error {
+		currentKeys := keys[startIndex:endIndex]
 		_, err := c.Pipelined(ctx, func(p redis.Pipeliner) error {
-			for _, key := range keys {
+			for _, key := range currentKeys {
 				p.SetEX(ctx, key, data[key], ttl)
 			}
 			return nil

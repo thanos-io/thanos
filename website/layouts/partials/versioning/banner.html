@@ -1,6 +1,6 @@
-{{- $currentVersion := index (split .Dir "/") 0 }}
+{{- $currentVersion := index (split .File.Dir "/") 0 }}
 {{- $latestVersion := "tip" }}
-{{- $latestUrl := replace .URL $currentVersion $latestVersion }}
+{{- $latestUrl := replace .RelPermalink $currentVersion $latestVersion }}
 
 {{- if ne $currentVersion $latestVersion }}
 <div class="alert alert-warning" role="alert">

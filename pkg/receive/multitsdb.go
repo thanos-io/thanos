@@ -59,7 +59,7 @@ type MultiTSDB struct {
 }
 
 // NewMultiTSDB creates new MultiTSDB.
-// NOTE: Passed labels has to be sorted by name.
+// NOTE: Passed labels must be sorted lexicographically (alphabetically).
 func NewMultiTSDB(
 	dataDir string,
 	l log.Logger,
@@ -322,16 +322,22 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 		return false, nil
 	}
 
-	sinceLastAppend := time.Since(time.UnixMilli(head.MaxTime()))
-	if sinceLastAppend.Milliseconds() <= t.tsdbOpts.RetentionDuration {
+	sinceLastAppendMillis := time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
+	compactThreshold := int64(1.5 * float64(t.tsdbOpts.MaxBlockDuration))
+	if sinceLastAppendMillis <= compactThreshold {
 		return false, nil
 	}
 
-	level.Info(logger).Log("msg", "Pruning tenant")
+	level.Info(logger).Log("msg", "Compacting tenant")
 	if err := tdb.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
 		return false, err
 	}
 
+	if sinceLastAppendMillis <= t.tsdbOpts.RetentionDuration {
+		return false, nil
+	}
+
+	level.Info(logger).Log("msg", "Pruning tenant")
 	if tenantInstance.shipper() != nil {
 		uploaded, err := tenantInstance.shipper().Sync(ctx)
 		if err != nil {

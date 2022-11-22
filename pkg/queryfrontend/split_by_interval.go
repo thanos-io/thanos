@@ -46,7 +46,10 @@ type splitByInterval struct {
 func (s splitByInterval) Do(ctx context.Context, r queryrange.Request) (queryrange.Response, error) {
 	// First we're going to build new requests, one for each day, taking care
 	// to line up the boundaries with step.
-	reqs := splitQuery(r, s.interval(r))
+	reqs, err := splitQuery(r, s.interval(r))
+	if err != nil {
+		return nil, err
+	}
 	s.splitByCounter.Add(float64(len(reqs)))
 
 	reqResps, err := queryrange.DoRequests(ctx, s.next, reqs, s.limits)
@@ -66,9 +69,15 @@ func (s splitByInterval) Do(ctx context.Context, r queryrange.Request) (queryran
 	return response, nil
 }
 
-func splitQuery(r queryrange.Request, interval time.Duration) []queryrange.Request {
+func splitQuery(r queryrange.Request, interval time.Duration) ([]queryrange.Request, error) {
 	var reqs []queryrange.Request
 	if _, ok := r.(*ThanosQueryRangeRequest); ok {
+		// Replace @ modifier function to their respective constant values in the query.
+		// This way subqueries will be evaluated at the same time as the parent query.
+		query, err := queryrange.EvaluateAtModifierFunction(r.GetQuery(), r.GetStart(), r.GetEnd())
+		if err != nil {
+			return nil, err
+		}
 		if start := r.GetStart(); start == r.GetEnd() {
 			reqs = append(reqs, r.WithStartEnd(start, start))
 		} else {
@@ -78,7 +87,7 @@ func splitQuery(r queryrange.Request, interval time.Duration) []queryrange.Reque
 					end = r.GetEnd()
 				}
 
-				reqs = append(reqs, r.WithStartEnd(start, end))
+				reqs = append(reqs, r.WithQuery(query).WithStartEnd(start, end))
 			}
 		}
 	} else {
@@ -93,7 +102,7 @@ func splitQuery(r queryrange.Request, interval time.Duration) []queryrange.Reque
 		}
 	}
 
-	return reqs
+	return reqs, nil
 }
 
 // Round up to the step before the next interval boundary.

@@ -70,7 +70,11 @@ transformations:
         menu: contributing
         lastmod: "{{ .Origin.LastMod }}"
     backMatter: *docBackMatter
-  
+
+  # Non-versioned element: Blog.
+  - glob: "blog/*"
+    path: /../blog/*
+
   - glob: "**/README.md"
     path: _index.md
     frontMatter: &justTitleFrontMatter
