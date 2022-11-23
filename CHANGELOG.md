@@ -35,6 +35,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Removed
 
 - [#5824](https://github.com/thanos-io/thanos/pull/5824) Mixin: Remove noisy `ThanosReceiveTrafficBelowThreshold` alert.
+- [#5819](https://github.com/thanos-io/thanos/pull/5819) Store: Add a few objectives for Store's data touched/fetched amount and sizes. They are: 50, 95, and 99 quantiles.
 
 ## [v0.29.0](https://github.com/thanos-io/thanos/tree/release-0.29) - 2022.11.03
 

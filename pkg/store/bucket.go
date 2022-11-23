@@ -168,21 +168,25 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	})
 
 	m.seriesDataTouched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_touched",
-		Help: "How many items of a data type in a block were touched for a single series request.",
+		Name:       "thanos_bucket_store_series_data_touched",
+		Help:       "Number of items of a data type touched to fulfill a single Store API series request.",
+		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
 	}, []string{"data_type"})
 	m.seriesDataFetched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_fetched",
-		Help: "How many items of a data type in a block were fetched for a single series request.",
+		Name:       "thanos_bucket_store_series_data_fetched",
+		Help:       "Number of items of a data type retrieved to fulfill a single Store API series request.",
+		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
 	}, []string{"data_type"})
 
 	m.seriesDataSizeTouched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_size_touched_bytes",
-		Help: "Size of all items of a data type in a block were touched for a single series request.",
+		Name:       "thanos_bucket_store_series_data_size_touched_bytes",
+		Help:       "Total size of items of a data type touched to fulfill a single Store API series request in Bytes.",
+		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
 	}, []string{"data_type"})
 	m.seriesDataSizeFetched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_size_fetched_bytes",
-		Help: "Size of all items of a data type in a block were fetched for a single series request.",
+		Name:       "thanos_bucket_store_series_data_size_fetched_bytes",
+		Help:       "Total size of items of a data type fetched to fulfill a single Store API series request in Bytes.",
+		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
 	}, []string{"data_type"})
 
 	m.seriesBlocksQueried = promauto.With(reg).NewSummary(prometheus.SummaryOpts{
