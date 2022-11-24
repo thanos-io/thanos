@@ -25,6 +25,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5836](https://github.com/thanos-io/thanos/pull/5836) Receive: Add hidden flag `tsdb.memory-snapshot-on-shutdown` to enable experimental TSDB feature to snapshot on shutdown. This is intended to speed up receiver restart.
 - [#5865](https://github.com/thanos-io/thanos/pull/5865) Compact: Retry on sync metas error.
 - [#5889](https://github.com/thanos-io/thanos/pull/5889) Query Frontend: Support sharding vertical sharding `label_replace` and `label_join` functions.
+- [#5819](https://github.com/thanos-io/thanos/pull/5819) Store: Add a few objectives for Store's data touched/fetched amount and sizes. They are: 50, 95, and 99 quantiles.
 
 ### Changed
 
@@ -35,7 +36,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Removed
 
 - [#5824](https://github.com/thanos-io/thanos/pull/5824) Mixin: Remove noisy `ThanosReceiveTrafficBelowThreshold` alert.
-- [#5819](https://github.com/thanos-io/thanos/pull/5819) Store: Add a few objectives for Store's data touched/fetched amount and sizes. They are: 50, 95, and 99 quantiles.
 
 ## [v0.29.0](https://github.com/thanos-io/thanos/tree/release-0.29) - 2022.11.03
 
