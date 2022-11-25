@@ -36,212 +36,15 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"google.golang.org/grpc"
 )
-
-func TestDetermineWriteErrorCause(t *testing.T) {
-	for _, tc := range []struct {
-		name           string
-		err            error
-		threshold      int
-		forReplication bool
-		exp            error
-	}{
-		{
-			name: "nil",
-		},
-		{
-			name: "nil multierror",
-			err:  errutil.NonNilMultiError([]error{}),
-		},
-		{
-			name:      "matching simple",
-			err:       errConflict,
-			threshold: 1,
-			exp:       errConflict,
-		},
-		{
-			name: "non-matching multierror",
-			err: errutil.NonNilMultiError([]error{
-				errors.New("foo"),
-				errors.New("bar"),
-			}),
-			exp: errors.New("2 errors: foo; bar"),
-		},
-		{
-			name: "nested non-matching multierror",
-			err: errors.Wrap(errutil.NonNilMultiError([]error{
-				errors.New("foo"),
-				errors.New("bar"),
-			}), "baz"),
-			threshold: 1,
-			exp:       errors.New("baz: 2 errors: foo; bar"),
-		},
-		{
-			name: "deep nested non-matching multierror",
-			err: errors.Wrap(errutil.NonNilMultiError([]error{
-				errors.New("foo"),
-				errutil.NonNilMultiError([]error{
-					errors.New("bar"),
-					errors.New("qux"),
-				}),
-			}), "baz"),
-			threshold: 1,
-			exp:       errors.New("baz: 2 errors: foo; 2 errors: bar; qux"),
-		},
-		{
-			name: "matching multierror",
-			err: errutil.NonNilMultiError([]error{
-				storage.ErrOutOfOrderSample,
-				errors.New("foo"),
-				errors.New("bar"),
-			}),
-			threshold: 1,
-			exp:       errConflict,
-		},
-		{
-			name: "matching multierror (exemplar error)",
-			err: errutil.NonNilMultiError([]error{
-				storage.ErrExemplarLabelLength,
-				errors.New("foo"),
-				errors.New("bar"),
-			}),
-			threshold: 1,
-			exp:       errConflict,
-		},
-		{
-			name: "matching multierror (labels error)",
-			err: errutil.NonNilMultiError([]error{
-				labelpb.ErrEmptyLabels,
-				errors.New("foo"),
-				errors.New("bar"),
-			}),
-			threshold: 1,
-			exp:       errConflict,
-		},
-		{
-			name: "matching but below threshold multierror",
-			err: errutil.NonNilMultiError([]error{
-				storage.ErrOutOfOrderSample,
-				errors.New("foo"),
-				errors.New("bar"),
-			}),
-			threshold: 2,
-			exp:       errors.New("3 errors: out of order sample; foo; bar"),
-		},
-		{
-			name: "matching multierror many",
-			err: errutil.NonNilMultiError([]error{
-				storage.ErrOutOfOrderSample,
-				errConflict,
-				status.Error(codes.AlreadyExists, "conflict"),
-				errors.New("foo"),
-				errors.New("bar"),
-			}),
-			threshold: 1,
-			exp:       errConflict,
-		},
-		{
-			name: "matching multierror many, one above threshold",
-			err: errutil.NonNilMultiError([]error{
-				storage.ErrOutOfOrderSample,
-				errConflict,
-				tsdb.ErrNotReady,
-				tsdb.ErrNotReady,
-				tsdb.ErrNotReady,
-				errors.New("foo"),
-			}),
-			threshold: 2,
-			exp:       errNotReady,
-		},
-		{
-			name: "matching multierror many, one above threshold (exemplar error)",
-			err: errutil.NonNilMultiError([]error{
-				tsdb.ErrNotReady,
-				tsdb.ErrNotReady,
-				storage.ErrDuplicateExemplar,
-				storage.ErrDuplicateSampleForTimestamp,
-				storage.ErrExemplarLabelLength,
-				errors.New("foo"),
-			}),
-			threshold: 2,
-			exp:       errConflict,
-		},
-		{
-			name: "matching multierror many, both above threshold, conflict has precedence",
-			err: errutil.NonNilMultiError([]error{
-				storage.ErrOutOfOrderSample,
-				errConflict,
-				tsdb.ErrNotReady,
-				tsdb.ErrNotReady,
-				tsdb.ErrNotReady,
-				status.Error(codes.AlreadyExists, "conflict"),
-				errors.New("foo"),
-			}),
-			threshold: 2,
-			exp:       errConflict,
-		},
-		{
-			name: "matching multierror many, both above threshold, conflict has precedence (labels error)",
-			err: errutil.NonNilMultiError([]error{
-				labelpb.ErrDuplicateLabels,
-				labelpb.ErrDuplicateLabels,
-				tsdb.ErrNotReady,
-				tsdb.ErrNotReady,
-				tsdb.ErrNotReady,
-				labelpb.ErrDuplicateLabels,
-				errors.New("foo"),
-			}),
-			threshold: 2,
-			exp:       errConflict,
-		},
-		{
-			name: "nested matching multierror",
-			err: errors.Wrap(errors.Wrap(errutil.NonNilMultiError([]error{
-				storage.ErrOutOfOrderSample,
-				errors.New("foo"),
-				errors.New("bar"),
-			}), "baz"), "qux"),
-			threshold: 1,
-			exp:       errConflict,
-		},
-		{
-			name: "deep nested matching multierror",
-			err: errors.Wrap(errutil.NonNilMultiError([]error{
-				errutil.NonNilMultiError([]error{
-					errors.New("qux"),
-					status.Error(codes.AlreadyExists, "conflict"),
-					status.Error(codes.AlreadyExists, "conflict"),
-				}),
-				errors.New("foo"),
-				errors.New("bar"),
-			}), "baz"),
-			threshold: 1,
-			exp:       errors.New("baz: 3 errors: 3 errors: qux; rpc error: code = AlreadyExists desc = conflict; rpc error: code = AlreadyExists desc = conflict; foo; bar"),
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			err := determineWriteErrorCause(tc.err, tc.threshold)
-			if tc.exp != nil {
-				testutil.NotOk(t, err)
-				testutil.Equals(t, tc.exp.Error(), err.Error())
-				return
-			}
-			testutil.Ok(t, err)
-		})
-	}
-}
 
 type fakeTenantAppendable struct {
 	f *fakeAppendable
@@ -375,7 +178,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			TenantHeader:      DefaultTenantHeader,
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
-			ForwardTimeout:    5 * time.Second,
+			ForwardTimeout:    5 * time.Minute,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
 			Limiter:           limiter,
 		})
@@ -567,7 +370,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 conflict and commit error with replication",
-			status:            http.StatusConflict,
+			status:            http.StatusInternalServerError,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -695,7 +498,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 6 with replication 3 one commit and two conflict error",
-			status:            http.StatusConflict,
+			status:            http.StatusInternalServerError,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
