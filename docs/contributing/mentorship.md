@@ -63,7 +63,7 @@ In order to allow mentees to share the knowledge their learned and allow them to
 
 ## For Mentors
 
-This section explains some process around selecting mentees (TBD) and [retrospective](#retrospective) process.
+This section explains some process around selecting mentees and [retrospective](#retrospective) process.
 
 ### Retrospective
 
@@ -82,4 +82,45 @@ The example retrospective process looks as follows:
 
 ### Mentees Selection
 
-TBD
+This section is to help guide mentors, old and new, on how to select mentees for Thanos mentorship projects. It details recommendations and steps for this entire process.
+
+#### Process
+
+The steps for any particular project mentee selection are as follows,
+
+1. After your project has been proposed to a particular mentorship program like LFX or GSoC, ensure that it is discoverable by potential mentees during the application period, by sharing it on the relevant GitHub issue. You could also optionally share this on the [#thanos-dev slack channel](https://cloud-native.slack.com/archives/CL25937SP), [Twitter](https://twitter.com/ThanosMetrics), and even during Thanos Contributor Hours.
+2. Wait for the mentee application period to end, and log into the relevant portal for the mentorship, in order to view mentee applications. You can refer to the relevant documentation that you will receive, to familiarize yourself with the portal, application format, and **selection deadlines**. Additional reference: [LFX Mentor docs](https://docs.linuxfoundation.org/lfx/mentorship/mentors/review-mentee-applications-and-tasks), [GSoC mentor guide](https://google.github.io/gsocguides/mentor/).
+3. Discuss with your co-mentors, and shortlist roughly, 30% of the mentee applications that you've found to be suitable, by referring to their applications, which can consist of things like CVs, proposals, and "statement of purpose" type questions. Refer to [recommendations](#recommendations) for what to keep in mind while shortlisting.
+4. Send an email with a few extra questions to get to know these 30% potential mentees even more. You can refer to the `thanos-io@googlegroups.com` mailing list for a list of such questions and the email format from past mentorships. Make sure to add mentee emails to `bcc` and your co-mentors and `thanos-io@googlegroups.com` to `to`. Set a deadline for the responses.
+5. Once you receive replies from most of them, review again with your co-mentor and shortlist candidates that you would now like to interview.
+6. Conduct 20-minute interviews (refer to [recommendations](#recommendations) for what to keep in mind during these interviews) of the shortlisted mentees to get to know them even better, and finally select a single person
+7. Send an email to the selected mentee asking for confirmation, and if they are happy with this.
+8. Once they reply, fill out the selection form in the relevant portal! :)
+
+#### Recommendations
+
+During mentee selection for our various mentorship programs, we want to follow some best practices to ensure that the mentorship is a fruitful experience for both mentees and mentors. A large part of ensuring this is selecting the most suitable candidate for the mentorship!
+
+This process is hard and requires time, as it involves holistically looking at mentorship applications, and trying to ascertain if they would be able to benefit from this mentorship and ideally become a great future contributor or even maintainer.
+
+With several past mentorships, we have been able to distill some learnings from the process, which are listed here as recommendations to mentors,
+
+* Encourage mentees who are interested in applying, by asking them to look through our issues and trying to work on one in which they would learn a bit about the codebase!
+* Allocate some time upfront for this process, as you might have a lot of mentee applications to look through.
+  * If possible, book some time on your calendars and discuss the selection process with co-mentors in a particular quarter beforehand.
+* Try to have some prerequisites in mind while shortlisting an application of a potential mentee (CV/questions/proposal/interview),
+  * The mentee should be able to allocate enough time to the mentorship.
+    * Thus, having prior important commitments like a full-time job or large educational course load can lead to mentees not having enough time for the mentorship, even if they commit to working > 30hrs a week. This could manifest as mentees not having enough energy to think about a project, skipping meetings, and generally not being able to utilize the time mentors can spend with them.
+    * So it is better to practically judge the amount of work a mentee would be able to balance before selecting them.
+    * Generally we expect our mentees to be university/college students, who would be able to balance both the mentorship and a moderate amount of course load. Commitments larger than this would need to be treated with some caution.
+  * The mentee should have at least one prior contribution to Thanos or its dependencies that affect it indirectly. The contribution should demonstrate effort & interest on part of the potential mentee.
+    * We want to understand that the potential mentee is interested in the project and has invested some time and effort in trying to understand Thanos.
+    * However, the contribution should not be a minimal effort, such as a typo/grammar fix or variable name change. While these are valued contributions, they cannot effectively demonstrate mentee effort, and should instead be some code/doc change. Note that this doesn't need to be in a merged/finalized state and can be open.
+  * The mentee should have proper means of communication (can be ensured during the 20-minute interview).
+    * This constitutes things like good enough internet to be able to video calls without dropping, as that is the primary means of communication between mentors and mentees.
+    * As most of the discussions (meetings/issues/reviews/code comments) are conducted in English, the mentee should be able to communicate well in English (first/second language).
+  * The mentee should have some form of local development environment setup, that would not require the mentor to constantly debug the mentee's environment, while working on the project.
+    * This is hard to ensure fully, but generally the mentee should be working on linux/linux VM/macOS, so most generic GNU/BSD commands are compatible.
+    * The mentee should have basic git, bash, programming, and Go knowledge. 
+    * They should be using some common code editor/IDE (VSCode/Goland), for the duration of mentorship, so that it is easier to pair program and share knowledge with them, without being blocked by things like code navigation.
+  * It is preferable to have mentees from historically underrepresented communities in tech, to ensure diverse contributors in Thanos.
