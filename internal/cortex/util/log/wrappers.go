@@ -6,7 +6,6 @@ package log
 import (
 	"context"
 
-	"github.com/go-kit/log"
 	kitlog "github.com/go-kit/log"
 	"github.com/weaveworks/common/tracing"
 
@@ -48,10 +47,4 @@ func WithContext(ctx context.Context, l kitlog.Logger) kitlog.Logger {
 	}
 
 	return WithTraceID(traceID, l)
-}
-
-// WithSourceIPs returns a Logger that has information about the source IPs in
-// its details.
-func WithSourceIPs(sourceIPs string, l log.Logger) log.Logger {
-	return log.With(l, "sourceIPs", sourceIPs)
 }
