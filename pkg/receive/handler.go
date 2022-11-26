@@ -777,10 +777,9 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 			if !more {
 				for _, rerr := range seriesErrs {
 					if seriesReplicated {
-						errs.Add(rerr.Cause())
+						errs.Add(rerr.ErrOrNil())
 					} else {
-						cause := rerr.replicationErr(quorum)
-						errs.Add(errors.Wrapf(cause, rerr.Error()))
+						errs.Add(rerr.replicationErr(quorum).ErrOrNil())
 					}
 				}
 				return errs.ErrOrNil()
@@ -932,7 +931,13 @@ func (es *writeErrors) Add(err error) {
 	if es.reasonSet == nil {
 		es.reasonSet = make(map[string]struct{})
 	}
-	es.reasonSet[err.Error()] = struct{}{}
+	if werr, ok := err.(*writeErrors); ok {
+		for reason := range werr.reasonSet {
+			es.reasonSet[reason] = struct{}{}
+		}
+	} else {
+		es.reasonSet[err.Error()] = struct{}{}
+	}
 }
 
 // ErrOrNil returns the writeErrors instance if any
@@ -981,13 +986,13 @@ func (es *writeErrors) Cause() error {
 // If no single error has occurred more than the threshold, but the
 // total number of errors meets the threshold,
 // replicationErr will return errInternal.
-func (es *writeErrors) replicationErr(threshold int) error {
+func (es *writeErrors) replicationErr(threshold int) *writeErrors {
 	if es == nil {
-		return nil
+		return &writeErrors{}
 	}
 
 	if len(es.errs) == 0 {
-		return nil
+		return &writeErrors{}
 	}
 
 	expErrs := expectedErrors{
@@ -1003,17 +1008,24 @@ func (es *writeErrors) replicationErr(threshold int) error {
 			}
 		}
 	}
+
 	// Determine which error occurred most.
 	sort.Sort(sort.Reverse(expErrs))
 	if exp := expErrs[0]; exp.count >= threshold {
-		return exp.err
+		return &writeErrors{
+			errs:      []error{exp.err},
+			reasonSet: es.reasonSet,
+		}
 	}
 
 	if len(es.errs) >= threshold {
-		return errInternal
+		return &writeErrors{
+			errs:      []error{errInternal},
+			reasonSet: es.reasonSet,
+		}
 	}
 
-	return nil
+	return &writeErrors{}
 }
 
 // Error returns a string containing a deduplicated set of reasons.

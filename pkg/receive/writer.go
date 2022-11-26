@@ -209,5 +209,5 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	if err := app.Commit(); err != nil {
 		errs.Add(errors.Wrap(err, "commit samples"))
 	}
-	return errs.Cause()
+	return errs.ErrOrNil()
 }
