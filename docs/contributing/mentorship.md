@@ -116,7 +116,7 @@ With several past mentorships, we have been able to distill some learnings from 
   * The mentee should have at least one prior contribution to Thanos or its dependencies that affect it indirectly. The contribution should demonstrate effort & interest on part of the potential mentee.
     * We want to understand that the potential mentee is interested in the project and has invested some time and effort in trying to understand Thanos.
     * However, the contribution should not be a minimal effort, such as a typo/grammar fix or variable name change. While these are valued contributions, they cannot effectively demonstrate mentee effort, and should instead be some code/doc change. Note that this doesn't need to be in a merged/finalized state and can be open.
-  * The mentee should have proper means of communication (can be ensured during the 20-minute interview).
+  * The mentee should have access to a stable internet connection over which they can attend regular video calls with mentors.
     * This constitutes things like good enough internet to be able to video calls without dropping, as that is the primary means of communication between mentors and mentees.
     * As most of the discussions (meetings/issues/reviews/code comments) are conducted in English, the mentee should be able to communicate well in English (first/second language).
   * The mentee should have some form of local development environment setup, that would not require the mentor to constantly debug the mentee's environment, while working on the project.
