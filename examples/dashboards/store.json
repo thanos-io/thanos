@@ -1760,7 +1760,7 @@
                "renderer": "flot",
                "seriesOverrides": [ ],
                "spaceLength": 10,
-               "span": 4,
+               "span": 3,
                "stack": false,
                "steppedLine": false,
                "targets": [
@@ -1853,7 +1853,7 @@
                "renderer": "flot",
                "seriesOverrides": [ ],
                "spaceLength": 10,
-               "span": 4,
+               "span": 3,
                "stack": false,
                "steppedLine": false,
                "targets": [
@@ -1861,15 +1861,15 @@
                      "expr": "thanos_bucket_store_series_data_fetched{job=~\"$job\", quantile=\"0.99\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P99",
+                     "legendFormat": "P99: {{data_type}} / {{job}}",
                      "legendLink": null,
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(thanos_bucket_store_series_data_fetched_sum{job=~\"$job\"}[$interval])) / sum by (job) (rate(thanos_bucket_store_series_data_fetched_count{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, data_type) (rate(thanos_bucket_store_series_data_fetched_sum{job=~\"$job\"}[$interval])) / sum by (job, data_type) (rate(thanos_bucket_store_series_data_fetched_count{job=~\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "mean {{job}}",
+                     "legendFormat": "mean: {{data_type}} / {{job}}",
                      "legendLink": null,
                      "step": 10
                   },
@@ -1877,7 +1877,7 @@
                      "expr": "thanos_bucket_store_series_data_fetched{job=~\"$job\", quantile=\"0.50\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "P50",
+                     "legendFormat": "P50: {{data_type}} / {{job}}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -1924,6 +1924,7 @@
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
+               "description": "Show the size of data touched",
                "fill": 1,
                "id": 21,
                "legend": {
@@ -1945,7 +1946,99 @@
                "renderer": "flot",
                "seriesOverrides": [ ],
                "spaceLength": 10,
-               "span": 4,
+               "span": 3,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "thanos_bucket_store_series_data_touched{job=~\"$job\", quantile=\"0.99\"}",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "P99: {{data_type}} / {{job}}",
+                     "legendLink": null,
+                     "step": 10
+                  },
+                  {
+                     "expr": "sum by (job, data_type) (rate(thanos_bucket_store_series_data_touched_sum{job=~\"$job\"}[$interval])) / sum by (job, data_type) (rate(thanos_bucket_store_series_data_touched_count{job=~\"$job\"}[$interval]))",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "mean: {{data_type}} / {{job}}",
+                     "legendLink": null,
+                     "step": 10
+                  },
+                  {
+                     "expr": "thanos_bucket_store_series_data_touched{job=~\"$job\", quantile=\"0.50\"}",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "P50: {{data_type}} / {{job}}",
+                     "legendLink": null,
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Data Touched",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "bytes",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "fill": 1,
+               "id": 22,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 3,
                "stack": false,
                "steppedLine": false,
                "targets": [
@@ -2030,7 +2123,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to get all series.",
                "fill": 1,
-               "id": 22,
+               "id": 23,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2148,7 +2241,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to merge series.",
                "fill": 1,
-               "id": 23,
+               "id": 24,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2266,7 +2359,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken for a series to wait at the gate.",
                "fill": 1,
-               "id": 24,
+               "id": 25,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2395,7 +2488,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 25,
+               "id": 26,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2511,7 +2604,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 26,
+               "id": 27,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -2587,7 +2680,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 27,
+               "id": 28,
                "legend": {
                   "avg": false,
                   "current": false,
