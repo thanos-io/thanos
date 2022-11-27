@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 
 	"github.com/alecthomas/units"
@@ -36,6 +37,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -43,7 +45,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"google.golang.org/grpc"
 )
 
 type fakeTenantAppendable struct {
@@ -370,7 +371,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 conflict and commit error with replication",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusConflict,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -498,7 +499,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 6 with replication 3 one commit and two conflict error",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusConflict,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{

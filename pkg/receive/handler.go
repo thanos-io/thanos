@@ -767,8 +767,11 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 	}()
 
 	quorum := h.writeQuorum()
+	if seriesReplicated {
+		quorum = 1
+	}
 	successes := make([]int, numSeries)
-	seriesErrs := make([]writeErrors, numSeries)
+	seriesErrs := newSeriesErrors(quorum, numSeries)
 	for {
 		select {
 		case <-fctx.Done():
@@ -776,11 +779,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		case wresp, more := <-ec:
 			if !more {
 				for _, rerr := range seriesErrs {
-					if seriesReplicated {
-						errs.Add(rerr.ErrOrNil())
-					} else {
-						errs.Add(rerr.replicationErr(quorum).ErrOrNil())
-					}
+					errs.Add(rerr)
 				}
 				return errs.ErrOrNil()
 			}
@@ -911,126 +910,15 @@ func (a expectedErrors) Len() int           { return len(a) }
 func (a expectedErrors) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a expectedErrors) Less(i, j int) bool { return a[i].count < a[j].count }
 
-// writeErrors contains all errors that have
-// occurred during a remote-write request.
-type writeErrors struct {
+// errorSet is a set of errors.
+type errorSet struct {
 	reasonSet map[string]struct{}
 	errs      []error
 }
 
-// Add adds an error to the writeErrors.
-func (es *writeErrors) Add(err error) {
-	if err == nil {
-		return
-	}
-	if len(es.errs) == 0 {
-		es.errs = []error{err}
-	} else {
-		es.errs = append(es.errs, err)
-	}
-	if es.reasonSet == nil {
-		es.reasonSet = make(map[string]struct{})
-	}
-	if werr, ok := err.(*writeErrors); ok {
-		for reason := range werr.reasonSet {
-			es.reasonSet[reason] = struct{}{}
-		}
-	} else {
-		es.reasonSet[err.Error()] = struct{}{}
-	}
-}
-
-// ErrOrNil returns the writeErrors instance if any
-// errors are contained in it.
-// Otherwise it returns nil.
-func (es *writeErrors) ErrOrNil() error {
-	if len(es.errs) == 0 {
-		return nil
-	}
-	return es
-}
-
-// Cause returns the primary cause for a write failure.
-// If multiple errors have occurred, Cause will prefer
-// recoverable over non-recoverable errors.
-func (es *writeErrors) Cause() error {
-	if len(es.errs) == 0 {
-		return nil
-	}
-
-	var recoverableErr error
-	var nonRecoverableErr error
-	for _, werr := range es.errs {
-		cause := errors.Cause(werr)
-		if isUnavailable(cause) {
-			return errUnavailable
-		}
-		if isNotReady(cause) {
-			return errNotReady
-		}
-		if isConflict(cause) {
-			nonRecoverableErr = errConflict
-			continue
-		}
-		recoverableErr = errInternal
-	}
-
-	if recoverableErr != nil {
-		return recoverableErr
-	}
-	return nonRecoverableErr
-}
-
-// replicationErr extracts a sentinel error with the highest occurrence
-// that has happened more than the given threshold.
-// If no single error has occurred more than the threshold, but the
-// total number of errors meets the threshold,
-// replicationErr will return errInternal.
-func (es *writeErrors) replicationErr(threshold int) *writeErrors {
-	if es == nil {
-		return &writeErrors{}
-	}
-
-	if len(es.errs) == 0 {
-		return &writeErrors{}
-	}
-
-	expErrs := expectedErrors{
-		{err: errConflict, cause: isConflict},
-		{err: errNotReady, cause: isNotReady},
-		{err: errUnavailable, cause: isUnavailable},
-	}
-	for _, exp := range expErrs {
-		exp.count = 0
-		for _, err := range es.errs {
-			if exp.cause(errors.Cause(err)) {
-				exp.count++
-			}
-		}
-	}
-
-	// Determine which error occurred most.
-	sort.Sort(sort.Reverse(expErrs))
-	if exp := expErrs[0]; exp.count >= threshold {
-		return &writeErrors{
-			errs:      []error{exp.err},
-			reasonSet: es.reasonSet,
-		}
-	}
-
-	if len(es.errs) >= threshold {
-		return &writeErrors{
-			errs:      []error{errInternal},
-			reasonSet: es.reasonSet,
-		}
-	}
-
-	return &writeErrors{}
-}
-
 // Error returns a string containing a deduplicated set of reasons.
-func (es *writeErrors) Error() string {
-	if es == nil || len(es.reasonSet) == 0 {
+func (es errorSet) Error() string {
+	if len(es.reasonSet) == 0 {
 		return ""
 	}
 	reasons := make([]string, 0, len(es.reasonSet))
@@ -1054,6 +942,141 @@ func (es *writeErrors) Error() string {
 	}
 
 	return buf.String()
+}
+
+// Add adds an error to the errorSet.
+func (es *errorSet) Add(err error) {
+	if err == nil {
+		return
+	}
+
+	if len(es.errs) == 0 {
+		es.errs = []error{err}
+	} else {
+		es.errs = append(es.errs, err)
+	}
+	if es.reasonSet == nil {
+		es.reasonSet = make(map[string]struct{})
+	}
+
+	switch werr := err.(type) {
+	case *replicationErrors:
+		for reason := range werr.reasonSet {
+			es.reasonSet[reason] = struct{}{}
+		}
+	case *writeErrors:
+		for reason := range werr.reasonSet {
+			es.reasonSet[reason] = struct{}{}
+		}
+	default:
+		es.reasonSet[err.Error()] = struct{}{}
+	}
+}
+
+// writeErrors contains all errors that have
+// occurred during a remote-write request.
+type writeErrors struct {
+	errorSet
+}
+
+// ErrOrNil returns the writeErrors instance if any
+// errors are contained in it.
+// Otherwise, it returns nil.
+func (es *writeErrors) ErrOrNil() error {
+	if len(es.errs) == 0 {
+		return nil
+	}
+	return es
+}
+
+// Cause returns the primary cause for a write failure.
+// If multiple errors have occurred, Cause will prefer
+// recoverable over non-recoverable errors.
+func (es *writeErrors) Cause() error {
+	if len(es.errs) == 0 {
+		return nil
+	}
+
+	expErrs := expectedErrors{
+		{err: errUnavailable, cause: isUnavailable},
+		{err: errNotReady, cause: isNotReady},
+		{err: errConflict, cause: isConflict},
+	}
+
+	var recoverableErr error
+	for _, werr := range es.errs {
+		var found bool
+		cause := errors.Cause(werr)
+		for _, exp := range expErrs {
+			if exp.cause(cause) {
+				found = true
+				exp.count++
+			}
+		}
+		if !found {
+			recoverableErr = cause
+		}
+	}
+
+	for _, exp := range expErrs {
+		if exp.count > 0 {
+			return exp.err
+		}
+	}
+
+	return recoverableErr
+}
+
+// replicationErrors contains errors that have happened while
+// replicating a time series within a remote-write request.
+type replicationErrors struct {
+	errorSet
+	threshold int
+}
+
+// Cause extracts a sentinel error with the highest occurrence that
+// has happened more than the given threshold.
+// If no single error has occurred more than the threshold, but the
+// total number of errors meets the threshold,
+// replicationErr will return errInternal.
+func (es *replicationErrors) Cause() error {
+	if len(es.errs) == 0 {
+		return errorSet{}
+	}
+
+	expErrs := expectedErrors{
+		{err: errConflict, cause: isConflict},
+		{err: errNotReady, cause: isNotReady},
+		{err: errUnavailable, cause: isUnavailable},
+	}
+	for _, exp := range expErrs {
+		exp.count = 0
+		for _, err := range es.errs {
+			if exp.cause(errors.Cause(err)) {
+				exp.count++
+			}
+		}
+	}
+
+	// Determine which error occurred most.
+	sort.Sort(sort.Reverse(expErrs))
+	if exp := expErrs[0]; exp.count >= es.threshold {
+		return exp.err
+	}
+
+	if len(es.errs) >= es.threshold {
+		return errInternal
+	}
+
+	return nil
+}
+
+func newSeriesErrors(threshold, numErrors int) []*replicationErrors {
+	errs := make([]*replicationErrors, numErrors)
+	for i := range errs {
+		errs[i] = &replicationErrors{threshold: threshold}
+	}
+	return errs
 }
 
 func newPeerGroup(dialOpts ...grpc.DialOption) *peerGroup {
