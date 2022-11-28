@@ -689,9 +689,15 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 				// This is an actual remote forward request so report metric here.
 				if err != nil {
 					h.forwardRequests.WithLabelValues(labelError).Inc()
+					if !seriesReplicated {
+						h.replications.WithLabelValues(labelError).Inc()
+					}
 					return
 				}
 				h.forwardRequests.WithLabelValues(labelSuccess).Inc()
+				if !seriesReplicated {
+					h.replications.WithLabelValues(labelSuccess).Inc()
+				}
 			}()
 
 			cl, err = h.peers.get(fctx, er.endpoint)
