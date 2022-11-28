@@ -113,14 +113,12 @@ With several past mentorships, we have been able to distill some learnings from 
     * Thus, having prior important commitments like a full-time job or large educational course load can lead to mentees not having enough time for the mentorship, even if they commit to working > 30hrs a week. This could manifest as mentees not having enough energy to think about a project, skipping meetings, and generally not being able to utilize the time mentors can spend with them.
     * So it is better to practically judge the amount of work a mentee would be able to balance before selecting them.
     * Generally we expect our mentees to be university/college students, who would be able to balance both the mentorship and a moderate amount of course load. Commitments larger than this would need to be treated with some caution.
-  * The mentee should have at least one prior contribution to Thanos or its dependencies that affect it indirectly. The contribution should demonstrate effort & interest on part of the potential mentee.
-    * We want to understand that the potential mentee is interested in the project and has invested some time and effort in trying to understand Thanos.
-    * However, the contribution should not be a minimal effort, such as a typo/grammar fix or variable name change. While these are valued contributions, they cannot effectively demonstrate mentee effort, and should instead be some code/doc change. Note that this doesn't need to be in a merged/finalized state and can be open.
-  * The mentee should have access to a stable internet connection over which they can attend regular video calls with mentors.
-    * This constitutes things like good enough internet to be able to video calls without dropping, as that is the primary means of communication between mentors and mentees.
+  * It is preferable for the mentee to have at least one prior contribution to Thanos or its dependencies that affect it indirectly. Such prior contributions demonstrate a willingness to engage with the community and independence from the potential mentee.
+    * However, the contribution should not be a minimal effort one, such as a typo/grammar fix or variable name change. While these are valued contributions, they cannot effectively demonstrate mentee effort, and should instead be some code/doc change. Note that this doesn't need to be in a merged/finalized state and can be open.
+  * The mentee should have access to a stable internet connection over which they can attend regular video calls with mentors (can be ensured during a 20-minute interview).
     * As most of the discussions (meetings/issues/reviews/code comments) are conducted in English, the mentee should be able to communicate well in English (first/second language).
-  * The mentee should have some form of local development environment setup, that would not require the mentor to constantly debug the mentee's environment, while working on the project.
-    * This is hard to ensure fully, but generally the mentee should be working on linux/linux VM/macOS, so most generic GNU/BSD commands are compatible.
-    * The mentee should have basic git, bash, programming, and Go knowledge. 
-    * They should be using some common code editor/IDE (VSCode/Goland), for the duration of mentorship, so that it is easier to pair program and share knowledge with them, without being blocked by things like code navigation.
+  * The mentee should have some form of local development environment setup that they can operate which would not require the mentor to constantly debug the mentee's environment while working on the project.
+    * This is hard to ensure fully, but generally the mentee should be working on linux/linux VM/macOS/, so most generic GNU/BSD commands are compatible.
+    * The mentee should have basic git, bash, and programming knowledge.
+    * They should be using some common code editor/IDE (VSCode/Goland etc) that they can operate comfortably, for the duration of mentorship. It should allow them to easily navigate code and lookup definitions across large codebases as this makes it easier to pair program and share knowledge with them.
   * It is preferable to have mentees from historically underrepresented communities in tech, to ensure diverse contributors in Thanos.
