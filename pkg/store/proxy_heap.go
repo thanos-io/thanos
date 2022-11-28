@@ -260,11 +260,11 @@ func (h *ProxyResponseHeap) At() *storepb.SeriesResponse {
 }
 
 func (l *lazyRespSet) StoreID() string {
-	return l.st.String()
+	return l.storeName
 }
 
 func (l *lazyRespSet) Labelset() string {
-	return labelpb.PromLabelSetsToString(l.st.LabelSets())
+	return labelpb.PromLabelSetsToString(l.storeLabelSets)
 }
 
 // lazyRespSet is a lazy storepb.SeriesSet that buffers
@@ -273,12 +273,13 @@ func (l *lazyRespSet) Labelset() string {
 // in Next().
 type lazyRespSet struct {
 	// Generic parameters.
-	span         opentracing.Span
-	cl           storepb.Store_SeriesClient
-	closeSeries  context.CancelFunc
-	st           Client
-	frameTimeout time.Duration
-	ctx          context.Context
+	span           opentracing.Span
+	cl             storepb.Store_SeriesClient
+	closeSeries    context.CancelFunc
+	storeName      string
+	storeLabelSets []labels.Labels
+	frameTimeout   time.Duration
+	ctx            context.Context
 
 	// Internal bookkeeping.
 	dataOrFinishEvent    *sync.Cond
@@ -358,13 +359,13 @@ func newLazyRespSet(
 	ctx context.Context,
 	span opentracing.Span,
 	frameTimeout time.Duration,
-	st Client,
+	storeName string,
+	storeLabelSets []labels.Labels,
 	closeSeries context.CancelFunc,
 	cl storepb.Store_SeriesClient,
 	shardMatcher *storepb.ShardMatcher,
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
-
 ) respSet {
 	bufferedResponses := []*storepb.SeriesResponse{}
 	bufferedResponsesMtx := &sync.Mutex{}
@@ -373,7 +374,8 @@ func newLazyRespSet(
 	respSet := &lazyRespSet{
 		frameTimeout:         frameTimeout,
 		cl:                   cl,
-		st:                   st,
+		storeName:            storeName,
+		storeLabelSets:       storeLabelSets,
 		closeSeries:          closeSeries,
 		span:                 span,
 		ctx:                  ctx,
@@ -383,7 +385,7 @@ func newLazyRespSet(
 		shardMatcher:         shardMatcher,
 	}
 
-	go func(st Client, l *lazyRespSet) {
+	go func(st string, l *lazyRespSet) {
 		bytesProcessed := 0
 		seriesStats := &storepb.SeriesStatsCounter{}
 
@@ -409,7 +411,7 @@ func newLazyRespSet(
 
 			select {
 			case <-l.ctx.Done():
-				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", st.String())
+				err := errors.Wrapf(l.ctx.Err(), "failed to receive any data from %s", st)
 				l.span.SetTag("err", err.Error())
 
 				l.bufferedResponsesMtx.Lock()
@@ -434,9 +436,9 @@ func newLazyRespSet(
 						// Most likely the per-Recv timeout has been reached.
 						// There's a small race between canceling and the Recv()
 						// but this is most likely true.
-						rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, st.String())
+						rerr = errors.Wrapf(err, "failed to receive any data in %s from %s", l.frameTimeout, st)
 					} else {
-						rerr = errors.Wrapf(err, "receive series from %s", st.String())
+						rerr = errors.Wrapf(err, "receive series from %s", st)
 					}
 
 					l.span.SetTag("err", rerr.Error())
@@ -478,7 +480,7 @@ func newLazyRespSet(
 				return
 			}
 		}
-	}(st, respSet)
+	}(storeName, respSet)
 
 	return respSet
 }
@@ -552,7 +554,8 @@ func newAsyncRespSet(ctx context.Context,
 			seriesCtx,
 			span,
 			frameTimeout,
-			st,
+			st.String(),
+			st.LabelSets(),
 			closeSeries,
 			cl,
 			shardMatcher,
