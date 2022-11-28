@@ -105,14 +105,15 @@ This process is hard and requires time, as it involves holistically looking at m
 
 With several past mentorships, we have been able to distil some learnings from the process, which are listed here as recommendations to mentors:
 
-* Encourage mentees interested in applying by asking them to look through our issues and try to work on one in which they would learn a bit about the codebase! There is no better proof of their motivation to work with us than seeing (meaningful) activity in the open-source project, before selection period. 
+* Encourage mentees interested in applying by asking them to look through our issues and try to work on one in which they would learn a bit about the codebase! There is no better proof of their motivation to work with us than seeing (meaningful) activity in the open-source project, before selection period.
 * Allocate some time upfront for this process, as you might have a lot of mentee applications to look through.
   * If possible, book some time on your calendars and discuss the selection process with co-mentors in a particular quarter beforehand.
 * Try to have some prerequisites in mind while shortlisting an application of a potential mentee (CV/questions/proposal/interview),
+  * It is preferable to have mentees from historically underrepresented communities in tech, to ensure diverse contributors in Thanos.
   * The mentee should be able to allocate enough time to the mentorship.
-    * Thus, having prior important commitments like a full-time job or large educational course load can lead to mentees not having enough time for the mentorship, even if they claim to commit to working > 30hrs a week. This could manifest as mentees not having enough energy to think about a project, skipping meetings, and not being able to utilize the time mentors can spend with them. It is hard to help them in such case.
-    * So it is better to practically judge the amount of work a mentee would be able to balance before selecting them.
-    * Generally we expect our mentees to be university/college students, who would be able to balance both the mentorship and a moderate amount of course load. Commitments larger than this would need to be treated with some caution.
+    * Thus, having prior important commitments like a full-time job or large educational course load can lead to mentees not having enough time for the mentorship, even if they claim to commit to working > 30hrs a week. This could manifest as mentees not having enough energy to think about a project, skipping meetings, and not being able to utilize the time mentors can spend with them. It is hard to help them in such case. So it is better to practically judge the amount of work a mentee would be able to balance before selecting them.
+    * Generally, we expect our mentees to be university/college students, who would be able to balance both the mentorship and a moderate amount of course load. Commitments larger than this would need to be treated with some caution. Generally, it's only ok to have a full-time job only for more senior engineers, who understand how to organize work, be transparent about mentorship with their employer etc.
+      * In case the mentee is employed full-time, asking for some form of proof (letter/forwarded email from manager) that their employer approves of them working on this mentorship is preferable.
   * It is preferable for the mentee to have at least one prior contribution to Thanos or its dependencies that affect it indirectly. Such prior contributions demonstrate a willingness to engage with the community and independence from the potential mentee.
     * However, the contribution should not be a minimal effort one, such as a typo/grammar fix or variable name change. While these are valued contributions, they cannot effectively demonstrate mentee effort, and should instead be some code/doc change. Note that this doesn't need to be in a merged/finalized state and can be open.
   * The mentee should have access to a stable internet connection over which they can attend regular video calls with mentors (can be ensured during a 20-minute interview).
@@ -121,4 +122,3 @@ With several past mentorships, we have been able to distil some learnings from t
     * This is hard to ensure fully, but generally the mentee should be working on linux/linux VM/macOS/, so most generic GNU/BSD commands are compatible.
     * The mentee should have basic git, bash, and programming knowledge.
     * They should be using some common code editor/IDE (VSCode/Goland etc) that they can operate comfortably, for the duration of mentorship. It should allow them to easily navigate code and lookup definitions across large codebases as this makes it easier to pair program and share knowledge with them.
-  * It is preferable to have mentees from historically underrepresented communities in tech, to ensure diverse contributors in Thanos.
