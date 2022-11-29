@@ -1083,8 +1083,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
-	lookupTable := newLookupTableBuilder(req.MaximumStringSlots)
-
 	s.mtx.RLock()
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
@@ -1211,6 +1209,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		s.metrics.seriesGetAllDuration.Observe(stats.GetAllDuration.Seconds())
 		s.metrics.seriesBlocksQueried.Observe(float64(stats.blocksQueried))
 	}
+
+	symbolTableBuilder := newSymbolTableBuilder(req.MaximumStringSlots)
+
 	// Merge the sub-results from each selected block.
 	tracing.DoInSpan(ctx, "bucket_store_merge_all", func(ctx context.Context) {
 		begin := time.Now()
@@ -1234,17 +1235,17 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			}
 			series.Labels = labelpb.ZLabelsFromPromLabels(lset)
 
-			var compressedResponse bool
+			var compressedResponse bool = true
 			compressedLabels := make([]labelpb.CompressedLabel, 0, len(lset))
 
 			for _, lbl := range lset {
-				nameRef, nerr := lookupTable.putString(lbl.Name)
-				valueRef, verr := lookupTable.putString(lbl.Value)
+				nameRef, nok := symbolTableBuilder.getOrStoreString(lbl.Name)
+				valueRef, vok := symbolTableBuilder.getOrStoreString(lbl.Value)
 
-				if nerr != nil || verr != nil {
+				if !nok || !vok {
 					compressedResponse = false
 					break
-				} else if compressedResponse && nerr == nil && verr == nil {
+				} else if compressedResponse && nok && vok {
 					compressedLabels = append(compressedLabels, labelpb.CompressedLabel{
 						NameRef:  nameRef,
 						ValueRef: valueRef,
@@ -1252,19 +1253,19 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				}
 			}
 
+			var resp *storepb.SeriesResponse
 			if compressedResponse {
-				if err = srv.Send(storepb.NewCompressedSeriesResponse(&storepb.CompressedSeries{
+				resp = storepb.NewCompressedSeriesResponse(&storepb.CompressedSeries{
 					Labels: compressedLabels,
 					Chunks: series.Chunks,
-				})); err != nil {
-					err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
-					return
-				}
+				})
 			} else {
-				if err = srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
-					err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
-					return
-				}
+				resp = storepb.NewSeriesResponse(&series)
+			}
+
+			if err = srv.Send(resp); err != nil {
+				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+				return
 			}
 		}
 		if set.Err() != nil {
@@ -1277,7 +1278,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		err = nil
 	})
 
-	resHints.StringSymbolTable = lookupTable.getTable()
+	resHints.StringSymbolTable = symbolTableBuilder.getTable()
 
 	{
 		var anyHints *types.Any

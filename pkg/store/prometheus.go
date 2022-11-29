@@ -176,7 +176,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		}
 	}
 
-	lookupTable := newLookupTableBuilder(r.MaximumStringSlots)
+	symbolTableBuilder := newSymbolTableBuilder(r.MaximumStringSlots)
 
 	if r.SkipChunks {
 		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, matchers, r.MinTime, r.MaxTime)
@@ -201,7 +201,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		{
 			var anyHints *types.Any
 
-			resHints := &hintspb.SeriesResponseHints{StringSymbolTable: lookupTable.getTable()}
+			resHints := &hintspb.SeriesResponseHints{StringSymbolTable: symbolTableBuilder.getTable()}
 
 			if anyHints, err = types.MarshalAny(resHints); err != nil {
 				err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
@@ -261,7 +261,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
-	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation, lookupTable)
+	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation, symbolTableBuilder)
 }
 
 func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *storepb.SeriesRequest) error {
@@ -388,7 +388,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	querySpan tracing.Span,
 	extLset labels.Labels,
 	calculateChecksums bool,
-	lookupTable *lookupTableBuilder,
+	lookupTable *symbolTableBuilder,
 ) error {
 	level.Debug(p.logger).Log("msg", "started handling ReadRequest_STREAMED_XOR_CHUNKS streamed read response.")
 
@@ -435,13 +435,13 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			compressedLabels := make([]labelpb.CompressedLabel, 0, len(completeLabelset))
 			var compressedResponse bool = true
 			for _, lbl := range completeLabelset {
-				nameRef, nerr := lookupTable.putString(lbl.Name)
-				valueRef, verr := lookupTable.putString(lbl.Value)
+				nameRef, nok := lookupTable.getOrStoreString(lbl.Name)
+				valueRef, vok := lookupTable.getOrStoreString(lbl.Value)
 
-				if nerr != nil || verr != nil {
+				if !nok || !vok {
 					compressedResponse = false
 					break
-				} else if compressedResponse && nerr == nil && verr == nil {
+				} else if compressedResponse && nok && vok {
 					compressedLabels = append(compressedLabels, labelpb.CompressedLabel{
 						NameRef:  nameRef,
 						ValueRef: valueRef,

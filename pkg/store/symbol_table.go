@@ -6,8 +6,6 @@ package store
 import (
 	"math"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 type adjusterFn func(uint64) uint64
@@ -39,10 +37,13 @@ func newReferenceAdjusterFactory(storeCount uint64) func(storeIndex uint64) adju
 	}
 }
 
-// lookupTableBuilder provides a way of building
-// a lookup table for static strings to compress
-// responses better.
-type lookupTableBuilder struct {
+// symbolTableBuilder provides a way of building
+// a symbol table for static strings to compress
+// responses better. gRPC compression works on a
+// message-by-message basis but we want to compress
+// static strings as well.
+// It's not safe to use this concurrently.
+type symbolTableBuilder struct {
 	maxElements uint64
 
 	current      uint64
@@ -50,27 +51,25 @@ type lookupTableBuilder struct {
 	reverseTable map[string]uint64
 }
 
-func newLookupTableBuilder(maxElements uint64) *lookupTableBuilder {
-	return &lookupTableBuilder{maxElements: maxElements, table: make(map[uint64]string), reverseTable: make(map[string]uint64)}
+func newSymbolTableBuilder(maxElements uint64) *symbolTableBuilder {
+	return &symbolTableBuilder{maxElements: maxElements, table: make(map[uint64]string), reverseTable: make(map[string]uint64)}
 }
 
-var maxElementsReached = errors.New("max elements reached in lookup table builder")
-
-func (b *lookupTableBuilder) putString(s string) (uint64, error) {
-	if b.current >= b.maxElements {
-		return 0, maxElementsReached
-	}
+func (b *symbolTableBuilder) getOrStoreString(s string) (uint64, bool) {
 	if num, ok := b.reverseTable[s]; ok {
-		return num, nil
+		return num, true
+	}
+	if b.current >= b.maxElements {
+		return 0, false
 	}
 
 	s = strings.Clone(s)
 	b.reverseTable[s] = b.current
 	b.table[b.current] = s
 	b.current++
-	return b.current - 1, nil
+	return b.current - 1, true
 }
 
-func (b *lookupTableBuilder) getTable() map[uint64]string {
+func (b *symbolTableBuilder) getTable() map[uint64]string {
 	return b.table
 }

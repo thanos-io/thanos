@@ -10,7 +10,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestLookupTableHandlesBigNumbers(t *testing.T) {
+func TestSymbolTableHandlesBigNumbersCorrectly(t *testing.T) {
 	adjuster := newReferenceAdjusterFactory(2)
 	adjust := adjuster(0)
 
