@@ -84,7 +84,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		ctx:                 context.Background(),
 		logger:              logger,
 		proxy:               &mockedStoreServer{responses: resps},
-		replicaLabels:       map[string]struct{}{"a_replica": {}},
+		replicaLabels:       []string{"a_replica"},
 		deduplicate:         dedup,
 		selectGate:          gate.NewNoop(),
 		seriesStatsReporter: NoopSeriesStatsReporter,

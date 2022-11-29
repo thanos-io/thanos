@@ -1,0 +1,25 @@
+package teststore
+
+import (
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+)
+
+type TestClient struct {
+	storepb.StoreClient
+
+	Name string
+
+	ExtLset                     []labels.Labels
+	MinTime, MaxTime            int64
+	Shardable                   bool
+	WithoutReplicaLabelsEnabled bool
+	IsLocalStore                bool
+}
+
+func (c TestClient) LabelSets() []labels.Labels         { return c.ExtLset }
+func (c TestClient) TimeRange() (mint, maxt int64)      { return c.MinTime, c.MaxTime }
+func (c TestClient) SupportsSharding() bool             { return c.Shardable }
+func (c TestClient) SupportsWithoutReplicaLabels() bool { return c.WithoutReplicaLabelsEnabled }
+func (c TestClient) String() string                     { return c.Name }
+func (c TestClient) Addr() (string, bool)               { return c.Name, c.IsLocalStore }

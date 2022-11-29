@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/thanos-io/thanos/pkg/dedup"
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log/level"
@@ -225,6 +226,10 @@ type ProxyResponseHeapNode struct {
 	rs respSet
 }
 
+// NewProxyResponseHeap returns heap that k-way merge series together.
+// In case of duplicates, series might return in random order without changed, chained or deduplicated chunks.
+// TODO(bwplotka): Consider moving deduplication routines in single place for readability. Currently it's scattered in
+// NewDedupResponseHeap, in removeDuplicates in promSeriesSet and dedup.NewSeriesSet.
 func NewProxyResponseHeap(seriesSets ...respSet) *ProxyResponseHeap {
 	ret := make(ProxyResponseHeap, 0, len(seriesSets))
 
@@ -431,6 +436,7 @@ func newLazyRespSet(
 				}
 
 				if err != nil {
+					// TODO(bwplotka): Return early on error. Don't wait of dedup, merge and sort if partial response is disabled.
 					var rerr error
 					if t != nil && !t.Stop() && errors.Is(err, context.Canceled) {
 						// Most likely the per-Recv timeout has been reached.
@@ -490,24 +496,26 @@ func newLazyRespSet(
 type RetrievalStrategy string
 
 const (
+	// LazyRetrieval allows readers (e.g. PromQL engine) to use (stream) data as soon as possible.
 	LazyRetrieval RetrievalStrategy = "lazy"
-
-	// TODO(GiedriusS): remove eager retrieval once
-	// https://github.com/prometheus/prometheus/blob/ce6a643ee88fba7c02fbd0459c4d0ac498f512dd/promql/engine.go#L877-L902
-	// is removed.
+	// EagerRetrieval is optimized to read all into internal buffer before returning to readers (e.g. PromQL engine).
+	// This currently preferred because:
+	// * Both PromQL engines (old and new) want all series ASAP to make decisions.
+	// * Querier buffers all responses when using StoreAPI internally.
 	EagerRetrieval RetrievalStrategy = "eager"
 )
 
-func newAsyncRespSet(ctx context.Context,
+func newAsyncRespSet(
+	ctx context.Context,
 	st Client,
 	req *storepb.SeriesRequest,
 	frameTimeout time.Duration,
 	retrievalStrategy RetrievalStrategy,
-	storeSupportsSharding bool,
 	buffers *sync.Pool,
 	shardInfo *storepb.ShardInfo,
 	logger log.Logger,
-	emptyStreamResponses prometheus.Counter) (respSet, error) {
+	emptyStreamResponses prometheus.Counter,
+) (respSet, error) {
 
 	var span opentracing.Span
 	var closeSeries context.CancelFunc
@@ -532,10 +540,9 @@ func newAsyncRespSet(ctx context.Context,
 
 	shardMatcher := shardInfo.Matcher(buffers)
 
-	applySharding := shardInfo != nil && !storeSupportsSharding
+	applySharding := shardInfo != nil && !st.SupportsSharding()
 	if applySharding {
-		msg := "Applying series sharding in the proxy since there is not support in the underlying store"
-		level.Debug(logger).Log("msg", msg, "store", st.String())
+		level.Debug(logger).Log("msg", "Applying series sharding in the proxy since there is not support in the underlying store", "store", st.String())
 	}
 
 	cl, err := st.Series(seriesCtx, req)
@@ -546,6 +553,18 @@ func newAsyncRespSet(ctx context.Context,
 		span.Finish()
 		closeSeries()
 		return nil, err
+	}
+
+	var labelsToRemove map[string]struct{}
+	if !st.SupportsWithoutReplicaLabels() && len(req.WithoutReplicaLabels) > 0 {
+		level.Warn(logger).Log("msg", "detecting store that does not support without replica label setting. "+
+			"Falling back to eager retrieval with additional sort. Make sure your storeAPI supports it to speed up your queries", "store", st.String())
+		retrievalStrategy = EagerRetrieval
+
+		labelsToRemove = make(map[string]struct{})
+		for _, replicaLabel := range req.WithoutReplicaLabels {
+			labelsToRemove[replicaLabel] = struct{}{}
+		}
 	}
 
 	switch retrievalStrategy {
@@ -573,6 +592,7 @@ func newAsyncRespSet(ctx context.Context,
 			shardMatcher,
 			applySharding,
 			emptyStreamResponses,
+			labelsToRemove,
 		), nil
 	default:
 		panic(fmt.Sprintf("unsupported retrieval strategy %s", retrievalStrategy))
@@ -592,6 +612,7 @@ func (l *lazyRespSet) Close() {
 
 // eagerRespSet is a SeriesSet that blocks until all data is retrieved from
 // the StoreAPI.
+// NOTE(bwplotka): It also resorts the series (and emits warning) if the client.SupportsWithoutReplicaLabels() is false.
 type eagerRespSet struct {
 	// Generic parameters.
 	span opentracing.Span
@@ -603,6 +624,7 @@ type eagerRespSet struct {
 	frameTimeout time.Duration
 
 	shardMatcher *storepb.ShardMatcher
+	removeLabels map[string]struct{}
 
 	// Internal bookkeeping.
 	bufferedResponses []*storepb.SeriesResponse
@@ -620,6 +642,7 @@ func newEagerRespSet(
 	shardMatcher *storepb.ShardMatcher,
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
+	removeLabels map[string]struct{},
 ) respSet {
 	ret := &eagerRespSet{
 		span:              span,
@@ -631,6 +654,7 @@ func newEagerRespSet(
 		bufferedResponses: []*storepb.SeriesResponse{},
 		wg:                &sync.WaitGroup{},
 		shardMatcher:      shardMatcher,
+		removeLabels:      removeLabels,
 	}
 
 	ret.wg.Add(1)
@@ -656,6 +680,8 @@ func newEagerRespSet(
 			}
 		}()
 
+		// TODO(bwplotka): Consider improving readability by getting rid of anonymous functions and merging eager and
+		// lazyResponse into one struct.
 		handleRecvResponse := func(t *time.Timer) bool {
 			if t != nil {
 				defer t.Reset(frameTimeout)
@@ -673,6 +699,7 @@ func newEagerRespSet(
 					return false
 				}
 				if err != nil {
+					// TODO(bwplotka): Return early on error. Don't wait of dedup, merge and sort if partial response is disabled.
 					var rerr error
 					if t != nil && !t.Stop() && errors.Is(err, context.Canceled) {
 						// Most likely the per-Recv timeout has been reached.
@@ -710,12 +737,81 @@ func newEagerRespSet(
 
 		for {
 			if !handleRecvResponse(t) {
-				return
+				break
 			}
 		}
+
+		// This should be used only for stores that does not support doing this on server side.
+		// See docs/proposals-accepted/20221129-avoid-global-sort.md for details.
+		if len(l.removeLabels) > 0 {
+			sortWithoutLabels(l.bufferedResponses, l.removeLabels)
+		}
+
 	}(st, ret)
 
 	return ret
+}
+
+// Move all wanted labels back and remove.
+// TODO(bwplotka): Consider microoptimizing this.
+func rmLabels(l labels.Labels, labelsToRemove map[string]struct{}) labels.Labels {
+	sort.Slice(l, func(i, j int) bool {
+		if _, ok := labelsToRemove[l[i].Name]; ok {
+			return false
+		}
+		if _, ok := labelsToRemove[l[j].Name]; ok {
+			return true
+		}
+		// Ensure that dedup marker goes just right before the replica labels.
+		if l[i].Name == dedup.PushdownMarker.Name {
+			return false
+		}
+		if l[j].Name == dedup.PushdownMarker.Name {
+			return true
+		}
+		return l[i].Name < l[j].Name
+	})
+
+	var totalToRemove int
+	for i := 0; i < len(labelsToRemove); i++ {
+		if len(l)-i == 0 {
+			break
+		}
+
+		if _, ok := labelsToRemove[l[len(l)-i-1].Name]; ok {
+			totalToRemove++
+		}
+	}
+
+	// Strip all present labels to remove.
+	return l[:len(l)-totalToRemove]
+}
+
+// sortWithoutLabels removes given labels from series and re-sorts the series responses that the same
+// series with different labels are coming right after each other. Other types of responses are moved to front.
+func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]struct{}) {
+	for _, s := range set {
+		ser := s.GetSeries()
+		if ser == nil {
+			continue
+		}
+
+		ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
+	}
+
+	// With the re-ordered label sets, re-sorting all series aligns the same series
+	// from different replicas sequentially.
+	sort.Slice(set, func(i, j int) bool {
+		si := set[i].GetSeries()
+		if si == nil {
+			return true
+		}
+		sj := set[j].GetSeries()
+		if sj == nil {
+			return false
+		}
+		return labels.Compare(labelpb.ZLabelsToPromLabels(si.Labels), labelpb.ZLabelsToPromLabels(sj.Labels)) < 0
+	})
 }
 
 func (l *eagerRespSet) Close() {

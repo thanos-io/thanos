@@ -37,6 +37,8 @@ func isCounter(f string) bool {
 	return f == "increase" || f == "rate" || f == "irate" || f == "resets"
 }
 
+// NewSeriesSet returns seriesSet that deduplicates the same series.
+// The series in series set are expected to be sorted by all labels.
 func NewSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, f string, pushdownEnabled bool) storage.SeriesSet {
 	// TODO: remove dependency on knowing whether it is a counter.
 	s := &dedupSeriesSet{pushdownEnabled: pushdownEnabled, set: set, replicaLabels: replicaLabels, isCounter: isCounter(f), f: f}
@@ -63,9 +65,8 @@ func (s *dedupSeriesSet) Next() bool {
 	}
 	s.replicas = s.replicas[:0]
 
-	// Set the label set we are currently gathering to the peek element
-	// without the replica label if it exists.
-	s.lset = s.peekLset()
+	// Set the label set we are currently gathering to the peek element.
+	s.lset = s.peek.Labels()
 
 	pushedDown := false
 	if s.pushdownEnabled {
@@ -79,28 +80,6 @@ func (s *dedupSeriesSet) Next() bool {
 	return s.next()
 }
 
-// peekLset returns the label set of the current peek element stripped from the
-// replica label if it exists.
-func (s *dedupSeriesSet) peekLset() labels.Labels {
-	lset := s.peek.Labels()
-	if len(s.replicaLabels) == 0 {
-		return lset
-	}
-	// Check how many replica labels are present so that these are removed.
-	var totalToRemove int
-	for i := 0; i < len(s.replicaLabels); i++ {
-		if len(lset)-i == 0 {
-			break
-		}
-
-		if _, ok := s.replicaLabels[lset[len(lset)-i-1].Name]; ok {
-			totalToRemove++
-		}
-	}
-	// Strip all present replica labels.
-	return lset[:len(lset)-totalToRemove]
-}
-
 func (s *dedupSeriesSet) next() bool {
 	// Peek the next series to see whether it's a replica for the current series.
 	s.ok = s.set.Next()
@@ -109,7 +88,7 @@ func (s *dedupSeriesSet) next() bool {
 		return len(s.replicas) > 0 || len(s.pushedDown) > 0
 	}
 	s.peek = s.set.At()
-	nextLset := s.peekLset()
+	nextLset := s.peek.Labels()
 
 	var pushedDown bool
 	if s.pushdownEnabled {

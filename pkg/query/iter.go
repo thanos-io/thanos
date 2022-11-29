@@ -43,8 +43,7 @@ func (s *promSeriesSet) Next() bool {
 		return false
 	}
 
-	// storage.Series are more strict then SeriesSet:
-	// * It requires storage.Series to iterate over full series.
+	// storage.Series is stricter than storepb.SeriesSet: it requires set to iterate over full series.
 	s.currLset, s.currChunks = s.set.At()
 	for {
 		s.done = s.set.Next()
@@ -66,9 +65,11 @@ func (s *promSeriesSet) Next() bool {
 		return s.currChunks[i].MinTime < s.currChunks[j].MinTime
 	})
 
-	// Proxy handles duplicates between different series, let's handle duplicates within single series now as well.
+	// Proxy handles some exact duplicates in chunk between different series, let's handle duplicates within single series now as well.
 	// We don't need to decode those.
 	s.currChunks = removeExactDuplicates(s.currChunks)
+
+	// TODO(bwplotka): Create dedup iterator for those chunks.
 	return true
 }
 
