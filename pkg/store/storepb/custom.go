@@ -494,16 +494,51 @@ type SeriesStatsCounter struct {
 	Samples int
 }
 
-func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
-	seriesHash := labelpb.HashWithPrefix("", seriesLabels)
-	if c.lastSeriesHash != 0 || seriesHash != c.lastSeriesHash {
-		c.lastSeriesHash = seriesHash
+func (c *SeriesStatsCounter) CountSeries(seriesLabelsHash uint64) {
+	if c.lastSeriesHash != 0 || seriesLabelsHash != c.lastSeriesHash {
+		c.lastSeriesHash = seriesLabelsHash
 		c.Series++
 	}
 }
 
+func (c *SeriesStatsCounter) CountCompressed(series *CompressedSeries) {
+	c.CountSeries(labelpb.HashCompressedWithPrefix("", series.Labels))
+
+	for _, chk := range series.Chunks {
+		if chk.Raw != nil {
+			c.Chunks++
+			c.Samples += chk.Raw.XORNumSamples()
+		}
+
+		if chk.Count != nil {
+			c.Chunks++
+			c.Samples += chk.Count.XORNumSamples()
+		}
+
+		if chk.Counter != nil {
+			c.Chunks++
+			c.Samples += chk.Counter.XORNumSamples()
+		}
+
+		if chk.Max != nil {
+			c.Chunks++
+			c.Samples += chk.Max.XORNumSamples()
+		}
+
+		if chk.Min != nil {
+			c.Chunks++
+			c.Samples += chk.Min.XORNumSamples()
+		}
+
+		if chk.Sum != nil {
+			c.Chunks++
+			c.Samples += chk.Sum.XORNumSamples()
+		}
+	}
+}
+
 func (c *SeriesStatsCounter) Count(series *Series) {
-	c.CountSeries(series.Labels)
+	c.CountSeries(labelpb.HashWithPrefix("", series.Labels))
 	for _, chk := range series.Chunks {
 		if chk.Raw != nil {
 			c.Chunks++

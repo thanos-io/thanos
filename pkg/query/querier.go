@@ -268,6 +268,7 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 
 	if r.GetCompressedSeries() != nil {
 		s.compressedSeriesSet = append(s.compressedSeriesSet, *r.GetCompressedSeries())
+		s.seriesSetStats.CountCompressed(r.GetCompressedSeries())
 		return nil
 	}
 

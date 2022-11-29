@@ -7,6 +7,7 @@
 package labelpb
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -341,6 +342,38 @@ func DeepCopy(lbls []ZLabel) []ZLabel {
 		ret[i].Value = string(noAllocBytes(lbls[i].Value))
 	}
 	return ret
+}
+
+// HashCompressedWithPrefix returns a hash for the given prefix and labels.
+func HashCompressedWithPrefix(prefix string, lbls []CompressedLabel) uint64 {
+	// Use xxhash.Sum64(b) for fast path as it's faster.
+	b := make([]byte, 0, 1024)
+	b = append(b, prefix...)
+	b = append(b, sep[0])
+
+	for i, v := range lbls {
+		if len(b)+8+8+2 >= cap(b) {
+			// If labels entry is 1KB allocate do not allocate whole entry.
+			h := xxhash.New()
+			_, _ = h.Write(b)
+
+			refStorage := make([]byte, 8)
+			for _, v := range lbls[i:] {
+				binary.LittleEndian.PutUint64(refStorage, v.NameRef)
+				_, _ = h.Write(refStorage)
+				_, _ = h.Write(sep)
+				binary.LittleEndian.PutUint64(refStorage, v.ValueRef)
+				_, _ = h.Write(refStorage)
+				_, _ = h.Write(sep)
+			}
+			return h.Sum64()
+		}
+		b = binary.LittleEndian.AppendUint64(b, v.NameRef)
+		b = append(b, sep[0])
+		b = binary.LittleEndian.AppendUint64(b, v.ValueRef)
+		b = append(b, sep[0])
+	}
+	return xxhash.Sum64(b)
 }
 
 // HashWithPrefix returns a hash for the given prefix and labels.
