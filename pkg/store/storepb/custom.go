@@ -501,10 +501,8 @@ func (c *SeriesStatsCounter) CountSeries(seriesLabelsHash uint64) {
 	}
 }
 
-func (c *SeriesStatsCounter) CountCompressed(series *CompressedSeries) {
-	c.CountSeries(labelpb.HashCompressedWithPrefix("", series.Labels))
-
-	for _, chk := range series.Chunks {
+func (c *SeriesStatsCounter) countChks(chks []AggrChunk) {
+	for _, chk := range chks {
 		if chk.Raw != nil {
 			c.Chunks++
 			c.Samples += chk.Raw.XORNumSamples()
@@ -537,39 +535,23 @@ func (c *SeriesStatsCounter) CountCompressed(series *CompressedSeries) {
 	}
 }
 
-func (c *SeriesStatsCounter) Count(series *Series) {
-	c.CountSeries(labelpb.HashWithPrefix("", series.Labels))
-	for _, chk := range series.Chunks {
-		if chk.Raw != nil {
-			c.Chunks++
-			c.Samples += chk.Raw.XORNumSamples()
-		}
+func (s *CompressedSeries) Count(counter *SeriesStatsCounter) {
+	counter.CountSeries(labelpb.HashCompressedWithPrefix("", s.Labels))
+	counter.countChks(s.Chunks)
 
-		if chk.Count != nil {
-			c.Chunks++
-			c.Samples += chk.Count.XORNumSamples()
-		}
+}
 
-		if chk.Counter != nil {
-			c.Chunks++
-			c.Samples += chk.Counter.XORNumSamples()
-		}
+func (s *Series) Count(counter *SeriesStatsCounter) {
+	counter.CountSeries(labelpb.HashWithPrefix("", s.Labels))
+	counter.countChks(s.Chunks)
+}
 
-		if chk.Max != nil {
-			c.Chunks++
-			c.Samples += chk.Max.XORNumSamples()
-		}
+type countableSeries interface {
+	Count(*SeriesStatsCounter)
+}
 
-		if chk.Min != nil {
-			c.Chunks++
-			c.Samples += chk.Min.XORNumSamples()
-		}
-
-		if chk.Sum != nil {
-			c.Chunks++
-			c.Samples += chk.Sum.XORNumSamples()
-		}
-	}
+func (c *SeriesStatsCounter) Count(series countableSeries) {
+	series.Count(c)
 }
 
 func (m *SeriesRequest) ToPromQL() string {
