@@ -25,8 +25,16 @@ func newReferenceAdjusterFactory(storeCount uint64) func(storeIndex uint64) adju
 	return func(storeIndex uint64) adjusterFn {
 		startFrom := eachStore * storeIndex
 
+		mappings := map[uint64]uint64{}
+		currentMappingInd := startFrom
+
 		return func(ref uint64) uint64 {
-			return startFrom + (ref % eachStore)
+			if i, ok := mappings[ref]; ok {
+				return i
+			}
+			mappings[ref] = currentMappingInd
+			currentMappingInd++
+			return currentMappingInd - 1
 		}
 	}
 }
