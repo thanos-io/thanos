@@ -777,7 +777,7 @@ func (h *Handler) fanoutForward(pctx context.Context, tenant string, wreqs map[e
 		quorum = 1
 	}
 	successes := make([]int, numSeries)
-	seriesErrs := newSeriesErrors(quorum, numSeries)
+	seriesErrs := newReplicationErrors(quorum, numSeries)
 	for {
 		select {
 		case <-fctx.Done():
@@ -965,13 +965,13 @@ func (es *errorSet) Add(err error) {
 		es.reasonSet = make(map[string]struct{})
 	}
 
-	switch werr := err.(type) {
+	switch addedErr := err.(type) {
 	case *replicationErrors:
-		for reason := range werr.reasonSet {
+		for reason := range addedErr.reasonSet {
 			es.reasonSet[reason] = struct{}{}
 		}
 	case *writeErrors:
-		for reason := range werr.reasonSet {
+		for reason := range addedErr.reasonSet {
 			es.reasonSet[reason] = struct{}{}
 		}
 	default:
@@ -980,7 +980,7 @@ func (es *errorSet) Add(err error) {
 }
 
 // writeErrors contains all errors that have
-// occurred during a remote-write request.
+// occurred during a local write of a remote-write request.
 type writeErrors struct {
 	errorSet
 }
@@ -1009,18 +1009,21 @@ func (es *writeErrors) Cause() error {
 		{err: errConflict, cause: isConflict},
 	}
 
-	var recoverableErr error
+	var (
+		unknownErr error
+		knownCause bool
+	)
 	for _, werr := range es.errs {
-		var found bool
+		knownCause = false
 		cause := errors.Cause(werr)
 		for _, exp := range expErrs {
 			if exp.cause(cause) {
-				found = true
+				knownCause = true
 				exp.count++
 			}
 		}
-		if !found {
-			recoverableErr = cause
+		if !knownCause {
+			unknownErr = cause
 		}
 	}
 
@@ -1030,7 +1033,7 @@ func (es *writeErrors) Cause() error {
 		}
 	}
 
-	return recoverableErr
+	return unknownErr
 }
 
 // replicationErrors contains errors that have happened while
@@ -1077,7 +1080,7 @@ func (es *replicationErrors) Cause() error {
 	return nil
 }
 
-func newSeriesErrors(threshold, numErrors int) []*replicationErrors {
+func newReplicationErrors(threshold, numErrors int) []*replicationErrors {
 	errs := make([]*replicationErrors, numErrors)
 	for i := range errs {
 		errs[i] = &replicationErrors{threshold: threshold}
