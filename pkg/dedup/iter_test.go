@@ -111,7 +111,7 @@ var expectedRealSeriesWithStaleMarkerDeduplicatedForRate = []sample{
 }
 
 func TestDedupSeriesSet(t *testing.T) {
-	tests := []struct {
+	for _, tcase := range []struct {
 		input       []series
 		exp         []series
 		dedupLabels map[string]struct{}
@@ -418,9 +418,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			},
 			dedupLabels: map[string]struct{}{"replica": {}},
 		},
-	}
-
-	for _, tcase := range tests {
+	} {
 		t.Run("", func(t *testing.T) {
 			// If it is a counter then pass a function which expects a counter.
 			f := ""
