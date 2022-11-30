@@ -234,3 +234,82 @@ type byLabels []storage.Series
 func (b byLabels) Len() int           { return len(b) }
 func (b byLabels) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
 func (b byLabels) Less(i, j int) bool { return labels.Compare(b[i].Labels(), b[j].Labels()) < 0 }
+
+type DeletedSeriesIterator struct {
+	itr              chunkenc.Iterator
+	deletedIntervals []model.Interval
+}
+
+func NewDeletedSeriesIterator(itr chunkenc.Iterator, deletedIntervals []model.Interval) chunkenc.Iterator {
+	return &DeletedSeriesIterator{
+		itr:              itr,
+		deletedIntervals: deletedIntervals,
+	}
+}
+
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
+func (d DeletedSeriesIterator) Seek(t int64) chunkenc.ValueType {
+	if valueType := d.itr.Seek(t); valueType == chunkenc.ValNone {
+		return valueType
+	}
+
+	seekedTs, _ := d.itr.At()
+	if d.isDeleted(seekedTs) {
+		// point we have seeked into is deleted, Next() should find a new non-deleted sample which is after t and seekedTs
+		return d.Next()
+	}
+
+	return chunkenc.ValFloat
+}
+
+func (d DeletedSeriesIterator) At() (t int64, v float64) {
+	return d.itr.At()
+}
+
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (d DeletedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (d DeletedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (d DeletedSeriesIterator) AtT() int64 {
+	t, _ := d.itr.At()
+	return t
+}
+
+func (d DeletedSeriesIterator) Next() chunkenc.ValueType {
+	for valueType := d.itr.Next(); valueType != chunkenc.ValNone; valueType = d.itr.Next() {
+		ts, _ := d.itr.At()
+
+		if d.isDeleted(ts) {
+			continue
+		}
+		return valueType
+	}
+	return chunkenc.ValNone
+}
+
+func (d DeletedSeriesIterator) Err() error {
+	return d.itr.Err()
+}
+
+// isDeleted removes intervals which are past ts while checking for whether ts happens to be in one of the deleted intervals
+func (d *DeletedSeriesIterator) isDeleted(ts int64) bool {
+	mts := model.Time(ts)
+
+	for _, interval := range d.deletedIntervals {
+		if mts > interval.End {
+			d.deletedIntervals = d.deletedIntervals[1:]
+			continue
+		} else if mts < interval.Start {
+			return false
+		}
+
+		return true
+	}
+
+	return false
+}
