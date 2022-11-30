@@ -674,7 +674,7 @@ func readBlockSeries(t *testing.T, bDir string) []seriesSamples {
 
 			var chk []sample
 			iter := c.Chunk.Iterator(nil)
-			for iter.Next() {
+			for iter.Next() != chunkenc.ValNone {
 				sa := sample{}
 				sa.t, sa.v = iter.At()
 				chk = append(chk, sa)
