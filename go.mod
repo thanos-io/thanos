@@ -69,10 +69,10 @@ require (
 	github.com/prometheus/common v0.37.0
 	github.com/prometheus/exporter-toolkit v0.8.1
 	// Prometheus maps version 2.x.y to tags v0.x.y.
-	github.com/prometheus/prometheus v0.40.1
+	github.com/prometheus/prometheus v0.40.3
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.1
-	github.com/thanos-community/promql-engine v0.0.0-20221115192426-d68c8139c070
+	github.com/thanos-community/promql-engine v0.0.0-20221128171136-44ee950ce4b0
 	github.com/thanos-io/objstore v0.0.0-20221111162010-dc083e736d11
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
