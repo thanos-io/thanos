@@ -578,20 +578,21 @@ func PutOutOfOrderIndex(blockDir string, minTime int64, maxTime int64) error {
 	var input indexWriterSeriesSlice
 
 	// Generate ChunkMetas for every label set.
+	// Ignoring gosec as it is only used for tests.
 	for _, lset := range lbls {
 		var metas []chunks.Meta
 		// only need two chunks that are out-of-order
 		chk1 := chunks.Meta{
 			MinTime: maxTime - 2,
 			MaxTime: maxTime - 1,
-			Ref:     chunks.ChunkRef(rand.Uint64()),
+			Ref:     chunks.ChunkRef(rand.Uint64()), // nolint:gosec
 			Chunk:   chunkenc.NewXORChunk(),
 		}
 		metas = append(metas, chk1)
 		chk2 := chunks.Meta{
 			MinTime: minTime + 1,
 			MaxTime: minTime + 2,
-			Ref:     chunks.ChunkRef(rand.Uint64()),
+			Ref:     chunks.ChunkRef(rand.Uint64()), // nolint:gosec
 			Chunk:   chunkenc.NewXORChunk(),
 		}
 		metas = append(metas, chk2)
