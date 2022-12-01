@@ -9,8 +9,8 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestUnmarshalAPIVersion(t *testing.T) {

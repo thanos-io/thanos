@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/goleak"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestMain(m *testing.M) {

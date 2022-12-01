@@ -9,9 +9,9 @@ import (
 	"io"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 type testStoreServer struct {

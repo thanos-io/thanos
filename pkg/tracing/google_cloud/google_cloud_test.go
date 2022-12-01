@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
@@ -20,7 +20,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	testutil.TolerantVerifyLeakMain(m)
+	custom.TolerantVerifyLeakMain(m)
 }
 
 // This test shows that if sample factor will enable tracing on client process, even when it would be disabled on server

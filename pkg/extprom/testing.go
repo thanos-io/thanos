@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 // CurrentGaugeValuesFor returns gauge values for given metric names. Useful for testing based on registry,
