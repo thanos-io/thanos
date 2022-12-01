@@ -21,7 +21,6 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/testutil/custom"
 )
 
 func TestMemcachedClientConfig_validate(t *testing.T) {
@@ -438,8 +437,8 @@ func TestMemcachedClient_sortKeysByServer(t *testing.T) {
 	}
 
 	sorted := client.sortKeysByServer(keys)
-	custom.Contains(t, sorted, []string{"key1", "key3", "key5"})
-	custom.Contains(t, sorted, []string{"key2", "key4", "key6"})
+	testutil.ContainsStringSlice(t, sorted, []string{"key1", "key3", "key5"})
+	testutil.ContainsStringSlice(t, sorted, []string{"key2", "key4", "key6"})
 }
 
 type mockAddr string
