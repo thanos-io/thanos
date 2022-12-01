@@ -108,7 +108,7 @@ require (
 
 require (
 	github.com/efficientgo/core v1.0.0-rc.0.0.20221201130417-ba593f67d2a4
-	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd
+	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd // indirect
 	github.com/minio/sha256-simd v1.0.0
 )
 
