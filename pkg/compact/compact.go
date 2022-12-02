@@ -1280,8 +1280,8 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			go func() {
 				defer wg.Done()
 				for g := range groupChan {
-					shouldRerunGroup, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp)
-					if err == nil {
+					shouldRerunGroup, compactErrs := g.Compact(workCtx, c.compactDir, c.planner, c.comp)
+					if compactErrs == nil {
 						if shouldRerunGroup {
 							mtx.Lock()
 							finishedAllGroups = false
@@ -1289,34 +1289,48 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 						}
 						continue
 					}
+					errs, ok := compactErrs.(errutil.NonNilMultiError)
+					if !ok {
+						errs = []error{compactErrs}
+					}
 
-					if IsIssue347Error(err) {
-						if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err); err == nil {
-							mtx.Lock()
-							finishedAllGroups = false
-							mtx.Unlock()
-							continue
+					var nonRecoverableErrs errutil.MultiError
+					for _, err := range errs {
+						if IsIssue347Error(err) {
+							if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err); err == nil {
+								mtx.Lock()
+								finishedAllGroups = false
+								mtx.Unlock()
+								continue
+							}
 						}
-					}
-					// If block has out of order chunk and it has been configured to skip it,
-					// then we can mark the block for no compaction so that the next compaction run
-					// will skip it.
-					if IsOutOfOrderChunkError(err) && c.skipBlocksWithOutOfOrderChunks {
-						if err := block.MarkForNoCompact(
-							ctx,
-							c.logger,
-							c.bkt,
-							err.(OutOfOrderChunksError).id,
-							metadata.OutOfOrderChunksNoCompactReason,
-							"OutofOrderChunk: marking block with out-of-order series/chunks to as no compact to unblock compaction", g.blocksMarkedForNoCompact); err == nil {
-							mtx.Lock()
-							finishedAllGroups = false
-							mtx.Unlock()
-							continue
+
+						// If block has out of order chunk and it has been configured to skip it,
+						// then we can mark the block for no compaction so that the next compaction run
+						// will skip it.
+						if IsOutOfOrderChunkError(err) && c.skipBlocksWithOutOfOrderChunks {
+							if err := block.MarkForNoCompact(
+								ctx,
+								c.logger,
+								c.bkt,
+								err.(OutOfOrderChunksError).id,
+								metadata.OutOfOrderChunksNoCompactReason,
+								"OutofOrderChunk: marking block with out-of-order series/chunks to as no compact to unblock compaction", g.blocksMarkedForNoCompact,
+							); err == nil {
+								mtx.Lock()
+								finishedAllGroups = false
+								mtx.Unlock()
+								continue
+							}
 						}
+
+						nonRecoverableErrs.Add(err)
 					}
-					errChan <- errors.Wrapf(err, "group %s", g.Key())
-					return
+
+					if nonRecoverableErrs.Err() != nil {
+						errChan <- errors.Wrapf(nonRecoverableErrs.Err(), "group %s", g.Key())
+						return
+					}
 				}
 			}()
 		}
