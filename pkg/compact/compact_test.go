@@ -451,6 +451,21 @@ func TestCompactProgressCalculate(t *testing.T) {
 				},
 			},
 		},
+		{
+			testName: "multiple_vertical_compactions",
+			input: []*metadata.Meta{
+				createBlockMeta(1, 0, 10, map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(2, 5, 15, map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(3, 20, 30, map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(4, 25, 40, map[string]string{"a": "1"}, 0, []uint64{}),
+			},
+			expected: map[string]planResult{
+				keys[0]: {
+					compactionRuns:   2.0,
+					compactionBlocks: 4.0,
+				},
+			},
+		},
 	} {
 		if ok := t.Run(tcase.testName, func(t *testing.T) {
 			blocks := make(map[ulid.ULID]*metadata.Meta, len(tcase.input))
