@@ -25,7 +25,6 @@ import (
 	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/thanos-io/thanos/internal/cortex/util/multierror"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -1024,7 +1023,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	var (
 		wg         sync.WaitGroup
 		mu         sync.Mutex
-		groupErr   multierror.MultiError
+		groupErr   errutil.MultiError
 		rerunGroup bool
 	)
 	for _, task := range tasks {
