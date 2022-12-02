@@ -369,7 +369,7 @@ func expandSeriesSet(t *testing.T, gotSS SeriesSet) (ret []rawSeries) {
 			testutil.Ok(t, err)
 
 			iter := c.Iterator(nil)
-			for iter.Next() {
+			for iter.Next() != chunkenc.ValNone {
 				t, v := iter.At()
 				r.chunks[i] = append(r.chunks[i], sample{t: t, v: v})
 			}
