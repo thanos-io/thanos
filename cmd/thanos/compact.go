@@ -352,7 +352,7 @@ func runCompact(
 		conf.blockFilesConcurrency,
 		conf.compactBlocksFetchConcurrency,
 	)
-	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
+	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter, conf.groupCompactionConcurrency)
 	planner := compact.WithLargeTotalIndexSizeFilter(
 		tsdbPlanner,
 		bkt,
@@ -671,6 +671,7 @@ type compactConfig struct {
 	maxBlockIndexSize                              units.Base2Bytes
 	hashFunc                                       string
 	enableVerticalCompaction                       bool
+	groupCompactionConcurrency                     int
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
 	progressCalculateInterval                      time.Duration
@@ -745,6 +746,10 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"Please note that by default this uses a NAIVE algorithm for merging. If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func."+
 		"NOTE: This flag is ignored and (enabled) when --deduplication.replica-label flag is set.").
 		Hidden().Default("false").BoolVar(&cc.enableVerticalCompaction)
+
+	cmd.Flag("compact.group-compaction-concurrency", "The maximum number of concurrent compactions that can run within a single compaction group."+
+		"A higher number means the compactor will use more resources at peak.").
+		Default("1").IntVar(&cc.groupCompactionConcurrency)
 
 	cmd.Flag("deduplication.func", "Experimental. Deduplication algorithm for merging overlapping blocks. "+
 		"Possible values are: \"\", \"penalty\". If no value is specified, the default compact deduplication merger is used, which performs 1:1 deduplication for samples. "+

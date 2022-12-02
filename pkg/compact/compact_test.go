@@ -360,7 +360,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 		int64(2 * time.Hour / time.Millisecond),
 		int64(4 * time.Hour / time.Millisecond),
 		int64(8 * time.Hour / time.Millisecond),
-	})
+	}, testGroupConcurrency)
 
 	keys := make([]string, 3)
 	m := make([]metadata.Meta, 3)
