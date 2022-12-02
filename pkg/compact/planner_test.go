@@ -816,6 +816,31 @@ func TestLargeTotalIndexSizeFilter_Plan(t *testing.T) {
 			},
 			expectedMarks: 1,
 		},
+		// |--------------|
+		//               |----------------|
+		//                                |--------------|
+		//                                                   |----------------|
+		//                                                         |--------------|
+		{
+			name: "Two groups of overlapping blocks, first group total is too large",
+			metas: []*metadata.Meta{
+				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 90}}},
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
+				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 30}}},
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 19, MaxTime: 40}},
+				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 30}}},
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 30}}},
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 70, MaxTime: 80}},
+				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 30}}},
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 75, MaxTime: 90}},
+			},
+			expectedMarks: 1,
+			expected: []CompactionTask{{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 70, MaxTime: 80}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 75, MaxTime: 90}},
+			}},
+		},
 	} {
 		if !t.Run(c.name, func(t *testing.T) {
 			t.Run("from meta", func(t *testing.T) {
