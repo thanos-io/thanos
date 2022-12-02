@@ -1030,7 +1030,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		wg.Add(1)
 		go func(task CompactionTask) {
 			defer wg.Done()
-			rerunTask, _, err := cg.compactBlocks(ctx, dir, task, comp, overlappingBlocks)
+			rerunTask, err := cg.compactBlocks(ctx, dir, task, comp, overlappingBlocks)
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -1043,7 +1043,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	return rerunGroup, groupErr.Err()
 }
 
-func (cg *Group) compactBlocks(ctx context.Context, dir string, task CompactionTask, comp Compactor, overlappingBlocks bool) (bool, ulid.ULID, error) {
+func (cg *Group) compactBlocks(ctx context.Context, dir string, task CompactionTask, comp Compactor, overlappingBlocks bool) (bool, error) {
 	// Once we have a plan we need to download the actual data.
 	compactionBegin := time.Now()
 	begin := compactionBegin
@@ -1097,7 +1097,7 @@ func (cg *Group) compactBlocks(ctx context.Context, dir string, task CompactionT
 	sourceBlockStr := fmt.Sprintf("%v", toCompactDirs)
 
 	if err := g.Wait(); err != nil {
-		return false, ulid.ULID{}, err
+		return false, err
 	}
 
 	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", sourceBlockStr, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
@@ -1108,7 +1108,7 @@ func (cg *Group) compactBlocks(ctx context.Context, dir string, task CompactionT
 		compID, e = comp.Compact(dir, toCompactDirs, nil)
 		return e
 	}); err != nil {
-		return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact blocks %v", toCompactDirs))
+		return false, halt(errors.Wrapf(err, "compact blocks %v", toCompactDirs))
 	}
 	if compID == (ulid.ULID{}) {
 		// Prometheus compactor found that the compacted block would have no samples.
@@ -1121,7 +1121,7 @@ func (cg *Group) compactBlocks(ctx context.Context, dir string, task CompactionT
 			}
 		}
 		// Even though this block was empty, there may be more work to do.
-		return true, ulid.ULID{}, nil
+		return true, nil
 	}
 	cg.compactions.Inc()
 	if overlappingBlocks {
@@ -1140,11 +1140,11 @@ func (cg *Group) compactBlocks(ctx context.Context, dir string, task CompactionT
 		SegmentFiles: block.GetSegmentFiles(bdir),
 	}, nil)
 	if err != nil {
-		return false, ulid.ULID{}, errors.Wrapf(err, "failed to finalize the block %s", bdir)
+		return false, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}
 
 	if err = os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
-		return false, ulid.ULID{}, errors.Wrap(err, "remove tombstones")
+		return false, errors.Wrap(err, "remove tombstones")
 	}
 
 	// Ensure the output block is valid.
@@ -1152,14 +1152,14 @@ func (cg *Group) compactBlocks(ctx context.Context, dir string, task CompactionT
 		return block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime)
 	})
 	if !cg.acceptMalformedIndex && err != nil {
-		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
+		return false, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
 	// Ensure the output block is not overlapping with anything else,
 	// unless vertical compaction is enabled.
 	if !cg.enableVerticalCompaction {
 		if err := cg.areBlocksOverlapping(newMeta, task...); err != nil {
-			return false, ulid.ULID{}, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
+			return false, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
 		}
 	}
 
@@ -1169,7 +1169,7 @@ func (cg *Group) compactBlocks(ctx context.Context, dir string, task CompactionT
 		return block.Upload(ctx, cg.logger, cg.bkt, bdir, cg.hashFunc, objstore.WithUploadConcurrency(cg.blockFilesConcurrency))
 	})
 	if err != nil {
-		return false, ulid.ULID{}, retry(errors.Wrapf(err, "upload of %s failed", compID))
+		return false, retry(errors.Wrapf(err, "upload of %s failed", compID))
 	}
 	level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
@@ -1181,14 +1181,14 @@ func (cg *Group) compactBlocks(ctx context.Context, dir string, task CompactionT
 			return cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()))
 		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
-			return false, ulid.ULID{}, retry(errors.Wrapf(err, "mark old block for deletion from bucket"))
+			return false, retry(errors.Wrapf(err, "mark old block for deletion from bucket"))
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
 	}
 
 	level.Info(cg.logger).Log("msg", "finished compacting blocks", "result_block", compID, "source_blocks", sourceBlockStr,
 		"duration", time.Since(compactionBegin), "duration_ms", time.Since(compactionBegin).Milliseconds())
-	return true, compID, nil
+	return true, nil
 }
 
 func (cg *Group) deleteBlock(id ulid.ULID, bdir string) error {
