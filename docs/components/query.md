@@ -103,6 +103,16 @@ thanos query \
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
 
+## Experimental PromQL Engine
+
+By default, Thanos querier comes with standard Prometheus PromQL engine. However, when `--query.promql-engine=thanos` is specified, Thanos will use [experimental Thanos PromQL engine](http://github.com/thanos-community/promql-engine) which is a drop-in, efficient implementation of PromQL engine with query planner and optimizers.
+
+To learn more, see [the introduction talk](https://youtu.be/pjkWzDVxWk4?t=3609) from [the PromConEU 2022](https://promcon.io/2022-munich/talks/opening-pandoras-box-redesigning/).
+
+This feature is still **experimental** given active development. All queries should be supported due to bulit-in fallback to old PromQL if something is not yet implemented.
+
+For new engine bugs/issues, please use https://github.com/thanos-community/promql-engine GitHub issues.
+
 ## Query API Overview
 
 As mentioned, Query API exposed by Thanos is guaranteed to be compatible with [Prometheus 2.x. API](https://prometheus.io/docs/prometheus/latest/querying/api/). However for additional Thanos features on top of Prometheus, Thanos adds:
@@ -375,6 +385,8 @@ Flags:
       --query.partial-response   Enable partial response for queries if
                                  no partial_response param is specified.
                                  --no-query.partial-response for disabling.
+      --query.promql-engine=prometheus
+                                 PromQL engine to use.
       --query.replica-label=QUERY.REPLICA-LABEL ...
                                  Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will

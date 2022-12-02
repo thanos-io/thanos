@@ -557,7 +557,19 @@ func runCompact(
 		// since one iteration potentially could take a long time.
 		if conf.cleanupBlocksInterval > 0 {
 			g.Add(func() error {
-				return runutil.Repeat(conf.cleanupBlocksInterval, ctx.Done(), cleanPartialMarked)
+				return runutil.Repeat(conf.cleanupBlocksInterval, ctx.Done(), func() error {
+					err := cleanPartialMarked()
+					if err != nil && compact.IsRetryError(err) {
+						// The RetryError signals that we hit an retriable error (transient error, no connection).
+						// You should alert on this being triggered too frequently.
+						level.Error(logger).Log("msg", "retriable error", "err", err)
+						compactMetrics.retried.Inc()
+
+						return nil
+					}
+
+					return err
+				})
 			}, func(error) {
 				cancel()
 			})
