@@ -102,7 +102,7 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 ## Blog posts
 
 * 2022:
-
+  * [Deploy Thanos Receive with native OCI Object Storage on Oracle Kubernetes Engine](https://medium.com/@lmukadam/deploy-thanos-receive-with-native-oci-object-storage-on-kubernetes-829326ea0bc6)
   * [Leveraging Consul for Thanos Query Discovery](https://nicolastakashi.medium.com/leveraging-consul-for-thanos-query-discovery-34212d496c88)
 
 * 2021:
