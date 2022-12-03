@@ -335,7 +335,7 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 		//                                         |--------------|
 		//                                                       |--------------|
 		{
-			name: "Multiple independent groups of overlapping blocks",
+			name: "Multiple independent overlapping blocks",
 			metas: []*metadata.Meta{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 10}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 9, MaxTime: 20}},
