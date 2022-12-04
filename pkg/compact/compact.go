@@ -731,7 +731,7 @@ func (rs *RetentionProgressCalculator) ProgressCalculate(ctx context.Context, gr
 type Planner interface {
 	// Plan returns a list of blocks that should be compacted into single one.
 	// The blocks can be overlapping. The provided metadata has to be ordered by minTime.
-	Plan(ctx context.Context, metasByMinTime []*metadata.Meta) ([]CompactionBlocks, error)
+	Plan(ctx context.Context, metasByMinTime []*metadata.Meta) ([]CompactionTask, error)
 }
 
 // Compactor provides compaction against an underlying storage of time series data.
@@ -753,17 +753,16 @@ type Compactor interface {
 	Compact(dest string, dirs []string, open []*tsdb.Block) (ulid.ULID, error)
 }
 
-// CompactionTask is an independent compaction task.
-type CompactionTask struct {
+// GroupCompactionTask is an independent compaction task for a given compaction group.
+type GroupCompactionTask struct {
 	Group  *Group
-	Blocks CompactionBlocks
+	Blocks CompactionTask
 	Dir    string
-	logger log.Logger
 }
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (task *CompactionTask) Compact(ctx context.Context, comp Compactor) (shouldRerun bool, cerr error) {
+func (task *GroupCompactionTask) Compact(ctx context.Context, comp Compactor) (shouldRerun bool, cerr error) {
 	overlappingBlocks := false
 	if err := task.Group.areBlocksOverlapping(nil); err != nil {
 		overlappingBlocks = true
@@ -779,7 +778,7 @@ func (task *CompactionTask) Compact(ctx context.Context, comp Compactor) (should
 		}
 		task.Group.compactionRunsCompleted.Inc()
 		if err := os.RemoveAll(task.Dir); err != nil {
-			level.Error(task.logger).Log("msg", "failed to remove compaction group work directory", "path", task.Dir, "err", err)
+			level.Error(task.Group.logger).Log("msg", "failed to remove compaction group work directory", "path", task.Dir, "err", err)
 		}
 	}()
 
@@ -989,26 +988,25 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) GetCompactionTasks(ctx context.Context, dir string, planner Planner) ([]CompactionTask, error) {
+func (cg *Group) GetCompactionTasks(ctx context.Context, dir string, planner Planner) ([]GroupCompactionTask, error) {
 	plannedCompactions, err := planner.Plan(ctx, cg.metasByMinTime)
 	if err != nil {
 		return nil, err
 	}
 
-	tasks := make([]CompactionTask, 0, len(plannedCompactions))
+	tasks := make([]GroupCompactionTask, 0, len(plannedCompactions))
 	for i, blocks := range plannedCompactions {
-		tasks = append(tasks, CompactionTask{
+		tasks = append(tasks, GroupCompactionTask{
 			Group:  cg,
 			Blocks: blocks,
 			Dir:    path.Join(dir, cg.Key(), strconv.Itoa(i)),
-			logger: cg.logger,
 		})
 	}
 
 	return tasks, nil
 }
 
-func (cg *Group) compactBlocks(ctx context.Context, dir string, blocks CompactionBlocks, comp Compactor, overlappingBlocks bool) (bool, error) {
+func (cg *Group) compactBlocks(ctx context.Context, dir string, blocks CompactionTask, comp Compactor, overlappingBlocks bool) (bool, error) {
 	// Once we have a plan we need to download the actual data.
 	compactionBegin := time.Now()
 	begin := compactionBegin
@@ -1230,7 +1228,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		var (
 			wg                     sync.WaitGroup
 			workCtx, workCtxCancel = context.WithCancel(ctx)
-			taskChan               = make(chan CompactionTask)
+			taskChan               = make(chan GroupCompactionTask)
 			errChan                = make(chan error, c.concurrency)
 			finishedAllTasks       = true
 			mtx                    sync.Mutex
@@ -1320,7 +1318,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		level.Info(c.logger).Log("msg", "start of compactions")
 
-		tasks := make([]CompactionTask, 0)
+		tasks := make([]GroupCompactionTask, 0)
 		for _, g := range groups {
 			groupTasks, err := g.GetCompactionTasks(ctx, c.compactDir, c.planner)
 			if err != nil {

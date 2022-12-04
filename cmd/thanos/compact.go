@@ -352,7 +352,7 @@ func runCompact(
 		conf.blockFilesConcurrency,
 		conf.compactBlocksFetchConcurrency,
 	)
-	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter, conf.groupCompactionConcurrency)
+	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter, conf.groupTasksConcurrency)
 	planner := compact.WithLargeTotalIndexSizeFilter(
 		tsdbPlanner,
 		bkt,
@@ -661,6 +661,7 @@ type compactConfig struct {
 	cleanupBlocksInterval                          time.Duration
 	compactionConcurrency                          int
 	downsampleConcurrency                          int
+	groupTasksConcurrency                          int
 	compactBlocksFetchConcurrency                  int
 	deleteDelay                                    model.Duration
 	dedupReplicaLabels                             []string
@@ -671,7 +672,6 @@ type compactConfig struct {
 	maxBlockIndexSize                              units.Base2Bytes
 	hashFunc                                       string
 	enableVerticalCompaction                       bool
-	groupCompactionConcurrency                     int
 	dedupFunc                                      string
 	skipBlockWithOutOfOrderChunks                  bool
 	progressCalculateInterval                      time.Duration
@@ -747,9 +747,9 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"NOTE: This flag is ignored and (enabled) when --deduplication.replica-label flag is set.").
 		Hidden().Default("false").BoolVar(&cc.enableVerticalCompaction)
 
-	cmd.Flag("compact.group-compaction-concurrency", "The maximum number of concurrent compactions that can run within a single compaction group."+
-		"A higher number means the compactor will use more resources at peak.").
-		Default("1").IntVar(&cc.groupCompactionConcurrency)
+	cmd.Flag("compact.group-concurrency", "The number of concurrent compactions from a single compaction group inside one compaction iteration."+
+		"The absolute concurrency between all compactions is still limited by the compact.concurrency flag.").
+		Default("1").IntVar(&cc.groupTasksConcurrency)
 
 	cmd.Flag("deduplication.func", "Experimental. Deduplication algorithm for merging overlapping blocks. "+
 		"Possible values are: \"\", \"penalty\". If no value is specified, the default compact deduplication merger is used, which performs 1:1 deduplication for samples. "+
