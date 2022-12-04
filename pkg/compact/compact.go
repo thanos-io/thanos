@@ -1324,9 +1324,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			if err != nil {
 				return errors.Wrapf(err, "get compaction group tasks: %s", g.Key())
 			}
-			for _, task := range groupTasks {
-				tasks = append(tasks, task)
-			}
+			tasks = append(tasks, groupTasks...)
 		}
 
 		// Send all groups found during this pass to the compaction workers.
