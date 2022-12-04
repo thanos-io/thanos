@@ -994,7 +994,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) GetCompactionTasks(ctx context.Context, dir string, planner Planner) ([]GroupCompactionTask, error) {
+func (cg *Group) PlanCompactionTasks(ctx context.Context, dir string, planner Planner) ([]GroupCompactionTask, error) {
 	plannedCompactions, err := planner.Plan(ctx, cg.metasByMinTime)
 	if err != nil {
 		return nil, err
@@ -1326,25 +1326,26 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		tasks := make([]GroupCompactionTask, 0)
 		for _, g := range groups {
-			groupTasks, err := g.GetCompactionTasks(ctx, c.compactDir, c.planner)
+			// Ignore groups with only one block because there is nothing to compact.
+			if len(g.IDs()) == 1 {
+				continue
+			}
+
+			groupTasks, err := g.PlanCompactionTasks(ctx, c.compactDir, c.planner)
 			if err != nil {
 				return errors.Wrapf(err, "get compaction group tasks: %s", g.Key())
 			}
 			tasks = append(tasks, groupTasks...)
 		}
 
-		// Send all groups found during this pass to the compaction workers.
+		// Send all tasks planned in this pass to the compaction workers.
 		var taskErrs errutil.MultiError
-	groupLoop:
+	tasksLoop:
 		for _, task := range tasks {
-			// Ignore groups with only one block because there is nothing to compact.
-			if len(task.Blocks) == 1 {
-				continue
-			}
 			select {
-			case groupErr := <-errChan:
-				taskErrs.Add(groupErr)
-				break groupLoop
+			case taskErr := <-errChan:
+				taskErrs.Add(taskErr)
+				break tasksLoop
 			case taskChan <- task:
 			}
 		}
