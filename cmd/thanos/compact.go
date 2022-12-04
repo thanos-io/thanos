@@ -747,7 +747,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"NOTE: This flag is ignored and (enabled) when --deduplication.replica-label flag is set.").
 		Hidden().Default("false").BoolVar(&cc.enableVerticalCompaction)
 
-	cmd.Flag("compact.group-concurrency", "The number of concurrent compactions from a single compaction group inside one compaction iteration."+
+	cmd.Flag("compact.group-concurrency", "The number of concurrent compactions from a single compaction group inside one compaction iteration. "+
 		"The absolute concurrency between all compactions is still limited by the compact.concurrency flag.").
 		Default("1").IntVar(&cc.groupTasksConcurrency)
 
