@@ -57,15 +57,15 @@ func NewPlanner(logger log.Logger, ranges []int64, noCompBlocks *GatherNoCompact
 }
 
 // TODO(bwplotka): Consider smarter algorithm, this prefers smaller iterative compactions vs big single one: https://github.com/thanos-io/thanos/issues/3405
-func (p *tsdbBasedPlanner) Plan(_ context.Context, metasByMinTime []*metadata.Meta) ([]CompactionTask, error) {
+func (p *tsdbBasedPlanner) Plan(_ context.Context, metasByMinTime []*metadata.Meta) ([]CompactionBlocks, error) {
 	return p.plan(p.noCompBlocksFunc(), metasByMinTime)
 }
 
-// CompactionTask is a set of blocks that should be compacted together in a single compaction.
-// Multiple compaction tasks can be run in parallel even inside a single compaction group.
-type CompactionTask []*metadata.Meta
+// CompactionBlocks is a set of blocks that should be compacted together in a single compaction.
+// Multiple compaction tasks can be run in parallel even within a single compaction group.
+type CompactionBlocks []*metadata.Meta
 
-func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompactMark, metasByMinTime []*metadata.Meta) ([]CompactionTask, error) {
+func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompactMark, metasByMinTime []*metadata.Meta) ([]CompactionBlocks, error) {
 	notExcludedMetasByMinTime := make([]*metadata.Meta, 0, len(metasByMinTime))
 	for _, meta := range metasByMinTime {
 		if _, excluded := noCompactMarked[meta.ULID]; excluded {
@@ -88,7 +88,7 @@ func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompac
 	metasByMinTime = metasByMinTime[:len(metasByMinTime)-1]
 	res := selectMetas(p.ranges, noCompactMarked, metasByMinTime)
 	if len(res) > 0 {
-		return []CompactionTask{res}, nil
+		return []CompactionBlocks{res}, nil
 	}
 
 	// Compact any blocks with big enough time range that have >5% tombstones.
@@ -99,7 +99,7 @@ func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompac
 		}
 		if float64(meta.Stats.NumTombstones)/float64(meta.Stats.NumSeries+1) > 0.05 {
 			task := []*metadata.Meta{notExcludedMetasByMinTime[i]}
-			return []CompactionTask{task}, nil
+			return []CompactionBlocks{task}, nil
 		}
 	}
 
@@ -168,7 +168,7 @@ func selectMetas(ranges []int64, noCompactMarked map[ulid.ULID]*metadata.NoCompa
 // selectOverlappingMetas returns all dirs with overlapping time ranges.
 // It expects sorted input by mint and returns the overlapping dirs in the same order as received.
 // Copied and adjusted from https://github.com/prometheus/prometheus/blob/3d8826a3d42566684283a9b7f7e812e412c24407/tsdb/compact.go#L268.
-func selectOverlappingMetas(metasByMinTime []*metadata.Meta, maxTasks int) []CompactionTask {
+func selectOverlappingMetas(metasByMinTime []*metadata.Meta, maxTasks int) []CompactionBlocks {
 	if len(metasByMinTime) < 2 {
 		return nil
 	}
@@ -212,7 +212,7 @@ loopMetas:
 		}
 	}
 
-	overlappingGroups := make([]CompactionTask, 0, len(groups))
+	overlappingGroups := make([]CompactionBlocks, 0, len(groups))
 	for _, group := range groups {
 		if len(group) < 2 {
 			continue
@@ -294,7 +294,7 @@ func WithLargeTotalIndexSizeFilter(with *tsdbBasedPlanner, bkt objstore.Bucket, 
 	return &largeTotalIndexSizeFilter{tsdbBasedPlanner: with, bkt: bkt, totalMaxIndexSizeBytes: totalMaxIndexSizeBytes, markedForNoCompact: markedForNoCompact}
 }
 
-func (t *largeTotalIndexSizeFilter) Plan(ctx context.Context, metasByMinTime []*metadata.Meta) ([]CompactionTask, error) {
+func (t *largeTotalIndexSizeFilter) Plan(ctx context.Context, metasByMinTime []*metadata.Meta) ([]CompactionBlocks, error) {
 	noCompactMarked := t.noCompBlocksFunc()
 	copiedNoCompactMarked := make(map[ulid.ULID]*metadata.NoCompactMark, len(noCompactMarked))
 	for k, v := range noCompactMarked {
