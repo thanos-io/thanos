@@ -14,6 +14,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+	"google.golang.org/grpc/codes"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
@@ -49,6 +50,16 @@ func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
 			Hints: hints,
 		},
 	}
+}
+
+func GRPCCodeFromWarn(warn string) codes.Code {
+	if strings.Contains(warn, "rpc error: code = ResourceExhausted") {
+		return codes.ResourceExhausted
+	}
+	if strings.Contains(warn, "rpc error: code = Code(422)") {
+		return 422
+	}
+	return codes.Unknown
 }
 
 type emptySeriesSet struct{}

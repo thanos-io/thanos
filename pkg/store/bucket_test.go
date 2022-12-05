@@ -31,8 +31,8 @@ import (
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
+
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
@@ -2573,10 +2573,6 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 	// No limits.
 	chunksLimiter := NewChunksLimiterFactory(0)(nil)
 	seriesLimiter := NewSeriesLimiterFactory(0)(nil)
-	dummyCounter := promauto.NewCounter(prometheus.CounterOpts{
-		Name: "dummy",
-		Help: "dummy help",
-	})
 	ctx := context.Background()
 
 	// Run multiple workers to execute the queries.
@@ -2608,17 +2604,14 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				// must be called only from the goroutine running the Benchmark function.
 				testutil.Ok(b, err)
 
-				indexReader := blk.indexReader()
-				chunkReader := blk.chunkReader()
-
-				seriesSet, _, err := blockSeries(ctx, nil, indexReader, chunkReader, matchers, chunksLimiter, seriesLimiter, NewBytesLimiterFactory(0)(nil), req.SkipChunks, req.MinTime, req.MaxTime, req.Aggregates, nil, dummyCounter, false)
-				testutil.Ok(b, err)
+				dummyHistogram := prometheus.NewHistogram(prometheus.HistogramOpts{})
+				blockClient := newBlockSeriesClient(ctx, nil, blk, req, chunksLimiter, NewBytesLimiterFactory(0)(nil), nil, false, SeriesBatchSize, dummyHistogram)
+				testutil.Ok(b, blockClient.ExpandPostings(matchers, seriesLimiter))
+				defer blockClient.Close()
 
 				// Ensure at least 1 series has been returned (as expected).
-				testutil.Equals(b, true, seriesSet.Next())
-
-				testutil.Ok(b, indexReader.Close())
-				testutil.Ok(b, chunkReader.Close())
+				_, err = blockClient.Recv()
+				testutil.Ok(b, err)
 			}
 		}()
 	}

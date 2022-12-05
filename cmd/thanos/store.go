@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/alecthomas/units"
@@ -56,6 +57,7 @@ type storeConfig struct {
 	httpConfig                  httpConfig
 	indexCacheSizeBytes         units.Base2Bytes
 	chunkPoolSize               units.Base2Bytes
+	seriesBatchSize             int
 	maxSampleCount              uint64
 	maxTouchedSeriesCount       uint64
 	maxDownloadedBytes          units.Base2Bytes
@@ -128,6 +130,9 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("block-meta-fetch-concurrency", "Number of goroutines to use when fetching block metadata from object storage.").
 		Default("32").IntVar(&sc.blockMetaFetchConcurrency)
+
+	cmd.Flag("debug.series-batch-size", "The batch size when fetching series from TSDB blocks. Setting the number too high can lead to slower retrieval, while setting it too low can lead to throttling caused by too many calls made to object storage.").
+		Hidden().Default(strconv.Itoa(store.SeriesBatchSize)).IntVar(&sc.seriesBatchSize)
 
 	sc.filterConf = &store.FilterConfig{}
 
@@ -340,6 +345,7 @@ func runStore(
 		store.WithChunkPool(chunkPool),
 		store.WithFilterConfig(conf.filterConf),
 		store.WithChunkHashCalculation(true),
+		store.WithSeriesBatchSize(conf.seriesBatchSize),
 	}
 
 	if conf.debugLogging {
