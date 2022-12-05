@@ -52,7 +52,7 @@ require (
 	github.com/lightstep/lightstep-tracer-go v0.25.0
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.50
-	github.com/minio/minio-go/v7 v7.0.37
+	github.com/minio/minio-go/v7 v7.0.45
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/oklog/run v1.1.0
 	github.com/oklog/ulid v1.3.1
@@ -73,7 +73,7 @@ require (
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.0
 	github.com/thanos-community/promql-engine v0.0.0-20221101075408-6d5b22b2cd4d
-	github.com/thanos-io/objstore v0.0.0-20221111162010-dc083e736d11
+	github.com/thanos-io/objstore v0.0.0-20221205132204-5aafc0079f06
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
@@ -107,7 +107,7 @@ require (
 )
 
 require (
-	github.com/efficientgo/core v1.0.0-rc.0
+	github.com/efficientgo/core v1.0.0-rc.0.0.20221201130417-ba593f67d2a4
 	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd
 	github.com/minio/sha256-simd v1.0.0
 )

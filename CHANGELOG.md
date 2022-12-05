@@ -26,6 +26,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5865](https://github.com/thanos-io/thanos/pull/5865) Compact: Retry on sync metas error.
 - [#5889](https://github.com/thanos-io/thanos/pull/5889) Query Frontend: Support sharding vertical sharding `label_replace` and `label_join` functions.
 - [#5819](https://github.com/thanos-io/thanos/pull/5819) Store: Add a few objectives for Store's data touched/fetched amount and sizes. They are: 50, 95, and 99 quantiles.
+- [#5940](https://github.com/thanos-io/thanos/pull/5940) Objstore: Support for authenticating to Swift using application credentials.
 
 ### Changed
 
