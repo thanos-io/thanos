@@ -86,9 +86,9 @@ func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompac
 		notExcludedMetasByMinTime = notExcludedMetasByMinTime[:len(notExcludedMetasByMinTime)-1]
 	}
 	metasByMinTime = metasByMinTime[:len(metasByMinTime)-1]
-	res := selectMetas(p.ranges, noCompactMarked, metasByMinTime)
+	res := selectMetas(p.ranges, noCompactMarked, metasByMinTime, p.maxTasks)
 	if len(res) > 0 {
-		return []CompactionTask{res}, nil
+		return res, nil
 	}
 
 	// Compact any blocks with big enough time range that have >5% tombstones.
@@ -109,9 +109,49 @@ func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompac
 // selectMetas returns the dir metas that should be compacted into a single new block.
 // If only a single block range is configured, the result is always nil.
 // Copied and adjusted from https://github.com/prometheus/prometheus/blob/3d8826a3d42566684283a9b7f7e812e412c24407/tsdb/compact.go#L229.
-func selectMetas(ranges []int64, noCompactMarked map[ulid.ULID]*metadata.NoCompactMark, metasByMinTime []*metadata.Meta) []*metadata.Meta {
+func selectMetas(ranges []int64, noCompactMarked map[ulid.ULID]*metadata.NoCompactMark, metasByMinTime []*metadata.Meta, maxTasks int) []CompactionTask {
+	excludedMetas := make(map[ulid.ULID]struct{})
+	for meta := range noCompactMarked {
+		excludedMetas[meta] = struct{}{}
+	}
+
+	var tasks []CompactionTask
+	var taskLevel int64 = -1
+
+	for {
+		if len(tasks) == maxTasks {
+			return tasks
+		}
+
+		task, level := selectMetasForCompaction(ranges, excludedMetas, metasByMinTime)
+		if task == nil {
+			return tasks
+		}
+		// Next block would be from a different level.
+		// Do not add it to the list of compaciton tasks for this cycle.
+		if taskLevel != -1 && taskLevel != level {
+			return tasks
+		}
+		taskLevel = level
+		tasks = append(tasks, task)
+
+		for _, meta := range task {
+			excludedMetas[meta.ULID] = struct{}{}
+		}
+		newMetas := make([]*metadata.Meta, 0, len(metasByMinTime))
+		for _, meta := range metasByMinTime {
+			if _, ok := excludedMetas[meta.ULID]; ok {
+				continue
+			}
+			newMetas = append(newMetas, meta)
+		}
+		metasByMinTime = newMetas
+	}
+}
+
+func selectMetasForCompaction(ranges []int64, noCompactMarked map[ulid.ULID]struct{}, metasByMinTime []*metadata.Meta) (CompactionTask, int64) {
 	if len(ranges) < 2 || len(metasByMinTime) < 1 {
-		return nil
+		return nil, 0
 	}
 	highTime := metasByMinTime[len(metasByMinTime)-1].MinTime
 
@@ -152,17 +192,17 @@ func selectMetas(ranges []int64, noCompactMarked map[ulid.ULID]*metadata.NoCompa
 					continue
 				}
 				if len(p[lastExcluded:i]) > 1 {
-					return p[lastExcluded:i]
+					return p[lastExcluded:i], iv
 				}
 				lastExcluded = i + 1
 			}
 			if len(p[lastExcluded:]) > 1 {
-				return p[lastExcluded:]
+				return p[lastExcluded:], iv
 			}
 		}
 	}
 
-	return nil
+	return nil, 0
 }
 
 // selectOverlappingMetas returns all dirs with overlapping time ranges.

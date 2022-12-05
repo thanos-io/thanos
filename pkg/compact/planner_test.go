@@ -189,6 +189,34 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 			}},
 		},
 		{
+			name: "Two sets of blocks to fill out a single range. Third set of blocks is for the next range. Plan only first two sets.",
+			metas: []*metadata.Meta{
+				// First compaction task.
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 180, MaxTime: 200}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 200, MaxTime: 220}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 220, MaxTime: 240}},
+				// Second compaction task.
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 240, MaxTime: 260}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 260, MaxTime: 280}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 280, MaxTime: 300}},
+				// Third group filling out a higher level.
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 0, MaxTime: 60}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 60, MaxTime: 120}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(9, nil), MinTime: 120, MaxTime: 180}},
+				// This block is excluded from compaction since it's the last one in the group
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(10, nil), MinTime: 300, MaxTime: 320}},
+			},
+			expected: []CompactionTask{{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 180, MaxTime: 200}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 200, MaxTime: 220}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 220, MaxTime: 240}},
+			}, {
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 240, MaxTime: 260}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 260, MaxTime: 280}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 280, MaxTime: 300}},
+			}},
+		},
+		{
 			name: "We have 20, 60, 20, 60, 240 range blocks. We can compact 20 + 60 + 60",
 			metas: []*metadata.Meta{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
