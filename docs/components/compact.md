@@ -308,6 +308,12 @@ Flags:
                                 happen at the end of an iteration.
       --compact.concurrency=1   Number of goroutines to use when compacting
                                 groups.
+      --compact.group-concurrency=1
+                                The number of concurrent compactions from a
+                                single compaction group inside one compaction
+                                iteration. The absolute concurrency between
+                                all compactions is still limited by the
+                                compact.concurrency flag.
       --compact.progress-interval=5m
                                 Frequency of calculating the compaction progress
                                 in the background when --wait has been enabled.

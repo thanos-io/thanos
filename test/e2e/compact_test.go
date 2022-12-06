@@ -649,8 +649,8 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_group_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_group_vertical_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(1), "thanos_compact_group_compactions_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_group_compaction_runs_started_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(1), "thanos_compact_group_compaction_runs_completed_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(1), "thanos_compact_group_compaction_runs_started_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_group_compaction_runs_completed_total"))
 
 		// However, the blocks have been cleaned because that happens concurrently.
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
@@ -702,8 +702,8 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(6), "thanos_compact_group_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(3), "thanos_compact_group_vertical_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_group_compactions_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(14), "thanos_compact_group_compaction_runs_started_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(14), "thanos_compact_group_compaction_runs_completed_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(6), "thanos_compact_group_compaction_runs_started_total"))
+		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(6), "thanos_compact_group_compaction_runs_completed_total"))
 
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_downsample_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_downsample_failures_total"))
@@ -723,7 +723,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		operationMatcher, err := matchers.NewMatcher(matchers.MatchEqual, "operation", "get")
 		testutil.Ok(t, err)
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(
-			e2emon.Equals(573),
+			e2emon.Equals(635),
 			[]string{"thanos_objstore_bucket_operations_total"}, e2emon.WithLabelMatchers(
 				bucketMatcher,
 				operationMatcher,
@@ -773,8 +773,8 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_group_compactions_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_group_vertical_compactions_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_group_compactions_failures_total"}, e2emon.WaitMissingMetrics()))
-		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(7), []string{"thanos_compact_group_compaction_runs_started_total"}, e2emon.WaitMissingMetrics()))
-		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(7), []string{"thanos_compact_group_compaction_runs_completed_total"}, e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_group_compaction_runs_started_total"}, e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_group_compaction_runs_completed_total"}, e2emon.WaitMissingMetrics()))
 
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_downsample_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_downsample_failures_total"}, e2emon.WaitMissingMetrics()))

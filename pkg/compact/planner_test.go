@@ -25,12 +25,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
+const testGroupConcurrency = 3
+
 type tsdbPlannerAdapter struct {
 	dir  string
 	comp tsdb.Compactor
 }
 
-func (p *tsdbPlannerAdapter) Plan(_ context.Context, metasByMinTime []*metadata.Meta) ([]*metadata.Meta, error) {
+func (p *tsdbPlannerAdapter) Plan(_ context.Context, metasByMinTime []*metadata.Meta) ([]CompactionTask, error) {
 	// TSDB planning works based on the meta.json files in the given dir. Mock it up.
 	for _, meta := range metasByMinTime {
 		bdir := filepath.Join(p.dir, meta.ULID.String())
@@ -46,6 +48,10 @@ func (p *tsdbPlannerAdapter) Plan(_ context.Context, metasByMinTime []*metadata.
 		return nil, err
 	}
 
+	if len(plan) == 0 {
+		return nil, nil
+	}
+
 	var res []*metadata.Meta
 	for _, pdir := range plan {
 		meta, err := metadata.ReadFromDir(pdir)
@@ -54,7 +60,7 @@ func (p *tsdbPlannerAdapter) Plan(_ context.Context, metasByMinTime []*metadata.
 		}
 		res = append(res, meta)
 	}
-	return res, nil
+	return []CompactionTask{res}, nil
 }
 
 // Adapted from https://github.com/prometheus/prometheus/blob/6c56a1faaaad07317ff585bda75b99bdba0517ad/tsdb/compact_test.go#L167
@@ -71,12 +77,12 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 	tsdbComp, err := tsdb.NewLeveledCompactor(context.Background(), nil, nil, ranges, nil, nil)
 	testutil.Ok(t, err)
 	tsdbPlanner := &tsdbPlannerAdapter{comp: tsdbComp}
-	tsdbBasedPlanner := NewTSDBBasedPlanner(log.NewNopLogger(), ranges)
+	tsdbBasedPlanner := NewTSDBBasedPlanner(log.NewNopLogger(), ranges, testGroupConcurrency)
 
 	for _, c := range []struct {
 		name     string
 		metas    []*metadata.Meta
-		expected []*metadata.Meta
+		expected []CompactionTask
 	}{
 		{
 			name: "Outside range",
@@ -108,11 +114,11 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 80}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
-			},
+			}},
 		},
 		{
 			name: "There are blocks to fill the entire 2nd parent range.",
@@ -123,10 +129,12 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(9, nil), MinTime: 180, MaxTime: 200}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(10, nil), MinTime: 200, MaxTime: 220}},
 			},
-			expected: []*metadata.Meta{
-				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 0, MaxTime: 60}},
-				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 60, MaxTime: 120}},
-				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 120, MaxTime: 180}},
+			expected: []CompactionTask{
+				{
+					{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 0, MaxTime: 60}},
+					{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 60, MaxTime: 120}},
+					{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 120, MaxTime: 180}},
+				},
 			},
 		},
 		{
@@ -147,10 +155,10 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 80}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 80, MaxTime: 100}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
-			},
+			}},
 		},
 		{
 			name: "We have 20, 20, 20, 60, 60 range blocks. '5' is marked as fresh one",
@@ -161,11 +169,11 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 120}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 120, MaxTime: 180}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
-			},
+			}},
 		},
 		{
 			name: "There are blocks to fill the entire 2nd parent range, but there is a gap",
@@ -175,10 +183,38 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(9, nil), MinTime: 180, MaxTime: 200}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(10, nil), MinTime: 200, MaxTime: 220}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 0, MaxTime: 60}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 120, MaxTime: 180}},
+			}},
+		},
+		{
+			name: "Two sets of blocks to fill out a single range. Third set of blocks is for the next range. Plan only first two sets.",
+			metas: []*metadata.Meta{
+				// First compaction task.
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 180, MaxTime: 200}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 200, MaxTime: 220}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 220, MaxTime: 240}},
+				// Second compaction task.
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 240, MaxTime: 260}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 260, MaxTime: 280}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 280, MaxTime: 300}},
+				// Third group filling out a higher level.
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 0, MaxTime: 60}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 60, MaxTime: 120}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(9, nil), MinTime: 120, MaxTime: 180}},
+				// This block is excluded from compaction since it's the last one in the group
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(10, nil), MinTime: 300, MaxTime: 320}},
 			},
+			expected: []CompactionTask{{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 180, MaxTime: 200}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 200, MaxTime: 220}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 220, MaxTime: 240}},
+			}, {
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 240, MaxTime: 260}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 260, MaxTime: 280}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 280, MaxTime: 300}},
+			}},
 		},
 		{
 			name: "We have 20, 60, 20, 60, 240 range blocks. We can compact 20 + 60 + 60",
@@ -189,20 +225,18 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 120, MaxTime: 180}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 720, MaxTime: 960}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 120}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 120, MaxTime: 180}},
-			},
+			}},
 		},
 		{
 			name: "Do not select large blocks that have many tombstones when there is no fresh block",
-			metas: []*metadata.Meta{
-				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 540, Stats: tsdb.BlockStats{
-					NumSeries:     10,
-					NumTombstones: 3,
-				}}},
-			},
+			metas: []*metadata.Meta{{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 540, Stats: tsdb.BlockStats{
+				NumSeries:     10,
+				NumTombstones: 3,
+			}}}},
 		},
 		{
 			name: "Select large blocks that have many tombstones when fresh appears",
@@ -213,10 +247,12 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				}}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 540, MaxTime: 560}},
 			},
-			expected: []*metadata.Meta{{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 540, Stats: tsdb.BlockStats{
-				NumSeries:     10,
-				NumTombstones: 3,
-			}}}},
+			expected: []CompactionTask{{
+				{BlockMeta: tsdb.BlockMeta{
+					Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 540, Stats: tsdb.BlockStats{
+						NumSeries:     10,
+						NumTombstones: 3,
+					}}}}},
 		},
 		{
 			name: "For small blocks, do not compact tombstones, even when fresh appears.",
@@ -251,10 +287,10 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 360, MaxTime: 420}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 420, MaxTime: 540}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 360, MaxTime: 420}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 420, MaxTime: 540}},
-			},
+			}},
 		},
 		// |--------------|
 		//               |----------------|
@@ -266,10 +302,10 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 19, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 19, MaxTime: 40}},
-			},
+			}},
 		},
 		// |--------------|
 		//                |--------------|
@@ -281,10 +317,10 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 30, MaxTime: 50}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 30, MaxTime: 50}},
-			},
+			}},
 		},
 		// |--------------|
 		//         |---------------------|
@@ -296,11 +332,11 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 10, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 30, MaxTime: 50}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 10, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 30, MaxTime: 50}},
-			},
+			}},
 		},
 		// |--------------|
 		//               |--------------------------------|
@@ -314,35 +350,46 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 360, MaxTime: 420}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 420, MaxTime: 540}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 0, MaxTime: 360}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(6, nil), MinTime: 340, MaxTime: 560}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 360, MaxTime: 420}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(8, nil), MinTime: 420, MaxTime: 540}},
-			},
+			}},
 		},
 		// |--------------|
 		//               |--------------|
-		//                                            |--------------|
-		//                                                          |--------------|
+		//                          |--------------|
+		//                                         |--------------|
+		//                                                       |--------------|
 		{
-			name: "Overlapping blocks 5",
+			name: "Multiple independent overlapping blocks",
 			metas: []*metadata.Meta{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 10}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 9, MaxTime: 20}},
-				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 30, MaxTime: 40}},
-				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 39, MaxTime: 50}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 17, MaxTime: 35}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 35, MaxTime: 50}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 47, MaxTime: 60}},
 			},
-			expected: []*metadata.Meta{
-				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 10}},
-				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 9, MaxTime: 20}},
+			expected: []CompactionTask{
+				{
+					{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 10}},
+					{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 9, MaxTime: 20}},
+					{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 17, MaxTime: 35}},
+				},
+				{
+					{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 35, MaxTime: 50}},
+					{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 47, MaxTime: 60}},
+				},
 			},
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			for _, e := range c.expected {
-				// Add here to avoid boilerplate.
-				e.Thanos.Labels = make(map[string]string)
+				for _, meta := range e {
+					// Add here to avoid boilerplate.
+					meta.Thanos.Labels = make(map[string]string)
+				}
 			}
 			for _, e := range c.metas {
 				// Add here to avoid boilerplate.
@@ -366,7 +413,11 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				tsdbPlanner.dir = dir
 				plan, err := tsdbPlanner.Plan(context.Background(), metasByMinTime)
 				testutil.Ok(t, err)
-				testutil.Equals(t, c.expected, plan)
+				if len(c.expected) == 0 {
+					testutil.Equals(t, len(plan), 0)
+				} else {
+					testutil.Equals(t, c.expected[0], plan[0])
+				}
 			})
 			t.Run("tsdbBasedPlanner", func(t *testing.T) {
 				metasByMinTime := make([]*metadata.Meta, len(c.metas))
@@ -399,7 +450,7 @@ func TestRangeWithFailedCompactionWontGetSelected(t *testing.T) {
 	tsdbComp, err := tsdb.NewLeveledCompactor(context.Background(), nil, nil, ranges, nil, nil)
 	testutil.Ok(t, err)
 	tsdbPlanner := &tsdbPlannerAdapter{comp: tsdbComp}
-	tsdbBasedPlanner := NewTSDBBasedPlanner(log.NewNopLogger(), ranges)
+	tsdbBasedPlanner := NewTSDBBasedPlanner(log.NewNopLogger(), ranges, testGroupConcurrency)
 
 	for _, c := range []struct {
 		metas []*metadata.Meta
@@ -442,12 +493,12 @@ func TestRangeWithFailedCompactionWontGetSelected(t *testing.T) {
 				tsdbPlanner.dir = dir
 				plan, err := tsdbPlanner.Plan(context.Background(), c.metas)
 				testutil.Ok(t, err)
-				testutil.Equals(t, []*metadata.Meta(nil), plan)
+				testutil.Equals(t, []CompactionTask(nil), plan)
 			})
 			t.Run("tsdbBasedPlanner", func(t *testing.T) {
 				plan, err := tsdbBasedPlanner.Plan(context.Background(), c.metas)
 				testutil.Ok(t, err)
-				testutil.Equals(t, []*metadata.Meta(nil), plan)
+				testutil.Equals(t, []CompactionTask(nil), plan)
 			})
 		})
 	}
@@ -463,14 +514,14 @@ func TestTSDBBasedPlanner_PlanWithNoCompactMarks(t *testing.T) {
 	}
 
 	g := &GatherNoCompactionMarkFilter{}
-	tsdbBasedPlanner := NewPlanner(log.NewNopLogger(), ranges, g)
+	tsdbBasedPlanner := NewPlanner(log.NewNopLogger(), ranges, g, testGroupConcurrency)
 
 	for _, c := range []struct {
 		name           string
 		metas          []*metadata.Meta
 		noCompactMarks map[ulid.ULID]*metadata.NoCompactMark
 
-		expected []*metadata.Meta
+		expected []CompactionTask
 	}{
 		{
 			name: "Outside range and excluded",
@@ -492,10 +543,10 @@ func TestTSDBBasedPlanner_PlanWithNoCompactMarks(t *testing.T) {
 			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
 				ulid.MustNew(1, nil): {},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
-			},
+			}},
 		},
 		{
 			name: "Blocks to fill the entire parent, but with second one excluded.",
@@ -520,11 +571,11 @@ func TestTSDBBasedPlanner_PlanWithNoCompactMarks(t *testing.T) {
 			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
 				ulid.MustNew(4, nil): {},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
-			},
+			}},
 		},
 		{
 			name: "Blocks to fill the entire parent, but with last one fist excluded.",
@@ -538,10 +589,10 @@ func TestTSDBBasedPlanner_PlanWithNoCompactMarks(t *testing.T) {
 				ulid.MustNew(1, nil): {},
 				ulid.MustNew(4, nil): {},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
-			},
+			}},
 		},
 		{
 			name: "Blocks to fill the entire parent, but with all of them excluded.",
@@ -583,10 +634,10 @@ func TestTSDBBasedPlanner_PlanWithNoCompactMarks(t *testing.T) {
 			noCompactMarks: map[ulid.ULID]*metadata.NoCompactMark{
 				ulid.MustNew(6, nil): {},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 120}},
-			},
+			}},
 		},
 		{
 			name: "We have 20, 60, 20, 60, 240 range blocks. We could compact 20 + 60 + 60, but 4th is excluded",
@@ -658,13 +709,13 @@ func TestLargeTotalIndexSizeFilter_Plan(t *testing.T) {
 	g := &GatherNoCompactionMarkFilter{}
 
 	marked := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-	planner := WithLargeTotalIndexSizeFilter(NewPlanner(log.NewNopLogger(), ranges, g), bkt, 100, marked)
+	planner := WithLargeTotalIndexSizeFilter(NewPlanner(log.NewNopLogger(), ranges, g, testGroupConcurrency), bkt, 100, marked)
 	var lastMarkValue float64
 	for _, c := range []struct {
 		name  string
 		metas []*metadata.Meta
 
-		expected      []*metadata.Meta
+		expected      []CompactionTask
 		expectedMarks float64
 	}{
 		{
@@ -688,10 +739,10 @@ func TestLargeTotalIndexSizeFilter_Plan(t *testing.T) {
 					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 80}},
 			},
 			expectedMarks: 1,
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
-			},
+			}},
 		},
 		{
 			name: "Blocks to fill the entire parent, but with second one too large.",
@@ -719,11 +770,11 @@ func TestLargeTotalIndexSizeFilter_Plan(t *testing.T) {
 				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 90}}},
 					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 80}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
-			},
+			}},
 		},
 		{
 			name: "Blocks to fill the entire parent, but with pre-last one and first too large.",
@@ -739,10 +790,10 @@ func TestLargeTotalIndexSizeFilter_Plan(t *testing.T) {
 				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 90}}},
 					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 60, MaxTime: 80}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 50}},
-			},
+			}},
 			expectedMarks: 2,
 		},
 		{
@@ -774,10 +825,10 @@ func TestLargeTotalIndexSizeFilter_Plan(t *testing.T) {
 				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 30}}},
 					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(7, nil), MinTime: 720, MaxTime: 960}},
 			},
-			expected: []*metadata.Meta{
+			expected: []CompactionTask{{
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 20, MaxTime: 40}},
 				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 60, MaxTime: 120}},
-			},
+			}},
 			expectedMarks: 1,
 		},
 		// |--------------|
@@ -794,6 +845,31 @@ func TestLargeTotalIndexSizeFilter_Plan(t *testing.T) {
 					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
 			},
 			expectedMarks: 1,
+		},
+		// |--------------|
+		//               |----------------|
+		//                                |--------------|
+		//                                                   |----------------|
+		//                                                         |--------------|
+		{
+			name: "Two groups of overlapping blocks, first group total is too large",
+			metas: []*metadata.Meta{
+				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 90}}},
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 20}},
+				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 30}}},
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 19, MaxTime: 40}},
+				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 30}}},
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(3, nil), MinTime: 40, MaxTime: 60}},
+				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 30}}},
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 70, MaxTime: 80}},
+				{Thanos: metadata.Thanos{Files: []metadata.File{{RelPath: block.IndexFilename, SizeBytes: 30}}},
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 75, MaxTime: 90}},
+			},
+			expectedMarks: 1,
+			expected: []CompactionTask{{
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(4, nil), MinTime: 70, MaxTime: 80}},
+				{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(5, nil), MinTime: 75, MaxTime: 90}},
+			}},
 		},
 	} {
 		if !t.Run(c.name, func(t *testing.T) {
@@ -817,9 +893,11 @@ func TestLargeTotalIndexSizeFilter_Plan(t *testing.T) {
 				plan, err := planner.Plan(context.Background(), metasByMinTime)
 				testutil.Ok(t, err)
 
-				for _, m := range plan {
-					// For less boilerplate.
-					m.Thanos = metadata.Thanos{}
+				for _, task := range plan {
+					for _, m := range task {
+						// For less boilerplate.
+						m.Thanos = metadata.Thanos{}
+					}
 				}
 				testutil.Equals(t, c.expected, plan)
 				testutil.Equals(t, c.expectedMarks, promtest.ToFloat64(marked)-lastMarkValue)

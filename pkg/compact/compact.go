@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -542,26 +544,28 @@ func (ps *CompactionProgressCalculator) ProgressCalculate(ctx context.Context, g
 			if len(plan) == 0 {
 				continue
 			}
-			groupCompactions[g.key]++
 
-			toRemove := make(map[ulid.ULID]struct{}, len(plan))
-			metas := make([]*tsdb.BlockMeta, 0, len(plan))
-			for _, p := range plan {
-				metas = append(metas, &p.BlockMeta)
-				toRemove[p.BlockMeta.ULID] = struct{}{}
+			for _, groupTask := range plan {
+				groupCompactions[g.key]++
+				toRemove := make(map[ulid.ULID]struct{}, len(groupTask))
+				metas := make([]*tsdb.BlockMeta, 0, len(groupTask))
+				for _, meta := range groupTask {
+					metas = append(metas, &meta.BlockMeta)
+					toRemove[meta.BlockMeta.ULID] = struct{}{}
+				}
+				g.deleteFromGroup(toRemove)
+				groupBlocks[g.key] += len(groupTask)
+
+				newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
+				if err := g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta, Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: g.Resolution()}, Labels: g.Labels().Map()}}); err != nil {
+					return errors.Wrapf(err, "append meta")
+				}
 			}
-			g.deleteFromGroup(toRemove)
-
-			groupBlocks[g.key] += len(plan)
 
 			if len(g.metasByMinTime) == 0 {
 				continue
 			}
 
-			newMeta := tsdb.CompactBlockMetas(ulid.MustNew(uint64(time.Now().Unix()), nil), metas...)
-			if err := g.AppendMeta(&metadata.Meta{BlockMeta: *newMeta, Thanos: metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: g.Resolution()}, Labels: g.Labels().Map()}}); err != nil {
-				return errors.Wrapf(err, "append meta")
-			}
 			tmpGroups = append(tmpGroups, g)
 		}
 
@@ -727,7 +731,7 @@ func (rs *RetentionProgressCalculator) ProgressCalculate(ctx context.Context, gr
 type Planner interface {
 	// Plan returns a list of blocks that should be compacted into single one.
 	// The blocks can be overlapping. The provided metadata has to be ordered by minTime.
-	Plan(ctx context.Context, metasByMinTime []*metadata.Meta) ([]*metadata.Meta, error)
+	Plan(ctx context.Context, metasByMinTime []*metadata.Meta) ([]CompactionTask, error)
 }
 
 // Compactor provides compaction against an underlying storage of time series data.
@@ -749,38 +753,54 @@ type Compactor interface {
 	Compact(dest string, dirs []string, open []*tsdb.Block) (ulid.ULID, error)
 }
 
+// GroupCompactionTask is an independent compaction task for a given compaction group.
+type GroupCompactionTask struct {
+	Group  *Group
+	Blocks CompactionTask
+	Dir    string
+}
+
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp Compactor) (shouldRerun bool, compID ulid.ULID, rerr error) {
-	cg.compactionRunsStarted.Inc()
-
-	subDir := filepath.Join(dir, cg.Key())
-
+func (task *GroupCompactionTask) Compact(ctx context.Context, comp Compactor) (shouldRerun bool, cerr error) {
+	task.Group.compactionRunsStarted.Inc()
 	defer func() {
 		// Leave the compact directory for inspection if it is a halt error
 		// or if it is not then so that possibly we would not have to download everything again.
-		if rerr != nil {
+		if cerr != nil {
+			task.Group.compactionFailures.Inc()
 			return
 		}
-		if err := os.RemoveAll(subDir); err != nil {
-			level.Error(cg.logger).Log("msg", "failed to remove compaction group work directory", "path", subDir, "err", err)
+		task.Group.compactionRunsCompleted.Inc()
+		if err := os.RemoveAll(task.Dir); err != nil {
+			level.Error(task.Group.logger).Log("msg", "failed to remove compaction group work directory", "path", task.Dir, "err", err)
 		}
 	}()
 
-	if err := os.MkdirAll(subDir, 0750); err != nil {
-		return false, ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
+	hasOverlappingBlocks := false
+	if err := task.Group.areBlocksOverlapping(task.Blocks, task.Group.metasByMinTime...); err != nil {
+		// TODO(bwplotka): It would really nice if we could still check for other overlaps than replica. In fact this should be checked
+		// in syncer itself. Otherwise with vertical compaction enabled we will sacrifice this important check.
+		if !task.Group.enableVerticalCompaction {
+			return false, halt(errors.Wrap(err, "pre compaction overlap check"))
+		}
+
+		hasOverlappingBlocks = true
 	}
 
-	err := tracing.DoInSpanWithErr(ctx, "compaction_group", func(ctx context.Context) (err error) {
-		shouldRerun, compID, err = cg.compact(ctx, subDir, planner, comp)
-		return err
-	}, opentracing.Tags{"group.key": cg.Key()})
-	if err != nil {
-		cg.compactionFailures.Inc()
-		return false, ulid.ULID{}, err
+	if err := os.MkdirAll(task.Dir, 0750); err != nil {
+		return false, errors.Wrap(err, "create compaction group dir")
 	}
-	cg.compactionRunsCompleted.Inc()
-	return shouldRerun, compID, nil
+
+	terr := tracing.DoInSpanWithErr(ctx, "compaction_group", func(ctx context.Context) (cerr error) {
+		shouldRerun, cerr = task.Group.compactBlocks(ctx, task.Dir, task.Blocks, comp, hasOverlappingBlocks)
+		return cerr
+	}, opentracing.Tags{"group.key": task.Group.Key()})
+	if terr != nil {
+		return false, terr
+	}
+
+	return shouldRerun, cerr
 }
 
 // Issue347Error is a type wrapper for errors that should invoke repair process for broken block.
@@ -886,7 +906,7 @@ func IsRetryError(err error) bool {
 	return ok
 }
 
-func (cg *Group) areBlocksOverlapping(include *metadata.Meta, exclude ...*metadata.Meta) error {
+func (cg *Group) areBlocksOverlapping(include []*metadata.Meta, exclude ...*metadata.Meta) error {
 	var (
 		metas      []tsdb.BlockMeta
 		excludeMap = map[ulid.ULID]struct{}{}
@@ -903,8 +923,8 @@ func (cg *Group) areBlocksOverlapping(include *metadata.Meta, exclude ...*metada
 		metas = append(metas, m.BlockMeta)
 	}
 
-	if include != nil {
-		metas = append(metas, include.BlockMeta)
+	for _, meta := range include {
+		metas = append(metas, meta.BlockMeta)
 	}
 
 	sort.Slice(metas, func(i, j int) bool {
@@ -974,55 +994,35 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp Compactor) (shouldRerun bool, compID ulid.ULID, _ error) {
-	cg.mtx.Lock()
-	defer cg.mtx.Unlock()
-
-	// Check for overlapped blocks.
-	overlappingBlocks := false
-	if err := cg.areBlocksOverlapping(nil); err != nil {
-		// TODO(bwplotka): It would really nice if we could still check for other overlaps than replica. In fact this should be checked
-		// in syncer itself. Otherwise with vertical compaction enabled we will sacrifice this important check.
-		if !cg.enableVerticalCompaction {
-			return false, ulid.ULID{}, halt(errors.Wrap(err, "pre compaction overlap check"))
-		}
-
-		overlappingBlocks = true
+func (cg *Group) PlanCompactionTasks(ctx context.Context, dir string, planner Planner) ([]GroupCompactionTask, error) {
+	plannedCompactions, err := planner.Plan(ctx, cg.metasByMinTime)
+	if err != nil {
+		return nil, err
 	}
 
-	var toCompact []*metadata.Meta
-	if err := tracing.DoInSpanWithErr(ctx, "compaction_planning", func(ctx context.Context) (e error) {
-		toCompact, e = planner.Plan(ctx, cg.metasByMinTime)
-		return e
-	}); err != nil {
-		return false, ulid.ULID{}, errors.Wrap(err, "plan compaction")
-	}
-	if len(toCompact) == 0 {
-		// Nothing to do.
-		return false, ulid.ULID{}, nil
+	tasks := make([]GroupCompactionTask, 0, len(plannedCompactions))
+	for i, blocks := range plannedCompactions {
+		tasks = append(tasks, GroupCompactionTask{
+			Group:  cg,
+			Blocks: blocks,
+			Dir:    path.Join(dir, cg.Key(), strconv.Itoa(i)),
+		})
 	}
 
-	level.Info(cg.logger).Log("msg", "compaction available and planned; downloading blocks", "plan", fmt.Sprintf("%v", toCompact))
+	return tasks, nil
+}
 
-	// Due to #183 we verify that none of the blocks in the plan have overlapping sources.
-	// This is one potential source of how we could end up with duplicated chunks.
-	uniqueSources := map[ulid.ULID]struct{}{}
-
+func (cg *Group) compactBlocks(ctx context.Context, dir string, blocks CompactionTask, comp Compactor, hasOverlappingBlocks bool) (bool, error) {
 	// Once we have a plan we need to download the actual data.
-	groupCompactionBegin := time.Now()
-	begin := groupCompactionBegin
+	compactionBegin := time.Now()
+	begin := compactionBegin
+
 	g, errCtx := errgroup.WithContext(ctx)
 	g.SetLimit(cg.compactBlocksFetchConcurrency)
 
-	toCompactDirs := make([]string, 0, len(toCompact))
-	for _, m := range toCompact {
+	toCompactDirs := make([]string, 0, len(blocks))
+	for _, m := range blocks {
 		bdir := filepath.Join(dir, m.ULID.String())
-		for _, s := range m.Compaction.Sources {
-			if _, ok := uniqueSources[s]; ok {
-				return false, ulid.ULID{}, halt(errors.Errorf("overlapping sources detected for plan %v", toCompact))
-			}
-			uniqueSources[s] = struct{}{}
-		}
 		func(ctx context.Context, meta *metadata.Meta) {
 			g.Go(func() error {
 				if err := tracing.DoInSpanWithErr(ctx, "compaction_block_download", func(ctx context.Context) error {
@@ -1062,25 +1062,27 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 		toCompactDirs = append(toCompactDirs, bdir)
 	}
+
 	sourceBlockStr := fmt.Sprintf("%v", toCompactDirs)
 
 	if err := g.Wait(); err != nil {
-		return false, ulid.ULID{}, err
+		return false, err
 	}
 
 	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", sourceBlockStr, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
+	var compID ulid.ULID
 	begin = time.Now()
 	if err := tracing.DoInSpanWithErr(ctx, "compaction", func(ctx context.Context) (e error) {
 		compID, e = comp.Compact(dir, toCompactDirs, nil)
 		return e
 	}); err != nil {
-		return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact blocks %v", toCompactDirs))
+		return false, halt(errors.Wrapf(err, "compact blocks %v", toCompactDirs))
 	}
 	if compID == (ulid.ULID{}) {
 		// Prometheus compactor found that the compacted block would have no samples.
 		level.Info(cg.logger).Log("msg", "compacted block would have no samples, deleting source blocks", "blocks", sourceBlockStr)
-		for _, meta := range toCompact {
+		for _, meta := range blocks {
 			if meta.Stats.NumSamples == 0 {
 				if err := cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String())); err != nil {
 					level.Warn(cg.logger).Log("msg", "failed to mark for deletion an empty block found during compaction", "block", meta.ULID)
@@ -1088,14 +1090,14 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			}
 		}
 		// Even though this block was empty, there may be more work to do.
-		return true, ulid.ULID{}, nil
+		return true, nil
 	}
 	cg.compactions.Inc()
-	if overlappingBlocks {
+	if hasOverlappingBlocks {
 		cg.verticalCompactions.Inc()
 	}
 	level.Info(cg.logger).Log("msg", "compacted blocks", "new", compID,
-		"blocks", sourceBlockStr, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "overlapping_blocks", overlappingBlocks)
+		"blocks", sourceBlockStr, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "overlapping_blocks", hasOverlappingBlocks)
 
 	bdir := filepath.Join(dir, compID.String())
 	index := filepath.Join(bdir, block.IndexFilename)
@@ -1107,11 +1109,11 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		SegmentFiles: block.GetSegmentFiles(bdir),
 	}, nil)
 	if err != nil {
-		return false, ulid.ULID{}, errors.Wrapf(err, "failed to finalize the block %s", bdir)
+		return false, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}
 
 	if err = os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
-		return false, ulid.ULID{}, errors.Wrap(err, "remove tombstones")
+		return false, errors.Wrap(err, "remove tombstones")
 	}
 
 	// Ensure the output block is valid.
@@ -1119,43 +1121,42 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		return block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime)
 	})
 	if !cg.acceptMalformedIndex && err != nil {
-		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
+		return false, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
 	// Ensure the output block is not overlapping with anything else,
 	// unless vertical compaction is enabled.
 	if !cg.enableVerticalCompaction {
-		if err := cg.areBlocksOverlapping(newMeta, toCompact...); err != nil {
-			return false, ulid.ULID{}, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
+		if err := cg.areBlocksOverlapping([]*metadata.Meta{newMeta}, blocks...); err != nil {
+			return false, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
 		}
 	}
 
 	begin = time.Now()
-
 	err = tracing.DoInSpanWithErr(ctx, "compaction_block_upload", func(ctx context.Context) error {
 		return block.Upload(ctx, cg.logger, cg.bkt, bdir, cg.hashFunc, objstore.WithUploadConcurrency(cg.blockFilesConcurrency))
 	})
 	if err != nil {
-		return false, ulid.ULID{}, retry(errors.Wrapf(err, "upload of %s failed", compID))
+		return false, retry(errors.Wrapf(err, "upload of %s failed", compID))
 	}
 	level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
 	// Mark for deletion the blocks we just compacted from the group and bucket so they do not get included
 	// into the next planning cycle.
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
-	for _, meta := range toCompact {
+	for _, meta := range blocks {
 		err = tracing.DoInSpanWithErr(ctx, "compaction_block_delete", func(ctx context.Context) error {
 			return cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()))
 		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
-			return false, ulid.ULID{}, retry(errors.Wrapf(err, "mark old block for deletion from bucket"))
+			return false, retry(errors.Wrapf(err, "mark old block for deletion from bucket"))
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
 	}
 
 	level.Info(cg.logger).Log("msg", "finished compacting blocks", "result_block", compID, "source_blocks", sourceBlockStr,
-		"duration", time.Since(groupCompactionBegin), "duration_ms", time.Since(groupCompactionBegin).Milliseconds())
-	return true, compID, nil
+		"duration", time.Since(compactionBegin), "duration_ms", time.Since(compactionBegin).Milliseconds())
+	return true, nil
 }
 
 func (cg *Group) deleteBlock(id ulid.ULID, bdir string) error {
@@ -1233,9 +1234,9 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		var (
 			wg                     sync.WaitGroup
 			workCtx, workCtxCancel = context.WithCancel(ctx)
-			groupChan              = make(chan *Group)
+			taskChan               = make(chan GroupCompactionTask)
 			errChan                = make(chan error, c.concurrency)
-			finishedAllGroups      = true
+			finishedAllTasks       = true
 			mtx                    sync.Mutex
 		)
 		defer workCtxCancel()
@@ -1246,12 +1247,12 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				for g := range groupChan {
-					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp)
+				for task := range taskChan {
+					shouldRerunGroup, err := task.Compact(workCtx, c.comp)
 					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()
-							finishedAllGroups = false
+							finishedAllTasks = false
 							mtx.Unlock()
 						}
 						continue
@@ -1260,11 +1261,12 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 					if IsIssue347Error(err) {
 						if err := RepairIssue347(workCtx, c.logger, c.bkt, c.sy.metrics.blocksMarkedForDeletion, err); err == nil {
 							mtx.Lock()
-							finishedAllGroups = false
+							finishedAllTasks = false
 							mtx.Unlock()
 							continue
 						}
 					}
+
 					// If block has out of order chunk and it has been configured to skip it,
 					// then we can mark the block for no compaction so that the next compaction run
 					// will skip it.
@@ -1275,15 +1277,19 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 							c.bkt,
 							err.(OutOfOrderChunksError).id,
 							metadata.OutOfOrderChunksNoCompactReason,
-							"OutofOrderChunk: marking block with out-of-order series/chunks to as no compact to unblock compaction", g.blocksMarkedForNoCompact); err == nil {
+							"OutofOrderChunk: marking block with out-of-order series/chunks to as no compact to unblock compaction", task.Group.blocksMarkedForNoCompact,
+						); err == nil {
 							mtx.Lock()
-							finishedAllGroups = false
+							finishedAllTasks = false
 							mtx.Unlock()
 							continue
 						}
 					}
-					errChan <- errors.Wrapf(err, "group %s", g.Key())
-					return
+
+					if err != nil {
+						errChan <- errors.Wrapf(err, "group %s", task.Group.Key())
+						return
+					}
 				}
 			}()
 		}
@@ -1318,37 +1324,47 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		level.Info(c.logger).Log("msg", "start of compactions")
 
-		// Send all groups found during this pass to the compaction workers.
-		var groupErrs errutil.MultiError
-	groupLoop:
+		tasks := make([]GroupCompactionTask, 0)
 		for _, g := range groups {
 			// Ignore groups with only one block because there is nothing to compact.
 			if len(g.IDs()) == 1 {
 				continue
 			}
+
+			groupTasks, err := g.PlanCompactionTasks(ctx, c.compactDir, c.planner)
+			if err != nil {
+				return errors.Wrapf(err, "get compaction group tasks: %s", g.Key())
+			}
+			tasks = append(tasks, groupTasks...)
+		}
+
+		// Send all tasks planned in this pass to the compaction workers.
+		var taskErrs errutil.MultiError
+	tasksLoop:
+		for _, task := range tasks {
 			select {
-			case groupErr := <-errChan:
-				groupErrs.Add(groupErr)
-				break groupLoop
-			case groupChan <- g:
+			case taskErr := <-errChan:
+				taskErrs.Add(taskErr)
+				break tasksLoop
+			case taskChan <- task:
 			}
 		}
-		close(groupChan)
+		close(taskChan)
 		wg.Wait()
 
 		// Collect any other error reported by the workers, or any error reported
 		// while we were waiting for the last batch of groups to run the compaction.
 		close(errChan)
 		for groupErr := range errChan {
-			groupErrs.Add(groupErr)
+			taskErrs.Add(groupErr)
 		}
 
 		workCtxCancel()
-		if len(groupErrs) > 0 {
-			return groupErrs.Err()
+		if len(taskErrs) > 0 {
+			return taskErrs.Err()
 		}
 
-		if finishedAllGroups {
+		if finishedAllTasks {
 			break
 		}
 	}

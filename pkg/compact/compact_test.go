@@ -360,7 +360,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 		int64(2 * time.Hour / time.Millisecond),
 		int64(4 * time.Hour / time.Millisecond),
 		int64(8 * time.Hour / time.Millisecond),
-	})
+	}, testGroupConcurrency)
 
 	keys := make([]string, 3)
 	m := make([]metadata.Meta, 3)
@@ -448,6 +448,21 @@ func TestCompactProgressCalculate(t *testing.T) {
 				keys[2]: {
 					compactionRuns:   1.0,
 					compactionBlocks: 2.0,
+				},
+			},
+		},
+		{
+			testName: "multiple_vertical_compactions",
+			input: []*metadata.Meta{
+				createBlockMeta(1, 0, 10, map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(2, 5, 15, map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(3, 20, 30, map[string]string{"a": "1"}, 0, []uint64{}),
+				createBlockMeta(4, 25, 40, map[string]string{"a": "1"}, 0, []uint64{}),
+			},
+			expected: map[string]planResult{
+				keys[0]: {
+					compactionRuns:   2.0,
+					compactionBlocks: 4.0,
 				},
 			},
 		},
