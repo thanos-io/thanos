@@ -63,16 +63,17 @@ import (
 )
 
 const (
-	DedupParam               = "dedup"
-	PartialResponseParam     = "partial_response"
-	MaxSourceResolutionParam = "max_source_resolution"
-	ReplicaLabelsParam       = "replicaLabels[]"
-	MatcherParam             = "match[]"
-	StoreMatcherParam        = "storeMatch[]"
-	Step                     = "step"
-	Stats                    = "stats"
-	ShardInfoParam           = "shard_info"
-	LookbackDeltaParam       = "lookback_delta"
+	DedupParam                 = "dedup"
+	PartialResponseParam       = "partial_response"
+	MaxSourceResolutionParam   = "max_source_resolution"
+	ReplicaLabelsParam         = "replicaLabels[]"
+	MatcherParam               = "match[]"
+	StoreMatcherParam          = "storeMatch[]"
+	Step                       = "step"
+	Stats                      = "stats"
+	ShardInfoParam             = "shard_info"
+	LookbackDeltaParam         = "lookback_delta"
+	IgnoreNoStoresMatchedParam = "ignore_no_stores_matched"
 )
 
 // QueryAPI is an API used by Thanos Querier.
@@ -91,6 +92,7 @@ type QueryAPI struct {
 
 	enableAutodownsampling              bool
 	enableQueryPartialResponse          bool
+	enableQueryIgnoreNoStoresMatched    bool
 	enableRulePartialResponse           bool
 	enableTargetPartialResponse         bool
 	enableMetricMetadataPartialResponse bool
@@ -128,6 +130,7 @@ func NewQueryAPI(
 	exemplars exemplars.UnaryClient,
 	enableAutodownsampling bool,
 	enableQueryPartialResponse bool,
+	enableQueryIgnoreNoStoresMatched bool,
 	enableRulePartialResponse bool,
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
@@ -159,6 +162,7 @@ func NewQueryAPI(
 		exemplars:                              exemplars,
 		enableAutodownsampling:                 enableAutodownsampling,
 		enableQueryPartialResponse:             enableQueryPartialResponse,
+		enableQueryIgnoreNoStoresMatched:       enableQueryIgnoreNoStoresMatched,
 		enableRulePartialResponse:              enableRulePartialResponse,
 		enableTargetPartialResponse:            enableTargetPartialResponse,
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
@@ -312,6 +316,18 @@ func (qapi *QueryAPI) parsePartialResponseParam(r *http.Request, defaultEnablePa
 	return defaultEnablePartialResponse, nil
 }
 
+func (qapi *QueryAPI) parseIgnoreNoStoresMatchedParam(r *http.Request, defaultIgnoreNoStoresMatched bool) (enableIgnoreNoStoresMatched bool, _ *api.ApiError) {
+	// Overwrite the cli flag when provided as a query parameter.
+	if val := r.FormValue(IgnoreNoStoresMatchedParam); val != "" {
+		var err error
+		defaultIgnoreNoStoresMatched, err = strconv.ParseBool(val)
+		if err != nil {
+			return false, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Wrapf(err, "'%s' parameter", IgnoreNoStoresMatchedParam)}
+		}
+	}
+	return defaultIgnoreNoStoresMatched, nil
+}
+
 func (qapi *QueryAPI) parseStep(r *http.Request, defaultRangeQueryStep time.Duration, rangeSeconds int64) (time.Duration, *api.ApiError) {
 	// Overwrite the cli flag when provided as a query parameter.
 	if val := r.FormValue(Step); val != "" {
@@ -383,6 +399,11 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr, func() {}
 	}
 
+	enableIgnoreNoStoresMatched, apiErr := qapi.parseIgnoreNoStoresMatchedParam(r, qapi.enableQueryIgnoreNoStoresMatched)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
+	}
+
 	maxSourceResolution, apiErr := qapi.parseDownsamplingParamMillis(r, qapi.defaultInstantQueryMaxSourceResolution)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
@@ -415,6 +436,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			storeDebugMatchers,
 			maxSourceResolution,
 			enablePartialResponse,
+			enableIgnoreNoStoresMatched,
 			qapi.enableQueryPushdown,
 			false,
 			shardInfo,
@@ -536,6 +558,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr, func() {}
 	}
 
+	enableIgnoreNoStoresMatched, apiErr := qapi.parseIgnoreNoStoresMatchedParam(r, qapi.enableQueryIgnoreNoStoresMatched)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
+	}
+
 	shardInfo, apiErr := qapi.parseShardInfo(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
@@ -566,6 +593,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			storeDebugMatchers,
 			maxSourceResolution,
 			enablePartialResponse,
+			enableIgnoreNoStoresMatched,
 			qapi.enableQueryPushdown,
 			false,
 			shardInfo,
@@ -635,6 +663,11 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		return nil, nil, apiErr, func() {}
 	}
 
+	enableIgnoreNoStoresMatched, apiErr := qapi.parseIgnoreNoStoresMatchedParam(r, qapi.enableQueryIgnoreNoStoresMatched)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
+	}
+
 	storeDebugMatchers, apiErr := qapi.parseStoreDebugMatchersParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
@@ -655,6 +688,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		storeDebugMatchers,
 		0,
 		enablePartialResponse,
+		enableIgnoreNoStoresMatched,
 		qapi.enableQueryPushdown,
 		true,
 		nil,
@@ -745,12 +779,18 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, apiErr, func() {}
 	}
 
+	enableIgnoreNoStoresMatched, apiErr := qapi.parseIgnoreNoStoresMatchedParam(r, qapi.enableQueryIgnoreNoStoresMatched)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
+	}
+
 	q, err := qapi.queryableCreate(
 		enableDedup,
 		replicaLabels,
 		storeDebugMatchers,
 		math.MaxInt64,
 		enablePartialResponse,
+		enableIgnoreNoStoresMatched,
 		qapi.enableQueryPushdown,
 		true,
 		nil,
@@ -791,6 +831,11 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr, func() {}
 	}
 
+	enableIgnoreNoStoresMatched, apiErr := qapi.parseIgnoreNoStoresMatchedParam(r, qapi.enableQueryIgnoreNoStoresMatched)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
+	}
+
 	storeDebugMatchers, apiErr := qapi.parseStoreDebugMatchersParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
@@ -811,6 +856,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		storeDebugMatchers,
 		0,
 		enablePartialResponse,
+		enableIgnoreNoStoresMatched,
 		qapi.enableQueryPushdown,
 		true,
 		nil,

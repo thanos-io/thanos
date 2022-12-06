@@ -136,6 +136,16 @@ func TestProxyStore_Series(t *testing.T) {
 			expectedWarningsLen: 1, // No store matched for this query.
 		},
 		{
+			title: "ignore No StoreAPIs matched error",
+			req: &storepb.SeriesRequest{
+				MinTime:               1,
+				MaxTime:               300,
+				Matchers:              []storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
+				IgnoreNoStoresMatched: true,
+			},
+			expectedWarningsLen: 0, // No store matched for this query.
+		},
+		{
 			title: "no storeAPI available for 301-302 time range",
 			storeAPIs: []Client{
 				&testClient{

@@ -52,6 +52,7 @@ type QueryableCreator func(
 	storeDebugMatchers [][]*labels.Matcher,
 	maxResolutionMillis int64,
 	partialResponse,
+	ignoreNoStoresMatched,
 	enableQueryPushdown,
 	skipChunks bool,
 	shardInfo *storepb.ShardInfo,
@@ -72,6 +73,7 @@ func NewQueryableCreator(
 		storeDebugMatchers [][]*labels.Matcher,
 		maxResolutionMillis int64,
 		partialResponse,
+		ignoreNoStoresMatched,
 		enableQueryPushdown,
 		skipChunks bool,
 		shardInfo *storepb.ShardInfo,
@@ -79,14 +81,15 @@ func NewQueryableCreator(
 	) storage.Queryable {
 		reg = extprom.WrapRegistererWithPrefix("concurrent_selects_", reg)
 		return &queryable{
-			logger:              logger,
-			replicaLabels:       replicaLabels,
-			storeDebugMatchers:  storeDebugMatchers,
-			proxy:               proxy,
-			deduplicate:         deduplicate,
-			maxResolutionMillis: maxResolutionMillis,
-			partialResponse:     partialResponse,
-			skipChunks:          skipChunks,
+			logger:                logger,
+			replicaLabels:         replicaLabels,
+			storeDebugMatchers:    storeDebugMatchers,
+			proxy:                 proxy,
+			deduplicate:           deduplicate,
+			maxResolutionMillis:   maxResolutionMillis,
+			partialResponse:       partialResponse,
+			ignoreNoStoresMatched: ignoreNoStoresMatched,
+			skipChunks:            skipChunks,
 			gateProviderFn: func() gate.Gate {
 				return gate.New(reg, maxConcurrentSelects)
 			},
@@ -100,44 +103,46 @@ func NewQueryableCreator(
 }
 
 type queryable struct {
-	logger               log.Logger
-	replicaLabels        []string
-	storeDebugMatchers   [][]*labels.Matcher
-	proxy                storepb.StoreServer
-	deduplicate          bool
-	maxResolutionMillis  int64
-	partialResponse      bool
-	skipChunks           bool
-	gateProviderFn       func() gate.Gate
-	maxConcurrentSelects int
-	selectTimeout        time.Duration
-	enableQueryPushdown  bool
-	shardInfo            *storepb.ShardInfo
-	seriesStatsReporter  seriesStatsReporter
+	logger                log.Logger
+	replicaLabels         []string
+	storeDebugMatchers    [][]*labels.Matcher
+	proxy                 storepb.StoreServer
+	deduplicate           bool
+	maxResolutionMillis   int64
+	partialResponse       bool
+	ignoreNoStoresMatched bool
+	skipChunks            bool
+	gateProviderFn        func() gate.Gate
+	maxConcurrentSelects  int
+	selectTimeout         time.Duration
+	enableQueryPushdown   bool
+	shardInfo             *storepb.ShardInfo
+	seriesStatsReporter   seriesStatsReporter
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.ignoreNoStoresMatched, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
 }
 
 type querier struct {
-	ctx                 context.Context
-	logger              log.Logger
-	cancel              func()
-	mint, maxt          int64
-	replicaLabels       map[string]struct{}
-	storeDebugMatchers  [][]*labels.Matcher
-	proxy               storepb.StoreServer
-	deduplicate         bool
-	maxResolutionMillis int64
-	partialResponse     bool
-	enableQueryPushdown bool
-	skipChunks          bool
-	selectGate          gate.Gate
-	selectTimeout       time.Duration
-	shardInfo           *storepb.ShardInfo
-	seriesStatsReporter seriesStatsReporter
+	ctx                   context.Context
+	logger                log.Logger
+	cancel                func()
+	mint, maxt            int64
+	replicaLabels         map[string]struct{}
+	storeDebugMatchers    [][]*labels.Matcher
+	proxy                 storepb.StoreServer
+	deduplicate           bool
+	maxResolutionMillis   int64
+	partialResponse       bool
+	ignoreNoStoresMatched bool
+	enableQueryPushdown   bool
+	skipChunks            bool
+	selectGate            gate.Gate
+	selectTimeout         time.Duration
+	shardInfo             *storepb.ShardInfo
+	seriesStatsReporter   seriesStatsReporter
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -153,6 +158,7 @@ func newQuerier(
 	deduplicate bool,
 	maxResolutionMillis int64,
 	partialResponse,
+	ignoreNoStoresMatched bool,
 	enableQueryPushdown,
 	skipChunks bool,
 	selectGate gate.Gate,
@@ -176,18 +182,19 @@ func newQuerier(
 		selectGate:    selectGate,
 		selectTimeout: selectTimeout,
 
-		mint:                mint,
-		maxt:                maxt,
-		replicaLabels:       rl,
-		storeDebugMatchers:  storeDebugMatchers,
-		proxy:               proxy,
-		deduplicate:         deduplicate,
-		maxResolutionMillis: maxResolutionMillis,
-		partialResponse:     partialResponse,
-		skipChunks:          skipChunks,
-		enableQueryPushdown: enableQueryPushdown,
-		shardInfo:           shardInfo,
-		seriesStatsReporter: seriesStatsReporter,
+		mint:                  mint,
+		maxt:                  maxt,
+		replicaLabels:         rl,
+		storeDebugMatchers:    storeDebugMatchers,
+		proxy:                 proxy,
+		deduplicate:           deduplicate,
+		maxResolutionMillis:   maxResolutionMillis,
+		partialResponse:       partialResponse,
+		ignoreNoStoresMatched: ignoreNoStoresMatched,
+		skipChunks:            skipChunks,
+		enableQueryPushdown:   enableQueryPushdown,
+		shardInfo:             shardInfo,
+		seriesStatsReporter:   seriesStatsReporter,
 	}
 }
 
@@ -355,6 +362,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		SkipChunks:              q.skipChunks,
 		Step:                    hints.Step,
 		Range:                   hints.Range,
+		IgnoreNoStoresMatched:   q.ignoreNoStoresMatched,
 	}, resp); err != nil {
 		return nil, storepb.SeriesStatsCounter{}, errors.Wrap(err, "proxy Series()")
 	}

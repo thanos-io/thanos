@@ -122,6 +122,9 @@ message SeriesRequest {
   // shard_info is used by the querier to request a specific
   // shard of blocks instead of entire blocks.
   ShardInfo shard_info = 13;
+
+  // ignore_no_stores_matched controls whether to ignore No StoreAPIs matched error.
+  bool ignore_no_stores_matched = 14; 
 }
 
 

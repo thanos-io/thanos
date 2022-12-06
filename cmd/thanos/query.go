@@ -174,6 +174,9 @@ func registerQuery(app *extkingpin.App) {
 	enableQueryPartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
 		Default("true").Bool()
 
+	enableQueryIgnoreNoStoresMatched := cmd.Flag("query.ignore-no-stores-matched", "Enable to ignore no StoreAPIs matched error for queries if no ignore_no_stores_matched param is specified.").
+		Default("false").Bool()
+
 	enableRulePartialResponse := cmd.Flag("rule.partial-response", "Enable partial response for rules endpoint. --no-rule.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
@@ -298,6 +301,7 @@ func registerQuery(app *extkingpin.App) {
 			*exemplarEndpoints,
 			*enableAutodownsampling,
 			*enableQueryPartialResponse,
+			*enableQueryIgnoreNoStoresMatched,
 			*enableRulePartialResponse,
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
@@ -374,6 +378,7 @@ func runQuery(
 	exemplarAddrs []string,
 	enableAutodownsampling bool,
 	enableQueryPartialResponse bool,
+	enableQueryIgnoreNoStoresMatched bool,
 	enableRulePartialResponse bool,
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
@@ -685,6 +690,7 @@ func runQuery(
 			exemplars.NewGRPCClientWithDedup(exemplarsProxy, queryReplicaLabels),
 			enableAutodownsampling,
 			enableQueryPartialResponse,
+			enableQueryIgnoreNoStoresMatched,
 			enableRulePartialResponse,
 			enableTargetPartialResponse,
 			enableMetricMetadataPartialResponse,

@@ -264,6 +264,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
 		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		ShardInfo:               originalRequest.ShardInfo,
+		IgnoreNoStoresMatched:   originalRequest.IgnoreNoStoresMatched,
 	}
 
 	stores := []Client{}
@@ -280,6 +281,9 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	if len(stores) == 0 {
 		err := errors.New("No StoreAPIs matched for this query")
 		level.Debug(reqLogger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
+		if r.IgnoreNoStoresMatched {
+			return nil
+		}
 		if sendErr := srv.Send(storepb.NewWarnSeriesResponse(err)); sendErr != nil {
 			level.Error(reqLogger).Log("err", sendErr)
 			return status.Error(codes.Unknown, errors.Wrap(sendErr, "send series response").Error())

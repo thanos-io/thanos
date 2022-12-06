@@ -358,6 +358,10 @@ Flags:
                                  = max(rangeSeconds / 250, defaultStep)).
                                  This will not work from Grafana, but Grafana
                                  has __step variable which can be used.
+      --query.ignore-no-stores-matched
+                                 Enable to ignore no StoreAPIs matched error for
+                                 queries if no ignore_no_stores_matched param is
+                                 specified.
       --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
                                  metrics during expression evaluations.
