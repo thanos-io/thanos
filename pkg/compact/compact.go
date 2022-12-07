@@ -1382,6 +1382,12 @@ func (c *BucketCompactor) planTasks(ctx context.Context, groups []*Group) ([]Gro
 	}
 
 	tasksLimit := c.concurrency
+	// Make sure we plan at least one task from each group.
+	if tasksLimit < len(allTasks) {
+		tasksLimit = len(groups)
+	}
+
+	// If there aren't enough tasks across all groups, plan all available tasks.
 	if numTasks < tasksLimit {
 		tasksLimit = numTasks
 	}

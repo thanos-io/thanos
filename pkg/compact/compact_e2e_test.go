@@ -174,7 +174,11 @@ func TestGroupCompactE2E(t *testing.T) {
 	testGroupCompactE2e(t, nil, 2)
 }
 
-func TestGroupCompactE2EWithConcurrency(t *testing.T) {
+func TestGroupCompactE2EWithoutConcurrency(t *testing.T) {
+	testGroupCompactE2e(t, nil, 1)
+}
+
+func TestGroupCompactE2EWithHighConcurrency(t *testing.T) {
 	testGroupCompactE2e(t, nil, 20)
 }
 
