@@ -994,7 +994,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) PlanCompactionTasks(ctx context.Context, dir string, planner Planner, maxTasks int) ([]GroupCompactionTask, error) {
+func (cg *Group) PlanCompactionTasks(ctx context.Context, dir string, planner Planner) ([]GroupCompactionTask, error) {
 	plannedCompactions, err := planner.Plan(ctx, cg.metasByMinTime)
 	if err != nil {
 		return nil, err
@@ -1007,10 +1007,6 @@ func (cg *Group) PlanCompactionTasks(ctx context.Context, dir string, planner Pl
 			Blocks: blocks,
 			Dir:    path.Join(dir, cg.Key(), strconv.Itoa(i)),
 		})
-	}
-
-	if len(tasks) > maxTasks {
-		tasks = tasks[:maxTasks]
 	}
 
 	return tasks, nil
@@ -1328,22 +1324,9 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		level.Info(c.logger).Log("msg", "start of compactions")
 
-		tasksPerGroup := 1
-		if len(groups) > 0 && c.concurrency > len(groups) {
-			tasksPerGroup = c.concurrency / len(groups)
-		}
-		tasks := make([]GroupCompactionTask, 0)
-		for _, g := range groups {
-			// Ignore groups with only one block because there is nothing to compact.
-			if len(g.IDs()) == 1 {
-				continue
-			}
-
-			groupTasks, err := g.PlanCompactionTasks(ctx, c.compactDir, c.planner, tasksPerGroup)
-			if err != nil {
-				return errors.Wrapf(err, "get compaction group tasks: %s", g.Key())
-			}
-			tasks = append(tasks, groupTasks...)
+		tasks, err := c.planTasks(ctx, groups)
+		if err != nil {
+			return err
 		}
 
 		// Send all tasks planned in this pass to the compaction workers.
@@ -1378,6 +1361,44 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 	}
 	level.Info(c.logger).Log("msg", "compaction iterations done")
 	return nil
+}
+
+func (c *BucketCompactor) planTasks(ctx context.Context, groups []*Group) ([]GroupCompactionTask, error) {
+	// Plan tasks from all groups
+	allTasks := make([][]GroupCompactionTask, 0, len(groups))
+	numTasks := 0
+	for _, g := range groups {
+		// Ignore groups with only one block because there is nothing to compact.
+		if len(g.IDs()) == 1 {
+			continue
+		}
+
+		groupTasks, err := g.PlanCompactionTasks(ctx, c.compactDir, c.planner)
+		if err != nil {
+			return nil, errors.Wrapf(err, "get compaction group tasks: %s", g.Key())
+		}
+		allTasks = append(allTasks, groupTasks)
+		numTasks += len(groupTasks)
+	}
+
+	tasksLimit := c.concurrency
+	if numTasks < tasksLimit {
+		tasksLimit = numTasks
+	}
+
+	// Distribute tasks from all groups in a round-robin manner until we
+	// reach the concurrency limit.
+	tasks := make([]GroupCompactionTask, 0)
+	for len(tasks) < tasksLimit {
+		for i, groupTasks := range allTasks {
+			if len(groupTasks) == 0 {
+				continue
+			}
+			tasks = append(tasks, groupTasks[0])
+			allTasks[i] = allTasks[i][1:]
+		}
+	}
+	return tasks, nil
 }
 
 var _ block.MetadataFilter = &GatherNoCompactionMarkFilter{}
