@@ -994,7 +994,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) PlanCompactionTasks(ctx context.Context, dir string, planner Planner) ([]GroupCompactionTask, error) {
+func (cg *Group) PlanCompactionTasks(ctx context.Context, dir string, planner Planner, maxTasks int) ([]GroupCompactionTask, error) {
 	plannedCompactions, err := planner.Plan(ctx, cg.metasByMinTime)
 	if err != nil {
 		return nil, err
@@ -1007,6 +1007,10 @@ func (cg *Group) PlanCompactionTasks(ctx context.Context, dir string, planner Pl
 			Blocks: blocks,
 			Dir:    path.Join(dir, cg.Key(), strconv.Itoa(i)),
 		})
+	}
+
+	if len(tasks) > maxTasks {
+		tasks = tasks[:maxTasks]
 	}
 
 	return tasks, nil
@@ -1325,13 +1329,14 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		level.Info(c.logger).Log("msg", "start of compactions")
 
 		tasks := make([]GroupCompactionTask, 0)
+		tasksPerGroup := c.concurrency / len(groups)
 		for _, g := range groups {
 			// Ignore groups with only one block because there is nothing to compact.
 			if len(g.IDs()) == 1 {
 				continue
 			}
 
-			groupTasks, err := g.PlanCompactionTasks(ctx, c.compactDir, c.planner)
+			groupTasks, err := g.PlanCompactionTasks(ctx, c.compactDir, c.planner, tasksPerGroup)
 			if err != nil {
 				return errors.Wrapf(err, "get compaction group tasks: %s", g.Key())
 			}
