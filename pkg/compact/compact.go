@@ -1328,8 +1328,11 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		level.Info(c.logger).Log("msg", "start of compactions")
 
+		tasksPerGroup := 1
+		if len(groups) > 0 && c.concurrency > len(groups) {
+			tasksPerGroup = c.concurrency / len(groups)
+		}
 		tasks := make([]GroupCompactionTask, 0)
-		tasksPerGroup := c.concurrency / len(groups)
 		for _, g := range groups {
 			// Ignore groups with only one block because there is nothing to compact.
 			if len(g.IDs()) == 1 {
