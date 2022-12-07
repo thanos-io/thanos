@@ -238,7 +238,7 @@ func (tbc *bucketDownsampleConfig) registerBucketDownsampleFlag(cmd extkingpin.F
 
 func (tbc *bucketMarkBlockConfig) registerBucketMarkBlockFlag(cmd extkingpin.FlagClause) *bucketMarkBlockConfig {
 	cmd.Flag("id", "ID (ULID) of the blocks to be marked for deletion (repeated flag)").Required().StringsVar(&tbc.blockIDs)
-	cmd.Flag("marker", "Marker to be put.").Required().EnumVar(&tbc.marker, metadata.DeletionMarkFilename, metadata.NoCompactMarkFilename)
+	cmd.Flag("marker", "Marker to be put.").Required().EnumVar(&tbc.marker, metadata.DeletionMarkFilename, metadata.NoCompactMarkFilename, metadata.NoDownsampleMarkFilename)
 	cmd.Flag("details", "Human readable details to be put into marker.").Required().StringVar(&tbc.details)
 
 	return tbc
@@ -1057,6 +1057,10 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 					}
 				case metadata.NoCompactMarkFilename:
 					if err := block.MarkForNoCompact(ctx, logger, bkt, id, metadata.ManualNoCompactReason, tbc.details, promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+						return errors.Wrapf(err, "mark %v for %v", id, tbc.marker)
+					}
+				case metadata.NoDownsampleMarkFilename:
+					if err := block.MarkForNoDownsample(ctx, logger, bkt, id, metadata.ManualNoDownsampleReason, tbc.details, promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
 						return errors.Wrapf(err, "mark %v for %v", id, tbc.marker)
 					}
 				default:

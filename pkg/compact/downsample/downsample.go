@@ -4,11 +4,13 @@
 package downsample
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -22,7 +24,10 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
+	"golang.org/x/sync/errgroup"
 
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -733,4 +738,107 @@ func SamplesFromTSDBSamples(samples []tsdbutil.Sample) []sample {
 		res[i] = sample{t: s.T(), v: s.V()}
 	}
 	return res
+}
+
+// GatherNoDownsampleMarkFilter is a block.Fetcher filter that passes all metas.
+// While doing it, it gathers all no-downsample-mark.json markers.
+type GatherNoDownsampleMarkFilter struct {
+	logger                log.Logger
+	bkt                   objstore.InstrumentedBucketReader
+	noDownsampleMarkedMap map[ulid.ULID]*metadata.NoDownsampleMark
+	concurrency           int
+	mtx                   sync.Mutex
+}
+
+// NewGatherNoDownsampleMarkFilter creates GatherNoDownsampleMarkFilter.
+func NewGatherNoDownsampleMarkFilter(logger log.Logger, bkt objstore.InstrumentedBucketReader) *GatherNoDownsampleMarkFilter {
+	return &GatherNoDownsampleMarkFilter{
+		logger:      logger,
+		bkt:         bkt,
+		concurrency: 1,
+	}
+}
+
+// NoDownsampleMarkedBlocks returns block ids that were marked for no downsample.
+func (f *GatherNoDownsampleMarkFilter) NoDownsampleMarkedBlocks() map[ulid.ULID]*metadata.NoDownsampleMark {
+	f.mtx.Lock()
+	copiedNoDownsampleMarked := make(map[ulid.ULID]*metadata.NoDownsampleMark, len(f.noDownsampleMarkedMap))
+	for k, v := range f.noDownsampleMarkedMap {
+		copiedNoDownsampleMarked[k] = v
+	}
+	f.mtx.Unlock()
+
+	return copiedNoDownsampleMarked
+}
+
+// TODO (@rohitkochhar): reduce code duplication here by combining
+// this code with that of GatherNoCompactionMarkFilter
+// Filter passes all metas, while gathering no downsample markers.
+func (f *GatherNoDownsampleMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced block.GaugeVec, modified block.GaugeVec) error {
+	f.mtx.Lock()
+	f.noDownsampleMarkedMap = make(map[ulid.ULID]*metadata.NoDownsampleMark)
+	f.mtx.Unlock()
+
+	// Make a copy of block IDs to check, in order to avoid concurrency issues
+	// between the scheduler and workers.
+	blockIDs := make([]ulid.ULID, 0, len(metas))
+	for id := range metas {
+		blockIDs = append(blockIDs, id)
+	}
+
+	var (
+		eg errgroup.Group
+		ch = make(chan ulid.ULID, f.concurrency)
+	)
+
+	for i := 0; i < f.concurrency; i++ {
+		eg.Go(func() error {
+			var lastErr error
+			for id := range ch {
+				m := &metadata.NoDownsampleMark{}
+
+				if err := metadata.ReadMarker(ctx, f.logger, f.bkt, id.String(), m); err != nil {
+					if errors.Cause(err) == metadata.ErrorMarkerNotFound {
+						continue
+					}
+					if errors.Cause(err) == metadata.ErrorUnmarshalMarker {
+						level.Warn(f.logger).Log("msg", "found partial no-downsample-mark.json; if we will see it happening often for the same block, consider manually deleting no-downsample-mark.json from the object storage", "block", id, "err", err)
+						continue
+					}
+					// Remember the last error and continue draining the channel.
+					lastErr = err
+					continue
+				}
+
+				f.mtx.Lock()
+				f.noDownsampleMarkedMap[id] = m
+				f.mtx.Unlock()
+				synced.WithLabelValues(block.MarkedForNoDownsampleMeta).Inc()
+			}
+
+			return lastErr
+		})
+	}
+
+	// Workers scheduled, distribute blocks.
+	eg.Go(func() error {
+		defer close(ch)
+
+		for _, id := range blockIDs {
+			select {
+			case ch <- id:
+				// Nothing to do.
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		return errors.Wrap(err, "filter blocks marked for no downsample")
+	}
+
+	return nil
 }
