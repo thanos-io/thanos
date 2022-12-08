@@ -342,6 +342,7 @@ config:
     key_file: ""
     server_name: ""
     insecure_skip_verify: false
+  cache_size: 0
 ```
 
 The **required** settings are:
@@ -356,6 +357,12 @@ While the remaining settings are **optional**:
 - `dial_timeout`: the redis dial timeout.
 - `read_timeout`: the redis read timeout.
 - `write_timeout`: the redis write timeout.
+- `cache_size` size of the in-memory cache used for client-side caching. Client-side caching is enabled when this value is not zero. See [official documentation](https://redis.io/docs/manual/client-side-caching/) for more. It is highly recommended to enable this so that Thanos Store would not need to continuously retrieve data from Redis for repeated requests of the same key(-s).
+
+Here is an example of what effect client-side caching could have:
+
+<img src="../img/rueidis-client-side.png" class="img-fluid" alt="Example of client-side in action - reduced network usage by a lot"/>
+
 - `pool_size`: maximum number of socket connections.
 - `min_idle_conns`: specifies the minimum number of idle connections which is useful when establishing new connection is slow.
 - `idle_timeout`: amount of time after which client closes idle connections. Should be less than server's timeout.
