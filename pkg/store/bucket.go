@@ -926,7 +926,7 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 
 	if len(b.entries) == 0 {
 		if b.chunkr != nil {
-			b.chunkFetchDuration.Observe(float64(b.chunkr.stats.ChunksFetchDurationSum))
+			b.chunkFetchDuration.Observe(b.chunkr.stats.ChunksFetchDurationSum.Seconds())
 		}
 		return nil, io.EOF
 	}
