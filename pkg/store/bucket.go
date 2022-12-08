@@ -2792,6 +2792,9 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 // This data range covers chunks starting at supplied offsets.
 func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx, calculateChunkChecksum bool, bytesLimiter BytesLimiter) error {
 	fetchBegin := time.Now()
+	defer func() {
+		r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
+	}()
 
 	// Get a reader for the required range.
 	reader, err := r.block.chunkRangeReader(ctx, seq, int64(part.Start), int64(part.End-part.Start))
@@ -2812,7 +2815,6 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 
 	r.stats.chunksFetchCount++
 	r.stats.chunksFetched += len(pIdxs)
-	r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
 	r.stats.ChunksFetchedSizeSum += units.Base2Bytes(int(part.End - part.Start))
 
 	var (
@@ -2901,7 +2903,6 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		locked = true
 
 		r.stats.chunksFetchCount++
-		r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
 		r.stats.ChunksFetchedSizeSum += units.Base2Bytes(len(*nb))
 		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk((*nb)[n:]), aggrs, r.save, calculateChunkChecksum)
 		if err != nil {
