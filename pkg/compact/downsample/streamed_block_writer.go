@@ -25,10 +25,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
-// streamedBlockWriter writes downsampled blocks to a new data block. Implemented to save memory consumption
+// StreamedBlockWriter writes downsampled blocks to a new data block. Implemented to save memory consumption
 // by writing chunks data right into the files, omitting keeping them in-memory. Index and meta data should be
 // sealed afterwards, when there aren't more series to process.
-type streamedBlockWriter struct {
+type StreamedBlockWriter struct {
 	blockDir       string
 	finalized      bool // Set to true, if Close was called.
 	logger         log.Logger
@@ -45,7 +45,7 @@ type streamedBlockWriter struct {
 	seriesRefs storage.SeriesRef // postings is a current posting position.
 }
 
-// NewStreamedBlockWriter returns streamedBlockWriter instance, it's not concurrency safe.
+// NewStreamedBlockWriter returns StreamedBlockWriter instance, it's not concurrency safe.
 // Caller is responsible to Close all io.Closers by calling the Close when downsampling is done.
 // In case if error happens outside of the StreamedBlockWriter during the processing,
 // index and meta files will be written anyway, so the caller is always responsible for removing block directory with
@@ -57,7 +57,7 @@ func NewStreamedBlockWriter(
 	indexReader tsdb.IndexReader,
 	logger log.Logger,
 	originMeta metadata.Meta,
-) (w *streamedBlockWriter, err error) {
+) (w *StreamedBlockWriter, err error) {
 	closers := make([]io.Closer, 0, 2)
 
 	// We should close any opened Closer up to an error.
@@ -74,13 +74,13 @@ func NewStreamedBlockWriter(
 
 	chunkWriter, err := chunks.NewWriter(filepath.Join(blockDir, block.ChunksDirname))
 	if err != nil {
-		return nil, errors.Wrap(err, "create chunk writer in streamedBlockWriter")
+		return nil, errors.Wrap(err, "create chunk writer in StreamedBlockWriter")
 	}
 	closers = append(closers, chunkWriter)
 
 	indexWriter, err := index.NewWriter(context.TODO(), filepath.Join(blockDir, block.IndexFilename))
 	if err != nil {
-		return nil, errors.Wrap(err, "open index writer in streamedBlockWriter")
+		return nil, errors.Wrap(err, "open index writer in StreamedBlockWriter")
 	}
 	closers = append(closers, indexWriter)
 
@@ -94,7 +94,7 @@ func NewStreamedBlockWriter(
 		return nil, errors.Wrap(err, "read symbols")
 	}
 
-	return &streamedBlockWriter{
+	return &StreamedBlockWriter{
 		logger:      logger,
 		blockDir:    blockDir,
 		indexReader: indexReader,
@@ -107,7 +107,7 @@ func NewStreamedBlockWriter(
 
 // WriteSeries writes chunks data to the chunkWriter, writes lset and chunks MetasFetcher to indexWrites and adds label sets to
 // labelsValues sets and memPostings to be written on the finalize state in the end of downsampling process.
-func (w *streamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Meta) error {
+func (w *StreamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Meta) error {
 	if w.finalized || w.ignoreFinalize {
 		return errors.New("series can't be added, writers has been closed or internal error happened")
 	}
@@ -139,7 +139,7 @@ func (w *streamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Me
 
 // Close calls finalizer to complete index and meta files and closes all io.CLoser writers.
 // Idempotent.
-func (w *streamedBlockWriter) Close() error {
+func (w *StreamedBlockWriter) Close() error {
 	if w.finalized {
 		return nil
 	}
@@ -176,7 +176,7 @@ func (w *streamedBlockWriter) Close() error {
 	// No error, claim success.
 
 	level.Info(w.logger).Log(
-		"msg", "finalized downsampled block",
+		"msg", "finalized block",
 		"mint", w.meta.MinTime,
 		"maxt", w.meta.MaxTime,
 		"ulid", w.meta.ULID,
@@ -186,7 +186,7 @@ func (w *streamedBlockWriter) Close() error {
 }
 
 // syncDir syncs blockDir on disk.
-func (w *streamedBlockWriter) syncDir() (err error) {
+func (w *StreamedBlockWriter) syncDir() (err error) {
 	df, err := fileutil.OpenDir(w.blockDir)
 	if err != nil {
 		return errors.Wrap(err, "open temporary block blockDir")
@@ -202,7 +202,7 @@ func (w *streamedBlockWriter) syncDir() (err error) {
 }
 
 // writeMetaFile writes meta file.
-func (w *streamedBlockWriter) writeMetaFile() error {
+func (w *StreamedBlockWriter) writeMetaFile() error {
 	w.meta.Version = metadata.TSDBVersion1
 	w.meta.Thanos.Source = metadata.CompactorSource
 	w.meta.Thanos.SegmentFiles = block.GetSegmentFiles(w.blockDir)
