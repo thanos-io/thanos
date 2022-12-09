@@ -21,13 +21,17 @@ import (
 
 type ShardedCompactor struct {
 	chunks    chunkenc.Pool
-	Logger    log.Logger
-	Compactor Compactor
-	NumShards uint64
+	logger    log.Logger
+	compactor Compactor
+	numShards uint64
 }
 
-func (sc *ShardedCompactor) CompactWithSharding(dest string, dirs []string, open []*tsdb.Block) ([]ulid.ULID, error) {
-	compID, err := sc.Compactor.Compact(dest, dirs, open)
+func NewShardedCompactor(chunks chunkenc.Pool, logger log.Logger, compactor Compactor, numShards uint64) *ShardedCompactor {
+	return &ShardedCompactor{chunks: chunks, logger: logger, compactor: compactor, numShards: numShards}
+}
+
+func (sc *ShardedCompactor) Compact(dest string, dirs []string, open []*tsdb.Block) ([]ulid.ULID, error) {
+	compID, err := sc.compactor.Compact(dest, dirs, open)
 	if err != nil {
 		return nil, errors.Wrapf(err, "compact blocks")
 	}
@@ -35,7 +39,7 @@ func (sc *ShardedCompactor) CompactWithSharding(dest string, dirs []string, open
 		return nil, nil
 	}
 
-	newBlock, err := tsdb.OpenBlock(sc.Logger, dest, sc.chunks)
+	newBlock, err := tsdb.OpenBlock(sc.logger, filepath.Join(dest, compID.String()), sc.chunks)
 	if err != nil {
 		return nil, errors.Wrapf(err, "open compacted block")
 	}
@@ -60,8 +64,8 @@ func (sc *ShardedCompactor) CompactWithSharding(dest string, dirs []string, open
 		chks []chunks.Meta
 		lset labels.Labels
 
-		compIDs = make([]ulid.ULID, sc.NumShards)
-		blocks  = make([]*downsample.StreamedBlockWriter, sc.NumShards)
+		compIDs = make([]ulid.ULID, sc.numShards)
+		blocks  = make([]*downsample.StreamedBlockWriter, sc.numShards)
 	)
 	for i := range blocks {
 		uid := ulid.MustNew(ulid.Now(), rand.New(rand.NewSource(time.Now().UnixNano())))
@@ -71,11 +75,11 @@ func (sc *ShardedCompactor) CompactWithSharding(dest string, dirs []string, open
 		meta := metadata.Meta{BlockMeta: newBlock.Meta()}
 		meta.ULID = uid
 
-		writer, err := downsample.NewStreamedBlockWriter(blockDir, indexr, sc.Logger, meta)
+		writer, err := downsample.NewStreamedBlockWriter(blockDir, indexr, sc.logger, meta)
 		if err != nil {
 			return nil, err
 		}
-		defer runutil.CloseWithLogOnErr(sc.Logger, writer, "sharded block writer")
+		defer runutil.CloseWithLogOnErr(sc.logger, writer, "sharded block writer")
 		blocks[i] = writer
 	}
 
@@ -97,7 +101,7 @@ func (sc *ShardedCompactor) CompactWithSharding(dest string, dirs []string, open
 			chks[i].Chunk = chk
 		}
 
-		shardID := lset.Hash() % sc.NumShards
+		shardID := lset.Hash() % sc.numShards
 		if err := blocks[shardID].WriteSeries(lset, chks); err != nil {
 			return nil, err
 		}
