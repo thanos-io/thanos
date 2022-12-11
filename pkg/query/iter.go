@@ -343,12 +343,12 @@ func (c *lazySeriesSet) Warnings() storage.Warnings {
 	return nil
 }
 
-type projectionSeriesSet struct {
+type projectedSeriesSet struct {
 	storage.SeriesSet
 	projectionMatcher *storepb.ProjectionMatcher
 }
 
-func (s projectionSeriesSet) At() storage.Series {
+func (s projectedSeriesSet) At() storage.Series {
 	cur := s.SeriesSet.At()
 	return &storage.SeriesEntry{
 		Lset:             s.projectionMatcher.ModifyLabels(cur.Labels(), false),

@@ -402,7 +402,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	defer projectionMatcher.Close()
 	if !q.isDedupEnabled() {
 		// Return data without any deduplication.
-		return &projectionSeriesSet{
+		return &projectedSeriesSet{
 			SeriesSet: &promSeriesSet{
 				mint:  q.mint,
 				maxt:  q.maxt,
@@ -426,7 +426,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 
 	// The merged series set assembles all potentially-overlapping time ranges of the same series into a single one.
 	// TODO(bwplotka): We could potentially dedup on chunk level, use chunk iterator for that when available.
-	return &projectionSeriesSet{
+	return &projectedSeriesSet{
 		SeriesSet:         dedup.NewSeriesSet(set, q.replicaLabels, hints.Func, q.enableQueryPushdown),
 		projectionMatcher: projectionMatcher,
 	}, resp.seriesSetStats, nil
