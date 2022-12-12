@@ -1365,7 +1365,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 func (c *BucketCompactor) planTasks(ctx context.Context, groups []*Group) ([]GroupCompactionTask, error) {
 	// Plan tasks from all groups
-	allTasks := make([][]GroupCompactionTask, 0, len(groups))
+	allGroupTasks := make([][]GroupCompactionTask, 0, len(groups))
 	numTasks := 0
 	for _, g := range groups {
 		// Ignore groups with only one block because there is nothing to compact.
@@ -1377,14 +1377,16 @@ func (c *BucketCompactor) planTasks(ctx context.Context, groups []*Group) ([]Gro
 		if err != nil {
 			return nil, errors.Wrapf(err, "get compaction group tasks: %s", g.Key())
 		}
-		allTasks = append(allTasks, groupTasks)
-		numTasks += len(groupTasks)
+		if len(groupTasks) > 0 {
+			allGroupTasks = append(allGroupTasks, groupTasks)
+			numTasks += len(groupTasks)
+		}
 	}
 
 	tasksLimit := c.concurrency
 	// Make sure we plan at least one task from each group.
-	if tasksLimit < len(allTasks) {
-		tasksLimit = len(groups)
+	if tasksLimit < len(allGroupTasks) {
+		tasksLimit = len(allGroupTasks)
 	}
 
 	// If there aren't enough tasks across all groups, plan all available tasks.
@@ -1396,12 +1398,12 @@ func (c *BucketCompactor) planTasks(ctx context.Context, groups []*Group) ([]Gro
 	// reach the concurrency limit.
 	tasks := make([]GroupCompactionTask, 0)
 	for len(tasks) < tasksLimit {
-		for i, groupTasks := range allTasks {
+		for i, groupTasks := range allGroupTasks {
 			if len(groupTasks) == 0 {
 				continue
 			}
 			tasks = append(tasks, groupTasks[0])
-			allTasks[i] = allTasks[i][1:]
+			allGroupTasks[i] = allGroupTasks[i][1:]
 		}
 	}
 	return tasks, nil
