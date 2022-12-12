@@ -43,6 +43,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/stats"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
+
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -55,6 +56,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/storagehints"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets"
@@ -407,6 +409,11 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
+	queryString, thanosHints, err := storagehints.ExtractThanosHints(r.FormValue("query"))
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+	}
+
 	var seriesStats []storepb.SeriesStatsCounter
 	qry, err := qapi.queryEngine.NewInstantQuery(
 		qapi.queryableCreate(
@@ -419,9 +426,10 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
+			thanosHints,
 		),
 		&promql.QueryOpts{LookbackDelta: lookbackDelta},
-		r.FormValue("query"),
+		queryString,
 		ts,
 	)
 
@@ -558,6 +566,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
+	queryString, hints, err := storagehints.ExtractThanosHints(r.FormValue("query"))
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+	}
+
 	var seriesStats []storepb.SeriesStatsCounter
 	qry, err := qapi.queryEngine.NewRangeQuery(
 		qapi.queryableCreate(
@@ -570,9 +583,10 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
+			hints,
 		),
 		&promql.QueryOpts{LookbackDelta: lookbackDelta},
-		r.FormValue("query"),
+		queryString,
 		start,
 		end,
 		step,
@@ -659,6 +673,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
@@ -755,6 +770,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 
 	if err != nil {
@@ -815,6 +831,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}

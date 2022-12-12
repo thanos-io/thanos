@@ -6,14 +6,51 @@ package storepb
 import (
 	"fmt"
 	"strings"
+
+	"github.com/prometheus/prometheus/storage"
 )
+
+func (m *QueryHints) MergePromHints(hints *storage.SelectHints) {
+	if hints == nil {
+		return
+	}
+	m.StartMillis = hints.Start
+	m.EndMillis = hints.End
+	m.StepMillis = hints.Step
+
+	if hints.Grouping != nil {
+		m.Grouping = &Grouping{
+			By:     hints.By,
+			Labels: hints.Grouping,
+		}
+	}
+	if hints.Range != 0 {
+		m.Range = &Range{Millis: hints.Range}
+	}
+}
+
+func (m *QueryHints) RangeMillis() int64 {
+	if m.Range == nil {
+		return 0
+	}
+
+	return m.Range.Millis
+}
+
+func (m *QueryHints) AggrFuncName() string {
+	if m.AggrFunc == nil {
+		return ""
+	}
+
+	return m.AggrFunc.Name
+}
 
 func (m *QueryHints) toPromQL(labelMatchers []LabelMatcher) string {
 	grouping := m.Grouping.toPromQL()
 	matchers := MatchersToString(labelMatchers...)
 	queryRange := m.Range.toPromQL()
 
-	query := fmt.Sprintf("%s %s (%s%s)", m.Func.Name, grouping, matchers, queryRange)
+	query := fmt.Sprintf("%s %s (%s%s)", m.AggrFunc.Name, grouping, matchers, queryRange)
 	// Remove double spaces if some expressions are missing.
 	return strings.Join(strings.Fields(query), " ")
 }

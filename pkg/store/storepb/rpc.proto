@@ -130,8 +130,17 @@ message QueryHints {
   // Query step size in milliseconds.
   int64 step_millis = 1;
 
-  // The surrounding function or aggregation.
-  Func func = 2;
+  // Query start time in milliseconds.
+  int64 start_millis = 6;
+
+  // Query end time in milliseconds.
+  int64 end_millis = 7;
+
+  // The surrounding aggregation.
+  Func aggrFunc = 2;
+
+  // The surrounding time function.
+  Func timeFunc = 3;
 
   // The grouping expression
   Grouping grouping = 4;

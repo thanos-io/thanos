@@ -24,9 +24,11 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,6 +49,8 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	promgate "github.com/prometheus/prometheus/util/gate"
 	"github.com/prometheus/prometheus/util/stats"
+	"github.com/thanos-community/promql-engine/engine"
+
 	baseAPI "github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -1798,6 +1802,363 @@ func TestRulesHandler(t *testing.T) {
 			testutil.Ok(t, err)
 
 			testutil.Equals(t, string(exp), string(got))
+		})
+	}
+}
+
+type hintRecordingQuerier struct {
+	storepb.StoreServer
+	mux   sync.Mutex
+	hints []storepb.QueryHints
+}
+
+func (h *hintRecordingQuerier) Series(request *storepb.SeriesRequest, server storepb.Store_SeriesServer) error {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+	h.hints = append(h.hints, *request.QueryHints)
+	return nil
+}
+
+func TestSelectHintsSetCorrectly(t *testing.T) {
+	for _, tc := range []struct {
+		query string
+
+		// All times are in milliseconds.
+		start int64
+		end   int64
+
+		// TODO(bwplotka): Add support for better hints when subquerying.
+		expected []storepb.QueryHints
+	}{
+		{
+			query: "foo", start: 10000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 5000, EndMillis: 10000},
+			},
+		}, {
+			query: "foo @ 15", start: 10000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 10000, EndMillis: 15000},
+			},
+		}, {
+			query: "foo @ 1", start: 10000,
+			expected: []storepb.QueryHints{
+				{StartMillis: -4000, EndMillis: 1000},
+			},
+		}, {
+			query: "foo[2m]", start: 200000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 80000, EndMillis: 200000, Range: &storepb.Range{Millis: 120000}},
+			},
+		}, {
+			query: "foo[2m] @ 180", start: 200000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 60000, EndMillis: 180000, Range: &storepb.Range{Millis: 120000}},
+			},
+		}, {
+			query: "foo[2m] @ 300", start: 200000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 180000, EndMillis: 300000, Range: &storepb.Range{Millis: 120000}},
+			},
+		}, {
+			query: "foo[2m] @ 60", start: 200000,
+			expected: []storepb.QueryHints{
+				{StartMillis: -60000, EndMillis: 60000, Range: &storepb.Range{Millis: 120000}},
+			},
+		}, {
+			query: "foo[2m] offset 2m", start: 300000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 60000, EndMillis: 180000, Range: &storepb.Range{Millis: 120000}},
+			},
+		}, {
+			query: "foo[2m] @ 200 offset 2m", start: 300000,
+			expected: []storepb.QueryHints{
+				{StartMillis: -40000, EndMillis: 80000, Range: &storepb.Range{Millis: 120000}},
+			},
+		}, {
+			query: "foo[2m:1s]", start: 300000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 175000, EndMillis: 300000, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time(foo[2m:1s])", start: 300000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 175000, EndMillis: 300000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time(foo[2m:1s] @ 300)", start: 200000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 175000, EndMillis: 300000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time(foo[2m:1s] @ 200)", start: 200000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 75000, EndMillis: 200000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time(foo[2m:1s] @ 100)", start: 200000,
+			expected: []storepb.QueryHints{
+				{StartMillis: -25000, EndMillis: 100000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time(foo[2m:1s] offset 10s)", start: 300000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 165000, EndMillis: 290000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time((foo offset 10s)[2m:1s] offset 10s)", start: 300000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 155000, EndMillis: 280000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			// When the @ is on the vector selector, the enclosing subquery parameters
+			// don't affect the hint ranges.
+			query: "count_over_time((foo @ 200 offset 10s)[2m:1s] offset 10s)", start: 300000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 185000, EndMillis: 190000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			// When the @ is on the vector selector, the enclosing subquery parameters
+			// don't affect the hint ranges.
+			query: "count_over_time((foo @ 200 offset 10s)[2m:1s] @ 100 offset 10s)", start: 300000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 185000, EndMillis: 190000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time((foo offset 10s)[2m:1s] @ 100 offset 10s)", start: 300000,
+			expected: []storepb.QueryHints{
+				{StartMillis: -45000, EndMillis: 80000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "foo", start: 10000, end: 20000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 5000, EndMillis: 20000, StepMillis: 1000},
+			},
+		}, {
+			query: "foo @ 15", start: 10000, end: 20000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 10000, EndMillis: 15000, StepMillis: 1000},
+			},
+		}, {
+			query: "foo @ 1", start: 10000, end: 20000,
+			expected: []storepb.QueryHints{
+				{StartMillis: -4000, EndMillis: 1000, StepMillis: 1000},
+			},
+		}, {
+			query: "rate(foo[2m] @ 180)", start: 200000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 60000, EndMillis: 180000, Range: &storepb.Range{Millis: 120000}, TimeFunc: &storepb.Func{Name: "rate"}, StepMillis: 1000},
+			},
+		}, {
+			query: "rate(foo[2m] @ 300)", start: 200000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 180000, EndMillis: 300000, Range: &storepb.Range{Millis: 120000}, TimeFunc: &storepb.Func{Name: "rate"}, StepMillis: 1000},
+			},
+		}, {
+			query: "rate(foo[2m] @ 60)", start: 200000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: -60000, EndMillis: 60000, Range: &storepb.Range{Millis: 120000}, TimeFunc: &storepb.Func{Name: "rate"}, StepMillis: 1000},
+			},
+		}, {
+			query: "rate(foo[2m])", start: 200000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 80000, EndMillis: 500000, Range: &storepb.Range{Millis: 120000}, TimeFunc: &storepb.Func{Name: "rate"}, StepMillis: 1000},
+			},
+		}, {
+			query: "rate(foo[2m] offset 2m)", start: 300000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 60000, EndMillis: 380000, Range: &storepb.Range{Millis: 120000}, TimeFunc: &storepb.Func{Name: "rate"}, StepMillis: 1000},
+			},
+		}, {
+			query: "rate(foo[2m:1s])", start: 300000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 175000, EndMillis: 500000, TimeFunc: &storepb.Func{Name: "rate"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time(foo[2m:1s])", start: 300000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 175000, EndMillis: 500000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time(foo[2m:1s] offset 10s)", start: 300000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 165000, EndMillis: 490000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time(foo[2m:1s] @ 300)", start: 200000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 175000, EndMillis: 300000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time(foo[2m:1s] @ 200)", start: 200000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 75000, EndMillis: 200000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time(foo[2m:1s] @ 100)", start: 200000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: -25000, EndMillis: 100000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time((foo offset 10s)[2m:1s] offset 10s)", start: 300000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 155000, EndMillis: 480000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			// When the @ is on the vector selector, the enclosing subquery parameters
+			// don't affect the hint ranges.
+			query: "count_over_time((foo @ 200 offset 10s)[2m:1s] offset 10s)", start: 300000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 185000, EndMillis: 190000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			// When the @ is on the vector selector, the enclosing subquery parameters
+			// don't affect the hint ranges.
+			query: "count_over_time((foo @ 200 offset 10s)[2m:1s] @ 100 offset 10s)", start: 300000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 185000, EndMillis: 190000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "count_over_time((foo offset 10s)[2m:1s] @ 100 offset 10s)", start: 300000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: -45000, EndMillis: 80000, TimeFunc: &storepb.Func{Name: "count_over_time"}, StepMillis: 1000},
+			},
+		}, {
+			query: "sum by (dim1) (foo)", start: 10000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 5000, EndMillis: 10000, AggrFunc: &storepb.Func{Name: "sum"}, Grouping: &storepb.Grouping{By: true, Labels: []string{"dim1"}}},
+			},
+		}, {
+			query: "sum without (dim1) (foo)", start: 10000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 5000, EndMillis: 10000, AggrFunc: &storepb.Func{Name: "sum"}, Grouping: &storepb.Grouping{By: false, Labels: []string{"dim1"}}},
+			},
+		}, {
+			query: "sum by (dim1) (avg_over_time(foo[1s]))", start: 10000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 9000, EndMillis: 10000, AggrFunc: &storepb.Func{Name: "sum"}, Grouping: &storepb.Grouping{By: true, Labels: []string{"dim1"}}, TimeFunc: &storepb.Func{Name: "avg_over_time"}, Range: &storepb.Range{Millis: 1000}}},
+		}, {
+			query: "sum by (dim1) (sort(avg_over_time(foo[1s])))", start: 10000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 9000, EndMillis: 10000, AggrFunc: &storepb.Func{Name: "sort"}, TimeFunc: &storepb.Func{Name: "avg_over_time"}, Range: &storepb.Range{Millis: 1000}}},
+		}, {
+			query: "sum by (dim1) (max by (dim2) (foo))", start: 10000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 5000, EndMillis: 10000, AggrFunc: &storepb.Func{Name: "max"}, Grouping: &storepb.Grouping{By: true, Labels: []string{"dim2"}}},
+			},
+		}, {
+			query: "(max by (dim1) (foo))[5s:1s]", start: 10000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 0, EndMillis: 10000, AggrFunc: &storepb.Func{Name: "max"}, Grouping: &storepb.Grouping{By: true, Labels: []string{"dim1"}}, StepMillis: 1000},
+			},
+		}, {
+			query: "(sum(http_requests{group=~\"p.*\"})+max(http_requests{group=~\"c.*\"}))[20s:5s]", start: 120000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 95000, EndMillis: 120000, AggrFunc: &storepb.Func{Name: "sum"}, Grouping: &storepb.Grouping{By: true}, StepMillis: 5000},
+				{StartMillis: 95000, EndMillis: 120000, AggrFunc: &storepb.Func{Name: "max"}, Grouping: &storepb.Grouping{By: true}, StepMillis: 5000},
+			},
+		}, {
+			query: "foo @ 50 + bar @ 250 + baz @ 900", start: 100000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 45000, EndMillis: 50000, StepMillis: 1000},
+				{StartMillis: 245000, EndMillis: 250000, StepMillis: 1000},
+				{StartMillis: 895000, EndMillis: 900000, StepMillis: 1000},
+			},
+		}, {
+			query: "foo @ 50 + bar + baz @ 900", start: 100000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 45000, EndMillis: 50000, StepMillis: 1000},
+				{StartMillis: 95000, EndMillis: 500000, StepMillis: 1000},
+				{StartMillis: 895000, EndMillis: 900000, StepMillis: 1000},
+			},
+		}, {
+			query: "rate(foo[2s] @ 50) + bar @ 250 + baz @ 900", start: 100000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 48000, EndMillis: 50000, StepMillis: 1000, TimeFunc: &storepb.Func{Name: "rate"}, Range: &storepb.Range{Millis: 2000}},
+				{StartMillis: 245000, EndMillis: 250000, StepMillis: 1000},
+				{StartMillis: 895000, EndMillis: 900000, StepMillis: 1000},
+			},
+		}, {
+			query: "rate(foo[2s:1s] @ 50) + bar + baz", start: 100000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 43000, EndMillis: 50000, StepMillis: 1000, TimeFunc: &storepb.Func{Name: "rate"}},
+				{StartMillis: 95000, EndMillis: 500000, StepMillis: 1000},
+				{StartMillis: 95000, EndMillis: 500000, StepMillis: 1000},
+			},
+		}, {
+			query: "rate(foo[2s:1s] @ 50) + bar + rate(baz[2m:1s] @ 900 offset 2m) ", start: 100000, end: 500000,
+			expected: []storepb.QueryHints{
+				{StartMillis: 43000, EndMillis: 50000, StepMillis: 1000, TimeFunc: &storepb.Func{Name: "rate"}},
+				{StartMillis: 95000, EndMillis: 500000, StepMillis: 1000},
+				{StartMillis: 655000, EndMillis: 780000, StepMillis: 1000, TimeFunc: &storepb.Func{Name: "rate"}},
+			},
+		}, { // Hints are based on the inner most subquery timestamp.
+			query: `sum_over_time(sum_over_time(metric{job="1"}[100s])[100s:25s] @ 50)[3s:1s] @ 3000`, start: 100000,
+			expected: []storepb.QueryHints{
+				{StartMillis: -150000, EndMillis: 50000, Range: &storepb.Range{Millis: 100000}, TimeFunc: &storepb.Func{Name: "sum_over_time"}, StepMillis: 25000}},
+		},
+		{ // Hints are based on the inner most subquery timestamp.
+			query: `sum_over_time(sum_over_time(metric{job="1"}[100s])[100s:25s] @ 3000)[3s:1s] @ 50`,
+			expected: []storepb.QueryHints{
+				{StartMillis: 2800000, EndMillis: 3000000, Range: &storepb.Range{Millis: 100000}, TimeFunc: &storepb.Func{Name: "sum_over_time"}, StepMillis: 25000}},
+		},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			opts := promql.EngineOpts{
+				Logger:           nil,
+				Reg:              nil,
+				MaxSamples:       10,
+				Timeout:          10 * time.Second,
+				LookbackDelta:    5 * time.Second,
+				EnableAtModifier: true,
+			}
+
+			reg := prometheus.NewRegistry()
+			hintsRecorder := &hintRecordingQuerier{}
+			qapi := QueryAPI{
+				baseAPI:               baseAPI.NewBaseAPI(log.NewNopLogger(), false, nil),
+				gate:                  gate.NewNoop(),
+				seriesStatsAggregator: &store.NoopSeriesStatsAggregator{},
+				lookbackDeltaCreate: func(i int64) time.Duration {
+					return opts.LookbackDelta
+				},
+				queryableCreate:     query.NewQueryableCreator(log.NewNopLogger(), nil, hintsRecorder, 1, 5*time.Minute),
+				queryEngine:         engine.New(engine.Opts{EngineOpts: opts}),
+				enableQueryPushdown: true,
+				queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+					Name:    "query_duration_seconds",
+					Buckets: []float64{1},
+				}),
+			}
+
+			request := httptest.NewRequest("GET", "/", nil)
+			q := request.URL.Query()
+			q.Add("query", tc.query)
+			if tc.end == 0 {
+				q.Add("time", fmt.Sprintf("%d", tc.start/1000))
+				request.URL.RawQuery = q.Encode()
+				_, _, apiErr, _ := qapi.query(request)
+				testutil.Assert(t, apiErr == nil, "unexpected error %v", apiErr)
+			} else {
+				q.Add("start", fmt.Sprintf("%d", tc.start/1000))
+				q.Add("end", fmt.Sprintf("%d", tc.end/1000))
+				q.Add("step", "1")
+				request.URL.RawQuery = q.Encode()
+				_, _, apiErr, _ := qapi.queryRange(request)
+				testutil.Assert(t, apiErr == nil, "unexpected error %v", apiErr)
+			}
+
+			// Selects are done in parallel so check that all hints are // present, but order does not matter.
+			testutil.Equals(t, len(tc.expected), len(hintsRecorder.hints))
+			for _, expected := range tc.expected {
+				contains := false
+				for _, hint := range hintsRecorder.hints {
+					if reflect.DeepEqual(expected, hint) {
+						contains = true
+					}
+				}
+				testutil.Assert(t, contains, "hints did not contain contain %#v", expected)
+			}
 		})
 	}
 }

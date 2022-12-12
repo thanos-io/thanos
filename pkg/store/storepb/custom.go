@@ -547,7 +547,7 @@ func (m *QueryHints) IsSafeToExecute() bool {
 		"group",
 	}
 	for _, op := range distributiveOperations {
-		if m.Func.Name == op {
+		if m.AggrFunc.Name == op {
 			return true
 		}
 	}
