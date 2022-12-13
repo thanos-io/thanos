@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package main
 
 import (
@@ -6,7 +9,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-kit/log"
@@ -16,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/cmd/thanos/storeutils"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
+	"go.uber.org/atomic"
 )
 
 type storeInspectConfig struct {
@@ -69,9 +72,9 @@ func registerInspectCommand(app extkingpin.AppClause) {
 		stores := storeLister.GetByLabelPairs(labelMap)
 		for _, i := range stores {
 			if i != nil {
-				fmt.Println("################################################################################")
+				fmt.Printf("################################################################################\n")
 				fmt.Printf("Name: %s\n", i.Name)
-				fmt.Println("Blocks:")
+				fmt.Printf("Blocks:\n")
 				sort.Slice(i.Blocks, func(x, y int) bool {
 					return i.Blocks[x].MinTime < i.Blocks[y].MinTime
 				})
@@ -79,13 +82,13 @@ func registerInspectCommand(app extkingpin.AppClause) {
 					for l, v := range labelMap {
 						if b.HasLabelPair(l, v) {
 							fmt.Printf("\t%s\n", b)
-							fmt.Println("================================================================================")
+							fmt.Printf("================================================================================\n")
 						}
 					}
 				}
 
 			}
-			fmt.Println(i)
+			fmt.Printf("%s\n", i)
 		}
 
 		return dummy()
@@ -154,7 +157,7 @@ func (r *InMemoryLister) LoadInfo(ctx context.Context) {
 	// rewrite this log call
 	level.Info(r.logger).Log("msg", "Found StoreAPIs", "count", len(ips), "elapsed", time.Since(start).String())
 
-	var progress uint64
+	var progress atomic.Int32
 	wg := &sync.WaitGroup{}
 	wg.Add(len(ips))
 	for _, addr := range ips {
@@ -173,8 +176,8 @@ func (r *InMemoryLister) LoadInfo(ctx context.Context) {
 				return
 			}
 			r.storeInfo[fqdn] = storeInfo
-			atomic.AddUint64(&progress, 1)
-			if progress%10 == 0 {
+			progress.Inc()
+			if progress.Load()%10 == 0 {
 				level.Info(r.logger).Log(
 					"msg",
 					"updated store info",

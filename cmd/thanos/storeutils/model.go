@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package storeutils
 
 import (
@@ -75,7 +78,6 @@ func (i InstanceInfo) HasLabelPair(key, value string) bool {
 	return false
 }
 
-// string method for BlockInfo
 func (b BlockInfo) String() string {
 	return fmt.Sprintf(
 		"Block: %s\n\tMin time: %s\n\tMax time: %s\n\tLabelset: \n%s",
