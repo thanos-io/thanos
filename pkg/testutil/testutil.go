@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -362,4 +363,19 @@ func PutOutOfOrderIndex(blockDir string, minTime int64, maxTime int64) error {
 	}
 
 	return iw.Close()
+}
+
+// ErrorContainsString fails if error is nil or does not contain the given string.
+func ErrorContainsString(tb testing.TB, err error, str string) {
+	tb.Helper()
+
+	_, file, line, _ := runtime.Caller(1)
+
+	if err == nil {
+		tb.Fatalf("\033[31m%s:%d: Expected error containing string %q, but error is nil.\n\n", filepath.Base(file), line, str)
+	}
+
+	if !strings.Contains(err.Error(), str) {
+		tb.Fatalf("\033[31m%s:%d: Expected error containing string %q, but got error %q.\n\n", filepath.Base(file), line, str, err.Error())
+	}
 }
