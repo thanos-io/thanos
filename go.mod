@@ -67,7 +67,7 @@ require (
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.37.0
-	github.com/prometheus/exporter-toolkit v0.8.1
+	github.com/prometheus/exporter-toolkit v0.8.2
 	// Prometheus maps version 2.x.y to tags v0.x.y.
 	github.com/prometheus/prometheus v0.40.1
 	github.com/sony/gobreaker v0.5.0
@@ -77,7 +77,7 @@ require (
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
-	github.com/weaveworks/common v0.0.0-20220706100410-67d27ed40fae
+	github.com/weaveworks/common v0.0.0-20221201103051-7c2720a9024d
 	go.elastic.co/apm v1.11.0
 	go.elastic.co/apm/module/apmot v1.11.0
 	go.etcd.io/etcd/api/v3 v3.5.4
@@ -275,9 +275,6 @@ replace (
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
-
-	// Until https://github.com/weaveworks/common/pull/262 is merged
-	github.com/weaveworks/common => github.com/rabenhorst/common v0.0.0-20221114111857-9eb1f146696e
 
 	// Override due to https://github.com/weaveworks/common/issues/239
 	google.golang.org/grpc => google.golang.org/grpc v1.45.0
