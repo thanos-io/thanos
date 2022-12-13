@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -29,7 +30,7 @@ type storeInspectConfig struct {
 
 func (sic *storeInspectConfig) registerInspectFlags(cmd extkingpin.FlagClause) *storeInspectConfig {
 	cmd.Flag("timeout", "Timeout to fetch information from all stores").Default("5m").DurationVar(&sic.timeout)
-	cmd.Flag("http.timeout", "Timeout for HTTP requests to store nodes").Default("1500ms").DurationVar(&sic.http.Timeout)
+	cmd.Flag("http.timeout", "Timeout for HTTP requests to store nodes").Default("2500ms").DurationVar(&sic.http.Timeout)
 	cmd.Flag("lister.service", "Service name to discover Store nodes").
 		Default("dnssrvnoa+_http._tcp.thanos-store.thanos.svc.cluster.local").
 		StringVar(&sic.lister.StoreGatewayService)
@@ -70,25 +71,36 @@ func registerInspectCommand(app extkingpin.AppClause) {
 		}
 
 		stores := storeLister.GetByLabelPairs(labelMap)
+		lines := make([][]string, 0, len(stores))
+		table := Table{Header: []string{"Name", "Min time", "Max time", "Matching blocks"}, Lines: lines}
+
+		sort.Slice(stores, func(i, j int) bool {
+			return stores[i].BlockSummary.TotalMinTime.Unix() < stores[j].BlockSummary.TotalMinTime.Unix()
+		})
 		for _, i := range stores {
-			if i != nil {
-				fmt.Printf("################################################################################\n")
-				fmt.Printf("Name: %s\n", i.Name)
-				fmt.Printf("Blocks:\n")
-				sort.Slice(i.Blocks, func(x, y int) bool {
-					return i.Blocks[x].MinTime < i.Blocks[y].MinTime
-				})
-				for _, b := range i.Blocks {
-					for l, v := range labelMap {
-						if b.HasLabelPair(l, v) {
-							fmt.Printf("\t%s\n", b)
-							fmt.Printf("================================================================================\n")
-						}
+			line := make([]string, 0, 4)
+			line = append(line, i.Name)
+			line = append(line, i.BlockSummary.TotalMinTime.Format(time.RFC3339))
+			line = append(line, i.BlockSummary.TotalMaxTime.Format(time.RFC3339))
+
+			matchingBlocks := 0
+
+			for _, b := range i.Blocks {
+				for l, v := range labelMap {
+					if b.HasLabelPair(l, v) {
+						matchingBlocks++
 					}
 				}
-
 			}
-			fmt.Printf("%s\n", i)
+
+			line = append(line, fmt.Sprintf("%d/%d", matchingBlocks, len(i.Blocks)))
+			lines = append(lines, line)
+		}
+		table.Lines = lines
+
+		err := printTable(os.Stdout, table)
+		if err != nil {
+			return err
 		}
 
 		return dummy()
@@ -160,6 +172,7 @@ func (r *InMemoryLister) LoadInfo(ctx context.Context) {
 	var progress atomic.Int32
 	wg := &sync.WaitGroup{}
 	wg.Add(len(ips))
+
 	for _, addr := range ips {
 		// divide address and port
 		fqdn, _ := splitAddress(addr)
@@ -182,7 +195,7 @@ func (r *InMemoryLister) LoadInfo(ctx context.Context) {
 					"msg",
 					"updated store info",
 					"progress",
-					progress,
+					progress.Load(),
 					"total",
 					len(ips),
 					"elapsed",
