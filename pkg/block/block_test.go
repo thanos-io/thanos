@@ -593,3 +593,144 @@ func (eb errBucket) Upload(ctx context.Context, name string, r io.Reader) error 
 	}
 	return nil
 }
+
+func TestRemoveMarkForDeletion(t *testing.T) {
+	defer custom.TolerantVerifyLeak(t)
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	for _, testcases := range []struct {
+		name           string
+		preDelete      func(t testing.TB, id ulid.ULID, bkt objstore.Bucket)
+		blocksUnmarked int
+	}{
+		{
+			name: "unmarked block for deletion",
+			preDelete: func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {
+				deletionMark, err := json.Marshal(metadata.DeletionMark{
+					ID:           id,
+					DeletionTime: time.Now().Unix(),
+					Version:      metadata.DeletionMarkVersion1,
+				})
+				testutil.Ok(t, err)
+				testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.DeletionMarkFilename), bytes.NewReader(deletionMark)))
+			},
+			blocksUnmarked: 1,
+		},
+		{
+			name:           "block not marked for deletion, message logged and metric not incremented",
+			preDelete:      func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {},
+			blocksUnmarked: 0,
+		},
+	} {
+		t.Run(testcases.name, func(t *testing.T) {
+			bkt := objstore.NewInMemBucket()
+			id, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+				{{Name: "cluster-eu1", Value: "service-1"}},
+				{{Name: "cluster-eu1", Value: "service-2"}},
+				{{Name: "cluster-eu1", Value: "service-3"}},
+				{{Name: "cluster-us1", Value: "service-1"}},
+				{{Name: "cluster-us1", Value: "service-2"}},
+			}, 100, 0, 1000, labels.Labels{{Name: "region-1", Value: "eu-west"}}, 124, metadata.NoneFunc)
+			testutil.Ok(t, err)
+			testcases.preDelete(t, id, bkt)
+			counter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+			err = RemoveMark(ctx, log.NewNopLogger(), bkt, id, counter, metadata.DeletionMarkFilename)
+			testutil.Ok(t, err)
+			testutil.Equals(t, float64(testcases.blocksUnmarked), promtest.ToFloat64(counter))
+		})
+	}
+}
+
+func TestRemoveMarkForNoCompact(t *testing.T) {
+	defer custom.TolerantVerifyLeak(t)
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	for _, testCases := range []struct {
+		name           string
+		preDelete      func(t testing.TB, id ulid.ULID, bkt objstore.Bucket)
+		blocksUnmarked int
+	}{
+		{
+			name: "unmarked block for no-compact",
+			preDelete: func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {
+				m, err := json.Marshal(metadata.NoCompactMark{
+					ID:            id,
+					NoCompactTime: time.Now().Unix(),
+					Version:       metadata.NoCompactMarkVersion1,
+				})
+				testutil.Ok(t, err)
+				testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.NoCompactMarkFilename), bytes.NewReader(m)))
+			},
+			blocksUnmarked: 1,
+		},
+		{
+			name:           "block not marked for no-compact, message logged and metric not incremented",
+			preDelete:      func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {},
+			blocksUnmarked: 0,
+		},
+	} {
+		t.Run(testCases.name, func(t *testing.T) {
+			bkt := objstore.NewInMemBucket()
+			id, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+				{{Name: "cluster-eu1", Value: "service-1"}},
+				{{Name: "cluster-eu1", Value: "service-2"}},
+				{{Name: "cluster-eu1", Value: "service-3"}},
+				{{Name: "cluster-us1", Value: "service-1"}},
+				{{Name: "cluster-us1", Value: "service-2"}},
+			}, 100, 0, 1000, labels.Labels{{Name: "region-1", Value: "eu-west"}}, 124, metadata.NoneFunc)
+			testutil.Ok(t, err)
+			testCases.preDelete(t, id, bkt)
+			counter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+			err = RemoveMark(ctx, log.NewNopLogger(), bkt, id, counter, metadata.NoCompactMarkFilename)
+			testutil.Ok(t, err)
+			testutil.Equals(t, float64(testCases.blocksUnmarked), promtest.ToFloat64(counter))
+		})
+	}
+}
+
+func TestRemoveMmarkForNoDownsample(t *testing.T) {
+	defer custom.TolerantVerifyLeak(t)
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	for _, testCases := range []struct {
+		name           string
+		preDelete      func(t testing.TB, id ulid.ULID, bkt objstore.Bucket)
+		blocksUnmarked int
+	}{
+		{
+			name: "unmarked block for no-downsample",
+			preDelete: func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {
+				m, err := json.Marshal(metadata.NoDownsampleMark{
+					ID:               id,
+					NoDownsampleTime: time.Now().Unix(),
+					Version:          metadata.NoDownsampleMarkVersion1,
+				})
+				testutil.Ok(t, err)
+				testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.NoDownsampleMarkFilename), bytes.NewReader(m)))
+			},
+			blocksUnmarked: 1,
+		},
+		{
+			name:           "block not marked for no-downsample, message logged and metric not incremented",
+			preDelete:      func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {},
+			blocksUnmarked: 0,
+		},
+	} {
+		t.Run(testCases.name, func(t *testing.T) {
+			bkt := objstore.NewInMemBucket()
+			id, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+				{{Name: "cluster-eu1", Value: "service-1"}},
+				{{Name: "cluster-eu1", Value: "service-2"}},
+				{{Name: "cluster-eu1", Value: "service-3"}},
+				{{Name: "cluster-us1", Value: "service-1"}},
+				{{Name: "cluster-us1", Value: "service-2"}},
+			}, 100, 0, 1000, labels.Labels{{Name: "region-1", Value: "eu-west"}}, 124, metadata.NoneFunc)
+			testutil.Ok(t, err)
+			testCases.preDelete(t, id, bkt)
+			counter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+			err = RemoveMark(ctx, log.NewNopLogger(), bkt, id, counter, metadata.NoDownsampleMarkFilename)
+			testutil.Ok(t, err)
+			testutil.Equals(t, float64(testCases.blocksUnmarked), promtest.ToFloat64(counter))
+		})
+	}
+}

@@ -52,7 +52,7 @@ Subcommands:
   tools bucket cleanup [<flags>]
     Cleans up all blocks marked for deletion.
 
-  tools bucket mark --id=ID --marker=MARKER --details=DETAILS
+  tools bucket mark --id=ID --marker=MARKER [<flags>]
     Mark block for deletion or no-compact in a safe way. NOTE: If the compactor
     is currently running compacting same block, this operation would be
     potentially a noop.
@@ -161,7 +161,7 @@ Subcommands:
   tools bucket cleanup [<flags>]
     Cleans up all blocks marked for deletion.
 
-  tools bucket mark --id=ID --marker=MARKER --details=DETAILS
+  tools bucket mark --id=ID --marker=MARKER [<flags>]
     Mark block for deletion or no-compact in a safe way. NOTE: If the compactor
     is currently running compacting same block, this operation would be
     potentially a noop.
@@ -681,7 +681,7 @@ prefix: ""
 ```
 
 ```$ mdox-exec="thanos tools bucket mark --help"
-usage: thanos tools bucket mark --id=ID --marker=MARKER --details=DETAILS
+usage: thanos tools bucket mark --id=ID --marker=MARKER [<flags>]
 
 Mark block for deletion or no-compact in a safe way. NOTE: If the compactor is
 currently running compacting same block, this operation would be potentially a
@@ -705,6 +705,7 @@ Flags:
                            Path to YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/tip/thanos/storage.md/#configuration
+      --remove             Remove the marker.
       --tracing.config=<content>
                            Alternative to 'tracing.config-file' flag
                            (mutually exclusive). Content of YAML file
