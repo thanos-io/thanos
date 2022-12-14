@@ -31,10 +31,10 @@ type storeInspectConfig struct {
 func (sic *storeInspectConfig) registerInspectFlags(cmd extkingpin.FlagClause) *storeInspectConfig {
 	cmd.Flag("timeout", "Timeout to fetch information from all stores").Default("5m").DurationVar(&sic.timeout)
 	cmd.Flag("http.timeout", "Timeout for HTTP requests to store nodes").Default("2500ms").DurationVar(&sic.http.Timeout)
-	cmd.Flag("lister.service", "Service name to discover Store nodes").
+	cmd.Flag("service", "FQDN for the service with protos and protocol, including dnssrvnoa+ prefix.").
 		Default("dnssrvnoa+_http._tcp.thanos-store.thanos.svc.cluster.local").
 		StringVar(&sic.lister.StoreGatewayService)
-	cmd.Flag("lister.label", "Label to discover Store nodes. This label can be repeated, the store MUST match all label pairs.").
+	cmd.Flag("label", "Label to discover Store nodes. This label can be repeated, the store MUST match all label pairs.").
 		Required().PlaceHolder("<name>=\"<value>\"").StringsVar(&sic.lister.LabelPairs)
 
 	return sic
@@ -47,7 +47,10 @@ func registerStoreTools(app extkingpin.AppClause) {
 }
 
 func registerInspectCommand(app extkingpin.AppClause) {
-	subCmd := app.Command("inspect", "Inspect loaded blocks in stores using label matchers.")
+	subCmd := app.Command("inspect", "Inspect loaded blocks in stores using label matchers.\n"+
+		"Stores are discovered via DNS by using SRV records. You may pass multiple label matchers to filter stores.\n"+
+		"Example: thanos store inspect --label 'replica=\"1\"' --label 'cluster=\"eu1\"'\n"+
+		"When using multiple label matchers, all matchers must match for a store to be selected.")
 	config := &storeInspectConfig{}
 	config.registerInspectFlags(subCmd)
 
