@@ -576,6 +576,10 @@ func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*
 
 var _ MetadataFilter = &DeduplicateFilter{}
 
+type IDeduplicateFilter interface {
+	DuplicateIDs() []ulid.ULID
+}
+
 // DeduplicateFilter is a BaseFetcher filter that filters out older blocks that have exactly the same data.
 // Not go-routine safe.
 type DeduplicateFilter struct {

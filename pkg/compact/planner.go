@@ -93,6 +93,10 @@ func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompac
 	return nil, nil
 }
 
+func (p *tsdbBasedPlanner) PlanWithPartition(ctx context.Context, metasByMinTime []*metadata.Meta, partitionID int, errChan chan error) ([]*metadata.Meta, error) {
+	return nil, errors.New("not support with partitioning")
+}
+
 // selectMetas returns the dir metas that should be compacted into a single new block.
 // If only a single block range is configured, the result is always nil.
 // Copied and adjusted from https://github.com/prometheus/prometheus/blob/3d8826a3d42566684283a9b7f7e812e412c24407/tsdb/compact.go#L229.
@@ -302,4 +306,8 @@ PlanLoop:
 		// Planned blocks should not exceed limit.
 		return plan, nil
 	}
+}
+
+func (t *largeTotalIndexSizeFilter) PlanWithPartition(ctx context.Context, metasByMinTime []*metadata.Meta, partitionID int, errChan chan error) ([]*metadata.Meta, error) {
+	return nil, errors.New("not support with partitioning")
 }
