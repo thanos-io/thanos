@@ -150,7 +150,11 @@ type InMemoryLister struct {
 	lastUpdate time.Time
 }
 
-func newLister(logger log.Logger, ap storeutils.AddressProvider, client storeutils.Client) Lister {
+func newLister(
+	logger log.Logger,
+	ap storeutils.AddressProvider,
+	client storeutils.Client,
+) Lister {
 	return &InMemoryLister{
 		ap:        ap,
 		logger:    logger,
@@ -191,7 +195,7 @@ func (r *InMemoryLister) LoadInfo(ctx context.Context) {
 			r.storeInfo[fqdn] = storeInfo
 			progress.Inc()
 			if progress.Load()%10 == 0 {
-				level.Info(r.logger).Log(
+				level.Debug(r.logger).Log(
 					"msg",
 					"updated store info",
 					"progress",
@@ -263,7 +267,6 @@ func (r *InMemoryLister) GetByLabelPairs(pairs map[string]string) []*storeutils.
 }
 
 func (r *InMemoryLister) createOrUpdate(ctx context.Context, name string, address string) (*storeutils.InstanceInfo, error) {
-	level.Debug(r.logger).Log("msg", "creating or updating store info", "name", name, "address", address)
 	storeInfo, err := r.client.GetInstanceInfo(ctx, address)
 	if err != nil {
 		return nil, err
