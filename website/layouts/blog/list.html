@@ -7,7 +7,7 @@
                     <h2><a href="{{ .Permalink }}">{{ .Title }}</a></h2>
                     <p class="text-muted">Written by {{ .Params.Author }} and published on {{ .Date.Format "Jan 02, 2006" }}</p>
                     <hr>
-                    {{ .Content }}
+                    {{ .Summary }}
                 </div>
             {{ end}}
             {{ template "_internal/pagination.html" . }}

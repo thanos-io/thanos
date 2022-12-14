@@ -70,3 +70,5 @@ markup:
     renderer:
       # We want to be able to put our own HTML.
       unsafe: true
+
+summaryLength: 50      
