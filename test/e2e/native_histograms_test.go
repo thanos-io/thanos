@@ -5,11 +5,15 @@ package e2e_test
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/efficientgo/e2e"
+	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	config_util "github.com/prometheus/common/config"
@@ -18,6 +22,7 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -40,19 +45,21 @@ func TestQueryNativeHistograms(t *testing.T) {
 
 	ts := time.Now()
 
+	getTs := func() time.Time {
+		return ts
+	}
+
 	writeRequest(t, ctx, rawRemoteWriteURL, nativeHistogramWriteRequest(ts))
 
 	// Make sure we can query native histogram directly from Prometheus.
-	queryAndAssertSeries(t, ctx, prom.Endpoint("http"), func() string { return "test_histogram" }, time.Now, promclient.QueryOptions{}, []model.Metric{
+	queryAndAssertSeries(t, ctx, prom.Endpoint("http"), func() string { return "test_histogram" }, getTs, promclient.QueryOptions{}, []model.Metric{
 		{
 			"__name__": "test_histogram",
 			"foo":      "bar",
 		},
 	})
 
-	// Querying from querier should fail.
-	_, _, err = promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+querier.Endpoint("http")), "test_histogram", ts, promclient.QueryOptions{})
-	testutil.ErrorContainsString(t, err, "invalid chunk encoding")
+	queryAndAssertError(t, ctx, querier.Endpoint("http"), func() string { return "test_histogram" }, getTs, promclient.QueryOptions{}, "invalid chunk encoding")
 }
 
 func TestWriteNativeHistograms(t *testing.T) {
@@ -141,4 +148,35 @@ func nativeHistogramWriteRequest(ts time.Time) *prompb.WriteRequest {
 			},
 		},
 	}
+}
+
+func queryAndAssertError(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, str string) {
+	t.Helper()
+
+	client := promclient.NewDefaultClient()
+
+	logger := log.NewLogfmtLogger(os.Stdout)
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	_ = logger.Log(
+		"caller", "instantQuery",
+		"msg", fmt.Sprintf("Waiting for result with error containing %q.", str),
+	)
+	testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
+		_, _, err := client.QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+		return errorContainsString(t, err, str)
+	}))
+}
+
+func errorContainsString(tb testing.TB, err error, str string) error {
+	tb.Helper()
+
+	if err == nil {
+		return fmt.Errorf("expected error containing string %q, but error is nil", str)
+	}
+
+	if !strings.Contains(err.Error(), str) {
+		return fmt.Errorf("expected error containing string %q, but got %q", str, err.Error())
+	}
+
+	return nil
 }
