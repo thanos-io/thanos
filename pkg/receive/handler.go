@@ -78,6 +78,7 @@ var (
 	errBadReplica  = errors.New("request replica exceeds receiver replication factor")
 	errNotReady    = errors.New("target not ready")
 	errUnavailable = errors.New("target not available")
+	errOutOfBounds = errors.New("out of bounds")
 )
 
 // Options for the web Handler.
@@ -522,6 +523,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 			responseStatusCode = http.StatusConflict
 		case errBadReplica:
 			responseStatusCode = http.StatusBadRequest
+		case errOutOfBounds:
+			responseStatusCode = http.StatusUnprocessableEntity
 		default:
 			level.Error(tLogger).Log("err", err, "msg", "internal server error")
 			responseStatusCode = http.StatusInternalServerError
@@ -916,6 +919,10 @@ func isUnavailable(err error) bool {
 		status.Code(err) == codes.Unavailable
 }
 
+func isOutOfBounds(err error) bool {
+	return err == storage.ErrOutOfBounds
+}
+
 // retryState encapsulates the number of request attempt made against a peer and,
 // next allowed time for the next attempt.
 type retryState struct {
@@ -958,6 +965,7 @@ func determineWriteErrorCause(err error, threshold int) error {
 		{err: errConflict, cause: isConflict},
 		{err: errNotReady, cause: isNotReady},
 		{err: errUnavailable, cause: isUnavailable},
+		{err: errOutOfBounds, cause: isOutOfBounds},
 	}
 	for _, exp := range expErrs {
 		exp.count = 0
