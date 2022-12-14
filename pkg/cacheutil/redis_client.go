@@ -141,7 +141,6 @@ func (c *RedisClientConfig) validate() error {
 	return nil
 }
 
-// RedisClient is a wrap of redis.Client.
 type RedisClient struct {
 	client rueidis.Client
 
@@ -190,9 +189,9 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		tlsConfig = tlsClientConfig
 	}
 
-	var disableCaching = false
+	clientSideCacheDisabled := false
 	if config.CacheSize == 0 {
-		disableCaching = true
+		clientSideCacheDisabled = true
 	}
 
 	client, err := rueidis.NewClient(rueidis.ClientOption{
@@ -204,7 +203,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		CacheSizeEachConn: int(config.CacheSize),
 		Dialer:            net.Dialer{Timeout: config.DialTimeout},
 		ConnWriteTimeout:  config.WriteTimeout,
-		DisableCache:      disableCaching,
+		DisableCache:      clientSideCacheDisabled,
 		TLSConfig:         tlsConfig,
 	})
 	if err != nil {
