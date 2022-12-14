@@ -43,3 +43,4 @@ examples/tmp/
 
 # Ignore generated Cortex files
 internal/cortex/querier/active-query-tracker
+.vscode

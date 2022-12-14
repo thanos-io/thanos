@@ -192,7 +192,9 @@ func storeMatchAnyMetadata(s Client, storeDebugMatchers [][]*labels.Matcher) (ok
 
 	labelSets := s.LabelSets()
 	for idx, ls := range labelSets {
-		labelSets[idx] = append(ls, labels.Label{Name: "__address__", Value: s.Addr()})
+		if addr, isLocalClient := s.Addr(); isLocalClient {
+			labelSets[idx] = append(ls, labels.Label{Name: "__address__", Value: addr})
+		}
 	}
 
 	for _, sm := range storeDebugMatchers {
