@@ -290,9 +290,6 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		"matchers": "{" + strings.Join(matchers, ",") + "}",
 	})
 
-	// BCS CopyLabelMatchContext
-	ctx = store.CopyLabelMatchContext(ctx, q.ctx)
-
 	promise := make(chan storage.SeriesSet, 1)
 	go func() {
 		defer close(promise)
