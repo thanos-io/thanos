@@ -393,6 +393,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	wg.Wait()
 
 	timedOutRefs := e.getTimedOutRefs()
+	e.endpointsMtx.RLock()
 	for addr, er := range e.endpoints {
 		_, isNew := newRefs[addr]
 		_, isExisting := existingRefs[addr]
@@ -401,6 +402,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 			staleRefs[addr] = er
 		}
 	}
+	e.endpointsMtx.RUnlock()
 
 	e.endpointsMtx.Lock()
 	defer e.endpointsMtx.Unlock()
@@ -450,6 +452,8 @@ func (e *EndpointSet) updateEndpoint(ctx context.Context, spec *GRPCEndpointSpec
 // successful health check is older than the unhealthyEndpointTimeout.
 // Strict endpoints are never considered as timed out.
 func (e *EndpointSet) getTimedOutRefs() map[string]*endpointRef {
+	e.endpointsMtx.RLock()
+	defer e.endpointsMtx.RUnlock()
 	result := make(map[string]*endpointRef)
 
 	endpoints := e.endpoints

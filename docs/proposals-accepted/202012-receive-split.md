@@ -52,7 +52,7 @@ This allows us to (optionally) model deployment in a way that avoid expensive re
 
 In comparison to previous proposal (as mentioned in [alternatives](#previous-proposal-separate-receive-route-command) we have big advantages:
 
-1. We can *reduce number of components* in Thanos system, we can reuse similar component flags and documentation. Users has to learn about one less command and in result Thanos design is much more approachable. Less components mean less maintainance, code and other implicit duties: Separate changelogs, issue confusions, boilerplates, etc.
+1. We can *reduce number of components* in Thanos system, we can reuse similar component flags and documentation. Users has to learn about one less command and in result Thanos design is much more approachable. Less components mean less maintenance, code and other implicit duties: Separate changelogs, issue confusions, boilerplates, etc.
 2. Allow consistent pattern with Query. We don't have separate StoreAPI component for proxying, we have that baked into Querier. This has been proven to be flexible and understandable, so I would like to propose similar pattern in Receiver.
 3. This is more future proof for potential advanced cases like *chain of routers -> receivers -> routers -> receivers* for federated writes, so ***trees with depth n***.
 
