@@ -104,3 +104,21 @@ func labelsFromStrings(ss ...string) labels.Labels {
 
 	return res
 }
+
+func BenchmarkSortWithoutLabels(b *testing.B) {
+	resps := make([]*storepb.SeriesResponse, 1e4)
+	labelsToRemove := map[string]struct{}{
+		"a": {}, "b": {},
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		for i := 0; i < 1e4; i++ {
+			resps[i] = storeSeriesResponse(b, labels.FromStrings("a", "1", "b", "replica-1", "c", "replica-1", "d", "1"))
+		}
+		b.StartTimer()
+		sortWithoutLabels(resps, labelsToRemove)
+	}
+}

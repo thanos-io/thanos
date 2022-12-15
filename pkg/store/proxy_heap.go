@@ -12,10 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-kit/log"
-	"github.com/thanos-io/thanos/pkg/dedup"
-
 	"github.com/cespare/xxhash/v2"
+	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tracing"
 	"github.com/opentracing/opentracing-go"
@@ -752,39 +750,15 @@ func newEagerRespSet(
 	return ret
 }
 
-// Move all wanted labels back and remove.
-// TODO(bwplotka): Consider microoptimizing this.
 func rmLabels(l labels.Labels, labelsToRemove map[string]struct{}) labels.Labels {
-	sort.Slice(l, func(i, j int) bool {
-		if _, ok := labelsToRemove[l[i].Name]; ok {
-			return false
+	for i := 0; i < len(l); i++ {
+		if _, ok := labelsToRemove[l[i].Name]; !ok {
+			continue
 		}
-		if _, ok := labelsToRemove[l[j].Name]; ok {
-			return true
-		}
-		// Ensure that dedup marker goes just right before the replica labels.
-		if l[i].Name == dedup.PushdownMarker.Name {
-			return false
-		}
-		if l[j].Name == dedup.PushdownMarker.Name {
-			return true
-		}
-		return l[i].Name < l[j].Name
-	})
-
-	var totalToRemove int
-	for i := 0; i < len(labelsToRemove); i++ {
-		if len(l)-i == 0 {
-			break
-		}
-
-		if _, ok := labelsToRemove[l[len(l)-i-1].Name]; ok {
-			totalToRemove++
-		}
+		l = append(l[:i], l[i+1:]...)
+		i--
 	}
-
-	// Strip all present labels to remove.
-	return l[:len(l)-totalToRemove]
+	return l
 }
 
 // sortWithoutLabels removes given labels from series and re-sorts the series responses that the same
