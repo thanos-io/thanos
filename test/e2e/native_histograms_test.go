@@ -6,7 +6,6 @@ package e2e_test
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -14,9 +13,6 @@ import (
 
 	"github.com/efficientgo/e2e"
 	"github.com/go-kit/log"
-	"github.com/gogo/protobuf/proto"
-	"github.com/golang/snappy"
-	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/prompb"
@@ -49,7 +45,7 @@ func TestQueryNativeHistograms(t *testing.T) {
 		return ts
 	}
 
-	writeRequest(t, ctx, rawRemoteWriteURL, nativeHistogramWriteRequest(ts))
+	testutil.Ok(t, storeWriteRequest(ctx, rawRemoteWriteURL, nativeHistogramWriteRequest(ts)))
 
 	// Make sure we can query native histogram directly from Prometheus.
 	queryAndAssertSeries(t, ctx, prom.Endpoint("http"), func() string { return "test_histogram" }, getTs, promclient.QueryOptions{}, []model.Metric{
@@ -78,10 +74,16 @@ func TestWriteNativeHistograms(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	writeRequest(t, ctx, rawRemoteWriteURL, nativeHistogramWriteRequest(time.Now()))
+	ts := time.Now()
 
-	queryAndAssertSeries(t, ctx, querier.Endpoint("http"), func() string { return "test_histogram" }, time.Now, promclient.QueryOptions{}, []model.Metric{})
-	queryAndAssertSeries(t, ctx, querier.Endpoint("http"), func() string { return "test_sample" }, time.Now, promclient.QueryOptions{}, []model.Metric{
+	getTs := func() time.Time {
+		return ts
+	}
+
+	testutil.Ok(t, storeWriteRequest(ctx, rawRemoteWriteURL, nativeHistogramWriteRequest(ts)))
+
+	queryAndAssertSeries(t, ctx, querier.Endpoint("http"), func() string { return "test_histogram" }, getTs, promclient.QueryOptions{}, []model.Metric{})
+	queryAndAssertSeries(t, ctx, querier.Endpoint("http"), func() string { return "test_sample" }, getTs, promclient.QueryOptions{}, []model.Metric{
 		{
 			"__name__":  "test_sample",
 			"bar":       "foo",
@@ -89,29 +91,6 @@ func TestWriteNativeHistograms(t *testing.T) {
 			"tenant_id": "default-tenant",
 		},
 	})
-}
-
-func writeRequest(t *testing.T, ctx context.Context, rawRemoteWriteURL string, req *prompb.WriteRequest) {
-	t.Helper()
-
-	remoteWriteURL, err := url.Parse(rawRemoteWriteURL)
-	testutil.Ok(t, err)
-
-	client, err := remote.NewWriteClient("remote-write-client", &remote.ClientConfig{
-		URL:     &config_util.URL{URL: remoteWriteURL},
-		Timeout: model.Duration(30 * time.Second),
-	})
-	testutil.Ok(t, err)
-
-	var buf []byte
-	pBuf := proto.NewBuffer(nil)
-	err = pBuf.Marshal(req)
-	testutil.Ok(t, err)
-
-	compressed := snappy.Encode(buf, pBuf.Bytes())
-
-	err = client.Store(ctx, compressed)
-	testutil.Ok(t, err)
 }
 
 func nativeHistogramWriteRequest(ts time.Time) *prompb.WriteRequest {
