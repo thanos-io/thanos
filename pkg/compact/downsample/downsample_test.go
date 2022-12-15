@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/storage"
@@ -21,6 +22,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
+	"github.com/thanos-io/thanos/pkg/comp_chunks"
 	"go.uber.org/goleak"
 
 	"github.com/thanos-io/thanos/pkg/block"
@@ -47,7 +49,7 @@ func TestDownsampleCounterBoundaryReset(t *testing.T) {
 			chk, err := achk.Get(AggrCounter)
 			testutil.Ok(t, err)
 
-			iter := chk.Iterator(nil)
+			iter := comp_chunks.NewCompChunksIterator(chk.Iterator(nil))
 			for iter.Next() {
 				t, v := iter.At()
 				res = append(res, sample{t, v})
@@ -57,11 +59,11 @@ func TestDownsampleCounterBoundaryReset(t *testing.T) {
 	}
 
 	counterIterate := func(t *testing.T, achks []*AggrChunk) (res []sample) {
-		var iters []chunkenc.Iterator
+		var iters []comp_chunks.Iterator
 		for _, achk := range achks {
 			chk, err := achk.Get(AggrCounter)
 			testutil.Ok(t, err)
-			iters = append(iters, chk.Iterator(nil))
+			iters = append(iters, comp_chunks.NewCompChunksIterator(chk.Iterator(nil)))
 		}
 
 		citer := NewApplyCounterResetsIterator(iters...)
@@ -493,7 +495,7 @@ func TestDownsample(t *testing.T) {
 					testutil.Ok(t, err)
 
 					buf := m[at]
-					testutil.Ok(t, expandChunkIterator(c.Iterator(nil), &buf))
+					testutil.Ok(t, expandChunkIterator(comp_chunks.NewCompChunksIterator(c.Iterator(nil)), &buf))
 					m[at] = buf
 				}
 				got = append(got, m)
@@ -711,7 +713,7 @@ func TestApplyCounterResetsIterator(t *testing.T) {
 		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
-			var its []chunkenc.Iterator
+			var its []comp_chunks.Iterator
 			for _, c := range tcase.chunks {
 				its = append(its, newSampleIterator(c))
 			}
@@ -744,7 +746,7 @@ func TestCounterSeriesIteratorSeek(t *testing.T) {
 		{200, 20}, {300, 30}, {400, 40},
 	}
 
-	var its []chunkenc.Iterator
+	var its []comp_chunks.Iterator
 	for _, c := range chunks {
 		its = append(its, newSampleIterator(c))
 	}
@@ -772,7 +774,7 @@ func TestCounterSeriesIteratorSeekExtendTs(t *testing.T) {
 		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
 	}
 
-	var its []chunkenc.Iterator
+	var its []comp_chunks.Iterator
 	for _, c := range chunks {
 		its = append(its, newSampleIterator(c))
 	}
@@ -791,7 +793,7 @@ func TestCounterSeriesIteratorSeekAfterNext(t *testing.T) {
 		{100, 10},
 	}
 
-	var its []chunkenc.Iterator
+	var its []comp_chunks.Iterator
 	for _, c := range chunks {
 		its = append(its, newSampleIterator(c))
 	}
@@ -851,6 +853,18 @@ func TestSamplesFromTSDBSamples(t *testing.T) {
 type testSample struct {
 	t int64
 	v float64
+}
+
+func (s testSample) H() *histogram.Histogram {
+	panic("implement me")
+}
+
+func (s testSample) FH() *histogram.FloatHistogram {
+	panic("implement me")
+}
+
+func (s testSample) Type() chunkenc.ValueType {
+	panic("implement me")
 }
 
 func (s testSample) T() int64 {

@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
+	"github.com/thanos-io/thanos/pkg/comp_chunks"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -143,7 +144,7 @@ func Downsample(
 				// TODO(bwplotka): We can optimze this further by using in WriteSeries iterators of each chunk instead of
 				// samples. Also ensure 120 sample limit, otherwise we have gigantic chunks.
 				// https://github.com/thanos-io/thanos/issues/2542.
-				if err := expandChunkIterator(c.Chunk.Iterator(reuseIt), &all); err != nil {
+				if err := expandChunkIterator(comp_chunks.NewCompChunksIterator(c.Chunk.Iterator(reuseIt)), &all); err != nil {
 					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
 				}
 			}
@@ -445,7 +446,7 @@ func downsampleAggrLoop(chks []*AggrChunk, buf *[]sample, resolution int64, numC
 
 // expandChunkIterator reads all samples from the iterator and appends them to buf.
 // Stale markers and out of order samples are skipped.
-func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
+func expandChunkIterator(it comp_chunks.Iterator, buf *[]sample) error {
 	// For safety reasons, we check for each sample that it does not go back in time.
 	// If it does, we skip it.
 	lastT := int64(0)
@@ -480,7 +481,7 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 			} else if err != nil {
 				return err
 			}
-			if err := expandChunkIterator(c.Iterator(reuseIt), buf); err != nil {
+			if err := expandChunkIterator(comp_chunks.NewCompChunksIterator(c.Iterator(reuseIt)), buf); err != nil {
 				return err
 			}
 		}
@@ -524,7 +525,7 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 	}
 
 	// Handle counters by applying resets directly.
-	acs := make([]chunkenc.Iterator, 0, len(chks))
+	acs := make([]comp_chunks.Iterator, 0, len(chks))
 	for _, achk := range chks {
 		c, err := achk.Get(AggrCounter)
 		if err == ErrAggrNotExist {
@@ -532,7 +533,7 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 		} else if err != nil {
 			return chk, err
 		}
-		acs = append(acs, c.Iterator(reuseIt))
+		acs = append(acs, comp_chunks.NewCompChunksIterator(c.Iterator(reuseIt)))
 	}
 	*buf = (*buf)[:0]
 	it := NewApplyCounterResetsIterator(acs...)
@@ -592,7 +593,7 @@ type sample struct {
 // issue https://github.com/thanos-io/thanos/issues/2401#issuecomment-621958839.
 // NOTE(bwplotka): This hides resets from PromQL engine. This means it will not work for PromQL resets function.
 type ApplyCounterResetsSeriesIterator struct {
-	chks   []chunkenc.Iterator
+	chks   []comp_chunks.Iterator
 	i      int     // Current chunk.
 	total  int     // Total number of processed samples.
 	lastT  int64   // Timestamp of the last sample.
@@ -600,7 +601,7 @@ type ApplyCounterResetsSeriesIterator struct {
 	totalV float64 // Total counter state since beginning of series.
 }
 
-func NewApplyCounterResetsIterator(chks ...chunkenc.Iterator) *ApplyCounterResetsSeriesIterator {
+func NewApplyCounterResetsIterator(chks ...comp_chunks.Iterator) *ApplyCounterResetsSeriesIterator {
 	return &ApplyCounterResetsSeriesIterator{chks: chks}
 }
 
@@ -676,14 +677,14 @@ func (it *ApplyCounterResetsSeriesIterator) Err() error {
 // AverageChunkIterator emits an artificial series of average samples based in aggregate
 // chunks with sum and count aggregates.
 type AverageChunkIterator struct {
-	cntIt chunkenc.Iterator
-	sumIt chunkenc.Iterator
+	cntIt comp_chunks.Iterator
+	sumIt comp_chunks.Iterator
 	t     int64
 	v     float64
 	err   error
 }
 
-func NewAverageChunkIterator(cnt, sum chunkenc.Iterator) *AverageChunkIterator {
+func NewAverageChunkIterator(cnt, sum comp_chunks.Iterator) *AverageChunkIterator {
 	return &AverageChunkIterator{cntIt: cnt, sumIt: sum}
 }
 

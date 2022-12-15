@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/thanos/pkg/comp_chunks"
 )
 
 // Wrapper around Prometheus chunk.
@@ -44,11 +45,11 @@ func (p *prometheusXorChunk) NewIterator(iterator Iterator) Iterator {
 
 	if pit, ok := iterator.(*prometheusChunkIterator); ok {
 		pit.c = p.chunk
-		pit.it = p.chunk.Iterator(pit.it)
+		pit.it = comp_chunks.NewCompChunksIterator(p.chunk.Iterator(pit.it.It()))
 		return pit
 	}
 
-	return &prometheusChunkIterator{c: p.chunk, it: p.chunk.Iterator(nil)}
+	return &prometheusChunkIterator{c: p.chunk, it: comp_chunks.NewCompChunksIterator(p.chunk.Iterator(nil))}
 }
 
 func (p *prometheusXorChunk) Marshal(i io.Writer) error {
@@ -102,7 +103,7 @@ func (p *prometheusXorChunk) Size() int {
 
 type prometheusChunkIterator struct {
 	c  chunkenc.Chunk // we need chunk, because FindAtOrAfter needs to start with fresh iterator.
-	it chunkenc.Iterator
+	it comp_chunks.Iterator
 }
 
 func (p *prometheusChunkIterator) Scan() bool {
@@ -112,7 +113,7 @@ func (p *prometheusChunkIterator) Scan() bool {
 func (p *prometheusChunkIterator) FindAtOrAfter(time model.Time) bool {
 	// FindAtOrAfter must return OLDEST value at given time. That means we need to start with a fresh iterator,
 	// otherwise we cannot guarantee OLDEST.
-	p.it = p.c.Iterator(p.it)
+	p.it = comp_chunks.NewCompChunksIterator(p.c.Iterator(p.it.It()))
 	return p.it.Seek(int64(time))
 }
 

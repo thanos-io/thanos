@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
@@ -16,7 +17,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tombstones"
-
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
 
@@ -234,9 +234,24 @@ type delSeriesIterator struct {
 	curr chunkenc.Iterator
 }
 
-func (p *delSeriesIterator) Next() bool {
-	if p.curr != nil && p.curr.Next() {
-		return true
+func (p *delSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (p *delSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (p *delSeriesIterator) AtT() int64 {
+	t, _ := p.At()
+	return t
+}
+
+func (p *delSeriesIterator) Next() chunkenc.ValueType {
+	if p.curr != nil && p.curr.Next() != chunkenc.ValNone {
+		return p.curr.Next()
 	}
 
 	for p.next() {
@@ -245,23 +260,23 @@ func (p *delSeriesIterator) Next() bool {
 		} else {
 			p.curr = p.currChkMeta.Chunk.Iterator(nil)
 		}
-		if p.curr.Next() {
-			return true
+		if p.curr.Next() != chunkenc.ValNone {
+			return p.curr.Next()
 		}
 	}
-	return false
+	return chunkenc.ValNone
 }
 
-func (p *delSeriesIterator) Seek(t int64) bool {
-	if p.curr != nil && p.curr.Seek(t) {
-		return true
+func (p *delSeriesIterator) Seek(t int64) chunkenc.ValueType {
+	if p.curr != nil && p.curr.Seek(t) != chunkenc.ValNone {
+		return p.curr.Seek(t)
 	}
-	for p.Next() {
-		if p.curr.Seek(t) {
-			return true
+	for p.Next() != chunkenc.ValNone {
+		if p.curr.Seek(t) != chunkenc.ValNone {
+			return p.curr.Seek(t)
 		}
 	}
-	return false
+	return chunkenc.ValNone
 }
 
 func (p *delSeriesIterator) At() (int64, float64) { return p.curr.At() }
@@ -300,7 +315,7 @@ func (p *delChunkSeriesIterator) Next() bool {
 		return false
 	}
 
-	if !p.currDelIter.Next() {
+	if p.currDelIter.Next() == chunkenc.ValNone {
 		if err := p.currDelIter.Err(); err != nil {
 			p.err = errors.Wrap(err, "iterate chunk while re-encoding")
 			return false
@@ -315,7 +330,7 @@ func (p *delChunkSeriesIterator) Next() bool {
 	p.curr.MinTime = t
 	app.Append(t, v)
 
-	for p.currDelIter.Next() {
+	for p.currDelIter.Next() != chunkenc.ValNone {
 		t, v = p.currDelIter.At()
 		app.Append(t, v)
 	}
