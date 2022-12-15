@@ -25,8 +25,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-const testGroupConcurrency = 3
-
 type tsdbPlannerAdapter struct {
 	dir  string
 	comp tsdb.Compactor
@@ -77,7 +75,7 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 	tsdbComp, err := tsdb.NewLeveledCompactor(context.Background(), nil, nil, ranges, nil, nil)
 	testutil.Ok(t, err)
 	tsdbPlanner := &tsdbPlannerAdapter{comp: tsdbComp}
-	tsdbBasedPlanner := NewTSDBBasedPlanner(log.NewNopLogger(), ranges, testGroupConcurrency)
+	tsdbBasedPlanner := NewTSDBBasedPlanner(log.NewNopLogger(), ranges)
 
 	for _, c := range []struct {
 		name     string
@@ -450,7 +448,7 @@ func TestRangeWithFailedCompactionWontGetSelected(t *testing.T) {
 	tsdbComp, err := tsdb.NewLeveledCompactor(context.Background(), nil, nil, ranges, nil, nil)
 	testutil.Ok(t, err)
 	tsdbPlanner := &tsdbPlannerAdapter{comp: tsdbComp}
-	tsdbBasedPlanner := NewTSDBBasedPlanner(log.NewNopLogger(), ranges, testGroupConcurrency)
+	tsdbBasedPlanner := NewTSDBBasedPlanner(log.NewNopLogger(), ranges)
 
 	for _, c := range []struct {
 		metas []*metadata.Meta
@@ -514,7 +512,7 @@ func TestTSDBBasedPlanner_PlanWithNoCompactMarks(t *testing.T) {
 	}
 
 	g := &GatherNoCompactionMarkFilter{}
-	tsdbBasedPlanner := NewPlanner(log.NewNopLogger(), ranges, g, testGroupConcurrency)
+	tsdbBasedPlanner := NewPlanner(log.NewNopLogger(), ranges, g)
 
 	for _, c := range []struct {
 		name           string
@@ -709,7 +707,7 @@ func TestLargeTotalIndexSizeFilter_Plan(t *testing.T) {
 	g := &GatherNoCompactionMarkFilter{}
 
 	marked := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
-	planner := WithLargeTotalIndexSizeFilter(NewPlanner(log.NewNopLogger(), ranges, g, testGroupConcurrency), bkt, 100, marked)
+	planner := WithLargeTotalIndexSizeFilter(NewPlanner(log.NewNopLogger(), ranges, g), bkt, 100, marked)
 	var lastMarkValue float64
 	for _, c := range []struct {
 		name  string

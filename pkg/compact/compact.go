@@ -1324,18 +1324,9 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 
 		level.Info(c.logger).Log("msg", "start of compactions")
 
-		tasks := make([]GroupCompactionTask, 0)
-		for _, g := range groups {
-			// Ignore groups with only one block because there is nothing to compact.
-			if len(g.IDs()) == 1 {
-				continue
-			}
-
-			groupTasks, err := g.PlanCompactionTasks(ctx, c.compactDir, c.planner)
-			if err != nil {
-				return errors.Wrapf(err, "get compaction group tasks: %s", g.Key())
-			}
-			tasks = append(tasks, groupTasks...)
+		tasks, err := c.planTasks(ctx, groups)
+		if err != nil {
+			return err
 		}
 
 		// Send all tasks planned in this pass to the compaction workers.
@@ -1370,6 +1361,52 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 	}
 	level.Info(c.logger).Log("msg", "compaction iterations done")
 	return nil
+}
+
+func (c *BucketCompactor) planTasks(ctx context.Context, groups []*Group) ([]GroupCompactionTask, error) {
+	// Plan tasks from all groups
+	allGroupTasks := make([][]GroupCompactionTask, 0, len(groups))
+	numTasks := 0
+	for _, g := range groups {
+		// Ignore groups with only one block because there is nothing to compact.
+		if len(g.IDs()) == 1 {
+			continue
+		}
+
+		groupTasks, err := g.PlanCompactionTasks(ctx, c.compactDir, c.planner)
+		if err != nil {
+			return nil, errors.Wrapf(err, "get compaction group tasks: %s", g.Key())
+		}
+		if len(groupTasks) > 0 {
+			allGroupTasks = append(allGroupTasks, groupTasks)
+			numTasks += len(groupTasks)
+		}
+	}
+
+	tasksLimit := c.concurrency
+	// Make sure we plan at least one task from each group.
+	if tasksLimit < len(allGroupTasks) {
+		tasksLimit = len(allGroupTasks)
+	}
+
+	// If there aren't enough tasks across all groups, plan all available tasks.
+	if numTasks < tasksLimit {
+		tasksLimit = numTasks
+	}
+
+	// Distribute tasks from all groups in a round-robin manner until we
+	// reach the concurrency limit.
+	tasks := make([]GroupCompactionTask, 0)
+	for len(tasks) < tasksLimit {
+		for i, groupTasks := range allGroupTasks {
+			if len(groupTasks) == 0 {
+				continue
+			}
+			tasks = append(tasks, groupTasks[0])
+			allGroupTasks[i] = allGroupTasks[i][1:]
+		}
+	}
+	return tasks, nil
 }
 
 var _ block.MetadataFilter = &GatherNoCompactionMarkFilter{}

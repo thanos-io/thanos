@@ -171,15 +171,23 @@ func MetricCount(c prometheus.Collector) int {
 }
 
 func TestGroupCompactE2E(t *testing.T) {
-	testGroupCompactE2e(t, nil)
+	testGroupCompactE2e(t, nil, 2)
+}
+
+func TestGroupCompactE2EWithoutConcurrency(t *testing.T) {
+	testGroupCompactE2e(t, nil, 1)
+}
+
+func TestGroupCompactE2EWithHighConcurrency(t *testing.T) {
+	testGroupCompactE2e(t, nil, 20)
 }
 
 // Penalty based merger should get the same result as the blocks don't have overlap.
 func TestGroupCompactPenaltyDedupE2E(t *testing.T) {
-	testGroupCompactE2e(t, dedup.NewChunkSeriesMerger())
+	testGroupCompactE2e(t, dedup.NewChunkSeriesMerger(), 2)
 }
 
-func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMergeFunc) {
+func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMergeFunc, concurrency int) {
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -210,9 +218,9 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil, mergeFunc)
 		testutil.Ok(t, err)
 
-		planner := NewPlanner(logger, []int64{1000, 3000}, noCompactMarkerFilter, testGroupConcurrency)
+		planner := NewPlanner(logger, []int64{1000, 3000}, noCompactMarkerFilter)
 		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, blocksMaredForNoCompact, metadata.NoneFunc, 10, 10)
-		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2, true)
+		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, concurrency, true)
 		testutil.Ok(t, err)
 
 		// Compaction on empty should not fail.
