@@ -13,7 +13,6 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -73,7 +72,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 	var (
 		ref  storage.SeriesRef
-		errs errutil.MultiError
+		errs writeErrors
 	)
 	for _, t := range wreq.Timeseries {
 		// Check if time series labels are valid. If not, skip the time series
@@ -210,5 +209,5 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	if err := app.Commit(); err != nil {
 		errs.Add(errors.Wrap(err, "commit samples"))
 	}
-	return errs.Err()
+	return errs.ErrOrNil()
 }
