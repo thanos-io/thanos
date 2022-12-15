@@ -33,10 +33,10 @@ const navConfig: { [component: string]: (NavConfig | NavDropDown)[] } = {
       name: 'Status',
       children: [
         { name: 'Runtime & Build Information', uri: '/status' },
-        { name: 'Command-Line Flags', uri: '/flags' },
-        { name: 'Alerts', uri: '/alerts' },
-        { name: 'Targets', uri: '/targets' },
-        { name: 'Rules', uri: '/rules' },
+        // { name: 'Command-Line Flags', uri: '/flags' },
+        // { name: 'Alerts', uri: '/alerts' },
+        // { name: 'Targets', uri: '/targets' },
+        // { name: 'Rules', uri: '/rules' },
       ],
     },
   ],
@@ -96,7 +96,7 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
     <Navbar className="mb-3" dark color="dark" expand="md" fixed="top">
       <NavbarToggler onClick={toggle} className="mr-2" />
       <Link className="navbar-brand" to={`${pathPrefix}${defaultRoute}`}>
-        Thanos - {thanosComponent[0].toUpperCase()}
+        BCS-Monitor - {thanosComponent[0].toUpperCase()}
         {thanosComponent.substr(1, thanosComponent.length)}
       </Link>
       <Collapse isOpen={isOpen} navbar style={{ justifyContent: 'space-between' }}>
@@ -126,9 +126,9 @@ const Navigation: FC<PathPrefixProps & NavigationProps> = ({ pathPrefix, thanosC
               </UncontrolledDropdown>
             );
           })}
-          <NavItem>
+          {/* <NavItem>
             <NavLink href="https://thanos.io/tip/thanos/getting-started.md/">Help</NavLink>
-          </NavItem>
+          </NavItem> */}
         </Nav>
       </Collapse>
       <ThemeToggle />
