@@ -4,6 +4,7 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -16,8 +17,12 @@ import (
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/golang/snappy"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/prompb"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -785,5 +790,170 @@ func TestReceive(t *testing.T) {
 				Value: model.SampleValue(3),
 			},
 		})
+	})
+}
+
+func TestReceiveResponseCodes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("single_ingestor", func(t *testing.T) {
+		e, err := e2e.New()
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		// Setup Router Ingestor.
+		i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(i))
+		hostPort := i.Endpoint("remote-write")
+
+		type reqResp struct {
+			*prompb.WriteRequest
+			expectCode int
+		}
+
+		type testCase struct {
+			name    string
+			reqResp []reqResp
+		}
+
+		now := time.Now().Unix()
+		responseCodeTests := []testCase{
+			{
+				name: "test_ok",
+				reqResp: []reqResp{
+					{
+						WriteRequest: &prompb.WriteRequest{
+							Timeseries: []prompb.TimeSeries{
+								{
+									Labels: []prompb.Label{
+										{
+											Name:  "__name__",
+											Value: "foo",
+										},
+									},
+									Samples: []prompb.Sample{
+										{
+											Timestamp: now,
+											Value:     100.0,
+										},
+									},
+								},
+							},
+						},
+						expectCode: http.StatusOK,
+					},
+				},
+			},
+			{
+				name: "err_out_of_order_timestamp",
+				reqResp: []reqResp{
+					{
+						WriteRequest: &prompb.WriteRequest{
+							Timeseries: []prompb.TimeSeries{
+								{
+									Labels: []prompb.Label{
+										{
+											Name:  "__name__",
+											Value: "foo",
+										},
+									},
+									Samples: []prompb.Sample{
+										{
+											Timestamp: now - 300,
+											Value:     100.0,
+										},
+									},
+								},
+							},
+						},
+						expectCode: http.StatusConflict,
+					},
+				},
+			},
+			{
+				name: "err_duplicate_timestamp",
+				reqResp: []reqResp{
+					{
+						WriteRequest: &prompb.WriteRequest{
+							Timeseries: []prompb.TimeSeries{
+								{
+									Labels: []prompb.Label{
+										{
+											Name:  "__name__",
+											Value: "foo",
+										},
+									},
+									Samples: []prompb.Sample{
+										{
+											Timestamp: now,
+											Value:     1000.0,
+										},
+									},
+								},
+							},
+						},
+						expectCode: http.StatusConflict,
+					},
+				},
+			},
+			{
+				name: "err_out_of_bounds_timestamp",
+				reqResp: []reqResp{
+					{
+						WriteRequest: &prompb.WriteRequest{
+							Timeseries: []prompb.TimeSeries{
+								{
+									Labels: []prompb.Label{
+										{
+											Name:  "__name__",
+											Value: "foo",
+										},
+									},
+									Samples: []prompb.Sample{
+										{
+											Timestamp: now - 10000000,
+											Value:     100.0,
+										},
+									},
+								},
+							},
+						},
+						expectCode: http.StatusConflict,
+					},
+				},
+			},
+		}
+
+		for _, test := range responseCodeTests {
+			for _, tc := range test.reqResp {
+				data, err := proto.Marshal(tc.WriteRequest)
+				if err != nil {
+					t.Errorf(err.Error())
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+				t.Cleanup(cancel)
+
+				body := bytes.NewReader(snappy.Encode(nil, data))
+				req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v1/receive", hostPort), body)
+				if err != nil {
+					t.Errorf(err.Error())
+				}
+				req.Header.Set("Content-Type", "application/x-protobuf")
+				req.Header.Set("Content-Encoding", "snappy")
+
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Errorf(err.Error())
+				}
+
+				t.Cleanup(func() {
+					resp.Body.Close()
+				})
+
+				if resp.StatusCode != tc.expectCode {
+					t.Errorf("expected status code %d, got %d", tc.expectCode, resp.StatusCode)
+				}
+			}
+		}
 	})
 }
