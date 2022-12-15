@@ -232,29 +232,6 @@ func (s *seriesServer) Context() context.Context {
 	return s.ctx
 }
 
-// aggrsFromFunc infers aggregates of the underlying data based on the wrapping
-// function of a series selection.
-func aggrsFromFunc(f string) []storepb.Aggr {
-	if f == "min" || strings.HasPrefix(f, "min_") {
-		return []storepb.Aggr{storepb.Aggr_MIN}
-	}
-	if f == "max" || strings.HasPrefix(f, "max_") {
-		return []storepb.Aggr{storepb.Aggr_MAX}
-	}
-	if f == "count" || strings.HasPrefix(f, "count_") {
-		return []storepb.Aggr{storepb.Aggr_COUNT}
-	}
-	// f == "sum" falls through here since we want the actual samples.
-	if strings.HasPrefix(f, "sum_") {
-		return []storepb.Aggr{storepb.Aggr_SUM}
-	}
-	if f == "increase" || f == "rate" || f == "irate" || f == "resets" {
-		return []storepb.Aggr{storepb.Aggr_COUNTER}
-	}
-	// In the default case, we retrieve count and sum to compute an average.
-	return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}
-}
-
 func storeHintsFromPromHints(hints *storage.SelectHints) *storepb.QueryHints {
 	return &storepb.QueryHints{
 		StepMillis: hints.Step,
@@ -339,7 +316,7 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		return nil, storepb.SeriesStatsCounter{}, errors.Wrap(err, "convert matchers")
 	}
 
-	aggrs := aggrsFromFunc(hints.Func)
+	aggrs := storepb.NewAggrsFromFunc(hints.Func)
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
@@ -391,19 +368,9 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		}
 	}
 
-	// promSeriesSet is deduplicating all overlapped chunks.
-	set := &promSeriesSet{
-		mint:  q.mint,
-		maxt:  q.maxt,
-		set:   newStoreSeriesSet(resp.seriesSet),
-		aggrs: aggrs,
-		warns: warns,
-	}
-
-	// // The merged series set assembles all potentially-overlapping time ranges of the same series into a single one.
-	//-	// TODO(bwplotka): We could potentially dedup on chunk level, use chunk iterator for that when available.
-	//-	return dedup.NewSeriesSet(set, q.replicaLabels, hints.Func, q.enableQueryPushdown), resp.seriesSetStats, nil
-	return set, resp.seriesSetStats, nil
+	// TODO(bwplotka): At this point we have deduplicate series with potentially overlapping chunks. If dedup is enabled
+	// we could skip deduping for some aggregations like `group`.
+	return newPromSeriesSet(q.mint, q.maxt, newStoreSeriesSet(resp.seriesSet), aggrs, warns, q.isDedupEnabled()), resp.seriesSetStats, nil
 }
 
 // LabelValues returns all potential values for a label name.

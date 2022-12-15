@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 // PushdownMarker is a label that gets attached on pushed down series so that
@@ -29,15 +30,15 @@ type pushdownSeriesIterator struct {
 // * If one of the series has a gap then the other one is used until the timestamps match up.
 // It is guaranteed that stepping through both of them that the timestamps will match eventually
 // because the samples have been processed by a PromQL engine.
-func newPushdownSeriesIterator(a, b chunkenc.Iterator, function string) *pushdownSeriesIterator {
+func newPushdownSeriesIterator(a, b chunkenc.Iterator, aggrs []storepb.Aggr) *pushdownSeriesIterator {
 	var fn func(float64, float64) float64
-	switch function {
-	case "max", "max_over_time":
+	switch aggrs {
+	case []storepb.Aggr{storepb.Aggr_MAX}:
 		fn = math.Max
-	case "min", "min_over_time":
+	case []storepb.Aggr{storepb.Aggr_MIN}:
 		fn = math.Min
 	default:
-		panic(fmt.Errorf("unsupported function %s passed", function))
+		panic(fmt.Errorf("unsupported aggregations %s passed", aggrs))
 	}
 	return &pushdownSeriesIterator{
 		a: a, b: b, function: fn, aused: true, bused: true,

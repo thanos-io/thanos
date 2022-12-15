@@ -552,3 +552,35 @@ func (m *QueryHints) IsSafeToExecute() bool {
 
 	return false
 }
+
+const Aggr_Group Aggr = 99
+
+// Aggrs is the aggregation slice that guarnatees there is at least one element.
+type Aggrs []Aggr
+
+// NewAggrsFromFunc infers aggregates of the underlying data based on the wrapping
+// function of a series selection.
+func NewAggrsFromFunc(f string) Aggrs {
+	if f == "min" || strings.HasPrefix(f, "min_") {
+		return Aggrs{Aggr_MIN}
+	}
+	if f == "max" || strings.HasPrefix(f, "max_") {
+		return Aggrs{Aggr_MAX}
+	}
+	if f == "count" || strings.HasPrefix(f, "count_") {
+		return Aggrs{Aggr_COUNT}
+	}
+	// f == "sum" falls through here since we want the actual samples.
+	if strings.HasPrefix(f, "sum_") {
+		return Aggrs{Aggr_SUM}
+	}
+	if f == "increase" || f == "rate" || f == "irate" || f == "resets" {
+		return Aggrs{Aggr_COUNTER}
+	}
+
+	if f == "group" {
+		return Aggrs{Aggr_Group}
+	}
+	// In the default case, we retrieve count and sum to compute an average.
+	return Aggrs{Aggr_COUNT, Aggr_SUM}
+}

@@ -49,7 +49,7 @@ func (d *dedupChunksIterator) At() chunks.Meta {
 }
 
 // Next method is almost the same as https://github.com/prometheus/prometheus/blob/v2.27.1/storage/merge.go#L615.
-// The difference is that it handles both XOR and Aggr chunk Encoding.
+// The difference is that it handles both XOR and Aggr chunk Encoding and it performs penalty based deduplication on overlapping chunks.
 func (d *dedupChunksIterator) Next() bool {
 	if d.h == nil {
 		for _, iter := range d.iterators {

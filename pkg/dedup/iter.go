@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type dedupSeriesSet struct {
@@ -26,21 +27,14 @@ type dedupSeriesSet struct {
 	peek storage.Series
 	ok   bool
 
-	f               string
 	pushdownEnabled bool
-}
-
-// isCounter deduces whether a counter metric has been passed. There must be
-// a better way to deduce this.
-func isCounter(f string) bool {
-	return f == "increase" || f == "rate" || f == "irate" || f == "resets"
 }
 
 // NewSeriesSet returns seriesSet that deduplicates the same series.
 // The series in series set are expected to be sorted by all labels.
-func NewSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, f string, pushdownEnabled bool) storage.SeriesSet {
+func NewSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, isCounter bool string, pushdownEnabled bool) storage.SeriesSet {
 	// TODO: remove dependency on knowing whether it is a counter.
-	s := &dedupSeriesSet{pushdownEnabled: pushdownEnabled, set: set, replicaLabels: replicaLabels, isCounter: isCounter(f), f: f}
+	s := &dedupSeriesSet{pushdownEnabled: pushdownEnabled, set: set, replicaLabels: replicaLabels, isCounter: isCounter, f: f}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
@@ -126,7 +120,7 @@ func (s *dedupSeriesSet) At() storage.Series {
 		copy(pushedDown, s.pushedDown)
 	}
 
-	return newDedupSeries(s.lset, repl, pushedDown, s.f)
+	return NewDedupChunksSeries(s.lset, repl, pushedDown, s.f)
 }
 
 func (s *dedupSeriesSet) Err() error {
@@ -144,28 +138,67 @@ type seriesWithLabels struct {
 
 func (s seriesWithLabels) Labels() labels.Labels { return s.lset }
 
-type dedupSeries struct {
+// NewDedupChunks takes potentially overlapping chunks from single series and uses penalty based algorithm to deduplicate the overlapping chunks.
+// It is similar to NewChunkSeriesMerger, just assumes the client needs decoded samples.
+func NewDedupChunks(chunks []chunkenc.Iterator, aggrs storepb.Aggrs) []chunkenc.Iterator {
+	if len(chunks) == 0 {
+		return nil
+	}
+
+	i := 0;
+	for i:=0; i< len(chunks); i++ {
+
+	}
+
+
+}
+
+func newDedupChunkIterator() chunkenc.Iterator {
+
+}
+func (s *dedupChunksSeries) Iterator(){
+	for _, chk := range s.chunks {
+
+	}
+
+	// TODO(bwplotka): Dedup with all series together, not in pairs for better efficiency.
+	var it adjustableSeriesIterator
+	if s.aggrs[0]== storepb.Aggr_COUNTER {
+		it = &counterErrAdjustSeriesIterator{Iterator: s.replicas[0].Iterator()}
+	} else {
+		it = noopAdjustableSeriesIterator{Iterator: s.replicas[0].Iterator()}
+	}
+
+	for _, o := range s.replicas[1:] {
+		var replicaIter adjustableSeriesIterator
+		if s.isCounter {
+			replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator()}
+		} else {
+			replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator()}
+		}
+		it = newDedupSeriesIterator(it, replicaIter)
+	}
+
+}
+
+
+// TODO(bwplotka): REM
+type dedupSeriesOLD struct {
 	lset       labels.Labels
-	replicas   []storage.Series
+	chunks   []storepb.AggrChunk
+
 	pushedDown []storage.Series
 
-	isCounter bool
-	f         string
+	aggrs storepb.Aggrs
 }
 
-func newDedupSeries(lset labels.Labels, replicas []storage.Series, pushedDown []storage.Series, f string) *dedupSeries {
-	return &dedupSeries{lset: lset, isCounter: isCounter(f), replicas: replicas, pushedDown: pushedDown, f: f}
-}
 
-func (s *dedupSeries) Labels() labels.Labels {
-	return s.lset
-}
 
 // pushdownIterator creates an iterator that handles
 // all pushed down series.
-func (s *dedupSeries) pushdownIterator() chunkenc.Iterator {
+func (s *dedupSeriesOLD) pushdownIterator() chunkenc.Iterator {
 	var pushedDownIterator adjustableSeriesIterator
-	if s.isCounter {
+	if s.aggrs[0] == storepb.Aggr_COUNTER {
 		pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator()}
 	} else {
 		pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator()}
@@ -174,7 +207,7 @@ func (s *dedupSeries) pushdownIterator() chunkenc.Iterator {
 	for _, o := range s.pushedDown[1:] {
 		var replicaIterator adjustableSeriesIterator
 
-		if s.isCounter {
+		if s.aggrs[0] == storepb.Aggr_COUNTER {
 			replicaIterator = &counterErrAdjustSeriesIterator{Iterator: o.Iterator()}
 		} else {
 			replicaIterator = noopAdjustableSeriesIterator{Iterator: o.Iterator()}
@@ -188,7 +221,7 @@ func (s *dedupSeries) pushdownIterator() chunkenc.Iterator {
 
 // allSeriesIterator creates an iterator over all series - pushed down
 // and regular replicas.
-func (s *dedupSeries) allSeriesIterator() chunkenc.Iterator {
+func (s *dedupSeriesOLD) allSeriesIterator() chunkenc.Iterator {
 	var replicasIterator, pushedDownIterator adjustableSeriesIterator
 	if len(s.replicas) != 0 {
 		if s.isCounter {
@@ -235,7 +268,7 @@ func (s *dedupSeries) allSeriesIterator() chunkenc.Iterator {
 	return newDedupSeriesIterator(pushedDownIterator, replicasIterator)
 }
 
-func (s *dedupSeries) Iterator() chunkenc.Iterator {
+func (s *dedupSeriesOLD) Iterator() chunkenc.Iterator {
 	// This function needs a regular iterator over all series. Behavior is identical
 	// whether it was pushed down or not.
 	if s.f == "group" {
