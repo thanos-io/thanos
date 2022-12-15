@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -87,10 +88,13 @@ type lazyPopulatableChunk struct {
 
 type errChunkIterator struct{ err error }
 
-func (e errChunkIterator) Seek(int64) bool      { return false }
-func (e errChunkIterator) At() (int64, float64) { return 0, 0 }
-func (e errChunkIterator) Next() bool           { return false }
-func (e errChunkIterator) Err() error           { return e.err }
+func (e errChunkIterator) Seek(int64) chunkenc.ValueType                        { return chunkenc.ValNone }
+func (e errChunkIterator) At() (int64, float64)                                 { return 0, 0 }
+func (e errChunkIterator) Next() chunkenc.ValueType                             { return chunkenc.ValNone }
+func (e errChunkIterator) Err() error                                           { return e.err }
+func (e errChunkIterator) AtHistogram() (int64, *histogram.Histogram)           { return 0, nil }
+func (e errChunkIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) { return 0, nil }
+func (e errChunkIterator) AtT() int64                                           { return 0 }
 
 type errChunk struct{ err errChunkIterator }
 
