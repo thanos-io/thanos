@@ -18,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/exemplar"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/promql"
@@ -43,6 +44,11 @@ func (n nopAppender) Append(storage.SeriesRef, labels.Labels, int64, float64) (s
 func (n nopAppender) AppendExemplar(storage.SeriesRef, labels.Labels, exemplar.Exemplar) (storage.SeriesRef, error) {
 	return 0, nil
 }
+
+func (n nopAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram) (storage.SeriesRef, error) {
+	return 0, nil
+}
+
 func (n nopAppender) Commit() error                                        { return nil }
 func (n nopAppender) Rollback() error                                      { return nil }
 func (n nopAppender) Appender(_ context.Context) (storage.Appender, error) { return n, nil }

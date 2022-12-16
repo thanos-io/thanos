@@ -17,6 +17,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/tsdb"
@@ -455,7 +456,7 @@ func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 	// If it does, we skip it.
 	lastT := int64(0)
 
-	for it.Next() {
+	for it.Next() != chunkenc.ValNone {
 		t, v := it.At()
 		if value.IsStaleNaN(v) {
 			continue
@@ -609,12 +610,13 @@ func NewApplyCounterResetsIterator(chks ...chunkenc.Iterator) *ApplyCounterReset
 	return &ApplyCounterResetsSeriesIterator{chks: chks}
 }
 
-func (it *ApplyCounterResetsSeriesIterator) Next() bool {
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
+func (it *ApplyCounterResetsSeriesIterator) Next() chunkenc.ValueType {
 	for {
 		if it.i >= len(it.chks) {
-			return false
+			return chunkenc.ValNone
 		}
-		if ok := it.chks[it.i].Next(); !ok {
+		if it.chks[it.i].Next() == chunkenc.ValNone {
 			it.i++
 			// While iterators are ordered, they are not generally guaranteed to be
 			// non-overlapping. Ensure that the series does not go back in time by seeking at least
@@ -631,7 +633,7 @@ func (it *ApplyCounterResetsSeriesIterator) Next() bool {
 			it.total++
 			it.lastT, it.lastV = t, v
 			it.totalV = v
-			return true
+			return chunkenc.ValFloat
 		}
 		// If the timestamp increased, it is not the special last sample.
 		if t > it.lastT {
@@ -642,7 +644,7 @@ func (it *ApplyCounterResetsSeriesIterator) Next() bool {
 			}
 			it.lastT, it.lastV = t, v
 			it.total++
-			return true
+			return chunkenc.ValFloat
 		}
 		// We hit a sample that indicates what the true last value was. For the
 		// next chunk we use it to determine whether there was a counter reset between them.
@@ -657,16 +659,28 @@ func (it *ApplyCounterResetsSeriesIterator) At() (t int64, v float64) {
 	return it.lastT, it.totalV
 }
 
-func (it *ApplyCounterResetsSeriesIterator) Seek(x int64) bool {
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (it *ApplyCounterResetsSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (it *ApplyCounterResetsSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (it *ApplyCounterResetsSeriesIterator) AtT() int64 {
+	return it.lastT
+}
+
+func (it *ApplyCounterResetsSeriesIterator) Seek(x int64) chunkenc.ValueType {
 	// Don't use underlying Seek, but iterate over next to not miss counter resets.
 	for {
 		if t, _ := it.At(); t >= x {
-			return true
+			return chunkenc.ValFloat
 		}
 
-		ok := it.Next()
-		if !ok {
-			return false
+		if it.Next() == chunkenc.ValNone {
+			return chunkenc.ValNone
 		}
 	}
 }
@@ -692,33 +706,47 @@ func NewAverageChunkIterator(cnt, sum chunkenc.Iterator) *AverageChunkIterator {
 	return &AverageChunkIterator{cntIt: cnt, sumIt: sum}
 }
 
-func (it *AverageChunkIterator) Next() bool {
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
+func (it *AverageChunkIterator) Next() chunkenc.ValueType {
 	cok, sok := it.cntIt.Next(), it.sumIt.Next()
 	if cok != sok {
 		it.err = errors.New("sum and count iterator not aligned")
-		return false
+		return chunkenc.ValNone
 	}
-	if !cok {
-		return false
+	if cok == chunkenc.ValNone {
+		return chunkenc.ValNone
 	}
 
 	cntT, cntV := it.cntIt.At()
 	sumT, sumV := it.sumIt.At()
 	if cntT != sumT {
 		it.err = errors.New("sum and count timestamps not aligned")
-		return false
+		return chunkenc.ValNone
 	}
 	it.t, it.v = cntT, sumV/cntV
-	return true
+	return chunkenc.ValFloat
 }
 
-func (it *AverageChunkIterator) Seek(t int64) bool {
+func (it *AverageChunkIterator) Seek(t int64) chunkenc.ValueType {
 	it.err = errors.New("seek used, but not implemented")
-	return false
+	return chunkenc.ValNone
 }
 
 func (it *AverageChunkIterator) At() (int64, float64) {
 	return it.t, it.v
+}
+
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (it *AverageChunkIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (it *AverageChunkIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (it *AverageChunkIterator) AtT() int64 {
+	return it.t
 }
 
 func (it *AverageChunkIterator) Err() error {

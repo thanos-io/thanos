@@ -1150,7 +1150,7 @@ func readSamplesFromChunks(rawChunks []storepb.AggrChunk) ([]sample, error) {
 		}
 
 		it := c.Iterator(nil)
-		for it.Next() {
+		for it.Next() != chunkenc.ValNone {
 			if it.Err() != nil {
 				return nil, it.Err()
 			}

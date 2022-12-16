@@ -32,6 +32,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	prometheusMetadata "github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/model/relabel"
@@ -139,6 +140,11 @@ func (f *fakeAppender) AppendExemplar(ref storage.SeriesRef, l labels.Labels, e 
 	}
 	f.exemplars[ref] = append(f.exemplars[ref], e)
 	return ref, f.appendErr()
+}
+
+// TODO(rabenhorst): Needs to be implement for native histogram support.
+func (f *fakeAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram) (storage.SeriesRef, error) {
+	panic("not implemented")
 }
 
 func (f *fakeAppender) GetRef(l labels.Labels) (storage.SeriesRef, labels.Labels) {
