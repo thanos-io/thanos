@@ -90,6 +90,8 @@ type Thanos struct {
 
 	// Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
 	Rewrites []Rewrite `json:"rewrites,omitempty"`
+
+	VerticalShardID *uint64 `json:"vertical_shard_id,omitempty"`
 }
 
 type Rewrite struct {
@@ -154,7 +156,15 @@ func InjectThanos(logger log.Logger, bdir string, meta Thanos, downsampledMeta *
 // Returns a unique identifier for the compaction group the block belongs to.
 // It considers the downsampling resolution and the block's labels.
 func (m *Thanos) GroupKey() string {
-	return fmt.Sprintf("%d@%v", m.Downsample.Resolution, labels.FromMap(m.Labels).Hash())
+	return m.GroupKeyForShard(m.VerticalShardID)
+}
+
+func (m *Thanos) GroupKeyForShard(verticalShard *uint64) string {
+	var shardKey string
+	if verticalShard != nil {
+		shardKey = fmt.Sprintf("@S%d", *verticalShard)
+	}
+	return fmt.Sprintf("%d%s@G%v", m.Downsample.Resolution, shardKey, labels.FromMap(m.Labels).Hash())
 }
 
 // WriteToDir writes the encoded meta into <dir>/meta.json.
