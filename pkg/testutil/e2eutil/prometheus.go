@@ -16,6 +16,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"syscall"
 	"testing"
@@ -459,6 +460,9 @@ func createBlock(
 				app := h.Appender(ctx)
 
 				for _, lset := range batch {
+					sort.Slice(lset, func(i, j int) bool {
+						return lset[i].Name < lset[j].Name
+					})
 					_, err := app.Append(0, lset, t, rand.Float64())
 					if err != nil {
 						if rerr := app.Rollback(); rerr != nil {
