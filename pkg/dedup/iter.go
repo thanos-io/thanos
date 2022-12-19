@@ -50,7 +50,7 @@ func NewSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, f st
 // trimPushdownMarker trims the pushdown marker from the given labels.
 // Returns true if there was a pushdown marker.
 func trimPushdownMarker(lbls labels.Labels) (labels.Labels, bool) {
-	return labels.NewBuilder(lbls).Del(PushdownMarker.Name).Labels(nil), lbls.Has(PushdownMarker.Name)
+	return labels.NewBuilder(lbls).Del(PushdownMarkerLabel).Labels(nil), lbls.Has(PushdownMarkerLabel)
 }
 
 func (s *dedupSeriesSet) Next() bool {

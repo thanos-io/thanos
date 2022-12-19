@@ -8,13 +8,12 @@ import (
 	"math"
 
 	"github.com/prometheus/prometheus/model/histogram"
-	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 )
 
-// PushdownMarker is a label that gets attached on pushed down series so that
+// PushdownMarkerLabel is a label that gets attached on pushed down series so that
 // the receiver would be able to handle them in potentially special way.
-var PushdownMarker = labels.Label{Name: "__thanos_pushed_down", Value: "true"}
+const PushdownMarkerLabel = "__thanos_pushed_down"
 
 type pushdownSeriesIterator struct {
 	a, b         chunkenc.Iterator
