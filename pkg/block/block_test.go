@@ -383,7 +383,7 @@ func TestMarkForNoCompact(t *testing.T) {
 
 func TestMarkForNoDownsample(t *testing.T) {
 
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
