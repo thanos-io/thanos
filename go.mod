@@ -52,7 +52,7 @@ require (
 	github.com/lightstep/lightstep-tracer-go v0.25.0
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.50
-	github.com/minio/minio-go/v7 v7.0.45
+	github.com/minio/minio-go/v7 v7.0.45 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/oklog/run v1.1.0
 	github.com/oklog/ulid v1.3.1
@@ -261,9 +261,6 @@ replace (
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
-
-	// Until https://github.com/weaveworks/common/pull/262 is merged
-	github.com/weaveworks/common => github.com/rabenhorst/common v0.0.0-20221114111857-9eb1f146696e
 
 	// Override due to https://github.com/weaveworks/common/issues/239
 	google.golang.org/grpc => google.golang.org/grpc v1.45.0
