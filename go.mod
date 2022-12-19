@@ -16,7 +16,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.2
 	github.com/chromedp/cdproto v0.0.0-20220629234738-4cfc9cdeeb92
 	github.com/chromedp/chromedp v0.8.2
-	github.com/davecgh/go-spew v1.1.1
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.0
 	github.com/efficientgo/e2e v0.13.1-0.20220923082810-8fa9daa8af8a
 	github.com/efficientgo/tools/extkingpin v0.0.0-20220817170617-6c25e3b627dd
@@ -62,7 +62,7 @@ require (
 	github.com/opentracing/basictracer-go v1.0.0
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/alertmanager v0.24.0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
@@ -108,7 +108,6 @@ require (
 
 require (
 	github.com/efficientgo/core v1.0.0-rc.0.0.20221201130417-ba593f67d2a4
-	github.com/efficientgo/tools/core v0.0.0-20220817170617-6c25e3b627dd
 	github.com/minio/sha256-simd v1.0.0
 )
 

@@ -24,9 +24,9 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"go.uber.org/goleak"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestMain(m *testing.M) {

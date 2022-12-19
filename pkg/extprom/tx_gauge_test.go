@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestTxGaugeVec(t *testing.T) {

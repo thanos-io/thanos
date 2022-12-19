@@ -20,9 +20,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/efficientgo/e2e"
 	e2emon "github.com/efficientgo/e2e/monitoring"
-	"github.com/efficientgo/tools/core/pkg/testutil"
 	"gopkg.in/yaml.v2"
 )
 

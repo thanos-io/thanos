@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/efficientgo/e2e"
 	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
@@ -19,7 +20,6 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 

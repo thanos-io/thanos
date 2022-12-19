@@ -6,7 +6,7 @@ package store
 import (
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 // Refer to https://github.com/prometheus/prometheus/issues/2651.

@@ -24,7 +24,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 
 	pb "google.golang.org/grpc/examples/features/proto/echo"

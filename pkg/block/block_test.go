@@ -24,8 +24,9 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/objstore"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
@@ -76,7 +77,7 @@ func TestIsBlockDir(t *testing.T) {
 }
 
 func TestUpload(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx := context.Background()
 
@@ -228,7 +229,7 @@ func TestUpload(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -273,7 +274,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestMarkForDeletion(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -327,7 +328,7 @@ func TestMarkForDeletion(t *testing.T) {
 }
 
 func TestMarkForNoCompact(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -382,7 +383,7 @@ func TestMarkForNoCompact(t *testing.T) {
 
 func TestMarkForNoDownsample(t *testing.T) {
 
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -439,7 +440,7 @@ func TestMarkForNoDownsample(t *testing.T) {
 // and tries to download it to the same dir. It should not try
 // to download twice.
 func TestHashDownload(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx := context.Background()
 
@@ -531,7 +532,7 @@ func TestHashDownload(t *testing.T) {
 }
 
 func TestUploadCleanup(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx := context.Background()
 

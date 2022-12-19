@@ -6,7 +6,7 @@ package cachekey
 import (
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestParseBucketCacheKey(t *testing.T) {
