@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	promgate "github.com/prometheus/prometheus/util/gate"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -391,19 +392,28 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		}
 	}
 
-	// promSeriesSet is deduplicating all overlapped chunks.
+	if !q.isDedupEnabled() {
+		return &promSeriesSet{
+			mint:  q.mint,
+			maxt:  q.maxt,
+			set:   newStoreSeriesSet(resp.seriesSet),
+			aggrs: aggrs,
+			warns: warns,
+		}, resp.seriesSetStats, nil
+	}
+
+	// TODO(bwplotka): Move to deduplication on chunk level inside promSeriesSet, similar to what we have in dedup.NewDedupChunkMerger().
+	// This however require big refactor, caring about correct AggrChunk to iterator conversion, pushdown logic and counter reset apply.
+	// For now we apply simple logic that splits potential overlapping chunks into separate replica series, so we can split the work.
 	set := &promSeriesSet{
 		mint:  q.mint,
 		maxt:  q.maxt,
-		set:   newStoreSeriesSet(resp.seriesSet),
+		set:   dedup.NewOverlapSplit(newStoreSeriesSet(resp.seriesSet)),
 		aggrs: aggrs,
 		warns: warns,
 	}
 
-	// // The merged series set assembles all potentially-overlapping time ranges of the same series into a single one.
-	//-	// TODO(bwplotka): We could potentially dedup on chunk level, use chunk iterator for that when available.
-	//-	return dedup.NewSeriesSet(set, q.replicaLabels, hints.Func, q.enableQueryPushdown), resp.seriesSetStats, nil
-	return set, resp.seriesSetStats, nil
+	return dedup.NewSeriesSet(set, hints.Func, q.enableQueryPushdown), resp.seriesSetStats, nil
 }
 
 // LabelValues returns all potential values for a label name.

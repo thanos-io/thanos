@@ -10,12 +10,12 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type dedupSeriesSet struct {
-	set           storage.SeriesSet
-	replicaLabels map[string]struct{}
-	isCounter     bool
+	set       storage.SeriesSet
+	isCounter bool
 
 	replicas []storage.Series
 	// Pushed down series. Currently, they are being handled in a specific way.
@@ -37,11 +37,77 @@ func isCounter(f string) bool {
 	return f == "increase" || f == "rate" || f == "irate" || f == "resets"
 }
 
+// NewOverlapSplit splits overlapping chunks into separate series entry, so existing algorithm can work as usual.
+// We cannot do this in dedup.SeriesSet as it iterates over samples already.
+// TODO(bwplotka): Remove when we move to per chunk deduplication code.
+// We expect non-duplicated series with sorted chunks by min time (possibly overlapped).
+func NewOverlapSplit(set storepb.SeriesSet) storepb.SeriesSet {
+	return &overlapSplitSet{set: set, ok: true}
+}
+
+type overlapSplitSet struct {
+	ok  bool
+	set storepb.SeriesSet
+
+	currLabels labels.Labels
+	currI      int
+	replicas   [][]storepb.AggrChunk
+}
+
+func (o *overlapSplitSet) Next() bool {
+	if !o.ok {
+		return false
+	}
+
+	o.currI++
+	if o.currI < len(o.replicas) {
+		return true
+	}
+
+	o.currI = 0
+	o.replicas = o.replicas[:0]
+	o.replicas = append(o.replicas, nil)
+
+	o.ok = o.set.Next()
+	if !o.ok {
+		return false
+	}
+
+	var chunks []storepb.AggrChunk
+	o.currLabels, chunks = o.set.At()
+	if len(chunks) == 0 {
+		return true
+	}
+
+	o.replicas[0] = append(o.replicas[0], chunks[0])
+
+chunksLoop:
+	for i := 1; i < len(chunks); i++ {
+		currMinTime := chunks[i].MinTime
+		for ri := range o.replicas {
+			if len(o.replicas[ri]) == 0 || o.replicas[ri][len(o.replicas[ri])-1].MaxTime < currMinTime {
+				o.replicas[ri] = append(o.replicas[ri], chunks[i])
+				continue chunksLoop
+			}
+		}
+		o.replicas = append(o.replicas, []storepb.AggrChunk{chunks[i]}) // Not found, add to a new "fake" series.
+	}
+	return true
+}
+
+func (o *overlapSplitSet) At() (labels.Labels, []storepb.AggrChunk) {
+	return o.currLabels, o.replicas[o.currI]
+}
+
+func (o *overlapSplitSet) Err() error {
+	return o.set.Err()
+}
+
 // NewSeriesSet returns seriesSet that deduplicates the same series.
-// The series in series set are expected to be sorted by all labels.
-func NewSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, f string, pushdownEnabled bool) storage.SeriesSet {
+// The series in series set are expected be sorted by all labels.
+func NewSeriesSet(set storage.SeriesSet, f string, pushdownEnabled bool) storage.SeriesSet {
 	// TODO: remove dependency on knowing whether it is a counter.
-	s := &dedupSeriesSet{pushdownEnabled: pushdownEnabled, set: set, replicaLabels: replicaLabels, isCounter: isCounter(f), f: f}
+	s := &dedupSeriesSet{pushdownEnabled: pushdownEnabled, set: set, isCounter: isCounter(f), f: f}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()

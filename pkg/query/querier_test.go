@@ -872,7 +872,7 @@ func testSelectResponse(t *testing.T, expected []series, res storage.SeriesSet) 
 		series = append(series, res.At())
 	}
 	testutil.Ok(t, res.Err())
-	testutil.Equals(t, len(expected), len(series), "got %v", func() string {
+	testutil.Equals(t, len(expected), len(series), "got %v series", func() string {
 		var ret []string
 		for _, s := range series {
 			ret = append(ret, s.Labels().String())
