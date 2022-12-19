@@ -3,11 +3,11 @@ package store
 import (
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestSortWithoutLabels(t *testing.T) {

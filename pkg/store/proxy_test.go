@@ -189,7 +189,7 @@ func TestProxyStore_Series(t *testing.T) {
 			expectedSeries: []rawSeries{
 				{
 					lset:   labels.FromStrings("a", "a"),
-					chunks: [][]sample{{{4, 3}}, {{0, 0}, {2, 1}, {3, 2}}}, // No sort merge.
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}, {{4, 3}}},
 				},
 			},
 		},
@@ -314,6 +314,73 @@ func TestProxyStore_Series(t *testing.T) {
 			expectedWarningsLen: 2,
 		},
 		{
+			title: "storeAPI available for time range; available two duplicated series for ext=1 external label matcher from 2 storeAPIs",
+			storeAPIs: []Client{
+				&teststore.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+					ExtLset: []labels.Labels{labels.FromStrings("ext", "1")},
+				},
+				&teststore.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{1, 4}, {2, 5}, {3, 6}}),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+					ExtLset: []labels.Labels{labels.FromStrings("ext", "1")},
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:  1,
+				MaxTime:  300,
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset:   labels.FromStrings("a", "a"),
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}, {{1, 4}, {2, 5}, {3, 6}}},
+				},
+			},
+		},
+		{
+			title: "storeAPI available for time range; available a few duplicated series for ext=1 external label matcher from the same storeAPIs",
+			storeAPIs: []Client{
+				&teststore.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}), // Exact same chunk should be removed.
+							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{1, 4}, {2, 5}, {3, 6}}),
+							storepb.NewWarnSeriesResponse(errors.New("test")), // Regression: Proxy had bug that caused warning to block chaining and iden. chunk deduping logic.
+							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{2, 4}, {2, 5}, {3, 6}}),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+					ExtLset: []labels.Labels{labels.FromStrings("ext", "1")},
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:  1,
+				MaxTime:  300,
+				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset:   labels.FromStrings("a", "a"),
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}, {{1, 4}, {2, 5}, {3, 6}}, {{2, 4}, {2, 5}, {3, 6}}},
+				},
+			},
+			expectedWarningsLen: 1,
+		},
+		{
 			title: "same external labels are validated during upload and on querier storeset, proxy does not care",
 			storeAPIs: []Client{
 				&teststore.TestClient{
@@ -415,7 +482,7 @@ func TestProxyStore_Series(t *testing.T) {
 				PartialResponseDisabled: true,
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},
-			expectedErr: errors.New("fetch series for {ext=\"1\"} test: error!"),
+			expectedErr: errors.New("fetch series for {ext=\"1\"} : error!"),
 		},
 		{
 			title: "storeAPI available for time range; available series for ext=1 external label matcher; allowed by store debug matcher",
@@ -429,6 +496,7 @@ func TestProxyStore_Series(t *testing.T) {
 					MinTime: 1,
 					MaxTime: 300,
 					ExtLset: []labels.Labels{labels.FromStrings("ext", "1")},
+					Name:    "testaddr",
 				},
 			},
 			req: &storepb.SeriesRequest{
@@ -457,6 +525,7 @@ func TestProxyStore_Series(t *testing.T) {
 					MinTime: 1,
 					MaxTime: 300,
 					ExtLset: []labels.Labels{labels.FromStrings("ext", "1")},
+					Name:    "testaddr",
 				},
 			},
 			req: &storepb.SeriesRequest{
@@ -506,38 +575,44 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 		},
 	} {
-		for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
-			if ok := t.Run(fmt.Sprintf("%s/%s", tc.title, strategy), func(t *testing.T) {
-				q := NewProxyStore(nil,
-					nil,
-					func() []Client { return tc.storeAPIs },
-					component.Query,
-					tc.selectorLabels,
-					5*time.Second, strategy,
-				)
+		t.Run(tc.title, func(t *testing.T) {
+			for _, replicaLabelSupport := range []bool{false, true} {
+				t.Run(fmt.Sprintf("replica_support=%v", replicaLabelSupport), func(t *testing.T) {
+					for _, s := range tc.storeAPIs {
+						cl := s.(*teststore.TestClient)
+						cl.WithoutReplicaLabelsEnabled = replicaLabelSupport
+					}
+					for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
+						t.Run(string(strategy), func(t *testing.T) {
+							q := NewProxyStore(nil,
+								nil,
+								func() []Client { return tc.storeAPIs },
+								component.Query,
+								tc.selectorLabels,
+								5*time.Second, strategy,
+							)
 
-				ctx := context.Background()
-				if len(tc.storeDebugMatchers) > 0 {
-					ctx = context.WithValue(ctx, StoreMatcherKey, tc.storeDebugMatchers)
-				}
+							ctx := context.Background()
+							if len(tc.storeDebugMatchers) > 0 {
+								ctx = context.WithValue(ctx, StoreMatcherKey, tc.storeDebugMatchers)
+							}
 
-				s := newStoreSeriesServer(ctx)
-				err := q.Series(tc.req, s)
-				if tc.expectedErr != nil {
-					testutil.NotOk(t, err)
-					testutil.Equals(t, tc.expectedErr.Error(), err.Error())
-					return
-				}
-				testutil.Ok(t, err)
+							s := newStoreSeriesServer(ctx)
+							err := q.Series(tc.req, s)
+							if tc.expectedErr != nil {
+								testutil.NotOk(t, err)
+								testutil.Equals(t, tc.expectedErr.Error(), err.Error())
+								return
+							}
+							testutil.Ok(t, err)
 
-				seriesEquals(t, tc.expectedSeries, s.SeriesSet)
-				testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
-
-			}); !ok {
-				return
+							seriesEquals(t, tc.expectedSeries, s.SeriesSet)
+							testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
+						})
+					}
+				})
 			}
-		}
-
+		})
 	}
 }
 

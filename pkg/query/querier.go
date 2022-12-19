@@ -5,6 +5,7 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -391,6 +392,8 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 			}
 		}
 	}
+
+	fmt.Println(resp.seriesSet)
 
 	if !q.isDedupEnabled() {
 		return &promSeriesSet{

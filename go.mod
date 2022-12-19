@@ -121,6 +121,7 @@ require (
 )
 
 require (
+	github.com/google/go-cmp v0.5.9
 	go.opentelemetry.io/contrib/propagators/autoprop v0.34.0
 	golang.org/x/exp v0.0.0-20221212164502-fae10dda9338
 )
@@ -179,7 +180,6 @@ require (
 	github.com/gogo/googleapis v1.4.0 // indirect
 	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
 	github.com/golang-jwt/jwt/v4 v4.4.1 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/pprof v0.0.0-20221212185716-aee1124e3a93 // indirect
 	github.com/google/uuid v1.3.0 // indirect

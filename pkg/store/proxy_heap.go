@@ -26,104 +26,93 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
-// dedupResponseHeap is a wrapper around ProxyResponseHeap
-// that removes duplicated identical chunks identified by the same labelset and checksum.
-// It uses a hashing function to do that.
 type dedupResponseHeap struct {
 	h *ProxyResponseHeap
 
-	responses []*storepb.SeriesResponse
+	bufferedSameSeries []*storepb.SeriesResponse
 
-	previousResponse *storepb.SeriesResponse
-	previousNext     bool
+	bufferedResp []*storepb.SeriesResponse
+	buffRespI    int
+
+	prev *storepb.SeriesResponse
+	ok   bool
 }
 
+// NewDedupResponseHeap returns a wrapper around ProxyResponseHeap that merged duplicated series messages into one.
+// It also deduplicates identical chunks identified by the same checksum from each series message.
 func NewDedupResponseHeap(h *ProxyResponseHeap) *dedupResponseHeap {
+	ok := h.Next()
+	var prev *storepb.SeriesResponse
+	if ok {
+		prev = h.At()
+	}
 	return &dedupResponseHeap{
-		h:            h,
-		previousNext: h.Next(),
+		h:    h,
+		ok:   ok,
+		prev: prev,
 	}
 }
 
 func (d *dedupResponseHeap) Next() bool {
-	d.responses = d.responses[:0]
-
-	// If there is something buffered that is *not* a series.
-	if d.previousResponse != nil && d.previousResponse.GetSeries() == nil {
-		d.responses = append(d.responses, d.previousResponse)
-		d.previousResponse = nil
-		d.previousNext = d.h.Next()
-		return len(d.responses) > 0 || d.previousNext
+	if d.buffRespI+1 < len(d.bufferedResp) {
+		d.buffRespI++
+		return true
 	}
 
-	var resp *storepb.SeriesResponse
-	var nextHeap bool
-
-	// If buffered then use it.
-	if d.previousResponse != nil {
-		resp = d.previousResponse
-		d.previousResponse = nil
-	} else {
-		// If not buffered then check whether there is anything.
-		nextHeap = d.h.Next()
-		if !nextHeap {
-			return false
-		}
-		resp = d.h.At()
+	if !d.ok && d.prev == nil {
+		return false
 	}
 
-	// Append buffered or retrieved response.
-	d.responses = append(d.responses, resp)
+	d.buffRespI = 0
+	d.bufferedResp = d.bufferedResp[:0]
+	d.bufferedSameSeries = d.bufferedSameSeries[:0]
 
-	// Update previousNext.
-	defer func(next *bool) {
-		d.previousNext = *next
-	}(&nextHeap)
-
-	if resp.GetSeries() == nil {
-		return len(d.responses) > 0 || d.previousNext
-	}
-
+	var s *storepb.SeriesResponse
 	for {
-		nextHeap = d.h.Next()
-		if !nextHeap {
-			break
-		}
-		resp = d.h.At()
-		if resp.GetSeries() == nil {
-			d.previousResponse = resp
-			break
-		}
-
-		lbls := resp.GetSeries().Labels
-		lastLbls := d.responses[len(d.responses)-1].GetSeries().Labels
-
-		if labels.Compare(labelpb.ZLabelsToPromLabels(lbls), labelpb.ZLabelsToPromLabels(lastLbls)) == 0 {
-			d.responses = append(d.responses, resp)
+		if d.prev == nil {
+			d.ok = d.h.Next()
+			if !d.ok {
+				if len(d.bufferedSameSeries) > 0 {
+					d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
+				}
+				return len(d.bufferedResp) > 0
+			}
+			s = d.h.At()
 		} else {
-			// This one is different. It will be taken care of via the next Next() call.
-			d.previousResponse = resp
-			break
+			s = d.prev
+			d.prev = nil
 		}
-	}
 
-	return len(d.responses) > 0 || d.previousNext
-}
-
-func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
-	if len(d.responses) == 0 {
-		panic("BUG: At() called with no responses; please call At() only if Next() returns true")
-	} else if len(d.responses) == 1 {
-		return d.responses[0]
-	}
-
-	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
-
-	for _, resp := range d.responses {
-		if resp.GetSeries() == nil {
+		if s.GetSeries() == nil {
+			d.bufferedResp = append(d.bufferedResp, s)
 			continue
 		}
-		for _, chk := range resp.GetSeries().Chunks {
+
+		if len(d.bufferedSameSeries) == 0 {
+			d.bufferedSameSeries = append(d.bufferedSameSeries, s)
+			continue
+		}
+
+		lbls := d.bufferedSameSeries[0].GetSeries().Labels
+		atLbls := s.GetSeries().Labels
+
+		if labels.Compare(labelpb.ZLabelsToPromLabels(lbls), labelpb.ZLabelsToPromLabels(atLbls)) == 0 {
+			d.bufferedSameSeries = append(d.bufferedSameSeries, s)
+			continue
+		}
+
+		d.bufferedResp = append(d.bufferedResp, chainSeriesAndRemIdenticalChunks(d.bufferedSameSeries))
+		d.prev = s
+
+		return true
+	}
+}
+
+func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb.SeriesResponse {
+	chunkDedupMap := map[uint64]*storepb.AggrChunk{}
+
+	for _, s := range series {
+		for _, chk := range s.GetSeries().Chunks {
 			for _, field := range []*storepb.Chunk{
 				chk.Raw, chk.Count, chk.Max, chk.Min, chk.Sum, chk.Counter,
 			} {
@@ -146,7 +135,7 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 
 	// If no chunks were requested.
 	if len(chunkDedupMap) == 0 {
-		return d.responses[0]
+		return series[0]
 	}
 
 	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
@@ -158,14 +147,12 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 		return finalChunks[i].Compare(finalChunks[j]) > 0
 	})
 
-	// Guaranteed to be a series because Next() only buffers one
-	// warning at a time that gets handled in the beginning.
-	lbls := d.responses[0].GetSeries().Labels
+	series[0].GetSeries().Chunks = finalChunks
+	return series[0]
+}
 
-	return storepb.NewSeriesResponse(&storepb.Series{
-		Labels: lbls,
-		Chunks: finalChunks,
-	})
+func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
+	return d.bufferedResp[d.buffRespI]
 }
 
 // ProxyResponseHeap is a heap for storepb.SeriesSets.
@@ -225,9 +212,7 @@ type ProxyResponseHeapNode struct {
 }
 
 // NewProxyResponseHeap returns heap that k-way merge series together.
-// In case of duplicates, series might return in random order without changed, chained or deduplicated chunks.
-// TODO(bwplotka): Consider moving deduplication routines in single place for readability. Currently it's scattered in
-// NewDedupResponseHeap, in removeDuplicates in promSeriesSet and dedup.NewSeriesSet.
+// It's agnostic to duplicates and overlaps, it forwards all duplicated series in random order.
 func NewProxyResponseHeap(seriesSets ...respSet) *ProxyResponseHeap {
 	ret := make(ProxyResponseHeap, 0, len(seriesSets))
 

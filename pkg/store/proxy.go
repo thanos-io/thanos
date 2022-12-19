@@ -388,7 +388,7 @@ func labelSetsMatch(matchers []*labels.Matcher, lset ...labels.Labels) bool {
 	for _, ls := range lset {
 		notMatched := false
 		for _, m := range matchers {
-			if lv := ls.Get(m.Name); lv != "" && !m.Matches(lv) {
+			if lv := ls.Get(m.Name); !m.Matches(lv) {
 				notMatched = true
 				break
 			}

@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
@@ -23,6 +22,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/util/teststorage"
 )
 
 var (
