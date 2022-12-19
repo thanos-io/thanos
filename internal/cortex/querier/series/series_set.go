@@ -23,6 +23,7 @@ import (
 	"sort"
 
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -106,11 +107,17 @@ func NewConcreteSeriesIterator(series *ConcreteSeries) chunkenc.Iterator {
 	}
 }
 
-func (c *concreteSeriesIterator) Seek(t int64) bool {
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
+func (c *concreteSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	c.cur = sort.Search(len(c.series.samples), func(n int) bool {
 		return c.series.samples[n].Timestamp >= model.Time(t)
 	})
-	return c.cur < len(c.series.samples)
+
+	if c.cur < len(c.series.samples) {
+		return chunkenc.ValFloat
+	}
+
+	return chunkenc.ValNone
 }
 
 func (c *concreteSeriesIterator) At() (t int64, v float64) {
@@ -118,9 +125,28 @@ func (c *concreteSeriesIterator) At() (t int64, v float64) {
 	return int64(s.Timestamp), float64(s.Value)
 }
 
-func (c *concreteSeriesIterator) Next() bool {
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (c *concreteSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (c *concreteSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (c *concreteSeriesIterator) AtT() int64 {
+	t, _ := c.At()
+	return t
+}
+
+func (c *concreteSeriesIterator) Next() chunkenc.ValueType {
 	c.cur++
-	return c.cur < len(c.series.samples)
+
+	if c.cur < len(c.series.samples) {
+		return chunkenc.ValFloat
+	}
+
+	return chunkenc.ValNone
 }
 
 func (c *concreteSeriesIterator) Err() error {
@@ -137,16 +163,28 @@ type errIterator struct {
 	err error
 }
 
-func (errIterator) Seek(int64) bool {
-	return false
+func (errIterator) Seek(int64) chunkenc.ValueType {
+	return chunkenc.ValNone
 }
 
-func (errIterator) Next() bool {
-	return false
+func (errIterator) Next() chunkenc.ValueType {
+	return chunkenc.ValNone
 }
 
 func (errIterator) At() (t int64, v float64) {
 	return 0, 0
+}
+
+func (errIterator) AtHistogram() (int64, *histogram.Histogram) {
+	return 0, nil
+}
+
+func (errIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	return 0, nil
+}
+
+func (errIterator) AtT() int64 {
+	return 0
 }
 
 func (e errIterator) Err() error {
@@ -268,9 +306,10 @@ func NewDeletedSeriesIterator(itr chunkenc.Iterator, deletedIntervals []model.In
 	}
 }
 
-func (d DeletedSeriesIterator) Seek(t int64) bool {
-	if found := d.itr.Seek(t); !found {
-		return false
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
+func (d DeletedSeriesIterator) Seek(t int64) chunkenc.ValueType {
+	if valueType := d.itr.Seek(t); valueType == chunkenc.ValNone {
+		return valueType
 	}
 
 	seekedTs, _ := d.itr.At()
@@ -279,23 +318,37 @@ func (d DeletedSeriesIterator) Seek(t int64) bool {
 		return d.Next()
 	}
 
-	return true
+	return chunkenc.ValFloat
 }
 
 func (d DeletedSeriesIterator) At() (t int64, v float64) {
 	return d.itr.At()
 }
 
-func (d DeletedSeriesIterator) Next() bool {
-	for d.itr.Next() {
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (d DeletedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (d DeletedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (d DeletedSeriesIterator) AtT() int64 {
+	t, _ := d.itr.At()
+	return t
+}
+
+func (d DeletedSeriesIterator) Next() chunkenc.ValueType {
+	for valueType := d.itr.Next(); valueType != chunkenc.ValNone; valueType = d.itr.Next() {
 		ts, _ := d.itr.At()
 
 		if d.isDeleted(ts) {
 			continue
 		}
-		return true
+		return valueType
 	}
-	return false
+	return chunkenc.ValNone
 }
 
 func (d DeletedSeriesIterator) Err() error {
@@ -343,16 +396,28 @@ func NewEmptySeriesIterator() chunkenc.Iterator {
 	return emptySeriesIterator{}
 }
 
-func (emptySeriesIterator) Seek(t int64) bool {
-	return false
+func (emptySeriesIterator) Seek(t int64) chunkenc.ValueType {
+	return chunkenc.ValNone
 }
 
 func (emptySeriesIterator) At() (t int64, v float64) {
 	return 0, 0
 }
 
-func (emptySeriesIterator) Next() bool {
-	return false
+func (emptySeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	return 0, nil
+}
+
+func (emptySeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	return 0, nil
+}
+
+func (emptySeriesIterator) AtT() int64 {
+	return 0
+}
+
+func (emptySeriesIterator) Next() chunkenc.ValueType {
+	return chunkenc.ValNone
 }
 
 func (emptySeriesIterator) Err() error {

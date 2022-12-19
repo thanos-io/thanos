@@ -349,8 +349,8 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	}
 
 	if err := q.proxy.Series(&storepb.SeriesRequest{
-		MinTime:                 hints.Start,
-		MaxTime:                 hints.End,
+		MinTime:                 q.mint,
+		MaxTime:                 q.maxt,
 		Matchers:                sms,
 		MaxResolutionWindow:     q.maxResolutionMillis,
 		Aggregates:              aggrs,

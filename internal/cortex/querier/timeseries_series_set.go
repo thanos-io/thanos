@@ -6,6 +6,7 @@ package querier
 import (
 	"sort"
 
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -77,8 +78,9 @@ func (t *timeseries) Iterator() chunkenc.Iterator {
 	}
 }
 
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
 // Seek implements SeriesIterator interface
-func (t *timeSeriesSeriesIterator) Seek(s int64) bool {
+func (t *timeSeriesSeriesIterator) Seek(s int64) chunkenc.ValueType {
 	offset := 0
 	if t.i > 0 {
 		offset = t.i // only advance via Seek
@@ -88,7 +90,11 @@ func (t *timeSeriesSeriesIterator) Seek(s int64) bool {
 		return t.ts.series.Samples[offset+i].TimestampMs >= s
 	}) + offset
 
-	return t.i < len(t.ts.series.Samples)
+	if t.i < len(t.ts.series.Samples) {
+		return chunkenc.ValFloat
+	}
+
+	return chunkenc.ValNone
 }
 
 // At implements the SeriesIterator interface
@@ -99,8 +105,30 @@ func (t *timeSeriesSeriesIterator) At() (int64, float64) {
 	return t.ts.series.Samples[t.i].TimestampMs, t.ts.series.Samples[t.i].Value
 }
 
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (t *timeSeriesSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (t *timeSeriesSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (t *timeSeriesSeriesIterator) AtT() int64 {
+	ts, _ := t.At()
+	return ts
+}
+
 // Next implements the SeriesIterator interface
-func (t *timeSeriesSeriesIterator) Next() bool { t.i++; return t.i < len(t.ts.series.Samples) }
+func (t *timeSeriesSeriesIterator) Next() chunkenc.ValueType {
+	t.i++
+
+	if t.i < len(t.ts.series.Samples) {
+		return chunkenc.ValFloat
+	}
+
+	return chunkenc.ValNone
+}
 
 // Err implements the SeriesIterator interface
 func (t *timeSeriesSeriesIterator) Err() error { return nil }

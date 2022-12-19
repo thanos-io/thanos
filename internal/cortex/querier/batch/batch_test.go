@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/stretchr/testify/require"
 
 	"github.com/thanos-io/thanos/internal/cortex/chunk"
@@ -50,7 +51,7 @@ func BenchmarkNewChunkMergeIterator_CreateAndIterate(b *testing.B) {
 
 			for n := 0; n < b.N; n++ {
 				it := NewChunkMergeIterator(chunks, 0, 0)
-				for it.Next() {
+				for it.Next() != chunkenc.ValNone {
 					it.At()
 				}
 
@@ -71,8 +72,8 @@ func TestSeekCorrectlyDealWithSinglePointChunks(t *testing.T) {
 	sut := NewChunkMergeIterator(chunks, 0, 0)
 
 	// Following calls mimics Prometheus's query engine behaviour for VectorSelector.
-	require.True(t, sut.Next())
-	require.True(t, sut.Seek(0))
+	require.NotEqual(t, chunkenc.ValNone, sut.Next())
+	require.NotEqual(t, chunkenc.ValNone, sut.Seek(0))
 
 	actual, val := sut.At()
 	require.Equal(t, float64(1*time.Second/time.Millisecond), val) // since mkChunk use ts as value.

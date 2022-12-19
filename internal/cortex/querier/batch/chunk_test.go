@@ -74,20 +74,20 @@ func mkGenericChunk(t require.TestingT, from model.Time, points int, enc promchu
 func testIter(t require.TestingT, points int, iter chunkenc.Iterator) {
 	ets := model.TimeFromUnix(0)
 	for i := 0; i < points; i++ {
-		require.True(t, iter.Next(), strconv.Itoa(i))
+		require.NotEqual(t, chunkenc.ValNone, iter.Next(), strconv.Itoa(i))
 		ts, v := iter.At()
 		require.EqualValues(t, int64(ets), ts, strconv.Itoa(i))
 		require.EqualValues(t, float64(ets), v, strconv.Itoa(i))
 		ets = ets.Add(step)
 	}
-	require.False(t, iter.Next())
+	require.Equal(t, chunkenc.ValNone, iter.Next())
 }
 
 func testSeek(t require.TestingT, points int, iter chunkenc.Iterator) {
 	for i := 0; i < points; i += points / 10 {
 		ets := int64(i * int(step/time.Millisecond))
 
-		require.True(t, iter.Seek(ets))
+		require.NotEqual(t, chunkenc.ValNone, iter.Seek(ets))
 		ts, v := iter.At()
 		require.EqualValues(t, ets, ts)
 		require.EqualValues(t, v, float64(ets))
@@ -95,7 +95,7 @@ func testSeek(t require.TestingT, points int, iter chunkenc.Iterator) {
 
 		for j := i + 1; j < i+points/10; j++ {
 			ets := int64(j * int(step/time.Millisecond))
-			require.True(t, iter.Next())
+			require.NotEqual(t, chunkenc.ValNone, iter.Next())
 			ts, v := iter.At()
 			require.EqualValues(t, ets, ts)
 			require.EqualValues(t, float64(ets), v)

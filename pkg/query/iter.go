@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -245,10 +246,13 @@ type errSeriesIterator struct {
 	err error
 }
 
-func (errSeriesIterator) Seek(int64) bool      { return false }
-func (errSeriesIterator) Next() bool           { return false }
-func (errSeriesIterator) At() (int64, float64) { return 0, 0 }
-func (it errSeriesIterator) Err() error        { return it.err }
+func (errSeriesIterator) Seek(int64) chunkenc.ValueType                        { return chunkenc.ValNone }
+func (errSeriesIterator) Next() chunkenc.ValueType                             { return chunkenc.ValNone }
+func (errSeriesIterator) At() (int64, float64)                                 { return 0, 0 }
+func (errSeriesIterator) AtHistogram() (int64, *histogram.Histogram)           { return 0, nil }
+func (errSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) { return 0, nil }
+func (errSeriesIterator) AtT() int64                                           { return 0 }
+func (it errSeriesIterator) Err() error                                        { return it.err }
 
 // chunkSeriesIterator implements a series iterator on top
 // of a list of time-sorted, non-overlapping chunks.
@@ -265,17 +269,18 @@ func newChunkSeriesIterator(cs []chunkenc.Iterator) chunkenc.Iterator {
 	return &chunkSeriesIterator{chunks: cs}
 }
 
-func (it *chunkSeriesIterator) Seek(t int64) (ok bool) {
+// TODO(rabenhorst: Native histogram support needs to be implement, currently float type is hardcoded.
+func (it *chunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	// We generally expect the chunks already to be cut down
 	// to the range we are interested in. There's not much to be gained from
 	// hopping across chunks so we just call next until we reach t.
 	for {
 		ct, _ := it.At()
 		if ct >= t {
-			return true
+			return chunkenc.ValFloat
 		}
-		if !it.Next() {
-			return false
+		if it.Next() == chunkenc.ValNone {
+			return chunkenc.ValNone
 		}
 	}
 }
@@ -284,17 +289,31 @@ func (it *chunkSeriesIterator) At() (t int64, v float64) {
 	return it.chunks[it.i].At()
 }
 
-func (it *chunkSeriesIterator) Next() bool {
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (it *chunkSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (it *chunkSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (it *chunkSeriesIterator) AtT() int64 {
+	t, _ := it.chunks[it.i].At()
+	return t
+}
+
+func (it *chunkSeriesIterator) Next() chunkenc.ValueType {
 	lastT, _ := it.At()
 
-	if it.chunks[it.i].Next() {
-		return true
+	if valueType := it.chunks[it.i].Next(); valueType != chunkenc.ValNone {
+		return valueType
 	}
 	if it.Err() != nil {
-		return false
+		return chunkenc.ValNone
 	}
 	if it.i >= len(it.chunks)-1 {
-		return false
+		return chunkenc.ValNone
 	}
 	// Chunks are guaranteed to be ordered but not generally guaranteed to not overlap.
 	// We must ensure to skip any overlapping range between adjacent chunks.

@@ -1205,18 +1205,7 @@ func synthesizeFakeMetricSamples(ctx context.Context, prometheus *e2emon.Instrum
 }
 
 func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, samples []model.Sample) error {
-	remoteWriteURL, err := url.Parse("http://" + prometheus.Endpoint("http") + "/api/v1/write")
-	if err != nil {
-		return err
-	}
-
-	client, err := remote.NewWriteClient("remote-write-client", &remote.ClientConfig{
-		URL:     &config_util.URL{URL: remoteWriteURL},
-		Timeout: model.Duration(30 * time.Second),
-	})
-	if err != nil {
-		return err
-	}
+	rawRemoteWriteURL := "http://" + prometheus.Endpoint("http") + "/api/v1/write"
 
 	samplespb := make([]prompb.TimeSeries, 0, len(samples))
 	for _, sample := range samples {
@@ -1238,13 +1227,30 @@ func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunna
 		})
 	}
 
-	sample := &prompb.WriteRequest{
+	writeRequest := &prompb.WriteRequest{
 		Timeseries: samplespb,
+	}
+
+	return storeWriteRequest(ctx, rawRemoteWriteURL, writeRequest)
+}
+
+func storeWriteRequest(ctx context.Context, rawRemoteWriteURL string, req *prompb.WriteRequest) error {
+	remoteWriteURL, err := url.Parse(rawRemoteWriteURL)
+	if err != nil {
+		return err
+	}
+
+	client, err := remote.NewWriteClient("remote-write-client", &remote.ClientConfig{
+		URL:     &config_util.URL{URL: remoteWriteURL},
+		Timeout: model.Duration(30 * time.Second),
+	})
+	if err != nil {
+		return err
 	}
 
 	var buf []byte
 	pBuf := proto.NewBuffer(nil)
-	if err := pBuf.Marshal(sample); err != nil {
+	if err := pBuf.Marshal(req); err != nil {
 		return err
 	}
 
