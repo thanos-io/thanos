@@ -446,7 +446,7 @@ func TestQuerier_Select(t *testing.T) {
 						storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
 						storepb.NewWarnSeriesResponse(errors.New("partial error")),
 						storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 6}, {7, 7}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 66}}), // Overlap samples for some reason. In this case the choice of value is random.
+						storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 66}}),
 						storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
 						storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{100, 1}, {300, 3}, {400, 4}}),
 					},
@@ -477,7 +477,7 @@ func TestQuerier_Select(t *testing.T) {
 			expectedAfterDedup: []series{{
 				lset: nil,
 				// We don't expect correctness here, it's just random non-replica data.
-				samples: []sample{{2, 1}, {3, 2}, {4, 4}, {5, 5}, {6, 66}, {7, 7}, {100, 1}, {t: 300, v: 3}},
+				samples: []sample{{1, 1}, {2, 2}, {3, 3}, {5, 5}, {6, 6}, {7, 7}},
 			}},
 			expectedWarning: "partial error",
 		},
@@ -744,7 +744,7 @@ func TestQuerier_Select(t *testing.T) {
 				{
 					lset: labels.FromStrings("a", "1", "x", "1"),
 					// We don't expect correctness here, it's just random non-replica data.
-					samples: []sample{{1, 1}, {2, 2}, {3, 3}, {4, 4}, {100, 1}, {300, 3}},
+					samples: []sample{{1, 1}, {2, 2}, {3, 3}, {100, 1}, {300, 3}},
 				},
 				{
 					lset: labels.FromStrings("a", "1", "x", "2"),

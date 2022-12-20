@@ -350,16 +350,28 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 		},
 		{
-			title: "storeAPI available for time range; available a few duplicated series for ext=1 external label matcher from the same storeAPIs",
+			title: "storeAPI available for time range; available a few duplicated series for ext=1 external label matcher, mixed storeAPIs",
 			storeAPIs: []Client{
 				&teststore.TestClient{
 					StoreClient: &mockedStoreAPI{
 						RespSeries: []*storepb.SeriesResponse{
-							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}), // Exact same chunk should be removed.
-							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{1, 4}, {2, 5}, {3, 6}}),
-							storepb.NewWarnSeriesResponse(errors.New("test")), // Regression: Proxy had bug that caused warning to block chaining and iden. chunk deduping logic.
-							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{2, 4}, {2, 5}, {3, 6}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "1", "w", "1"), []sample{{5, 5}, {7, 7}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "1", "w", "1"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "1", "w", "1"), []sample{{5, 5}, {6, 6}, {7, 7}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "1", "x", "1"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "1", "x", "1"), []sample{{100, 1}, {300, 3}, {400, 4}}),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+					ExtLset: []labels.Labels{labels.FromStrings("ext", "1")},
+				},
+				&teststore.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "1", "w", "1"), []sample{{2, 1}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "1", "w", "1"), []sample{{5, 5}, {6, 6}, {7, 7}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "1", "x", "2"), []sample{{10, 10}, {30, 30}, {40, 40}}),
 						},
 					},
 					MinTime: 1,
@@ -374,11 +386,18 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset:   labels.FromStrings("a", "a"),
-					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}, {{1, 4}, {2, 5}, {3, 6}}, {{2, 4}, {2, 5}, {3, 6}}},
+					lset:   labels.FromStrings("a", "1", "w", "1"),
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}, {{2, 1}}, {{5, 5}, {6, 6}, {7, 7}}, {{5, 5}, {7, 7}}},
+				},
+				{
+					lset:   labels.FromStrings("a", "1", "x", "1"),
+					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}, {{2, 2}, {3, 3}, {4, 4}}, {{100, 1}, {300, 3}, {400, 4}}},
+				},
+				{
+					lset:   labels.FromStrings("a", "1", "x", "2"),
+					chunks: [][]sample{{{10, 10}, {30, 30}, {40, 40}}},
 				},
 			},
-			expectedWarningsLen: 1,
 		},
 		{
 			title: "same external labels are validated during upload and on querier storeset, proxy does not care",
@@ -607,7 +626,7 @@ func TestProxyStore_Series(t *testing.T) {
 							testutil.Ok(t, err)
 
 							seriesEquals(t, tc.expectedSeries, s.SeriesSet)
-							testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
+							testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v warnings", s.Warnings)
 						})
 					}
 				})
@@ -1516,26 +1535,31 @@ type rawSeries struct {
 func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 	testutil.Equals(t, len(expected), len(got), "got unexpected number of series: \n %v", got)
 
-	for i, series := range got {
-		testutil.Equals(t, expected[i].lset, labelpb.ZLabelsToPromLabels(series.Labels))
-		testutil.Equals(t, len(expected[i].chunks), len(series.Chunks), "unexpected number of chunks for series %v", series.Labels)
+	ret := make([]rawSeries, len(got))
+	for i, s := range got {
+		r := rawSeries{
+			lset: labelpb.ZLabelsToPromLabels(s.Labels),
+		}
+		for _, chk := range s.Chunks {
+			var samples []sample
 
-		for k, chk := range series.Chunks {
 			c, err := chunkenc.FromData(chunkenc.EncXOR, chk.Raw.Data)
 			testutil.Ok(t, err)
 
-			j := 0
 			iter := c.Iterator(nil)
 			for iter.Next() != chunkenc.ValNone {
-				testutil.Assert(t, j < len(expected[i].chunks[k]), "more samples than expected for %v chunk %d", series.Labels, k)
-
 				tv, v := iter.At()
-				testutil.Equals(t, expected[i].chunks[k][j], sample{tv, v})
-				j++
+				samples = append(samples, sample{tv, v})
 			}
 			testutil.Ok(t, iter.Err())
-			testutil.Equals(t, len(expected[i].chunks[k]), j)
+
+			r.chunks = append(r.chunks, samples)
 		}
+		ret[i] = r
+	}
+
+	for i := range ret {
+		testutil.Equals(t, expected[i], ret[i])
 	}
 }
 
