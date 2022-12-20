@@ -402,3 +402,34 @@ func MarkForNoCompact(ctx context.Context, logger log.Logger, bkt objstore.Bucke
 	level.Info(logger).Log("msg", "block has been marked for no compaction", "block", id)
 	return nil
 }
+
+// MarkForNoDownsample creates a file which marks block to be not downsampled.
+func MarkForNoDownsample(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, reason metadata.NoDownsampleReason, details string, markedForNoDownsample prometheus.Counter) error {
+	m := path.Join(id.String(), metadata.NoDownsampleMarkFilename)
+	noDownsampleMarkExists, err := bkt.Exists(ctx, m)
+	if err != nil {
+		return errors.Wrapf(err, "check exists %s in bucket", m)
+	}
+	if noDownsampleMarkExists {
+		level.Warn(logger).Log("msg", "requested to mark for no deletion, but file already exists; this should not happen; investigate", "err", errors.Errorf("file %s already exists in bucket", m))
+		return nil
+	}
+	noDownsampleMark, err := json.Marshal(metadata.NoDownsampleMark{
+		ID:      id,
+		Version: metadata.NoDownsampleMarkVersion1,
+
+		NoDownsampleTime: time.Now().Unix(),
+		Reason:           reason,
+		Details:          details,
+	})
+	if err != nil {
+		return errors.Wrap(err, "json encode no downsample mark")
+	}
+
+	if err := bkt.Upload(ctx, m, bytes.NewBuffer(noDownsampleMark)); err != nil {
+		return errors.Wrapf(err, "upload file %s to bucket", m)
+	}
+	markedForNoDownsample.Inc()
+	level.Info(logger).Log("msg", "block has been marked for no downsample", "block", id)
+	return nil
+}
