@@ -187,7 +187,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#5145](https://github.com/thanos-io/thanos/pull/5145) UI: Remove old Prometheus UI.
 
-## [v0.25.2](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.03.24
+## [v0.25.2](https://github.com/thanos-io/thanos/releases/tag/v0.25.2) - 2022.03.24
 
 ### Fixed
 
