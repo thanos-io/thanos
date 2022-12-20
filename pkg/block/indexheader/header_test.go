@@ -21,9 +21,9 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 

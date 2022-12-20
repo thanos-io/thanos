@@ -21,10 +21,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 type testExemplarClient struct {

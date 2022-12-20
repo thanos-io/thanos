@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func Test_extractOrgId(t *testing.T) {

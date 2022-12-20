@@ -12,8 +12,8 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestDedupChunkSeriesMerger(t *testing.T) {

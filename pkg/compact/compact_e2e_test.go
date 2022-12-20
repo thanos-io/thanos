@@ -26,10 +26,10 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/objtesting"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/dedup"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
@@ -441,7 +441,7 @@ func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec, b
 	for _, b := range blocksWithOutOfOrderChunks {
 		id, meta := createBlock(t, ctx, prepareDir, b)
 
-		err := testutil.PutOutOfOrderIndex(filepath.Join(prepareDir, id.String()), b.mint, b.maxt)
+		err := e2eutil.PutOutOfOrderIndex(filepath.Join(prepareDir, id.String()), b.mint, b.maxt)
 		testutil.Ok(t, err)
 
 		metas = append(metas, meta)

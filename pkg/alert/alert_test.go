@@ -19,7 +19,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/notifier"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestQueue_Pop_all_Pushed(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 	"github.com/facette/natsort"
 	"github.com/pkg/errors"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestNatSort(t *testing.T) {

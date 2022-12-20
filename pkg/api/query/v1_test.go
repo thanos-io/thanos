@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -55,13 +56,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
 )
 
 func TestMain(m *testing.M) {
-	testutil.TolerantVerifyLeakMain(m)
+	custom.TolerantVerifyLeakMain(m)
 }
 
 type endpointTestCase struct {

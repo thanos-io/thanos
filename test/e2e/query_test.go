@@ -43,6 +43,7 @@ import (
 	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/objstore/providers/s3"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -53,7 +54,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )

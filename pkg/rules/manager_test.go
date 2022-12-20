@@ -26,10 +26,10 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"gopkg.in/yaml.v3"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 type nopAppendable struct{}

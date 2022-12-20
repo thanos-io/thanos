@@ -19,12 +19,13 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
@@ -38,7 +39,7 @@ func TestPrometheusStore_Series_promOnPath_e2e(t *testing.T) {
 }
 
 func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheusOnPath(prefix)
 	testutil.Ok(t, err)
@@ -164,7 +165,7 @@ func expandChunk(cit chunkenc.Iterator) (res []sample) {
 }
 
 func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -346,7 +347,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 }
 
 func TestPrometheusStore_LabelAPIs(t *testing.T) {
-	t.Cleanup(func() { testutil.TolerantVerifyLeak(t) })
+	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
 	testLabelAPIs(t, func(extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 		p, err := e2eutil.NewPrometheus()
 		testutil.Ok(t, err)
@@ -371,7 +372,7 @@ func TestPrometheusStore_LabelAPIs(t *testing.T) {
 }
 
 func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -433,7 +434,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 }
 
 func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -482,7 +483,7 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 }
 
 func TestPrometheusStore_Info(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -553,7 +554,7 @@ func testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, appender st
 
 // Regression test for https://github.com/thanos-io/thanos/issues/396.
 func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)

@@ -6,7 +6,7 @@ package receive
 import (
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestRequestLimiter_limitsFor(t *testing.T) {

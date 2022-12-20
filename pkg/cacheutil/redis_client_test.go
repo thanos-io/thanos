@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestRedisClient(t *testing.T) {

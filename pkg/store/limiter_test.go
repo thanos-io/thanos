@@ -6,10 +6,10 @@ package store
 import (
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestLimiter(t *testing.T) {

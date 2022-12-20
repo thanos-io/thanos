@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestMemcachedCache(t *testing.T) {

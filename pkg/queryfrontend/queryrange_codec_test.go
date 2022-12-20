@@ -14,9 +14,9 @@ import (
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 
+	"github.com/efficientgo/core/testutil"
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestQueryRangeCodec_DecodeRequest(t *testing.T) {
