@@ -33,7 +33,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil/teststore"
+	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
 
 type sample struct {
@@ -338,7 +338,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 
 	for _, tcase := range []struct {
 		name               string
-		storeAPI           storepb.StoreServer
+		storeAPI           *store.ProxyStore
 		replicaLabels      []string // Replica label groups chunks by the label value and strips it from the final result.
 		hints              *storage.SelectHints
 		equivalentQuery    string
@@ -350,11 +350,11 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 		{
 			// Regression test 1 against https://github.com/thanos-io/thanos/issues/2890.
 			name: "when switching replicas don't miss samples when set with a big enough lookback delta",
-			storeAPI: func() storepb.StoreServer {
+			storeAPI: newProxyStore(func() storepb.StoreServer {
 				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2890-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
 				testutil.Ok(t, err)
 				return s
-			}(),
+			}()),
 			equivalentQuery: `cluster_version{}`,
 			replicaLabels:   []string{"replica"},
 			hints: &storage.SelectHints{
@@ -786,7 +786,7 @@ func TestQuerier_Select(t *testing.T) {
 					g,
 					timeout,
 					nil,
-					func(i storepb.SeriesStatsCounter) {},
+					NoopSeriesStatsReporter,
 				)
 				t.Cleanup(func() { testutil.Ok(t, q.Close()) })
 
@@ -837,7 +837,7 @@ func newProxyStore(storeAPIs ...storepb.StoreServer) *store.ProxyStore {
 		if srv, ok := s.(*testStoreServer); ok {
 			withoutReplicaLabelsEnabled = len(srv.respsWithoutReplicaLabels) > 0
 		}
-		cls[i] = &teststore.TestClient{
+		cls[i] = &storetestutil.TestClient{
 			Name:        fmt.Sprintf("%v", i),
 			StoreClient: storepb.ServerAsClient(s, 0),
 			MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
@@ -1078,7 +1078,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 100 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, false, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, newProxyStore(s), false, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -1148,7 +1148,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 5 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, true, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, newProxyStore(s), true, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})

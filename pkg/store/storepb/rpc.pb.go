@@ -296,7 +296,8 @@ type SeriesRequest struct {
 	// shard_info is used by the querier to request a specific
 	// shard of blocks instead of entire blocks.
 	ShardInfo *ShardInfo `protobuf:"bytes,13,opt,name=shard_info,json=shardInfo,proto3" json:"shard_info,omitempty"`
-	// without_replica_labels are replica labels which have to be excluded from series set results (including sorting).
+	// without_replica_labels are replica labels which have to be excluded from series set results.
+	// The sorting requirement has to be preserved, so series should be sorted without those labels.
 	// If the requested label is NOT a replica label (labels that identify replication group) it should be not affected by
 	// this setting (label should be included in sorting and response).
 	// It is the server responsibility to detect and track what is replica label and what is not.

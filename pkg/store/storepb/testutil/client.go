@@ -1,4 +1,7 @@
-package teststore
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+package storetestutil
 
 import (
 	"github.com/prometheus/prometheus/model/labels"

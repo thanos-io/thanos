@@ -131,7 +131,7 @@ type querier struct {
 	mint, maxt              int64
 	replicaLabels           []string
 	storeDebugMatchers      [][]*labels.Matcher
-	proxy                   storepb.StoreServer
+	proxy                   *store.ProxyStore
 	deduplicate             bool
 	maxResolutionMillis     int64
 	partialResponseStrategy storepb.PartialResponseStrategy
@@ -152,7 +152,7 @@ func newQuerier(
 	maxt int64,
 	replicaLabels []string,
 	storeDebugMatchers [][]*labels.Matcher,
-	proxy storepb.StoreServer,
+	proxy *store.ProxyStore,
 	deduplicate bool,
 	maxResolutionMillis int64,
 	partialResponse,

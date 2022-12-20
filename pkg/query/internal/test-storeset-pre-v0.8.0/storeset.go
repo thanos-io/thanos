@@ -208,7 +208,7 @@ func (s *storeRef) SupportsSharding() bool {
 	return false
 }
 
-func (s *storeRef) SendsSortedSeries() bool {
+func (s *storeRef) SupportsWithoutReplicaLabels() bool {
 	return false
 }
 
