@@ -24,8 +24,9 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/objstore"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
@@ -76,7 +77,7 @@ func TestIsBlockDir(t *testing.T) {
 }
 
 func TestUpload(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx := context.Background()
 
@@ -228,7 +229,7 @@ func TestUpload(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -273,7 +274,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestMarkForDeletion(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -327,7 +328,7 @@ func TestMarkForDeletion(t *testing.T) {
 }
 
 func TestMarkForNoCompact(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 	ctx := context.Background()
 
 	tmpDir := t.TempDir()
@@ -380,11 +381,66 @@ func TestMarkForNoCompact(t *testing.T) {
 	}
 }
 
+func TestMarkForNoDownsample(t *testing.T) {
+
+	defer custom.TolerantVerifyLeak(t)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+
+	for _, tcase := range []struct {
+		name      string
+		preUpload func(t testing.TB, id ulid.ULID, bkt objstore.Bucket)
+
+		blocksMarked int
+	}{
+		{
+			name:         "block marked",
+			preUpload:    func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {},
+			blocksMarked: 1,
+		},
+		{
+			name: "block with no-downsample mark already, expected log and no metric increment",
+			preUpload: func(t testing.TB, id ulid.ULID, bkt objstore.Bucket) {
+				m, err := json.Marshal(metadata.NoDownsampleMark{
+					ID:               id,
+					NoDownsampleTime: time.Now().Unix(),
+					Version:          metadata.NoDownsampleMarkVersion1,
+				})
+				testutil.Ok(t, err)
+				testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.NoDownsampleMarkFilename), bytes.NewReader(m)))
+			},
+			blocksMarked: 0,
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			bkt := objstore.NewInMemBucket()
+			id, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+				{{Name: "a", Value: "1"}},
+				{{Name: "a", Value: "2"}},
+				{{Name: "a", Value: "3"}},
+				{{Name: "a", Value: "4"}},
+				{{Name: "b", Value: "1"}},
+			}, 100, 0, 1000, labels.Labels{{Name: "ext1", Value: "val1"}}, 124, metadata.NoneFunc)
+			testutil.Ok(t, err)
+
+			tcase.preUpload(t, id, bkt)
+
+			testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, id.String()), metadata.NoneFunc))
+
+			c := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+			err = MarkForNoDownsample(ctx, log.NewNopLogger(), bkt, id, metadata.ManualNoDownsampleReason, "", c)
+			testutil.Ok(t, err)
+			testutil.Equals(t, float64(tcase.blocksMarked), promtest.ToFloat64(c))
+		})
+	}
+}
+
 // TestHashDownload uploads an empty block to in-memory storage
 // and tries to download it to the same dir. It should not try
 // to download twice.
 func TestHashDownload(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx := context.Background()
 
@@ -476,7 +532,7 @@ func TestHashDownload(t *testing.T) {
 }
 
 func TestUploadCleanup(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx := context.Background()
 

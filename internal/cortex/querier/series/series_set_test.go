@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -84,7 +85,7 @@ func TestDeletedSeriesIterator(t *testing.T) {
 		it := NewDeletedSeriesIterator(NewConcreteSeriesIterator(&cs), c.r)
 		ranges := c.r[:]
 
-		for it.Next() {
+		for it.Next() != chunkenc.ValNone {
 			i++
 			for _, tr := range ranges {
 				if inbound(model.Time(i), tr) {
@@ -122,28 +123,28 @@ func TestDeletedIterator_WithSeek(t *testing.T) {
 	}
 
 	cases := []struct {
-		r        []model.Interval
-		seek     int64
-		ok       bool
-		seekedTs int64
+		r         []model.Interval
+		seek      int64
+		valueType chunkenc.ValueType
+		seekedTs  int64
 	}{
-		{r: []model.Interval{{Start: 1, End: 20}}, seek: 1, ok: true, seekedTs: 21},
-		{r: []model.Interval{{Start: 1, End: 20}}, seek: 20, ok: true, seekedTs: 21},
-		{r: []model.Interval{{Start: 1, End: 20}}, seek: 10, ok: true, seekedTs: 21},
-		{r: []model.Interval{{Start: 1, End: 20}}, seek: 999, ok: true, seekedTs: 999},
-		{r: []model.Interval{{Start: 1, End: 20}}, seek: 1000, ok: false},
-		{r: []model.Interval{{Start: 1, End: 23}, {Start: 24, End: 40}, {Start: 45, End: 3000}}, seek: 1, ok: true, seekedTs: 41},
-		{r: []model.Interval{{Start: 5, End: 23}, {Start: 24, End: 40}, {Start: 41, End: 3000}}, seek: 5, ok: false},
-		{r: []model.Interval{{Start: 0, End: 2000}}, seek: 10, ok: false},
-		{r: []model.Interval{{Start: 500, End: 2000}}, seek: 10, ok: true, seekedTs: 10},
-		{r: []model.Interval{{Start: 500, End: 2000}}, seek: 501, ok: false},
+		{r: []model.Interval{{Start: 1, End: 20}}, seek: 1, valueType: chunkenc.ValFloat, seekedTs: 21},
+		{r: []model.Interval{{Start: 1, End: 20}}, seek: 20, valueType: chunkenc.ValFloat, seekedTs: 21},
+		{r: []model.Interval{{Start: 1, End: 20}}, seek: 10, valueType: chunkenc.ValFloat, seekedTs: 21},
+		{r: []model.Interval{{Start: 1, End: 20}}, seek: 999, valueType: chunkenc.ValFloat, seekedTs: 999},
+		{r: []model.Interval{{Start: 1, End: 20}}, seek: 1000, valueType: chunkenc.ValNone},
+		{r: []model.Interval{{Start: 1, End: 23}, {Start: 24, End: 40}, {Start: 45, End: 3000}}, seek: 1, valueType: chunkenc.ValFloat, seekedTs: 41},
+		{r: []model.Interval{{Start: 5, End: 23}, {Start: 24, End: 40}, {Start: 41, End: 3000}}, seek: 5, valueType: chunkenc.ValNone},
+		{r: []model.Interval{{Start: 0, End: 2000}}, seek: 10, valueType: chunkenc.ValNone},
+		{r: []model.Interval{{Start: 500, End: 2000}}, seek: 10, valueType: chunkenc.ValFloat, seekedTs: 10},
+		{r: []model.Interval{{Start: 500, End: 2000}}, seek: 501, valueType: chunkenc.ValNone},
 	}
 
 	for _, c := range cases {
 		it := NewDeletedSeriesIterator(NewConcreteSeriesIterator(&cs), c.r)
 
-		require.Equal(t, c.ok, it.Seek(c.seek))
-		if c.ok {
+		require.Equal(t, c.valueType, it.Seek(c.seek))
+		if c.valueType != chunkenc.ValNone {
 			ts, _ := it.At()
 			require.Equal(t, c.seekedTs, ts)
 		}

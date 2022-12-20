@@ -15,8 +15,8 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 type sample struct {
@@ -369,7 +369,7 @@ func expandSeriesSet(t *testing.T, gotSS SeriesSet) (ret []rawSeries) {
 			testutil.Ok(t, err)
 
 			iter := c.Iterator(nil)
-			for iter.Next() {
+			for iter.Next() != chunkenc.ValNone {
 				t, v := iter.At()
 				r.chunks[i] = append(r.chunks[i], sample{t: t, v: v})
 			}

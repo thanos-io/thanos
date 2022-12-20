@@ -4,17 +4,20 @@
 package downsample
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/tsdb"
@@ -22,7 +25,10 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
+	"golang.org/x/sync/errgroup"
 
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -450,7 +456,7 @@ func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 	// If it does, we skip it.
 	lastT := int64(0)
 
-	for it.Next() {
+	for it.Next() != chunkenc.ValNone {
 		t, v := it.At()
 		if value.IsStaleNaN(v) {
 			continue
@@ -604,12 +610,13 @@ func NewApplyCounterResetsIterator(chks ...chunkenc.Iterator) *ApplyCounterReset
 	return &ApplyCounterResetsSeriesIterator{chks: chks}
 }
 
-func (it *ApplyCounterResetsSeriesIterator) Next() bool {
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
+func (it *ApplyCounterResetsSeriesIterator) Next() chunkenc.ValueType {
 	for {
 		if it.i >= len(it.chks) {
-			return false
+			return chunkenc.ValNone
 		}
-		if ok := it.chks[it.i].Next(); !ok {
+		if it.chks[it.i].Next() == chunkenc.ValNone {
 			it.i++
 			// While iterators are ordered, they are not generally guaranteed to be
 			// non-overlapping. Ensure that the series does not go back in time by seeking at least
@@ -626,7 +633,7 @@ func (it *ApplyCounterResetsSeriesIterator) Next() bool {
 			it.total++
 			it.lastT, it.lastV = t, v
 			it.totalV = v
-			return true
+			return chunkenc.ValFloat
 		}
 		// If the timestamp increased, it is not the special last sample.
 		if t > it.lastT {
@@ -637,7 +644,7 @@ func (it *ApplyCounterResetsSeriesIterator) Next() bool {
 			}
 			it.lastT, it.lastV = t, v
 			it.total++
-			return true
+			return chunkenc.ValFloat
 		}
 		// We hit a sample that indicates what the true last value was. For the
 		// next chunk we use it to determine whether there was a counter reset between them.
@@ -652,16 +659,28 @@ func (it *ApplyCounterResetsSeriesIterator) At() (t int64, v float64) {
 	return it.lastT, it.totalV
 }
 
-func (it *ApplyCounterResetsSeriesIterator) Seek(x int64) bool {
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (it *ApplyCounterResetsSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (it *ApplyCounterResetsSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (it *ApplyCounterResetsSeriesIterator) AtT() int64 {
+	return it.lastT
+}
+
+func (it *ApplyCounterResetsSeriesIterator) Seek(x int64) chunkenc.ValueType {
 	// Don't use underlying Seek, but iterate over next to not miss counter resets.
 	for {
 		if t, _ := it.At(); t >= x {
-			return true
+			return chunkenc.ValFloat
 		}
 
-		ok := it.Next()
-		if !ok {
-			return false
+		if it.Next() == chunkenc.ValNone {
+			return chunkenc.ValNone
 		}
 	}
 }
@@ -687,33 +706,47 @@ func NewAverageChunkIterator(cnt, sum chunkenc.Iterator) *AverageChunkIterator {
 	return &AverageChunkIterator{cntIt: cnt, sumIt: sum}
 }
 
-func (it *AverageChunkIterator) Next() bool {
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
+func (it *AverageChunkIterator) Next() chunkenc.ValueType {
 	cok, sok := it.cntIt.Next(), it.sumIt.Next()
 	if cok != sok {
 		it.err = errors.New("sum and count iterator not aligned")
-		return false
+		return chunkenc.ValNone
 	}
-	if !cok {
-		return false
+	if cok == chunkenc.ValNone {
+		return chunkenc.ValNone
 	}
 
 	cntT, cntV := it.cntIt.At()
 	sumT, sumV := it.sumIt.At()
 	if cntT != sumT {
 		it.err = errors.New("sum and count timestamps not aligned")
-		return false
+		return chunkenc.ValNone
 	}
 	it.t, it.v = cntT, sumV/cntV
-	return true
+	return chunkenc.ValFloat
 }
 
-func (it *AverageChunkIterator) Seek(t int64) bool {
+func (it *AverageChunkIterator) Seek(t int64) chunkenc.ValueType {
 	it.err = errors.New("seek used, but not implemented")
-	return false
+	return chunkenc.ValNone
 }
 
 func (it *AverageChunkIterator) At() (int64, float64) {
 	return it.t, it.v
+}
+
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (it *AverageChunkIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (it *AverageChunkIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (it *AverageChunkIterator) AtT() int64 {
+	return it.t
 }
 
 func (it *AverageChunkIterator) Err() error {
@@ -733,4 +766,107 @@ func SamplesFromTSDBSamples(samples []tsdbutil.Sample) []sample {
 		res[i] = sample{t: s.T(), v: s.V()}
 	}
 	return res
+}
+
+// GatherNoDownsampleMarkFilter is a block.Fetcher filter that passes all metas.
+// While doing it, it gathers all no-downsample-mark.json markers.
+type GatherNoDownsampleMarkFilter struct {
+	logger                log.Logger
+	bkt                   objstore.InstrumentedBucketReader
+	noDownsampleMarkedMap map[ulid.ULID]*metadata.NoDownsampleMark
+	concurrency           int
+	mtx                   sync.Mutex
+}
+
+// NewGatherNoDownsampleMarkFilter creates GatherNoDownsampleMarkFilter.
+func NewGatherNoDownsampleMarkFilter(logger log.Logger, bkt objstore.InstrumentedBucketReader) *GatherNoDownsampleMarkFilter {
+	return &GatherNoDownsampleMarkFilter{
+		logger:      logger,
+		bkt:         bkt,
+		concurrency: 1,
+	}
+}
+
+// NoDownsampleMarkedBlocks returns block ids that were marked for no downsample.
+func (f *GatherNoDownsampleMarkFilter) NoDownsampleMarkedBlocks() map[ulid.ULID]*metadata.NoDownsampleMark {
+	f.mtx.Lock()
+	copiedNoDownsampleMarked := make(map[ulid.ULID]*metadata.NoDownsampleMark, len(f.noDownsampleMarkedMap))
+	for k, v := range f.noDownsampleMarkedMap {
+		copiedNoDownsampleMarked[k] = v
+	}
+	f.mtx.Unlock()
+
+	return copiedNoDownsampleMarked
+}
+
+// TODO (@rohitkochhar): reduce code duplication here by combining
+// this code with that of GatherNoCompactionMarkFilter
+// Filter passes all metas, while gathering no downsample markers.
+func (f *GatherNoDownsampleMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced block.GaugeVec, modified block.GaugeVec) error {
+	f.mtx.Lock()
+	f.noDownsampleMarkedMap = make(map[ulid.ULID]*metadata.NoDownsampleMark)
+	f.mtx.Unlock()
+
+	// Make a copy of block IDs to check, in order to avoid concurrency issues
+	// between the scheduler and workers.
+	blockIDs := make([]ulid.ULID, 0, len(metas))
+	for id := range metas {
+		blockIDs = append(blockIDs, id)
+	}
+
+	var (
+		eg errgroup.Group
+		ch = make(chan ulid.ULID, f.concurrency)
+	)
+
+	for i := 0; i < f.concurrency; i++ {
+		eg.Go(func() error {
+			var lastErr error
+			for id := range ch {
+				m := &metadata.NoDownsampleMark{}
+
+				if err := metadata.ReadMarker(ctx, f.logger, f.bkt, id.String(), m); err != nil {
+					if errors.Cause(err) == metadata.ErrorMarkerNotFound {
+						continue
+					}
+					if errors.Cause(err) == metadata.ErrorUnmarshalMarker {
+						level.Warn(f.logger).Log("msg", "found partial no-downsample-mark.json; if we will see it happening often for the same block, consider manually deleting no-downsample-mark.json from the object storage", "block", id, "err", err)
+						continue
+					}
+					// Remember the last error and continue draining the channel.
+					lastErr = err
+					continue
+				}
+
+				f.mtx.Lock()
+				f.noDownsampleMarkedMap[id] = m
+				f.mtx.Unlock()
+				synced.WithLabelValues(block.MarkedForNoDownsampleMeta).Inc()
+			}
+
+			return lastErr
+		})
+	}
+
+	// Workers scheduled, distribute blocks.
+	eg.Go(func() error {
+		defer close(ch)
+
+		for _, id := range blockIDs {
+			select {
+			case ch <- id:
+				// Nothing to do.
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		return errors.Wrap(err, "filter blocks marked for no downsample")
+	}
+
+	return nil
 }

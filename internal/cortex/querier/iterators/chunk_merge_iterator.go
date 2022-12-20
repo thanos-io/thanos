@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/thanos-io/thanos/internal/cortex/chunk"
@@ -32,7 +33,7 @@ func NewChunkMergeIterator(cs []chunk.Chunk, _, _ model.Time) chunkenc.Iterator 
 	}
 
 	for _, iter := range c.its {
-		if iter.Next() {
+		if iter.Next() != chunkenc.ValNone {
 			c.h = append(c.h, iter)
 			continue
 		}
@@ -76,18 +77,19 @@ outer:
 	return its
 }
 
-func (c *chunkMergeIterator) Seek(t int64) bool {
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
+func (c *chunkMergeIterator) Seek(t int64) chunkenc.ValueType {
 	c.h = c.h[:0]
 
 	for _, iter := range c.its {
-		if iter.Seek(t) {
+		if iter.Seek(t) != chunkenc.ValNone {
 			c.h = append(c.h, iter)
 			continue
 		}
 
 		if err := iter.Err(); err != nil {
 			c.currErr = err
-			return false
+			return chunkenc.ValNone
 		}
 	}
 
@@ -95,22 +97,22 @@ func (c *chunkMergeIterator) Seek(t int64) bool {
 
 	if len(c.h) > 0 {
 		c.currTime, c.currValue = c.h[0].At()
-		return true
+		return chunkenc.ValFloat
 	}
 
-	return false
+	return chunkenc.ValNone
 }
 
-func (c *chunkMergeIterator) Next() bool {
+func (c *chunkMergeIterator) Next() chunkenc.ValueType {
 	if len(c.h) == 0 {
-		return false
+		return chunkenc.ValNone
 	}
 
 	lastTime := c.currTime
 	for c.currTime == lastTime && len(c.h) > 0 {
 		c.currTime, c.currValue = c.h[0].At()
 
-		if c.h[0].Next() {
+		if c.h[0].Next() != chunkenc.ValNone {
 			heap.Fix(&c.h, 0)
 			continue
 		}
@@ -118,15 +120,32 @@ func (c *chunkMergeIterator) Next() bool {
 		iter := heap.Pop(&c.h).(chunkenc.Iterator)
 		if err := iter.Err(); err != nil {
 			c.currErr = err
-			return false
+			return chunkenc.ValNone
 		}
 	}
 
-	return c.currTime != lastTime
+	if c.currTime != lastTime {
+		return chunkenc.ValFloat
+	}
+
+	return chunkenc.ValNone
 }
 
 func (c *chunkMergeIterator) At() (t int64, v float64) {
 	return c.currTime, c.currValue
+}
+
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (c *chunkMergeIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (c *chunkMergeIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (c *chunkMergeIterator) AtT() int64 {
+	return c.currTime
 }
 
 func (c *chunkMergeIterator) Err() error {
@@ -180,22 +199,27 @@ func newNonOverlappingIterator(chunks []*chunkIterator) *nonOverlappingIterator 
 	}
 }
 
-func (it *nonOverlappingIterator) Seek(t int64) bool {
+// TODO(rabenhorst): Native histogram support needs to be added, float type is hardcoded.
+func (it *nonOverlappingIterator) Seek(t int64) chunkenc.ValueType {
 	for ; it.curr < len(it.chunks); it.curr++ {
 		if it.chunks[it.curr].Seek(t) {
-			return true
+			return chunkenc.ValFloat
 		}
 	}
 
-	return false
+	return chunkenc.ValNone
 }
 
-func (it *nonOverlappingIterator) Next() bool {
+func (it *nonOverlappingIterator) Next() chunkenc.ValueType {
 	for it.curr < len(it.chunks) && !it.chunks[it.curr].Next() {
 		it.curr++
 	}
 
-	return it.curr < len(it.chunks)
+	if it.curr < len(it.chunks) {
+		return chunkenc.ValFloat
+	}
+
+	return chunkenc.ValNone
 }
 
 func (it *nonOverlappingIterator) AtTime() int64 {
@@ -204,6 +228,19 @@ func (it *nonOverlappingIterator) AtTime() int64 {
 
 func (it *nonOverlappingIterator) At() (int64, float64) {
 	return it.chunks[it.curr].At()
+}
+
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (it *nonOverlappingIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (it *nonOverlappingIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (it *nonOverlappingIterator) AtT() int64 {
+	return it.chunks[it.curr].AtTime()
 }
 
 func (it *nonOverlappingIterator) Err() error {

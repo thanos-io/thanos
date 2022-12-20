@@ -26,11 +26,11 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 

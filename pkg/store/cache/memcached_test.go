@@ -15,7 +15,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {

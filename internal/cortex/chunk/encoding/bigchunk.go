@@ -278,7 +278,7 @@ func (it *bigchunkIterator) FindAtOrAfter(target model.Time) bool {
 		it.curr = it.chunks[it.i].Iterator(it.curr)
 	}
 
-	for it.curr.Next() {
+	for it.curr.Next() != chunkenc.ValNone {
 		t, _ := it.curr.At()
 		if t >= int64(target) {
 			return true
@@ -296,7 +296,7 @@ func (it *bigchunkIterator) FindAtOrAfter(target model.Time) bool {
 }
 
 func (it *bigchunkIterator) Scan() bool {
-	if it.curr.Next() {
+	if it.curr.Next() != chunkenc.ValNone {
 		return true
 	}
 	if err := it.curr.Err(); err != nil {
@@ -306,7 +306,7 @@ func (it *bigchunkIterator) Scan() bool {
 	for it.i < len(it.chunks)-1 {
 		it.i++
 		it.curr = it.chunks[it.i].Iterator(it.curr)
-		if it.curr.Next() {
+		if it.curr.Next() != chunkenc.ValNone {
 			return true
 		}
 	}
@@ -348,7 +348,7 @@ func (it *bigchunkIterator) Err() error {
 func firstTime(c chunkenc.Chunk, iter chunkenc.Iterator) (int64, chunkenc.Iterator, error) {
 	var first int64
 	iter = c.Iterator(iter)
-	if iter.Next() {
+	if iter.Next() != chunkenc.ValNone {
 		first, _ = iter.At()
 	}
 	return first, iter, iter.Err()

@@ -18,18 +18,19 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 const skipMessage = "Chunk behavior changed due to https://github.com/prometheus/prometheus/pull/8723. Skip for now."
 
 func TestTSDBStore_Info(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -63,7 +64,7 @@ func TestTSDBStore_Info(t *testing.T) {
 }
 
 func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -103,7 +104,7 @@ func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 }
 
 func TestTSDBStore_Series(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -228,7 +229,7 @@ func TestTSDBStore_Series(t *testing.T) {
 }
 
 func TestTSDBStore_LabelAPIs(t *testing.T) {
-	t.Cleanup(func() { testutil.TolerantVerifyLeak(t) })
+	t.Cleanup(func() { custom.TolerantVerifyLeak(t) })
 	testLabelAPIs(t, func(extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
 		db, err := e2eutil.NewTSDB()
 		testutil.Ok(t, err)
@@ -243,7 +244,7 @@ func TestTSDBStore_LabelAPIs(t *testing.T) {
 
 // Regression test for https://github.com/thanos-io/thanos/issues/1038.
 func TestTSDBStore_Series_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()

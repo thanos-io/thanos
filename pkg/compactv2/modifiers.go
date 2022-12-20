@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
@@ -234,9 +235,13 @@ type delSeriesIterator struct {
 	curr chunkenc.Iterator
 }
 
-func (p *delSeriesIterator) Next() bool {
-	if p.curr != nil && p.curr.Next() {
-		return true
+func (p *delSeriesIterator) Next() chunkenc.ValueType {
+	if p.curr == nil {
+		return chunkenc.ValNone
+	}
+
+	if valueType := p.curr.Next(); valueType != chunkenc.ValNone {
+		return valueType
 	}
 
 	for p.next() {
@@ -245,26 +250,44 @@ func (p *delSeriesIterator) Next() bool {
 		} else {
 			p.curr = p.currChkMeta.Chunk.Iterator(nil)
 		}
-		if p.curr.Next() {
-			return true
+		if valueType := p.curr.Next(); valueType != chunkenc.ValNone {
+			return valueType
 		}
 	}
-	return false
+	return chunkenc.ValNone
 }
 
-func (p *delSeriesIterator) Seek(t int64) bool {
-	if p.curr != nil && p.curr.Seek(t) {
-		return true
+func (p *delSeriesIterator) Seek(t int64) chunkenc.ValueType {
+	if p.curr == nil {
+		return chunkenc.ValNone
 	}
-	for p.Next() {
-		if p.curr.Seek(t) {
-			return true
+
+	if valueType := p.curr.Seek(t); valueType != chunkenc.ValNone {
+		return valueType
+	}
+	for p.Next() != chunkenc.ValNone {
+		if valueType := p.curr.Seek(t); valueType != chunkenc.ValNone {
+			return valueType
 		}
 	}
-	return false
+	return chunkenc.ValNone
 }
 
 func (p *delSeriesIterator) At() (int64, float64) { return p.curr.At() }
+
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (p *delSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (p *delSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (p *delSeriesIterator) AtT() int64 {
+	t, _ := p.curr.At()
+	return t
+}
 
 func (p *delSeriesIterator) Err() error {
 	if err := p.delGenericSeriesIterator.Err(); err != nil {
@@ -300,7 +323,7 @@ func (p *delChunkSeriesIterator) Next() bool {
 		return false
 	}
 
-	if !p.currDelIter.Next() {
+	if p.currDelIter.Next() == chunkenc.ValNone {
 		if err := p.currDelIter.Err(); err != nil {
 			p.err = errors.Wrap(err, "iterate chunk while re-encoding")
 			return false
@@ -315,7 +338,7 @@ func (p *delChunkSeriesIterator) Next() bool {
 	p.curr.MinTime = t
 	app.Append(t, v)
 
-	for p.currDelIter.Next() {
+	for p.currDelIter.Next() != chunkenc.ValNone {
 		t, v = p.currDelIter.At()
 		app.Append(t, v)
 	}

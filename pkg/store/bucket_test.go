@@ -44,6 +44,7 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -56,7 +57,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
@@ -193,7 +194,7 @@ func TestBucketBlock_Property(t *testing.T) {
 }
 
 func TestBucketFilterExtLabelsMatchers(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	dir := t.TempDir()
 	bkt, err := filesystem.NewBucket(dir)
@@ -239,7 +240,7 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 }
 
 func TestBucketBlock_matchLabels(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	dir := t.TempDir()
 
@@ -335,7 +336,7 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 }
 
 func TestBucketBlockSet_addGet(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	set := newBucketBlockSet(labels.Labels{})
 
@@ -446,7 +447,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 }
 
 func TestBucketBlockSet_remove(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	set := newBucketBlockSet(labels.Labels{})
 
@@ -476,7 +477,7 @@ func TestBucketBlockSet_remove(t *testing.T) {
 }
 
 func TestBucketBlockSet_labelMatchers(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	set := newBucketBlockSet(labels.FromStrings("a", "b", "c", "d"))
 
@@ -545,7 +546,7 @@ func TestBucketBlockSet_labelMatchers(t *testing.T) {
 }
 
 func TestGapBasedPartitioner_Partition(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	const maxGapSize = 1024 * 512
 
@@ -631,7 +632,7 @@ func TestBucketStoreConfig_validate(t *testing.T) {
 }
 
 func TestBucketStore_Info(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -30,10 +30,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/promql"
@@ -41,6 +43,7 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	promgate "github.com/prometheus/prometheus/util/gate"
 	"github.com/prometheus/prometheus/util/stats"
@@ -53,13 +56,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
 )
 
 func TestMain(m *testing.M) {
-	testutil.TolerantVerifyLeakMain(m)
+	custom.TolerantVerifyLeakMain(m)
 }
 
 type endpointTestCase struct {
@@ -1854,4 +1857,17 @@ func (s sample) T() int64 {
 
 func (s sample) V() float64 {
 	return s.v
+}
+
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (s sample) H() *histogram.Histogram {
+	panic("not implemented")
+}
+
+func (s sample) FH() *histogram.FloatHistogram {
+	panic("not implemented")
+}
+
+func (s sample) Type() chunkenc.ValueType {
+	return chunkenc.ValFloat
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/stretchr/testify/require"
 
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
@@ -64,7 +65,7 @@ func Test_ResponseToSamples(t *testing.T) {
 		require.Nil(t, set.Err())
 
 		sampleCt := 0
-		for iter.Next() {
+		for iter.Next() != chunkenc.ValNone {
 			ts, v := iter.At()
 			require.Equal(t, input.Data.Result[setCt].Samples[sampleCt].TimestampMs, ts)
 			require.Equal(t, input.Data.Result[setCt].Samples[sampleCt].Value, v)

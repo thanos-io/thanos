@@ -19,9 +19,9 @@ import (
 	"github.com/prometheus/common/model"
 	"gopkg.in/yaml.v2"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/objstore/providers/s3"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	tracingclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"

@@ -27,12 +27,12 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )

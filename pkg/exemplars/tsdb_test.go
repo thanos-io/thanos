@@ -8,7 +8,7 @@ import (
 
 	"github.com/prometheus/prometheus/model/labels"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestSelectorsMatchExternalLabels(t *testing.T) {
