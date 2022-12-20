@@ -84,6 +84,25 @@ func TestSortWithoutLabels(t *testing.T) {
 			},
 			dedupLabels: map[string]struct{}{"b": {}},
 		},
+		// Longer series.
+		{
+			input: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labels.FromStrings(
+					"__name__", "gitlab_transaction_cache_read_hit_count_total", "action", "widget.json", "controller", "Projects::MergeRequests::ContentController", "env", "gprd", "environment",
+					"gprd", "fqdn", "web-08-sv-gprd.c.gitlab-production.internal", "instance", "web-08-sv-gprd.c.gitlab-production.internal:8083", "job", "gitlab-rails", "monitor", "app", "provider",
+					"gcp", "region", "us-east", "replica", "01", "shard", "default", "stage", "main", "tier", "sv", "type", "web",
+				)),
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labels.FromStrings(
+					// No replica label anymore.
+					"__name__", "gitlab_transaction_cache_read_hit_count_total", "action", "widget.json", "controller", "Projects::MergeRequests::ContentController", "env", "gprd", "environment",
+					"gprd", "fqdn", "web-08-sv-gprd.c.gitlab-production.internal", "instance", "web-08-sv-gprd.c.gitlab-production.internal:8083", "job", "gitlab-rails", "monitor", "app", "provider",
+					"gcp", "region", "us-east", "shard", "default", "stage", "main", "tier", "sv", "type", "web",
+				)),
+			},
+			dedupLabels: map[string]struct{}{"replica": {}},
+		},
 	} {
 		t.Run("", func(t *testing.T) {
 			sortWithoutLabels(tcase.input, tcase.dedupLabels)

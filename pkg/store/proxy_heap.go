@@ -147,8 +147,10 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 		return finalChunks[i].Compare(finalChunks[j]) > 0
 	})
 
-	series[0].GetSeries().Chunks = finalChunks
-	return series[0]
+	return storepb.NewSeriesResponse(&storepb.Series{
+		Labels: series[0].GetSeries().Labels,
+		Chunks: finalChunks,
+	})
 }
 
 func (d *dedupResponseHeap) At() *storepb.SeriesResponse {

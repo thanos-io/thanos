@@ -677,7 +677,7 @@ func TestQuerier_Select(t *testing.T) {
 				{
 					lset: labels.FromStrings("a", "1", "x", "1"),
 					// We don't expect correctness here, it's just random non-replica data.
-					samples: []sample{{1, 1}, {2, 2}, {3, 3}, {4, 4}, {100, 1}, {300, 3}},
+					samples: []sample{{1, 1}, {2, 2}, {3, 3}, {100, 1}, {300, 3}},
 				},
 				{
 					lset: labels.FromStrings("a", "1", "x", "2"),
