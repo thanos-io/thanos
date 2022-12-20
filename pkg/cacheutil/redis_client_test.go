@@ -203,17 +203,10 @@ func TestValidateRedisConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := tt.config()
 
-			logger := log.NewLogfmtLogger(os.Stderr)
-			reg := prometheus.NewRegistry()
-			val, err := NewRedisClientWithConfig(logger, tt.name, cfg, reg)
-			if val != nil {
-				defer val.Stop()
-			}
-
 			if tt.expect_err {
-				testutil.NotOk(t, err, val)
+				testutil.NotOk(t, cfg.validate())
 			} else {
-				testutil.Ok(t, err, val)
+				testutil.Ok(t, cfg.validate())
 			}
 		})
 	}

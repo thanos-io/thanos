@@ -30,6 +30,7 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
@@ -639,4 +640,27 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 			return fmt.Errorf("expected an error")
 		}))
 	})
+}
+
+func TestRedisClient_Rueidis(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("redis-client")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	r := e2ethanos.NewRedis(e, "redis")
+	testutil.Ok(t, r.Start())
+
+	redisClient, err := cacheutil.NewRedisClientWithConfig(log.NewLogfmtLogger(os.Stderr), "redis", cacheutil.RedisClientConfig{
+		Addr: r.Endpoint("redis"),
+	}, nil)
+	testutil.Ok(t, err)
+
+	err = redisClient.SetAsync(context.TODO(), "foo", []byte(`bar`), 1*time.Minute)
+	testutil.Ok(t, err)
+
+	returnedVals := redisClient.GetMulti(context.TODO(), []string{"foo"})
+	testutil.Equals(t, 1, len(returnedVals))
+	testutil.Equals(t, []byte("bar"), returnedVals["foo"])
 }
