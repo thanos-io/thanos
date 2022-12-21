@@ -159,6 +159,13 @@ func (m *Thanos) GroupKey() string {
 	return m.GroupKeyForShard(m.VerticalShardID)
 }
 
+func (m *Thanos) GetVerticalShardID() string {
+	if m.VerticalShardID == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d", *m.VerticalShardID)
+}
+
 func (m *Thanos) GroupKeyForShard(verticalShard *uint64) string {
 	var shardKey string
 	if verticalShard != nil {
