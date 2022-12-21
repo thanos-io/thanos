@@ -406,7 +406,6 @@ func runCompact(
 		defer cleanMtx.Unlock()
 
 		if err := sy.SyncMetas(ctx); err != nil {
-			cancel()
 			return errors.Wrap(err, "syncing metas")
 		}
 
