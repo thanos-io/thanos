@@ -19,6 +19,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5880](https://github.com/thanos-io/thanos/pull/5880) Query Frontend: Fixes some edge cases of query sharding analysis.
 - [#5893](https://github.com/thanos-io/thanos/pull/5893) Cache: Fixed redis client not respecting `SetMultiBatchSize` config value.
 - [#5966](https://github.com/thanos-io/thanos/pull/5966) Query: Fixed mint and maxt when selecting series for the `api/v1/series` HTTP endpoint.
+- [#5997](https://github.com/thanos-io/thanos/pull/5997) Rule: switch to miekgdns DNS resolver as the default one.
 
 ### Added
 
