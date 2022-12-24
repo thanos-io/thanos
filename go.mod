@@ -228,7 +228,7 @@ require (
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rs/xid v1.4.0 // indirect
-	github.com/rueian/rueidis v0.0.88
+	github.com/rueian/rueidis v0.0.90
 	github.com/santhosh-tekuri/jsonschema v1.2.4 // indirect
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
 	github.com/sercand/kuberesolver v2.4.0+incompatible // indirect
