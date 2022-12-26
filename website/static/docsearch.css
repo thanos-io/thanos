@@ -1,0 +1,15 @@
+@media (max-width:530px) and (min-width:360px){
+    .algolia-autocomplete .ds-dropdown-menu [class^=ds-dataset-]{
+        width: 70%;
+    }
+}
+@media (max-width:360px) and (min-width:300px){
+    .algolia-autocomplete .ds-dropdown-menu [class^=ds-dataset-]{
+        width: 60%;
+    }
+}
+@media (max-width:300px) {
+    .algolia-autocomplete .ds-dropdown-menu [class^=ds-dataset-]{
+        width: 50%;
+    }
+}
