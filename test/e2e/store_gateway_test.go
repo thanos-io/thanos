@@ -279,7 +279,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	// TODO(khyati) Let's add some case for compaction-meta.json once the PR will be merged: https://github.com/thanos-io/thanos/pull/2136.
 }
 
-// Test store with `--disable-caching-index-header-file` flag.
+// Test store with `--no-cache-index-header` flag.
 func TestStoreGatewayNoCacheFile(t *testing.T) {
 	t.Parallel()
 
@@ -299,7 +299,7 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
 		},
 		"",
-		[]string{"--disable-caching-index-header-file"},
+		[]string{"--no-cache-index-header"},
 		relabel.Config{
 			Action:       relabel.Drop,
 			Regex:        relabel.MustNewRegexp("value2"),

@@ -55,36 +55,36 @@ const (
 )
 
 type storeConfig struct {
-	indexCacheConfigs             extflag.PathOrContent
-	objStoreConfig                extflag.PathOrContent
-	dataDir                       string
-	disableCachingIndexHeaderFile bool
-	grpcConfig                    grpcConfig
-	httpConfig                    httpConfig
-	indexCacheSizeBytes           units.Base2Bytes
-	chunkPoolSize                 units.Base2Bytes
-	seriesBatchSize               int
-	maxSampleCount                uint64
-	maxTouchedSeriesCount         uint64
-	maxDownloadedBytes            units.Base2Bytes
-	maxConcurrency                int
-	component                     component.StoreAPI
-	debugLogging                  bool
-	syncInterval                  time.Duration
-	blockSyncConcurrency          int
-	blockMetaFetchConcurrency     int
-	filterConf                    *store.FilterConfig
-	selectorRelabelConf           extflag.PathOrContent
-	advertiseCompatibilityLabel   bool
-	consistencyDelay              commonmodel.Duration
-	ignoreDeletionMarksDelay      commonmodel.Duration
-	disableWeb                    bool
-	webConfig                     webConfig
-	postingOffsetsInMemSampling   int
-	cachingBucketConfig           extflag.PathOrContent
-	reqLogConfig                  *extflag.PathOrContent
-	lazyIndexReaderEnabled        bool
-	lazyIndexReaderIdleTimeout    time.Duration
+	indexCacheConfigs           extflag.PathOrContent
+	objStoreConfig              extflag.PathOrContent
+	dataDir                     string
+	cacheIndexHeader            bool
+	grpcConfig                  grpcConfig
+	httpConfig                  httpConfig
+	indexCacheSizeBytes         units.Base2Bytes
+	chunkPoolSize               units.Base2Bytes
+	seriesBatchSize             int
+	maxSampleCount              uint64
+	maxTouchedSeriesCount       uint64
+	maxDownloadedBytes          units.Base2Bytes
+	maxConcurrency              int
+	component                   component.StoreAPI
+	debugLogging                bool
+	syncInterval                time.Duration
+	blockSyncConcurrency        int
+	blockMetaFetchConcurrency   int
+	filterConf                  *store.FilterConfig
+	selectorRelabelConf         extflag.PathOrContent
+	advertiseCompatibilityLabel bool
+	consistencyDelay            commonmodel.Duration
+	ignoreDeletionMarksDelay    commonmodel.Duration
+	disableWeb                  bool
+	webConfig                   webConfig
+	postingOffsetsInMemSampling int
+	cachingBucketConfig         extflag.PathOrContent
+	reqLogConfig                *extflag.PathOrContent
+	lazyIndexReaderEnabled      bool
+	lazyIndexReaderIdleTimeout  time.Duration
 }
 
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -94,8 +94,8 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar. Ignored if --disable-caching-index-header-file option is specified.").
 		Default("./data").StringVar(&sc.dataDir)
 
-	cmd.Flag("disable-caching-index-header-file", "Disable caching index-header file on disk. Store will create index header from remote object storage on startup, and cache them in memory, no index header file will be created on the disk. If set, the --data-dir will be ignored.").
-		Default("false").BoolVar(&sc.disableCachingIndexHeaderFile)
+	cmd.Flag("cache-index-header", "Cache TSDB index-headers on disk to reduce startup time. When set to true, Thanos Store will download index headers from remote object storage on startup and create a header file on disk. Use --data-dir to set the directory in which index headers will be downloaded.").
+		Default("true").BoolVar(&sc.cacheIndexHeader)
 
 	cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
 		Default("250MB").BytesVar(&sc.indexCacheSizeBytes)
@@ -242,7 +242,7 @@ func runStore(
 	flagsMap map[string]string,
 ) error {
 	dataDir := conf.dataDir
-	if conf.disableCachingIndexHeaderFile {
+	if !conf.cacheIndexHeader {
 		dataDir = ""
 	}
 
