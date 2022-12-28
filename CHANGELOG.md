@@ -201,7 +201,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5204](https://github.com/thanos-io/thanos/pull/5204) Store: Fix data race in advertised label set in bucket store.
 - [#5242](https://github.com/thanos-io/thanos/pull/5242) Ruler: Make ruler use the correct WAL directory.
 
-## [v0.25.1](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.03.09
+## [v0.25.1](https://github.com/thanos-io/thanos/releases/tag/v0.25.1) - 2022.03.09
 
 The binaries published with this release are built with Go1.17.8 to avoid [CVE-2022-24921](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-24921).
 
