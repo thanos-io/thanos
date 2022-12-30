@@ -249,10 +249,16 @@ type binaryWriter struct {
 	crc32 hash.Hash
 }
 
-func newBinaryWriter(id ulid.ULID, fn string, buf []byte) (w *binaryWriter, err error) {
-	var writer PosWriter
-	if fn != "" {
-		dir := filepath.Dir(fn)
+func newBinaryWriter(id ulid.ULID, cacheFilename string, buf []byte) (w *binaryWriter, err error) {
+	var memoryWriter *MemoryWriter
+	memoryWriter, err = NewMemoryWriter(id, len(buf))
+	if err != nil {
+		return nil, err
+	}
+	var binWriter PosWriter = memoryWriter
+
+	if cacheFilename != "" {
+		dir := filepath.Dir(cacheFilename)
 
 		df, err := fileutil.OpenDir(dir)
 		if os.IsNotExist(err) {
@@ -262,34 +268,29 @@ func newBinaryWriter(id ulid.ULID, fn string, buf []byte) (w *binaryWriter, err 
 			df, err = fileutil.OpenDir(dir)
 		}
 		if err != nil {
-
 			return nil, err
 		}
 
 		defer runutil.CloseWithErrCapture(&err, df, "dir close")
 
-		if err := os.RemoveAll(fn); err != nil {
+		if err := os.RemoveAll(cacheFilename); err != nil {
 			return nil, errors.Wrap(err, "remove any existing index at path")
 		}
 
 		// We use file writer for buffers not larger than reused one.
-		writer, err = NewFileWriter(fn, len(buf))
+		var fileWriter *FileWriter
+		fileWriter, err = NewFileWriter(cacheFilename, memoryWriter)
 		if err != nil {
 			return nil, err
 		}
 		if err := df.Sync(); err != nil {
 			return nil, errors.Wrap(err, "sync dir")
 		}
-	} else {
-		var err error
-		writer, err = NewMemoryWriter(id, len(buf))
-		if err != nil {
-			return nil, err
-		}
+		binWriter = fileWriter
 	}
 
 	w = &binaryWriter{
-		writer: writer,
+		writer: binWriter,
 
 		// Reusable memory.
 		buf:   encoding.Encbuf{B: buf},
@@ -319,7 +320,7 @@ type MemoryWriter struct {
 }
 
 // TODO(bwplotka): Added size to method, upstream this.
-func NewMemoryWriter(id ulid.ULID, size int) (PosWriter, error) {
+func NewMemoryWriter(id ulid.ULID, size int) (*MemoryWriter, error) {
 	var buf bytes.Buffer
 	return &MemoryWriter{
 		id:  id,
@@ -367,79 +368,59 @@ func (mw *MemoryWriter) Close() error {
 }
 
 type FileWriter struct {
-	f    *os.File
-	fbuf *bufio.Writer
-	pos  uint64
-	name string
+	f          *os.File
+	memWriter  *MemoryWriter
+	fileWriter *bufio.Writer
+	name       string
 }
 
 // TODO(bwplotka): Added size to method, upstream this.
-func NewFileWriter(name string, size int) (*FileWriter, error) {
+func NewFileWriter(name string, memWriter *MemoryWriter) (*FileWriter, error) {
 	f, err := os.OpenFile(filepath.Clean(name), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
 	}
 	return &FileWriter{
-		f:    f,
-		fbuf: bufio.NewWriterSize(f, size),
-		pos:  0,
-		name: name,
+		f:          f,
+		memWriter:  memWriter,
+		fileWriter: bufio.NewWriterSize(f, memWriter.buf.Len()),
+		name:       name,
 	}, nil
 }
 
 func (fw *FileWriter) Pos() uint64 {
-	return fw.pos
+	return fw.memWriter.Pos()
 }
 
 func (fw *FileWriter) Write(bufs ...[]byte) error {
+	if err := fw.memWriter.Write(bufs...); err != nil {
+		return err
+	}
 	for _, b := range bufs {
-		n, err := fw.fbuf.Write(b)
-		fw.pos += uint64(n)
+		_, err := fw.fileWriter.Write(b)
 		if err != nil {
 			return err
-		}
-		// For now the index file must not grow beyond 64GiB. Some of the fixed-sized
-		// offset references in v1 are only 4 bytes large.
-		// Once we move to compressed/varint representations in those areas, this limitation
-		// can be lifted.
-		if fw.pos > 16*math.MaxUint32 {
-			return errors.Errorf("%q exceeding max size of 64GiB", fw.name)
 		}
 	}
 	return nil
 }
 
 func (fw *FileWriter) Buffer() []byte {
-	return nil
+	return fw.memWriter.Buffer()
 }
 
 func (fw *FileWriter) Flush() error {
-	return fw.fbuf.Flush()
-}
-
-func (fw *FileWriter) WriteAt(buf []byte, pos uint64) error {
-	if err := fw.Flush(); err != nil {
+	if err := fw.memWriter.Flush(); err != nil {
 		return err
 	}
-	_, err := fw.f.WriteAt(buf, int64(pos))
-	return err
-}
 
-// AddPadding adds zero byte padding until the file size is a multiple size.
-func (fw *FileWriter) AddPadding(size int) error {
-	p := fw.pos % uint64(size)
-	if p == 0 {
-		return nil
-	}
-	p = uint64(size) - p
-
-	if err := fw.Write(make([]byte, p)); err != nil {
-		return errors.Wrap(err, "add padding")
-	}
-	return nil
+	return fw.fileWriter.Flush()
 }
 
 func (fw *FileWriter) Close() error {
+	if err := fw.memWriter.Close(); err != nil {
+		return err
+	}
 	if err := fw.Flush(); err != nil {
 		return err
 	}
@@ -450,6 +431,9 @@ func (fw *FileWriter) Close() error {
 }
 
 func (fw *FileWriter) Sync() error {
+	if err := fw.memWriter.Sync(); err != nil {
+		return err
+	}
 	return fw.f.Sync()
 }
 
