@@ -274,7 +274,7 @@ Flags:
                                  in all alerts 'Source' field.
       --enable-feature= ...      Comma separated experimental feature names
                                  to enable.The current list of features is
-                                 query-pushdown.
+                                 query-pushdown,promql-negative-offset,promql-at-modifier.
       --endpoint=<endpoint> ...  Addresses of statically configured Thanos
                                  API servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
