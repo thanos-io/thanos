@@ -212,3 +212,19 @@ func TestValidateRedisConfig(t *testing.T) {
 	}
 
 }
+
+func TestMultipleRedisClient(t *testing.T) {
+	s, err := miniredis.Run()
+	if err != nil {
+		testutil.Ok(t, err)
+	}
+	defer s.Close()
+	cfg := DefaultRedisClientConfig
+	cfg.Addr = s.Addr()
+	logger := log.NewLogfmtLogger(os.Stderr)
+	reg := prometheus.NewRegistry()
+	_, err = NewRedisClientWithConfig(logger, "test1", cfg, reg)
+	testutil.Ok(t, err)
+	_, err = NewRedisClientWithConfig(logger, "test2", cfg, reg)
+	testutil.Ok(t, err)
+}
