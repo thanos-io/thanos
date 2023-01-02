@@ -175,6 +175,10 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		return nil, err
 	}
 
+	if reg != nil {
+		reg = prometheus.WrapRegistererWith(prometheus.Labels{"name": name}, reg)
+	}
+
 	var tlsConfig *tls.Config
 	if config.TLSEnabled {
 		userTLSConfig := config.TLSConfig
