@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#5990](https://github.com/thanos-io/thanos/pull/5990) Cache/Redis: add support for Redis Sentinel via new option `master_name`.
+- [#6008](https://github.com/thanos-io/thanos/pull/6008) *: Add counter metric `gate_queries_total` to gate.
 
 ## [v0.30.0](https://github.com/thanos-io/thanos/tree/release-0.30) - in progress.
 
@@ -37,7 +38,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5819](https://github.com/thanos-io/thanos/pull/5819) Store: Add a few objectives for Store's data touched/fetched amount and sizes. They are: 50, 95, and 99 quantiles.
 - [#5940](https://github.com/thanos-io/thanos/pull/5940) Objstore: Support for authenticating to Swift using application credentials.
 - [#5977](https://github.com/thanos-io/thanos/pull/5977) Tools: Added remove flag on bucket mark command to remove deletion, no-downsample or no-compact markers on the block.
-- [#6008](https://github.com/thanos-io/thanos/pull/6008) *: Add counter metric to gate.
 
 ### Changed
 
