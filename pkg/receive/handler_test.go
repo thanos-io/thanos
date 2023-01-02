@@ -850,8 +850,8 @@ func (a *tsOverrideAppender) Append(ref storage.SeriesRef, l labels.Labels, _ in
 	return a.Appender.Append(ref, l, cnt, v)
 }
 
-func (a *tsOverrideAppender) GetRef(lset labels.Labels) (storage.SeriesRef, labels.Labels) {
-	return a.Appender.(storage.GetRef).GetRef(lset, lset.Hash())
+func (a *tsOverrideAppender) GetRef(lset labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
+	return a.Appender.(storage.GetRef).GetRef(lset, hash)
 }
 
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would
