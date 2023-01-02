@@ -147,8 +147,8 @@ func (f *fakeAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t
 	panic("not implemented")
 }
 
-func (f *fakeAppender) GetRef(l labels.Labels) (storage.SeriesRef, labels.Labels) {
-	return storage.SeriesRef(l.Hash()), l
+func (f *fakeAppender) GetRef(l labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
+	return storage.SeriesRef(hash), l
 }
 
 func (f *fakeAppender) Commit() error {
@@ -851,7 +851,7 @@ func (a *tsOverrideAppender) Append(ref storage.SeriesRef, l labels.Labels, _ in
 }
 
 func (a *tsOverrideAppender) GetRef(lset labels.Labels) (storage.SeriesRef, labels.Labels) {
-	return a.Appender.(storage.GetRef).GetRef(lset)
+	return a.Appender.(storage.GetRef).GetRef(lset, lset.Hash())
 }
 
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would

@@ -99,7 +99,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		lset := labelpb.ZLabelsToPromLabels(t.Labels)
 
 		// Check if the TSDB has cached reference for those labels.
-		ref, lset = getRef.GetRef(lset)
+		ref, lset = getRef.GetRef(lset, lset.Hash())
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
