@@ -102,7 +102,7 @@ message StoreInfo {
     int64 max_time = 2;
     bool supports_sharding = 3;
 
-    // replica_aware means this store supports without_replica_labels of StoreAPI.Series.
+    // supports_without_replica_labels means this store supports without_replica_labels of StoreAPI.Series.
     bool supports_without_replica_labels = 5;
 }
 ```
