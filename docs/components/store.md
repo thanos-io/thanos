@@ -343,6 +343,7 @@ config:
     server_name: ""
     insecure_skip_verify: false
   cache_size: 0
+  master_name: ""
 ```
 
 The **required** settings are:
