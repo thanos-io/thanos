@@ -10,6 +10,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+### Added
+
+- [#5990](https://github.com/thanos-io/thanos/pull/5990) Cache/Redis: add support for Redis Sentinel via new option `master_name`.
+
 ## [v0.30.0](https://github.com/thanos-io/thanos/tree/release-0.30) - in progress.
 
 ### Fixed

@@ -133,6 +133,7 @@ config:
     server_name: ""
     insecure_skip_verify: false
   cache_size: 0
+  master_name: ""
   expiration: 24h0m0s
 ```
 
