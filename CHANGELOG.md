@@ -10,7 +10,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-## [v0.30.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.30) - 21.12.2022
+## [v0.30.0](https://github.com/thanos-io/thanos/tree/release-0.30) - 2.01.2023
 
 NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unhidden. We encourage users to use new experimental PromQL engine for efficiency reasons.
 
