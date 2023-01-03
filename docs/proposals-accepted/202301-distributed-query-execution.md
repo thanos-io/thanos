@@ -39,7 +39,7 @@ Query Sharding is a execution method initiated by Query Frontend and allows for 
 
 The key advantage of distributed execution is the fact that the number of series is drastically reduced when a query contains an aggregation operator (`sum`, `group`, `max`, etc..). Most (if not all) high cardinality PromQL queries are in-fact aggregations since users will struggle to sensibly visualise more than a handful of series.
 
-We therefore propose an execution mode that allows running a Thanos Querier in a mode where it transforms a query in a manner where subqueries can be delegated to independent Queriers, and a central aggregation that is then executed locally on the result of all subqueries. A simple example of this transformation is a `sum(rate(metric[2m]))` expression which can be transformed as
+We therefore propose an execution model that allows running a Thanos Querier in a mode where it transforms a query to subqueries which are delegated to independent Queriers, and a central aggregation that is executed locally on the result of all subqueries. A simple example of this transformation is a `sum(rate(metric[2m]))` expression which can be transformed as
 
 ```
 sum(
