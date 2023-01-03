@@ -115,7 +115,6 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 - [#5741](https://github.com/thanos-io/thanos/pull/5741) Query: add metrics on how much data is being selected by downstream Store APIs.
 - [#5673](https://github.com/thanos-io/thanos/pull/5673) Receive: Reload tenant limit configuration on file change.
 - [#5749](https://github.com/thanos-io/thanos/pull/5749) Query Frontend: Added small LRU cache to cache query analysis results.
-- [#5773](https://github.com/thanos-io/thanos/pull/5773) Store: Support disable cache index header file.
 
 ### Changed
 
