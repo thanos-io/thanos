@@ -10,12 +10,12 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 )
 
-type ShardedPostingsProvider struct {
+type ShardedPostingsFunc struct {
 	partitionCount uint64
 	partitionID    uint64
 }
 
-func (p *ShardedPostingsProvider) GetPostings(originalPostings index.Postings, indexReader tsdb.IndexReader) index.Postings {
+func (p *ShardedPostingsFunc) GetPostings(originalPostings index.Postings, indexReader tsdb.IndexReader) index.Postings {
 	return NewShardedPosting(originalPostings, p.partitionCount, p.partitionID, indexReader.Series)
 }
 

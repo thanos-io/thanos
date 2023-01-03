@@ -90,6 +90,9 @@ type Thanos struct {
 
 	// Rewrites is present when any rewrite (deletion, relabel etc) were applied to this block. Optional.
 	Rewrites []Rewrite `json:"rewrites,omitempty"`
+
+	// PartitionInfo is used for partitioning compaction to keep track of partition information of result block. Optional.
+	PartitionInfo *PartitionInfo `json:"partition_info,omitempty"`
 }
 
 type Rewrite struct {
@@ -99,6 +102,12 @@ type Rewrite struct {
 	DeletionsApplied []DeletionRequest `json:"deletions_applied,omitempty"`
 	// Relabels if applied.
 	RelabelsApplied []*relabel.Config `json:"relabels_applied,omitempty"`
+}
+
+type PartitionInfo struct {
+	PartitionedGroupID uint32 `json:"partitionedGroupID"`
+	PartitionCount     int    `json:"partitionCount"`
+	PartitionID        int    `json:"partitionID"`
 }
 
 type Matchers []*labels.Matcher

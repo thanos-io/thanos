@@ -37,8 +37,6 @@ const (
 	IndexHeaderFilename = "index-header"
 	// ChunksDirname is the known dir name for chunks with compressed samples.
 	ChunksDirname = "chunks"
-	// PartitionInfoFilename is JSON filename for partition information.
-	PartitionInfoFilename = "partition-info.json"
 
 	// DebugMetas is a directory for debug meta files that happen in the past. Useful for debugging.
 	DebugMetas = "debug/metas"
@@ -153,14 +151,6 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 
 	if err := objstore.UploadFile(ctx, logger, bkt, filepath.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
 		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index"))
-	}
-
-	// level 1 blocks should not have partition info file
-	if meta.Compaction.Level > 1 {
-		if err := objstore.UploadFile(ctx, logger, bkt, filepath.Join(bdir, PartitionInfoFilename), path.Join(id.String(), PartitionInfoFilename)); err != nil {
-			// Don't call cleanUp here. Partition info file acts in a similar way as meta file.
-			return errors.Wrap(err, "upload partition info")
-		}
 	}
 
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file to be pending uploads.
