@@ -28,6 +28,7 @@ import (
 	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/thanos-io/objstore/exthttp"
+
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 
@@ -252,6 +253,9 @@ type QuerierBuilder struct {
 	enableFeatures          []string
 	endpoints               []string
 
+	engine    string
+	queryMode string
+
 	replicaLabels []string
 	tracingConfig string
 
@@ -346,6 +350,16 @@ func (q *QuerierBuilder) WithReplicaLabels(labels ...string) *QuerierBuilder {
 
 func (q *QuerierBuilder) WithDisablePartialResponses(disable bool) *QuerierBuilder {
 	q.disablePartialResponses = disable
+	return q
+}
+
+func (q *QuerierBuilder) WithEngine(engine string) *QuerierBuilder {
+	q.engine = engine
+	return q
+}
+
+func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
+	q.queryMode = mode
 	return q
 }
 
