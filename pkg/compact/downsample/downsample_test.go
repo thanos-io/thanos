@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/storage"
@@ -23,9 +24,9 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"go.uber.org/goleak"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestMain(m *testing.M) {
@@ -48,7 +49,7 @@ func TestDownsampleCounterBoundaryReset(t *testing.T) {
 			testutil.Ok(t, err)
 
 			iter := chk.Iterator(nil)
-			for iter.Next() {
+			for iter.Next() != chunkenc.ValNone {
 				t, v := iter.At()
 				res = append(res, sample{t, v})
 			}
@@ -65,7 +66,7 @@ func TestDownsampleCounterBoundaryReset(t *testing.T) {
 		}
 
 		citer := NewApplyCounterResetsIterator(iters...)
-		for citer.Next() {
+		for citer.Next() != chunkenc.ValNone {
 			t, v := citer.At()
 			res = append(res, sample{t: t, v: v})
 		}
@@ -618,7 +619,7 @@ func TestAverageChunkIterator(t *testing.T) {
 	x := NewAverageChunkIterator(newSampleIterator(cnt), newSampleIterator(sum))
 
 	var res []sample
-	for x.Next() {
+	for x.Next() != chunkenc.ValNone {
 		t, v := x.At()
 		res = append(res, sample{t, v})
 	}
@@ -719,7 +720,7 @@ func TestApplyCounterResetsIterator(t *testing.T) {
 			x := NewApplyCounterResetsIterator(its...)
 
 			var res []sample
-			for x.Next() {
+			for x.Next() != chunkenc.ValNone {
 				t, v := x.At()
 				res = append(res, sample{t, v})
 			}
@@ -752,15 +753,14 @@ func TestCounterSeriesIteratorSeek(t *testing.T) {
 	var res []sample
 	x := NewApplyCounterResetsIterator(its...)
 
-	ok := x.Seek(150)
-	testutil.Assert(t, ok, "Seek should return true")
+	valueType := x.Seek(150)
+	testutil.Equals(t, chunkenc.ValFloat, valueType, "Seek should return float value type")
 	testutil.Ok(t, x.Err())
 	for {
 		ts, v := x.At()
 		res = append(res, sample{ts, v})
 
-		ok = x.Next()
-		if !ok {
+		if x.Next() == chunkenc.ValNone {
 			break
 		}
 	}
@@ -779,8 +779,8 @@ func TestCounterSeriesIteratorSeekExtendTs(t *testing.T) {
 
 	x := NewApplyCounterResetsIterator(its...)
 
-	ok := x.Seek(500)
-	testutil.Assert(t, !ok, "Seek should return false")
+	valueType := x.Seek(500)
+	testutil.Equals(t, chunkenc.ValNone, valueType, "Seek should return none value type")
 }
 
 func TestCounterSeriesIteratorSeekAfterNext(t *testing.T) {
@@ -801,15 +801,14 @@ func TestCounterSeriesIteratorSeekAfterNext(t *testing.T) {
 
 	x.Next()
 
-	ok := x.Seek(50)
-	testutil.Assert(t, ok, "Seek should return true")
+	valueType := x.Seek(50)
+	testutil.Equals(t, chunkenc.ValFloat, valueType, "Seek should return float value type")
 	testutil.Ok(t, x.Err())
 	for {
 		ts, v := x.At()
 		res = append(res, sample{ts, v})
 
-		ok = x.Next()
-		if !ok {
+		if x.Next() == chunkenc.ValNone {
 			break
 		}
 	}
@@ -861,6 +860,19 @@ func (s testSample) V() float64 {
 	return s.v
 }
 
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (s testSample) H() *histogram.Histogram {
+	panic("not implemented")
+}
+
+func (s testSample) FH() *histogram.FloatHistogram {
+	panic("not implemented")
+}
+
+func (s testSample) Type() chunkenc.ValueType {
+	panic("not implemented")
+}
+
 type sampleIterator struct {
 	l []sample
 	i int
@@ -874,20 +886,34 @@ func (it *sampleIterator) Err() error {
 	return nil
 }
 
-func (it *sampleIterator) Next() bool {
+// TODO(rabenhorst): Native histogram support needs to be added.
+func (it *sampleIterator) Next() chunkenc.ValueType {
 	if it.i >= len(it.l)-1 {
-		return false
+		return chunkenc.ValNone
 	}
 	it.i++
-	return true
+	return chunkenc.ValFloat
 }
 
-func (it *sampleIterator) Seek(int64) bool {
+func (it *sampleIterator) Seek(int64) chunkenc.ValueType {
 	panic("unexpected")
 }
 
 func (it *sampleIterator) At() (t int64, v float64) {
 	return it.l[it.i].t, it.l[it.i].v
+}
+
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (it *sampleIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (it *sampleIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (it *sampleIterator) AtT() int64 {
+	return it.l[it.i].t
 }
 
 // memBlock is an in-memory block that implements a subset of the tsdb.BlockReader interface

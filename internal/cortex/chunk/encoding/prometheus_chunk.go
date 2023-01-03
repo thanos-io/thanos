@@ -106,14 +106,14 @@ type prometheusChunkIterator struct {
 }
 
 func (p *prometheusChunkIterator) Scan() bool {
-	return p.it.Next()
+	return p.it.Next() != chunkenc.ValNone
 }
 
 func (p *prometheusChunkIterator) FindAtOrAfter(time model.Time) bool {
 	// FindAtOrAfter must return OLDEST value at given time. That means we need to start with a fresh iterator,
 	// otherwise we cannot guarantee OLDEST.
 	p.it = p.c.Iterator(p.it)
-	return p.it.Seek(int64(time))
+	return p.it.Seek(int64(time)) != chunkenc.ValNone
 }
 
 func (p *prometheusChunkIterator) Value() model.SamplePair {
@@ -132,7 +132,7 @@ func (p *prometheusChunkIterator) Batch(size int) Batch {
 		batch.Timestamps[j] = t
 		batch.Values[j] = v
 		j++
-		if j < size && !p.it.Next() {
+		if j < size && p.it.Next() == chunkenc.ValNone {
 			break
 		}
 	}

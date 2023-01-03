@@ -80,6 +80,9 @@ const (
 	// MarkedForNoCompactionMeta is label for blocks which are loaded but also marked for no compaction. This label is also counted in `loaded` label metric.
 	MarkedForNoCompactionMeta = "marked-for-no-compact"
 
+	// MarkedForNoDownsampleMeta is label for blocks which are loaded but also marked for no downsample. This label is also counted in `loaded` label metric.
+	MarkedForNoDownsampleMeta = "marked-for-no-downsample"
+
 	// Modified label values.
 	replicaRemovedMeta = "replica-label-removed"
 )

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestPathContentReloader(t *testing.T) {
