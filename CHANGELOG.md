@@ -10,6 +10,12 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+## [v0.30.1](https://github.com/thanos-io/thanos/tree/release-0.30) - 4.01.2023
+
+### Fixed
+
+- [#6009](https://github.com/thanos-io/thanos/pull/6009) Query Frontend/Store: fix duplicate metrics registration in Redis client
+
 ## [v0.30.0](https://github.com/thanos-io/thanos/tree/release-0.30) - 2.01.2023
 
 NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unhidden. We encourage users to use new experimental PromQL engine for efficiency reasons.
