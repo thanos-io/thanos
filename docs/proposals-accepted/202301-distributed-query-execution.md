@@ -119,6 +119,18 @@ Each subquery would preserve the external `cluster` label which will allow the `
 
 <img src="../img/distributed-execution-proposal-2.png" alt="Distributed query execution" width="400"/>
 
+## Deployment models
+
+With this approach, a Thanos admin can arrange remote Queriers in an arbitrary way, as long as TSDB replicas are always queried by only one remote Querier. The following deployment models can be used as examples: 
+
+#### Monitoring different environments with Prometheus pairs
+
+<img src="../img/distributed-execution-proposal-4.png" alt="Distributed query execution" width="400"/>
+
+#### Querying separate Store Gateways with disjoint datasets
+
+<img src="../img/distributed-execution-proposal-3.png" alt="Distributed query execution" width="400"/>
+
 ## 7 Alternatives
 
 A viable alternative to the proposed method is to add support for Query Pushdown in the Thanos Querier. By extracting better as described in https://github.com/thanos-io/thanos/issues/5984, we can decide to execute a query in a local Querier, similar to how the sidecar does that against Prometheus.
