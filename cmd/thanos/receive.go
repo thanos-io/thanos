@@ -88,6 +88,8 @@ func registerReceive(app *extkingpin.App) {
 			EnableExemplarStorage:          true,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
 			EnableMemorySnapshotOnShutdown: conf.tsdbMemorySnapshotOnShutdown,
+			//TODO (rabenhorst): Do we want to make this configurable?
+			EnableNativeHistograms: true,
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?

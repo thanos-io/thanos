@@ -145,7 +145,7 @@ func TestDeletedIterator_WithSeek(t *testing.T) {
 
 		require.Equal(t, c.valueType, it.Seek(c.seek))
 		if c.valueType != chunkenc.ValNone {
-			ts, _ := it.At()
+			ts := it.AtT()
 			require.Equal(t, c.seekedTs, ts)
 		}
 	}
