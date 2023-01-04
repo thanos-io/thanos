@@ -14,6 +14,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#5990](https://github.com/thanos-io/thanos/pull/5990) Cache/Redis: add support for Redis Sentinel via new option `master_name`.
 - [#6008](https://github.com/thanos-io/thanos/pull/6008) *: Add counter metric `gate_queries_total` to gate.
+- [#5773](https://github.com/thanos-io/thanos/pull/5773) Store: Support disable cache index header file.
 
 ### Changed
 
