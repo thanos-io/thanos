@@ -239,7 +239,7 @@ func (d DeletedSeriesIterator) Seek(t int64) chunkenc.ValueType {
 		return valueType
 	}
 
-	seekedTs, _ := d.itr.At()
+	seekedTs := d.itr.AtT()
 	if d.isDeleted(seekedTs) {
 		// point we have seeked into is deleted, Next() should find a new non-deleted sample which is after t and seekedTs
 		return d.Next()
@@ -268,7 +268,7 @@ func (d DeletedSeriesIterator) AtT() int64 {
 
 func (d DeletedSeriesIterator) Next() chunkenc.ValueType {
 	for valueType := d.itr.Next(); valueType != chunkenc.ValNone; valueType = d.itr.Next() {
-		ts, _ := d.itr.At()
+		ts := d.itr.AtT()
 
 		if d.isDeleted(ts) {
 			continue

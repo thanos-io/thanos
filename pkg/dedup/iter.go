@@ -380,8 +380,8 @@ type dedupSeriesIterator struct {
 
 	// TODO(bwplotka): Don't base on LastT, but on detected scrape interval. This will allow us to be more
 	// responsive to gaps: https://github.com/thanos-io/thanos/issues/981, let's do it in next PR.
-	lastT int64
-	lastV float64
+	lastT    int64
+	lastIter chunkenc.Iterator
 
 	penA, penB int64
 	useA       bool
@@ -389,23 +389,23 @@ type dedupSeriesIterator struct {
 
 func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator {
 	return &dedupSeriesIterator{
-		a:     a,
-		b:     b,
-		lastT: math.MinInt64,
-		lastV: float64(math.MinInt64),
-		aval:  a.Next(),
-		bval:  b.Next(),
+		a:        a,
+		b:        b,
+		lastT:    math.MinInt64,
+		lastIter: a,
+		aval:     a.Next(),
+		bval:     b.Next(),
 	}
 }
 
 func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
-	lastValue := it.lastV
+	lastFloatVal, isFloatVal := it.lastFloatVal()
 	lastUseA := it.useA
 	defer func() {
-		if it.useA != lastUseA {
+		if it.useA != lastUseA && isFloatVal {
 			// We switched replicas.
 			// Ensure values are correct bases on value before At.
-			it.adjustAtValue(lastValue)
+			it.adjustAtValue(lastFloatVal)
 		}
 	}()
 
@@ -421,14 +421,16 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	if it.aval == chunkenc.ValNone {
 		it.useA = false
 		if it.bval != chunkenc.ValNone {
-			it.lastT, it.lastV = it.b.At()
+			it.lastT = it.b.AtT()
+			it.lastIter = it.b
 			it.penB = 0
 		}
 		return it.bval
 	}
 	if it.bval == chunkenc.ValNone {
 		it.useA = true
-		it.lastT, it.lastV = it.a.At()
+		it.lastT = it.a.AtT()
+		it.lastIter = it.a
 		it.penA = 0
 		return it.aval
 	}
@@ -436,8 +438,8 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	// with the smaller timestamp.
 	// The applied penalty potentially already skipped potential samples already
 	// that would have resulted in exaggerated sampling frequency.
-	ta, va := it.a.At()
-	tb, vb := it.b.At()
+	ta := it.a.AtT()
+	tb := it.b.AtT()
 
 	it.useA = ta <= tb
 
@@ -458,7 +460,8 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		}
 		it.penA = 0
 		it.lastT = ta
-		it.lastV = va
+		it.lastIter = it.a
+
 		return it.aval
 	}
 	if it.lastT != math.MinInt64 {
@@ -468,26 +471,40 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	}
 	it.penB = 0
 	it.lastT = tb
-	it.lastV = vb
+	it.lastIter = it.b
 	return it.bval
 }
 
+func (it *dedupSeriesIterator) lastFloatVal() (float64, bool) {
+	if it.useA && it.aval == chunkenc.ValFloat {
+		_, v := it.lastIter.At()
+		return v, true
+	}
+	if !it.useA && it.bval == chunkenc.ValFloat {
+		_, v := it.lastIter.At()
+		return v, true
+	}
+	return 0, false
+}
+
 func (it *dedupSeriesIterator) adjustAtValue(lastValue float64) {
-	if it.aval != chunkenc.ValNone {
+	if it.aval == chunkenc.ValFloat {
 		it.a.adjustAtValue(lastValue)
 	}
-	if it.bval != chunkenc.ValNone {
+	if it.bval == chunkenc.ValFloat {
 		it.b.adjustAtValue(lastValue)
 	}
 }
 
-// TODO(rabenhorst): Native histogram support needs to be implemented, float type hardcoded.
 func (it *dedupSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	// Don't use underlying Seek, but iterate over next to not miss gaps.
 	for {
-		ts, _ := it.At()
+		ts := it.AtT()
 		if ts >= t {
-			return chunkenc.ValFloat
+			if it.useA {
+				return it.a.Seek(ts)
+			}
+			return it.b.Seek(ts)
 		}
 		if it.Next() == chunkenc.ValNone {
 			return chunkenc.ValNone
@@ -496,27 +513,23 @@ func (it *dedupSeriesIterator) Seek(t int64) chunkenc.ValueType {
 }
 
 func (it *dedupSeriesIterator) At() (int64, float64) {
-	if it.useA {
-		return it.a.At()
-	}
-	return it.b.At()
+	return it.lastIter.At()
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (it *dedupSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	panic("not implemented")
+	return it.lastIter.AtHistogram()
 }
 
 func (it *dedupSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	panic("not implemented")
+	return it.lastIter.AtFloatHistogram()
 }
 
 func (it *dedupSeriesIterator) AtT() int64 {
 	var t int64
 	if it.useA {
-		t, _ = it.a.At()
+		t = it.a.AtT()
 	} else {
-		t, _ = it.b.At()
+		t = it.b.AtT()
 	}
 	return t
 }
@@ -553,18 +566,16 @@ func (it *boundedSeriesIterator) At() (t int64, v float64) {
 	return it.it.At()
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (it *boundedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	panic("not implemented")
+	return it.it.AtHistogram()
 }
 
 func (it *boundedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	panic("not implemented")
+	return it.it.AtFloatHistogram()
 }
 
 func (it *boundedSeriesIterator) AtT() int64 {
-	t, _ := it.it.At()
-	return t
+	return it.it.AtT()
 }
 
 func (it *boundedSeriesIterator) Next() chunkenc.ValueType {
@@ -572,14 +583,14 @@ func (it *boundedSeriesIterator) Next() chunkenc.ValueType {
 	if valueType == chunkenc.ValNone {
 		return chunkenc.ValNone
 	}
-	t, _ := it.it.At()
+	t := it.it.AtT()
 
 	// Advance the iterator if we are before the valid interval.
 	if t < it.mint {
 		if it.Seek(it.mint) == chunkenc.ValNone {
 			return chunkenc.ValNone
 		}
-		t, _ = it.it.At()
+		t = it.it.AtT()
 	}
 	// Once we passed the valid interval, there is no going back.
 	if t <= it.maxt {

@@ -106,7 +106,7 @@ func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, l
 func (h *headSeriesLimit) QueryMetaMonitoring(ctx context.Context) error {
 	c := promclient.NewWithTracingClient(h.logger, h.metaMonitoringClient, httpconfig.ThanosUserAgent)
 
-	vectorRes, _, err := c.QueryInstant(ctx, h.metaMonitoringURL, h.metaMonitoringQuery, time.Now(), promclient.QueryOptions{})
+	vectorRes, _, _, err := c.QueryInstant(ctx, h.metaMonitoringURL, h.metaMonitoringQuery, time.Now(), promclient.QueryOptions{})
 	if err != nil {
 		h.metaMonitoringErr.Inc()
 		return err

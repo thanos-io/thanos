@@ -255,7 +255,7 @@ func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *store
 		}
 		matrix = result
 	} else {
-		vector, _, err := p.client.QueryInstant(s.Context(), p.base, r.ToPromQL(), timestamp.Time(r.MaxTime), opts)
+		vector, _, _, err := p.client.QueryInstant(s.Context(), p.base, r.ToPromQL(), timestamp.Time(r.MaxTime), opts)
 		if err != nil {
 			return err
 		}
