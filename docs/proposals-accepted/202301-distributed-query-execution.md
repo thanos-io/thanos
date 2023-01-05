@@ -121,15 +121,27 @@ Each subquery would preserve the external `cluster` label which will allow the `
 
 ## Deployment models
 
-With this approach, a Thanos admin can arrange remote Queriers in an arbitrary way, as long as TSDB replicas are always queried by only one remote Querier. The following deployment models can be used as examples: 
+With this approach, a Thanos admin can arrange remote Queriers in an arbitrary way, as long as TSDB replicas are always queried by only one remote Querier. The following deployment models can be used as examples:
 
 #### Monitoring different environments with Prometheus pairs
 
+In this deployment mode, remote queriers are attached to pairs of Prometheus instances. The central Querier delegates subqueries to them and performs a central aggregation of results.
+
 <img src="../img/distributed-execution-proposal-4.png" alt="Distributed query execution" width="400"/>
 
-#### Querying separate Store Gateways with disjoint datasets
+#### Querying separate Store Gateways and Prometheus pairs
+
+Remote Queriers can be attached to Prometheus pairs and Store Gateways at the same time. The central querier delegates subqueries and deduplicates overlapping results before performing a central aggregation.
 
 <img src="../img/distributed-execution-proposal-3.png" alt="Distributed query execution" width="400"/>
+
+#### Running remote Queriers as Store Gateway sidecars
+
+Remote Queriers can be attached to disjoint groups of Store Gateways. They can even be attached to individual Store Gateways which have deduplicated TSDB blocks, or hold all replicas of a TSDB block. This will make sure penalty-based deduplication happens in the remote querier.
+
+Store groups can be created by either partitioning TSDBs by time (time-based partitioning), or by external labels. Both of these techniques are documented in the [Store Gateway documentation](https://thanos.io/tip/components/store.md/#time-based-partitioning).
+
+<img src="../img/distributed-execution-proposal-5.png" alt="Distributed query execution" width="400"/>
 
 ## 7 Alternatives
 
