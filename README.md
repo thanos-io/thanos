@@ -4,7 +4,7 @@ This repository is a fork of the [thanos-io/thanos](https://github.com/thanos-io
 
 ## Differences from upstream
 
-Theis project has several improvements which have been made. Most of them are raised as upstream PRs in order to avoid divergent codebases over time.
+This project has several improvements which have been made. Most of them are raised as upstream PRs in order to avoid divergent codebases over time.
 
 #### Parallel compaction
 
