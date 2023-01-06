@@ -6,7 +6,7 @@ package tracing
 import (
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"

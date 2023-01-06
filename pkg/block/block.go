@@ -433,3 +433,22 @@ func MarkForNoDownsample(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	level.Info(logger).Log("msg", "block has been marked for no downsample", "block", id)
 	return nil
 }
+
+// RemoveMark removes the file which marked the block for deletion, no-downsample or no-compact.
+func RemoveMark(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, removeMark prometheus.Counter, markedFilename string) error {
+	markedFile := path.Join(id.String(), markedFilename)
+	markedFileExists, err := bkt.Exists(ctx, markedFile)
+	if err != nil {
+		return errors.Wrapf(err, "check if %s file exists in bucket", markedFile)
+	}
+	if !markedFileExists {
+		level.Warn(logger).Log("msg", "requested to remove the mark, but file does not exist", "err", errors.Errorf("file %s does not exist in bucket", markedFile))
+		return nil
+	}
+	if err := bkt.Delete(ctx, markedFile); err != nil {
+		return errors.Wrapf(err, "delete file %s from bucket", markedFile)
+	}
+	removeMark.Inc()
+	level.Info(logger).Log("msg", "mark has been removed from the block", "block", id)
+	return nil
+}

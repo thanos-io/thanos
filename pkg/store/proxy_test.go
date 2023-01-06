@@ -28,11 +28,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 )
 
 type testClient struct {
@@ -94,7 +95,7 @@ type mockedStartTimeDB struct {
 func (db *mockedStartTimeDB) StartTime() (int64, error) { return db.startTime, nil }
 
 func TestProxyStore_Info(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -115,7 +116,7 @@ func TestProxyStore_Info(t *testing.T) {
 }
 
 func TestProxyStore_Series(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	for _, tc := range []struct {
 		title          string
@@ -584,7 +585,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 		t.Skip("enable THANOS_ENABLE_STORE_READ_TIMEOUT_TESTS to run store-read-timeout tests")
 	}
 
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	for _, tc := range []struct {
 		title          string
@@ -1122,7 +1123,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 }
 
 func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	m := &mockedStoreAPI{
 		RespSeries: []*storepb.SeriesResponse{
@@ -1166,7 +1167,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 }
 
 func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	var cls []Client
 	for i := 0; i < 10; i++ {
@@ -1222,7 +1223,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 }
 
 func TestProxyStore_LabelValues(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	m1 := &mockedStoreAPI{
 		RespLabelValues: &storepb.LabelValuesResponse{
@@ -1283,7 +1284,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 }
 
 func TestProxyStore_LabelNames(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	for _, tc := range []struct {
 		title     string
@@ -1923,7 +1924,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 }
 
 func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
-	defer testutil.TolerantVerifyLeak(t)
+	defer custom.TolerantVerifyLeak(t)
 
 	clients := []Client{
 		&testClient{

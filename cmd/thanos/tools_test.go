@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-kit/log"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func Test_CheckRules(t *testing.T) {

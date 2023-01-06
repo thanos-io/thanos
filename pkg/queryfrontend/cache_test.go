@@ -11,7 +11,7 @@ import (
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestGenerateCacheKey(t *testing.T) {

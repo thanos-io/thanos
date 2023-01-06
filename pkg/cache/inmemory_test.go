@@ -13,7 +13,7 @@ import (
 
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestInmemoryCache(t *testing.T) {
