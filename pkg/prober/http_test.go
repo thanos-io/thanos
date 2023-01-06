@@ -15,7 +15,7 @@ import (
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestHTTPProberHealthInitialState(t *testing.T) {

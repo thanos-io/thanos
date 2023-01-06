@@ -11,7 +11,7 @@ import (
 	"github.com/go-kit/log"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestProvider(t *testing.T) {

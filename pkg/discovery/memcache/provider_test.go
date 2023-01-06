@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestProviderUpdatesAddresses(t *testing.T) {

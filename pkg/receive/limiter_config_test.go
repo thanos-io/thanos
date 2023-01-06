@@ -9,7 +9,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestParseLimiterConfig(t *testing.T) {

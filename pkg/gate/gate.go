@@ -21,6 +21,10 @@ var (
 		Name: "gate_queries_in_flight",
 		Help: "Number of queries that are currently in flight.",
 	}
+	TotalCounterOpts = prometheus.CounterOpts{
+		Name: "gate_queries_total",
+		Help: "Total number of queries.",
+	}
 	DurationHistogramOpts = prometheus.HistogramOpts{
 		Name:    "gate_duration_seconds",
 		Help:    "How many seconds it took for queries to wait at the gate.",
@@ -87,9 +91,12 @@ func New(reg prometheus.Registerer, maxConcurrent int) Gate {
 
 	return InstrumentGateDuration(
 		promauto.With(reg).NewHistogram(DurationHistogramOpts),
-		InstrumentGateInFlight(
-			promauto.With(reg).NewGauge(InFlightGaugeOpts),
-			promgate.New(maxConcurrent),
+		InstrumentGateTotal(
+			promauto.With(reg).NewCounter(TotalCounterOpts),
+			InstrumentGateInFlight(
+				promauto.With(reg).NewGauge(InFlightGaugeOpts),
+				promgate.New(maxConcurrent),
+			),
 		),
 	)
 }
@@ -157,5 +164,33 @@ func (g *instrumentedInFlightGate) Start(ctx context.Context) error {
 // Done implements the Gate interface.
 func (g *instrumentedInFlightGate) Done() {
 	g.inflight.Dec()
+	g.g.Done()
+}
+
+type instrumentedTotalGate struct {
+	g     Gate
+	total prometheus.Counter
+}
+
+// InstrumentGateTotal instruments the provided Gate to track total requests.
+func InstrumentGateTotal(total prometheus.Counter, g Gate) Gate {
+	return &instrumentedTotalGate{
+		g:     g,
+		total: total,
+	}
+}
+
+// Start implements the Gate interface.
+func (g *instrumentedTotalGate) Start(ctx context.Context) error {
+	g.total.Inc()
+	if err := g.g.Start(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Done implements the Gate interface.
+func (g *instrumentedTotalGate) Done() {
 	g.g.Done()
 }

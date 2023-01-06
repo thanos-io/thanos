@@ -17,8 +17,8 @@ import (
 )
 
 // NewServerConfig provides new server TLS configuration.
-func NewServerConfig(logger log.Logger, cert, key, clientCA string) (*tls.Config, error) {
-	if key == "" && cert == "" {
+func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA string) (*tls.Config, error) {
+	if keyPath == "" && certPath == "" {
 		if clientCA != "" {
 			return nil, errors.New("when a client CA is used a server key and certificate must also be provided")
 		}
@@ -29,17 +29,23 @@ func NewServerConfig(logger log.Logger, cert, key, clientCA string) (*tls.Config
 
 	level.Info(logger).Log("msg", "enabling server side TLS")
 
-	if key == "" || cert == "" {
+	if keyPath == "" || certPath == "" {
 		return nil, errors.New("both server key and certificate must be provided")
 	}
 
 	tlsCfg := &tls.Config{
 		MinVersion: tls.VersionTLS13,
 	}
+	// Certificate is loaded during server startup to check for any errors.
+	certificate, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, errors.Wrap(err, "server credentials")
+	}
 
 	mngr := &serverTLSManager{
-		srvCertPath: cert,
-		srvKeyPath:  key,
+		srvCertPath: certPath,
+		srvKeyPath:  keyPath,
+		srvCert:     &certificate,
 	}
 
 	tlsCfg.GetCertificate = mngr.getCertificate

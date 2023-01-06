@@ -8,9 +8,9 @@ import (
 	"io"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestMeta_ReadWrite(t *testing.T) {

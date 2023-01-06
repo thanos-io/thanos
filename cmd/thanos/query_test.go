@@ -9,7 +9,7 @@ import (
 
 	"github.com/prometheus/prometheus/promql"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestLookbackDeltaFactory(t *testing.T) {

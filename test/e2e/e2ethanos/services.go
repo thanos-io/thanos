@@ -1213,3 +1213,14 @@ rule_files:
 
 	return config
 }
+
+func NewRedis(e e2e.Environment, name string) e2e.Runnable {
+	return e.Runnable(fmt.Sprintf("redis-%s", name)).WithPorts(map[string]int{"redis": 6379}).Init(
+		e2e.StartOptions{
+			Image:            "docker.io/redis:7.0.4-alpine",
+			Command:          e2e.NewCommand("redis-server", "*:6379"),
+			User:             strconv.Itoa(os.Getuid()),
+			WaitReadyBackoff: &defaultBackoffConfig,
+		},
+	)
+}

@@ -26,10 +26,10 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/objtesting"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func newTestFetcherMetrics() *FetcherMetrics {

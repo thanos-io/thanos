@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestRemoveExactDuplicates(t *testing.T) {

@@ -21,13 +21,13 @@ import (
 	galaxyhttp "github.com/vimeo/galaxycache/http"
 	"golang.org/x/net/http2"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/prober"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store/cache/cachekey"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 const basePath = `/_groupcache/`

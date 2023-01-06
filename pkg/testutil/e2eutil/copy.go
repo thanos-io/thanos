@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func Copy(t testing.TB, src, dst string) {

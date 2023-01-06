@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/opentracing/opentracing-go"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
 

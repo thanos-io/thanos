@@ -13,10 +13,10 @@ import (
 	"github.com/efficientgo/e2e"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
