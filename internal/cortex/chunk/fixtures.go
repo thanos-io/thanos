@@ -7,7 +7,6 @@ package chunk
 
 import (
 	"context"
-	"time"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
@@ -34,29 +33,6 @@ var BenchmarkLabels = labels.Labels{
 	{Name: "name", Value: "k8s_some-name_some-other-name-5j8s8_kube-system_6e91c467-e4c5-11e7-ace3-0a97ed59c75e_0"},
 	{Name: "namespace", Value: "kube-system"},
 	{Name: "pod_name", Value: "some-other-name-5j8s8"},
-}
-
-// DefaultSchemaConfig creates a simple schema config for testing
-func DefaultSchemaConfig(store, schema string, from model.Time) SchemaConfig {
-	s := SchemaConfig{
-		Configs: []PeriodConfig{{
-			IndexType: store,
-			Schema:    schema,
-			From:      DayTime{from},
-			ChunkTables: PeriodicTableConfig{
-				Prefix: "cortex",
-				Period: 7 * 24 * time.Hour,
-			},
-			IndexTables: PeriodicTableConfig{
-				Prefix: "cortex_chunks",
-				Period: 7 * 24 * time.Hour,
-			},
-		}},
-	}
-	if err := s.Validate(); err != nil {
-		panic(err)
-	}
-	return s
 }
 
 // ChunksToMatrix converts a set of chunks to a model.Matrix.

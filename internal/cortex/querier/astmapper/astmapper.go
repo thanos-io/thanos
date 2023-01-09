@@ -72,14 +72,6 @@ type NodeMapper interface {
 	MapNode(node parser.Node) (mapped parser.Node, finished bool, err error)
 }
 
-// NodeMapperFunc is an adapter for NodeMapper
-type NodeMapperFunc func(node parser.Node) (parser.Node, bool, error)
-
-// MapNode applies a NodeMapperFunc as a NodeMapper
-func (f NodeMapperFunc) MapNode(node parser.Node) (parser.Node, bool, error) {
-	return f(node)
-}
-
 // NewASTNodeMapper creates an ASTMapper from a NodeMapper
 func NewASTNodeMapper(mapper NodeMapper) ASTNodeMapper {
 	return ASTNodeMapper{mapper}

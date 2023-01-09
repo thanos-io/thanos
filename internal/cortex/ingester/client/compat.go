@@ -8,7 +8,6 @@ import (
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
-
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 )
 
@@ -35,38 +34,6 @@ func FromQueryRequest(req *QueryRequest) (model.Time, model.Time, []*labels.Matc
 	from := model.Time(req.StartTimestampMs)
 	to := model.Time(req.EndTimestampMs)
 	return from, to, matchers, nil
-}
-
-// ToExemplarQueryRequest builds an ExemplarQueryRequest proto.
-func ToExemplarQueryRequest(from, to model.Time, matchers ...[]*labels.Matcher) (*ExemplarQueryRequest, error) {
-	var reqMatchers []*LabelMatchers
-	for _, m := range matchers {
-		ms, err := toLabelMatchers(m)
-		if err != nil {
-			return nil, err
-		}
-		reqMatchers = append(reqMatchers, &LabelMatchers{ms})
-	}
-
-	return &ExemplarQueryRequest{
-		StartTimestampMs: int64(from),
-		EndTimestampMs:   int64(to),
-		Matchers:         reqMatchers,
-	}, nil
-}
-
-// FromExemplarQueryRequest unpacks a ExemplarQueryRequest proto.
-func FromExemplarQueryRequest(req *ExemplarQueryRequest) (int64, int64, [][]*labels.Matcher, error) {
-	var result [][]*labels.Matcher
-	for _, m := range req.Matchers {
-		matchers, err := FromLabelMatchers(m.Matchers)
-		if err != nil {
-			return 0, 0, nil, err
-		}
-		result = append(result, matchers)
-	}
-
-	return req.StartTimestampMs, req.EndTimestampMs, result, nil
 }
 
 // ToQueryResponse builds a QueryResponse proto.
@@ -105,74 +72,6 @@ func FromQueryResponse(resp *QueryResponse) model.Matrix {
 	}
 
 	return m
-}
-
-// ToMetricsForLabelMatchersRequest builds a MetricsForLabelMatchersRequest proto
-func ToMetricsForLabelMatchersRequest(from, to model.Time, matchers []*labels.Matcher) (*MetricsForLabelMatchersRequest, error) {
-	ms, err := toLabelMatchers(matchers)
-	if err != nil {
-		return nil, err
-	}
-
-	return &MetricsForLabelMatchersRequest{
-		StartTimestampMs: int64(from),
-		EndTimestampMs:   int64(to),
-		MatchersSet:      []*LabelMatchers{{Matchers: ms}},
-	}, nil
-}
-
-// FromMetricsForLabelMatchersRequest unpacks a MetricsForLabelMatchersRequest proto
-func FromMetricsForLabelMatchersRequest(req *MetricsForLabelMatchersRequest) (model.Time, model.Time, [][]*labels.Matcher, error) {
-	matchersSet := make([][]*labels.Matcher, 0, len(req.MatchersSet))
-	for _, matchers := range req.MatchersSet {
-		matchers, err := FromLabelMatchers(matchers.Matchers)
-		if err != nil {
-			return 0, 0, nil, err
-		}
-		matchersSet = append(matchersSet, matchers)
-	}
-	from := model.Time(req.StartTimestampMs)
-	to := model.Time(req.EndTimestampMs)
-	return from, to, matchersSet, nil
-}
-
-// FromMetricsForLabelMatchersResponse unpacks a MetricsForLabelMatchersResponse proto
-func FromMetricsForLabelMatchersResponse(resp *MetricsForLabelMatchersResponse) []model.Metric {
-	metrics := []model.Metric{}
-	for _, m := range resp.Metric {
-		metrics = append(metrics, cortexpb.FromLabelAdaptersToMetric(m.Labels))
-	}
-	return metrics
-}
-
-// ToLabelValuesRequest builds a LabelValuesRequest proto
-func ToLabelValuesRequest(labelName model.LabelName, from, to model.Time, matchers []*labels.Matcher) (*LabelValuesRequest, error) {
-	ms, err := toLabelMatchers(matchers)
-	if err != nil {
-		return nil, err
-	}
-
-	return &LabelValuesRequest{
-		LabelName:        string(labelName),
-		StartTimestampMs: int64(from),
-		EndTimestampMs:   int64(to),
-		Matchers:         &LabelMatchers{Matchers: ms},
-	}, nil
-}
-
-// FromLabelValuesRequest unpacks a LabelValuesRequest proto
-func FromLabelValuesRequest(req *LabelValuesRequest) (string, int64, int64, []*labels.Matcher, error) {
-	var err error
-	var matchers []*labels.Matcher
-
-	if req.Matchers != nil {
-		matchers, err = FromLabelMatchers(req.Matchers.Matchers)
-		if err != nil {
-			return "", 0, 0, nil, err
-		}
-	}
-
-	return req.LabelName, req.StartTimestampMs, req.EndTimestampMs, matchers, nil
 }
 
 func toLabelMatchers(matchers []*labels.Matcher) ([]*LabelMatcher, error) {
@@ -223,23 +122,6 @@ func FromLabelMatchers(matchers []*LabelMatcher) ([]*labels.Matcher, error) {
 		result = append(result, matcher)
 	}
 	return result, nil
-}
-
-// FastFingerprint runs the same algorithm as Prometheus labelSetToFastFingerprint()
-func FastFingerprint(ls []cortexpb.LabelAdapter) model.Fingerprint {
-	if len(ls) == 0 {
-		return model.Metric(nil).FastFingerprint()
-	}
-
-	var result uint64
-	for _, l := range ls {
-		sum := hashNew()
-		sum = hashAdd(sum, l.Name)
-		sum = hashAddByte(sum, model.SeparatorByte)
-		sum = hashAdd(sum, l.Value)
-		result ^= sum
-	}
-	return model.Fingerprint(result)
 }
 
 // Fingerprint runs the same algorithm as Prometheus labelSetToFingerprint()

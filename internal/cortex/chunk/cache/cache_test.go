@@ -6,7 +6,6 @@ package cache_test
 import (
 	"context"
 	"math/rand"
-	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -116,43 +115,6 @@ func testCacheMultiple(t *testing.T, cache cache.Cache, keys []string, chunks []
 	require.Equal(t, chunks, result)
 }
 
-func testChunkFetcher(t *testing.T, c cache.Cache, keys []string, chunks []chunk.Chunk) {
-	fetcher, err := chunk.NewChunkFetcher(c, false, nil)
-	require.NoError(t, err)
-	defer fetcher.Stop()
-
-	found, err := fetcher.FetchChunks(context.Background(), chunks, keys)
-	require.NoError(t, err)
-	sort.Sort(byExternalKey(found))
-	sort.Sort(byExternalKey(chunks))
-	require.Equal(t, chunks, found)
-}
-
-// testChunkFetcherStop checks that stopping the fetcher while fetching chunks don't result an error
-func testChunkFetcherStop(t *testing.T, c cache.Cache, keys []string, chunks []chunk.Chunk) {
-	fetcher, err := chunk.NewChunkFetcher(c, false, chunk.NewMockStorage())
-	require.NoError(t, err)
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if _, err := fetcher.FetchChunks(context.Background(), chunks, keys); err != nil {
-			// Since we stop fetcher while FetchChunks is running, we may not get everything back
-			// which requires the fetcher to fetch keys from storage, which is missing the keys
-			// so errors here is expected. Need to check the error because of the lint check.
-			require.NotNil(t, err)
-		}
-	}()
-	fetcher.Stop()
-	<-done
-}
-
-type byExternalKey []chunk.Chunk
-
-func (a byExternalKey) Len() int           { return len(a) }
-func (a byExternalKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a byExternalKey) Less(i, j int) bool { return a[i].ExternalKey() < a[j].ExternalKey() }
-
 func testCacheMiss(t *testing.T, cache cache.Cache) {
 	for i := 0; i < 100; i++ {
 		key := strconv.Itoa(rand.Int()) // arbitrary key which should fail: no chunk key is a single integer
@@ -173,14 +135,6 @@ func testCache(t *testing.T, cache cache.Cache) {
 	})
 	t.Run("Miss", func(t *testing.T) {
 		testCacheMiss(t, cache)
-	})
-	t.Run("Fetcher", func(t *testing.T) {
-		testChunkFetcher(t, cache, keys, chunks)
-	})
-	t.Run("FetcherStop", func(t *testing.T) {
-		// Refill the cache to avoid nil pointer error during fetch for getting missing keys from storage
-		keys, chunks = fillCache(t, cache)
-		testChunkFetcherStop(t, cache, keys, chunks)
 	})
 }
 

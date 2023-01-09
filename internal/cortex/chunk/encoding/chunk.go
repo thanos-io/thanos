@@ -25,9 +25,8 @@ import (
 	"sort"
 
 	"github.com/prometheus/common/model"
-	errs "github.com/weaveworks/common/errors"
-
 	"github.com/thanos-io/thanos/internal/cortex/prom1/storage/metric"
+	errs "github.com/weaveworks/common/errors"
 )
 
 const (

@@ -8,8 +8,6 @@ import (
 	"flag"
 	"sync"
 
-	opentracing "github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -71,44 +69,6 @@ func NewBackground(name string, cfg BackgroundConfig, cache Cache, reg prometheu
 	}
 
 	return c
-}
-
-// Stop the background flushing goroutines.
-func (c *backgroundCache) Stop() {
-	close(c.quit)
-	c.wg.Wait()
-
-	c.Cache.Stop()
-}
-
-const keysPerBatch = 100
-
-// Store writes keys for the cache in the background.
-func (c *backgroundCache) Store(ctx context.Context, keys []string, bufs [][]byte) {
-	for len(keys) > 0 {
-		num := keysPerBatch
-		if num > len(keys) {
-			num = len(keys)
-		}
-
-		bgWrite := backgroundWrite{
-			keys: keys[:num],
-			bufs: bufs[:num],
-		}
-		select {
-		case c.bgWrites <- bgWrite:
-			c.queueLength.Add(float64(num))
-		default:
-			c.droppedWriteBack.Add(float64(num))
-			sp := opentracing.SpanFromContext(ctx)
-			if sp != nil {
-				sp.LogFields(otlog.Int("dropped", num))
-			}
-			return // queue is full; give up
-		}
-		keys = keys[num:]
-		bufs = bufs[num:]
-	}
 }
 
 func (c *backgroundCache) writeBackLoop() {

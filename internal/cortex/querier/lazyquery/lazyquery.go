@@ -5,14 +5,9 @@ package lazyquery
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
-
-	"github.com/thanos-io/thanos/internal/cortex/chunk"
-	"github.com/thanos-io/thanos/internal/cortex/querier/chunkstore"
 )
 
 // LazyQueryable wraps a storage.Queryable
@@ -73,16 +68,6 @@ func (l LazyQuerier) LabelNames(matchers ...*labels.Matcher) ([]string, storage.
 // Close implements Storage.Querier
 func (l LazyQuerier) Close() error {
 	return l.next.Close()
-}
-
-// Get implements chunk.Store for the chunk tar HTTP handler.
-func (l LazyQuerier) Get(ctx context.Context, userID string, from, through model.Time, matchers ...*labels.Matcher) ([]chunk.Chunk, error) {
-	store, ok := l.next.(chunkstore.ChunkStore)
-	if !ok {
-		return nil, fmt.Errorf("not supported")
-	}
-
-	return store.Get(ctx, userID, from, through, matchers...)
 }
 
 type lazySeriesSet struct {
