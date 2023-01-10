@@ -323,7 +323,7 @@ type adjustableSeriesIterator interface {
 
 	// adjustAtValue allows to adjust value by implementation if needed knowing the last value. This is used by counter
 	// implementation which can adjust for obsolete counter value.
-	adjustAtValue(lastValue float64)
+	adjustAtValue(lastFloatValue float64)
 }
 
 type noopAdjustableSeriesIterator struct {
@@ -360,11 +360,11 @@ type counterErrAdjustSeriesIterator struct {
 	errAdjust float64
 }
 
-func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastValue float64) {
+func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastFloatValue float64) {
 	_, v := it.At()
-	if lastValue > v {
+	if lastFloatValue > v {
 		// This replica has obsolete value (did not see the correct "end" of counter value before app restart). Adjust.
-		it.errAdjust += lastValue - v
+		it.errAdjust += lastFloatValue - v
 	}
 }
 
@@ -405,6 +405,7 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		if it.useA != lastUseA && isFloatVal {
 			// We switched replicas.
 			// Ensure values are correct bases on value before At.
+			// TODO(rabenhorst): Investiagte if we also need to implement adjusting histograms here.
 			it.adjustAtValue(lastFloatVal)
 		}
 	}()
@@ -487,12 +488,12 @@ func (it *dedupSeriesIterator) lastFloatVal() (float64, bool) {
 	return 0, false
 }
 
-func (it *dedupSeriesIterator) adjustAtValue(lastValue float64) {
+func (it *dedupSeriesIterator) adjustAtValue(lastFloatValue float64) {
 	if it.aval == chunkenc.ValFloat {
-		it.a.adjustAtValue(lastValue)
+		it.a.adjustAtValue(lastFloatValue)
 	}
 	if it.bval == chunkenc.ValFloat {
-		it.b.adjustAtValue(lastValue)
+		it.b.adjustAtValue(lastFloatValue)
 	}
 }
 
