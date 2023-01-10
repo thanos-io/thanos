@@ -405,7 +405,7 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		if it.useA != lastUseA && isFloatVal {
 			// We switched replicas.
 			// Ensure values are correct bases on value before At.
-			// TODO(rabenhorst): Investiagte if we also need to implement adjusting histograms here.
+			// TODO(rabenhorst): Investigate if we also need to implement adjusting histograms here.
 			it.adjustAtValue(lastFloatVal)
 		}
 	}()
