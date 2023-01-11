@@ -18,8 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/weaveworks/common/middleware"
 	"github.com/weaveworks/common/user"
-
-	"github.com/thanos-io/thanos/internal/cortex/chunk"
 )
 
 func TestRoundTrip(t *testing.T) {
@@ -53,7 +51,6 @@ func TestRoundTrip(t *testing.T) {
 		mockLimits{},
 		PrometheusCodec,
 		nil,
-		chunk.SchemaConfig{},
 		promql.EngineOpts{
 			Logger:     log.NewNopLogger(),
 			Reg:        nil,
@@ -116,7 +113,6 @@ func Test_ShardingConfigError(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		chunk.SchemaConfig{},
 		promql.EngineOpts{},
 		0,
 		nil,

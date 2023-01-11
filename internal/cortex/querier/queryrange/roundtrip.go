@@ -36,7 +36,6 @@ import (
 	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/user"
 
-	"github.com/thanos-io/thanos/internal/cortex/chunk"
 	"github.com/thanos-io/thanos/internal/cortex/chunk/cache"
 	"github.com/thanos-io/thanos/internal/cortex/querier"
 	"github.com/thanos-io/thanos/internal/cortex/tenant"
@@ -135,7 +134,6 @@ func NewTripperware(
 	limits Limits,
 	codec Codec,
 	cacheExtractor Extractor,
-	schema chunk.SchemaConfig,
 	engineOpts promql.EngineOpts,
 	minShardingLookback time.Duration,
 	registerer prometheus.Registerer,
@@ -177,27 +175,6 @@ func NewTripperware(
 		}
 		c = cache
 		queryRangeMiddleware = append(queryRangeMiddleware, InstrumentMiddleware("results_cache", metrics), queryCacheMiddleware)
-	}
-
-	if cfg.ShardedQueries {
-		if minShardingLookback == 0 {
-			return nil, nil, errInvalidMinShardingLookback
-		}
-
-		shardingware := NewQueryShardMiddleware(
-			log,
-			promql.NewEngine(engineOpts),
-			schema.Configs,
-			codec,
-			minShardingLookback,
-			metrics,
-			registerer,
-		)
-
-		queryRangeMiddleware = append(
-			queryRangeMiddleware,
-			shardingware, // instrumentation is included in the sharding middleware
-		)
 	}
 
 	if cfg.MaxRetries > 0 {
