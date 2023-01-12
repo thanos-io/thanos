@@ -15,10 +15,10 @@ func TestBackground(t *testing.T) {
 		WriteBackBuffer:     100,
 	}, cache.NewMockCache(), nil)
 
-	keys, chunks := fillCache(t, c)
+	keys, bufs := fillCache(t, c)
 	cache.Flush(c)
 
-	testCacheSingle(t, c, keys, chunks)
-	testCacheMultiple(t, c, keys, chunks)
+	testCacheSingle(t, c, keys, bufs)
+	testCacheMultiple(t, c, keys, bufs)
 	testCacheMiss(t, c)
 }
