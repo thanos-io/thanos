@@ -207,7 +207,7 @@ func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.Fla
 
 	cmd.Flag("compaction", "Only blocks with these compaction levels will be replicated. Repeated flag.").Default("1", "2", "3", "4").IntsVar(&tbc.compactions)
 
-	cmd.Flag("matcher", "Only blocks whose external labels exactly match this matcher will be replicated.").PlaceHolder("key=\"value\"").StringVar(&tbc.matcherStrs)
+	cmd.Flag("matcher", "blocks whose external labels match this matcher will be replicated. All Prometheus matchers are supported, including =, !=, =~ and !~.").StringVar(&tbc.matcherStrs)
 
 	cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").BoolVar(&tbc.singleRun)
 
