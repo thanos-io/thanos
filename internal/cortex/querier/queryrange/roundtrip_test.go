@@ -105,19 +105,3 @@ func (s singleHostRoundTripper) RoundTrip(r *http.Request) (*http.Response, erro
 	r.URL.Host = s.host
 	return s.next.RoundTrip(r)
 }
-
-func Test_ShardingConfigError(t *testing.T) {
-	_, _, err := NewTripperware(
-		Config{ShardedQueries: true},
-		log.NewNopLogger(),
-		nil,
-		nil,
-		nil,
-		promql.EngineOpts{},
-		0,
-		nil,
-		nil,
-	)
-
-	require.EqualError(t, err, errInvalidMinShardingLookback.Error())
-}
