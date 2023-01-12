@@ -461,6 +461,7 @@ type ReceiveBuilder struct {
 	relabelConfigs      []*relabel.Config
 	replication         int
 	image               string
+	nativeHistograms    bool
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -508,6 +509,11 @@ func (r *ReceiveBuilder) WithValidationEnabled(limit int, metaMonitoring string,
 	if len(query) > 0 {
 		r.metaMonitoringQuery = query[0]
 	}
+	return r
+}
+
+func (r *ReceiveBuilder) WithNativeHistograms() *ReceiveBuilder {
+	r.nativeHistograms = true
 	return r
 }
 
@@ -587,6 +593,10 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate relabel configs: %v", relabelConfigBytes))}
 		}
 		args["--receive.relabel-config"] = string(relabelConfigBytes)
+	}
+
+	if r.nativeHistograms {
+		args["--tsdb.enable-native-histograms"] = ""
 	}
 
 	return e2emon.AsInstrumented(r.f.Init(wrapWithDefaults(e2e.StartOptions{
