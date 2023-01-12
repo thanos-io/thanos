@@ -88,8 +88,7 @@ func registerReceive(app *extkingpin.App) {
 			EnableExemplarStorage:          true,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
 			EnableMemorySnapshotOnShutdown: conf.tsdbMemorySnapshotOnShutdown,
-			//TODO (rabenhorst): Do we want to make this configurable?
-			EnableNativeHistograms: true,
+			EnableNativeHistograms:         conf.tsdbEnableNativeHistograms,
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -785,6 +784,7 @@ type receiveConfig struct {
 	tsdbMaxExemplars             int64
 	tsdbWriteQueueSize           int64
 	tsdbMemorySnapshotOnShutdown bool
+	tsdbEnableNativeHistograms   bool
 
 	walCompression bool
 	noLockFile     bool
@@ -896,6 +896,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.memory-snapshot-on-shutdown",
 		"[EXPERIMENTAL] Enables feature to snapshot in-memory chunks on shutdown for faster restarts.").
 		Default("false").Hidden().BoolVar(&rc.tsdbMemorySnapshotOnShutdown)
+
+	cmd.Flag("tsdb.enable-native-histograms",
+		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
+		Default("false").Hidden().BoolVar(&rc.tsdbEnableNativeHistograms)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")
