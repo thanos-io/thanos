@@ -211,6 +211,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsistencyDelay bool) {
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
+	tooOldSampleErrFn := func() error { return storage.ErrTooOldSample }
 	commitErrFn := func() error { return errors.New("failed to commit") }
 	wreq := &prompb.WriteRequest{
 		Timeseries: makeSeriesWithValues(50),
@@ -389,6 +390,23 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 				},
 				{
 					appender: newFakeAppender(conflictErrFn, commitErrFn, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 conflict with replication and error is ErrTooOldSample",
+			status:            http.StatusConflict,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(tooOldSampleErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(tooOldSampleErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(tooOldSampleErrFn, nil, nil),
 				},
 			},
 		},
