@@ -23,6 +23,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5995] (https://github.com/thanos-io/thanos/pull/5993) Sidecar: Loads the TLS certificate during startup.
 - [#6044](https://github.com/thanos-io/thanos/pull/6044) Receive: mark ouf of window errors as conflict, if out-of-window samples ingestion is activated
 
+### Changed
+
+- [#6010](https://github.com/thanos-io/thanos/pull/6010) *: Upgrade Prometheus to v0.41.0.
+
 ## [v0.30.0](https://github.com/thanos-io/thanos/tree/release-0.30) - in progress.
 
 ### Fixed

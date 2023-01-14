@@ -520,37 +520,34 @@ func newFileBinaryReader(path string, postingOffsetsInMemSampling int) (bw *Bina
 		return nil, errors.Wrap(err, "read symbols")
 	}
 
-	var lastKey []string
+	var lastName, lastValue []byte
 	if r.indexVersion == index.FormatV1 {
 		// Earlier V1 formats don't have a sorted postings offset table, so
 		// load the whole offset table into memory.
 		r.postingsV1 = map[string]map[string]index.Range{}
 
 		var prevRng index.Range
-		if err := index.ReadOffsetTable(r.b, r.toc.PostingsOffsetTable, func(key []string, off uint64, _ int) error {
-			if len(key) != 2 {
-				return errors.Errorf("unexpected key length for posting table %d", len(key))
+		if err := index.ReadPostingsOffsetTable(r.b, r.toc.PostingsOffsetTable, func(name, value []byte, postingsOffset uint64, _ int) error {
+			if lastName != nil {
+				prevRng.End = int64(postingsOffset - crc32.Size)
+				r.postingsV1[string(lastName)][string(lastValue)] = prevRng
 			}
 
-			if lastKey != nil {
-				prevRng.End = int64(off - crc32.Size)
-				r.postingsV1[lastKey[0]][lastKey[1]] = prevRng
+			if _, ok := r.postingsV1[string(name)]; !ok {
+				r.postingsV1[string(name)] = map[string]index.Range{}
+				r.postings[string(name)] = nil // Used to get a list of labelnames in places.
 			}
 
-			if _, ok := r.postingsV1[key[0]]; !ok {
-				r.postingsV1[key[0]] = map[string]index.Range{}
-				r.postings[key[0]] = nil // Used to get a list of labelnames in places.
-			}
-
-			lastKey = key
-			prevRng = index.Range{Start: int64(off + postingLengthFieldSize)}
+			lastName = name
+			lastValue = value
+			prevRng = index.Range{Start: int64(postingsOffset + postingLengthFieldSize)}
 			return nil
 		}); err != nil {
 			return nil, errors.Wrap(err, "read postings table")
 		}
-		if lastKey != nil {
+		if string(lastName) != "" {
 			prevRng.End = r.indexLastPostingEnd - crc32.Size
-			r.postingsV1[lastKey[0]][lastKey[1]] = prevRng
+			r.postingsV1[string(lastName)][string(lastValue)] = prevRng
 		}
 	} else {
 		lastTableOff := 0
@@ -558,46 +555,44 @@ func newFileBinaryReader(path string, postingOffsetsInMemSampling int) (bw *Bina
 
 		// For the postings offset table we keep every label name but only every nth
 		// label value (plus the first and last one), to save memory.
-		if err := index.ReadOffsetTable(r.b, r.toc.PostingsOffsetTable, func(key []string, off uint64, tableOff int) error {
-			if len(key) != 2 {
-				return errors.Errorf("unexpected key length for posting table %d", len(key))
-			}
-
-			if _, ok := r.postings[key[0]]; !ok {
+		if err := index.ReadPostingsOffsetTable(r.b, r.toc.PostingsOffsetTable, func(name, value []byte, postingsOffset uint64, labelOffset int) error {
+			if _, ok := r.postings[string(name)]; !ok {
 				// Not seen before label name.
-				r.postings[key[0]] = &postingValueOffsets{}
-				if lastKey != nil {
+				r.postings[string(name)] = &postingValueOffsets{}
+				if lastName != nil {
 					// Always include last value for each label name, unless it was just added in previous iteration based
 					// on valueCount.
 					if (valueCount-1)%postingOffsetsInMemSampling != 0 {
-						r.postings[lastKey[0]].offsets = append(r.postings[lastKey[0]].offsets, postingOffset{value: lastKey[1], tableOff: lastTableOff})
+						r.postings[string(lastName)].offsets = append(r.postings[string(lastName)].offsets, postingOffset{value: string(lastValue), tableOff: lastTableOff})
 					}
-					r.postings[lastKey[0]].lastValOffset = int64(off - crc32.Size)
-					lastKey = nil
+					r.postings[string(lastName)].lastValOffset = int64(postingsOffset - crc32.Size)
+					lastName = nil
+					lastValue = nil
 				}
 				valueCount = 0
 			}
 
-			lastKey = key
-			lastTableOff = tableOff
+			lastName = name
+			lastValue = value
+			lastTableOff = labelOffset
 			valueCount++
 
 			if (valueCount-1)%postingOffsetsInMemSampling == 0 {
-				r.postings[key[0]].offsets = append(r.postings[key[0]].offsets, postingOffset{value: key[1], tableOff: tableOff})
+				r.postings[string(name)].offsets = append(r.postings[string(name)].offsets, postingOffset{value: string(value), tableOff: labelOffset})
 			}
 
 			return nil
 		}); err != nil {
 			return nil, errors.Wrap(err, "read postings table")
 		}
-		if lastKey != nil {
+		if lastName != nil {
 			if (valueCount-1)%postingOffsetsInMemSampling != 0 {
 				// Always include last value for each label name if not included already based on valueCount.
-				r.postings[lastKey[0]].offsets = append(r.postings[lastKey[0]].offsets, postingOffset{value: lastKey[1], tableOff: lastTableOff})
+				r.postings[string(lastName)].offsets = append(r.postings[string(lastName)].offsets, postingOffset{value: string(lastValue), tableOff: lastTableOff})
 			}
 			// In any case lastValOffset is unknown as don't have next posting anymore. Guess from TOC table.
 			// In worst case we will overfetch a few bytes.
-			r.postings[lastKey[0]].lastValOffset = r.indexLastPostingEnd - crc32.Size
+			r.postings[string(lastName)].lastValOffset = r.indexLastPostingEnd - crc32.Size
 		}
 		// Trim any extra space in the slices.
 		for k, v := range r.postings {
