@@ -41,10 +41,6 @@ type Config struct {
 	// series is considered stale.
 	LookbackDelta time.Duration `yaml:"lookback_delta"`
 
-	// Blocks storage only.
-	StoreGatewayAddresses string       `yaml:"store_gateway_addresses"`
-	StoreGatewayClient    ClientConfig `yaml:"store_gateway_client"`
-
 	SecondStoreEngine        string       `yaml:"second_store_engine"`
 	UseSecondStoreBeforeTime flagext.Time `yaml:"use_second_store_before_time"`
 
