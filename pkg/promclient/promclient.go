@@ -385,15 +385,15 @@ func (p *QueryOptions) AddTo(values url.Values) error {
 }
 
 // QueryInstant performs an instant query using a default HTTP client and returns results in model.Vector type.
-func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, json.RawMessage, []string, error) {
+func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, error) {
 	params, err := url.ParseQuery(base.RawQuery)
 	if err != nil {
-		return nil, nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
+		return nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
 	}
 	params.Add("query", query)
 	params.Add("time", t.Format(time.RFC3339Nano))
 	if err := opts.AddTo(params); err != nil {
-		return nil, nil, nil, errors.Wrap(err, "add thanos opts query params")
+		return nil, nil, errors.Wrap(err, "add thanos opts query params")
 	}
 
 	u := *base
@@ -412,7 +412,7 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 
 	body, _, err := c.req2xx(ctx, &u, method)
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "read query instant response")
+		return nil, nil, errors.Wrap(err, "read query instant response")
 	}
 
 	// Decode only ResultType and load Result only as RawJson since we don't know
@@ -430,7 +430,7 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 	}
 
 	if err = json.Unmarshal(body, &m); err != nil {
-		return nil, nil, nil, errors.Wrap(err, "unmarshal query instant response")
+		return nil, nil, errors.Wrap(err, "unmarshal query instant response")
 	}
 
 	var vectorResult model.Vector
@@ -440,29 +440,29 @@ func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, 
 	switch m.Data.ResultType {
 	case string(parser.ValueTypeVector):
 		if err = json.Unmarshal(m.Data.Result, &vectorResult); err != nil {
-			return nil, nil, nil, errors.Wrap(err, "decode result into ValueTypeVector")
+			return nil, nil, errors.Wrap(err, "decode result into ValueTypeVector")
 		}
 	case string(parser.ValueTypeScalar):
 		vectorResult, err = convertScalarJSONToVector(m.Data.Result)
 		if err != nil {
-			return nil, nil, nil, errors.Wrap(err, "decode result into ValueTypeScalar")
+			return nil, nil, errors.Wrap(err, "decode result into ValueTypeScalar")
 		}
 	default:
 		if m.Warnings != nil {
-			return nil, nil, nil, errors.Errorf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
+			return nil, nil, errors.Errorf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
 		}
 		if m.Error != "" {
-			return nil, nil, nil, errors.Errorf("error: %s, type: %s", m.Error, m.ErrorType)
+			return nil, nil, errors.Errorf("error: %s, type: %s", m.Error, m.ErrorType)
 		}
-		return nil, nil, nil, errors.Errorf("received status code: 200, unknown response type: '%q'", m.Data.ResultType)
+		return nil, nil, errors.Errorf("received status code: 200, unknown response type: '%q'", m.Data.ResultType)
 	}
 
-	return vectorResult, m.Data.Result, m.Warnings, nil
+	return vectorResult, m.Warnings, nil
 }
 
 // PromqlQueryInstant performs instant query and returns results in promql.Vector type that is compatible with promql package.
 func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions) (promql.Vector, []string, error) {
-	vectorResult, _, warnings, err := c.QueryInstant(ctx, base, query, t, opts)
+	vectorResult, warnings, err := c.QueryInstant(ctx, base, query, t, opts)
 	if err != nil {
 		return nil, nil, err
 	}

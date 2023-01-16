@@ -1019,7 +1019,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 }
 
 func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, error) {
-	res, _, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+	res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 	if err != nil {
 		return nil, err
 	}
@@ -1048,7 +1048,7 @@ func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func()
 		"msg", fmt.Sprintf("Waiting for %d results for query %s", len(expected), q()),
 	)
 	testutil.Ok(t, runutil.RetryWithLog(logger, 10*time.Second, ctx.Done(), func() error {
-		res, _, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
+		res, warnings, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 		if err != nil {
 			return err
 		}
