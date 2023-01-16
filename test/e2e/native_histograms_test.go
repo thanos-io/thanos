@@ -40,23 +40,16 @@ func TestQueryNativeHistograms(t *testing.T) {
 	testutil.Ok(t, synthesizeHistogram(ctx, rawRemoteWriteURL1))
 	testutil.Ok(t, synthesizeHistogram(ctx, rawRemoteWriteURL2))
 
-	queryAndAssertSeries(t, ctx, prom1.Endpoint("http"), func() string { return "fake_histogram" }, time.Now, promclient.QueryOptions{}, []model.Metric{
-		{
-			"__name__": "fake_histogram",
-			"foo":      "bar",
-		},
-	})
-	queryAndAssertSeries(t, ctx, prom2.Endpoint("http"), func() string { return "fake_histogram" }, time.Now, promclient.QueryOptions{}, []model.Metric{
-		{
-			"__name__": "fake_histogram",
-			"foo":      "bar",
-		},
-	})
+	// Make sure we can query histogram from both Prometheus instances.
+	queryAndAssert(t, ctx, prom1.Endpoint("http"), func() string { return "fake_histogram" }, time.Now, promclient.QueryOptions{}, expectedHistogramModelVector(nil))
+	queryAndAssert(t, ctx, prom2.Endpoint("http"), func() string { return "fake_histogram" }, time.Now, promclient.QueryOptions{}, expectedHistogramModelVector(nil))
 
+	// Query deduplicated histogram from Thanos Querier.
 	queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return "fake_histogram" }, time.Now, promclient.QueryOptions{Deduplicate: true}, expectedHistogramModelVector(map[string]string{
 		"prometheus": "prom-ha",
 	}))
 
+	// Query histogram using histogram_count function and deduplication from Thanos Querier.
 	queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return "histogram_count(fake_histogram)" }, time.Now, promclient.QueryOptions{Deduplicate: true}, model.Vector{
 		&model.Sample{
 			Value: 5,
@@ -67,6 +60,7 @@ func TestQueryNativeHistograms(t *testing.T) {
 		},
 	})
 
+	// Query histogram using group function to test pushdown.
 	queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return "group(fake_histogram)" }, time.Now, promclient.QueryOptions{Deduplicate: true}, model.Vector{
 		&model.Sample{
 			Value:  1,
