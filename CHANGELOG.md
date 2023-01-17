@@ -21,7 +21,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#5995](https://github.com/thanos-io/thanos/pull/5993) Sidecar: Loads the TLS certificate during startup.
+- [#5995](https://github.com/thanos-io/thanos/pull/5995) Sidecar: Loads the TLS certificate during startup.
 - [#6044](https://github.com/thanos-io/thanos/pull/6044) Receive: mark ouf of window errors as conflict, if out-of-window samples ingestion is activated
 
 ### Changed
@@ -52,7 +52,7 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 - [#5966](https://github.com/thanos-io/thanos/pull/5966) Query: Fixed mint and maxt when selecting series for the `api/v1/series` HTTP endpoint.
 - [#5997](https://github.com/thanos-io/thanos/pull/5997) Rule: switch to miekgdns DNS resolver as the default one.
 - [#5948](https://github.com/thanos-io/thanos/pull/5948) Store: `chunks_fetched_duration` wrong calculation.
-- [#5910](https://github.com/thanos-io/thanos/pull/5910): Receive: Fixed ketama quorum bug that was could cause success response for failed replication. This also optimize heavily receiver CPU use.
+- [#5910](https://github.com/thanos-io/thanos/pull/5910) Receive: Fixed ketama quorum bug that was could cause success response for failed replication. This also optimize heavily receiver CPU use.
 
 ### Added
 
