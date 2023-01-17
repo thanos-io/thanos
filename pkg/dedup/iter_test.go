@@ -147,13 +147,14 @@ var expectedRealSeriesWithStaleMarkerDeduplicatedForRate = []sample{
 
 func TestDedupSeriesSet(t *testing.T) {
 	tests := []struct {
+		name        string
 		input       []series
 		exp         []series
 		dedupLabels map[string]struct{}
 		isCounter   bool
 	}{
 		{
-			// Single dedup label.
+			name: "Single dedup label",
 			input: []series{
 				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}},
@@ -210,6 +211,7 @@ func TestDedupSeriesSet(t *testing.T) {
 		{
 			// Regression tests against: https://github.com/thanos-io/thanos/issues/2645.
 			// We were panicking on requests with more replica labels than overall labels in any series.
+			name: "Regression tests against #2645",
 			input: []series{
 				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}},
@@ -238,7 +240,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			dedupLabels: map[string]struct{}{"replica": {}, "replica2": {}, "replica3": {}, "replica4": {}, "replica5": {}, "replica6": {}, "replica7": {}},
 		},
 		{
-			// Multi dedup label.
+			name: "Multi dedup label",
 			input: []series{
 				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}, {Name: "replicaA", Value: "replica-1"}},
@@ -294,7 +296,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			},
 		},
 		{
-			// Multi dedup label - some series don't have all dedup labels.
+			name: "Multi dedup label - some series don't have all dedup labels",
 			input: []series{
 				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}, {Name: "replicaA", Value: "replica-1"}},
@@ -322,6 +324,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			// Now, depending on what replica we look, we can see totally different counter value in total where total means
 			// after accounting for counter resets. We account for that in downsample.CounterSeriesIterator, mainly because
 			// we handle downsample Counter Aggregations specially (for detecting resets between chunks).
+			name:      "Regression test against 2401",
 			isCounter: true,
 			input: []series{
 				{
@@ -362,6 +365,7 @@ func TestDedupSeriesSet(t *testing.T) {
 		},
 		{
 			// Same thing but not for counter should not adjust anything.
+			name:      "Regression test with no counter adjustment",
 			isCounter: false,
 			input: []series{
 				{
@@ -387,6 +391,7 @@ func TestDedupSeriesSet(t *testing.T) {
 		{
 			// Regression test on real data against https://github.com/thanos-io/thanos/issues/2401.
 			// Real data with stale marker after downsample.CounterSeriesIterator (required for downsampling + rate).
+			name:      "Regression test on real data against 2401",
 			isCounter: true,
 			input: []series{
 				{
@@ -456,7 +461,7 @@ func TestDedupSeriesSet(t *testing.T) {
 	}
 
 	for _, tcase := range tests {
-		t.Run("", func(t *testing.T) {
+		t.Run(tcase.name, func(t *testing.T) {
 			// If it is a counter then pass a function which expects a counter.
 			f := ""
 			if tcase.isCounter {
