@@ -5,82 +5,31 @@ package cache_test
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
-	"sort"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 
-	"github.com/thanos-io/thanos/internal/cortex/chunk"
 	"github.com/thanos-io/thanos/internal/cortex/chunk/cache"
-	prom_chunk "github.com/thanos-io/thanos/internal/cortex/chunk/encoding"
 )
 
-const userID = "1"
-
-func fillCache(t *testing.T, cache cache.Cache) ([]string, []chunk.Chunk) {
-	const chunkLen = 13 * 3600 // in seconds
-
-	// put a set of chunks, larger than background batch size, with varying timestamps and values
+func fillCache(t *testing.T, cache cache.Cache) ([]string, [][]byte) {
 	keys := []string{}
 	bufs := [][]byte{}
-	chunks := []chunk.Chunk{}
 	for i := 0; i < 111; i++ {
-		ts := model.TimeFromUnix(int64(i * chunkLen))
-		promChunk := prom_chunk.New()
-		nc, err := promChunk.Add(model.SamplePair{
-			Timestamp: ts,
-			Value:     model.SampleValue(i),
-		})
-		require.NoError(t, err)
-		require.Nil(t, nc)
-		c := chunk.NewChunk(
-			userID,
-			model.Fingerprint(1),
-			labels.Labels{
-				{Name: model.MetricNameLabel, Value: "foo"},
-				{Name: "bar", Value: "baz"},
-			},
-			promChunk,
-			ts,
-			ts.Add(chunkLen),
-		)
-
-		err = c.Encode()
-		require.NoError(t, err)
-		buf, err := c.Encoded()
-		require.NoError(t, err)
-
-		// In order to be able to compare the expected chunk (this one) with the
-		// actual one (the one that will be fetched from the cache) we need to
-		// cleanup the chunk to avoid any internal references mismatch (ie. appender
-		// pointer).
-		cleanChunk := chunk.Chunk{
-			UserID:      c.UserID,
-			Fingerprint: c.Fingerprint,
-			From:        c.From,
-			Through:     c.Through,
-			Checksum:    c.Checksum,
-			ChecksumSet: c.ChecksumSet,
-		}
-		err = cleanChunk.Decode(chunk.NewDecodeContext(), buf)
-		require.NoError(t, err)
-
-		keys = append(keys, c.ExternalKey())
-		bufs = append(bufs, buf)
-		chunks = append(chunks, cleanChunk)
+		keys = append(keys, fmt.Sprintf("test%d", i))
+		bufs = append(bufs, []byte(fmt.Sprintf("buf%d", i)))
 	}
 
 	cache.Store(context.Background(), keys, bufs)
-	return keys, chunks
+	return keys, bufs
 }
 
-func testCacheSingle(t *testing.T, cache cache.Cache, keys []string, chunks []chunk.Chunk) {
+func testCacheSingle(t *testing.T, cache cache.Cache, keys []string, data [][]byte) {
 	for i := 0; i < 100; i++ {
 		index := rand.Intn(len(keys))
 		key := keys[index]
@@ -89,69 +38,23 @@ func testCacheSingle(t *testing.T, cache cache.Cache, keys []string, chunks []ch
 		require.Len(t, found, 1)
 		require.Len(t, bufs, 1)
 		require.Len(t, missingKeys, 0)
-
-		c, err := chunk.ParseExternalKey(userID, found[0])
-		require.NoError(t, err)
-		err = c.Decode(chunk.NewDecodeContext(), bufs[0])
-		require.NoError(t, err)
-		require.Equal(t, chunks[index], c)
+		require.Equal(t, data[index], bufs[0])
 	}
 }
 
-func testCacheMultiple(t *testing.T, cache cache.Cache, keys []string, chunks []chunk.Chunk) {
+func testCacheMultiple(t *testing.T, cache cache.Cache, keys []string, data [][]byte) {
 	// test getting them all
 	found, bufs, missingKeys := cache.Fetch(context.Background(), keys)
 	require.Len(t, found, len(keys))
 	require.Len(t, bufs, len(keys))
 	require.Len(t, missingKeys, 0)
 
-	result := []chunk.Chunk{}
+	result := [][]byte{}
 	for i := range found {
-		c, err := chunk.ParseExternalKey(userID, found[i])
-		require.NoError(t, err)
-		err = c.Decode(chunk.NewDecodeContext(), bufs[i])
-		require.NoError(t, err)
-		result = append(result, c)
+		result = append(result, bufs[i])
 	}
-	require.Equal(t, chunks, result)
+	require.Equal(t, data, result)
 }
-
-func testChunkFetcher(t *testing.T, c cache.Cache, keys []string, chunks []chunk.Chunk) {
-	fetcher, err := chunk.NewChunkFetcher(c, false, nil)
-	require.NoError(t, err)
-	defer fetcher.Stop()
-
-	found, err := fetcher.FetchChunks(context.Background(), chunks, keys)
-	require.NoError(t, err)
-	sort.Sort(byExternalKey(found))
-	sort.Sort(byExternalKey(chunks))
-	require.Equal(t, chunks, found)
-}
-
-// testChunkFetcherStop checks that stopping the fetcher while fetching chunks don't result an error
-func testChunkFetcherStop(t *testing.T, c cache.Cache, keys []string, chunks []chunk.Chunk) {
-	fetcher, err := chunk.NewChunkFetcher(c, false, chunk.NewMockStorage())
-	require.NoError(t, err)
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if _, err := fetcher.FetchChunks(context.Background(), chunks, keys); err != nil {
-			// Since we stop fetcher while FetchChunks is running, we may not get everything back
-			// which requires the fetcher to fetch keys from storage, which is missing the keys
-			// so errors here is expected. Need to check the error because of the lint check.
-			require.NotNil(t, err)
-		}
-	}()
-	fetcher.Stop()
-	<-done
-}
-
-type byExternalKey []chunk.Chunk
-
-func (a byExternalKey) Len() int           { return len(a) }
-func (a byExternalKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a byExternalKey) Less(i, j int) bool { return a[i].ExternalKey() < a[j].ExternalKey() }
 
 func testCacheMiss(t *testing.T, cache cache.Cache) {
 	for i := 0; i < 100; i++ {
@@ -164,23 +67,15 @@ func testCacheMiss(t *testing.T, cache cache.Cache) {
 }
 
 func testCache(t *testing.T, cache cache.Cache) {
-	keys, chunks := fillCache(t, cache)
+	keys, bufs := fillCache(t, cache)
 	t.Run("Single", func(t *testing.T) {
-		testCacheSingle(t, cache, keys, chunks)
+		testCacheSingle(t, cache, keys, bufs)
 	})
 	t.Run("Multiple", func(t *testing.T) {
-		testCacheMultiple(t, cache, keys, chunks)
+		testCacheMultiple(t, cache, keys, bufs)
 	})
 	t.Run("Miss", func(t *testing.T) {
 		testCacheMiss(t, cache)
-	})
-	t.Run("Fetcher", func(t *testing.T) {
-		testChunkFetcher(t, cache, keys, chunks)
-	})
-	t.Run("FetcherStop", func(t *testing.T) {
-		// Refill the cache to avoid nil pointer error during fetch for getting missing keys from storage
-		keys, chunks = fillCache(t, cache)
-		testChunkFetcherStop(t, cache, keys, chunks)
 	})
 }
 

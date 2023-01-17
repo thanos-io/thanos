@@ -865,7 +865,8 @@ func isConflict(err error) bool {
 func isSampleConflictErr(err error) bool {
 	return err == storage.ErrDuplicateSampleForTimestamp ||
 		err == storage.ErrOutOfOrderSample ||
-		err == storage.ErrOutOfBounds
+		err == storage.ErrOutOfBounds ||
+		err == storage.ErrTooOldSample
 }
 
 // isExemplarConflictErr returns whether or not the given error represents
