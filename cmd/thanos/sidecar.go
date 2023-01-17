@@ -22,8 +22,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/thanos-io/objstore/client"
 
+	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -268,10 +268,11 @@ func runSidecar(
 				if httpProbe.IsReady() {
 					mint, maxt := promStore.Timestamps()
 					return &infopb.StoreInfo{
-						MinTime:           mint,
-						MaxTime:           maxt,
-						SupportsSharding:  true,
-						SendsSortedSeries: true,
+						MinTime:            mint,
+						MaxTime:            maxt,
+						SupportsSharding:   true,
+						SendsSortedSeries:  true,
+						SupportsProjection: true,
 					}
 				}
 				return nil

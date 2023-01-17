@@ -824,6 +824,7 @@ type blockSeriesClient struct {
 
 	skipChunks         bool
 	shardMatcher       *storepb.ShardMatcher
+	projectionMatcher  *storepb.ProjectionMatcher
 	calculateChunkHash bool
 	chunkFetchDuration prometheus.Histogram
 
@@ -846,6 +847,7 @@ func newBlockSeriesClient(
 	limiter ChunksLimiter,
 	bytesLimiter BytesLimiter,
 	shardMatcher *storepb.ShardMatcher,
+	projectionMatcher *storepb.ProjectionMatcher,
 	calculateChunkHash bool,
 	batchSize int,
 	chunkFetchDuration prometheus.Histogram,
@@ -870,6 +872,7 @@ func newBlockSeriesClient(
 
 		loadAggregates:     req.Aggregates,
 		shardMatcher:       shardMatcher,
+		projectionMatcher:  projectionMatcher,
 		calculateChunkHash: calculateChunkHash,
 		hasMorePostings:    true,
 		batchSize:          batchSize,
@@ -1208,6 +1211,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			}
 
 			shardMatcher := req.ShardInfo.Matcher(&s.buffers)
+			projectionMatcher := req.ProjectionInfo.Matcher(&s.buffers, b.extLset)
 			blockClient := newBlockSeriesClient(
 				srv.Context(),
 				s.logger,
@@ -1216,6 +1220,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				chunksLimiter,
 				bytesLimiter,
 				shardMatcher,
+				projectionMatcher,
 				s.enableChunkHashCalculation,
 				s.seriesBatchSize,
 				s.metrics.chunkFetchDuration,
@@ -1463,7 +1468,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
 
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
@@ -1637,7 +1642,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
 
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,

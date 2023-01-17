@@ -40,11 +40,12 @@ type testClient struct {
 	// Just to pass interface check.
 	storepb.StoreClient
 
-	labelSets        []labels.Labels
-	minTime          int64
-	maxTime          int64
-	supportsSharding bool
-	isLocalStore     bool
+	labelSets          []labels.Labels
+	minTime            int64
+	maxTime            int64
+	supportsSharding   bool
+	supportsProjection bool
+	isLocalStore       bool
 }
 
 func (c testClient) LabelSets() []labels.Labels {
@@ -57,6 +58,10 @@ func (c testClient) TimeRange() (int64, int64) {
 
 func (c testClient) SupportsSharding() bool {
 	return c.supportsSharding
+}
+
+func (c testClient) SupportsProjection() bool {
+	return c.supportsProjection
 }
 
 func (c testClient) SendsSortedSeries() bool {

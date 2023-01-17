@@ -32,7 +32,7 @@ type RequestHeader struct {
 	Values []string
 }
 
-// ThanosRequestDedup is a an interface for all requests that share setting deduplication.
+// ThanosRequestDedup is an interface for all requests that share setting deduplication.
 type ThanosRequestDedup interface {
 	IsDedupEnabled() bool
 }

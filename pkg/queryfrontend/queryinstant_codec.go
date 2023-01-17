@@ -177,7 +177,7 @@ func (c queryInstantCodec) EncodeRequest(ctx context.Context, r queryrange.Reque
 	}
 
 	if thanosReq.ShardInfo != nil {
-		data, err := encodeShardInfo(thanosReq.ShardInfo)
+		data, err := encode(thanosReq.ShardInfo)
 		if err != nil {
 			return nil, err
 		}

@@ -161,6 +161,9 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 
 	shardMatcher := r.ShardInfo.Matcher(&s.buffers)
 	defer shardMatcher.Close()
+
+	projectionMatcher := r.ProjectionInfo.Matcher(&s.buffers, s.extLset)
+	defer projectionMatcher.Close()
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
@@ -170,8 +173,9 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		if !shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
+		projectedLabels := projectionMatcher.ModifyLabels(completeLabelset, true)
 
-		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
+		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(projectedLabels)}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())

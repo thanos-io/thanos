@@ -177,7 +177,7 @@ func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request
 	}
 
 	if thanosReq.ShardInfo != nil {
-		data, err := encodeShardInfo(thanosReq.ShardInfo)
+		data, err := encode(thanosReq.ShardInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -310,7 +310,7 @@ func matchersToStringSlice(storeMatchers [][]*labels.Matcher) []string {
 	return res
 }
 
-func encodeShardInfo(info *storepb.ShardInfo) (string, error) {
+func encode(info any) (string, error) {
 	if info == nil {
 		return "", nil
 	}

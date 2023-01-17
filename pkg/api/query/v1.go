@@ -52,6 +52,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/metadata"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/queryprojection"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -108,6 +109,8 @@ type QueryAPI struct {
 	queryRangeHist prometheus.Histogram
 
 	seriesStatsAggregator seriesQueryPerformanceMetricsAggregator
+
+	projectionAnalyzer queryprojection.Analyzer
 }
 
 type seriesQueryPerformanceMetricsAggregator interface {
@@ -142,6 +145,7 @@ func NewQueryAPI(
 	gate gate.Gate,
 	statsAggregator seriesQueryPerformanceMetricsAggregator,
 	reg *prometheus.Registry,
+	projectionAnalyzer queryprojection.Analyzer,
 ) *QueryAPI {
 	if statsAggregator == nil {
 		statsAggregator = &store.NoopSeriesStatsAggregator{}
@@ -171,6 +175,7 @@ func NewQueryAPI(
 		defaultMetadataTimeRange:               defaultMetadataTimeRange,
 		disableCORS:                            disableCORS,
 		seriesStatsAggregator:                  statsAggregator,
+		projectionAnalyzer:                     projectionAnalyzer,
 
 		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "thanos_query_range_requested_timespan_duration_seconds",
@@ -407,6 +412,17 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
+	q := r.FormValue("query")
+	var projectionInfo *storepb.ProjectionInfo
+	analysis, err := qapi.projectionAnalyzer.Analyze(q)
+	if err == nil {
+		projectionInfo = &storepb.ProjectionInfo{
+			Grouping: analysis.Grouping(),
+			By:       analysis.By(),
+			Labels:   analysis.Labels(),
+		}
+	}
+
 	var seriesStats []storepb.SeriesStatsCounter
 	qry, err := qapi.queryEngine.NewInstantQuery(
 		qapi.queryableCreate(
@@ -419,9 +435,10 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
+			projectionInfo,
 		),
 		&promql.QueryOpts{LookbackDelta: lookbackDelta},
-		r.FormValue("query"),
+		q,
 		ts,
 	)
 
@@ -558,6 +575,17 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
+	q := r.FormValue("query")
+	var projectionInfo *storepb.ProjectionInfo
+	analysis, err := qapi.projectionAnalyzer.Analyze(q)
+	if err == nil {
+		projectionInfo = &storepb.ProjectionInfo{
+			Grouping: analysis.Grouping(),
+			By:       analysis.By(),
+			Labels:   analysis.Labels(),
+		}
+	}
+
 	var seriesStats []storepb.SeriesStatsCounter
 	qry, err := qapi.queryEngine.NewRangeQuery(
 		qapi.queryableCreate(
@@ -570,9 +598,10 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
+			projectionInfo,
 		),
 		&promql.QueryOpts{LookbackDelta: lookbackDelta},
-		r.FormValue("query"),
+		q,
 		start,
 		end,
 		step,
@@ -659,6 +688,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
@@ -755,6 +785,7 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 
 	if err != nil {
@@ -815,6 +846,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		true,
 		nil,
 		query.NoopSeriesStatsReporter,
+		nil,
 	).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}

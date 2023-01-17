@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/querysharding"
-
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -18,6 +16,7 @@ import (
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/internal/cortex/util/validation"
+	"github.com/thanos-io/thanos/pkg/querysharding"
 )
 
 const (

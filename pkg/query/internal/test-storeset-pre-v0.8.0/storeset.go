@@ -208,6 +208,10 @@ func (s *storeRef) SupportsSharding() bool {
 	return false
 }
 
+func (s *storeRef) SupportsProjection() bool {
+	return false
+}
+
 func (s *storeRef) SendsSortedSeries() bool {
 	return false
 }
