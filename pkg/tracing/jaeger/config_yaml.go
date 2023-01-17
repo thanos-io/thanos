@@ -19,6 +19,13 @@ import (
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 )
 
+const (
+	SamplerTypeRemote        = "remote"
+	SamplerTypeProbabilistic = "probabilistic"
+	SamplerTypeConstant      = "const"
+	SamplerTypeRateLimiting  = "ratelimiting"
+)
+
 type ParentBasedSamplerConfig struct {
 	LocalParentSampled  bool `yaml:"local_parent_sampled"`
 	RemoteParentSampled bool `yaml:"remote_parent_sampled"`
@@ -114,22 +121,27 @@ func getSamplingFraction(samplerType string, samplingFactor float64) float64 {
 
 func getSampler(config Config) tracesdk.Sampler {
 	samplerType := config.SamplerType
+	if samplerType == "" {
+		samplerType = SamplerTypeRateLimiting
+	}
 	samplingFraction := getSamplingFraction(samplerType, config.SamplerParam)
 
 	var sampler tracesdk.Sampler
 	switch samplerType {
-	case "probabilistic":
-		sampler = tracesdk.ParentBased(tracesdk.TraceIDRatioBased(samplingFraction))
-	case "const":
+	case SamplerTypeProbabilistic:
+		sampler = tracesdk.TraceIDRatioBased(samplingFraction)
+	case SamplerTypeConstant:
 		if samplingFraction == 1.0 {
 			sampler = tracesdk.AlwaysSample()
 		} else {
 			sampler = tracesdk.NeverSample()
 		}
-	case "remote":
+	case SamplerTypeRemote:
 		remoteOptions := getRemoteOptions(config)
 		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
-	case "ratelimiting":
+	// Fallback always to default (rate limiting).
+	case SamplerTypeRateLimiting:
+	default:
 		// The same config options are applicable to both remote and rate-limiting samplers.
 		remoteOptions := getRemoteOptions(config)
 		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
@@ -137,17 +149,20 @@ func getSampler(config Config) tracesdk.Sampler {
 		if ok {
 			sampler.Update(config.SamplerParam)
 		}
-	default:
-		var root tracesdk.Sampler
-		var parentOptions []tracesdk.ParentBasedSamplerOption
-		if config.SamplerParentConfig.LocalParentSampled {
-			parentOptions = append(parentOptions, tracesdk.WithLocalParentSampled(root))
-		}
-		if config.SamplerParentConfig.RemoteParentSampled {
-			parentOptions = append(parentOptions, tracesdk.WithRemoteParentSampled(root))
-		}
-		sampler = tracesdk.ParentBased(root, parentOptions...)
 	}
+
+	// Use parent-based to make sure we respect the span parent, if
+	// it is sampled. Optionally, allow user to specify the
+	// parent-based options.
+	var parentOptions []tracesdk.ParentBasedSamplerOption
+	if config.SamplerParentConfig.LocalParentSampled {
+		parentOptions = append(parentOptions, tracesdk.WithLocalParentSampled(sampler))
+	}
+	if config.SamplerParentConfig.RemoteParentSampled {
+		parentOptions = append(parentOptions, tracesdk.WithRemoteParentSampled(sampler))
+	}
+	sampler = tracesdk.ParentBased(sampler, parentOptions...)
+
 	return sampler
 }
 
