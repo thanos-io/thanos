@@ -28,7 +28,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#6010](https://github.com/thanos-io/thanos/pull/6010) *: Upgrade Prometheus to v0.41.0.
 
-## [v0.30.0](https://github.com/thanos-io/thanos/tree/release-0.30) - in progress.
+## [v0.30.0](https://github.com/thanos-io/thanos/tree/release-0.30) - 2.01.2023
 
 NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unhidden. We encourage users to use new experimental PromQL engine for efficiency reasons.
 
