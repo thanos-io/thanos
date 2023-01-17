@@ -49,6 +49,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
+const (
+	retryTimeoutDuration  = 30
+	retryIntervalDuration = 10
+)
+
 type storeConfig struct {
 	indexCacheConfigs           extflag.PathOrContent
 	objStoreConfig              extflag.PathOrContent
@@ -381,14 +386,25 @@ func runStore(
 
 			level.Info(logger).Log("msg", "initializing bucket store")
 			begin := time.Now()
-			if err := bs.InitialSync(ctx); err != nil {
+
+			// This will stop retrying after set timeout duration.
+			initialSyncCtx, cancel := context.WithTimeout(ctx, retryTimeoutDuration*time.Second)
+			defer cancel()
+
+			// Retry in case of error.
+			err := runutil.Retry(retryIntervalDuration*time.Second, initialSyncCtx.Done(), func() error {
+				return bs.InitialSync(ctx)
+			})
+
+			if err != nil {
 				close(bucketStoreReady)
 				return errors.Wrap(err, "bucket store initial sync")
 			}
+
 			level.Info(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
 			close(bucketStoreReady)
 
-			err := runutil.Repeat(conf.syncInterval, ctx.Done(), func() error {
+			err = runutil.Repeat(conf.syncInterval, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}
