@@ -24,7 +24,7 @@ var parentConfig = ParentBasedSamplerConfig{LocalParentSampled: true}
 
 // This test shows that if sample factor will enable tracing on client process, even when it would be disabled on server
 // it will be still enabled for all spans within this span.
-func TestContextTracing_ClientEnablesTracing(t *testing.T) {
+func TestContextTracing_ClientEnablesProbabilisticTracing(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
 	config := Config{
 		SamplerType:         "probabilistic",
@@ -65,7 +65,7 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 
 // This test shows that if sample factor will disable tracing on client process,  when it would be enabled on server
 // it will be still disabled for all spans within this span.
-func TestContextTracing_ClientDisablesTracing(t *testing.T) {
+func TestContextTracing_ClientDisablesProbabilisticTracing(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
 
 	config := Config{
@@ -87,6 +87,45 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 	clientRoot, clientCtx := tracing.StartSpan(tracing.ContextWithTracer(context.Background(), tracer), "a")
 
 	config.SamplerParam = 1.0
+	sampler2 := getSampler(config)
+	// Simulate Server process with different tracer, but with client span in context.
+	srvTracerOtel := newTraceProvider(
+		context.Background(),
+		"srvTracerOtel",
+		log.NewNopLogger(),
+		tracesdk.NewSimpleSpanProcessor(exp),
+		sampler2, // never sample
+		[]attribute.KeyValue{},
+	)
+	srvTracer, _ := migration.Bridge(srvTracerOtel, log.NewNopLogger())
+
+	srvRoot, srvCtx := tracing.StartSpan(tracing.ContextWithTracer(clientCtx, srvTracer), "b")
+	srvChild, _ := tracing.StartSpan(srvCtx, "bb")
+
+	tracing.ContextTracing_ClientDisablesTracing(t, exp, clientRoot, srvRoot, srvChild)
+}
+
+func TestContextTracing_ClientDisablesAlwaysOnSampling(t *testing.T) {
+	exp := tracetest.NewInMemoryExporter()
+
+	config := Config{
+		SamplerType:  SamplerTypeConstant,
+		SamplerParam: 0,
+	}
+	sampler := getSampler(config)
+	tracerOtel := newTraceProvider(
+		context.Background(),
+		"tracerOtel",
+		log.NewNopLogger(),
+		tracesdk.NewSimpleSpanProcessor(exp),
+		sampler, // never sample
+		[]attribute.KeyValue{},
+	)
+	tracer, _ := migration.Bridge(tracerOtel, log.NewNopLogger())
+
+	clientRoot, clientCtx := tracing.StartSpan(tracing.ContextWithTracer(context.Background(), tracer), "a")
+
+	config.SamplerParam = 1
 	sampler2 := getSampler(config)
 	// Simulate Server process with different tracer, but with client span in context.
 	srvTracerOtel := newTraceProvider(
