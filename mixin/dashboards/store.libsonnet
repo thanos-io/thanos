@@ -53,7 +53,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate', 'Shows rate of execution for operations against the bucket.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_objstore_bucket_operations_total{%s}[$interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'operation']), thanos.store.dashboard.selector],
+            'sum by (%s) (rate(thanos_objstore_bucket_operations_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'operation']), thanos.store.dashboard.selector],
             '{{job}} {{operation}}'
           ) +
           g.stack
@@ -61,7 +61,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of executed operations against the bucket.') +
           g.queryPanel(
-            'sum by (%(dimensions)s) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[$interval])) / sum by (%(dimensions)s) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[$interval]))' % thanos.store.dashboard { dimensions: utils.joinLabels([thanos.store.dashboard.dimensions, 'operation']) },
+            'sum by (%(dimensions)s) (rate(thanos_objstore_bucket_operation_failures_total{%(selector)s}[$__rate_interval])) / sum by (%(dimensions)s) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[$__rate_interval]))' % thanos.store.dashboard { dimensions: utils.joinLabels([thanos.store.dashboard.dimensions, 'operation']) },
             '{{job}} {{operation}}'
           ) +
           { yaxes: g.yaxes({ format: 'percentunit' }) } +
@@ -77,7 +77,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Block Load Rate', 'Shows rate of block loads from the bucket.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_bucket_store_block_loads_total{%s}[$interval]))' % [thanos.store.dashboard.dimensions, thanos.store.dashboard.selector],
+            'sum by (%s) (rate(thanos_bucket_store_block_loads_total{%s}[$__rate_interval]))' % [thanos.store.dashboard.dimensions, thanos.store.dashboard.selector],
             'block loads'
           ) +
           g.stack
@@ -93,7 +93,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Block Drop Rate', 'Shows rate of block drops.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_bucket_store_block_drops_total{%s}[$interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'operation']), thanos.store.dashboard.selector],
+            'sum by (%s) (rate(thanos_bucket_store_block_drops_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'operation']), thanos.store.dashboard.selector],
             'block drops {{job}}'
           ) +
           g.stack
@@ -112,7 +112,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Requests', 'Show rate of cache requests.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_store_index_cache_requests_total{%s}[$interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'item_type']), thanos.store.dashboard.selector],
+            'sum by (%s) (rate(thanos_store_index_cache_requests_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'item_type']), thanos.store.dashboard.selector],
             '{{job}} {{item_type}}',
           ) +
           g.stack
@@ -120,7 +120,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Hits', 'Shows ratio of errors compared to the total number of cache hits.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_store_index_cache_hits_total{%s}[$interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'item_type']), thanos.store.dashboard.selector],
+            'sum by (%s) (rate(thanos_store_index_cache_hits_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'item_type']), thanos.store.dashboard.selector],
             '{{job}} {{item_type}}',
           ) +
           g.stack
@@ -128,7 +128,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Added', 'Show rate of added items to cache.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_store_index_cache_items_added_total{%s}[$interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'item_type']), thanos.store.dashboard.selector],
+            'sum by (%s) (rate(thanos_store_index_cache_items_added_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'item_type']), thanos.store.dashboard.selector],
             '{{job}} {{item_type}}',
           ) +
           g.stack
@@ -136,7 +136,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Evicted', 'Show rate of evicted items from cache.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_store_index_cache_items_evicted_total{%s}[$interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'item_type']), thanos.store.dashboard.selector],
+            'sum by (%s) (rate(thanos_store_index_cache_items_evicted_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'item_type']), thanos.store.dashboard.selector],
             '{{job}} {{item_type}}',
           ) +
           g.stack
@@ -148,9 +148,9 @@ local utils = import '../lib/utils.libsonnet';
           g.panel('Chunk Size', 'Shows size of chunks that have sent to the bucket.') +
           g.queryPanel(
             [
-              'histogram_quantile(0.99, sum by (%s) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{%s}[$interval])))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'le']), thanos.store.dashboard.selector],
-              'sum by (%(dimensions)s) (rate(thanos_bucket_store_sent_chunk_size_bytes_sum{%(selector)s}[$interval])) / sum by (%(dimensions)s) (rate(thanos_bucket_store_sent_chunk_size_bytes_count{%(selector)s}[$interval]))' % thanos.store.dashboard,
-              'histogram_quantile(0.99, sum by (%s) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{%s}[$interval])))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'le']), thanos.store.dashboard.selector],
+              'histogram_quantile(0.99, sum by (%s) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{%s}[$__rate_interval])))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'le']), thanos.store.dashboard.selector],
+              'sum by (%(dimensions)s) (rate(thanos_bucket_store_sent_chunk_size_bytes_sum{%(selector)s}[$__rate_interval])) / sum by (%(dimensions)s) (rate(thanos_bucket_store_sent_chunk_size_bytes_count{%(selector)s}[$__rate_interval]))' % thanos.store.dashboard,
+              'histogram_quantile(0.99, sum by (%s) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{%s}[$__rate_interval])))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'le']), thanos.store.dashboard.selector],
             ],
             [
               'P99',
@@ -168,7 +168,7 @@ local utils = import '../lib/utils.libsonnet';
           g.queryPanel(
             [
               'thanos_bucket_store_series_blocks_queried{%s, quantile="0.99"}' % thanos.store.dashboard.selector,
-              'sum by (%(dimensions)s) (rate(thanos_bucket_store_series_blocks_queried_sum{%(selector)s}[$interval])) / sum by (%(dimensions)s) (rate(thanos_bucket_store_series_blocks_queried_count{%(selector)s}[$interval]))' % thanos.store.dashboard,
+              'sum by (%(dimensions)s) (rate(thanos_bucket_store_series_blocks_queried_sum{%(selector)s}[$__rate_interval])) / sum by (%(dimensions)s) (rate(thanos_bucket_store_series_blocks_queried_count{%(selector)s}[$__rate_interval]))' % thanos.store.dashboard,
               'thanos_bucket_store_series_blocks_queried{%s, quantile="0.50"}' % thanos.store.dashboard.selector,
             ], [
               'P99',
@@ -182,7 +182,7 @@ local utils = import '../lib/utils.libsonnet';
           g.queryPanel(
             [
               'thanos_bucket_store_series_data_fetched{%s, quantile="0.99"}' % thanos.store.dashboard.selector,
-              'sum by (%s) (rate(thanos_bucket_store_series_data_fetched_sum{%s}[$interval])) / sum by (%s) (rate(thanos_bucket_store_series_data_fetched_count{%s}[$interval]))' % [dataSizeDimensions, thanos.store.dashboard.selector, dataSizeDimensions, thanos.store.dashboard.selector],
+              'sum by (%s) (rate(thanos_bucket_store_series_data_fetched_sum{%s}[$__rate_interval])) / sum by (%s) (rate(thanos_bucket_store_series_data_fetched_count{%s}[$__rate_interval]))' % [dataSizeDimensions, thanos.store.dashboard.selector, dataSizeDimensions, thanos.store.dashboard.selector],
               'thanos_bucket_store_series_data_fetched{%s, quantile="0.50"}' % thanos.store.dashboard.selector,
             ], [
               'P99: {{data_type}} / {{job}}',
@@ -197,7 +197,7 @@ local utils = import '../lib/utils.libsonnet';
           g.queryPanel(
             [
               'thanos_bucket_store_series_data_touched{%s, quantile="0.99"}' % thanos.store.dashboard.selector,
-              'sum by (%s) (rate(thanos_bucket_store_series_data_touched_sum{%s}[$interval])) / sum by (%s) (rate(thanos_bucket_store_series_data_touched_count{%s}[$interval]))' % [dataSizeDimensions, thanos.store.dashboard.selector, dataSizeDimensions, thanos.store.dashboard.selector],
+              'sum by (%s) (rate(thanos_bucket_store_series_data_touched_sum{%s}[$__rate_interval])) / sum by (%s) (rate(thanos_bucket_store_series_data_touched_count{%s}[$__rate_interval]))' % [dataSizeDimensions, thanos.store.dashboard.selector, dataSizeDimensions, thanos.store.dashboard.selector],
               'thanos_bucket_store_series_data_touched{%s, quantile="0.50"}' % thanos.store.dashboard.selector,
             ], [
               'P99: {{data_type}} / {{job}}',
@@ -212,7 +212,7 @@ local utils = import '../lib/utils.libsonnet';
           g.queryPanel(
             [
               'thanos_bucket_store_series_result_series{%s,quantile="0.99"}' % thanos.store.dashboard.selector,
-              'sum by (%(dimensions)s) (rate(thanos_bucket_store_series_result_series_sum{%(selector)s}[$interval])) / sum by (%(dimensions)s) (rate(thanos_bucket_store_series_result_series_count{%(selector)s}[$interval]))' % thanos.store.dashboard,
+              'sum by (%(dimensions)s) (rate(thanos_bucket_store_series_result_series_sum{%(selector)s}[$__rate_interval])) / sum by (%(dimensions)s) (rate(thanos_bucket_store_series_result_series_count{%(selector)s}[$__rate_interval]))' % thanos.store.dashboard,
               'thanos_bucket_store_series_result_series{%s,quantile="0.50"}' % thanos.store.dashboard.selector,
             ], [
               'P99',
@@ -274,7 +274,7 @@ local utils = import '../lib/utils.libsonnet';
     nullPointMode: 'null as zero',
     targets: [
       {
-        expr: 'histogram_quantile(0.99, sum by (%(dimensions)s, operation, le) (rate(%(metricName)s_bucket{%(selector)s}[$interval]))) * %(multiplier)s' % params,
+        expr: 'histogram_quantile(0.99, sum by (%(dimensions)s, operation, le) (rate(%(metricName)s_bucket{%(selector)s}[$__rate_interval]))) * %(multiplier)s' % params,
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: 'P99 {{job}}',
@@ -282,7 +282,7 @@ local utils = import '../lib/utils.libsonnet';
         step: 10,
       },
       {
-        expr: 'sum by (%(dimensions)s, operation) (rate(%(metricName)s_sum{%(selector)s}[$interval])) * %(multiplier)s  / sum by (%(dimensions)s, operation) (rate(%(metricName)s_count{%(selector)s}[$interval]))' % params,
+        expr: 'sum by (%(dimensions)s, operation) (rate(%(metricName)s_sum{%(selector)s}[$__rate_interval])) * %(multiplier)s  / sum by (%(dimensions)s, operation) (rate(%(metricName)s_count{%(selector)s}[$__rate_interval]))' % params,
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: 'mean {{job}}',
@@ -290,7 +290,7 @@ local utils = import '../lib/utils.libsonnet';
         step: 10,
       },
       {
-        expr: 'histogram_quantile(0.50, sum by (%(dimensions)s, operation, le) (rate(%(metricName)s_bucket{%(selector)s}[$interval]))) * %(multiplier)s' % params,
+        expr: 'histogram_quantile(0.50, sum by (%(dimensions)s, operation, le) (rate(%(metricName)s_bucket{%(selector)s}[$__rate_interval]))) * %(multiplier)s' % params,
         format: 'time_series',
         intervalFactor: 2,
         legendFormat: 'P50 {{job}}',

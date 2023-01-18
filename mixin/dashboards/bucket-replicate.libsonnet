@@ -26,7 +26,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Errors', 'Shows rate of errors.') +
           g.queryPanel(
-            'sum by (%(dimensions)s, result) (rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[$interval]))' % thanos.bucketReplicate.dashboard,
+            'sum by (%(dimensions)s, result) (rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[$__rate_interval]))' % thanos.bucketReplicate.dashboard,
             '{{result}}'
           ) +
           { yaxes: g.yaxes('percentunit') } +
@@ -47,11 +47,11 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.panel('Metrics') +
           g.queryPanel(
             [
-              'sum by (%(dimensions)s) (rate(blocks_meta_synced{state="loaded", %(selector)s}[$interval]))' % thanos.bucketReplicate.dashboard,
-              'sum by (%(dimensions)s) (rate(blocks_meta_synced{state="failed", %(selector)s}[$interval]))' % thanos.bucketReplicate.dashboard,
-              'sum by (%(dimensions)s) (rate(thanos_replicate_blocks_already_replicated_total{%(selector)s}[$interval]))' % thanos.bucketReplicate.dashboard,
-              'sum by (%(dimensions)s) (rate(thanos_replicate_blocks_replicated_total{%(selector)s}[$interval]))' % thanos.bucketReplicate.dashboard,
-              'sum by (%(dimensions)s) (rate(thanos_replicate_objects_replicated_total{%(selector)s}[$interval]))' % thanos.bucketReplicate.dashboard,
+              'sum by (%(dimensions)s) (rate(blocks_meta_synced{state="loaded", %(selector)s}[$__rate_interval]))' % thanos.bucketReplicate.dashboard,
+              'sum by (%(dimensions)s) (rate(blocks_meta_synced{state="failed", %(selector)s}[$__rate_interval]))' % thanos.bucketReplicate.dashboard,
+              'sum by (%(dimensions)s) (rate(thanos_replicate_blocks_already_replicated_total{%(selector)s}[$__rate_interval]))' % thanos.bucketReplicate.dashboard,
+              'sum by (%(dimensions)s) (rate(thanos_replicate_blocks_replicated_total{%(selector)s}[$__rate_interval]))' % thanos.bucketReplicate.dashboard,
+              'sum by (%(dimensions)s) (rate(thanos_replicate_objects_replicated_total{%(selector)s}[$__rate_interval]))' % thanos.bucketReplicate.dashboard,
             ],
             ['meta loads', 'partial meta reads', 'already replicated blocks', 'replicated blocks', 'replicated objects']
           )

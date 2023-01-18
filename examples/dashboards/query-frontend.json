@@ -448,7 +448,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tripperware) (rate(cortex_cache_request_duration_seconds_count{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, tripperware) (rate(cortex_cache_request_duration_seconds_count{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{tripperware}}",
@@ -525,7 +525,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tripperware) (rate(querier_cache_gets_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, tripperware) (rate(querier_cache_gets_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "Cache gets - {{job}} {{tripperware}}",
@@ -533,7 +533,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job, tripperware) (rate(querier_cache_misses_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, tripperware) (rate(querier_cache_misses_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "Cache misses - {{job}} {{tripperware}}",
@@ -610,7 +610,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tripperware) (rate(cortex_cache_fetched_keys_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, tripperware) (rate(cortex_cache_fetched_keys_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{tripperware}}",
@@ -687,7 +687,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, tripperware) (rate(cortex_cache_hits_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, tripperware) (rate(cortex_cache_hits_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{tripperware}}",
