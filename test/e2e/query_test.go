@@ -542,7 +542,7 @@ config:
 				ruleAndAssert(t, ctx, q.Endpoint("http"), "", []*rulespb.RuleGroup{
 					{
 						Name: "example_abort",
-						File: "/shared/data/querier-1/rules/rules.yaml",
+						File: q.Dir() + "/rules/rules.yaml",
 						Rules: []*rulespb.Rule{
 							rulespb.NewAlertingRule(&rulespb.Alert{
 								Name:  "TestAlert_AbortOnPartialResponse",
