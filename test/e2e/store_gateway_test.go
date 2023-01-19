@@ -288,7 +288,7 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-no-cache-test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	s1 := e2ethanos.NewStoreGW(
@@ -296,7 +296,7 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 		"1",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
 		[]string{"--no-cache-index-header"},
@@ -334,7 +334,7 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "test-feed")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))

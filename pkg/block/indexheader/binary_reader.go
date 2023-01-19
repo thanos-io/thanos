@@ -694,7 +694,7 @@ func (r *BinaryReader) init() (err error) {
 				if lastName != nil {
 					// Always include last value for each label name, unless it was just added in previous iteration based
 					// on valueCount.
-					if (valueCount-1)%postingOffsetsInMemSampling != 0 {
+					if (valueCount-1)%r.postingOffsetsInMemSampling != 0 {
 						r.postings[string(lastName)].offsets = append(r.postings[string(lastName)].offsets, postingOffset{value: string(lastValue), tableOff: lastTableOff})
 					}
 					r.postings[string(lastName)].lastValOffset = int64(postingsOffset - crc32.Size)
@@ -709,7 +709,7 @@ func (r *BinaryReader) init() (err error) {
 			lastTableOff = labelOffset
 			valueCount++
 
-			if (valueCount-1)%postingOffsetsInMemSampling == 0 {
+			if (valueCount-1)%r.postingOffsetsInMemSampling == 0 {
 				r.postings[string(name)].offsets = append(r.postings[string(name)].offsets, postingOffset{value: string(value), tableOff: labelOffset})
 			}
 
@@ -718,7 +718,7 @@ func (r *BinaryReader) init() (err error) {
 			return errors.Wrap(err, "read postings table")
 		}
 		if lastName != nil {
-			if (valueCount-1)%postingOffsetsInMemSampling != 0 {
+			if (valueCount-1)%r.postingOffsetsInMemSampling != 0 {
 				// Always include last value for each label name if not included already based on valueCount.
 				r.postings[string(lastName)].offsets = append(r.postings[string(lastName)].offsets, postingOffset{value: string(lastValue), tableOff: lastTableOff})
 			}
