@@ -96,7 +96,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	ruleAndAssert(t, ctx, q.Endpoint("http"), "", []*rulespb.RuleGroup{
 		{
 			Name: "example_abort",
-			File: "/shared/data/querier-query/rules/rules.yaml",
+			File: q.Dir() + "/rules/rules.yaml",
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
@@ -112,7 +112,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		},
 		{
 			Name: "example_abort",
-			File: "/shared/data/querier-query/thanos-rules/rules-0.yaml",
+			File: q.Dir() + "/thanos-rules/rules-0.yaml",
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
@@ -127,7 +127,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		},
 		{
 			Name: "example_warn",
-			File: "/shared/data/querier-query/thanos-rules/rules-1.yaml",
+			File: q.Dir() + "/thanos-rules/rules-1.yaml",
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_WarnOnPartialResponse",
@@ -142,7 +142,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		},
 		{
 			Name:  "example_with_limit",
-			File:  "/shared/data/querier-query/thanos-rules/rules-with-limit.yaml",
+			File:  q.Dir() + "/thanos-rules/rules-with-limit.yaml",
 			Limit: 1,
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
