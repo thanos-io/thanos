@@ -138,17 +138,22 @@ export const getOptions = (stacked: boolean, useLocalTime: boolean): jquery.flot
 
 export const normalizeData = ({ queryParams, data }: GraphProps): GraphSeries[] => {
   const { startTime, endTime, resolution } = queryParams!;
-  return data.result.map(({ values, metric }, index) => {
+  return data.result.map(({ values, histograms, metric }, index) => {
     // Insert nulls for all missing steps.
     const data = [];
-    let pos = 0;
+    let valPos = 0;
+    let histogramPos = 0;
 
     for (let t = startTime; t <= endTime; t += resolution) {
       // Allow for floating point inaccuracy.
-      const currentValue = values[pos];
-      if (values.length > pos && currentValue[0] < t + resolution / 100) {
+      const currentValue = values && values[valPos];
+      const currentHistogram = histograms && histograms[histogramPos];
+      if (currentValue && values.length > valPos && currentValue[0] < t + resolution / 100) {
         data.push([currentValue[0] * 1000, parseValue(currentValue[1])]);
-        pos++;
+        valPos++;
+      } else if (currentHistogram && histograms.length > histogramPos && currentHistogram[0] < t + resolution / 100) {
+        data.push([currentHistogram[0] * 1000, parseValue(currentHistogram[1].sum)]);
+        histogramPos++;
       } else {
         data.push([t * 1000, null]);
       }
