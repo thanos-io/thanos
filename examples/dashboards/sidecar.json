@@ -883,7 +883,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, operation) (rate(thanos_objstore_bucket_operations_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, operation) (rate(thanos_objstore_bucket_operations_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{operation}}",
