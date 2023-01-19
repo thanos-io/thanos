@@ -89,13 +89,20 @@ func (k *Keeper) NewGate(maxConcurrent int) Gate {
 func New(reg prometheus.Registerer, maxConcurrent int) Gate {
 	promauto.With(reg).NewGauge(MaxGaugeOpts).Set(float64(maxConcurrent))
 
+	var gate Gate
+	if maxConcurrent <= 0 {
+		gate = NewNoop()
+	} else {
+		gate = promgate.New(maxConcurrent)
+	}
+
 	return InstrumentGateDuration(
 		promauto.With(reg).NewHistogram(DurationHistogramOpts),
 		InstrumentGateTotal(
 			promauto.With(reg).NewCounter(TotalCounterOpts),
 			InstrumentGateInFlight(
 				promauto.With(reg).NewGauge(InFlightGaugeOpts),
-				promgate.New(maxConcurrent),
+				gate,
 			),
 		),
 	)
