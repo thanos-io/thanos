@@ -145,11 +145,20 @@ Store groups can be created by either partitioning TSDBs by time (time-based par
 
 ### Distributed execution against Receive components
 
-Currently we lack the mechanism to configure a Querier against a subset of TSDBs unless that Querier is exclusively attached to Stores that have those TSDBs. In the case of Receivers, TSDBs are created and pruned dynamically, which makes it hard to apply the distributed query model against this component.
+We currently lack the mechanism to configure a Querier against a subset of TSDBs, unless that Querier is exclusively attached to Stores that have those TSDBs. In the case of Receivers, TSDBs are created and pruned dynamically, which makes it hard to apply the distributed query model against this component.
 
-To resolve this issue, this proposal suggests adding a `"selector.relabel-config` command-line flag to the Query component that will work the same way as the StoreGateway selector works. For each query, the Querier will apply the given relabel config against each Store's external labels and decide whether to keep or drop a Store.
+To resolve this issue, this proposal suggests adding a `"selector.relabel-config` command-line flag to the Query component that will work the same way as the Store Gateway selector works. For each query, the Querier will apply the given relabel config against each Store's external label set and decide whether to keep or drop a TSDB from the query. After the relabeling is applied, the query will be rewritten to target only those TSDBs that match the selector.
+
+An example config that only targets TSDBs with external labels `tenant=a` would be:
+
+```
+- source_labels: [tenant]
+  action: keep
+  regex: a
+```
 
 With this mechanism, a user can run a pool of Queriers with a selector config as follows:
+
 ```
 - source_labels: [ext_label_a, ext_label_b]
   action: hashmod
