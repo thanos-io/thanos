@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
 	"github.com/go-kit/log"
@@ -48,7 +49,7 @@ func TestStoreGateway(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-gateway-test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	memcached := e2ethanos.NewMemcached(e, "1")
@@ -67,7 +68,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		"1",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		memcachedConfig,
 		nil,
@@ -107,7 +108,7 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "test-feed")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
@@ -286,7 +287,7 @@ func TestStoreGatewayMemcachedCache(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-gateway-memcached-cache-test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	memcached := e2ethanos.NewMemcached(e, "1")
@@ -302,7 +303,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 		"1",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		memcachedConfig,
 		nil,
@@ -327,7 +328,7 @@ blocks_iter_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "test-feed")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
@@ -388,7 +389,7 @@ func TestStoreGatewayGroupCache(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-gateway-groupcache-test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	groupcacheConfig := `type: GROUPCACHE
@@ -410,7 +411,7 @@ metafile_content_ttl: 0s`
 		"1",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 1),
 		nil,
@@ -420,7 +421,7 @@ metafile_content_ttl: 0s`
 		"2",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 2),
 		nil,
@@ -430,7 +431,7 @@ metafile_content_ttl: 0s`
 		"3",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		fmt.Sprintf(groupcacheConfig, 3),
 		nil,
@@ -459,7 +460,7 @@ metafile_content_ttl: 0s`
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "test-feed")
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id.String()), id.String()))
@@ -513,7 +514,7 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-gateway-test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	store1 := e2ethanos.NewStoreGW(
@@ -521,7 +522,7 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 		"1",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
 		[]string{"--store.grpc.downloaded-bytes-limit=1B"},
@@ -532,7 +533,7 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 		"2",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
 		[]string{"--store.grpc.downloaded-bytes-limit=100B"},
@@ -542,7 +543,7 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 		"3",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
 		[]string{"--store.grpc.downloaded-bytes-limit=196627B"},
@@ -577,7 +578,7 @@ func TestStoreGatewayBytesLimit(t *testing.T) {
 	testutil.Ok(t, err)
 	l := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(l,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "test-feed")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
