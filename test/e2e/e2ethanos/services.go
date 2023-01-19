@@ -31,7 +31,6 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/objstore/client"
-	"github.com/thanos-io/objstore/exthttp"
 	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/thanos-io/thanos/pkg/alert"
@@ -945,57 +944,6 @@ http {
 	}), "http")
 }
 
-// NewMinio returns minio server, used as a local replacement for S3.
-// TODO(@matej-g): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/11;
-// after this is addresses fixed all calls should be replaced with e2edb.NewMinio.
-func NewMinio(e e2e.Environment, name, bktName string) *e2emon.InstrumentedRunnable {
-	image := "minio/minio:RELEASE.2022-07-30T05-21-40Z"
-	minioKESGithubContent := "https://raw.githubusercontent.com/minio/kes/master"
-
-	httpsPort := 8090
-	consolePort := 8080
-	f := e.Runnable(fmt.Sprintf("minio-%s", name)).
-		WithPorts(map[string]int{"https": httpsPort, "console": consolePort}).
-		Future()
-
-	if err := os.MkdirAll(filepath.Join(f.Dir(), "certs", "CAs"), 0750); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create certs dir"))}
-	}
-
-	if err := genCerts(
-		filepath.Join(f.Dir(), "certs", "public.crt"),
-		filepath.Join(f.Dir(), "certs", "private.key"),
-		filepath.Join(f.Dir(), "certs", "CAs", "ca.crt"),
-		fmt.Sprintf("%s-minio-%s", e.Name(), name),
-	); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "fail to generate certs"))}
-	}
-
-	commands := []string{
-		fmt.Sprintf("curl -sSL --tlsv1.2 -O '%s/root.key' -O '%s/root.cert'", minioKESGithubContent, minioKESGithubContent),
-		fmt.Sprintf("mkdir -p /data/%s && minio server --certs-dir %s/certs --address :%v --console-address :%v /data", bktName, f.InternalDir(), httpsPort, consolePort),
-	}
-
-	minio := e2emon.AsInstrumented(f.Init(e2e.StartOptions{
-		Image: image,
-		// Create the required bucket before starting minio.
-		Command:   e2e.NewCommandWithoutEntrypoint("sh", "-c", strings.Join(commands, " && ")),
-		Readiness: e2e.NewHTTPSReadinessProbe("console", "/", 200, 200),
-		EnvVars: map[string]string{
-			"MINIO_ROOT_USER":     e2edb.MinioAccessKey,
-			"MINIO_ROOT_PASSWORD": e2edb.MinioSecretKey,
-			"MINIO_BROWSER":       "on",
-			"ENABLE_HTTPS":        "1",
-			// https://docs.min.io/docs/minio-kms-quickstart-guide.html
-			"MINIO_KMS_KES_ENDPOINT":  "https://play.min.io:7373",
-			"MINIO_KMS_KES_KEY_FILE":  "root.key",
-			"MINIO_KMS_KES_CERT_FILE": "root.cert",
-			"MINIO_KMS_KES_KEY_NAME":  "my-minio-key",
-		},
-	}), "https")
-	return minio
-}
-
 func NewMemcached(e e2e.Environment, name string) *e2emon.InstrumentedRunnable {
 	return e2emon.AsInstrumented(e.Runnable(fmt.Sprintf("memcached-%s", name)).
 		WithPorts(map[string]int{"memcached": 11211}).
@@ -1133,18 +1081,18 @@ func genCerts(certPath, privkeyPath, caPath, serverName string) error {
 
 func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 	httpDefaultConf := s3.DefaultConfig.HTTPConfig
-	httpDefaultConf.TLSConfig = exthttp.TLSConfig{
-		CAFile:   filepath.Join(basePath, "certs", "CAs", "ca.crt"),
-		CertFile: filepath.Join(basePath, "certs", "public.crt"),
-		KeyFile:  filepath.Join(basePath, "certs", "private.key"),
-	}
+	// httpDefaultConf.TLSConfig = exthttp.TLSConfig{
+	// 	CAFile:   filepath.Join(basePath, "certs", "CAs", "ca.crt"),
+	// 	CertFile: filepath.Join(basePath, "certs", "public.crt"),
+	// 	KeyFile:  filepath.Join(basePath, "certs", "private.key"),
+	// }
 
 	return s3.Config{
 		Bucket:           bucket,
 		AccessKey:        e2edb.MinioAccessKey,
 		SecretKey:        e2edb.MinioSecretKey,
 		Endpoint:         endpoint,
-		Insecure:         false,
+		Insecure:         true,
 		HTTPConfig:       httpDefaultConf,
 		BucketLookupType: s3.AutoLookup,
 	}
