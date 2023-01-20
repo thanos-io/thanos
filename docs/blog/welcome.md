@@ -2,6 +2,7 @@
 title: Welcome to Thanos Blog Space!
 date: "2022-11-07"
 author: Thanos Team
+menu: blogs
 ---
 
 Welcome 👋🏼
