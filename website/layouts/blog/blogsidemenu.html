@@ -10,7 +10,7 @@
   {{ $versionDocsUrl := .RelPermalink}}
   <nav class="docs-menu collapse d-lg-block"> 
     {{ if in $currentPageUrl $versionDocsUrl }}    
-      {{ range (.RegularPagesRecursive.GroupByParam "menu").Reverse }}
+    {{ range (where .Data.Pages "Type" "blog").GroupByParam "menu" }}
         <div class="sidemenu-docs">
           <input type="checkbox" id="menuinput-{{ .Key }}" class="menuinput" {{if eq .Key "blog"}} checked {{end}}/>
           <label for="menuinput-{{ .Key }}" class="menulabel-docs">
