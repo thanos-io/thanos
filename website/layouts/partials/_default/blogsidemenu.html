@@ -1,0 +1,29 @@
+{{ $currentPage := . }}
+{{ $currentPageUrl := .RelPermalink }}
+
+<button class="btn btn-block btn-outline-secondary mb-3 d-block d-lg-none" type="button" data-toggle="collapse" data-target=".docs-menu">
+    Toggle Menu
+</button>
+
+{{ range .Site.Sections }}
+  {{ $versionDocsPage := . }}
+  {{ $versionDocsUrl := .RelPermalink}}
+  <nav class="docs-menu collapse d-lg-block"> 
+    {{ if in $currentPageUrl $versionDocsUrl }}    
+      {{ range (.RegularPagesRecursive.GroupByParam "menu").Reverse }}
+        <div class="sidemenu-docs">
+          <input type="checkbox" id="menuinput-{{ .Key }}" class="menuinput" {{if eq .Key "blog"}} checked {{end}}/>
+          <label for="menuinput-{{ .Key }}" class="menulabel-docs">
+            <h5 >{{ replace .Key "-" "/" }}</h5>
+            <img class="caret-expand" src="/expand.svg" alt="expand" />
+          </label>        
+          {{ range .Pages }}
+          <div class="list-group list-group-flush">
+            <a class="list-group-item list-group-item-action list-group-item-docs py-1" href="{{ .Permalink }}">{{ .Title }}</a>
+          </div>
+          {{ end }}
+        </div>
+      {{ end }}
+    {{ end }}
+  </nav>
+{{ end }}
