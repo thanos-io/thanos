@@ -45,7 +45,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, strategy) (rate(prometheus_rule_evaluations_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, strategy) (rate(prometheus_rule_evaluations_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{ strategy }}",
@@ -121,7 +121,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, strategy) (increase(prometheus_rule_group_iterations_missed_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, strategy) (increase(prometheus_rule_group_iterations_missed_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{ strategy }}",
@@ -286,7 +286,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, alertmanager) (rate(thanos_alert_sender_alerts_dropped_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, alertmanager) (rate(thanos_alert_sender_alerts_dropped_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{alertmanager}}",
@@ -363,7 +363,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, alertmanager) (rate(thanos_alert_sender_alerts_sent_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, alertmanager) (rate(thanos_alert_sender_alerts_sent_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{alertmanager}}",
@@ -648,7 +648,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_alert_queue_alerts_dropped_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_alert_queue_alerts_dropped_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}}",

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -41,12 +42,12 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	externalPrefix := "testThanos"
 
 	const bucket = "compact-test"
-	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
 		Type:   client.S3,
-		Config: e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.InternalDir()),
+		Config: e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.InternalDir()),
 	}
 
 	b := e2ethanos.NewToolsBucketWeb(
@@ -73,12 +74,12 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 
 	externalPrefix := "testThanos"
 	const bucket = "toolsBucketWeb-test"
-	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
 		Type:   client.S3,
-		Config: e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.InternalDir()),
+		Config: e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.InternalDir()),
 	}
 
 	b := e2ethanos.NewToolsBucketWeb(
@@ -111,13 +112,13 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	externalPrefix := "testThanos"
 	routePrefix := "test"
 	const bucket = "toolsBucketWeb-test"
-	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
 		Type:   client.S3,
-		Config: e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.InternalDir()),
+		Config: e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.InternalDir()),
 	}
 
 	b := e2ethanos.NewToolsBucketWeb(
@@ -149,13 +150,13 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 
 	// Create Minio.
 	const bucket = "toolsBucketWeb-test"
-	m := e2ethanos.NewMinio(e, "thanos", bucket)
+	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	// Create bucket.
 	logger := log.NewLogfmtLogger(os.Stdout)
 	bkt, err := s3.NewBucketWithConfig(logger,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "tools")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "tools")
 	testutil.Ok(t, err)
 
 	// Create share dir for upload.
@@ -198,7 +199,7 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 	// Start thanos tool bucket web.
 	svcConfig := client.BucketConfig{
 		Type:   client.S3,
-		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 	}
 	b := e2ethanos.NewToolsBucketWeb(
 		e,

@@ -21,7 +21,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
             'Shows rate of execution for compactions against blocks that are stored in the bucket by compaction group.'
           ) +
           g.queryPanel(
-            'sum by (%(dimensions)s, group) (rate(thanos_compact_group_compactions_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s, group) (rate(thanos_compact_group_compactions_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
             'compaction {{job}} {{group}}'
           ) +
           g.stack
@@ -46,7 +46,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
             'Shows rate of execution for downsampling against blocks that are stored in the bucket by compaction group.'
           ) +
           g.queryPanel(
-            'sum by (%(dimensions)s, group) (rate(thanos_compact_downsample_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s, group) (rate(thanos_compact_downsample_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
             'downsample {{job}} {{group}}'
           ) +
           g.stack
@@ -68,7 +68,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
             'Shows rate of execution for removals of blocks if their data is available as part of a block with a higher compaction level.'
           ) +
           g.queryPanel(
-            'sum by (%(dimensions)s) (rate(thanos_compact_garbage_collection_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s) (rate(thanos_compact_garbage_collection_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
             'garbage collection {{job}}'
           ) +
           g.stack
@@ -94,7 +94,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
             'Shows deletion rate of blocks already marked for deletion.'
           ) +
           g.queryPanel(
-            'sum by (%(dimensions)s) (rate(thanos_compact_blocks_cleaned_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s) (rate(thanos_compact_blocks_cleaned_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
             'Blocks cleanup {{job}}'
           ) +
           g.stack
@@ -105,7 +105,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
             'Shows deletion failures rate of blocks already marked for deletion.'
           ) +
           g.queryPanel(
-            'sum by (%(dimensions)s) (rate(thanos_compact_block_cleanup_failures_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s) (rate(thanos_compact_block_cleanup_failures_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
             'Blocks cleanup failures {{job}}'
           )
         )
@@ -115,7 +115,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
             'Shows rate at which blocks are marked for deletion (from GC and retention policy).'
           ) +
           g.queryPanel(
-            'sum by (%(dimensions)s) (rate(thanos_compact_blocks_marked_for_deletion_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s) (rate(thanos_compact_blocks_marked_for_deletion_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
             'Blocks marked {{job}}'
           )
         )
@@ -128,7 +128,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
             'Shows rate of execution for all meta files from blocks in the bucket into the memory.'
           ) +
           g.queryPanel(
-            'sum by (%(dimensions)s) (rate(thanos_blocks_meta_syncs_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s) (rate(thanos_blocks_meta_syncs_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
             'sync {{job}}'
           ) +
           g.stack
@@ -151,7 +151,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Rate', 'Shows rate of execution for operations against the bucket.') +
           g.queryPanel(
-            'sum by (%(dimensions)s, operation) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[$interval]))' % thanos.compact.dashboard,
+            'sum by (%(dimensions)s, operation) (rate(thanos_objstore_bucket_operations_total{%(selector)s}[$__rate_interval]))' % thanos.compact.dashboard,
             '{{job}} {{operation}}'
           ) +
           g.stack
@@ -181,7 +181,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           'Shows rate of execution for compactions against blocks that are stored in the bucket by compaction group.'
         ) +
         g.queryPanel(
-          'sum by (%(dimensions)s) (rate(thanos_compact_group_compactions_total{%(selector)s}[$interval]))' % thanos.dashboard.overview,
+          'sum by (%(dimensions)s) (rate(thanos_compact_group_compactions_total{%(selector)s}[$__rate_interval]))' % thanos.dashboard.overview,
           'compaction {{job}}'
         ) +
         g.stack +
