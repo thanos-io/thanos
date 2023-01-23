@@ -46,7 +46,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, group) (rate(thanos_compact_group_compactions_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, group) (rate(thanos_compact_group_compactions_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "compaction {{job}} {{group}}",
@@ -213,7 +213,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, group) (rate(thanos_compact_downsample_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, group) (rate(thanos_compact_downsample_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "downsample {{job}} {{group}}",
@@ -380,7 +380,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_compact_garbage_collection_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_compact_garbage_collection_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "garbage collection {{job}}",
@@ -665,7 +665,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_compact_blocks_cleaned_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_compact_blocks_cleaned_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "Blocks cleanup {{job}}",
@@ -742,7 +742,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_compact_block_cleanup_failures_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_compact_block_cleanup_failures_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "Blocks cleanup failures {{job}}",
@@ -819,7 +819,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_compact_blocks_marked_for_deletion_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_compact_blocks_marked_for_deletion_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "Blocks marked {{job}}",
@@ -908,7 +908,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_blocks_meta_syncs_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_blocks_meta_syncs_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "sync {{job}}",
@@ -1193,7 +1193,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, operation) (rate(thanos_objstore_bucket_operations_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, operation) (rate(thanos_objstore_bucket_operations_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{operation}}",
