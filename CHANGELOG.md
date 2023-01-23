@@ -10,6 +10,12 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+## [v0.30.2](https://github.com/thanos-io/thanos/tree/release-0.30) - 28.01.2023
+
+### Fixed
+
+- [#6066](https://github.com/thanos-io/thanos/pull/6066) Tracing: fixed panic because of nil sampler
+
 ## [v0.30.1](https://github.com/thanos-io/thanos/tree/release-0.30) - 4.01.2023
 
 ### Fixed

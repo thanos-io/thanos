@@ -129,7 +129,10 @@ func getSampler(config Config) tracesdk.Sampler {
 	case "remote":
 		remoteOptions := getRemoteOptions(config)
 		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
+	// Fallback always to default (rate limiting).
 	case "ratelimiting":
+		fallthrough
+	default:
 		// The same config options are applicable to both remote and rate-limiting samplers.
 		remoteOptions := getRemoteOptions(config)
 		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
@@ -137,17 +140,17 @@ func getSampler(config Config) tracesdk.Sampler {
 		if ok {
 			sampler.Update(config.SamplerParam)
 		}
-	default:
-		var root tracesdk.Sampler
-		var parentOptions []tracesdk.ParentBasedSamplerOption
-		if config.SamplerParentConfig.LocalParentSampled {
-			parentOptions = append(parentOptions, tracesdk.WithLocalParentSampled(root))
-		}
-		if config.SamplerParentConfig.RemoteParentSampled {
-			parentOptions = append(parentOptions, tracesdk.WithRemoteParentSampled(root))
-		}
-		sampler = tracesdk.ParentBased(root, parentOptions...)
 	}
+
+	var parentOptions []tracesdk.ParentBasedSamplerOption
+	if config.SamplerParentConfig.LocalParentSampled {
+		parentOptions = append(parentOptions, tracesdk.WithLocalParentSampled(sampler))
+	}
+	if config.SamplerParentConfig.RemoteParentSampled {
+		parentOptions = append(parentOptions, tracesdk.WithRemoteParentSampled(sampler))
+	}
+	sampler = tracesdk.ParentBased(sampler, parentOptions...)
+
 	return sampler
 }
 
