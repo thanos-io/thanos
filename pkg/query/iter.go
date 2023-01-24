@@ -307,8 +307,7 @@ func (it *chunkSeriesIterator) AtT() int64 {
 func (it *chunkSeriesIterator) Next() chunkenc.ValueType {
 	lastT := it.AtT()
 
-	var valueType chunkenc.ValueType
-	if valueType = it.chunks[it.i].Next(); valueType != chunkenc.ValNone {
+	if valueType := it.chunks[it.i].Next(); valueType != chunkenc.ValNone {
 		it.lastVal = valueType
 		return valueType
 	}
