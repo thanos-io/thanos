@@ -22,6 +22,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -518,6 +519,35 @@ func TestMultiTSDBStats(t *testing.T) {
 			stats := m.TenantStats(labels.MetricName, test.tenants...)
 			testutil.Equals(t, test.expectedStats, len(stats))
 		})
+	}
+}
+
+// Regression test for https://github.com/thanos-io/thanos/issues/6047.
+func TestMultiTSDBWithNilStore(t *testing.T) {
+	dir := t.TempDir()
+
+	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		nil,
+		false,
+		metadata.NoneFunc,
+	)
+	defer func() { testutil.Ok(t, m.Close()) }()
+
+	_, err := m.TenantAppendable("test-tenant")
+	testutil.Ok(t, err)
+
+	clients := m.TSDBLocalClients()
+	for _, client := range clients {
+		testutil.Ok(t, testutil.FaultOrPanicToErr(func() {
+			client.LabelSets()
+		}))
 	}
 }
 
