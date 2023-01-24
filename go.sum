@@ -245,8 +245,8 @@ github.com/eapache/queue v1.1.0/go.mod h1:6eCeP0CKFpHLu8blIFXhExK/dRa7WDZfr6jVFP
 github.com/edsrzf/mmap-go v1.0.0/go.mod h1:YO35OhQPt3KJa3ryjFM5Bs14WD66h8eGKpfaBNrHW5M=
 github.com/edsrzf/mmap-go v1.1.0 h1:6EUwBLQ/Mcr1EYLE4Tn1VdW1A4ckqCQWZBw8Hr0kjpQ=
 github.com/edsrzf/mmap-go v1.1.0/go.mod h1:19H/e8pUPLicwkyNgOykDXkJ9F0MHE+Z52B8EIth78Q=
-github.com/efficientgo/core v1.0.0-rc.0.0.20221201130417-ba593f67d2a4 h1:rydBwnBoywKQMjWF0z8SriYtQ+uUcaFsxuijMjJr5PI=
-github.com/efficientgo/core v1.0.0-rc.0.0.20221201130417-ba593f67d2a4/go.mod h1:kQa0V74HNYMfuJH6jiPiwNdpWXl4xd/K4tzlrcvYDQI=
+github.com/efficientgo/core v1.0.0-rc.2 h1:7j62qHLnrZqO3V3UA0AqOGd5d5aXV3AX6m/NZBHp78I=
+github.com/efficientgo/core v1.0.0-rc.2/go.mod h1:FfGdkzWarkuzOlY04VY+bGfb1lWrjaL6x/GLcQ4vJps=
 github.com/efficientgo/e2e v0.14.1-0.20230119090947-fa7ceb0197c5 h1:N1fHVcNEPMJNB93sxT6icl5yvoFxa2sp3/1NnVlrAFc=
 github.com/efficientgo/e2e v0.14.1-0.20230119090947-fa7ceb0197c5/go.mod h1:plsKU0YHE9uX+7utvr7SiDtVBSHJyEfHRO4UnUgDmts=
 github.com/efficientgo/tools/extkingpin v0.0.0-20220817170617-6c25e3b627dd h1:VaYzzXeUbC5fVheskcKVNOyJMEYD+HgrJNzIAg/mRIM=
@@ -894,8 +894,8 @@ github.com/tencentyun/cos-go-sdk-v5 v0.7.34 h1:xm+Pg+6m486y4eugRI7/E4WasbVmpY1hp
 github.com/tencentyun/cos-go-sdk-v5 v0.7.34/go.mod h1:4dCEtLHGh8QPxHEkgq+nFaky7yZxQuYwgSJM87icDaw=
 github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e h1:f1Zsv7OAU9iQhZwigp50Yl38W10g/vd5NC8Rdk1Jzng=
 github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e/go.mod h1:jXcofnrSln/cLI6/dhlBxPQZEEQHVPCcFaH75M+nSzM=
-github.com/thanos-community/promql-engine v0.0.0-20221115192426-d68c8139c070 h1:tA16KmHqwpdN6AFIsSUv4OlV6j+ObmgaR+2r1I/Yy2w=
-github.com/thanos-community/promql-engine v0.0.0-20221115192426-d68c8139c070/go.mod h1:GJkKOtKfXos1xbTmHBnX3YTCov8enxdAS1woR6/h4CI=
+github.com/thanos-community/promql-engine v0.0.0-20230124070417-9e293186b7e4 h1:D0ruzvS/U+49eMLg/7IIYK2iMdVP4PrJLpVHgguMVkg=
+github.com/thanos-community/promql-engine v0.0.0-20230124070417-9e293186b7e4/go.mod h1:d52Wfzxs6L3xhc2snodyWvM2bZMMVn0XT2q4vsfBPVo=
 github.com/thanos-io/objstore v0.0.0-20221205132204-5aafc0079f06 h1:xUnLk2CwIoJyv6OB4MWC3aOH9TnneSgM5kgTsOmXIuI=
 github.com/thanos-io/objstore v0.0.0-20221205132204-5aafc0079f06/go.mod h1:gdo4vwwonBnheHB/TCwAOUtKJKrLhLtbBVTQR9rN/v0=
 github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab h1:7ZR3hmisBWw77ZpO1/o86g+JV3VKlk3d48jopJxzTjU=
