@@ -24,6 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5995](https://github.com/thanos-io/thanos/pull/5995) Sidecar: Loads the TLS certificate during startup.
 - [#6044](https://github.com/thanos-io/thanos/pull/6044) Receive: mark ouf of window errors as conflict, if out-of-window samples ingestion is activated
 - [#6066](https://github.com/thanos-io/thanos/pull/6066) Tracing: fixed panic because of nil sampler
+- [#6067](https://github.com/thanos-io/thanos/pull/6067) Receive: fixed panic when querying uninitialized TSDBs.
 
 ### Changed
 
