@@ -540,15 +540,19 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
-	_, err := m.TenantAppendable("test-tenant")
+	const tenantID = "test-tenant"
+	_, err := m.TenantAppendable(tenantID)
 	testutil.Ok(t, err)
 
+	// Get LabelSets of newly created TSDB.
 	clients := m.TSDBLocalClients()
 	for _, client := range clients {
-		testutil.Ok(t, testutil.FaultOrPanicToErr(func() {
-			client.LabelSets()
-		}))
+		testutil.Ok(t, testutil.FaultOrPanicToErr(func() { client.LabelSets() }))
 	}
+
+	// Wait for tenant to become ready before terminating the test.
+	// This allows the tear down procedure to cleanup properly.
+	testutil.Ok(t, appendSample(m, tenantID, time.Now()))
 }
 
 func appendSample(m *MultiTSDB, tenant string, timestamp time.Time) error {
