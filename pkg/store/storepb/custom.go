@@ -13,10 +13,12 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc/codes"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	prompb "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -551,4 +553,30 @@ func (m *QueryHints) IsSafeToExecute() bool {
 	}
 
 	return false
+}
+
+// HistogramProtoToHistogram extracts a (normal integer) Histogram from the
+// provided proto message. The caller has to make sure that the proto message
+// represents an interger histogram and not a float histogram.
+func HistogramProtoToHistogram(hp prompb.Histogram) *histogram.Histogram {
+	return &histogram.Histogram{
+		Schema:          hp.Schema,
+		ZeroThreshold:   hp.ZeroThreshold,
+		ZeroCount:       hp.GetZeroCountInt(),
+		Count:           hp.GetCountInt(),
+		Sum:             hp.Sum,
+		PositiveSpans:   spansProtoToSpans(hp.GetPositiveSpans()),
+		PositiveBuckets: hp.GetPositiveDeltas(),
+		NegativeSpans:   spansProtoToSpans(hp.GetNegativeSpans()),
+		NegativeBuckets: hp.GetNegativeDeltas(),
+	}
+}
+
+func spansProtoToSpans(s []*prompb.BucketSpan) []histogram.Span {
+	spans := make([]histogram.Span, len(s))
+	for i := 0; i < len(s); i++ {
+		spans[i] = histogram.Span{Offset: s[i].Offset, Length: s[i].Length}
+	}
+
+	return spans
 }
