@@ -38,6 +38,7 @@ Users who are admin personas and need to perform admin operations on Thanos for 
 ## 7 How
 
 In the hashring config, there will be new field `external_labels`. Something like this:
+
 ```
     [
         {
@@ -59,7 +60,7 @@ Tenants’ external labels will be first implemented in RouterIngestor, since th
 
 After that, we can implement tenants’ external labels in RouterOnly and IngestorOnly modes. As stated above, the best-case scenario would be logically splitting RouterOnly and IngestorOnl (Issue [#5643](https://github.com/thanos-io/thanos/issues/5643)) before implement tenants’ external labels in each.
 
-For the tests, the foremost ones are testing defining one or multiple tenants’ external labels correctly, handling changes in tenants’ external labels correctly, backward compatibility with Receiver’s external labels,  and shipper detecting and uploading tenants’ external labels correctly to block storage. We may add more tests in the future but currently these are the most important ones to do first.
+For the tests, the foremost ones are testing defining one or multiple tenants’ external labels correctly, handling changes in tenants’ external labels correctly, backward compatibility with Receiver’s external labels, and shipper detecting and uploading tenants’ external labels correctly to block storage. We may add more tests in the future but currently these are the most important ones to do first.
 
 ## 8 Implementation plan
 
