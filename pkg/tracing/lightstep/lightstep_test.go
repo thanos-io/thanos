@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 
 	"github.com/opentracing/opentracing-go"
 )

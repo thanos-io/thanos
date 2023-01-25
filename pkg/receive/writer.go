@@ -13,8 +13,8 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 
-	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -73,7 +73,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 	var (
 		ref  storage.SeriesRef
-		errs errutil.MultiError
+		errs writeErrors
 	)
 	for _, t := range wreq.Timeseries {
 		// Check if time series labels are valid. If not, skip the time series
@@ -100,7 +100,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		lset := labelpb.ZLabelsToPromLabels(t.Labels)
 
 		// Check if the TSDB has cached reference for those labels.
-		ref, lset = getRef.GetRef(lset)
+		ref, lset = getRef.GetRef(lset, lset.Hash())
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
@@ -127,6 +127,29 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			default:
 				if err != nil {
 					level.Debug(tLogger).Log("msg", "Error ingesting sample", "err", err)
+				}
+			}
+		}
+
+		for _, hp := range t.Histograms {
+			h := storepb.HistogramProtoToHistogram(hp)
+			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h)
+			switch err {
+			case storage.ErrOutOfOrderSample:
+				numSamplesOutOfOrder++
+				level.Debug(tLogger).Log("msg", "Out of order histogram", "lset", lset, "timestamp", hp.Timestamp)
+			case storage.ErrDuplicateSampleForTimestamp:
+				numSamplesDuplicates++
+				level.Debug(tLogger).Log("msg", "Duplicate histogram for timestamp", "lset", lset, "timestamp", hp.Timestamp)
+			case storage.ErrOutOfBounds:
+				numSamplesOutOfBounds++
+				level.Debug(tLogger).Log("msg", "Out of bounds metric", "lset", lset, "timestamp", hp.Timestamp)
+			case storage.ErrTooOldSample:
+				numSamplesTooOld++
+				level.Debug(tLogger).Log("msg", "Histogram is too old", "lset", lset, "timestamp", hp.Timestamp)
+			default:
+				if err != nil {
+					level.Debug(tLogger).Log("msg", "Error ingesting histogram", "err", err)
 				}
 			}
 		}
@@ -210,5 +233,5 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 	if err := app.Commit(); err != nil {
 		errs.Add(errors.Wrap(err, "commit samples"))
 	}
-	return errs.Err()
+	return errs.ErrOrNil()
 }

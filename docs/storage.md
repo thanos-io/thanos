@@ -413,6 +413,9 @@ config:
   password: ""
   domain_id: ""
   domain_name: ""
+  application_credential_id: ""
+  application_credential_name: ""
+  application_credential_secret: ""
   project_id: ""
   project_name: ""
   project_domain_id: ""
@@ -513,11 +516,11 @@ config:
 prefix: ""
 ```
 
-### Oracle Cloud Infrastructure Object Storage
+#### Oracle Cloud Infrastructure Object Storage
 
 To configure Oracle Cloud Infrastructure (OCI) Object Storage as Thanos Object Store, you need to provide appropriate authentication credentials to your OCI tenancy. The OCI object storage client implementation for Thanos supports either the default keypair or instance principal authentication.
 
-#### API Signing Key
+##### API Signing Key
 
 The default API signing key authentication provider leverages same [configuration as the OCI CLI](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/cliconcepts.htm) which is usually stored in at `$HOME/.oci/config` or via variable names starting with the string `OCI_CLI`. If the same configuration is found in multiple places the provider will prefer the first one.
 
@@ -545,7 +548,7 @@ config:
     client_timeout: 90s           // Optional time limit for requests made by the HTTP Client.
 ```
 
-#### Instance Principal Provider
+##### Instance Principal Provider
 
 For Example:
 
@@ -559,7 +562,7 @@ config:
 
 You can also include any of the optional configuration just like the example in `Default Provider`.
 
-#### Raw Provider
+##### Raw Provider
 
 For Example:
 
@@ -578,6 +581,24 @@ config:
 ```
 
 You can also include any of the optional configuration just like the example in `Default Provider`.
+
+##### OCI Policies
+
+Regardless of the method you use for authentication (raw, instance-principal), you need the following 2 policies in order for Thanos (sidecar or receive) to be able to write TSDB to OCI object storage. The difference lies in whom you are giving the permissions.
+
+For using instance-principal and dynamic group:
+
+```
+Allow dynamic-group thanos to read buckets in compartment id ocid1.compartment.oc1..a
+Allow dynamic-group thanos to manage objects in compartment id ocid1.compartment.oc1..a
+```
+
+For using raw provider and an IAM group:
+
+```
+Allow group thanos to read buckets in compartment id ocid1.compartment.oc1..a
+Allow group thanos to manage objects in compartment id ocid1.compartment.oc1..a
+```
 
 ### How to add a new client to Thanos?
 

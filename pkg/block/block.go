@@ -402,3 +402,53 @@ func MarkForNoCompact(ctx context.Context, logger log.Logger, bkt objstore.Bucke
 	level.Info(logger).Log("msg", "block has been marked for no compaction", "block", id)
 	return nil
 }
+
+// MarkForNoDownsample creates a file which marks block to be not downsampled.
+func MarkForNoDownsample(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, reason metadata.NoDownsampleReason, details string, markedForNoDownsample prometheus.Counter) error {
+	m := path.Join(id.String(), metadata.NoDownsampleMarkFilename)
+	noDownsampleMarkExists, err := bkt.Exists(ctx, m)
+	if err != nil {
+		return errors.Wrapf(err, "check exists %s in bucket", m)
+	}
+	if noDownsampleMarkExists {
+		level.Warn(logger).Log("msg", "requested to mark for no deletion, but file already exists; this should not happen; investigate", "err", errors.Errorf("file %s already exists in bucket", m))
+		return nil
+	}
+	noDownsampleMark, err := json.Marshal(metadata.NoDownsampleMark{
+		ID:      id,
+		Version: metadata.NoDownsampleMarkVersion1,
+
+		NoDownsampleTime: time.Now().Unix(),
+		Reason:           reason,
+		Details:          details,
+	})
+	if err != nil {
+		return errors.Wrap(err, "json encode no downsample mark")
+	}
+
+	if err := bkt.Upload(ctx, m, bytes.NewBuffer(noDownsampleMark)); err != nil {
+		return errors.Wrapf(err, "upload file %s to bucket", m)
+	}
+	markedForNoDownsample.Inc()
+	level.Info(logger).Log("msg", "block has been marked for no downsample", "block", id)
+	return nil
+}
+
+// RemoveMark removes the file which marked the block for deletion, no-downsample or no-compact.
+func RemoveMark(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, removeMark prometheus.Counter, markedFilename string) error {
+	markedFile := path.Join(id.String(), markedFilename)
+	markedFileExists, err := bkt.Exists(ctx, markedFile)
+	if err != nil {
+		return errors.Wrapf(err, "check if %s file exists in bucket", markedFile)
+	}
+	if !markedFileExists {
+		level.Warn(logger).Log("msg", "requested to remove the mark, but file does not exist", "err", errors.Errorf("file %s does not exist in bucket", markedFile))
+		return nil
+	}
+	if err := bkt.Delete(ctx, markedFile); err != nil {
+		return errors.Wrapf(err, "delete file %s from bucket", markedFile)
+	}
+	removeMark.Inc()
+	level.Info(logger).Log("msg", "mark has been removed from the block", "block", id)
+	return nil
+}

@@ -18,9 +18,9 @@ import (
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/objstore"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestBestEffortCleanAbortedPartialUploads(t *testing.T) {

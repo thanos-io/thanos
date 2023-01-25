@@ -342,6 +342,8 @@ config:
     key_file: ""
     server_name: ""
     insecure_skip_verify: false
+  cache_size: 0
+  master_name: ""
 ```
 
 The **required** settings are:
@@ -356,6 +358,12 @@ While the remaining settings are **optional**:
 - `dial_timeout`: the redis dial timeout.
 - `read_timeout`: the redis read timeout.
 - `write_timeout`: the redis write timeout.
+- `cache_size` size of the in-memory cache used for client-side caching. Client-side caching is enabled when this value is not zero. See [official documentation](https://redis.io/docs/manual/client-side-caching/) for more. It is highly recommended to enable this so that Thanos Store would not need to continuously retrieve data from Redis for repeated requests of the same key(-s).
+
+Here is an example of what effect client-side caching could have:
+
+<img src="../img/rueidis-client-side.png" class="img-fluid" alt="Example of client-side in action - reduced network usage by a lot"/>
+
 - `pool_size`: maximum number of socket connections.
 - `min_idle_conns`: specifies the minimum number of idle connections which is useful when establishing new connection is slow.
 - `idle_timeout`: amount of time after which client closes idle connections. Should be less than server's timeout.
@@ -435,7 +443,7 @@ Here is how it looks like:
 
 <img src="../img/groupcache.png" class="img-fluid" alt="Example of a groupcache group showing that each Thanos Store instance communicates with all others in the group"/>
 
-Note that with groupcache enabled, new routes are registed on the HTTP server with the prefix `/_groupcache`. Using those routes, anyone can access any kind of data in the configured remote object storage. So, if you are exposing your Thanos Store to the Internet then it is highly recommended to use a reverse proxy in front and disable access to `/_groupcache/...`.
+Note that with groupcache enabled, new routes are registered on the HTTP server with the prefix `/_groupcache`. Using those routes, anyone can access any kind of data in the configured remote object storage. So, if you are exposing your Thanos Store to the Internet then it is highly recommended to use a reverse proxy in front and disable access to `/_groupcache/...`.
 
 Currently TLS *is* supported but on the client's side no verification is done of the received certificate. This will be added in the future. HTTP2 over cleartext is also enabled to improve the performance for users that don't use TLS.
 

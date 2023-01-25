@@ -40,7 +40,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Requests', 'Show rate of cache requests.') +
           g.queryPanel(
-            'sum by (%s) (rate(cortex_cache_request_duration_seconds_count{%s}[$interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
+            'sum by (%s) (rate(cortex_cache_request_duration_seconds_count{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
             '{{job}} {{tripperware}}',
           ) +
           g.stack
@@ -48,11 +48,11 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Querier cache gets vs misses', 'Show rate of Querier cache gets vs misses.') +
           g.queryPanel(
-            'sum by (%s) (rate(querier_cache_gets_total{%s}[$interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
+            'sum by (%s) (rate(querier_cache_gets_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
             'Cache gets - {{job}} {{tripperware}}',
           ) +
           g.queryPanel(
-            'sum by (%s) (rate(querier_cache_misses_total{%s}[$interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
+            'sum by (%s) (rate(querier_cache_misses_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
             'Cache misses - {{job}} {{tripperware}}',
           ) +
           g.stack
@@ -60,7 +60,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Cortex fetched keys', 'Shows rate of cortex fetched keys.') +
           g.queryPanel(
-            'sum by (%s) (rate(cortex_cache_fetched_keys_total{%s}[$interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
+            'sum by (%s) (rate(cortex_cache_fetched_keys_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
             '{{job}} {{tripperware}}',
           ) +
           g.stack
@@ -68,7 +68,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Cortex cache hits', 'Shows rate of cortex cache hits.') +
           g.queryPanel(
-            'sum by (%s) (rate(cortex_cache_hits_total{%s}[$interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
+            'sum by (%s) (rate(cortex_cache_hits_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
             '{{job}} {{tripperware}}',
           ) +
           g.stack

@@ -279,7 +279,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	if len(stores) == 0 {
 		err := errors.New("No StoreAPIs matched for this query")
-		level.Warn(reqLogger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
+		level.Debug(reqLogger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
 		if sendErr := srv.Send(storepb.NewWarnSeriesResponse(err)); sendErr != nil {
 			level.Error(reqLogger).Log("err", sendErr)
 			return status.Error(codes.Unknown, errors.Wrap(sendErr, "send series response").Error())

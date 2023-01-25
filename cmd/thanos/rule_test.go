@@ -6,7 +6,7 @@ package main
 import (
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func Test_parseFlagLabels(t *testing.T) {
