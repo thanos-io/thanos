@@ -126,8 +126,15 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := f.roundTripper.RoundTrip(r)
 	queryResponseTime := time.Since(startTime)
 
+	// Check whether we should parse the query string.
+	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 && queryResponseTime > f.cfg.LogQueriesLongerThan
+	if shouldReportSlowQuery || f.cfg.QueryStatsEnabled {
+		queryString = f.parseRequestQueryString(r, buf)
+	}
+
 	if err != nil {
-		writeError(w, err)
+		err = writeError(w, err)
+		f.reportQueryWithError(r, queryString, err)
 		return
 	}
 
@@ -147,12 +154,6 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		level.Error(util_log.WithContext(r.Context(), f.log)).Log("msg", "write response body error", "bytesCopied", bytesCopied, "err", err)
 	}
 
-	// Check whether we should parse the query string.
-	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 && queryResponseTime > f.cfg.LogQueriesLongerThan
-	if shouldReportSlowQuery || f.cfg.QueryStatsEnabled {
-		queryString = f.parseRequestQueryString(r, buf)
-	}
-
 	if shouldReportSlowQuery {
 		f.reportSlowQuery(r, queryString, queryResponseTime)
 	}
@@ -161,8 +162,36 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// reportQueryWithError reports querie with error.
+func (f *Handler) reportQueryWithError(r *http.Request, queryString url.Values, err error) {
+	headers := f.getHeaderInfo(r)
+	logMessage := append([]interface{}{
+		"msg", "failed query detected",
+		"error", err,
+		"method", r.Method,
+		"host", r.Host,
+		"path", r.URL.Path,
+	}, headers...)
+	logMessage = append(logMessage, formatQueryString(queryString)...)
+	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+}
+
 // reportSlowQuery reports slow queries.
 func (f *Handler) reportSlowQuery(r *http.Request, queryString url.Values, queryResponseTime time.Duration) {
+	headers := f.getHeaderInfo(r)
+	logMessage := append([]interface{}{
+		"msg", "slow query detected",
+		"method", r.Method,
+		"host", r.Host,
+		"path", r.URL.Path,
+		"time_taken", queryResponseTime.String(),
+	}, headers...)
+	logMessage = append(logMessage, formatQueryString(queryString)...)
+
+	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+}
+
+func (f *Handler) getHeaderInfo(r *http.Request) (fields []interface{}) {
 	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
 	grafanaDashboardUID := "-"
 	if dashboardUID := r.Header.Get("X-Dashboard-Uid"); dashboardUID != "" {
@@ -172,18 +201,9 @@ func (f *Handler) reportSlowQuery(r *http.Request, queryString url.Values, query
 	if panelID := r.Header.Get("X-Panel-Id"); panelID != "" {
 		grafanaPanelID = panelID
 	}
-
-	logMessage := append([]interface{}{
-		"msg", "slow query detected",
-		"method", r.Method,
-		"host", r.Host,
-		"path", r.URL.Path,
-		"time_taken", queryResponseTime.String(),
-		"grafana_dashboard_uid", grafanaDashboardUID,
-		"grafana_panel_id", grafanaPanelID,
-	}, formatQueryString(queryString)...)
-
-	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
+	fields = append(fields, "grafana_dashboard_uid", grafanaDashboardUID)
+	fields = append(fields, "grafana_panel_id", grafanaPanelID)
+	return fields
 }
 
 func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, queryResponseTime time.Duration, stats *querier_stats.Stats) {
@@ -238,7 +258,7 @@ func formatQueryString(queryString url.Values) (fields []interface{}) {
 	return fields
 }
 
-func writeError(w http.ResponseWriter, err error) {
+func writeError(w http.ResponseWriter, err error) error {
 	switch err {
 	case context.Canceled:
 		err = errCanceled
@@ -250,6 +270,7 @@ func writeError(w http.ResponseWriter, err error) {
 		}
 	}
 	server.WriteError(w, err)
+	return err
 }
 
 func writeServiceTimingHeader(queryResponseTime time.Duration, headers http.Header, stats *querier_stats.Stats) {
