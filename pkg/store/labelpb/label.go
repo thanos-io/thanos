@@ -50,11 +50,20 @@ func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 	return *(*labels.Labels)(unsafe.Pointer(&lset))
 }
 
-// ReAllocZLabelsStrings re-allocates all underlying bytes for string, detaching it from bigger memory pool.
-// Internally it uses string interning, i.e. reusing already allocated strings, to make the reallocation
-// method more efficient. This is primarily intended to be used before labels are written into TSDB
-// which can hold label strings in the memory long term.
-func ReAllocZLabelsStrings(lset *[]ZLabel) {
+// ReAllocAndInternZLabelsStrings re-allocates all underlying bytes for string, detaching it from bigger memory pool.
+// If `intern` is set to true, the method will use interning, i.e. reuse already allocated strings, to make the reallocation
+// method more efficient.
+//
+// This is primarily intended to be used before labels are written into TSDB which can hold label strings in the memory long term.
+func ReAllocZLabelsStrings(lset *[]ZLabel, intern bool) {
+	if intern {
+		for j, l := range *lset {
+			(*lset)[j].Name = string(noAllocBytes(l.Name))
+			(*lset)[j].Value = string(noAllocBytes(l.Value))
+		}
+		return
+	}
+
 	for j, l := range *lset {
 		(*lset)[j].Name = detachAndInternLabelString(l.Name)
 		(*lset)[j].Value = detachAndInternLabelString(l.Value)

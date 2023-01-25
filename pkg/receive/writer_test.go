@@ -299,7 +299,7 @@ func TestWriter(t *testing.T) {
 				return err
 			}))
 
-			w := NewWriter(logger, m)
+			w := NewWriter(logger, m, false)
 
 			for idx, req := range testData.reqs {
 				err = w.Write(context.Background(), DefaultTenant, req)
@@ -383,7 +383,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 	app, err := m.TenantAppendable("foo")
 	testutil.Ok(b, err)
 
-	w := NewWriter(logger, m)
+	w := NewWriter(logger, m, true)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

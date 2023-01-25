@@ -207,7 +207,7 @@ func runReceive(
 		conf.allowOutOfOrderUpload,
 		hashFunc,
 	)
-	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
+	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, conf.writerInterning)
 
 	var limitsConfig *receive.RootLimitsConfig
 	if conf.limitsConfig != nil {
@@ -786,8 +786,9 @@ type receiveConfig struct {
 	tsdbMemorySnapshotOnShutdown bool
 	tsdbEnableNativeHistograms   bool
 
-	walCompression bool
-	noLockFile     bool
+	walCompression  bool
+	noLockFile      bool
+	writerInterning bool
 
 	hashFunc string
 
@@ -900,6 +901,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.enable-native-histograms",
 		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
 		Default("false").Hidden().BoolVar(&rc.tsdbEnableNativeHistograms)
+
+	cmd.Flag("writer.intern",
+		"[EXPERIMENTAL] Enables string interning in receive writer, for more optimized memory usage.").
+		Default("false").Hidden().BoolVar(&rc.writerInterning)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")
