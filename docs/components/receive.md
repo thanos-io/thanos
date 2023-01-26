@@ -334,6 +334,14 @@ Flags:
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
+      --store.grpc.chunks-limit=0
+                                 The maximum chunks allowed for a single Series
+                                 request, The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
+      --store.grpc.series-limit=0
+                                 The maximum series allowed for a single Series
+                                 request. The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file
