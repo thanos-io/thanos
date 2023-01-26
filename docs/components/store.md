@@ -162,12 +162,20 @@ Flags:
                                  If true, Store Gateway will lazy memory map
                                  index-header only once the block is required by
                                  a query.
+      --store.grpc.chunks-limit=0
+                                 The maximum chunks allowed for a single Series
+                                 request, The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
       --store.grpc.downloaded-bytes-limit=0
                                  Maximum amount of downloaded (either
                                  fetched or touched) bytes in a single
                                  Series/LabelNames/LabelValues call. The Series
                                  call fails if this limit is exceeded. 0 means
                                  no limit.
+      --store.grpc.series-limit=0
+                                 The maximum series allowed for a single Series
+                                 request. The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
       --store.grpc.series-max-concurrency=20
                                  Maximum number of concurrent Series calls.
       --store.grpc.series-sample-limit=0

@@ -283,8 +283,9 @@ func runSidecar(
 			info.WithMetricMetadataInfoFunc(),
 		)
 
+		storeServer := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), conf.storeRateLimits)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
+			grpcserver.WithServer(store.RegisterStoreServer(storeServer)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(targets.RegisterTargetsServer(targets.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
@@ -475,15 +476,16 @@ func (s *promMetadata) Version() string {
 }
 
 type sidecarConfig struct {
-	http         httpConfig
-	grpc         grpcConfig
-	prometheus   prometheusConfig
-	tsdb         tsdbConfig
-	reloader     reloaderConfig
-	reqLogConfig *extflag.PathOrContent
-	objStore     extflag.PathOrContent
-	shipper      shipperConfig
-	limitMinTime thanosmodel.TimeOrDurationValue
+	http            httpConfig
+	grpc            grpcConfig
+	prometheus      prometheusConfig
+	tsdb            tsdbConfig
+	reloader        reloaderConfig
+	reqLogConfig    *extflag.PathOrContent
+	objStore        extflag.PathOrContent
+	shipper         shipperConfig
+	limitMinTime    thanosmodel.TimeOrDurationValue
+	storeRateLimits store.RateLimits
 }
 
 func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -495,6 +497,7 @@ func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 	sc.objStore = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 	sc.shipper.registerFlag(cmd)
+	sc.storeRateLimits.RegisterFlags(cmd)
 	cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z").SetValue(&sc.limitMinTime)
 }
