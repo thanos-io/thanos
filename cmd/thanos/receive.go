@@ -210,8 +210,8 @@ func runReceive(
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 
 	var limitsConfig *receive.RootLimitsConfig
-	if conf.limitsConfig != nil {
-		limitsContentYaml, err := conf.limitsConfig.Content()
+	if conf.writeLimitsConfig != nil {
+		limitsContentYaml, err := conf.writeLimitsConfig.Content()
 		if err != nil {
 			return errors.Wrap(err, "get content of limit configuration")
 		}
@@ -220,7 +220,7 @@ func runReceive(
 			return errors.Wrap(err, "parse limit configuration")
 		}
 	}
-	limiter, err := receive.NewLimiter(conf.limitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"))
+	limiter, err := receive.NewLimiter(conf.writeLimitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"))
 	if err != nil {
 		return errors.Wrap(err, "creating limiter")
 	}
@@ -314,7 +314,7 @@ func runReceive(
 			0,
 			store.LazyRetrieval,
 		)
-		mts := store.NewInstrumentedStoreServer(reg, proxy)
+		mts := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), conf.storeRateLimits)
 		rw := store.ReadWriteTSDBStore{
 			StoreServer:          mts,
 			WriteableStoreServer: webHandler,
@@ -799,12 +799,14 @@ type receiveConfig struct {
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
 
-	limitsConfig *extflag.PathOrContent
+	writeLimitsConfig *extflag.PathOrContent
+	storeRateLimits   store.RateLimits
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.httpBindAddr, rc.httpGracePeriod, rc.httpTLSConfig = extkingpin.RegisterHTTPFlags(cmd)
 	rc.grpcBindAddr, rc.grpcGracePeriod, rc.grpcCert, rc.grpcKey, rc.grpcClientCA, rc.grpcMaxConnAge = extkingpin.RegisterGRPCFlags(cmd)
+	rc.storeRateLimits.RegisterFlags(cmd)
 
 	cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
 		Default("0.0.0.0:19291").StringVar(&rc.rwAddress)
@@ -916,7 +918,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 
-	rc.limitsConfig = extflag.RegisterPathOrContent(cmd, "receive.limits-config", "YAML file that contains limit configuration.", extflag.WithEnvSubstitution(), extflag.WithHidden())
+	rc.writeLimitsConfig = extflag.RegisterPathOrContent(cmd, "receive.limits-config", "YAML file that contains limit configuration.", extflag.WithEnvSubstitution(), extflag.WithHidden())
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

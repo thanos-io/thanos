@@ -58,6 +58,7 @@ type storeConfig struct {
 	indexCacheSizeBytes         units.Base2Bytes
 	chunkPoolSize               units.Base2Bytes
 	seriesBatchSize             int
+	storeRateLimits             store.RateLimits
 	maxSampleCount              uint64
 	maxTouchedSeriesCount       uint64
 	maxDownloadedBytes          units.Base2Bytes
@@ -84,6 +85,7 @@ type storeConfig struct {
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.httpConfig = *sc.httpConfig.registerFlag(cmd)
 	sc.grpcConfig = *sc.grpcConfig.registerFlag(cmd)
+	sc.storeRateLimits.RegisterFlags(cmd)
 
 	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar.").
 		Default("./data").StringVar(&sc.dataDir)
@@ -429,8 +431,9 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
+		storeServer := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, bs), conf.storeRateLimits)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, conf.component, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(store.NewInstrumentedStoreServer(reg, bs))),
+			grpcserver.WithServer(store.RegisterStoreServer(storeServer)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
 			grpcserver.WithGracePeriod(time.Duration(conf.grpcConfig.gracePeriod)),
