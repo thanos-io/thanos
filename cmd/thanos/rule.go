@@ -635,7 +635,7 @@ func runRule(
 				return nil
 			}),
 		)
-		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(tsdbStore)))
+		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore))))
 	}
 
 	options = append(options, grpcserver.WithServer(

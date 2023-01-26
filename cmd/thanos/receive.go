@@ -305,7 +305,7 @@ func runReceive(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		mts := store.NewProxyStore(
+		proxy := store.NewProxyStore(
 			logger,
 			reg,
 			dbs.TSDBLocalClients,
@@ -314,6 +314,7 @@ func runReceive(
 			0,
 			store.LazyRetrieval,
 		)
+		mts := store.NewInstrumentedStoreServer(reg, proxy)
 		rw := store.ReadWriteTSDBStore{
 			StoreServer:          mts,
 			WriteableStoreServer: webHandler,
@@ -321,10 +322,10 @@ func runReceive(
 
 		infoSrv := info.NewInfoServer(
 			component.Receive.String(),
-			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return mts.LabelSet() }),
+			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return proxy.LabelSet() }),
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 				if httpProbe.IsReady() {
-					minTime, maxTime := mts.TimeRange()
+					minTime, maxTime := proxy.TimeRange()
 					return &infopb.StoreInfo{
 						MinTime:                        minTime,
 						MaxTime:                        maxTime,

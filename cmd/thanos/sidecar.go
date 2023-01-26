@@ -284,7 +284,7 @@ func runSidecar(
 		)
 
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(promStore)),
+			grpcserver.WithServer(store.RegisterStoreServer(store.NewInstrumentedStoreServer(reg, promStore))),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(targets.RegisterTargetsServer(targets.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
