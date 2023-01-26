@@ -598,12 +598,13 @@ type sample struct {
 // issue https://github.com/thanos-io/thanos/issues/2401#issuecomment-621958839.
 // NOTE(bwplotka): This hides resets from PromQL engine. This means it will not work for PromQL resets function.
 type ApplyCounterResetsSeriesIterator struct {
-	chks   []chunkenc.Iterator
-	i      int     // Current chunk.
-	total  int     // Total number of processed samples.
-	lastT  int64   // Timestamp of the last sample.
-	lastV  float64 // Value of the last sample.
-	totalV float64 // Total counter state since beginning of series.
+	chks        []chunkenc.Iterator
+	i           int     // Current chunk.
+	total       int     // Total number of processed samples.
+	lastT       int64   // Timestamp of the last sample.
+	lastV       float64 // Value of the last sample.
+	totalV      float64 // Total counter state since beginning of series.
+	lastValType chunkenc.ValueType
 }
 
 func NewApplyCounterResetsIterator(chks ...chunkenc.Iterator) *ApplyCounterResetsSeriesIterator {
@@ -616,15 +617,21 @@ func (it *ApplyCounterResetsSeriesIterator) Next() chunkenc.ValueType {
 		if it.i >= len(it.chks) {
 			return chunkenc.ValNone
 		}
-		if it.chks[it.i].Next() == chunkenc.ValNone {
+		it.lastValType = it.chks[it.i].Next()
+		if it.lastValType == chunkenc.ValNone {
 			it.i++
 			// While iterators are ordered, they are not generally guaranteed to be
 			// non-overlapping. Ensure that the series does not go back in time by seeking at least
 			// to the next timestamp.
 			return it.Seek(it.lastT + 1)
 		}
-		t, v := it.chks[it.i].At()
+		// Counter resets do not need to be handled for non-float sample types.
+		if it.lastValType != chunkenc.ValFloat {
+			it.lastT = it.chks[it.i].AtT()
+			return it.lastValType
+		}
 
+		t, v := it.chks[it.i].At()
 		if math.IsNaN(v) {
 			return it.Next()
 		}
@@ -661,11 +668,11 @@ func (it *ApplyCounterResetsSeriesIterator) At() (t int64, v float64) {
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (it *ApplyCounterResetsSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	panic("not implemented")
+	return it.chks[it.i].AtHistogram()
 }
 
 func (it *ApplyCounterResetsSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	panic("not implemented")
+	return it.chks[it.i].AtFloatHistogram()
 }
 
 func (it *ApplyCounterResetsSeriesIterator) AtT() int64 {
@@ -675,8 +682,8 @@ func (it *ApplyCounterResetsSeriesIterator) AtT() int64 {
 func (it *ApplyCounterResetsSeriesIterator) Seek(x int64) chunkenc.ValueType {
 	// Don't use underlying Seek, but iterate over next to not miss counter resets.
 	for {
-		if t, _ := it.At(); t >= x {
-			return chunkenc.ValFloat
+		if t := it.AtT(); t >= x {
+			return it.lastValType
 		}
 
 		if it.Next() == chunkenc.ValNone {

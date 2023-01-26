@@ -30,6 +30,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#6010](https://github.com/thanos-io/thanos/pull/6010) *: Upgrade Prometheus to v0.41.0.
 - [#5887](https://github.com/thanos-io/thanos/pull/5887) Tracing: Make sure rate limiting sampler is the default, as was the case in version pre-0.29.0.
+- [#6071](https://github.com/thanos-io/thanos/pull/6071) Query Frontend: *breaking :warning:* Aligned with Prometheus common model (cache reset required)
 
 ## [v0.30.1](https://github.com/thanos-io/thanos/tree/release-0.30) - 4.01.2023
 

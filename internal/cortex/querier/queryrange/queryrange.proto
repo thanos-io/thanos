@@ -98,16 +98,37 @@ message PrometheusResponseQueryableSamplesStatsPerStep {
 message SampleStream {
   repeated cortexpb.LabelPair labels = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "metric", (gogoproto.customtype) = "github.com/thanos-io/thanos/internal/cortex/cortexpb.LabelAdapter"];
   repeated cortexpb.Sample samples = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "values"];
+  repeated SampleHistogramPair histograms = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "histogram"];
 }
 
 message Sample {
   repeated cortexpb.LabelPair labels = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "metric", (gogoproto.customtype) = "github.com/thanos-io/thanos/internal/cortex/cortexpb.LabelAdapter"];
-  cortexpb.Sample sample = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "value"];
+  double sampleValue = 2 [(gogoproto.jsontag) = "value"];
+  int64 timestamp = 3;
+  SampleHistogram histogram = 4 [(gogoproto.nullable) = true, (gogoproto.jsontag) = "histogram"];
 }
 
 message StringSample {
   string value = 1;
   int64 timestamp_ms = 2;
+}
+
+message SampleHistogramPair {
+  int64 timestamp = 1;
+  SampleHistogram histogram = 2 [(gogoproto.nullable) = false];
+}
+
+message SampleHistogram {
+  double count = 1;
+  double sum = 2;
+  repeated HistogramBucket buckets = 3;
+}
+
+message HistogramBucket {
+  int64 boundaries = 1;
+  double lower = 2;
+  double upper = 3;
+  double count = 4;
 }
 
 message CachedResponse  {

@@ -273,7 +273,7 @@ func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange
 			metric := cortexpb.FromLabelAdaptersToLabels(sample.Labels).String()
 			if existingSample, ok := output[metric]; !ok {
 				output[metric] = s
-			} else if existingSample.GetSample().TimestampMs < s.GetSample().TimestampMs {
+			} else if existingSample.Timestamp < s.Timestamp {
 				// Choose the latest sample if we see overlap.
 				output[metric] = s
 			}

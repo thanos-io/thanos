@@ -736,6 +736,62 @@ func TestApplyCounterResetsIterator(t *testing.T) {
 
 }
 
+func TestApplyCounterResetsIteratorHistograms(t *testing.T) {
+	const lenChunks, lenChunk = 4, 10
+
+	histograms := tsdb.GenerateTestHistograms(lenChunks * lenChunk)
+
+	var chunks [][]*histogramPair
+	for i := 0; i < lenChunks; i++ {
+		var chunk []*histogramPair
+		for j := 0; j < lenChunk; j++ {
+			chunk = append(chunk, &histogramPair{t: int64(i*lenChunk+j) * 100, h: histograms[i*lenChunk+j]})
+		}
+		chunks = append(chunks, chunk)
+	}
+
+	var expected []*histogramPair
+	for i, h := range histograms {
+		expected = append(expected, &histogramPair{t: int64(i * 100), h: h})
+	}
+
+	for _, tcase := range []struct {
+		name string
+
+		chunks [][]*histogramPair
+
+		expected []*histogramPair
+	}{
+		{
+			name:     "histogram series",
+			chunks:   chunks,
+			expected: expected,
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			var its []chunkenc.Iterator
+			for _, c := range tcase.chunks {
+				its = append(its, newHistogramIterator(c))
+			}
+
+			x := NewApplyCounterResetsIterator(its...)
+
+			var res []*histogramPair
+			for x.Next() != chunkenc.ValNone {
+				t, h := x.AtHistogram()
+				res = append(res, &histogramPair{t, h})
+			}
+			testutil.Ok(t, x.Err())
+			testutil.Equals(t, tcase.expected, res)
+
+			for i := range res[1:] {
+				testutil.Assert(t, res[i+1].t >= res[i].t, "sample time %v is not monotonically increasing. previous sample %v is older", res[i+1], res[i])
+			}
+		})
+	}
+
+}
+
 func TestCounterSeriesIteratorSeek(t *testing.T) {
 	chunks := [][]sample{
 		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
@@ -860,7 +916,6 @@ func (s testSample) V() float64 {
 	return s.v
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (s testSample) H() *histogram.Histogram {
 	panic("not implemented")
 }
@@ -886,7 +941,6 @@ func (it *sampleIterator) Err() error {
 	return nil
 }
 
-// TODO(rabenhorst): Native histogram support needs to be added.
 func (it *sampleIterator) Next() chunkenc.ValueType {
 	if it.i >= len(it.l)-1 {
 		return chunkenc.ValNone
@@ -903,7 +957,6 @@ func (it *sampleIterator) At() (t int64, v float64) {
 	return it.l[it.i].t, it.l[it.i].v
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (it *sampleIterator) AtHistogram() (int64, *histogram.Histogram) {
 	panic("not implemented")
 }
@@ -913,6 +966,52 @@ func (it *sampleIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) 
 }
 
 func (it *sampleIterator) AtT() int64 {
+	return it.l[it.i].t
+}
+
+type histogramPair struct {
+	t int64
+	h *histogram.Histogram
+}
+
+type histogramIterator struct {
+	l []*histogramPair
+	i int
+}
+
+func newHistogramIterator(l []*histogramPair) *histogramIterator {
+	return &histogramIterator{l: l, i: -1}
+}
+
+func (it *histogramIterator) Err() error {
+	return nil
+}
+
+func (it *histogramIterator) Next() chunkenc.ValueType {
+	if it.i >= len(it.l)-1 {
+		return chunkenc.ValNone
+	}
+	it.i++
+	return chunkenc.ValHistogram
+}
+
+func (it *histogramIterator) Seek(int64) chunkenc.ValueType {
+	panic("unexpected")
+}
+
+func (it *histogramIterator) At() (t int64, v float64) {
+	panic("not implemented")
+}
+
+func (it *histogramIterator) AtHistogram() (int64, *histogram.Histogram) {
+	return it.l[it.i].t, it.l[it.i].h
+}
+
+func (it *histogramIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (it *histogramIterator) AtT() int64 {
 	return it.l[it.i].t
 }
 

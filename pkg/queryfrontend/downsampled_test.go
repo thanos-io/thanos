@@ -113,6 +113,60 @@ func TestDownsampled_MinResponseTime(t *testing.T) {
 			},
 			expected: 1,
 		},
+		{
+			desc: "three histogram SampleStreams, last is earliest",
+			sampleStreams: []queryrange.SampleStream{
+				{
+					Histograms: []queryrange.SampleHistogramPair{
+						{Timestamp: 2},
+						{Timestamp: 3},
+					},
+				},
+				{
+					Histograms: []queryrange.SampleHistogramPair{
+						{Timestamp: 2},
+					},
+				},
+				{
+					Histograms: []queryrange.SampleHistogramPair{
+						{Timestamp: 1},
+					},
+				},
+			},
+			expected: 1,
+		},
+		{
+			desc: "mixed float and histogram SampleStreams, float is earliest",
+			sampleStreams: []queryrange.SampleStream{
+				{
+					Samples: []cortexpb.Sample{
+						{TimestampMs: 1},
+					},
+				},
+				{
+					Histograms: []queryrange.SampleHistogramPair{
+						{Timestamp: 2},
+					},
+				},
+			},
+			expected: 1,
+		},
+		{
+			desc: "mixed float and histogram SampleStreams, histogram is earliest",
+			sampleStreams: []queryrange.SampleStream{
+				{
+					Samples: []cortexpb.Sample{
+						{TimestampMs: 3},
+					},
+				},
+				{
+					Histograms: []queryrange.SampleHistogramPair{
+						{Timestamp: 2},
+					},
+				},
+			},
+			expected: 2,
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			pr := queryrange.NewEmptyPrometheusResponse()
