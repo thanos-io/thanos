@@ -4,6 +4,7 @@
 package store
 
 import (
+	"fmt"
 	"runtime"
 
 	"github.com/go-kit/log"
@@ -44,7 +45,7 @@ func (r *recoverableStoreServer) recover(srv storepb.Store_SeriesServer) {
 			level.Error(r.logger).Log("err", err)
 		}
 	default:
-		if err := srv.Send(storepb.NewWarnSeriesResponse(errors.New("Unknown error"))); err != nil {
+		if err := srv.Send(storepb.NewWarnSeriesResponse(errors.New(fmt.Sprintf("unknown error while processing Series: %v", e)))); err != nil {
 			level.Error(r.logger).Log("err", err)
 		}
 	}
