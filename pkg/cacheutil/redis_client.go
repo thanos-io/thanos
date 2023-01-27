@@ -125,6 +125,10 @@ type RedisClientConfig struct {
 	// instead of fetching data each time.
 	// See https://redis.io/docs/manual/client-side-caching/ for info.
 	CacheSize model.Bytes `yaml:"cache_size"`
+
+	// MasterName specifies the master's name. Must be not empty
+	// for Redis Sentinel.
+	MasterName string `yaml:"master_name"`
 }
 
 func (c *RedisClientConfig) validate() error {
@@ -175,6 +179,10 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		return nil, err
 	}
 
+	if reg != nil {
+		reg = prometheus.WrapRegistererWith(prometheus.Labels{"name": name}, reg)
+	}
+
 	var tlsConfig *tls.Config
 	if config.TLSEnabled {
 		userTLSConfig := config.TLSConfig
@@ -194,7 +202,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		clientSideCacheDisabled = true
 	}
 
-	client, err := rueidis.NewClient(rueidis.ClientOption{
+	clientOpts := rueidis.ClientOption{
 		InitAddress:       strings.Split(config.Addr, ","),
 		ShuffleInit:       true,
 		Username:          config.Username,
@@ -205,7 +213,15 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		ConnWriteTimeout:  config.WriteTimeout,
 		DisableCache:      clientSideCacheDisabled,
 		TLSConfig:         tlsConfig,
-	})
+	}
+
+	if config.MasterName != "" {
+		clientOpts.Sentinel = rueidis.SentinelOption{
+			MasterSet: config.MasterName,
+		}
+	}
+
+	client, err := rueidis.NewClient(clientOpts)
 	if err != nil {
 		return nil, err
 	}

@@ -179,3 +179,15 @@ type ecServer struct {
 func (s *ecServer) UnaryEcho(ctx context.Context, req *pb.EchoRequest) (*pb.EchoResponse, error) {
 	return &pb.EchoResponse{Message: req.Message}, nil
 }
+
+func TestInvalidCertAndKey(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	logger := log.NewLogfmtLogger(os.Stderr)
+	tmpDirSrv := t.TempDir()
+	caSrv := filepath.Join(tmpDirSrv, "ca")
+	certSrv := filepath.Join(tmpDirSrv, "cert")
+	keySrv := filepath.Join(tmpDirSrv, "key")
+	// Certificate and key are not present in the above path
+	_, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv)
+	testutil.NotOk(t, err)
+}

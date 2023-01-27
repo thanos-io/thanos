@@ -147,7 +147,6 @@ func (c *Memcached) Fetch(ctx context.Context, keys []string) (found []string, b
 	})
 	return
 }
-
 func (c *Memcached) fetch(ctx context.Context, keys []string) (found []string, bufs [][]byte, missed []string) {
 	var items map[string]*memcache.Item
 	const method = "Memcache.GetMulti"

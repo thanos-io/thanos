@@ -507,81 +507,79 @@ Replicate data from one object storage to another. NOTE: Currently it works only
 with Thanos blocks (meta.json has to have Thanos metadata).
 
 Flags:
-      --compaction=1... ...      Only blocks with these compaction levels will
-                                 be replicated. Repeated flag.
-  -h, --help                     Show context-sensitive help (also try
-                                 --help-long and --help-man).
+      --compaction=1... ...   Only blocks with these compaction levels will be
+                              replicated. Repeated flag.
+  -h, --help                  Show context-sensitive help (also try --help-long
+                              and --help-man).
       --http-address="0.0.0.0:10902"
-                                 Listen host:port for HTTP endpoints.
-      --http-grace-period=2m     Time to wait after an interrupt received for
-                                 HTTP Server.
-      --http.config=""           [EXPERIMENTAL] Path to the configuration file
-                                 that can enable TLS or authentication for all
-                                 HTTP endpoints.
-      --id=ID ...                Block to be replicated to the destination
-                                 bucket. IDs will be used to match blocks and
-                                 other matchers will be ignored. When specified,
-                                 this command will be run only once after
-                                 successful replication. Repeated field
+                              Listen host:port for HTTP endpoints.
+      --http-grace-period=2m  Time to wait after an interrupt received for HTTP
+                              Server.
+      --http.config=""        [EXPERIMENTAL] Path to the configuration file
+                              that can enable TLS or authentication for all HTTP
+                              endpoints.
+      --id=ID ...             Block to be replicated to the destination bucket.
+                              IDs will be used to match blocks and other
+                              matchers will be ignored. When specified, this
+                              command will be run only once after successful
+                              replication. Repeated field
       --ignore-marked-for-deletion
-                                 Do not replicate blocks that have deletion
-                                 mark.
-      --log.format=logfmt        Log format to use. Possible options: logfmt or
-                                 json.
-      --log.level=info           Log filtering level.
-      --matcher=key="value" ...  Only blocks whose external labels exactly match
-                                 this matcher will be replicated.
+                              Do not replicate blocks that have deletion mark.
+      --log.format=logfmt     Log format to use. Possible options: logfmt or
+                              json.
+      --log.level=info        Log filtering level.
+      --matcher=MATCHER       blocks whose external labels match this matcher
+                              will be replicated. All Prometheus matchers are
+                              supported, including =, !=, =~ and !~.
       --max-time=9999-12-31T23:59:59Z
-                                 End of time range limit to replicate.
-                                 Thanos Replicate will replicate only metrics,
-                                 which happened earlier than this value.
-                                 Option can be a constant time in RFC3339 format
-                                 or time duration relative to current time, such
-                                 as -1d or 2h45m. Valid duration units are ms,
-                                 s, m, h, d, w, y.
+                              End of time range limit to replicate. Thanos
+                              Replicate will replicate only metrics, which
+                              happened earlier than this value. Option can be a
+                              constant time in RFC3339 format or time duration
+                              relative to current time, such as -1d or 2h45m.
+                              Valid duration units are ms, s, m, h, d, w, y.
       --min-time=0000-01-01T00:00:00Z
-                                 Start of time range limit to replicate.
-                                 Thanos Replicate will replicate only metrics,
-                                 which happened later than this value. Option
-                                 can be a constant time in RFC3339 format or
-                                 time duration relative to current time, such as
-                                 -1d or 2h45m. Valid duration units are ms, s,
-                                 m, h, d, w, y.
+                              Start of time range limit to replicate. Thanos
+                              Replicate will replicate only metrics, which
+                              happened later than this value. Option can be a
+                              constant time in RFC3339 format or time duration
+                              relative to current time, such as -1d or 2h45m.
+                              Valid duration units are ms, s, m, h, d, w, y.
       --objstore-to.config=<content>
-                                 Alternative to 'objstore-to.config-file'
-                                 flag (mutually exclusive). Content of
-                                 YAML file that contains object store-to
-                                 configuration. See format details:
-                                 https://thanos.io/tip/thanos/storage.md/#configuration
-                                 The object storage which replicate data to.
+                              Alternative to 'objstore-to.config-file'
+                              flag (mutually exclusive). Content of
+                              YAML file that contains object store-to
+                              configuration. See format details:
+                              https://thanos.io/tip/thanos/storage.md/#configuration
+                              The object storage which replicate data to.
       --objstore-to.config-file=<file-path>
-                                 Path to YAML file that contains object
-                                 store-to configuration. See format details:
-                                 https://thanos.io/tip/thanos/storage.md/#configuration
-                                 The object storage which replicate data to.
+                              Path to YAML file that contains object
+                              store-to configuration. See format details:
+                              https://thanos.io/tip/thanos/storage.md/#configuration
+                              The object storage which replicate data to.
       --objstore.config=<content>
-                                 Alternative to 'objstore.config-file'
-                                 flag (mutually exclusive). Content of
-                                 YAML file that contains object store
-                                 configuration. See format details:
-                                 https://thanos.io/tip/thanos/storage.md/#configuration
+                              Alternative to 'objstore.config-file'
+                              flag (mutually exclusive). Content of
+                              YAML file that contains object store
+                              configuration. See format details:
+                              https://thanos.io/tip/thanos/storage.md/#configuration
       --objstore.config-file=<file-path>
-                                 Path to YAML file that contains object
-                                 store configuration. See format details:
-                                 https://thanos.io/tip/thanos/storage.md/#configuration
-      --resolution=0s... ...     Only blocks with these resolutions will be
-                                 replicated. Repeated flag.
-      --single-run               Run replication only one time, then exit.
+                              Path to YAML file that contains object
+                              store configuration. See format details:
+                              https://thanos.io/tip/thanos/storage.md/#configuration
+      --resolution=0s... ...  Only blocks with these resolutions will be
+                              replicated. Repeated flag.
+      --single-run            Run replication only one time, then exit.
       --tracing.config=<content>
-                                 Alternative to 'tracing.config-file' flag
-                                 (mutually exclusive). Content of YAML file
-                                 with tracing configuration. See format details:
-                                 https://thanos.io/tip/thanos/tracing.md/#configuration
+                              Alternative to 'tracing.config-file' flag
+                              (mutually exclusive). Content of YAML file
+                              with tracing configuration. See format details:
+                              https://thanos.io/tip/thanos/tracing.md/#configuration
       --tracing.config-file=<file-path>
-                                 Path to YAML file with tracing
-                                 configuration. See format details:
-                                 https://thanos.io/tip/thanos/tracing.md/#configuration
-      --version                  Show application version.
+                              Path to YAML file with tracing
+                              configuration. See format details:
+                              https://thanos.io/tip/thanos/tracing.md/#configuration
+      --version               Show application version.
 
 ```
 

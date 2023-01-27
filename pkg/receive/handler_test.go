@@ -147,8 +147,8 @@ func (f *fakeAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t
 	panic("not implemented")
 }
 
-func (f *fakeAppender) GetRef(l labels.Labels) (storage.SeriesRef, labels.Labels) {
-	return storage.SeriesRef(l.Hash()), l
+func (f *fakeAppender) GetRef(l labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
+	return storage.SeriesRef(hash), l
 }
 
 func (f *fakeAppender) Commit() error {
@@ -211,6 +211,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsistencyDelay bool) {
 	appenderErrFn := func() error { return errors.New("failed to get appender") }
 	conflictErrFn := func() error { return storage.ErrOutOfBounds }
+	tooOldSampleErrFn := func() error { return storage.ErrTooOldSample }
 	commitErrFn := func() error { return errors.New("failed to commit") }
 	wreq := &prompb.WriteRequest{
 		Timeseries: makeSeriesWithValues(50),
@@ -389,6 +390,23 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 				},
 				{
 					appender: newFakeAppender(conflictErrFn, commitErrFn, nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 conflict with replication and error is ErrTooOldSample",
+			status:            http.StatusConflict,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(tooOldSampleErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(tooOldSampleErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(tooOldSampleErrFn, nil, nil),
 				},
 			},
 		},
@@ -850,8 +868,8 @@ func (a *tsOverrideAppender) Append(ref storage.SeriesRef, l labels.Labels, _ in
 	return a.Appender.Append(ref, l, cnt, v)
 }
 
-func (a *tsOverrideAppender) GetRef(lset labels.Labels) (storage.SeriesRef, labels.Labels) {
-	return a.Appender.(storage.GetRef).GetRef(lset)
+func (a *tsOverrideAppender) GetRef(lset labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
+	return a.Appender.(storage.GetRef).GetRef(lset, hash)
 }
 
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would

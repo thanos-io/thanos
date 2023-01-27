@@ -8,8 +8,7 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-
-	"github.com/thanos-io/thanos/internal/cortex/util"
+	"golang.org/x/exp/slices"
 )
 
 var allowedIntegrationNames = []string{
@@ -45,7 +44,7 @@ func (m NotificationRateLimitMap) updateMap(unmarshalErr error, newMap map[strin
 	}
 
 	for k, v := range newMap {
-		if !util.StringsContain(allowedIntegrationNames, k) {
+		if !slices.Contains(allowedIntegrationNames, k) {
 			return errors.Errorf("unknown integration name: %s", k)
 		}
 		m[k] = v

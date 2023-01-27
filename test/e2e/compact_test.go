@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
 	"github.com/go-kit/log"
@@ -347,11 +348,11 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 
 	const bucket = "compact-test"
-	m := e2ethanos.NewMinio(e, "minio", bucket)
+	m := e2edb.NewMinio(e, "minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "test-feed")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
 	testutil.Ok(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -454,7 +455,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 
 	bktConfig := client.BucketConfig{
 		Type:   client.S3,
-		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 	}
 
 	// Crank down the deletion mark delay since deduplication can miss blocks in the presence of replica labels it doesn't know about.
