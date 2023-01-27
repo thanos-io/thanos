@@ -29,6 +29,7 @@ import (
 
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/thanos-community/promql-engine/engine"
+	"github.com/thanos-community/promql-engine/logicalplan"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -101,6 +102,7 @@ func registerQuery(app *extkingpin.App) {
 
 	promqlEngine := cmd.Flag("query.promql-engine", "PromQL engine to use.").Default(string(promqlEnginePrometheus)).
 		Enum(string(promqlEnginePrometheus), string(promqlEngineThanos))
+	enableThanosPromQLEngOptimizer := cmd.Flag("query.enable-thanos-promql-engine-optimizer", "Enable query optimizer for Thanos PromQL engine ").Default("true").Bool()
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
@@ -324,6 +326,7 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetrySamplesQuantiles,
 			*queryTelemetrySeriesQuantiles,
 			promqlEngineType(*promqlEngine),
+			*enableThanosPromQLEngOptimizer,
 			storeRateLimits,
 		)
 	})
@@ -401,6 +404,7 @@ func runQuery(
 	queryTelemetrySamplesQuantiles []int64,
 	queryTelemetrySeriesQuantiles []int64,
 	promqlEngine promqlEngineType,
+	enableThanosPromQLEngOptimizer bool,
 	storeRateLimits store.RateLimits,
 ) error {
 	if alertQueryURL == "" {
@@ -634,6 +638,10 @@ func runQuery(
 		EnableAtModifier:     true,
 	}
 
+	logicalOptimizers := logicalplan.NoOptimizers
+	if enableThanosPromQLEngOptimizer {
+		logicalOptimizers = logicalplan.DefaultOptimizers
+	}
 	// An active query tracker will be added only if the user specifies a non-default path.
 	// Otherwise, the nil active query tracker from existing engine options will be used.
 	if activeQueryDir != "" {
@@ -645,7 +653,7 @@ func runQuery(
 	case promqlEnginePrometheus:
 		queryEngine = promql.NewEngine(engineOpts)
 	case promqlEngineThanos:
-		queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts})
+		queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts, LogicalOptimizers: logicalOptimizers})
 	default:
 		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)
 	}
