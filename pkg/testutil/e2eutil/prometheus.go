@@ -508,7 +508,7 @@ func createBlock(
 					if sampleType == chunkenc.ValFloat {
 						_, err = app.Append(0, lset, t, rand.Float64())
 					} else if sampleType == chunkenc.ValHistogram {
-						_, err = app.AppendHistogram(0, lset, t, &histogramSample)
+						_, err = app.AppendHistogram(0, lset, t, &histogramSample, nil)
 					}
 					if err != nil {
 						if rerr := app.Rollback(); rerr != nil {
