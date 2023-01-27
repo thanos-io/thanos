@@ -159,16 +159,16 @@ func (t *tenant) store() *store.TSDBStore {
 	return t.storeTSDB
 }
 
-func (t *tenant) client() store.Client {
+func (t *tenant) client(logger log.Logger) store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	store := t.store()
-	if store == nil {
+	tsdbStore := t.store()
+	if tsdbStore == nil {
 		return nil
 	}
-	client := storepb.ServerAsClient(store, 0)
-	return newLocalClient(client, store.LabelSet, store.TimeRange)
+	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore), 0)
+	return newLocalClient(client, tsdbStore.LabelSet, tsdbStore.TimeRange)
 }
 
 func (t *tenant) exemplars() *exemplars.TSDB {
@@ -432,7 +432,7 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
-		client := tenant.client()
+		client := tenant.client(t.logger)
 		if client != nil {
 			res = append(res, client)
 		}
