@@ -2,7 +2,7 @@
 <div class="container">
     <div class="row py-5">
         <div class="col col-5">
-            {{ template "blog/blogsidemenu.html" . }}
+            {{ partial "_default/sidemenu.html" . "menu" "blog" }}
         </div>
         <div class="col col-12">
             {{ range .Paginator.Pages }}
