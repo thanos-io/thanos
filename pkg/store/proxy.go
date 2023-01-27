@@ -91,9 +91,9 @@ func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
 	return &m
 }
 
-func RegisterStoreServer(storeSrv storepb.StoreServer) func(*grpc.Server) {
+func RegisterStoreServer(storeSrv storepb.StoreServer, logger log.Logger) func(*grpc.Server) {
 	return func(s *grpc.Server) {
-		storepb.RegisterStoreServer(s, storeSrv)
+		storepb.RegisterStoreServer(s, NewRecoverableStoreServer(logger, storeSrv))
 	}
 }
 

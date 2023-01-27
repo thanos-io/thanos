@@ -55,6 +55,14 @@ type inProcessStream struct {
 	err    chan error
 }
 
+func NewInProcessStream(ctx context.Context, bufferSize int) *inProcessStream {
+	return &inProcessStream{
+		ctx:  ctx,
+		recv: make(chan *SeriesResponse, bufferSize),
+		err:  make(chan error),
+	}
+}
+
 func (s *inProcessStream) Context() context.Context { return s.ctx }
 
 func (s *inProcessStream) Send(r *SeriesResponse) error {
