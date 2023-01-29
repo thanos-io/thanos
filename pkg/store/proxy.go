@@ -35,6 +35,10 @@ type ctxKey int
 // StoreMatcherKey is the context key for the store's allow list.
 const StoreMatcherKey = ctxKey(0)
 
+// ErrorNoStoresMatched is returned if the query does not match any data.
+// This can happen with Query servers trees and external labels.
+var ErrorNoStoresMatched = errors.New("No StoreAPIs matched for this query")
+
 // Client holds meta information about a store.
 type Client interface {
 	// StoreClient to access the store.
@@ -278,12 +282,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	}
 
 	if len(stores) == 0 {
-		err := errors.New("No StoreAPIs matched for this query")
-		level.Debug(reqLogger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
-		if sendErr := srv.Send(storepb.NewWarnSeriesResponse(err)); sendErr != nil {
-			level.Error(reqLogger).Log("err", sendErr)
-			return status.Error(codes.Unknown, errors.Wrap(sendErr, "send series response").Error())
-		}
+		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return nil
 	}
 

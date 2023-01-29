@@ -133,7 +133,7 @@ func TestProxyStore_Series(t *testing.T) {
 				MaxTime:  300,
 				Matchers: []storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
 			},
-			expectedWarningsLen: 1, // No store matched for this query.
+			expectedWarningsLen: 0, // No store matched for this query.
 		},
 		{
 			title: "no storeAPI available for 301-302 time range",
@@ -153,7 +153,7 @@ func TestProxyStore_Series(t *testing.T) {
 				MaxTime:  400,
 				Matchers: []storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
 			},
-			expectedWarningsLen: 1, // No store matched for this query.
+			expectedWarningsLen: 0, // No store matched for this query.
 		},
 		{
 			title: "storeAPI available for time range; no series for ext=2 external label matcher",
@@ -174,7 +174,7 @@ func TestProxyStore_Series(t *testing.T) {
 				MaxTime:  300,
 				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "2", Type: storepb.LabelMatcher_EQ}},
 			},
-			expectedWarningsLen: 1, // No store matched for this query.
+			expectedWarningsLen: 0, // No store matched for this query.
 		},
 		{
 			title: "storeAPI available for time range; available series for ext=1 external label matcher",
@@ -499,7 +499,7 @@ func TestProxyStore_Series(t *testing.T) {
 				Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 			},
 			storeDebugMatchers:  [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__address__", "foo")}},
-			expectedWarningsLen: 1, // No stores match.
+			expectedWarningsLen: 0, // No stores match.
 		},
 		{
 			title: "sharded series response",
