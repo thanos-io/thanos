@@ -212,6 +212,7 @@ type alertMgrConfig struct {
 	alertExcludeLabels     []string
 	alertQueryURL          *string
 	alertRelabelConfigPath *extflag.PathOrContent
+	follow_redirect        bool
 }
 
 func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
@@ -222,9 +223,11 @@ func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
 		DurationVar(&ac.alertmgrsTimeout)
 	cmd.Flag("alertmanagers.sd-dns-interval", "Interval between DNS resolutions of Alertmanager hosts.").
 		Default("30s").DurationVar(&ac.alertmgrsDNSSDInterval)
+	cmd.Flag("follow_redirect", "To follows redirects to the OAuth provider.").
+		Default("false").BoolVar(&ac.follow_redirect)
 	ac.alertQueryURL = cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 	cmd.Flag("alert.label-drop", "Labels by name to drop before sending to alertmanager. This allows alert to be deduplicated on replica label (repeated). Similar Prometheus alert relabelling").
-		StringsVar(&ac.alertExcludeLabels)
+		StringsVar(&ac.alertExcludeLabels)	
 	ac.alertRelabelConfigPath = extflag.RegisterPathOrContent(cmd, "alert.relabel-config", "YAML file that contains alert relabelling configuration.", extflag.WithEnvSubstitution())
 	return ac
 }
