@@ -542,7 +542,7 @@ config:
 				ruleAndAssert(t, ctx, q.Endpoint("http"), "", []*rulespb.RuleGroup{
 					{
 						Name: "example_abort",
-						File: "/shared/data/querier-1/rules/rules.yaml",
+						File: q.Dir() + "/rules/rules.yaml",
 						Rules: []*rulespb.Rule{
 							rulespb.NewAlertingRule(&rulespb.Alert{
 								Name:  "TestAlert_AbortOnPartialResponse",
@@ -591,11 +591,11 @@ func TestQueryStoreMetrics(t *testing.T) {
 	t.Cleanup(cancel)
 
 	bucket := "store-gw-test"
-	minio := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	minio := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(minio))
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("https"), minio.Dir()), "test")
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test")
 	testutil.Ok(t, err)
 
 	// Preparing 2 different blocks for the tests.
@@ -639,7 +639,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 		"s1",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("https"), minio.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
 		},
 		"",
 		nil,
@@ -719,7 +719,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
 
 	const bucket = "store-gateway-test"
-	m := e2ethanos.NewMinio(e, "thanos-minio", bucket)
+	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	dir := filepath.Join(e.SharedDir(), "tmp")
@@ -736,7 +736,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("https"), m.Dir()), "test")
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test")
 	testutil.Ok(t, err)
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
 
@@ -745,7 +745,7 @@ func TestSidecarStorePushdown(t *testing.T) {
 		"1",
 		client.BucketConfig{
 			Type:   client.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("https"), m.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
 		nil,
