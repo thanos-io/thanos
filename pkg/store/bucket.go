@@ -1227,20 +1227,22 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 			shardMatcher := req.ShardInfo.Matcher(&s.buffers)
 
+			blockClient := newBlockSeriesClient(
+				srv.Context(),
+				s.logger,
+				blk,
+				req,
+				chunksLimiter,
+				bytesLimiter,
+				shardMatcher,
+				s.enableChunkHashCalculation,
+				s.seriesBatchSize,
+				s.metrics.chunkFetchDuration,
+			)
+
+			defer blockClient.Close()
+
 			g.Go(func() error {
-				blockClient := newBlockSeriesClient(
-					srv.Context(),
-					s.logger,
-					blk,
-					req,
-					chunksLimiter,
-					bytesLimiter,
-					shardMatcher,
-					s.enableChunkHashCalculation,
-					s.seriesBatchSize,
-					s.metrics.chunkFetchDuration,
-				)
-				defer blockClient.Close()
 
 				span, _ := tracing.StartSpan(gctx, "bucket_store_block_series", tracing.Tags{
 					"block.id":         blk.meta.ULID,
