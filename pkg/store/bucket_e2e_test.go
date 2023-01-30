@@ -767,7 +767,7 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				vals, err := s.store.LabelNames(ctx, tc.req)
 				for _, b := range s.store.blocks {
-					waitTimeout(t, b.pendingReaders, 5*time.Second)
+					waitTimeout(t, &b.pendingReaders, 5*time.Second)
 				}
 
 				testutil.Ok(t, err)
@@ -874,7 +874,7 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				vals, err := s.store.LabelValues(ctx, tc.req)
 				for _, b := range s.store.blocks {
-					waitTimeout(t, b.pendingReaders, 5*time.Second)
+					waitTimeout(t, &b.pendingReaders, 5*time.Second)
 				}
 
 				testutil.Ok(t, err)
@@ -892,7 +892,7 @@ func emptyToNil(values []string) []string {
 	return values
 }
 
-func waitTimeout(t *testing.T, wg sync.WaitGroup, timeout time.Duration) {
+func waitTimeout(t *testing.T, wg *sync.WaitGroup, timeout time.Duration) {
 	c := make(chan struct{})
 	go func() {
 		defer close(c)
