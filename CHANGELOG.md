@@ -25,13 +25,18 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5995](https://github.com/thanos-io/thanos/pull/5995) Sidecar: Loads the TLS certificate during startup.
 - [#6044](https://github.com/thanos-io/thanos/pull/6044) Receive: mark ouf of window errors as conflict, if out-of-window samples ingestion is activated
 - [#6050](https://github.com/thanos-io/thanos/pull/6050) Store: Re-try bucket store initial sync upon failure.
-- [#6066](https://github.com/thanos-io/thanos/pull/6066) Tracing: fixed panic because of nil sampler
 - [#6067](https://github.com/thanos-io/thanos/pull/6067) Receive: fixed panic when querying uninitialized TSDBs.
 
 ### Changed
 
 - [#6010](https://github.com/thanos-io/thanos/pull/6010) *: Upgrade Prometheus to v0.41.0.
 - [#5887](https://github.com/thanos-io/thanos/pull/5887) Tracing: Make sure rate limiting sampler is the default, as was the case in version pre-0.29.0.
+
+## [v0.30.2](https://github.com/thanos-io/thanos/tree/release-0.30) - 28.01.2023
+
+### Fixed
+
+- [#6066](https://github.com/thanos-io/thanos/pull/6066) Tracing: fixed panic because of nil sampler
 
 ## [v0.30.1](https://github.com/thanos-io/thanos/tree/release-0.30) - 4.01.2023
 
