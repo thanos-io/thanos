@@ -1090,6 +1090,54 @@ func Heap(dir string) (err error) {
 	return pprof.WriteHeapProfile(f)
 }
 
+func TestIsTenantValid(t *testing.T) {
+	for _, tcase := range []struct {
+		name   string
+		tenant string
+
+		expectedErr error
+	}{
+		{
+			name:        "test malicious tenant",
+			tenant:      "/etc/foo",
+			expectedErr: errors.New("Tenant name not valid"),
+		},
+		{
+			name:        "test malicious tenant going out of receiver directory",
+			tenant:      "./../../hacker_dir",
+			expectedErr: errors.New("Tenant name not valid"),
+		},
+		{
+			name:        "test slash-only tenant",
+			tenant:      "///",
+			expectedErr: errors.New("Tenant name not valid"),
+		},
+		{
+			name:   "test default tenant",
+			tenant: "default-tenant",
+		},
+		{
+			name:   "test tenant with uuid",
+			tenant: "528d0490-8720-4478-aa29-819d90fc9a9f",
+		},
+		{
+			name:   "test valid tenant",
+			tenant: "foo",
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			h := NewHandler(nil, &Options{})
+			err := h.isTenantValid(tcase.tenant)
+			if tcase.expectedErr != nil {
+				testutil.NotOk(t, err)
+				testutil.Equals(t, tcase.expectedErr.Error(), err.Error())
+				return
+			}
+			testutil.Ok(t, err)
+		})
+	}
+}
+
 func TestRelabel(t *testing.T) {
 	for _, tcase := range []struct {
 		name                 string
