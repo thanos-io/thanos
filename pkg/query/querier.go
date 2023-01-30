@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
+	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
 	promgate "github.com/prometheus/prometheus/util/gate"
 
 	"github.com/thanos-io/thanos/pkg/dedup"
@@ -216,42 +217,108 @@ type seriesServer struct {
 	compressedSeriesSet []storepb.CompressedSeries
 }
 
-func (s *seriesServer) DecompressSeries() error {
-	for _, cs := range s.compressedSeriesSet {
-		newSeries := &storepb.Series{
-			Chunks: cs.Chunks,
-		}
-
-		lbls := labels.Labels{}
-
-		for _, cLabel := range cs.Labels {
-			var name, val string
-			for _, symTable := range s.symbolTables {
-				if foundName, ok := symTable[uint64(cLabel.NameRef)]; ok {
-					name = foundName
-				}
-
-				if foundValue, ok := symTable[uint64(cLabel.ValueRef)]; ok {
-					val = foundValue
-				}
-			}
-			if name == "" {
-				return fmt.Errorf("found no reference for name ref %d", cLabel.NameRef)
-			}
-			if val == "" {
-				return fmt.Errorf("found no reference for value ref %d", cLabel.ValueRef)
-			}
-
-			lbls = append(lbls, labels.Label{
-				Name:  name,
-				Value: val,
-			})
-		}
-
-		newSeries.Labels = labelpb.ZLabelsFromPromLabels(lbls)
-		s.seriesSet = append(s.seriesSet, *newSeries)
+func (s *seriesServer) decompressSeriesIndex(i int) (*storepb.Series, error) {
+	newSeries := &storepb.Series{
+		Chunks: s.compressedSeriesSet[i].Chunks,
 	}
-	return nil
+
+	lbls := make(labels.Labels, 0, len(s.compressedSeriesSet[i].Labels))
+
+	for _, cLabel := range s.compressedSeriesSet[i].Labels {
+		var name, val string
+		for _, symTable := range s.symbolTables {
+			if foundName, ok := symTable[uint64(cLabel.NameRef)]; ok {
+				name = foundName
+			}
+
+			if foundValue, ok := symTable[uint64(cLabel.ValueRef)]; ok {
+				val = foundValue
+			}
+
+			if name != "" && val != "" {
+				break
+			}
+		}
+		if name == "" || val == "" {
+			return nil, fmt.Errorf("series %+v references do not exist", cLabel)
+		}
+
+		lbls = append(lbls, labels.Label{
+			Name:  name,
+			Value: val,
+		})
+	}
+
+	newSeries.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+	return newSeries, nil
+}
+
+func (s *seriesServer) DecompressSeries() error {
+	workerInput := make(chan int)
+	workerOutput := make(chan *storepb.Series)
+
+	var elements uint64
+	for _, css := range s.compressedSeriesSet {
+		elements += uint64(len(css.Labels)) * 2
+	}
+
+	newSeriesSet := make([]storepb.Series, 0, len(s.seriesSet)+len(s.compressedSeriesSet))
+	copy(newSeriesSet, s.seriesSet)
+
+	// NOTE(GiedriusS): Ballpark estimate. With more workers I got slower results.
+	workerCount := 1 + (elements / 2000000)
+	if workerCount == 1 {
+		for i := range s.compressedSeriesSet {
+			decompressedSeries, err := s.decompressSeriesIndex(i)
+			if err != nil {
+				return fmt.Errorf("decompressing element %d: %w", i, err)
+			}
+
+			newSeriesSet = append(newSeriesSet, *decompressedSeries)
+		}
+		s.seriesSet = newSeriesSet
+		return nil
+	}
+
+	wg := &sync.WaitGroup{}
+	errLock := sync.Mutex{}
+	errs := tsdb_errors.NewMulti()
+
+	for i := uint64(0); i < workerCount; i++ {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			for ind := range workerInput {
+				decompressedSeries, err := s.decompressSeriesIndex(ind)
+				if err != nil {
+					errLock.Lock()
+					errs.Add(fmt.Errorf("decompressing element %d: %w", ind, err))
+					errLock.Unlock()
+					return
+				}
+
+				workerOutput <- decompressedSeries
+			}
+		}()
+	}
+
+	go func() {
+		for i := range s.compressedSeriesSet {
+			workerInput <- i
+		}
+
+		close(workerInput)
+		wg.Wait()
+		close(workerOutput)
+	}()
+
+	for wo := range workerOutput {
+		newSeriesSet = append(newSeriesSet, *wo)
+	}
+	s.seriesSet = newSeriesSet
+
+	return errs.Err()
 }
 
 func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
