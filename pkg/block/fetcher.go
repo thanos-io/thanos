@@ -709,7 +709,7 @@ func (r *ReplicaLabelRemover) Filter(_ context.Context, metas map[ulid.ULID]*met
 		return nil
 	}
 
-  countReplicaLabelRemoved := make(map[string]int, len(metas))
+	countReplicaLabelRemoved := make(map[string]int, len(metas))
 	for u, meta := range metas {
 		l := make(map[string]string)
 		for n, v := range meta.Thanos.Labels {
@@ -719,7 +719,7 @@ func (r *ReplicaLabelRemover) Filter(_ context.Context, metas map[ulid.ULID]*met
 		for _, replicaLabel := range r.replicaLabels {
 			if _, exists := l[replicaLabel]; exists {
 				delete(l, replicaLabel)
-        countReplicaLabelRemoved[replicaLabel] += 1
+				countReplicaLabelRemoved[replicaLabel] += 1
 				modified.WithLabelValues(replicaRemovedMeta).Inc()
 			}
 		}
@@ -732,9 +732,9 @@ func (r *ReplicaLabelRemover) Filter(_ context.Context, metas map[ulid.ULID]*met
 		nm.Thanos.Labels = l
 		metas[u] = &nm
 	}
-  for replicaLabelRemoved, count := range countReplicaLabelRemoved {
-    level.Debug(r.logger).Log("msg", "removed replica label", "label", replicaLabelRemoved, "count", count)
-  }
+	for replicaLabelRemoved, count := range countReplicaLabelRemoved {
+		level.Debug(r.logger).Log("msg", "removed replica label", "label", replicaLabelRemoved, "count", count)
+	}
 	return nil
 }
 
