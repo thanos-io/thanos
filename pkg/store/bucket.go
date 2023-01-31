@@ -1226,6 +1226,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			}
 
 			shardMatcher := req.ShardInfo.Matcher(&s.buffers)
+
 			blockClient := newBlockSeriesClient(
 				srv.Context(),
 				s.logger,
@@ -1238,9 +1239,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				s.seriesBatchSize,
 				s.metrics.chunkFetchDuration,
 			)
+
 			defer blockClient.Close()
 
 			g.Go(func() error {
+
 				span, _ := tracing.StartSpan(gctx, "bucket_store_block_series", tracing.Tags{
 					"block.id":         blk.meta.ULID,
 					"block.mint":       blk.meta.MinTime,
@@ -1482,6 +1485,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					SkipChunks: true,
 				}
 				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
@@ -1656,6 +1660,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					SkipChunks: true,
 				}
 				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
