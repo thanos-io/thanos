@@ -717,7 +717,6 @@ func (r *ReplicaLabelRemover) Filter(_ context.Context, metas map[ulid.ULID]*met
 
 		for _, replicaLabel := range r.replicaLabels {
 			if _, exists := l[replicaLabel]; exists {
-				level.Debug(r.logger).Log("msg", "replica label removed", "label", replicaLabel)
 				delete(l, replicaLabel)
 				modified.WithLabelValues(replicaRemovedMeta).Inc()
 			}
