@@ -1,5 +1,6 @@
 ---
 title: Welcome to Thanos Blog Space!
+menu: blog
 date: "2022-11-07"
 author: Thanos Team
 ---

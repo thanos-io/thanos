@@ -1,6 +1,7 @@
 {{ define "main" }}
 <div class="container">
     <div class="row py-5">
+        {{ partial "_default/sidemenu.html" . }}
         <div class="col col-12">
             <div class="blog-post mb-5">
                 <h2><a href="{{ .Permalink }}">{{ .Title }}</a></h2>

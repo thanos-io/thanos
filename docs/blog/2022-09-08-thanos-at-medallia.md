@@ -1,5 +1,6 @@
 ---
 title: 'Thanos at Medallia: A Hybrid Architecture Scaled to Support 1 Billion+ Series Across 40+ Data Centers'
+menu: blog
 date: "2022-11-09"
 author: Anugrah Vijay and Vic Thomas
 ---
