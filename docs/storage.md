@@ -644,7 +644,7 @@ total 2209344
 drwxr-xr-x 2 bwplotka bwplotka       4096 Dec 10  2019 chunks
 -rw-r--r-- 1 bwplotka bwplotka 1962383742 Dec 10  2019 index
 -rw-r--r-- 1 bwplotka bwplotka       6761 Dec 10  2019 meta.json
--rw-r--r-- 1 bwplotka bwplotka        111 Dec 10  2019 delete-mark.json      # <-- Optional marker.
+-rw-r--r-- 1 bwplotka bwplotka        111 Dec 10  2019 deletion-mark.json    # <-- Optional marker.
 -rw-r--r-- 1 bwplotka bwplotka        124 Dec 10  2019 no-compact-mark.json  # <-- Optional marker.
 
 01DN3SK96XDAEKRB1AN30AAW6E/chunks:
