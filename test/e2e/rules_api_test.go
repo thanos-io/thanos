@@ -19,12 +19,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/rules"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/testutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
@@ -96,7 +96,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	ruleAndAssert(t, ctx, q.Endpoint("http"), "", []*rulespb.RuleGroup{
 		{
 			Name: "example_abort",
-			File: "/shared/data/querier-query/rules/rules.yaml",
+			File: q.Dir() + "/rules/rules.yaml",
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
@@ -112,7 +112,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		},
 		{
 			Name: "example_abort",
-			File: "/shared/data/querier-query/thanos-rules/rules-0.yaml",
+			File: q.Dir() + "/thanos-rules/rules-0.yaml",
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_AbortOnPartialResponse",
@@ -127,7 +127,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		},
 		{
 			Name: "example_warn",
-			File: "/shared/data/querier-query/thanos-rules/rules-1.yaml",
+			File: q.Dir() + "/thanos-rules/rules-1.yaml",
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "TestAlert_WarnOnPartialResponse",
@@ -142,7 +142,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 		},
 		{
 			Name:  "example_with_limit",
-			File:  "/shared/data/querier-query/thanos-rules/rules-with-limit.yaml",
+			File:  q.Dir() + "/thanos-rules/rules-with-limit.yaml",
 			Limit: 1,
 			Rules: []*rulespb.Rule{
 				rulespb.NewAlertingRule(&rulespb.Alert{

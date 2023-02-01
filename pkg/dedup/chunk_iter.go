@@ -312,7 +312,7 @@ func (a *aggrChunkIterator) toChunk(at downsample.AggrType, minTime, maxTime int
 		lastT int64
 		lastV float64
 	)
-	for it.Next() {
+	for it.Next() != chunkenc.ValNone {
 		lastT, lastV = it.At()
 		appender.Append(lastT, lastV)
 	}

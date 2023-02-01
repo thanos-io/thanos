@@ -29,9 +29,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/route"
 
+	"github.com/efficientgo/core/testutil"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
-	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestRespondSuccess(t *testing.T) {

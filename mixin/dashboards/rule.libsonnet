@@ -22,14 +22,14 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rule Group Evaluations') +
           g.queryPanel(
-            'sum by (%s) (rate(prometheus_rule_evaluations_total{%s}[$interval]))' % [utils.joinLabels([thanos.rule.dashboard.dimensions, 'strategy']), thanos.rule.dashboard.selector],
+            'sum by (%s) (rate(prometheus_rule_evaluations_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.rule.dashboard.dimensions, 'strategy']), thanos.rule.dashboard.selector],
             '{{ strategy }}',
           )
         )
         .addPanel(
           g.panel('Rule Group Evaluations Missed') +
           g.queryPanel(
-            'sum by (%s) (increase(prometheus_rule_group_iterations_missed_total{%s}[$interval]))' % [utils.joinLabels([thanos.rule.dashboard.dimensions, 'strategy']), thanos.rule.dashboard.selector],
+            'sum by (%s) (increase(prometheus_rule_group_iterations_missed_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.rule.dashboard.dimensions, 'strategy']), thanos.rule.dashboard.selector],
             '{{ strategy }}',
           )
         )
@@ -52,14 +52,14 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Dropped Rate', 'Shows rate of dropped alerts.') +
           g.queryPanel(
-            'sum by (%(dimensions)s, alertmanager) (rate(thanos_alert_sender_alerts_dropped_total{%s}[$interval]))' % [thanos.rule.dashboard.dimensions, thanos.rule.dashboard.selector],
+            'sum by (%(dimensions)s, alertmanager) (rate(thanos_alert_sender_alerts_dropped_total{%s}[$__rate_interval]))' % [thanos.rule.dashboard.dimensions, thanos.rule.dashboard.selector],
             '{{alertmanager}}'
           )
         )
         .addPanel(
           g.panel('Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +
           g.queryPanel(
-            'sum by (%(dimensions)s, alertmanager) (rate(thanos_alert_sender_alerts_sent_total{%s}[$interval]))' % [thanos.rule.dashboard.dimensions, thanos.rule.dashboard.selector],
+            'sum by (%(dimensions)s, alertmanager) (rate(thanos_alert_sender_alerts_sent_total{%s}[$__rate_interval]))' % [thanos.rule.dashboard.dimensions, thanos.rule.dashboard.selector],
             '{{alertmanager}}'
           ) +
           g.stack
@@ -82,7 +82,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Push Rate', 'Shows rate of queued alerts.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_alert_queue_alerts_dropped_total{%s}[$interval]))' % [thanos.rule.dashboard.dimensions, thanos.rule.dashboard.selector],
+            'sum by (%s) (rate(thanos_alert_queue_alerts_dropped_total{%s}[$__rate_interval]))' % [thanos.rule.dashboard.dimensions, thanos.rule.dashboard.selector],
             '{{job}}'
           )
         )
@@ -134,7 +134,7 @@ local utils = import '../lib/utils.libsonnet';
       .addPanel(
         g.panel('Alert Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +
         g.queryPanel(
-          'sum by (%s) (rate(thanos_alert_sender_alerts_sent_total{%s}[$interval]))' % [utils.joinLabels([thanos.dashboard.overview.dimensions, 'alertmanager']), thanos.dashboard.overview.selector],
+          'sum by (%s) (rate(thanos_alert_sender_alerts_sent_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.dashboard.overview.dimensions, 'alertmanager']), thanos.dashboard.overview.selector],
           '{{alertmanager}}'
         ) +
         g.addDashboardLink(thanos.rule.title) +

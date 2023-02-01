@@ -495,6 +495,10 @@ func NewBucketStore(
 		return nil, errors.Wrap(err, "validate config")
 	}
 
+	if dir == "" {
+		return s, nil
+	}
+
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, errors.Wrap(err, "create dir")
 	}
@@ -591,6 +595,10 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 		return errors.Wrap(err, "sync block")
 	}
 
+	if s.dir == "" {
+		return nil
+	}
+
 	fis, err := os.ReadDir(s.dir)
 	if err != nil {
 		return errors.Wrap(err, "read dir")
@@ -624,15 +632,20 @@ func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
 }
 
 func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err error) {
-	dir := filepath.Join(s.dir, meta.ULID.String())
+	var dir string
+	if s.dir != "" {
+		dir = filepath.Join(s.dir, meta.ULID.String())
+	}
 	start := time.Now()
 
 	level.Debug(s.logger).Log("msg", "loading new block", "id", meta.ULID)
 	defer func() {
 		if err != nil {
 			s.metrics.blockLoadFailures.Inc()
-			if err2 := os.RemoveAll(dir); err2 != nil {
-				level.Warn(s.logger).Log("msg", "failed to remove block we cannot load", "err", err2)
+			if dir != "" {
+				if err2 := os.RemoveAll(dir); err2 != nil {
+					level.Warn(s.logger).Log("msg", "failed to remove block we cannot load", "err", err2)
+				}
 			}
 			level.Warn(s.logger).Log("msg", "loading block failed", "elapsed", time.Since(start), "id", meta.ULID, "err", err)
 		} else {
@@ -721,6 +734,11 @@ func (s *BucketStore) removeBlock(id ulid.ULID) error {
 	if err := b.Close(); err != nil {
 		return errors.Wrap(err, "close block")
 	}
+
+	if b.dir == "" {
+		return nil
+	}
+
 	return os.RemoveAll(b.dir)
 }
 
@@ -926,7 +944,7 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 
 	if len(b.entries) == 0 {
 		if b.chunkr != nil {
-			b.chunkFetchDuration.Observe(float64(b.chunkr.stats.ChunksFetchDurationSum))
+			b.chunkFetchDuration.Observe(b.chunkr.stats.ChunksFetchDurationSum.Seconds())
 		}
 		return nil, io.EOF
 	}
@@ -1209,6 +1227,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			}
 
 			shardMatcher := req.ShardInfo.Matcher(&s.buffers)
+
 			blockClient := newBlockSeriesClient(
 				srv.Context(),
 				s.logger,
@@ -1221,9 +1240,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				s.seriesBatchSize,
 				s.metrics.chunkFetchDuration,
 			)
+
 			defer blockClient.Close()
 
 			g.Go(func() error {
+
 				span, _ := tracing.StartSpan(gctx, "bucket_store_block_series", tracing.Tags{
 					"block.id":         blk.meta.ULID,
 					"block.mint":       blk.meta.MinTime,
@@ -1499,6 +1520,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					SkipChunks: true,
 				}
 				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
@@ -1673,6 +1695,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					SkipChunks: true,
 				}
 				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
 					reqSeriesMatchersNoExtLabels,
@@ -2825,6 +2848,9 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 // This data range covers chunks starting at supplied offsets.
 func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, aggrs []storepb.Aggr, seq int, part Part, pIdxs []loadIdx, calculateChunkChecksum bool, bytesLimiter BytesLimiter) error {
 	fetchBegin := time.Now()
+	defer func() {
+		r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
+	}()
 
 	// Get a reader for the required range.
 	reader, err := r.block.chunkRangeReader(ctx, seq, int64(part.Start), int64(part.End-part.Start))
@@ -2845,7 +2871,6 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 
 	r.stats.chunksFetchCount++
 	r.stats.chunksFetched += len(pIdxs)
-	r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
 	r.stats.ChunksFetchedSizeSum += units.Base2Bytes(int(part.End - part.Start))
 
 	var (
@@ -2934,7 +2959,6 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		locked = true
 
 		r.stats.chunksFetchCount++
-		r.stats.ChunksFetchDurationSum += time.Since(fetchBegin)
 		r.stats.ChunksFetchedSizeSum += units.Base2Bytes(len(*nb))
 		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk((*nb)[n:]), aggrs, r.save, calculateChunkChecksum)
 		if err != nil {

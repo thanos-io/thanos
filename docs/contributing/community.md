@@ -14,7 +14,7 @@ Thanos Community Office Hour (previously Contributor Office Hour) is a public we
 
 > NOTE: If no agenda items will be added 1h before the meeting, the meeting will be cancelled.
 
-**Meeting Time:** Every-second Thursday 15:00 CET
+**Meeting Time:** Every-second Thursday 14:00 GMT
 
 **Calendar Event:** https://www.cncf.io/calendar/
 
@@ -78,12 +78,10 @@ Schedule:
 
 | Month   | Shepherd (GitHub handle) |
 |---------|:-------------------------|
-| 2022.13 | TBD                      |
-| 2022.12 | TBD                      |
-| 2022.11 | TBD                      |
-| 2022.10 | TBD                      |
-| 2022.09 | `@bwplotka`              |
-| 2022.08 | `@bwplotka`              |
+| 2023.03 | TBD                      |
+| 2023.02 | TBD                      |
+| 2023.01 | TBD                      |
+| 2022.12 | `@bwplotka`              |
 
 Each month we rotate the role of Community Office Shepherds among Team Members. This role is focused on leading the safe and friendly discussions during our [Community Office Hours](#thanos-community-office-hours).
 
@@ -95,7 +93,7 @@ Each month we rotate the role of Community Office Shepherds among Team Members. 
 
 The Same Day Morning Before Meeting:
 
-* Add entry for today on the [agenda document](https://docs.google.com/document/d/137XnxfOT2p1NcNUq6NWZjwmtlSdA6Wyti86Pd6cyQhs.
+* Add entry for today on the [agenda document](https://docs.google.com/document/d/137XnxfOT2p1NcNUq6NWZjwmtlSdA6Wyti86Pd6cyQhs).
 * Announce meeting and call for agenda the same day morning on #thanos-dev and Twitter (`@ThanosMetrics` or your own account retweeted by ThanosMetrics).
 
 30 minutes Before:

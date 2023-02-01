@@ -1683,7 +1683,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, alertmanager) (rate(thanos_alert_sender_alerts_sent_total{}[$interval]))",
+                     "expr": "sum by (job, alertmanager) (rate(thanos_alert_sender_alerts_sent_total{}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{alertmanager}}",
@@ -1968,7 +1968,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(thanos_compact_group_compactions_total{}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_compact_group_compactions_total{}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "compaction {{job}}",

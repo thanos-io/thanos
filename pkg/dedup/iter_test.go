@@ -11,11 +11,12 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 type sample struct {
@@ -29,6 +30,19 @@ func (s sample) T() int64 {
 
 func (s sample) V() float64 {
 	return s.v
+}
+
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (s sample) H() *histogram.Histogram {
+	panic("not implemented")
+}
+
+func (s sample) FH() *histogram.FloatHistogram {
+	panic("not implemented")
+}
+
+func (s sample) Type() chunkenc.ValueType {
+	return chunkenc.ValFloat
 }
 
 type series struct {
@@ -68,11 +82,15 @@ func newMockedSeriesIterator(samples []sample) *mockedSeriesIterator {
 	return &mockedSeriesIterator{samples: samples, cur: -1}
 }
 
-func (s *mockedSeriesIterator) Seek(t int64) bool {
+// TODO(rabenhorst): Native histogram support needs to be added, currently hardcoded to float.
+func (s *mockedSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	s.cur = sort.Search(len(s.samples), func(n int) bool {
 		return s.samples[n].t >= t
 	})
-	return s.cur < len(s.samples)
+	if s.cur < len(s.samples) {
+		return chunkenc.ValFloat
+	}
+	return chunkenc.ValNone
 }
 
 func (s *mockedSeriesIterator) At() (t int64, v float64) {
@@ -80,9 +98,26 @@ func (s *mockedSeriesIterator) At() (t int64, v float64) {
 	return sample.t, sample.v
 }
 
-func (s *mockedSeriesIterator) Next() bool {
+// TODO(rabenhorst): Needs to be implemented for native histogram support.
+func (s *mockedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	panic("not implemented")
+}
+
+func (s *mockedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (s *mockedSeriesIterator) AtT() int64 {
+	return s.samples[s.cur].t
+}
+
+func (s *mockedSeriesIterator) Next() chunkenc.ValueType {
 	s.cur++
-	return s.cur < len(s.samples)
+	if s.cur < len(s.samples) {
+		return chunkenc.ValFloat
+	}
+
+	return chunkenc.ValNone
 }
 
 func (s *mockedSeriesIterator) Err() error { return nil }
@@ -112,13 +147,14 @@ var expectedRealSeriesWithStaleMarkerDeduplicatedForRate = []sample{
 
 func TestDedupSeriesSet(t *testing.T) {
 	tests := []struct {
+		name        string
 		input       []series
 		exp         []series
 		dedupLabels map[string]struct{}
 		isCounter   bool
 	}{
 		{
-			// Single dedup label.
+			name: "Single dedup label",
 			input: []series{
 				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}},
@@ -175,6 +211,7 @@ func TestDedupSeriesSet(t *testing.T) {
 		{
 			// Regression tests against: https://github.com/thanos-io/thanos/issues/2645.
 			// We were panicking on requests with more replica labels than overall labels in any series.
+			name: "Regression tests against #2645",
 			input: []series{
 				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}},
@@ -203,7 +240,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			dedupLabels: map[string]struct{}{"replica": {}, "replica2": {}, "replica3": {}, "replica4": {}, "replica5": {}, "replica6": {}, "replica7": {}},
 		},
 		{
-			// Multi dedup label.
+			name: "Multi dedup label",
 			input: []series{
 				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}, {Name: "replicaA", Value: "replica-1"}},
@@ -259,7 +296,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			},
 		},
 		{
-			// Multi dedup label - some series don't have all dedup labels.
+			name: "Multi dedup label - some series don't have all dedup labels",
 			input: []series{
 				{
 					lset:    labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}, {Name: "replicaA", Value: "replica-1"}},
@@ -287,6 +324,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			// Now, depending on what replica we look, we can see totally different counter value in total where total means
 			// after accounting for counter resets. We account for that in downsample.CounterSeriesIterator, mainly because
 			// we handle downsample Counter Aggregations specially (for detecting resets between chunks).
+			name:      "Regression test against 2401",
 			isCounter: true,
 			input: []series{
 				{
@@ -327,6 +365,7 @@ func TestDedupSeriesSet(t *testing.T) {
 		},
 		{
 			// Same thing but not for counter should not adjust anything.
+			name:      "Regression test with no counter adjustment",
 			isCounter: false,
 			input: []series{
 				{
@@ -352,6 +391,7 @@ func TestDedupSeriesSet(t *testing.T) {
 		{
 			// Regression test on real data against https://github.com/thanos-io/thanos/issues/2401.
 			// Real data with stale marker after downsample.CounterSeriesIterator (required for downsampling + rate).
+			name:      "Regression test on real data against 2401",
 			isCounter: true,
 			input: []series{
 				{
@@ -421,7 +461,7 @@ func TestDedupSeriesSet(t *testing.T) {
 	}
 
 	for _, tcase := range tests {
-		t.Run("", func(t *testing.T) {
+		t.Run(tcase.name, func(t *testing.T) {
 			// If it is a counter then pass a function which expects a counter.
 			f := ""
 			if tcase.isCounter {
@@ -497,7 +537,7 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 		b.ResetTimer()
 		var total int64
 
-		for it.Next() {
+		for it.Next() != chunkenc.ValNone {
 			t, _ := it.At()
 			total += t
 		}
@@ -541,7 +581,7 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 const hackyStaleMarker = float64(-99999999)
 
 func expandSeries(t testing.TB, it chunkenc.Iterator) (res []sample) {
-	for it.Next() {
+	for it.Next() != chunkenc.ValNone {
 		t, v := it.At()
 		// Nan != Nan, so substitute for another value.
 		// This is required for testutil.Equals to work deterministically.

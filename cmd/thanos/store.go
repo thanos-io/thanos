@@ -49,10 +49,16 @@ import (
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
+const (
+	retryTimeoutDuration  = 30
+	retryIntervalDuration = 10
+)
+
 type storeConfig struct {
 	indexCacheConfigs           extflag.PathOrContent
 	objStoreConfig              extflag.PathOrContent
 	dataDir                     string
+	cacheIndexHeader            bool
 	grpcConfig                  grpcConfig
 	httpConfig                  httpConfig
 	indexCacheSizeBytes         units.Base2Bytes
@@ -85,8 +91,11 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.httpConfig = *sc.httpConfig.registerFlag(cmd)
 	sc.grpcConfig = *sc.grpcConfig.registerFlag(cmd)
 
-	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar.").
+	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar. Ignored if -no-cache-index-header option is specified.").
 		Default("./data").StringVar(&sc.dataDir)
+
+	cmd.Flag("cache-index-header", "Cache TSDB index-headers on disk to reduce startup time. When set to true, Thanos Store will download index headers from remote object storage on startup and create a header file on disk. Use --data-dir to set the directory in which index headers will be downloaded.").
+		Default("true").BoolVar(&sc.cacheIndexHeader)
 
 	cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
 		Default("250MB").BytesVar(&sc.indexCacheSizeBytes)
@@ -232,6 +241,11 @@ func runStore(
 	conf storeConfig,
 	flagsMap map[string]string,
 ) error {
+	dataDir := conf.dataDir
+	if !conf.cacheIndexHeader {
+		dataDir = ""
+	}
+
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
 	statusProber := prober.Combine(
@@ -313,7 +327,7 @@ func runStore(
 	}
 
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
-	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, bkt, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{
 			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
 			block.NewLabelShardedMetaFilter(relabelConfig),
@@ -355,7 +369,7 @@ func runStore(
 	bs, err := store.NewBucketStore(
 		bkt,
 		metaFetcher,
-		conf.dataDir,
+		dataDir,
 		store.NewChunksLimiterFactory(conf.maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		store.NewSeriesLimiterFactory(conf.maxTouchedSeriesCount),
 		store.NewBytesLimiterFactory(conf.maxDownloadedBytes),
@@ -381,14 +395,25 @@ func runStore(
 
 			level.Info(logger).Log("msg", "initializing bucket store")
 			begin := time.Now()
-			if err := bs.InitialSync(ctx); err != nil {
+
+			// This will stop retrying after set timeout duration.
+			initialSyncCtx, cancel := context.WithTimeout(ctx, retryTimeoutDuration*time.Second)
+			defer cancel()
+
+			// Retry in case of error.
+			err := runutil.Retry(retryIntervalDuration*time.Second, initialSyncCtx.Done(), func() error {
+				return bs.InitialSync(ctx)
+			})
+
+			if err != nil {
 				close(bucketStoreReady)
 				return errors.Wrap(err, "bucket store initial sync")
 			}
+
 			level.Info(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
 			close(bucketStoreReady)
 
-			err := runutil.Repeat(conf.syncInterval, ctx.Done(), func() error {
+			err = runutil.Repeat(conf.syncInterval, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}
@@ -429,7 +454,7 @@ func runStore(
 		}
 
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, conf.component, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(bs)),
+			grpcserver.WithServer(store.RegisterStoreServer(bs, logger)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
 			grpcserver.WithGracePeriod(time.Duration(conf.grpcConfig.gracePeriod)),

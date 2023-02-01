@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -237,6 +238,8 @@ func chunkEncoding(e storepb.Chunk_Encoding) chunkenc.Encoding {
 	switch e {
 	case storepb.Chunk_XOR:
 		return chunkenc.EncXOR
+	case storepb.Chunk_HISTOGRAM:
+		return chunkenc.EncHistogram
 	}
 	return 255 // Invalid.
 }
@@ -245,16 +248,20 @@ type errSeriesIterator struct {
 	err error
 }
 
-func (errSeriesIterator) Seek(int64) bool      { return false }
-func (errSeriesIterator) Next() bool           { return false }
-func (errSeriesIterator) At() (int64, float64) { return 0, 0 }
-func (it errSeriesIterator) Err() error        { return it.err }
+func (errSeriesIterator) Seek(int64) chunkenc.ValueType                        { return chunkenc.ValNone }
+func (errSeriesIterator) Next() chunkenc.ValueType                             { return chunkenc.ValNone }
+func (errSeriesIterator) At() (int64, float64)                                 { return 0, 0 }
+func (errSeriesIterator) AtHistogram() (int64, *histogram.Histogram)           { return 0, nil }
+func (errSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) { return 0, nil }
+func (errSeriesIterator) AtT() int64                                           { return 0 }
+func (it errSeriesIterator) Err() error                                        { return it.err }
 
 // chunkSeriesIterator implements a series iterator on top
 // of a list of time-sorted, non-overlapping chunks.
 type chunkSeriesIterator struct {
-	chunks []chunkenc.Iterator
-	i      int
+	chunks  []chunkenc.Iterator
+	i       int
+	lastVal chunkenc.ValueType
 }
 
 func newChunkSeriesIterator(cs []chunkenc.Iterator) chunkenc.Iterator {
@@ -265,17 +272,18 @@ func newChunkSeriesIterator(cs []chunkenc.Iterator) chunkenc.Iterator {
 	return &chunkSeriesIterator{chunks: cs}
 }
 
-func (it *chunkSeriesIterator) Seek(t int64) (ok bool) {
+func (it *chunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	// We generally expect the chunks already to be cut down
 	// to the range we are interested in. There's not much to be gained from
 	// hopping across chunks so we just call next until we reach t.
 	for {
-		ct, _ := it.At()
+		ct := it.AtT()
 		if ct >= t {
-			return true
+			return it.lastVal
 		}
-		if !it.Next() {
-			return false
+		it.lastVal = it.Next()
+		if it.lastVal == chunkenc.ValNone {
+			return chunkenc.ValNone
 		}
 	}
 }
@@ -284,17 +292,30 @@ func (it *chunkSeriesIterator) At() (t int64, v float64) {
 	return it.chunks[it.i].At()
 }
 
-func (it *chunkSeriesIterator) Next() bool {
-	lastT, _ := it.At()
+func (it *chunkSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
+	return it.chunks[it.i].AtHistogram()
+}
 
-	if it.chunks[it.i].Next() {
-		return true
+func (it *chunkSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
+	return it.chunks[it.i].AtFloatHistogram()
+}
+
+func (it *chunkSeriesIterator) AtT() int64 {
+	return it.chunks[it.i].AtT()
+}
+
+func (it *chunkSeriesIterator) Next() chunkenc.ValueType {
+	lastT := it.AtT()
+
+	if valueType := it.chunks[it.i].Next(); valueType != chunkenc.ValNone {
+		it.lastVal = valueType
+		return valueType
 	}
 	if it.Err() != nil {
-		return false
+		return chunkenc.ValNone
 	}
 	if it.i >= len(it.chunks)-1 {
-		return false
+		return chunkenc.ValNone
 	}
 	// Chunks are guaranteed to be ordered but not generally guaranteed to not overlap.
 	// We must ensure to skip any overlapping range between adjacent chunks.

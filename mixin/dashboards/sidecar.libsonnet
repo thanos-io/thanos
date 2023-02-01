@@ -68,7 +68,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_objstore_bucket_operations_total{%s}[$interval]))' % [utils.joinLabels([thanos.sidecar.dashboard.dimensions, 'operation']), thanos.sidecar.dashboard.selector],
+            'sum by (%s) (rate(thanos_objstore_bucket_operations_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.sidecar.dashboard.dimensions, 'operation']), thanos.sidecar.dashboard.selector],
             '{{job}} {{operation}}'
           ) +
           g.stack
