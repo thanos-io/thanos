@@ -122,8 +122,11 @@ require (
 
 require (
 	go.opentelemetry.io/contrib/propagators/autoprop v0.34.0
+	go4.org/intern v0.0.0-20220617035311-6925f38cc365
 	golang.org/x/exp v0.0.0-20221212164502-fae10dda9338
 )
+
+require go4.org/unsafe/assume-no-moving-gc v0.0.0-20220617031537-928513b29760 // indirect
 
 require (
 	cloud.google.com/go/compute/metadata v0.2.2 // indirect
