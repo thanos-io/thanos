@@ -293,16 +293,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		return nil
 	}
 
-	sortSeriesSet := false
-	for _, st := range stores {
-		if !st.SendsSeriesSortedForDedup() {
-			sortSeriesSet = true
-			level.Warn(reqLogger).Log("msg", "store sends unsorted data hence falling back to eager retrieval && explicit sorting; please update Thanos", "st", st.String())
-			break
-		}
-	}
-
-	sortedSeriesSrv := newSortedSeriesServer(srv, r.SortWithoutLabelSet(), sortSeriesSet)
+	sortedSeriesSrv := newSortedSeriesServer(srv, r.SortWithoutLabelSet())
 	storeResponses := make([]respSet, 0, len(stores))
 	for _, st := range stores {
 		st := st
@@ -342,7 +333,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		}
 	}
 
-	return sortedSeriesSrv.Flush()
+	return nil
 }
 
 // storeMatches returns boolean if the given store may hold data for the given label matchers, time ranges and debug store matches gathered from context.

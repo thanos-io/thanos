@@ -175,9 +175,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		}
 	}
 
-	sortSeriesSet := sortRequired(r.SortWithoutLabelSet(), labelsToMap(extLset))
-	sortedSeriesSrv := newSortedSeriesServer(s, r.SortWithoutLabelSet(), sortSeriesSet)
-
+	sortedSeriesSrv := newSortedSeriesServer(s, r.SortWithoutLabelSet())
 	if r.SkipChunks {
 		labelMaps, err := p.client.SeriesInGRPC(sortedSeriesSrv.Context(), p.base, matchers, r.MinTime, r.MaxTime)
 		if err != nil {
@@ -363,7 +361,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 		}
 	}
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_SAMPLED request.", "series", len(resp.Results[0].Timeseries))
-	return s.Flush()
+	return nil
 }
 
 func (p *PrometheusStore) handleStreamedPrometheusResponse(
@@ -458,7 +456,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	querySpan.SetTag("processed.bytes", bodySizer.BytesCount())
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_STREAMED_XOR_CHUNKS request.", "frames", framesNum)
 
-	return s.Flush()
+	return nil
 }
 
 type BytesCounter struct {

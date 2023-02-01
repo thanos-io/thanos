@@ -148,9 +148,6 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
 	}
 
-	sortSeriesSet := sortRequired(r.SortWithoutLabelSet(), s.extLabelsMap)
-	sortedSeriesSrv := newSortedSeriesServer(srv, r.SortWithoutLabelSet(), sortSeriesSet)
-
 	q, err := s.db.ChunkQuerier(context.Background(), r.MinTime, r.MaxTime)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
@@ -168,6 +165,8 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	defer shardMatcher.Close()
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
+
+	sortedSeriesSrv := newSortedSeriesServer(srv, r.SortWithoutLabelSet())
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
@@ -240,7 +239,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 			return status.Error(codes.Aborted, err.Error())
 		}
 	}
-	return sortedSeriesSrv.Flush()
+	return nil
 }
 
 // LabelNames returns all known label names constrained with the given matchers.
