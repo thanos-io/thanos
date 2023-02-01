@@ -358,7 +358,8 @@ Flags:
                                  next startup.
       --tsdb.path="./data"       Data directory of TSDB.
       --tsdb.retention=15d       How long to retain raw samples on local
-                                 storage. 0d - disables this retention.
+                                 storage. 0d - disables the retention
+                                 policy (i.e. infinite retention).
                                  For more details on how retention is
                                  enforced for individual tenants, please
                                  refer to the Tenant lifecycle management
