@@ -312,6 +312,7 @@ func runReceive(
 			labels.Labels{},
 			0,
 			store.LazyRetrieval,
+			false,
 		)
 		rw := store.ReadWriteTSDBStore{
 			StoreServer:          mts,

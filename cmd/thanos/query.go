@@ -112,7 +112,7 @@ func registerQuery(app *extkingpin.App) {
 		Default("4").Int()
 
 	maxConcurrentDecompressWorkers := cmd.Flag("query.max-concurrent-decompress-workers", "Maximum number of workers spawned to decompress a set of compressed storepb.Series.").
-		Default("40").Int()
+		Default("0").Int()
 
 	queryConnMetricLabels := cmd.Flag("query.conn-metric.label", "Optional selection of query connection metric labels to be collected from endpoint set").
 		Default(string(query.ExternalLabels), string(query.StoreType)).
@@ -512,7 +512,16 @@ func runQuery(
 			endpointInfoTimeout,
 			queryConnMetricLabels...,
 		)
-		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy))
+		proxy = store.NewProxyStore(
+			logger,
+			reg,
+			endpoints.GetStoreClients,
+			component.Query,
+			selectorLset,
+			storeResponseTimeout,
+			store.RetrievalStrategy(grpcProxyStrategy),
+			maxConcurrentDecompressWorkers > 0,
+		)
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)

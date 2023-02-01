@@ -100,6 +100,7 @@ func TestProxyStore_Info(t *testing.T) {
 		func() []Client { return nil },
 		component.Query,
 		nil, 0*time.Second, RetrievalStrategy(EagerRetrieval),
+		false,
 	)
 
 	resp, err := q.Info(ctx, &storepb.InfoRequest{})
@@ -547,6 +548,7 @@ func TestProxyStore_Series(t *testing.T) {
 					component.Query,
 					tc.selectorLabels,
 					5*time.Second, strategy,
+					false,
 				)
 
 				ctx := context.Background()
@@ -1081,6 +1083,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 						component.Query,
 						tc.selectorLabels,
 						4*time.Second, strategy,
+						false,
 					)
 
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1139,6 +1142,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		component.Query,
 		nil,
 		1*time.Second, EagerRetrieval,
+		false,
 	)
 
 	ctx := context.Background()
@@ -1201,6 +1205,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 		component.Query,
 		labels.FromStrings("fed", "a"),
 		5*time.Second, EagerRetrieval,
+		false,
 	)
 
 	ctx := context.Background()
@@ -1248,6 +1253,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 		component.Query,
 		nil,
 		0*time.Second, EagerRetrieval,
+		false,
 	)
 
 	ctx := context.Background()
@@ -1445,6 +1451,7 @@ func TestProxyStore_LabelNames(t *testing.T) {
 				component.Query,
 				nil,
 				5*time.Second, EagerRetrieval,
+				false,
 			)
 
 			ctx := context.Background()

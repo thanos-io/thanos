@@ -71,9 +71,10 @@ type ProxyStore struct {
 	selectorLabels labels.Labels
 	buffers        sync.Pool
 
-	responseTimeout   time.Duration
-	metrics           *proxyStoreMetrics
-	retrievalStrategy RetrievalStrategy
+	responseTimeout           time.Duration
+	metrics                   *proxyStoreMetrics
+	retrievalStrategy         RetrievalStrategy
+	enableCompressedRetrieval bool
 }
 
 type proxyStoreMetrics struct {
@@ -107,6 +108,7 @@ func NewProxyStore(
 	selectorLabels labels.Labels,
 	responseTimeout time.Duration,
 	retrievalStrategy RetrievalStrategy,
+	enableCompressedRetrieval bool,
 ) *ProxyStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -122,9 +124,10 @@ func NewProxyStore(
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
-		responseTimeout:   responseTimeout,
-		metrics:           metrics,
-		retrievalStrategy: retrievalStrategy,
+		responseTimeout:           responseTimeout,
+		metrics:                   metrics,
+		retrievalStrategy:         retrievalStrategy,
+		enableCompressedRetrieval: enableCompressedRetrieval,
 	}
 	return s
 }
@@ -287,7 +290,10 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		return nil
 	}
 
-	r.MaximumStringSlots = maxStringsPerStore(uint64(len(stores)))
+	// Zero maximum slots indicated that we want uncompressed data.
+	if s.enableCompressedRetrieval {
+		r.MaximumStringSlots = maxStringsPerStore(uint64(len(stores)))
+	}
 	adjusterFactory := newReferenceAdjusterFactory(uint64(len(stores)))
 
 	storeResponses := make([]respSet, 0, len(stores))

@@ -130,7 +130,7 @@ type queryable struct {
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, maxConcurrentDecompressWorkers), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.enableQueryPushdown, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.maxConcurrentDecompressWorkers), nil
 }
 
 type querier struct {
@@ -260,6 +260,10 @@ func (s *seriesServer) decompressSeriesIndex(i int) (*storepb.Series, error) {
 }
 
 func (s *seriesServer) DecompressSeries(maxWorkers int) error {
+	if len(s.compressedSeriesSet) == 0 {
+		return nil
+	}
+
 	workerInput := make(chan int)
 	workerOutput := make(chan *storepb.Series)
 
@@ -269,11 +273,11 @@ func (s *seriesServer) DecompressSeries(maxWorkers int) error {
 	}
 
 	newSeriesSet := make([]storepb.Series, 0, len(s.seriesSet)+len(s.compressedSeriesSet))
-	copy(newSeriesSet, s.seriesSet)
+	newSeriesSet = append(newSeriesSet, s.seriesSet...)
 
 	// NOTE(GiedriusS): Ballpark estimate. With more workers I got slower results.
 	workerCount := 1 + (elements / 2000000)
-	if workerCount == 1 {
+	if workerCount == 1 || maxWorkers < 1 {
 		for i := range s.compressedSeriesSet {
 			decompressedSeries, err := s.decompressSeriesIndex(i)
 			if err != nil {
