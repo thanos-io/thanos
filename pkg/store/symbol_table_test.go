@@ -7,7 +7,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/efficientgo/core/testutil"
 )
 
 func TestSymbolTableHandlesBigNumbersCorrectly(t *testing.T) {
