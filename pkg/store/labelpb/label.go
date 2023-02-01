@@ -58,15 +58,15 @@ func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 func ReAllocZLabelsStrings(lset *[]ZLabel, intern bool) {
 	if intern {
 		for j, l := range *lset {
-			(*lset)[j].Name = string(noAllocBytes(l.Name))
-			(*lset)[j].Value = string(noAllocBytes(l.Value))
+			(*lset)[j].Name = detachAndInternLabelString(l.Name)
+			(*lset)[j].Value = detachAndInternLabelString(l.Value)
 		}
 		return
 	}
 
 	for j, l := range *lset {
-		(*lset)[j].Name = detachAndInternLabelString(l.Name)
-		(*lset)[j].Value = detachAndInternLabelString(l.Value)
+		(*lset)[j].Name = string(noAllocBytes(l.Name))
+		(*lset)[j].Value = string(noAllocBytes(l.Value))
 	}
 }
 
