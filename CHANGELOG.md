@@ -16,10 +16,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6008](https://github.com/thanos-io/thanos/pull/6008) *: Add counter metric `gate_queries_total` to gate.
 - [#5773](https://github.com/thanos-io/thanos/pull/5773) Store: Support disable cache index header file.
 
-### Changed
-
-- [#6035](https://github.com/thanos-io/thanos/pull/6035) Replicate: Support all types of matchers to match blocks for replication. Change matcher parameter from string slice to a single string.
-
 ### Fixed
 
 - [#5995](https://github.com/thanos-io/thanos/pull/5995) Sidecar: Loads the TLS certificate during startup.
@@ -30,7 +26,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Changed
 
 - [#6010](https://github.com/thanos-io/thanos/pull/6010) *: Upgrade Prometheus to v0.41.0.
+- [#5999](https://github.com/thanos-io/thanos/pull/5999) *: Upgrade Alertmanager dependency to v0.25.0.
 - [#5887](https://github.com/thanos-io/thanos/pull/5887) Tracing: Make sure rate limiting sampler is the default, as was the case in version pre-0.29.0.
+- [#5997](https://github.com/thanos-io/thanos/pull/5997) Rule: switch to miekgdns DNS resolver as the default one.
+- [#6035](https://github.com/thanos-io/thanos/pull/6035) Replicate: Support all types of matchers to match blocks for replication. Change matcher parameter from string slice to a single string.
 
 ## [v0.30.2](https://github.com/thanos-io/thanos/tree/release-0.30) - 28.01.2023
 
@@ -60,7 +59,6 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 - [#5880](https://github.com/thanos-io/thanos/pull/5880) Query Frontend: Fixes some edge cases of query sharding analysis.
 - [#5893](https://github.com/thanos-io/thanos/pull/5893) Cache: Fixed redis client not respecting `SetMultiBatchSize` config value.
 - [#5966](https://github.com/thanos-io/thanos/pull/5966) Query: Fixed mint and maxt when selecting series for the `api/v1/series` HTTP endpoint.
-- [#5997](https://github.com/thanos-io/thanos/pull/5997) Rule: switch to miekgdns DNS resolver as the default one.
 - [#5948](https://github.com/thanos-io/thanos/pull/5948) Store: `chunks_fetched_duration` wrong calculation.
 - [#5910](https://github.com/thanos-io/thanos/pull/5910) Receive: Fixed ketama quorum bug that was could cause success response for failed replication. This also optimize heavily receiver CPU use.
 
@@ -86,7 +84,6 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 - [#5846](https://github.com/thanos-io/thanos/pull/5846) Query Frontend: vertical query sharding supports subqueries.
 - [#5593](https://github.com/thanos-io/thanos/pull/5593) Cache: switch Redis client to [Rueidis](https://github.com/rueian/rueidis). Rueidis is [faster](https://github.com/rueian/rueidis#benchmark-comparison-with-go-redis-v9) and provides [client-side caching](https://redis.io/docs/manual/client-side-caching/). It is highly recommended to use it so that repeated requests for the same key would not be needed.
 - [#5896](https://github.com/thanos-io/thanos/pull/5896) *: Upgrade Prometheus to v0.40.7 without implementing native histogram support. *Querying native histograms will fail with `Error executing query: invalid chunk encoding "<unknown>"` and native histograms in write requests are ignored.*
-- [#5999](https://github.com/thanos-io/thanos/pull/5999) *: Upgrade Alertmanager dependency to v0.25.0.
 - [#5909](https://github.com/thanos-io/thanos/pull/5909) Receive: Compact tenant head after no appends have happened for 1.5 `tsdb.max-block-size`.
 - [#5838](https://github.com/thanos-io/thanos/pull/5838) Mixin: Added data touched type to Store dashboard.
 - [#5922](https://github.com/thanos-io/thanos/pull/5922) Compact: Retry on clean, partial marked errors when possible.
