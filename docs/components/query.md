@@ -373,6 +373,13 @@ Flags:
                                  If unset it will use the promql default of 5m.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
+      --query.max-concurrent-decompress-workers=0
+                                 Maximum number of workers spawned to
+                                 decompress a set of compressed storepb.Series.
+                                 Setting this to higher than zero enables label
+                                 compression during querying - CPU usage will
+                                 be slightly higher whilst network usage will be
+                                 significantly lower.
       --query.max-concurrent-select=4
                                  Maximum number of select requests made
                                  concurrently per a query.
