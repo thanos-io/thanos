@@ -1185,7 +1185,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
-	sortWithoutLabelSet := req.SortWithoutLabelSet()
+	sortWithoutLabelSet := req.StrippedLabels()
 	s.mtx.RLock()
 
 	for _, bs := range s.blockSets {

@@ -535,7 +535,7 @@ func (m *SeriesRequest) ToPromQL() string {
 	return m.QueryHints.toPromQL(m.Matchers)
 }
 
-func (m *SeriesRequest) SortWithoutLabelSet() map[string]struct{} {
+func (m *SeriesRequest) StrippedLabels() map[string]struct{} {
 	ls := make(map[string]struct{}, len(m.SortWithoutLabels))
 	for _, l := range m.SortWithoutLabels {
 		ls[l] = struct{}{}
