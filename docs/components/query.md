@@ -358,6 +358,8 @@ Flags:
                                  = max(rangeSeconds / 250, defaultStep)).
                                  This will not work from Grafana, but Grafana
                                  has __step variable which can be used.
+      --query.enable-thanos-promql-engine-optimizer
+                                 Enable query optimizer for Thanos PromQL engine
       --query.lookback-delta=QUERY.LOOKBACK-DELTA
                                  The maximum lookback duration for retrieving
                                  metrics during expression evaluations.
