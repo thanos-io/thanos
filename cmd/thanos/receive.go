@@ -161,18 +161,10 @@ func runReceive(
 	enableIngestion := receiveMode == receive.IngestorOnly || receiveMode == receive.RouterIngestor
 
 	upload := len(confContentYaml) > 0
+
 	if enableIngestion {
 		if upload {
-			if tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
-				if !conf.ignoreBlockSize {
-					return errors.Errorf("found that TSDB Max time is %d and Min time is %d. "+
-						"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
-				}
-				level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
-			}
-			// The background shipper continuously scans the data directory and uploads
-			// new blocks to object storage service.
-			bkt, err = client.NewBucket(logger, confContentYaml, reg, comp.String())
+			bkt, err = uploadToBucket(tsdbOpts, conf, logger, confContentYaml, reg, comp)
 			if err != nil {
 				return err
 			}
@@ -196,18 +188,47 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
-	dbs := receive.NewMultiTSDB(
-		conf.dataDir,
-		logger,
-		reg,
-		tsdbOpts,
-		lset,
-		conf.tenantLabelName,
-		bkt,
-		conf.allowOutOfOrderUpload,
-		hashFunc,
+	grpcProbe := prober.NewGRPC()
+	httpProbe := prober.NewHTTP()
+	statusProber := prober.Combine(
+		httpProbe,
+		grpcProbe,
+		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
 	)
-	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, conf.writerInterning)
+
+	var (
+		// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
+		hashringChangedChan = make(chan struct{}, 1)
+
+		dbs    *receive.MultiTSDB
+		writer *receive.Writer
+	)
+
+	if enableIngestion {
+		dbs = receive.NewMultiTSDB(
+			conf.dataDir,
+			logger,
+			reg,
+			tsdbOpts,
+			lset,
+			conf.tenantLabelName,
+			bkt,
+			conf.allowOutOfOrderUpload,
+			hashFunc,
+		)
+		writer = receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, conf.writerInterning)
+		// uploadC signals when new blocks should be uploaded.
+		uploadC := make(chan struct{}, 1)
+		// uploadDone signals when uploading has finished.
+		uploadDone := make(chan struct{}, 1)
+
+		level.Debug(logger).Log("msg", "setting up TSDB")
+		{
+			if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
+				return err
+			}
+		}
+	}
 
 	var limitsConfig *receive.RootLimitsConfig
 	if conf.writeLimitsConfig != nil {
@@ -245,34 +266,6 @@ func runReceive(
 		Limiter:           limiter,
 	})
 
-	grpcProbe := prober.NewGRPC()
-	httpProbe := prober.NewHTTP()
-	statusProber := prober.Combine(
-		httpProbe,
-		grpcProbe,
-		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
-	)
-
-	// Start all components while we wait for TSDB to open but only load
-	// initial config and mark ourselves as ready after it completes.
-
-	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
-	hashringChangedChan := make(chan struct{}, 1)
-
-	if enableIngestion {
-		// uploadC signals when new blocks should be uploaded.
-		uploadC := make(chan struct{}, 1)
-		// uploadDone signals when uploading has finished.
-		uploadDone := make(chan struct{}, 1)
-
-		level.Debug(logger).Log("msg", "setting up TSDB")
-		{
-			if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
-				return err
-			}
-		}
-	}
-
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
 		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion); err != nil {
@@ -305,49 +298,33 @@ func runReceive(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		proxy := store.NewProxyStore(
-			logger,
-			reg,
-			dbs.TSDBLocalClients,
-			comp,
-			labels.Labels{},
-			0,
-			store.LazyRetrieval,
-		)
-		mts := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, conf.storeRateLimits)
+		grpcOpts := []grpcserver.Option{
+			grpcserver.WithListen(*conf.grpcBindAddr),
+			grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
+			grpcserver.WithTLSConfig(tlsCfg),
+			grpcserver.WithMaxConnAge(*conf.grpcMaxConnAge),
+		}
+
+		infoSrvOpts := []info.ServerOptionFunc{}
+
 		rw := store.ReadWriteTSDBStore{
-			StoreServer:          mts,
 			WriteableStoreServer: webHandler,
 		}
 
-		infoSrv := info.NewInfoServer(
-			component.Receive.String(),
-			info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return proxy.LabelSet() }),
-			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
-				if httpProbe.IsReady() {
-					minTime, maxTime := proxy.TimeRange()
-					return &infopb.StoreInfo{
-						MinTime:                      minTime,
-						MaxTime:                      maxTime,
-						SupportsSharding:             true,
-						SupportsWithoutReplicaLabels: true,
-					}
-				}
-				return nil
-			}),
-			info.WithExemplarsInfoFunc(),
+		// If ingestion is enabled and dbs is nil.
+		if dbs != nil {
+			rw, infoSrvOpts, grpcOpts = setupgRPCandInfoSrv(rw, infoSrvOpts, grpcOpts, logger, reg, comp, dbs, httpProbe)
+		}
+
+		grpcOpts = append(grpcOpts,
+			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
+			grpcserver.WithServer(info.RegisterInfoServer(info.NewInfoServer(
+				component.Receive.String(),
+				infoSrvOpts...,
+			))),
 		)
 
-		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(rw, logger)),
-			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
-			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
-			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
-			grpcserver.WithListen(conf.grpcConfig.bindAddress),
-			grpcserver.WithGracePeriod(conf.grpcConfig.gracePeriod),
-			grpcserver.WithMaxConnAge(conf.grpcConfig.maxConnectionAge),
-			grpcserver.WithTLSConfig(tlsCfg),
-		)
+		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, tagOpts, comp, grpcProbe, grpcOpts...)
 
 		g.Add(
 			func() error {
@@ -376,14 +353,30 @@ func runReceive(
 		)
 	}
 
-	if limitsConfig.AreHeadSeriesLimitsConfigured() {
-		level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
+	if enableIngestion {
+		if limitsConfig.AreHeadSeriesLimitsConfigured() {
+			level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
+			{
+				ctx, cancel := context.WithCancel(context.Background())
+				g.Add(func() error {
+					return runutil.Repeat(15*time.Second, ctx.Done(), func() error {
+						if err := limiter.HeadSeriesLimiter.QueryMetaMonitoring(ctx); err != nil {
+							level.Error(logger).Log("msg", "failed to query meta-monitoring", "err", err.Error())
+						}
+						return nil
+					})
+				}, func(err error) {
+					cancel()
+				})
+			}
+		}
+		level.Debug(logger).Log("msg", "setting up periodic tenant pruning")
 		{
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
-				return runutil.Repeat(15*time.Second, ctx.Done(), func() error {
-					if err := limiter.HeadSeriesLimiter.QueryMetaMonitoring(ctx); err != nil {
-						level.Error(logger).Log("msg", "failed to query meta-monitoring", "err", err.Error())
+				return runutil.Repeat(2*time.Hour, ctx.Done(), func() error {
+					if err := dbs.Prune(ctx); err != nil {
+						level.Error(logger).Log("err", err)
 					}
 					return nil
 				})
@@ -391,21 +384,6 @@ func runReceive(
 				cancel()
 			})
 		}
-	}
-
-	level.Debug(logger).Log("msg", "setting up periodic tenant pruning")
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			return runutil.Repeat(2*time.Hour, ctx.Done(), func() error {
-				if err := dbs.Prune(ctx); err != nil {
-					level.Error(logger).Log("err", err)
-				}
-				return nil
-			})
-		}, func(err error) {
-			cancel()
-		})
 	}
 
 	{
@@ -426,6 +404,72 @@ func runReceive(
 
 	level.Info(logger).Log("msg", "starting receiver")
 	return nil
+}
+
+func uploadToBucket(tsdbOpts *tsdb.Options,
+	conf *receiveConfig,
+	logger log.Logger,
+	confContentYaml []byte,
+	reg *prometheus.Registry,
+	comp component.SourceStoreAPI,
+) (objstore.Bucket, error) {
+	if tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
+		if !conf.ignoreBlockSize {
+			return nil, errors.Errorf("found that TSDB Max time is %d and Min time is %d. "+
+				"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
+		}
+		level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
+	}
+	// The background shipper continuously scans the data directory and uploads
+	// new blocks to object storage service.
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, comp.String())
+	if err != nil {
+		return nil, err
+	}
+	return bkt, nil
+}
+
+func setupgRPCandInfoSrv(rw store.ReadWriteTSDBStore,
+	infoSrvOpts []info.ServerOptionFunc,
+	grpcOpts []grpcserver.Option,
+	logger log.Logger,
+	reg *prometheus.Registry,
+	comp component.SourceStoreAPI,
+	dbs *receive.MultiTSDB,
+	httpProbe *prober.HTTPProbe,
+) (store.ReadWriteTSDBStore, []info.ServerOptionFunc, []grpcserver.Option) {
+	mts := store.NewProxyStore(
+		logger,
+		reg,
+		dbs.TSDBLocalClients,
+		comp,
+		labels.Labels{},
+		0,
+		store.LazyRetrieval,
+	)
+	rw.StoreServer = mts
+
+	infoSrvOpts = append(infoSrvOpts, info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return mts.LabelSet() }),
+		info.WithStoreInfoFunc(func() *infopb.StoreInfo {
+			if httpProbe.IsReady() {
+				minTime, maxTime := mts.TimeRange()
+				return &infopb.StoreInfo{
+					MinTime:           minTime,
+					MaxTime:           maxTime,
+					SupportsSharding:  true,
+					SendsSortedSeries: true,
+				}
+			}
+			return nil
+		}),
+		info.WithExemplarsInfoFunc(),
+	)
+	grpcOpts = append(grpcOpts,
+		grpcserver.WithServer(store.RegisterStoreServer(rw, logger)),
+		grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
+	)
+
+	return rw, infoSrvOpts, grpcOpts
 }
 
 // setupHashring sets up the hashring configuration provided.

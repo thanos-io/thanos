@@ -258,9 +258,14 @@ func (h *Handler) Hashring(hashring Hashring) {
 func (h *Handler) isReady() bool {
 	h.mtx.RLock()
 	hr := h.hashring != nil
-	sr := h.writer != nil
+
+	if h.options.ReceiverMode != RouterOnly {
+		sr := h.writer != nil
+		h.mtx.RUnlock()
+		return sr && hr
+	}
 	h.mtx.RUnlock()
-	return sr && hr
+	return hr
 }
 
 // Checks if server is ready, calls f if it is, returns 503 if it is not.
@@ -282,6 +287,11 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusapi.TenantStats, *api.ApiError) {
 	if !h.isReady() {
 		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: fmt.Errorf("service unavailable")}
+	}
+
+	// Do not return stats if TSDB is not initialized.
+	if h.options.ReceiverMode == RouterOnly || h.options.TSDBStats == nil {
+		return []statusapi.TenantStats{}, nil
 	}
 
 	tenantID := r.Header.Get(h.options.TenantHeader)
