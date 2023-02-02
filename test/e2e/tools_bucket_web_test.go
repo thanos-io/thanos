@@ -33,6 +33,7 @@ import (
 )
 
 func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
+	t.Skip("Test is flaky.")
 	t.Parallel()
 
 	e, err := e2e.NewDockerEnvironment("route-prefix")

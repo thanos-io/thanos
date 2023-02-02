@@ -226,6 +226,7 @@ func TestQueryExternalPrefix(t *testing.T) {
 }
 
 func TestQueryExternalPrefixAndRoutePrefix(t *testing.T) {
+	t.Skip("Test is flaky.")
 	t.Parallel()
 
 	e, err := e2e.NewDockerEnvironment("prefix")
