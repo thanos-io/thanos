@@ -76,22 +76,22 @@ require (
 	github.com/weaveworks/common v0.0.0-20221201103051-7c2720a9024d
 	go.elastic.co/apm v1.11.0
 	go.elastic.co/apm/module/apmot v1.11.0
-	go.opentelemetry.io/contrib/propagators/ot v1.9.0 // indirect
-	go.opentelemetry.io/otel v1.11.2
-	go.opentelemetry.io/otel/bridge/opentracing v1.10.0
-	go.opentelemetry.io/otel/sdk v1.11.2
-	go.opentelemetry.io/otel/trace v1.11.2
+	go.opentelemetry.io/contrib/propagators/ot v1.13.0 // indirect
+	go.opentelemetry.io/otel v1.12.0
+	go.opentelemetry.io/otel/bridge/opentracing v1.12.0
+	go.opentelemetry.io/otel/sdk v1.12.0
+	go.opentelemetry.io/otel/trace v1.12.0
 	go.uber.org/atomic v1.10.0
 	go.uber.org/automaxprocs v1.5.1
 	go.uber.org/goleak v1.2.0
 	golang.org/x/crypto v0.1.0
-	golang.org/x/net v0.4.0
+	golang.org/x/net v0.5.0
 	golang.org/x/sync v0.1.0
-	golang.org/x/text v0.5.0
+	golang.org/x/text v0.6.0
 	golang.org/x/time v0.3.0
 	google.golang.org/api v0.104.0 // indirect
-	google.golang.org/genproto v0.0.0-20221207170731-23e4bf6bdc37 // indirect
-	google.golang.org/grpc v1.51.0
+	google.golang.org/genproto v0.0.0-20230131230820-1c016267d619 // indirect
+	google.golang.org/grpc v1.52.0
 	google.golang.org/grpc/examples v0.0.0-20211119005141-f45e61797429
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/fsnotify.v1 v1.4.7
@@ -113,15 +113,15 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.4.1 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1 // indirect
-	go.opentelemetry.io/contrib/samplers/jaegerremote v0.3.0
-	go.opentelemetry.io/otel/exporters/jaeger v1.8.0
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.11.2
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.11.2
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.11.2
+	go.opentelemetry.io/contrib/samplers/jaegerremote v0.7.0
+	go.opentelemetry.io/otel/exporters/jaeger v1.12.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.12.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.12.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.12.0
 )
 
 require (
-	go.opentelemetry.io/contrib/propagators/autoprop v0.34.0
+	go.opentelemetry.io/contrib/propagators/autoprop v0.38.0
 	go4.org/intern v0.0.0-20220617035311-6925f38cc365
 	golang.org/x/exp v0.0.0-20221212164502-fae10dda9338
 )
@@ -214,7 +214,7 @@ require (
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rs/xid v1.4.0 // indirect
-	github.com/rueian/rueidis v0.0.90
+	github.com/rueian/rueidis v0.0.93
 	github.com/santhosh-tekuri/jsonschema v1.2.4 // indirect
 	github.com/sercand/kuberesolver v2.4.0+incompatible // indirect
 	github.com/shirou/gopsutil/v3 v3.22.9 // indirect
@@ -232,17 +232,17 @@ require (
 	go.elastic.co/fastjson v1.1.0 // indirect
 	go.mongodb.org/mongo-driver v1.11.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.37.0 // indirect
-	go.opentelemetry.io/contrib/propagators/aws v1.9.0 // indirect
-	go.opentelemetry.io/contrib/propagators/b3 v1.9.0 // indirect
-	go.opentelemetry.io/contrib/propagators/jaeger v1.9.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.11.2 // indirect
-	go.opentelemetry.io/otel/metric v0.34.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.38.0 // indirect
+	go.opentelemetry.io/contrib/propagators/aws v1.13.0 // indirect
+	go.opentelemetry.io/contrib/propagators/b3 v1.13.0 // indirect
+	go.opentelemetry.io/contrib/propagators/jaeger v1.13.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.12.0 // indirect
+	go.opentelemetry.io/otel/metric v0.35.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.19.0 // indirect
-	go.uber.org/multierr v1.8.0 // indirect
+	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/oauth2 v0.3.0 // indirect
-	golang.org/x/sys v0.3.0 // indirect
+	golang.org/x/sys v0.4.0 // indirect
 	golang.org/x/tools v0.4.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gonum.org/v1/gonum v0.12.0 // indirect
