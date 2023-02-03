@@ -17,6 +17,7 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+	"go4.org/intern"
 )
 
 var (
@@ -49,25 +50,37 @@ func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 	return *(*labels.Labels)(unsafe.Pointer(&lset))
 }
 
-// ReAllocZLabelsStrings re-allocates all underlying bytes for string, detaching it from bigger memory pool.
-func ReAllocZLabelsStrings(lset *[]ZLabel) {
+// ReAllocAndInternZLabelsStrings re-allocates all underlying bytes for string, detaching it from bigger memory pool.
+// If `intern` is set to true, the method will use interning, i.e. reuse already allocated strings, to make the reallocation
+// method more efficient.
+//
+// This is primarily intended to be used before labels are written into TSDB which can hold label strings in the memory long term.
+func ReAllocZLabelsStrings(lset *[]ZLabel, intern bool) {
+	if intern {
+		for j, l := range *lset {
+			(*lset)[j].Name = detachAndInternLabelString(l.Name)
+			(*lset)[j].Value = detachAndInternLabelString(l.Value)
+		}
+		return
+	}
+
 	for j, l := range *lset {
-		// NOTE: This trick converts from string to byte without copy, but copy when creating string.
 		(*lset)[j].Name = string(noAllocBytes(l.Name))
 		(*lset)[j].Value = string(noAllocBytes(l.Value))
 	}
 }
 
-// LabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed labels.Labels.
-func LabelsFromPromLabels(lset labels.Labels) []Label {
-	return *(*[]Label)(unsafe.Pointer(&lset))
+// internLabelString is a helper method to intern a label string or,
+// if the string was previously interned, it returns the existing
+// reference and asserts it to a string.
+func internLabelString(s string) string {
+	return intern.GetByString(s).Get().(string)
 }
 
-// LabelsToPromLabels convert slice of labelpb.ZLabel to Prometheus labels in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed []Label.
-func LabelsToPromLabels(lset []Label) labels.Labels {
-	return *(*labels.Labels)(unsafe.Pointer(&lset))
+// detachAndInternLabelString reallocates the label string to detach it
+// from a bigger memory pool and interns the string.
+func detachAndInternLabelString(s string) string {
+	return internLabelString(string(noAllocBytes(s)))
 }
 
 // ZLabelSetsToPromLabelSets converts slice of labelpb.ZLabelSet to slice of Prometheus labels.

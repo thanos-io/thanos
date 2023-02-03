@@ -97,7 +97,8 @@ func TestReaders(t *testing.T) {
 
 			t.Run("binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-				testutil.Ok(t, WriteBinary(ctx, bkt, id, fn))
+				_, err := WriteBinary(ctx, bkt, id, fn)
+				testutil.Ok(t, err)
 
 				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3)
 				testutil.Ok(t, err)
@@ -170,7 +171,8 @@ func TestReaders(t *testing.T) {
 
 			t.Run("lazy binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-				testutil.Ok(t, WriteBinary(ctx, bkt, id, fn))
+				_, err := WriteBinary(ctx, bkt, id, fn)
+				testutil.Ok(t, err)
 
 				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), nil)
 				testutil.Ok(t, err)
@@ -340,7 +342,8 @@ func BenchmarkBinaryWrite(t *testing.B) {
 
 	t.ResetTimer()
 	for i := 0; i < t.N; i++ {
-		testutil.Ok(t, WriteBinary(ctx, bkt, m.ULID, fn))
+		_, err := WriteBinary(ctx, bkt, m.ULID, fn)
+		testutil.Ok(t, err)
 	}
 }
 
@@ -353,7 +356,8 @@ func BenchmarkBinaryReader(t *testing.B) {
 
 	m := prepareIndexV2Block(t, tmpDir, bkt)
 	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
-	testutil.Ok(t, WriteBinary(ctx, bkt, m.ULID, fn))
+	_, err = WriteBinary(ctx, bkt, m.ULID, fn)
+	testutil.Ok(t, err)
 
 	t.ResetTimer()
 	for i := 0; i < t.N; i++ {

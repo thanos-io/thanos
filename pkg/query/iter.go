@@ -238,6 +238,8 @@ func chunkEncoding(e storepb.Chunk_Encoding) chunkenc.Encoding {
 	switch e {
 	case storepb.Chunk_XOR:
 		return chunkenc.EncXOR
+	case storepb.Chunk_HISTOGRAM:
+		return chunkenc.EncHistogram
 	}
 	return 255 // Invalid.
 }
@@ -257,8 +259,9 @@ func (it errSeriesIterator) Err() error                                        {
 // chunkSeriesIterator implements a series iterator on top
 // of a list of time-sorted, non-overlapping chunks.
 type chunkSeriesIterator struct {
-	chunks []chunkenc.Iterator
-	i      int
+	chunks  []chunkenc.Iterator
+	i       int
+	lastVal chunkenc.ValueType
 }
 
 func newChunkSeriesIterator(cs []chunkenc.Iterator) chunkenc.Iterator {
@@ -269,17 +272,17 @@ func newChunkSeriesIterator(cs []chunkenc.Iterator) chunkenc.Iterator {
 	return &chunkSeriesIterator{chunks: cs}
 }
 
-// TODO(rabenhorst: Native histogram support needs to be implement, currently float type is hardcoded.
 func (it *chunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	// We generally expect the chunks already to be cut down
 	// to the range we are interested in. There's not much to be gained from
 	// hopping across chunks so we just call next until we reach t.
 	for {
-		ct, _ := it.At()
+		ct := it.AtT()
 		if ct >= t {
-			return chunkenc.ValFloat
+			return it.lastVal
 		}
-		if it.Next() == chunkenc.ValNone {
+		it.lastVal = it.Next()
+		if it.lastVal == chunkenc.ValNone {
 			return chunkenc.ValNone
 		}
 	}
@@ -289,24 +292,23 @@ func (it *chunkSeriesIterator) At() (t int64, v float64) {
 	return it.chunks[it.i].At()
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (it *chunkSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	panic("not implemented")
+	return it.chunks[it.i].AtHistogram()
 }
 
 func (it *chunkSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	panic("not implemented")
+	return it.chunks[it.i].AtFloatHistogram()
 }
 
 func (it *chunkSeriesIterator) AtT() int64 {
-	t, _ := it.chunks[it.i].At()
-	return t
+	return it.chunks[it.i].AtT()
 }
 
 func (it *chunkSeriesIterator) Next() chunkenc.ValueType {
-	lastT, _ := it.At()
+	lastT := it.AtT()
 
 	if valueType := it.chunks[it.i].Next(); valueType != chunkenc.ValNone {
+		it.lastVal = valueType
 		return valueType
 	}
 	if it.Err() != nil {

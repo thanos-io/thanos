@@ -62,13 +62,13 @@ require (
 	github.com/prometheus/alertmanager v0.25.0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
-	github.com/prometheus/common v0.39.0
+	github.com/prometheus/common v0.39.1-0.20230110141620-846591a16635
 	github.com/prometheus/exporter-toolkit v0.8.2
 	// Prometheus maps version 2.x.y to tags v0.x.y.
 	github.com/prometheus/prometheus v0.41.0
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.1
-	github.com/thanos-community/promql-engine v0.0.0-20221115192426-d68c8139c070
+	github.com/thanos-community/promql-engine v0.0.0-20230124070417-9e293186b7e4
 	github.com/thanos-io/objstore v0.0.0-20221205132204-5aafc0079f06
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
@@ -100,7 +100,7 @@ require (
 )
 
 require (
-	github.com/efficientgo/core v1.0.0-rc.0.0.20221201130417-ba593f67d2a4
+	github.com/efficientgo/core v1.0.0-rc.2
 	github.com/minio/sha256-simd v1.0.0
 )
 
@@ -122,8 +122,11 @@ require (
 
 require (
 	go.opentelemetry.io/contrib/propagators/autoprop v0.34.0
+	go4.org/intern v0.0.0-20220617035311-6925f38cc365
 	golang.org/x/exp v0.0.0-20221212164502-fae10dda9338
 )
+
+require go4.org/unsafe/assume-no-moving-gc v0.0.0-20220617031537-928513b29760 // indirect
 
 require (
 	cloud.google.com/go/compute/metadata v0.2.2 // indirect

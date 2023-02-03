@@ -141,6 +141,7 @@ func getSampler(config Config) tracesdk.Sampler {
 		sampler = jaegerremote.New(config.ServiceName, remoteOptions...)
 	// Fallback always to default (rate limiting).
 	case SamplerTypeRateLimiting:
+		fallthrough
 	default:
 		// The same config options are applicable to both remote and rate-limiting samplers.
 		remoteOptions := getRemoteOptions(config)

@@ -88,6 +88,7 @@ func registerReceive(app *extkingpin.App) {
 			EnableExemplarStorage:          true,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
 			EnableMemorySnapshotOnShutdown: conf.tsdbMemorySnapshotOnShutdown,
+			EnableNativeHistograms:         conf.tsdbEnableNativeHistograms,
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -206,7 +207,7 @@ func runReceive(
 		conf.allowOutOfOrderUpload,
 		hashFunc,
 	)
-	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
+	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, conf.writerInterning)
 
 	var limitsConfig *receive.RootLimitsConfig
 	if conf.limitsConfig != nil {
@@ -337,7 +338,7 @@ func runReceive(
 		)
 
 		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(rw)),
+			grpcserver.WithServer(store.RegisterStoreServer(rw, logger)),
 			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
@@ -783,9 +784,11 @@ type receiveConfig struct {
 	tsdbMaxExemplars             int64
 	tsdbWriteQueueSize           int64
 	tsdbMemorySnapshotOnShutdown bool
+	tsdbEnableNativeHistograms   bool
 
-	walCompression bool
-	noLockFile     bool
+	walCompression  bool
+	noLockFile      bool
+	writerInterning bool
 
 	hashFunc string
 
@@ -826,7 +829,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
-	rc.retention = extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention. For more details on how retention is enforced for individual tenants, please refer to the Tenant lifecycle management section in the Receive documentation: https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management").Default("15d"))
+	rc.retention = extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables the retention policy (i.e. infinite retention). For more details on how retention is enforced for individual tenants, please refer to the Tenant lifecycle management section in the Receive documentation: https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management").Default("15d"))
 
 	cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration. A watcher is initialized to watch changes and update the hashring dynamically.").PlaceHolder("<path>").StringVar(&rc.hashringsFilePath)
 
@@ -894,6 +897,14 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.memory-snapshot-on-shutdown",
 		"[EXPERIMENTAL] Enables feature to snapshot in-memory chunks on shutdown for faster restarts.").
 		Default("false").Hidden().BoolVar(&rc.tsdbMemorySnapshotOnShutdown)
+
+	cmd.Flag("tsdb.enable-native-histograms",
+		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
+		Default("false").Hidden().BoolVar(&rc.tsdbEnableNativeHistograms)
+
+	cmd.Flag("writer.intern",
+		"[EXPERIMENTAL] Enables string interning in receive writer, for more optimized memory usage.").
+		Default("false").Hidden().BoolVar(&rc.writerInterning)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")
