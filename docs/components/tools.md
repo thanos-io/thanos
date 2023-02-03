@@ -525,6 +525,9 @@ Flags:
                               replication. Repeated field
       --ignore-marked-for-deletion
                               Do not replicate blocks that have deletion mark.
+      --label=<name>="<value>" ...
+                              additional external labels to meta data file when
+                              replicating blocks.
       --log.format=logfmt     Log format to use. Possible options: logfmt or
                               json.
       --log.level=info        Log filtering level.

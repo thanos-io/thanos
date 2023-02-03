@@ -86,8 +86,10 @@ func TestReplicationSchemeAll(t *testing.T) {
 		selector                labels.Selector
 		blockIDs                []ulid.ULID
 		ignoreMarkedForDeletion bool
-		prepare                 func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
-		assert                  func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
+		lbls                    labels.Labels
+
+		prepare func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
+		assert  func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket)
 	}{
 		{
 			name:    "EmptyOrigin",
@@ -362,6 +364,69 @@ func TestReplicationSchemeAll(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "Replicate labels",
+			lbls: labels.FromMap(map[string]string{"foo": "bar"}),
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
+				ulid := testULID(0)
+				meta := testMeta(ulid)
+
+				b, err := json.Marshal(meta)
+				testutil.Ok(t, err)
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "meta.json"), bytes.NewReader(b))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
+			},
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
+				expected := 3
+				got := len(targetBucket.Objects())
+				if got != expected {
+					t.Fatalf("TargetBucket should have two blocks made up of three objects replicated. Got %d but expected %d objects.", got, expected)
+				}
+				ulid := testULID(0)
+				var originMetaData, targetMetaData metadata.Meta
+				originMetaContent := originBucket.Objects()[path.Join(ulid.String(), "meta.json")]
+				targetMetaContent := targetBucket.Objects()[path.Join(ulid.String(), "meta.json")]
+
+				err := json.Unmarshal(originMetaContent, &originMetaData)
+				testutil.Ok(t, err)
+
+				err = json.Unmarshal(targetMetaContent, &targetMetaData)
+				testutil.Ok(t, err)
+
+				originMetaLabels := originMetaData.Thanos.Labels
+				targetMetaLabels := targetMetaData.Thanos.Labels
+
+				originMetaLabels["foo"] = "bar"
+				testutil.Equals(t, originMetaLabels, targetMetaLabels)
+			},
+		},
+		{
+			name: "Replicate labels with duplicate names",
+			lbls: labels.FromMap(map[string]string{"foo": "bar"}),
+			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
+				ulid := testULID(0)
+				meta := testMeta(ulid)
+				meta.Thanos.Labels["foo"] = "baz"
+
+				b, err := json.Marshal(meta)
+				testutil.Ok(t, err)
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "meta.json"), bytes.NewReader(b))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "chunks", "000001"), bytes.NewReader(nil))
+				_ = originBucket.Upload(ctx, path.Join(ulid.String(), "index"), bytes.NewReader(nil))
+			},
+			assert: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
+				expected := 3
+				got := len(targetBucket.Objects())
+				if got != expected {
+					t.Fatalf("TargetBucket should have two blocks made up of three objects replicated. Got %d but expected %d objects.", got, expected)
+				}
+				ulid := testULID(0)
+				originMetaContent := originBucket.Objects()[path.Join(ulid.String(), "meta.json")]
+				targetMetaContent := targetBucket.Objects()[path.Join(ulid.String(), "meta.json")]
+				testutil.Equals(t, originMetaContent, targetMetaContent)
+			},
+		},
 	}
 
 	for _, c := range cases {
@@ -393,7 +458,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 		)
 		testutil.Ok(t, err)
 
-		r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), targetBucket, nil)
+		r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), targetBucket, nil, c.lbls)
 
 		err = r.execute(ctx)
 		testutil.Ok(t, err)

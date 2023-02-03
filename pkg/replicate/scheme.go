@@ -6,6 +6,7 @@ package replicate
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"path"
@@ -128,7 +129,8 @@ type replicationScheme struct {
 	logger  log.Logger
 	metrics *replicationMetrics
 
-	reg prometheus.Registerer
+	reg  prometheus.Registerer
+	lbls labels.Labels
 }
 
 type replicationMetrics struct {
@@ -163,6 +165,7 @@ func newReplicationScheme(
 	from objstore.InstrumentedBucketReader,
 	to objstore.Bucket,
 	reg prometheus.Registerer,
+	lbls labels.Labels,
 ) *replicationScheme {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -176,6 +179,7 @@ func newReplicationScheme(
 		toBkt:       to,
 		metrics:     metrics,
 		reg:         reg,
+		lbls:        lbls,
 	}
 }
 
@@ -240,10 +244,31 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 		return errors.Wrap(err, "get meta file from target bucket")
 	}
 
-	// TODO(bwplotka): Allow injecting custom labels as shipper does.
 	originMetaFileContent, err := io.ReadAll(originMetaFile)
 	if err != nil {
 		return errors.Wrap(err, "read origin meta file")
+	}
+
+	var modifiedOriginMetaFileContent []byte
+	if len(rs.lbls) > 0 {
+		var originMeta metadata.Meta
+		if err := json.Unmarshal(originMetaFileContent, &originMeta); err != nil {
+			return errors.Wrap(err, "unmarshal origin meta file")
+		}
+		// Modify origin meta lables, skip if label name already exists.
+		for _, lbl := range rs.lbls {
+			if _, ok := originMeta.Thanos.Labels[lbl.Name]; ok {
+				continue
+			} else {
+				originMeta.Thanos.Labels[lbl.Name] = lbl.Value
+			}
+		}
+		modifiedOriginMetaFileContent, err = json.Marshal(originMeta)
+		if err != nil {
+			return errors.Wrap(err, "marshal modified origin meta file")
+		}
+	} else {
+		modifiedOriginMetaFileContent = originMetaFileContent
 	}
 
 	if targetMetaFile != nil && !rs.toBkt.IsObjNotFoundErr(err) {
@@ -252,8 +277,8 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 			return errors.Wrap(err, "read target meta file")
 		}
 
-		if bytes.Equal(originMetaFileContent, targetMetaFileContent) {
-			// If the origin meta file content and target meta file content is
+		if bytes.Equal(modifiedOriginMetaFileContent, targetMetaFileContent) {
+			// If the modified meta file content and target meta file content is
 			// equal, we know we have already successfully replicated
 			// previously.
 			level.Debug(rs.logger).Log("msg", "skipping block as already replicated", "block_uuid", blockID)
@@ -280,7 +305,7 @@ func (rs *replicationScheme) ensureBlockIsReplicated(ctx context.Context, id uli
 
 	level.Debug(rs.logger).Log("msg", "replicating meta file", "object", metaFile)
 
-	if err := rs.toBkt.Upload(ctx, metaFile, bytes.NewBuffer(originMetaFileContent)); err != nil {
+	if err := rs.toBkt.Upload(ctx, metaFile, bytes.NewBuffer(modifiedOriginMetaFileContent)); err != nil {
 		return errors.Wrap(err, "upload meta file")
 	}
 
