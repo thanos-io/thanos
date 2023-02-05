@@ -259,7 +259,9 @@ Flags:
                                  the hashring configuration.
       --receive.hashrings-algorithm=hashmod
                                  The algorithm used when distributing series in
-                                 the hashrings. Must be one of hashmod, ketama
+                                 the hashrings. Must be one of hashmod, ketama.
+                                 Will be overwritten by the tenant-specific
+                                 algorithm in the hashring config.
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
                                  configuration. A watcher is initialized

@@ -6,12 +6,14 @@ package receive
 import (
 	"context"
 	"fmt"
-	"log"
 	"sort"
 	"strconv"
 	"sync"
 
 	"github.com/cespare/xxhash"
+
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 
 	"github.com/pkg/errors"
 
@@ -240,9 +242,9 @@ func newMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 	for _, h := range cfg {
 		var hashring Hashring
 		if h.Algorithm != "" {
-			hashring = newHashring(h.Algorithm, h.Endpoints, replicationFactor)
+			hashring = newHashring(h.Algorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants)
 		} else {
-			hashring = newHashring(algorithm, h.Endpoints, replicationFactor)
+			hashring = newHashring(algorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants)
 		}
 		m.hashrings = append(m.hashrings, hashring)
 		var t map[string]struct{}
@@ -292,21 +294,21 @@ func HashringFromConfig(algorithm HashringAlgorithm, replicationFactor uint64, c
 	if len(config) == 0 {
 		return nil, errors.Wrapf(err, "failed to load configuration")
 	}
-	
-	if (algorithm != "hashmod") && (algorithm != "ketama") {
-		log.Println("The specified algorithm is incorrect. Fall back to hashmod algorithm")
-	}
 
 	return newMultiHashring(algorithm, replicationFactor, config), err
 }
 
-func newHashring(algorithm HashringAlgorithm, endpoints []string, replicationFactor uint64) Hashring {
+func newHashring(algorithm HashringAlgorithm, endpoints []string, replicationFactor uint64, hashring string, tenants []string) Hashring {
 	switch algorithm {
 	case AlgorithmHashmod:
 		return simpleHashring(endpoints)
 	case AlgorithmKetama:
 		return newKetamaHashring(endpoints, SectionsPerNode, replicationFactor)
 	default:
+		l := log.NewNopLogger()
+		level.Warn(l).Log("msg", "Unrecognizable hashring algorithm. Fall back to hashmod algorithm.",
+			"hashring", hashring,
+			"tenants", tenants)
 		return simpleHashring(endpoints)
 	}
 }
