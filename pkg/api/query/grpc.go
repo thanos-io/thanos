@@ -9,11 +9,12 @@ import (
 
 	"github.com/prometheus/prometheus/promql"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
+	"google.golang.org/grpc"
+
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"google.golang.org/grpc"
 )
 
 type GRPCAPI struct {
@@ -136,7 +137,8 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	ctx := srv.Context()
 	if request.TimeoutSeconds != 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(request.TimeoutSeconds))
+		timeout := time.Duration(request.TimeoutSeconds) * time.Second
+		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 
