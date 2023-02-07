@@ -233,29 +233,33 @@ func (s *seriesServer) Context() context.Context {
 	return s.ctx
 }
 
-// aggrsFromFunc infers aggregates of the underlying data based on the wrapping
+// aggrsFromHints infers aggregates of the underlying data based on the wrapping
 // function of a series selection.
-func aggrsFromFunc(sf *storepb.Func) []storepb.Aggr {
-	if sf == nil {
+func aggrsFromHints(hints storepb.QueryHints) []storepb.Aggr {
+	if hints.AggrFunc == nil && hints.TimeFunc == nil {
 		return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}
 	}
 
-	f := sf.Name
-	if f == "min" || strings.HasPrefix(f, "min_") {
+	switch hints.TimeFuncName() {
+	case "min_over_time":
 		return []storepb.Aggr{storepb.Aggr_MIN}
-	}
-	if f == "max" || strings.HasPrefix(f, "max_") {
+	case "max_over_time":
 		return []storepb.Aggr{storepb.Aggr_MAX}
-	}
-	if f == "count" || strings.HasPrefix(f, "count_") {
+	case "count_over_time":
 		return []storepb.Aggr{storepb.Aggr_COUNT}
-	}
-	// f == "sum" falls through here since we want the actual samples.
-	if strings.HasPrefix(f, "sum_") {
-		return []storepb.Aggr{storepb.Aggr_SUM}
-	}
-	if f == "increase" || f == "rate" || f == "irate" || f == "resets" {
+	case "increase", "rate", "irate", "resets":
 		return []storepb.Aggr{storepb.Aggr_COUNTER}
+	}
+
+	switch hints.AggrFuncName() {
+	case "min":
+		return []storepb.Aggr{storepb.Aggr_MIN}
+	case "max":
+		return []storepb.Aggr{storepb.Aggr_MAX}
+	case "count":
+		return []storepb.Aggr{storepb.Aggr_COUNT}
+	case "sum":
+		return []storepb.Aggr{storepb.Aggr_SUM}
 	}
 	// In the default case, we retrieve count and sum to compute an average.
 	return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}
@@ -333,7 +337,7 @@ func (q *querier) selectFn(ctx context.Context, hints storepb.QueryHints, ms ...
 		return nil, storepb.SeriesStatsCounter{}, errors.Wrap(err, "convert matchers")
 	}
 
-	aggrs := aggrsFromFunc(hints.AggrFunc)
+	aggrs := aggrsFromHints(hints)
 
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
