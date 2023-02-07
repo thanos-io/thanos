@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -64,6 +65,7 @@ func TestQuerier_Proxy(t *testing.T) {
 				false,
 				nil,
 				NoopSeriesStatsReporter,
+				nil,
 			)
 		}
 

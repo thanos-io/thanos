@@ -45,12 +45,28 @@ func (m *QueryHints) AggrFuncName() string {
 	return m.AggrFunc.Name
 }
 
+func (m *QueryHints) TimeFuncName() string {
+	if m.TimeFunc == nil {
+		return ""
+	}
+
+	return m.TimeFunc.Name
+}
+
 func (m *QueryHints) toPromQL(labelMatchers []LabelMatcher) string {
+	aggrFunc := m.AggrFuncName()
+	timeFunc := m.TimeFuncName()
 	grouping := m.Grouping.toPromQL()
 	matchers := MatchersToString(labelMatchers...)
 	queryRange := m.Range.toPromQL()
 
-	query := fmt.Sprintf("%s %s (%s%s)", m.AggrFunc.Name, grouping, matchers, queryRange)
+	var query string
+	if timeFunc == "" {
+		query = fmt.Sprintf("%s %s (%s%s)", aggrFunc, grouping, matchers, queryRange)
+	} else {
+		query = fmt.Sprintf("%s %s (%s(%s%s))", aggrFunc, grouping, timeFunc, matchers, queryRange)
+	}
+
 	// Remove double spaces if some expressions are missing.
 	return strings.Join(strings.Fields(query), " ")
 }

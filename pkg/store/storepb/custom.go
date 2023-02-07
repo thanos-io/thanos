@@ -535,21 +535,32 @@ func (m *SeriesRequest) ToPromQL() string {
 	return m.QueryHints.toPromQL(m.Matchers)
 }
 
+var distributiveAggregations = map[string]struct{}{
+	"max":   {},
+	"min":   {},
+	"group": {},
+}
+var distributiveTimeFuncs = map[string]struct{}{
+	"min_over_time": {},
+	"max_over_time": {},
+}
+
 // IsSafeToExecute returns true if the function or aggregation from the query hint
 // can be safely executed by the underlying Prometheus instance without affecting the
 // result of the query.
 func (m *QueryHints) IsSafeToExecute() bool {
-	distributiveOperations := []string{
-		"max",
-		"max_over_time",
-		"min",
-		"min_over_time",
-		"group",
+	if m.AggrFunc != nil && m.TimeFunc != nil {
+		return false
 	}
-	for _, op := range distributiveOperations {
-		if m.AggrFunc.Name == op {
-			return true
-		}
+
+	if m.AggrFunc != nil {
+		_, ok := distributiveAggregations[m.AggrFuncName()]
+		return ok
+	}
+
+	if m.TimeFunc != nil {
+		_, ok := distributiveTimeFuncs[m.TimeFuncName()]
+		return ok
 	}
 
 	return false

@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
@@ -545,7 +546,7 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 					},
 				},
 				QueryHints: &QueryHints{
-					Func: &Func{
+					AggrFunc: &Func{
 						Name: "max",
 					},
 				},
@@ -563,7 +564,7 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 					},
 				},
 				QueryHints: &QueryHints{
-					Func: &Func{
+					AggrFunc: &Func{
 						Name: "max",
 					},
 					Grouping: &Grouping{
@@ -590,7 +591,7 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 					},
 				},
 				QueryHints: &QueryHints{
-					Func: &Func{
+					AggrFunc: &Func{
 						Name: "max",
 					},
 					Grouping: &Grouping{
@@ -617,7 +618,7 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 					},
 				},
 				QueryHints: &QueryHints{
-					Func: &Func{
+					TimeFunc: &Func{
 						Name: "max_over_time",
 					},
 					Range: &Range{
@@ -625,7 +626,7 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 					},
 				},
 			},
-			expected: `max_over_time ({__name__="kube_pod_info", namespace=~"kube-.+"}[600000ms])`,
+			expected: `(max_over_time({__name__="kube_pod_info", namespace=~"kube-.+"}[600000ms]))`,
 		},
 		{
 			name: "Query with grouping and vector range selector",
@@ -643,7 +644,7 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 					},
 				},
 				QueryHints: &QueryHints{
-					Func: &Func{
+					AggrFunc: &Func{
 						Name: "max",
 					},
 					Grouping: &Grouping{
@@ -656,6 +657,39 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 				},
 			},
 			expected: `max without (container,pod) ({__name__="kube_pod_info", namespace=~"kube-.+"}[600000ms])`,
+		},
+		{
+			name: "Query with time and aggregate functions",
+			r: &SeriesRequest{
+				Matchers: []LabelMatcher{
+					{
+						Type:  LabelMatcher_EQ,
+						Name:  "__name__",
+						Value: "kube_pod_info",
+					},
+					{
+						Type:  LabelMatcher_RE,
+						Name:  "namespace",
+						Value: "kube-.+",
+					},
+				},
+				QueryHints: &QueryHints{
+					AggrFunc: &Func{
+						Name: "max",
+					},
+					TimeFunc: &Func{
+						Name: "max_over_time",
+					},
+					Grouping: &Grouping{
+						By:     false,
+						Labels: []string{"container", "pod"},
+					},
+					Range: &Range{
+						Millis: 10 * time.Minute.Milliseconds(),
+					},
+				},
+			},
+			expected: `max without (container,pod) (max_over_time({__name__="kube_pod_info", namespace=~"kube-.+"}[600000ms]))`,
 		},
 	}
 
