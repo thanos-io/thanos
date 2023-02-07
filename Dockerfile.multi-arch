@@ -9,4 +9,11 @@ ARG OS="linux"
 
 COPY .build/${OS}-${ARCH}/thanos /bin/thanos
 
+RUN adduser \
+    -D `#Dont assign a password` \
+    -H `#Dont create home directory` \
+    -u 1001 `#User id`\
+    thanos && \
+    chown thanos /bin/thanos
+USER 1001
 ENTRYPOINT [ "/bin/thanos" ]
