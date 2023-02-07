@@ -330,11 +330,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 }
 
 // storeMatches returns boolean if the given store may hold data for the given label matchers, time ranges and debug store matches gathered from context.
-// It also produces tracing span.
 func storeMatches(ctx context.Context, s Client, mint, maxt int64, matchers ...*labels.Matcher) (ok bool, reason string) {
-	span, ctx := tracing.StartSpan(ctx, "store_matches")
-	defer span.Finish()
-
 	var storeDebugMatcher [][]*labels.Matcher
 	if ctxVal := ctx.Value(StoreMatcherKey); ctxVal != nil {
 		if value, ok := ctxVal.([][]*labels.Matcher); ok {
