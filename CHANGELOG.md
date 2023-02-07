@@ -16,6 +16,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6008](https://github.com/thanos-io/thanos/pull/6008) *: Add counter metric `gate_queries_total` to gate.
 - [#5926](https://github.com/thanos-io/thanos/pull/5926) Receiver: Add experimental string interning in writer. Can be enabled with a hidden flag `writer.intern`.
 - [#5773](https://github.com/thanos-io/thanos/pull/5773) Store: Support disable cache index header file.
+- [#5653](https://github.com/thanos-io/thanos/pull/5653) Receive: Allow setting hashing algorithm per tenant in hashrings config
 
 ### Fixed
 
