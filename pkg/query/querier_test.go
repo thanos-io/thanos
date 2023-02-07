@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/prometheus/util/gate"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -55,6 +56,7 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 		false,
 		nil,
 		NoopSeriesStatsReporter,
+		nil,
 	)
 
 	q, err := queryable.Querier(context.Background(), 0, 42)
@@ -97,6 +99,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		false,
 		nil,
 		NoopSeriesStatsReporter,
+		nil,
 	)
 	engine := promql.NewEngine(
 		promql.EngineOpts{
@@ -391,7 +394,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 						g := gate.New(2)
 						mq := &mockedQueryable{
 							Creator: func(mint, maxt int64) storage.Querier {
-								return newQuerier(context.Background(), nil, mint, maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
+								return newQuerier(context.Background(), nil, mint, maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter, nil)
 							},
 						}
 						t.Cleanup(func() {
@@ -635,7 +638,7 @@ func TestQuerier_Select(t *testing.T) {
 				{dedup: true, expected: []series{tcase.expectedAfterDedup}},
 			} {
 				g := gate.New(2)
-				q := newQuerier(context.Background(), nil, tcase.mint, tcase.maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil, func(i storepb.SeriesStatsCounter) {})
+				q := newQuerier(context.Background(), nil, tcase.mint, tcase.maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter, nil)
 				t.Cleanup(func() { testutil.Ok(t, q.Close()) })
 
 				t.Run(fmt.Sprintf("dedup=%v", sc.dedup), func(t *testing.T) {
@@ -887,7 +890,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 100 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, false, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, false, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter, nil)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -957,7 +960,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 5 * time.Second
 		g := gate.New(2)
-		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, true, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter)
+		q := newQuerier(context.Background(), logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, s, true, 0, true, false, false, g, timeout, nil, NoopSeriesStatsReporter, nil)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
