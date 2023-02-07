@@ -67,6 +67,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6035](https://github.com/thanos-io/thanos/pull/6035) Replicate: Support all types of matchers to match blocks for replication. Change matcher parameter from string slice to a single string.
 - [#6126](https://github.com/thanos-io/thanos/pull/6126) Build with Go 1.20
 - [#6131](https://github.com/thanos-io/thanos/pull/6131) Store: *breaking :warning:* Use Histograms for bucket metrics.
+- [#6043](https://github.com/thanos-io/thanos/pull/6043) Receiver: Logically split router and ingestor mode.
 
 ## [v0.30.2](https://github.com/thanos-io/thanos/tree/release-0.30) - 28.01.2023
 

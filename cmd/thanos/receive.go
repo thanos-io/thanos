@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/grpc"
-
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -28,8 +26,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
-	"gopkg.in/yaml.v2"
-
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -48,34 +44,31 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tls"
+	"google.golang.org/grpc"
+	"gopkg.in/yaml.v2"
 )
 
 const compressionNone = "none"
 
 func registerReceive(app *extkingpin.App) {
 	cmd := app.Command(component.Receive.String(), "Accept Prometheus remote write API requests and write to local tsdb.")
-
 	conf := &receiveConfig{}
 	conf.registerFlag(cmd)
-
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(conf.labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
 		}
-
 		if !model.LabelName.IsValid(model.LabelName(conf.tenantLabelName)) {
 			return errors.Errorf("unsupported format for tenant label name, got %s", conf.tenantLabelName)
 		}
 		if len(lset) == 0 {
 			return errors.New("no external labels configured for receive, uniquely identifying external labels must be configured (ideally with `receive_` prefix); see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 		}
-
 		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
-
 		tsdbOpts := &tsdb.Options{
 			MinBlockDuration:               int64(time.Duration(*conf.tsdbMinBlockDuration) / time.Millisecond),
 			MaxBlockDuration:               int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
@@ -90,10 +83,8 @@ func registerReceive(app *extkingpin.App) {
 			EnableMemorySnapshotOnShutdown: conf.tsdbMemorySnapshotOnShutdown,
 			EnableNativeHistograms:         conf.tsdbEnableNativeHistograms,
 		}
-
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
 		receiveMode := conf.determineMode()
-
 		return runReceive(
 			g,
 			logger,
@@ -109,7 +100,6 @@ func registerReceive(app *extkingpin.App) {
 		)
 	})
 }
-
 func runReceive(
 	g *run.Group,
 	logger log.Logger,
@@ -125,14 +115,7 @@ func runReceive(
 	conf *receiveConfig,
 ) error {
 	logger = log.With(logger, "component", "receive")
-
 	level.Info(logger).Log("mode", receiveMode, "msg", "running receive")
-
-	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA)
-	if err != nil {
-		return err
-	}
-
 	dialOpts, err := extgrpc.StoreClientGRPCOpts(
 		logger,
 		reg,
@@ -147,34 +130,15 @@ func runReceive(
 	if err != nil {
 		return err
 	}
+
 	if conf.compression != compressionNone {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
 	}
-
-	var bkt objstore.Bucket
 	confContentYaml, err := conf.objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
 
-	// Has this thanos receive instance been configured to ingest metrics into a local TSDB?
-	enableIngestion := receiveMode == receive.IngestorOnly || receiveMode == receive.RouterIngestor
-
-	upload := len(confContentYaml) > 0
-
-	if enableIngestion {
-		if upload {
-			bkt, err = uploadToBucket(tsdbOpts, conf, logger, confContentYaml, reg, comp)
-			if err != nil {
-				return err
-			}
-		} else {
-			level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
-		}
-	}
-
-	// TODO(brancz): remove after a couple of versions
-	// Migrate non-multi-tsdb capable storage to multi-tsdb disk layout.
 	if err := migrateLegacyStorage(logger, conf.dataDir, conf.defaultTenantID); err != nil {
 		return errors.Wrapf(err, "migrate legacy storage in %v to default tenant %v", conf.dataDir, conf.defaultTenantID)
 	}
@@ -183,54 +147,21 @@ func runReceive(
 	if err != nil {
 		return errors.Wrap(err, "get content of relabel configuration")
 	}
-	var relabelConfig []*relabel.Config
-	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
-		return errors.Wrap(err, "parse relabel configuration")
-	}
-
-	grpcProbe := prober.NewGRPC()
-	httpProbe := prober.NewHTTP()
-	statusProber := prober.Combine(
-		httpProbe,
-		grpcProbe,
-		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
-	)
 
 	var (
 		// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
 		hashringChangedChan = make(chan struct{}, 1)
-
-		dbs    *receive.MultiTSDB
-		writer *receive.Writer
+		relabelConfig       []*relabel.Config
+		dbs                 *receive.MultiTSDB
+		bkt                 objstore.Bucket
+		limitsConfig        *receive.RootLimitsConfig
 	)
-
-	if enableIngestion {
-		dbs = receive.NewMultiTSDB(
-			conf.dataDir,
-			logger,
-			reg,
-			tsdbOpts,
-			lset,
-			conf.tenantLabelName,
-			bkt,
-			conf.allowOutOfOrderUpload,
-			hashFunc,
-		)
-		writer = receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, conf.writerInterning)
-		// uploadC signals when new blocks should be uploaded.
-		uploadC := make(chan struct{}, 1)
-		// uploadDone signals when uploading has finished.
-		uploadDone := make(chan struct{}, 1)
-
-		level.Debug(logger).Log("msg", "setting up TSDB")
-		{
-			if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
-				return err
-			}
-		}
+	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
+		return errors.Wrap(err, "parse relabel configuration")
 	}
 
-	var limitsConfig *receive.RootLimitsConfig
+	// writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, conf.writerInterning)
+
 	if conf.writeLimitsConfig != nil {
 		limitsContentYaml, err := conf.writeLimitsConfig.Content()
 		if err != nil {
@@ -241,11 +172,341 @@ func runReceive(
 			return errors.Wrap(err, "parse limit configuration")
 		}
 	}
+
 	limiter, err := receive.NewLimiter(conf.writeLimitsConfig, reg, receiveMode, log.With(logger, "component", "receive-limiter"))
 	if err != nil {
 		return errors.Wrap(err, "creating limiter")
 	}
 
+	grpcProbe := prober.NewGRPC()
+	httpProbe := prober.NewHTTP()
+	statusProber := prober.Combine(
+		httpProbe,
+		grpcProbe,
+		prober.NewInstrumentation(comp, logger, extprom.WrapRegistererWithPrefix("thanos_", reg)),
+	)
+
+	upload := len(confContentYaml) > 0
+
+	// Has this thanos receive instance been configured to ingest metrics into a local TSDB?
+	enableIngestion := receiveMode == receive.IngestorOnly || receiveMode == receive.RouterIngestor
+	if enableIngestion {
+		err := ingestionMode(bkt, upload, tsdbOpts, conf, logger, confContentYaml, reg, comp, dbs, lset, hashFunc, g, hashringChangedChan, statusProber,
+			relabelConfig, receiveMode, tracer, dialOpts, limiter, httpProbe, grpcProbe, limitsConfig, grpcLogOpts, tagOpts, enableIngestion)
+		if err != nil {
+			return err
+		}
+
+	} else {
+		err := routerMode(conf, logger, reg, comp, dbs, g, hashringChangedChan, statusProber,
+			relabelConfig, receiveMode, tracer, dialOpts, limiter, httpProbe, grpcProbe, grpcLogOpts, tagOpts, enableIngestion)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ingestionMode(bkt objstore.Bucket,
+	upload bool,
+	tsdbOpts *tsdb.Options,
+	conf *receiveConfig,
+	logger log.Logger,
+	confContentYaml []byte,
+	reg *prometheus.Registry,
+	comp component.SourceStoreAPI,
+	dbs *receive.MultiTSDB,
+	lset labels.Labels,
+	hashFunc metadata.HashFunc,
+	g *run.Group,
+	hashringChangedChan chan struct{},
+	statusProber prober.Probe,
+	relabelConfig []*relabel.Config,
+	receiveMode receive.ReceiverMode,
+	tracer opentracing.Tracer,
+	dialOpts []grpc.DialOption,
+	limiter *receive.Limiter,
+	httpProbe *prober.HTTPProbe,
+	grpcProbe *prober.GRPCProbe,
+	limitsConfig *receive.RootLimitsConfig,
+	grpcLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
+	enableIngestion bool,
+) error {
+	if upload {
+		var err error
+		bkt, err = uploadToBucket(tsdbOpts, conf, logger, confContentYaml, reg, comp)
+		if err != nil {
+			return err
+		}
+	} else {
+		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
+	}
+	dbs = receive.NewMultiTSDB(
+		conf.dataDir,
+		logger,
+		reg,
+		tsdbOpts,
+		lset,
+		conf.tenantLabelName,
+		bkt,
+		conf.allowOutOfOrderUpload,
+		hashFunc,
+	)
+	// uploadC signals when new blocks should be uploaded.
+	uploadC := make(chan struct{}, 1)
+	// uploadDone signals when uploading has finished.
+	uploadDone := make(chan struct{}, 1)
+
+	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, conf.writerInterning)
+
+	level.Debug(logger).Log("msg", "setting up TSDB")
+	{
+		if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
+			return err
+		}
+	}
+	err, webHandler := getWebhandler(conf, logger, reg, dbs, writer, relabelConfig, receiveMode, tracer, dialOpts, limiter)
+	if err != nil {
+		return err
+	}
+
+	level.Debug(logger).Log("msg", "setting up hashring")
+	{
+		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion); err != nil {
+			return err
+		}
+	}
+	level.Debug(logger).Log("msg", "setting up HTTP server")
+	{
+		if err := setupHttpSever(logger, reg, comp, httpProbe, conf, g, statusProber); err != nil {
+			return err
+		}
+	}
+	level.Debug(logger).Log("msg", "setting up gRPC server")
+	{
+		if err := setupgRPC(logger, conf, webHandler, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe, statusProber, g, dbs, httpProbe); err != nil {
+			return nil
+		}
+	}
+	level.Debug(logger).Log("msg", "setting up receive HTTP handler")
+	{
+		setupHttpHandler(g, webHandler)
+	}
+	if limitsConfig.AreHeadSeriesLimitsConfigured() {
+		level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
+		{
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				return runutil.Repeat(15*time.Second, ctx.Done(), func() error {
+					if err := limiter.HeadSeriesLimiter.QueryMetaMonitoring(ctx); err != nil {
+						level.Error(logger).Log("msg", "failed to query meta-monitoring", "err", err.Error())
+					}
+					return nil
+				})
+			}, func(err error) {
+				cancel()
+			})
+		}
+	}
+	level.Debug(logger).Log("msg", "setting up periodic tenant pruning")
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			return runutil.Repeat(2*time.Hour, ctx.Done(), func() error {
+				if err := dbs.Prune(ctx); err != nil {
+					level.Error(logger).Log("err", err)
+				}
+				return nil
+			})
+		}, func(err error) {
+			cancel()
+		})
+	}
+	{
+		if err := configReloader(limiter, logger, g); err != nil {
+			return err
+		}
+	}
+	level.Info(logger).Log("msg", "starting receiver")
+	return nil
+}
+func routerMode(
+	conf *receiveConfig,
+	logger log.Logger,
+	reg *prometheus.Registry,
+	comp component.SourceStoreAPI,
+	dbs *receive.MultiTSDB,
+	g *run.Group,
+	hashringChangedChan chan struct{},
+	statusProber prober.Probe,
+	relabelConfig []*relabel.Config,
+	receiveMode receive.ReceiverMode,
+	tracer opentracing.Tracer,
+	dialOpts []grpc.DialOption,
+	limiter *receive.Limiter,
+	httpProbe *prober.HTTPProbe,
+	grpcProbe *prober.GRPCProbe,
+	grpcLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
+	enableIngestion bool,
+
+) error {
+	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, conf.writerInterning)
+
+	err, webHandler := getWebhandler(conf, logger, reg, dbs, writer, relabelConfig, receiveMode, tracer, dialOpts, limiter)
+	if err != nil {
+		return err
+	}
+
+	level.Debug(logger).Log("msg", "setting up hashring")
+	{
+		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion); err != nil {
+
+			return err
+		}
+	}
+	level.Debug(logger).Log("msg", "setting up HTTP server")
+	{
+		if err := setupHttpSever(logger, reg, comp, httpProbe, conf, g, statusProber); err != nil {
+			return err
+		}
+	}
+	level.Debug(logger).Log("msg", "setting up gRPC server")
+	{
+		if err := setupgRPC(logger, conf, webHandler, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe, statusProber, g, dbs, httpProbe); err != nil {
+			return nil
+		}
+	}
+	level.Debug(logger).Log("msg", "setting up receive HTTP handler")
+	{
+		setupHttpHandler(g, webHandler)
+	}
+	{
+		if err := configReloader(limiter, logger, g); err != nil {
+			return err
+		}
+	}
+	level.Info(logger).Log("msg", "starting receiver")
+	return nil
+}
+
+func configReloader(limiter *receive.Limiter, logger log.Logger, g *run.Group) error {
+	if limiter.CanReload() {
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			level.Debug(logger).Log("msg", "limits config initialized with file watcher.")
+			if err := limiter.StartConfigReloader(ctx); err != nil {
+				return err
+			}
+			<-ctx.Done()
+			return nil
+		}, func(err error) {
+			cancel()
+		})
+	}
+	return nil
+}
+
+func setupHttpHandler(g *run.Group, webHandler *receive.Handler) {
+	g.Add(
+		func() error {
+			return errors.Wrap(webHandler.Run(), "error starting web server")
+		},
+		func(err error) {
+			webHandler.Close()
+		},
+	)
+}
+
+func setupgRPC(logger log.Logger,
+	conf *receiveConfig,
+	webHandler *receive.Handler,
+	reg *prometheus.Registry,
+	tracer opentracing.Tracer,
+	grpcLogOpts []grpc_logging.Option,
+	tagOpts []tags.Option,
+	comp component.SourceStoreAPI,
+	grpcProbe *prober.GRPCProbe,
+	statusProber prober.Probe,
+	g *run.Group,
+	dbs *receive.MultiTSDB,
+	httpProbe *prober.HTTPProbe,
+) error {
+	tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA)
+	if err != nil {
+		return errors.Wrap(err, "setup gRPC server")
+	}
+	grpcOpts := []grpcserver.Option{
+		grpcserver.WithListen(conf.grpcConfig.bindAddress),
+		grpcserver.WithGracePeriod(time.Duration(conf.grpcConfig.gracePeriod)),
+		grpcserver.WithTLSConfig(tlsCfg),
+		grpcserver.WithMaxConnAge(conf.grpcConfig.maxConnectionAge),
+	}
+	infoSrvOpts := []info.ServerOptionFunc{}
+	rw := store.ReadWriteTSDBStore{
+		WriteableStoreServer: webHandler,
+	}
+	// If ingestion is enabled and dbs is nil.
+	if dbs != nil {
+		rw, infoSrvOpts, grpcOpts = setupgRPCandInfoSrv(rw, infoSrvOpts, grpcOpts, logger, reg, comp, dbs, httpProbe)
+	}
+	grpcOpts = append(grpcOpts,
+		grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
+		grpcserver.WithServer(info.RegisterInfoServer(info.NewInfoServer(
+			component.Receive.String(),
+			infoSrvOpts...,
+		))),
+	)
+	srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, tagOpts, comp, grpcProbe, grpcOpts...)
+	g.Add(
+		func() error {
+			level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", conf.grpcConfig.bindAddress)
+			statusProber.Healthy()
+			return srv.ListenAndServe()
+		},
+		func(err error) {
+			statusProber.NotReady(err)
+			defer statusProber.NotHealthy(err)
+			srv.Shutdown(err)
+		},
+	)
+	return nil
+}
+
+func setupHttpSever(logger log.Logger, reg *prometheus.Registry, comp component.SourceStoreAPI, httpProbe *prober.HTTPProbe, conf *receiveConfig, g *run.Group, statusProber prober.Probe) error {
+	srv := httpserver.New(logger, reg, comp, httpProbe,
+		httpserver.WithListen(*conf.httpBindAddr),
+		httpserver.WithGracePeriod(time.Duration(*conf.httpGracePeriod)),
+		httpserver.WithTLSConfig(*conf.httpTLSConfig),
+	)
+	g.Add(func() error {
+		statusProber.Healthy()
+		return srv.ListenAndServe()
+	}, func(err error) {
+		statusProber.NotReady(err)
+		defer statusProber.NotHealthy(err)
+		srv.Shutdown(err)
+	})
+	return nil
+}
+
+func getWebhandler(
+	conf *receiveConfig,
+	logger log.Logger,
+	reg *prometheus.Registry,
+	dbs *receive.MultiTSDB,
+	writer *receive.Writer,
+	relabelConfig []*relabel.Config,
+	receiveMode receive.ReceiverMode,
+	tracer opentracing.Tracer,
+	dialOpts []grpc.DialOption,
+	limiter *receive.Limiter,
+) (error, *receive.Handler) {
+	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA)
+	if err != nil {
+		return err, nil
+	}
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
 		Writer:            writer,
 		ListenAddress:     conf.rwAddress,
@@ -265,145 +526,7 @@ func runReceive(
 		TSDBStats:         dbs,
 		Limiter:           limiter,
 	})
-
-	level.Debug(logger).Log("msg", "setting up hashring")
-	{
-		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion); err != nil {
-			return err
-		}
-	}
-
-	level.Debug(logger).Log("msg", "setting up HTTP server")
-	{
-		srv := httpserver.New(logger, reg, comp, httpProbe,
-			httpserver.WithListen(*conf.httpBindAddr),
-			httpserver.WithGracePeriod(time.Duration(*conf.httpGracePeriod)),
-			httpserver.WithTLSConfig(*conf.httpTLSConfig),
-		)
-		g.Add(func() error {
-			statusProber.Healthy()
-			return srv.ListenAndServe()
-		}, func(err error) {
-			statusProber.NotReady(err)
-			defer statusProber.NotHealthy(err)
-
-			srv.Shutdown(err)
-		})
-	}
-
-	level.Debug(logger).Log("msg", "setting up gRPC server")
-	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA)
-		if err != nil {
-			return errors.Wrap(err, "setup gRPC server")
-		}
-
-		grpcOpts := []grpcserver.Option{
-			grpcserver.WithListen(*conf.grpcBindAddr),
-			grpcserver.WithGracePeriod(time.Duration(*conf.grpcGracePeriod)),
-			grpcserver.WithTLSConfig(tlsCfg),
-			grpcserver.WithMaxConnAge(*conf.grpcMaxConnAge),
-		}
-
-		infoSrvOpts := []info.ServerOptionFunc{}
-
-		rw := store.ReadWriteTSDBStore{
-			WriteableStoreServer: webHandler,
-		}
-
-		// If ingestion is enabled and dbs is nil.
-		if dbs != nil {
-			rw, infoSrvOpts, grpcOpts = setupgRPCandInfoSrv(rw, infoSrvOpts, grpcOpts, logger, reg, comp, dbs, httpProbe)
-		}
-
-		grpcOpts = append(grpcOpts,
-			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
-			grpcserver.WithServer(info.RegisterInfoServer(info.NewInfoServer(
-				component.Receive.String(),
-				infoSrvOpts...,
-			))),
-		)
-
-		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, tagOpts, comp, grpcProbe, grpcOpts...)
-
-		g.Add(
-			func() error {
-				level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", conf.grpcConfig.bindAddress)
-				statusProber.Healthy()
-				return srv.ListenAndServe()
-			},
-			func(err error) {
-				statusProber.NotReady(err)
-				defer statusProber.NotHealthy(err)
-
-				srv.Shutdown(err)
-			},
-		)
-	}
-
-	level.Debug(logger).Log("msg", "setting up receive HTTP handler")
-	{
-		g.Add(
-			func() error {
-				return errors.Wrap(webHandler.Run(), "error starting web server")
-			},
-			func(err error) {
-				webHandler.Close()
-			},
-		)
-	}
-
-	if enableIngestion {
-		if limitsConfig.AreHeadSeriesLimitsConfigured() {
-			level.Info(logger).Log("msg", "setting up periodic (every 15s) meta-monitoring query for limiting cache")
-			{
-				ctx, cancel := context.WithCancel(context.Background())
-				g.Add(func() error {
-					return runutil.Repeat(15*time.Second, ctx.Done(), func() error {
-						if err := limiter.HeadSeriesLimiter.QueryMetaMonitoring(ctx); err != nil {
-							level.Error(logger).Log("msg", "failed to query meta-monitoring", "err", err.Error())
-						}
-						return nil
-					})
-				}, func(err error) {
-					cancel()
-				})
-			}
-		}
-		level.Debug(logger).Log("msg", "setting up periodic tenant pruning")
-		{
-			ctx, cancel := context.WithCancel(context.Background())
-			g.Add(func() error {
-				return runutil.Repeat(2*time.Hour, ctx.Done(), func() error {
-					if err := dbs.Prune(ctx); err != nil {
-						level.Error(logger).Log("err", err)
-					}
-					return nil
-				})
-			}, func(err error) {
-				cancel()
-			})
-		}
-	}
-
-	{
-		if limiter.CanReload() {
-			ctx, cancel := context.WithCancel(context.Background())
-			g.Add(func() error {
-				level.Debug(logger).Log("msg", "limits config initialized with file watcher.")
-				if err := limiter.StartConfigReloader(ctx); err != nil {
-					return err
-				}
-				<-ctx.Done()
-				return nil
-			}, func(err error) {
-				cancel()
-			})
-		}
-	}
-
-	level.Info(logger).Log("msg", "starting receiver")
-	return nil
+	return nil, webHandler
 }
 
 func uploadToBucket(tsdbOpts *tsdb.Options,
@@ -448,16 +571,15 @@ func setupgRPCandInfoSrv(rw store.ReadWriteTSDBStore,
 		store.LazyRetrieval,
 	)
 	rw.StoreServer = mts
-
 	infoSrvOpts = append(infoSrvOpts, info.WithLabelSetFunc(func() []labelpb.ZLabelSet { return mts.LabelSet() }),
 		info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 			if httpProbe.IsReady() {
 				minTime, maxTime := mts.TimeRange()
 				return &infopb.StoreInfo{
-					MinTime:           minTime,
-					MaxTime:           maxTime,
-					SupportsSharding:  true,
-					SendsSortedSeries: true,
+					MinTime:                      minTime,
+					MaxTime:                      maxTime,
+					SupportsSharding:             true,
+					SupportsWithoutReplicaLabels: true,
 				}
 			}
 			return nil
@@ -468,7 +590,6 @@ func setupgRPCandInfoSrv(rw store.ReadWriteTSDBStore,
 		grpcserver.WithServer(store.RegisterStoreServer(rw, logger)),
 		grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
 	)
-
 	return rw, infoSrvOpts, grpcOpts
 }
 
