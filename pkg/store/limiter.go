@@ -101,29 +101,29 @@ func NewBytesLimiterFactory(limit units.Base2Bytes) BytesLimiterFactory {
 }
 
 type RateLimits struct {
-	SeriesPerRequest uint64
-	ChunksPerRequest uint64
+	SeriesPerRequest  uint64
+	SamplesPerRequest uint64
 }
 
 func (l *RateLimits) RegisterFlags(cmd extkingpin.FlagClause) {
 	cmd.Flag("store.grpc.series-limit", "The maximum series allowed for a single Series request. The Series call fails if this limit is exceeded. 0 means no limit.").Default("0").Uint64Var(&l.SeriesPerRequest)
-	cmd.Flag("store.grpc.chunks-limit", "The maximum chunks allowed for a single Series request, The Series call fails if this limit is exceeded. 0 means no limit.").Default("0").Uint64Var(&l.ChunksPerRequest)
+	cmd.Flag("store.grpc.samples-limit", "The maximum samples allowed for a single Series request, The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains a maximum of 120 samples.").Default("0").Uint64Var(&l.SamplesPerRequest)
 }
 
 // rateLimitedStoreServer is a storepb.StoreServer that can apply rate limits against Series requests.
 type rateLimitedStoreServer struct {
 	storepb.StoreServer
 	newSeriesLimiter      SeriesLimiterFactory
-	newChunksLimiter      ChunksLimiterFactory
+	newSamplesLimiter     ChunksLimiterFactory
 	failedRequestsCounter *prometheus.CounterVec
 }
 
 // NewRateLimitedStoreServer creates a new rateLimitedStoreServer.
 func NewRateLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registerer, rateLimits RateLimits) storepb.StoreServer {
 	return &rateLimitedStoreServer{
-		StoreServer:      store,
-		newSeriesLimiter: NewSeriesLimiterFactory(rateLimits.SeriesPerRequest),
-		newChunksLimiter: NewChunksLimiterFactory(rateLimits.ChunksPerRequest),
+		StoreServer:       store,
+		newSeriesLimiter:  NewSeriesLimiterFactory(rateLimits.SeriesPerRequest),
+		newSamplesLimiter: NewChunksLimiterFactory(rateLimits.SamplesPerRequest),
 		failedRequestsCounter: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_store_selects_dropped_total",
 			Help: "Number of select queries that were dropped due to configured limits.",
@@ -133,7 +133,7 @@ func NewRateLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registe
 
 func (s *rateLimitedStoreServer) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	seriesLimiter := s.newSeriesLimiter(s.failedRequestsCounter.WithLabelValues("series"))
-	chunksLimiter := s.newChunksLimiter(s.failedRequestsCounter.WithLabelValues("chunks"))
+	chunksLimiter := s.newSamplesLimiter(s.failedRequestsCounter.WithLabelValues("chunks"))
 	rateLimitedSrv := newRateLimitedServer(srv, seriesLimiter, chunksLimiter)
 	if err := s.StoreServer.Series(req, rateLimitedSrv); err != nil {
 		return err
@@ -145,15 +145,15 @@ func (s *rateLimitedStoreServer) Series(req *storepb.SeriesRequest, srv storepb.
 // rateLimitedServer is a storepb.Store_SeriesServer that tracks statistics about sent series.
 type rateLimitedServer struct {
 	storepb.Store_SeriesServer
-	seriesLimiter SeriesLimiter
-	chunksLimiter ChunksLimiter
+	seriesLimiter  SeriesLimiter
+	samplesLimiter ChunksLimiter
 }
 
 func newRateLimitedServer(upstream storepb.Store_SeriesServer, seriesLimiter SeriesLimiter, chunksLimiter ChunksLimiter) *rateLimitedServer {
 	return &rateLimitedServer{
 		Store_SeriesServer: upstream,
 		seriesLimiter:      seriesLimiter,
-		chunksLimiter:      chunksLimiter,
+		samplesLimiter:     chunksLimiter,
 	}
 }
 
@@ -166,8 +166,8 @@ func (i *rateLimitedServer) Send(response *storepb.SeriesResponse) error {
 	if err := i.seriesLimiter.Reserve(1); err != nil {
 		return errors.Wrapf(err, "failed to send series")
 	}
-	if err := i.chunksLimiter.Reserve(uint64(len(series.Chunks))); err != nil {
-		return errors.Wrapf(err, "failed to send chunks")
+	if err := i.samplesLimiter.Reserve(uint64(len(series.Chunks) * MaxSamplesPerChunk)); err != nil {
+		return errors.Wrapf(err, "failed to send samples")
 	}
 
 	return i.Store_SeriesServer.Send(response)

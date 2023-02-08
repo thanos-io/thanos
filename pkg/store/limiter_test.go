@@ -35,10 +35,11 @@ func TestLimiter(t *testing.T) {
 }
 
 func TestRateLimitedServer(t *testing.T) {
+	numSamples := 60
 	series := []*storepb.SeriesResponse{
-		storeSeriesResponse(t, labels.FromStrings("series", "1"), []sample{{t: 0, v: 0}}),
-		storeSeriesResponse(t, labels.FromStrings("series", "2"), []sample{{t: 0, v: 0}}),
-		storeSeriesResponse(t, labels.FromStrings("series", "3"), []sample{{t: 0, v: 0}}),
+		storeSeriesResponse(t, labels.FromStrings("series", "1"), makeSamples(numSamples)),
+		storeSeriesResponse(t, labels.FromStrings("series", "2"), makeSamples(numSamples)),
+		storeSeriesResponse(t, labels.FromStrings("series", "3"), makeSamples(numSamples)),
 	}
 	tests := []struct {
 		name   string
@@ -49,24 +50,24 @@ func TestRateLimitedServer(t *testing.T) {
 		{
 			name: "no limits",
 			limits: RateLimits{
-				SeriesPerRequest: 0,
-				ChunksPerRequest: 0,
+				SeriesPerRequest:  0,
+				SamplesPerRequest: 0,
 			},
 			series: series,
 		},
 		{
 			name: "series bellow limit",
 			limits: RateLimits{
-				SeriesPerRequest: 3,
-				ChunksPerRequest: 0,
+				SeriesPerRequest:  3,
+				SamplesPerRequest: 0,
 			},
 			series: series,
 		},
 		{
 			name: "series over limit",
 			limits: RateLimits{
-				SeriesPerRequest: 2,
-				ChunksPerRequest: 0,
+				SeriesPerRequest:  2,
+				SamplesPerRequest: 0,
 			},
 			series: series,
 			err:    "failed to send series: limit 2 violated (got 3)",
@@ -74,19 +75,19 @@ func TestRateLimitedServer(t *testing.T) {
 		{
 			name: "chunks bellow limit",
 			limits: RateLimits{
-				SeriesPerRequest: 0,
-				ChunksPerRequest: 3,
+				SeriesPerRequest:  0,
+				SamplesPerRequest: uint64(3 * numSamples * MaxSamplesPerChunk),
 			},
 			series: series,
 		},
 		{
 			name: "chunks over limit",
 			limits: RateLimits{
-				SeriesPerRequest: 0,
-				ChunksPerRequest: 2,
+				SeriesPerRequest:  0,
+				SamplesPerRequest: 50,
 			},
 			series: series,
-			err:    "failed to send chunks: limit 2 violated (got 3)",
+			err:    "failed to send samples: limit 50 violated (got 120)",
 		},
 	}
 	for _, test := range tests {
@@ -105,6 +106,14 @@ func TestRateLimitedServer(t *testing.T) {
 			}
 		})
 	}
+}
+
+func makeSamples(numSamples int) []sample {
+	samples := make([]sample, numSamples)
+	for i := range samples {
+		samples[i] = sample{t: int64(i), v: float64(i)}
+	}
+	return samples
 }
 
 type testStoreServer struct {
