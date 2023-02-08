@@ -286,6 +286,7 @@ func newMemcachedClient(
 		getMultiGate: gate.New(
 			extprom.WrapRegistererWithPrefix("thanos_memcached_getmulti_", reg),
 			config.MaxGetMultiConcurrency,
+			gate.Gets,
 		),
 	}
 
