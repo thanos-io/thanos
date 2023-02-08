@@ -93,7 +93,7 @@ func NewSeriesLimiterFactory(limit uint64) SeriesLimiterFactory {
 	}
 }
 
-// NewSeriesLimiterFactory makes a new NewSeriesLimiterFactory with a static limit.
+// NewBytesLimiterFactory makes a new NewSeriesLimiterFactory with a static limit.
 func NewBytesLimiterFactory(limit units.Base2Bytes) BytesLimiterFactory {
 	return func(failedCounter prometheus.Counter) BytesLimiter {
 		return NewLimiter(uint64(limit), failedCounter)
@@ -107,7 +107,7 @@ type RateLimits struct {
 
 func (l *RateLimits) RegisterFlags(cmd extkingpin.FlagClause) {
 	cmd.Flag("store.grpc.series-limit", "The maximum series allowed for a single Series request. The Series call fails if this limit is exceeded. 0 means no limit.").Default("0").Uint64Var(&l.SeriesPerRequest)
-	cmd.Flag("store.grpc.chunks-limit", "The maximum chunks allowed for a single Series request, The Series call fails if this limit is exceeded. 0 means no limit.").Default("0").Uint64Var(&l.SeriesPerRequest)
+	cmd.Flag("store.grpc.chunks-limit", "The maximum chunks allowed for a single Series request, The Series call fails if this limit is exceeded. 0 means no limit.").Default("0").Uint64Var(&l.ChunksPerRequest)
 }
 
 // rateLimitedStoreServer is a storepb.StoreServer that can apply rate limits against Series requests.
