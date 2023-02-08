@@ -282,7 +282,7 @@ func runSidecar(
 			info.WithMetricMetadataInfoFunc(),
 		)
 
-		storeServer := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), conf.storeRateLimits)
+		storeServer := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), reg, conf.storeRateLimits)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),

@@ -314,7 +314,7 @@ func runReceive(
 			0,
 			store.LazyRetrieval,
 		)
-		mts := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), conf.storeRateLimits)
+		mts := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, conf.storeRateLimits)
 		rw := store.ReadWriteTSDBStore{
 			StoreServer:          mts,
 			WriteableStoreServer: webHandler,

@@ -107,7 +107,7 @@ func NewInstrumentedStoreServer(reg prometheus.Registerer, store storepb.StoreSe
 		chunksRequested: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "thanos_store_server_chunks_requested",
 			Help:    "Number of requested chunks for Series calls",
-			Buckets: []float64{100, 1000, 10000, 100000, 10000000, 100000000, 1000000000},
+			Buckets: []float64{1, 100, 1000, 10000, 100000, 10000000, 100000000, 1000000000, 10000000000},
 		}),
 	}
 }

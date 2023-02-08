@@ -636,13 +636,8 @@ func runRule(
 				return nil
 			}),
 		)
-<<<<<<< HEAD
-		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(tsdbStore, logger)))
-		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), logger)))
-=======
-		storeServer := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), conf.storeRateLimits)
-		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(storeServer)))
->>>>>>> d9ff3c5c (Add rate limits to Store servers)
+		storeServer := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), reg, conf.storeRateLimits)
+		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)))
 	}
 
 	options = append(options, grpcserver.WithServer(

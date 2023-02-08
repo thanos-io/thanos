@@ -455,7 +455,7 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		storeServer := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, bs), conf.storeRateLimits)
+		storeServer := store.NewInstrumentedStoreServer(reg, bs)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, conf.component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(storeServer)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),

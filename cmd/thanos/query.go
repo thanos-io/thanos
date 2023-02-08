@@ -764,7 +764,7 @@ func runQuery(
 		)
 
 		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, queryEngine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
-		storeServer := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), storeRateLimits)
+		storeServer := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, storeRateLimits)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),
 			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
