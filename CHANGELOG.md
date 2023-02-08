@@ -23,7 +23,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Changed
 
 - [#6035](https://github.com/thanos-io/thanos/pull/6035) Replicate: Support all types of matchers to match blocks for replication. Change matcher parameter from string slice to a single string.
->>>>>>> 0dbde4f1 (Add CHANGELOG entry)
 
 ### Fixed
 

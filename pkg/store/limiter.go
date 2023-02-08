@@ -100,30 +100,33 @@ func NewBytesLimiterFactory(limit units.Base2Bytes) BytesLimiterFactory {
 	}
 }
 
-type RateLimits struct {
+// SeriesSelectLimits are limits applied against individual Series calls.
+type SeriesSelectLimits struct {
 	SeriesPerRequest  uint64
 	SamplesPerRequest uint64
 }
 
-func (l *RateLimits) RegisterFlags(cmd extkingpin.FlagClause) {
+func (l *SeriesSelectLimits) RegisterFlags(cmd extkingpin.FlagClause) {
 	cmd.Flag("store.grpc.series-limit", "The maximum series allowed for a single Series request. The Series call fails if this limit is exceeded. 0 means no limit.").Default("0").Uint64Var(&l.SeriesPerRequest)
 	cmd.Flag("store.grpc.samples-limit", "The maximum samples allowed for a single Series request, The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains a maximum of 120 samples.").Default("0").Uint64Var(&l.SamplesPerRequest)
 }
 
-// rateLimitedStoreServer is a storepb.StoreServer that can apply rate limits against Series requests.
-type rateLimitedStoreServer struct {
+var _ storepb.StoreServer = &limitedStoreServer{}
+
+// limitedStoreServer is a storepb.StoreServer that can apply series and sample limits against individual Series requests.
+type limitedStoreServer struct {
 	storepb.StoreServer
 	newSeriesLimiter      SeriesLimiterFactory
 	newSamplesLimiter     ChunksLimiterFactory
 	failedRequestsCounter *prometheus.CounterVec
 }
 
-// NewRateLimitedStoreServer creates a new rateLimitedStoreServer.
-func NewRateLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registerer, rateLimits RateLimits) storepb.StoreServer {
-	return &rateLimitedStoreServer{
+// NewLimitedStoreServer creates a new limitedStoreServer.
+func NewLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registerer, selectLimits SeriesSelectLimits) storepb.StoreServer {
+	return &limitedStoreServer{
 		StoreServer:       store,
-		newSeriesLimiter:  NewSeriesLimiterFactory(rateLimits.SeriesPerRequest),
-		newSamplesLimiter: NewChunksLimiterFactory(rateLimits.SamplesPerRequest),
+		newSeriesLimiter:  NewSeriesLimiterFactory(selectLimits.SeriesPerRequest),
+		newSamplesLimiter: NewChunksLimiterFactory(selectLimits.SamplesPerRequest),
 		failedRequestsCounter: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_store_selects_dropped_total",
 			Help: "Number of select queries that were dropped due to configured limits.",
@@ -131,33 +134,35 @@ func NewRateLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registe
 	}
 }
 
-func (s *rateLimitedStoreServer) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+func (s *limitedStoreServer) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	seriesLimiter := s.newSeriesLimiter(s.failedRequestsCounter.WithLabelValues("series"))
 	chunksLimiter := s.newSamplesLimiter(s.failedRequestsCounter.WithLabelValues("chunks"))
-	rateLimitedSrv := newRateLimitedServer(srv, seriesLimiter, chunksLimiter)
-	if err := s.StoreServer.Series(req, rateLimitedSrv); err != nil {
+	limitedSrv := newLimitedServer(srv, seriesLimiter, chunksLimiter)
+	if err := s.StoreServer.Series(req, limitedSrv); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// rateLimitedServer is a storepb.Store_SeriesServer that tracks statistics about sent series.
-type rateLimitedServer struct {
+var _ storepb.Store_SeriesServer = &limitedServer{}
+
+// limitedServer is a storepb.Store_SeriesServer that tracks statistics about sent series.
+type limitedServer struct {
 	storepb.Store_SeriesServer
 	seriesLimiter  SeriesLimiter
 	samplesLimiter ChunksLimiter
 }
 
-func newRateLimitedServer(upstream storepb.Store_SeriesServer, seriesLimiter SeriesLimiter, chunksLimiter ChunksLimiter) *rateLimitedServer {
-	return &rateLimitedServer{
+func newLimitedServer(upstream storepb.Store_SeriesServer, seriesLimiter SeriesLimiter, chunksLimiter ChunksLimiter) *limitedServer {
+	return &limitedServer{
 		Store_SeriesServer: upstream,
 		seriesLimiter:      seriesLimiter,
 		samplesLimiter:     chunksLimiter,
 	}
 }
 
-func (i *rateLimitedServer) Send(response *storepb.SeriesResponse) error {
+func (i *limitedServer) Send(response *storepb.SeriesResponse) error {
 	series := response.GetSeries()
 	if series == nil {
 		return i.Store_SeriesServer.Send(response)

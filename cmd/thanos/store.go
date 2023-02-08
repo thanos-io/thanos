@@ -64,7 +64,7 @@ type storeConfig struct {
 	indexCacheSizeBytes         units.Base2Bytes
 	chunkPoolSize               units.Base2Bytes
 	seriesBatchSize             int
-	storeRateLimits             store.RateLimits
+	storeRateLimits             store.SeriesSelectLimits
 	maxDownloadedBytes          units.Base2Bytes
 	maxConcurrency              int
 	component                   component.StoreAPI

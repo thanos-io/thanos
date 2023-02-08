@@ -43,13 +43,13 @@ func TestRateLimitedServer(t *testing.T) {
 	}
 	tests := []struct {
 		name   string
-		limits RateLimits
+		limits SeriesSelectLimits
 		series []*storepb.SeriesResponse
 		err    string
 	}{
 		{
 			name: "no limits",
-			limits: RateLimits{
+			limits: SeriesSelectLimits{
 				SeriesPerRequest:  0,
 				SamplesPerRequest: 0,
 			},
@@ -57,7 +57,7 @@ func TestRateLimitedServer(t *testing.T) {
 		},
 		{
 			name: "series bellow limit",
-			limits: RateLimits{
+			limits: SeriesSelectLimits{
 				SeriesPerRequest:  3,
 				SamplesPerRequest: 0,
 			},
@@ -65,7 +65,7 @@ func TestRateLimitedServer(t *testing.T) {
 		},
 		{
 			name: "series over limit",
-			limits: RateLimits{
+			limits: SeriesSelectLimits{
 				SeriesPerRequest:  2,
 				SamplesPerRequest: 0,
 			},
@@ -74,7 +74,7 @@ func TestRateLimitedServer(t *testing.T) {
 		},
 		{
 			name: "chunks bellow limit",
-			limits: RateLimits{
+			limits: SeriesSelectLimits{
 				SeriesPerRequest:  0,
 				SamplesPerRequest: uint64(3 * numSamples * MaxSamplesPerChunk),
 			},
@@ -82,7 +82,7 @@ func TestRateLimitedServer(t *testing.T) {
 		},
 		{
 			name: "chunks over limit",
-			limits: RateLimits{
+			limits: SeriesSelectLimits{
 				SeriesPerRequest:  0,
 				SamplesPerRequest: 50,
 			},
@@ -95,7 +95,7 @@ func TestRateLimitedServer(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
 
-			store := NewRateLimitedStoreServer(newStoreServerStub(test.series), prometheus.NewRegistry(), test.limits)
+			store := NewLimitedStoreServer(newStoreServerStub(test.series), prometheus.NewRegistry(), test.limits)
 			seriesServer := storepb.NewInProcessStream(ctx, 10)
 			err := store.Series(&storepb.SeriesRequest{}, seriesServer)
 			if test.err == "" {

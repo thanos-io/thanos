@@ -314,7 +314,7 @@ func runReceive(
 			0,
 			store.LazyRetrieval,
 		)
-		mts := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, conf.storeRateLimits)
+		mts := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, conf.storeRateLimits)
 		rw := store.ReadWriteTSDBStore{
 			StoreServer:          mts,
 			WriteableStoreServer: webHandler,
@@ -800,7 +800,7 @@ type receiveConfig struct {
 	relabelConfigPath *extflag.PathOrContent
 
 	writeLimitsConfig *extflag.PathOrContent
-	storeRateLimits   store.RateLimits
+	storeRateLimits   store.SeriesSelectLimits
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
