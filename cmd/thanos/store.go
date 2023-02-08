@@ -346,7 +346,7 @@ func runStore(
 		return errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", conf.maxConcurrency)
 	}
 
-	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), int(conf.maxConcurrency))
+	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), int(conf.maxConcurrency), gate.Queries)
 
 	chunkPool, err := store.NewDefaultChunkBytesPool(uint64(conf.chunkPoolSize))
 	if err != nil {
@@ -456,7 +456,7 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		storeServer := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, bs), conf.storeRateLimits)
+		storeServer := store.NewInstrumentedStoreServer(reg, bs)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, conf.component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
