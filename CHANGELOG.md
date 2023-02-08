@@ -20,10 +20,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Add histogram metrics `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested` to all Stores.
 - [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Allow configuring series and sample limits per `Series` request for all Stores.
 
-### Changed
-
-- [#6035](https://github.com/thanos-io/thanos/pull/6035) Replicate: Support all types of matchers to match blocks for replication. Change matcher parameter from string slice to a single string.
-
 ### Fixed
 
 - [#5995](https://github.com/thanos-io/thanos/pull/5995) Sidecar: Loads the TLS certificate during startup.
