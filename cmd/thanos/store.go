@@ -344,7 +344,7 @@ func runStore(
 		return errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", conf.maxConcurrency)
 	}
 
-	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), int(conf.maxConcurrency))
+	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), int(conf.maxConcurrency), gate.Queries)
 
 	chunkPool, err := store.NewDefaultChunkBytesPool(uint64(conf.chunkPoolSize))
 	if err != nil {

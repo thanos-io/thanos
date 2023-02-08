@@ -5,31 +5,12 @@ package gate
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promgate "github.com/prometheus/prometheus/util/gate"
-)
-
-var (
-	MaxGaugeOpts = prometheus.GaugeOpts{
-		Name: "gate_queries_max",
-		Help: "Maximum number of concurrent queries.",
-	}
-	InFlightGaugeOpts = prometheus.GaugeOpts{
-		Name: "gate_queries_in_flight",
-		Help: "Number of queries that are currently in flight.",
-	}
-	TotalCounterOpts = prometheus.CounterOpts{
-		Name: "gate_queries_total",
-		Help: "Total number of queries.",
-	}
-	DurationHistogramOpts = prometheus.HistogramOpts{
-		Name:    "gate_duration_seconds",
-		Help:    "How many seconds it took for queries to wait at the gate.",
-		Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
-	}
 )
 
 // Gate controls the maximum number of concurrently running and waiting queries.
@@ -75,8 +56,18 @@ func NewKeeper(reg prometheus.Registerer) *Keeper {
 //
 // Deprecated: see Keeper.
 func (k *Keeper) NewGate(maxConcurrent int) Gate {
-	return New(k.reg, maxConcurrent)
+	return New(k.reg, maxConcurrent, Queries)
 }
+
+type OperationName string
+
+const (
+	Queries OperationName = "queries"
+	Selects OperationName = "selects"
+	Gets    OperationName = "gets"
+	Sets    OperationName = "sets"
+	Writes  OperationName = "writes"
+)
 
 // New returns an instrumented gate limiting the number of requests being
 // executed concurrently.
@@ -86,8 +77,28 @@ func (k *Keeper) NewGate(maxConcurrent int) Gate {
 //
 // It can be called several times but not with the same registerer otherwise it
 // will panic when trying to register the same metric multiple times.
-func New(reg prometheus.Registerer, maxConcurrent int) Gate {
-	promauto.With(reg).NewGauge(MaxGaugeOpts).Set(float64(maxConcurrent))
+func New(reg prometheus.Registerer, maxConcurrent int, opName OperationName) Gate {
+	var (
+		maxGaugeOpts = prometheus.GaugeOpts{
+			Name: fmt.Sprintf("gate_%s_max", opName),
+			Help: fmt.Sprintf("Maximum number of concurrent %s.", opName),
+		}
+		inFlightGaugeOpts = prometheus.GaugeOpts{
+			Name: fmt.Sprintf("gate_%s_in_flight", opName),
+			Help: fmt.Sprintf("Number of %s that are currently in flight.", opName),
+		}
+		totalCounterOpts = prometheus.CounterOpts{
+			Name: fmt.Sprintf("gate_%s_total", opName),
+			Help: fmt.Sprintf("Total number of %s.", opName),
+		}
+		durationHistogramOpts = prometheus.HistogramOpts{
+			Name:    fmt.Sprintf("gate_%s_duration_seconds", opName),
+			Help:    fmt.Sprintf("How many seconds it took for %s to wait at the gate.", opName),
+			Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
+		}
+	)
+
+	promauto.With(reg).NewGauge(maxGaugeOpts).Set(float64(maxConcurrent))
 
 	var gate Gate
 	if maxConcurrent <= 0 {
@@ -97,11 +108,11 @@ func New(reg prometheus.Registerer, maxConcurrent int) Gate {
 	}
 
 	return InstrumentGateDuration(
-		promauto.With(reg).NewHistogram(DurationHistogramOpts),
+		promauto.With(reg).NewHistogram(durationHistogramOpts),
 		InstrumentGateTotal(
-			promauto.With(reg).NewCounter(TotalCounterOpts),
+			promauto.With(reg).NewCounter(totalCounterOpts),
 			InstrumentGateInFlight(
-				promauto.With(reg).NewGauge(InFlightGaugeOpts),
+				promauto.With(reg).NewGauge(inFlightGaugeOpts),
 				gate,
 			),
 		),

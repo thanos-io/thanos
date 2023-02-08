@@ -66,7 +66,7 @@ func NewQueryableCreator(
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
 ) QueryableCreator {
-	g := gate.New(extprom.WrapRegistererWithPrefix("concurrent_selects_", reg), maxConcurrentSelects)
+	g := gate.New(extprom.WrapRegistererWithPrefix("concurrent_selects_", reg), maxConcurrentSelects, gate.Selects)
 
 	return func(
 		deduplicate bool,
