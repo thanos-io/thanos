@@ -450,7 +450,7 @@ func runStore(
 
 		storeServer := store.NewInstrumentedStoreServer(reg, bs)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, conf.component, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(storeServer)),
+			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
 			grpcserver.WithGracePeriod(time.Duration(conf.grpcConfig.gracePeriod)),
