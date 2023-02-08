@@ -197,7 +197,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "(\n  max by(job, rule_group) (prometheus_rule_group_last_duration_seconds{job=~\"$job\"})\n  >\n  sum by(job, rule_group) (prometheus_rule_group_interval_seconds{job=~\"$job\"})\n)\n",
+                     "expr": "(\n  sum by(job, rule_group) (prometheus_rule_group_last_duration_seconds{job=~\"$job\"})\n  >\n  sum by(job, rule_group) (prometheus_rule_group_interval_seconds{job=~\"$job\"})\n)\n",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{ rule_group }}",

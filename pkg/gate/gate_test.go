@@ -13,7 +13,7 @@ import (
 
 func TestGateAllowsDisablingLimits(t *testing.T) {
 	reg := prometheus.NewRegistry()
-	g := New(reg, 0)
+	g := New(reg, 0, Queries)
 
 	require.NoError(t, g.Start(context.Background()))
 }

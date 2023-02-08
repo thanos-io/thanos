@@ -233,10 +233,12 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		getMultiGate: gate.New(
 			extprom.WrapRegistererWithPrefix("thanos_redis_getmulti_", reg),
 			config.MaxGetMultiConcurrency,
+			gate.Gets,
 		),
 		setMultiGate: gate.New(
 			extprom.WrapRegistererWithPrefix("thanos_redis_setmulti_", reg),
 			config.MaxSetMultiConcurrency,
+			gate.Sets,
 		),
 	}
 	duration := promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{

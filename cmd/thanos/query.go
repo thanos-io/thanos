@@ -699,6 +699,7 @@ func runQuery(
 			gate.New(
 				extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg),
 				maxConcurrentQueries,
+				gate.Queries,
 			),
 			store.NewSeriesStatsAggregator(
 				reg,

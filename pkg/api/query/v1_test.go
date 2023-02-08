@@ -195,7 +195,7 @@ func TestQueryEndpoints(t *testing.T) {
 		queryableCreate:       query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, db, component.Query, nil), 2, timeout),
 		queryEngine:           qe,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
-		gate:                  gate.New(nil, 4),
+		gate:                  gate.New(nil, 4, gate.Queries),
 		defaultRangeQueryStep: time.Second,
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
@@ -736,7 +736,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		queryableCreate:     query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, db, component.Query, nil), 2, timeout),
 		queryEngine:         qe,
 		lookbackDeltaCreate: func(m int64) time.Duration { return time.Duration(0) },
-		gate:                gate.New(nil, 4),
+		gate:                gate.New(nil, 4, gate.Queries),
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
 		}),
@@ -749,7 +749,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		queryableCreate:          query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, db, component.Query, nil), 2, timeout),
 		queryEngine:              qe,
 		lookbackDeltaCreate:      func(m int64) time.Duration { return time.Duration(0) },
-		gate:                     gate.New(nil, 4),
+		gate:                     gate.New(nil, 4, gate.Queries),
 		defaultMetadataTimeRange: apiLookbackDelta,
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 			Name: "query_range_hist",
@@ -1461,7 +1461,7 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 	for i, test := range tests {
 		api := QueryAPI{
 			enableAutodownsampling: test.enableAutodownsampling,
-			gate:                   gate.New(nil, 4),
+			gate:                   gate.New(nil, 4, gate.Queries),
 			queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
 				Name: "query_range_hist",
 			}),
