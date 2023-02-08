@@ -30,12 +30,14 @@ type TenantStorage interface {
 type Writer struct {
 	logger    log.Logger
 	multiTSDB TenantStorage
+	intern    bool
 }
 
-func NewWriter(logger log.Logger, multiTSDB TenantStorage) *Writer {
+func NewWriter(logger log.Logger, multiTSDB TenantStorage, intern bool) *Writer {
 	return &Writer{
 		logger:    logger,
 		multiTSDB: multiTSDB,
+		intern:    intern,
 	}
 }
 
@@ -104,7 +106,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
-			labelpb.ReAllocZLabelsStrings(&t.Labels)
+			labelpb.ReAllocZLabelsStrings(&t.Labels, r.intern)
 			lset = labelpb.ZLabelsToPromLabels(t.Labels)
 		}
 

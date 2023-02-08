@@ -34,13 +34,21 @@ Following the [KISS](https://en.wikipedia.org/wiki/KISS_principle) and Unix phil
 * Querier/Query: implements Prometheus's v1 API to aggregate data from the underlying components.
 * Query Frontend: implements Prometheus's v1 API proxies it to Query while caching the response and optional splitting by queries day.
 
-Deployment with Sidecar:
+Deployment with Sidecar for Kubernetes:
 
-![Sidecar](https://docs.google.com/drawings/d/e/2PACX-1vTBFKKgf8YDInJyRakPE8eZZg9phTlOsBB2ogNkFvhNGbZ8YDvz_cGMbxWZBG1G6hpsQfSX145FpYcv/pub?w=960&h=720)
+<!---
+Source file to copy and edit: https://docs.google.com/drawings/d/1AiMc1qAjASMbtqL6PNs0r9-ynGoZ9LIAtf0b9PjILxw/edit?usp=sharing
+-->
 
-Deployment with Receive:
+![Sidecar](https://docs.google.com/drawings/d/e/2PACX-1vSJd32gPh8-MC5Ko0-P-v1KQ0Xnxa0qmsVXowtkwVGlczGfVW-Vd415Y6F129zvh3y0vHLBZcJeZEoz/pub?w=960&h=720)
 
-![Receive](https://docs.google.com/drawings/d/e/2PACX-1vTfko27YB_3ab7ZL8ODNG5uCcrpqKxhmqaz3lW-yhGN3_oNxkTrqXmwwlcZjaWf3cGgAJIM4CMwwkEV/pub?w=960&h=720)
+Deployment with Receive in order to scale out or implement with other remote write compatible sources:
+
+<!---
+Source file to copy and edit: https://docs.google.com/drawings/d/1iimTbcicKXqz0FYtSfz04JmmVFLVO9BjAjEzBm5538w/edit?usp=sharing
+-->
+
+![Receive](https://docs.google.com/drawings/d/e/2PACX-1vRdYP__uDuygGR5ym1dxBzU6LEx5v7Rs1cAUKPsl5BZrRGVl5YIj5lsD_FOljeIVOGWatdAI9pazbCP/pub?w=960&h=720)
 
 ### Sidecar
 

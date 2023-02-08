@@ -25,12 +25,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 // BlockFilter is block filter that filters out compacted and unselected blocks.
 type BlockFilter struct {
 	logger           log.Logger
 	labelSelector    labels.Selector
+	labelSelectorStr string
 	resolutionLevels map[compact.ResolutionLevel]struct{}
 	compactionLevels map[int]struct{}
 	blockIDs         []ulid.ULID
@@ -55,6 +57,7 @@ func NewBlockFilter(
 
 	return &BlockFilter{
 		labelSelector:    labelSelector,
+		labelSelectorStr: storepb.PromMatchersToString(labelSelector...),
 		logger:           logger,
 		resolutionLevels: allowedResolutions,
 		compactionLevels: allowedCompactions,
@@ -83,20 +86,7 @@ func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 
 	labelMatch := bf.labelSelector.Matches(blockLabels)
 	if !labelMatch {
-		selStr := "{"
-
-		for i, m := range bf.labelSelector {
-			if i != 0 {
-				selStr += ","
-			}
-
-			selStr += m.String()
-		}
-
-		selStr += "}"
-
-		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "labels don't match", "block_labels", blockLabels.String(), "selector", selStr)
-
+		level.Debug(bf.logger).Log("msg", "filtering block", "reason", "labels don't match", "block_labels", blockLabels.String(), "selector", bf.labelSelectorStr)
 		return false
 	}
 

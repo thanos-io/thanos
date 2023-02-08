@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -765,6 +766,10 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				vals, err := s.store.LabelNames(ctx, tc.req)
+				for _, b := range s.store.blocks {
+					waitTimeout(t, &b.pendingReaders, 5*time.Second)
+				}
+
 				testutil.Ok(t, err)
 
 				testutil.Equals(t, tc.expected, vals.Names)
@@ -868,6 +873,10 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				vals, err := s.store.LabelValues(ctx, tc.req)
+				for _, b := range s.store.blocks {
+					waitTimeout(t, &b.pendingReaders, 5*time.Second)
+				}
+
 				testutil.Ok(t, err)
 
 				testutil.Equals(t, tc.expected, emptyToNil(vals.Values))
@@ -881,4 +890,18 @@ func emptyToNil(values []string) []string {
 		return nil
 	}
 	return values
+}
+
+func waitTimeout(t *testing.T, wg *sync.WaitGroup, timeout time.Duration) {
+	c := make(chan struct{})
+	go func() {
+		defer close(c)
+		wg.Wait()
+	}()
+	select {
+	case <-c:
+		return
+	case <-time.After(timeout):
+		t.Fatalf("timeout waiting wg for %v", timeout)
+	}
 }

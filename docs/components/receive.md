@@ -259,7 +259,9 @@ Flags:
                                  the hashring configuration.
       --receive.hashrings-algorithm=hashmod
                                  The algorithm used when distributing series in
-                                 the hashrings. Must be one of hashmod, ketama
+                                 the hashrings. Must be one of hashmod, ketama.
+                                 Will be overwritten by the tenant-specific
+                                 algorithm in the hashring config.
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
                                  configuration. A watcher is initialized
@@ -366,7 +368,8 @@ Flags:
                                  next startup.
       --tsdb.path="./data"       Data directory of TSDB.
       --tsdb.retention=15d       How long to retain raw samples on local
-                                 storage. 0d - disables this retention.
+                                 storage. 0d - disables the retention
+                                 policy (i.e. infinite retention).
                                  For more details on how retention is
                                  enforced for individual tenants, please
                                  refer to the Tenant lifecycle management

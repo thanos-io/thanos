@@ -207,7 +207,7 @@ func runReceive(
 		conf.allowOutOfOrderUpload,
 		hashFunc,
 	)
-	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
+	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, conf.writerInterning)
 
 	var limitsConfig *receive.RootLimitsConfig
 	if conf.writeLimitsConfig != nil {
@@ -788,8 +788,9 @@ type receiveConfig struct {
 	tsdbMemorySnapshotOnShutdown bool
 	tsdbEnableNativeHistograms   bool
 
-	walCompression bool
-	noLockFile     bool
+	walCompression  bool
+	noLockFile      bool
+	writerInterning bool
 
 	hashFunc string
 
@@ -832,14 +833,14 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
-	rc.retention = extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention. For more details on how retention is enforced for individual tenants, please refer to the Tenant lifecycle management section in the Receive documentation: https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management").Default("15d"))
+	rc.retention = extkingpin.ModelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables the retention policy (i.e. infinite retention). For more details on how retention is enforced for individual tenants, please refer to the Tenant lifecycle management section in the Receive documentation: https://thanos.io/tip/components/receive.md/#tenant-lifecycle-management").Default("15d"))
 
 	cmd.Flag("receive.hashrings-file", "Path to file that contains the hashring configuration. A watcher is initialized to watch changes and update the hashring dynamically.").PlaceHolder("<path>").StringVar(&rc.hashringsFilePath)
 
 	cmd.Flag("receive.hashrings", "Alternative to 'receive.hashrings-file' flag (lower priority). Content of file that contains the hashring configuration.").PlaceHolder("<content>").StringVar(&rc.hashringsFileContent)
 
 	hashringAlgorithmsHelptext := strings.Join([]string{string(receive.AlgorithmHashmod), string(receive.AlgorithmKetama)}, ", ")
-	cmd.Flag("receive.hashrings-algorithm", "The algorithm used when distributing series in the hashrings. Must be one of "+hashringAlgorithmsHelptext).
+	cmd.Flag("receive.hashrings-algorithm", "The algorithm used when distributing series in the hashrings. Must be one of "+hashringAlgorithmsHelptext+". Will be overwritten by the tenant-specific algorithm in the hashring config.").
 		Default(string(receive.AlgorithmHashmod)).
 		EnumVar(&rc.hashringsAlgorithm, string(receive.AlgorithmHashmod), string(receive.AlgorithmKetama))
 
@@ -904,6 +905,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.enable-native-histograms",
 		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
 		Default("false").Hidden().BoolVar(&rc.tsdbEnableNativeHistograms)
+
+	cmd.Flag("writer.intern",
+		"[EXPERIMENTAL] Enables string interning in receive writer, for more optimized memory usage.").
+		Default("false").Hidden().BoolVar(&rc.writerInterning)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")

@@ -299,7 +299,7 @@ func TestWriter(t *testing.T) {
 				return err
 			}))
 
-			w := NewWriter(logger, m)
+			w := NewWriter(logger, m, false)
 
 			for idx, req := range testData.reqs {
 				err = w.Write(context.Background(), DefaultTenant, req)
@@ -383,8 +383,6 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 	app, err := m.TenantAppendable("foo")
 	testutil.Ok(b, err)
 
-	w := NewWriter(logger, m)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -399,12 +397,28 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		Timeseries: timeSeries,
 	}
 
-	b.ReportAllocs()
-	b.ResetTimer()
+	b.Run("without interning", func(b *testing.B) {
+		w := NewWriter(logger, m, false)
 
-	for i := 0; i < b.N; i++ {
-		testutil.Ok(b, w.Write(ctx, "foo", wreq))
-	}
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			testutil.Ok(b, w.Write(ctx, "foo", wreq))
+		}
+	})
+
+	b.Run("with interning", func(b *testing.B) {
+		w := NewWriter(logger, m, true)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			testutil.Ok(b, w.Write(ctx, "foo", wreq))
+		}
+	})
+
 }
 
 // generateLabelsAndSeries generates time series for benchmark with specified number of labels.

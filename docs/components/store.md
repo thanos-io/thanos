@@ -36,6 +36,12 @@ Flags:
                                  Number of goroutines to use when constructing
                                  index-cache.json blocks from object storage.
                                  Must be equal or greater than 1.
+      --cache-index-header       Cache TSDB index-headers on disk to reduce
+                                 startup time. When set to true, Thanos Store
+                                 will download index headers from remote object
+                                 storage on startup and create a header file on
+                                 disk. Use --data-dir to set the directory in
+                                 which index headers will be downloaded.
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable
                                  bytes reserved strictly to reuse for chunks in
                                  memory.
@@ -47,9 +53,10 @@ Flags:
                                  purposes (index-header, in-mem cache items and
                                  meta.jsons). If removed, no data will be lost,
                                  just store will have to rebuild the cache.
-                                 NOTE: Putting raw blocks here will not cause
-                                 the store to read them. For such use cases use
-                                 Prometheus + sidecar.
+                                 NOTE: Putting raw blocks here will not
+                                 cause the store to read them. For such use
+                                 cases use Prometheus + sidecar. Ignored if
+                                 -no-cache-index-header option is specified.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable

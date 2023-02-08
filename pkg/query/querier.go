@@ -13,11 +13,9 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
-	promgate "github.com/prometheus/prometheus/util/gate"
 
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -66,10 +64,6 @@ func NewQueryableCreator(
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
 ) QueryableCreator {
-	duration := promauto.With(
-		extprom.WrapRegistererWithPrefix("concurrent_selects_", reg),
-	).NewHistogram(gate.DurationHistogramOpts)
-
 	return func(
 		deduplicate bool,
 		replicaLabels []string,
@@ -81,6 +75,7 @@ func NewQueryableCreator(
 		shardInfo *storepb.ShardInfo,
 		seriesStatsReporter seriesStatsReporter,
 	) storage.Queryable {
+		reg = extprom.WrapRegistererWithPrefix("concurrent_selects_", reg)
 		return &queryable{
 			logger:              logger,
 			replicaLabels:       replicaLabels,
@@ -91,7 +86,7 @@ func NewQueryableCreator(
 			partialResponse:     partialResponse,
 			skipChunks:          skipChunks,
 			gateProviderFn: func() gate.Gate {
-				return gate.InstrumentGateDuration(duration, promgate.New(maxConcurrentSelects))
+				return gate.New(reg, maxConcurrentSelects)
 			},
 			maxConcurrentSelects: maxConcurrentSelects,
 			selectTimeout:        selectTimeout,
