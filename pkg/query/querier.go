@@ -66,7 +66,7 @@ func NewQueryableCreator(
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
 ) QueryableCreator {
-	g := gate.New(extprom.WrapRegistererWithPrefix("concurrent_selects_", reg), maxConcurrentSelects, gate.Selects)
+	gf := gate.NewGateFactory(extprom.WrapRegistererWithPrefix("concurrent_selects_", reg), maxConcurrentSelects, gate.Selects)
 
 	return func(
 		deduplicate bool,
@@ -89,7 +89,7 @@ func NewQueryableCreator(
 			partialResponse:     partialResponse,
 			skipChunks:          skipChunks,
 			gateProviderFn: func() gate.Gate {
-				return g
+				return gf.New()
 			},
 			maxConcurrentSelects: maxConcurrentSelects,
 			selectTimeout:        selectTimeout,

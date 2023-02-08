@@ -62,12 +62,89 @@ func (k *Keeper) NewGate(maxConcurrent int) Gate {
 type OperationName string
 
 const (
-	Queries OperationName = "queries"
-	Selects OperationName = "selects"
-	Gets    OperationName = "gets"
-	Sets    OperationName = "sets"
-	Writes  OperationName = "writes"
+	Queries       OperationName = "queries"
+	Selects       OperationName = "selects"
+	Gets          OperationName = "gets"
+	Sets          OperationName = "sets"
+	WriteRequests OperationName = "write_requests"
 )
+
+type GateFactory interface {
+	New() Gate
+}
+
+type gateProducer struct {
+	reg           prometheus.Registerer
+	opName        OperationName
+	maxConcurrent int
+
+	durationHist prometheus.Histogram
+	total        prometheus.Counter
+	inflight     prometheus.Gauge
+}
+
+func (g *gateProducer) New() Gate {
+	var gate Gate
+	if g.maxConcurrent <= 0 {
+		gate = NewNoop()
+	} else {
+		gate = promgate.New(g.maxConcurrent)
+	}
+
+	return InstrumentGateDuration(
+		g.durationHist,
+		InstrumentGateTotal(
+			g.total,
+			InstrumentGateInFlight(
+				g.inflight,
+				gate,
+			),
+		),
+	)
+}
+
+var (
+	maxGaugeOpts = func(opName OperationName) prometheus.GaugeOpts {
+		return prometheus.GaugeOpts{
+			Name: fmt.Sprintf("gate_%s_max", opName),
+			Help: fmt.Sprintf("Maximum number of concurrent %s.", opName),
+		}
+	}
+	inFlightGaugeOpts = func(opName OperationName) prometheus.GaugeOpts {
+		return prometheus.GaugeOpts{
+			Name: fmt.Sprintf("gate_%s_in_flight", opName),
+			Help: fmt.Sprintf("Number of %s that are currently in flight.", opName),
+		}
+	}
+	totalCounterOpts = func(opName OperationName) prometheus.CounterOpts {
+		return prometheus.CounterOpts{
+			Name: fmt.Sprintf("gate_%s_total", opName),
+			Help: fmt.Sprintf("Total number of %s.", opName),
+		}
+	}
+	durationHistogramOpts = func(opName OperationName) prometheus.HistogramOpts {
+		return prometheus.HistogramOpts{
+			Name:    fmt.Sprintf("gate_%s_duration_seconds", opName),
+			Help:    fmt.Sprintf("How many seconds it took for %s to wait at the gate.", opName),
+			Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
+		}
+	}
+)
+
+// NewGateFactory creates a Gate factory. They act like Gate but each produced Gate
+// acts individually in terms of the limit and they have unified metrics.
+func NewGateFactory(reg prometheus.Registerer, maxConcurrent int, opName OperationName) GateFactory {
+	promauto.With(reg).NewGauge(maxGaugeOpts(opName)).Set(float64(maxConcurrent))
+
+	return &gateProducer{
+		reg:           reg,
+		opName:        opName,
+		maxConcurrent: maxConcurrent,
+		durationHist:  promauto.With(reg).NewHistogram(durationHistogramOpts(opName)),
+		total:         promauto.With(reg).NewCounter(totalCounterOpts(opName)),
+		inflight:      promauto.With(reg).NewGauge(inFlightGaugeOpts(opName)),
+	}
+}
 
 // New returns an instrumented gate limiting the number of requests being
 // executed concurrently.
@@ -78,27 +155,7 @@ const (
 // It can be called several times but not with the same registerer otherwise it
 // will panic when trying to register the same metric multiple times.
 func New(reg prometheus.Registerer, maxConcurrent int, opName OperationName) Gate {
-	var (
-		maxGaugeOpts = prometheus.GaugeOpts{
-			Name: fmt.Sprintf("gate_%s_max", opName),
-			Help: fmt.Sprintf("Maximum number of concurrent %s.", opName),
-		}
-		inFlightGaugeOpts = prometheus.GaugeOpts{
-			Name: fmt.Sprintf("gate_%s_in_flight", opName),
-			Help: fmt.Sprintf("Number of %s that are currently in flight.", opName),
-		}
-		totalCounterOpts = prometheus.CounterOpts{
-			Name: fmt.Sprintf("gate_%s_total", opName),
-			Help: fmt.Sprintf("Total number of %s.", opName),
-		}
-		durationHistogramOpts = prometheus.HistogramOpts{
-			Name:    fmt.Sprintf("gate_%s_duration_seconds", opName),
-			Help:    fmt.Sprintf("How many seconds it took for %s to wait at the gate.", opName),
-			Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
-		}
-	)
-
-	promauto.With(reg).NewGauge(maxGaugeOpts).Set(float64(maxConcurrent))
+	promauto.With(reg).NewGauge(maxGaugeOpts(opName)).Set(float64(maxConcurrent))
 
 	var gate Gate
 	if maxConcurrent <= 0 {
@@ -108,11 +165,11 @@ func New(reg prometheus.Registerer, maxConcurrent int, opName OperationName) Gat
 	}
 
 	return InstrumentGateDuration(
-		promauto.With(reg).NewHistogram(durationHistogramOpts),
+		promauto.With(reg).NewHistogram(durationHistogramOpts(opName)),
 		InstrumentGateTotal(
-			promauto.With(reg).NewCounter(totalCounterOpts),
+			promauto.With(reg).NewCounter(totalCounterOpts(opName)),
 			InstrumentGateInFlight(
-				promauto.With(reg).NewGauge(inFlightGaugeOpts),
+				promauto.With(reg).NewGauge(inFlightGaugeOpts(opName)),
 				gate,
 			),
 		),
