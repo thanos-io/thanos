@@ -86,14 +86,14 @@ func NewChunksLimiterFactory(limit uint64) ChunksLimiterFactory {
 	}
 }
 
-// NewSeriesLimiterFactory makes a new NewSeriesLimiterFactory with a static limit.
+// NewSeriesLimiterFactory makes a new SeriesLimiterFactory with a static limit.
 func NewSeriesLimiterFactory(limit uint64) SeriesLimiterFactory {
 	return func(failedCounter prometheus.Counter) SeriesLimiter {
 		return NewLimiter(limit, failedCounter)
 	}
 }
 
-// NewBytesLimiterFactory makes a new NewSeriesLimiterFactory with a static limit.
+// NewBytesLimiterFactory makes a new BytesLimiterFactory with a static limit.
 func NewBytesLimiterFactory(limit units.Base2Bytes) BytesLimiterFactory {
 	return func(failedCounter prometheus.Counter) BytesLimiter {
 		return NewLimiter(uint64(limit), failedCounter)

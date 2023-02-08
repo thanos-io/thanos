@@ -429,10 +429,13 @@ Flags:
                                  that are always used, even if the health check
                                  fails. Useful if you have a caching layer on
                                  top.
-      --store.grpc.chunks-limit=0
-                                 The maximum chunks allowed for a single Series
-                                 request, The Series call fails if this limit is
-                                 exceeded. 0 means no limit.
+      --store.grpc.samples-limit=0
+                                 The maximum samples allowed for a single
+                                 Series request, The Series call fails if
+                                 this limit is exceeded. 0 means no limit.
+                                 NOTE: For efficiency the limit is internally
+                                 implemented as 'chunks limit' considering each
+                                 chunk contains a maximum of 120 samples.
       --store.grpc.series-limit=0
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is

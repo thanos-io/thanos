@@ -169,16 +169,19 @@ Flags:
                                  If true, Store Gateway will lazy memory map
                                  index-header only once the block is required by
                                  a query.
-      --store.grpc.chunks-limit=0
-                                 The maximum chunks allowed for a single Series
-                                 request, The Series call fails if this limit is
-                                 exceeded. 0 means no limit.
       --store.grpc.downloaded-bytes-limit=0
                                  Maximum amount of downloaded (either
                                  fetched or touched) bytes in a single
                                  Series/LabelNames/LabelValues call. The Series
                                  call fails if this limit is exceeded. 0 means
                                  no limit.
+      --store.grpc.samples-limit=0
+                                 The maximum samples allowed for a single
+                                 Series request, The Series call fails if
+                                 this limit is exceeded. 0 means no limit.
+                                 NOTE: For efficiency the limit is internally
+                                 implemented as 'chunks limit' considering each
+                                 chunk contains a maximum of 120 samples.
       --store.grpc.series-limit=0
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is
@@ -186,19 +189,9 @@ Flags:
       --store.grpc.series-max-concurrency=20
                                  Maximum number of concurrent Series calls.
       --store.grpc.series-sample-limit=0
-                                 Maximum amount of samples returned via a
-                                 single Series call. The Series call fails
-                                 if this limit is exceeded. 0 means no limit.
-                                 NOTE: For efficiency the limit is internally
-                                 implemented as 'chunks limit' considering
-                                 each chunk contains 120 samples (it's the max
-                                 number of samples each chunk can contain),
-                                 so the actual number of samples might be lower,
-                                 even though the maximum could be hit.
+                                 DEPRECATED: use store.grpc.chunks-limit.
       --store.grpc.touched-series-limit=0
-                                 Maximum amount of touched series returned via
-                                 a single Series call. The Series call fails if
-                                 this limit is exceeded. 0 means no limit.
+                                 DEPRECATED: use store.grpc.series-limit.
       --sync-block-duration=3m   Repeat interval for syncing the blocks between
                                  local and remote view.
       --tracing.config=<content>
