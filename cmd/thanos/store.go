@@ -113,8 +113,8 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").
 		Default("2GB").BytesVar(&sc.chunkPoolSize)
 
-	cmd.Flag("store.grpc.touched-series-limit", "DEPRECATED: use store.grpc.series-limit.").Default("0").Uint64Var(&sc.storeRateLimits.SeriesPerRequest)
-	cmd.Flag("store.grpc.series-sample-limit", "DEPRECATED: use store.grpc.chunks-limit.").Default("0").Uint64Var(&sc.storeRateLimits.SamplesPerRequest)
+	cmd.Flag("store.grpc.touched-series-limit", "DEPRECATED: use store.limits.request-series.").Default("0").Uint64Var(&sc.storeRateLimits.SeriesPerRequest)
+	cmd.Flag("store.grpc.series-sample-limit", "DEPRECATED: use store.limits.request-samples.").Default("0").Uint64Var(&sc.storeRateLimits.SamplesPerRequest)
 
 	cmd.Flag("store.grpc.downloaded-bytes-limit",
 		"Maximum amount of downloaded (either fetched or touched) bytes in a single Series/LabelNames/LabelValues call. The Series call fails if this limit is exceeded. 0 means no limit.").
