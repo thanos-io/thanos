@@ -517,8 +517,6 @@ func runQuery(
 				}
 
 				for _, eg := range strictEndpointGroups {
-					grpc.WithDisableRetry()
-
 					addr := fmt.Sprintf("dns:///%s", eg)
 					spec := query.NewGRPCEndpointSpec(addr, true, extgrpc.EndpointGroupGRPCOpts()...)
 					specs = append(specs, spec)
