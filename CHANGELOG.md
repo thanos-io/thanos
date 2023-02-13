@@ -14,20 +14,11 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#5990](https://github.com/thanos-io/thanos/pull/5990) Cache/Redis: add support for Redis Sentinel via new option `master_name`.
 - [#6008](https://github.com/thanos-io/thanos/pull/6008) *: Add counter metric `gate_queries_total` to gate.
-<<<<<<< HEAD
-- [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Add histogram metrics `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested` to all Stores.
-- [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Allow configuring series and chunk rate limits per `Series` request for all Stores.
-
-### Changed
-
-- [#6035](https://github.com/thanos-io/thanos/pull/6035) Replicate: Support all types of matchers to match blocks for replication. Change matcher parameter from string slice to a single string.
-=======
 - [#5926](https://github.com/thanos-io/thanos/pull/5926) Receiver: Add experimental string interning in writer. Can be enabled with a hidden flag `writer.intern`.
 - [#5773](https://github.com/thanos-io/thanos/pull/5773) Store: Support disable cache index header file.
 - [#5653](https://github.com/thanos-io/thanos/pull/5653) Receive: Allow setting hashing algorithm per tenant in hashrings config
 - [#6104](https://github.com/thanos-io/thanos/pull/6104) Objstore: Support S3 session token.
 - [#5548](https://github.com/thanos-io/thanos/pull/5548) Query: Added experimental support for load balancing across multiple Store endpoints.
->>>>>>> update-prometheus-42
 
 ### Fixed
 
@@ -44,7 +35,15 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6010](https://github.com/thanos-io/thanos/pull/6010) *: Upgrade Prometheus to v0.41.0.
 - [#5999](https://github.com/thanos-io/thanos/pull/5999) *: Upgrade Alertmanager dependency to v0.25.0.
 - [#5887](https://github.com/thanos-io/thanos/pull/5887) Tracing: Make sure rate limiting sampler is the default, as was the case in version pre-0.29.0.
-- [#6071](https://github.com/thanos-io/thanos/pull/6071) Query Frontend: *breaking :warning:* Aligned with Prometheus common model (cache reset required)
+- [#5997](https://github.com/thanos-io/thanos/pull/5997) Rule: switch to miekgdns DNS resolver as the default one.
+- [#6035](https://github.com/thanos-io/thanos/pull/6035) Replicate: Support all types of matchers to match blocks for replication. Change matcher parameter from string slice to a single string.
+
+## [v0.30.2](https://github.com/thanos-io/thanos/tree/release-0.30) - 28.01.2023
+
+### Fixed
+
+- [#6066](https://github.com/thanos-io/thanos/pull/6066) Tracing: fixed panic because of nil sampler
+- [#6086](https://github.com/thanos-io/thanos/pull/6086) Store Gateway: Fix store-gateway deadlock due to not close BlockSeriesClient
 
 ## [v0.30.1](https://github.com/thanos-io/thanos/tree/release-0.30) - 4.01.2023
 
