@@ -24,7 +24,7 @@ type lazyPopulateChunkSeriesSet struct {
 	all index.Postings
 
 	bufChks []chunks.Meta
-	bufBldr labels.ScratchBuilder
+	bufLbls labels.ScratchBuilder
 
 	curr *storage.ChunkSeriesEntry
 	err  error
@@ -36,7 +36,7 @@ func newLazyPopulateChunkSeriesSet(sReader seriesReader, all index.Postings) *la
 
 func (s *lazyPopulateChunkSeriesSet) Next() bool {
 	for s.all.Next() {
-		if err := s.sReader.ir.Series(s.all.At(), &s.bufBldr, &s.bufChks); err != nil {
+		if err := s.sReader.ir.Series(s.all.At(), &s.bufLbls, &s.bufChks); err != nil {
 			// Postings may be stale. Skip if no underlying series exists.
 			if errors.Cause(err) == storage.ErrNotFound {
 				continue
@@ -53,7 +53,7 @@ func (s *lazyPopulateChunkSeriesSet) Next() bool {
 			s.bufChks[i].Chunk = &lazyPopulatableChunk{cr: s.sReader.cr, m: &s.bufChks[i]}
 		}
 		s.curr = &storage.ChunkSeriesEntry{
-			Lset: s.bufBldr.Labels().Copy(),
+			Lset: s.bufLbls.Labels(),
 			ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
 				return storage.NewListChunkSeriesIterator(s.bufChks...)
 			},

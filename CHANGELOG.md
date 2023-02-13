@@ -14,12 +14,20 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#5990](https://github.com/thanos-io/thanos/pull/5990) Cache/Redis: add support for Redis Sentinel via new option `master_name`.
 - [#6008](https://github.com/thanos-io/thanos/pull/6008) *: Add counter metric `gate_queries_total` to gate.
+<<<<<<< HEAD
 - [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Add histogram metrics `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested` to all Stores.
 - [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Allow configuring series and chunk rate limits per `Series` request for all Stores.
 
 ### Changed
 
 - [#6035](https://github.com/thanos-io/thanos/pull/6035) Replicate: Support all types of matchers to match blocks for replication. Change matcher parameter from string slice to a single string.
+=======
+- [#5926](https://github.com/thanos-io/thanos/pull/5926) Receiver: Add experimental string interning in writer. Can be enabled with a hidden flag `writer.intern`.
+- [#5773](https://github.com/thanos-io/thanos/pull/5773) Store: Support disable cache index header file.
+- [#5653](https://github.com/thanos-io/thanos/pull/5653) Receive: Allow setting hashing algorithm per tenant in hashrings config
+- [#6104](https://github.com/thanos-io/thanos/pull/6104) Objstore: Support S3 session token.
+- [#5548](https://github.com/thanos-io/thanos/pull/5548) Query: Added experimental support for load balancing across multiple Store endpoints.
+>>>>>>> update-prometheus-42
 
 ### Fixed
 
@@ -28,6 +36,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6050](https://github.com/thanos-io/thanos/pull/6050) Store: Re-try bucket store initial sync upon failure.
 - [#6067](https://github.com/thanos-io/thanos/pull/6067) Receive: fixed panic when querying uninitialized TSDBs.
 - [#6082](https://github.com/thanos-io/thanos/pull/6082) Store: Don't error when no stores are matched.
+- [#6098](https://github.com/thanos-io/thanos/pull/6098) Cache/Redis: upgrade `rueidis` to v0.0.93 to fix potential panic when the client-side caching is disabled.
 - [#6103](https://github.com/thanos-io/thanos/pull/6103) Mixins(Rule): Fix query for long rule evaluations.
 
 ### Changed

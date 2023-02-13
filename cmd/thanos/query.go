@@ -130,6 +130,9 @@ func registerQuery(app *extkingpin.App) {
 	endpoints := extkingpin.Addrs(cmd.Flag("endpoint", "Addresses of statically configured Thanos API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
 		PlaceHolder("<endpoint>"))
 
+	endpointGroups := extkingpin.Addrs(cmd.Flag("endpoint-group", "Experimental: DNS name of statically configured Thanos API server groups (repeatable). Targets resolved from the DNS name will be queried in a round-robin, instead of a fanout manner. This flag should be used when connecting a Thanos Query to HA groups of Thanos components.").
+		PlaceHolder("<endpoint-group>"))
+
 	stores := extkingpin.Addrs(cmd.Flag("store", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
 		PlaceHolder("<store>"))
 
@@ -152,6 +155,9 @@ func registerQuery(app *extkingpin.App) {
 
 	strictEndpoints := cmd.Flag("endpoint-strict", "Addresses of only statically configured Thanos API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
 		PlaceHolder("<staticendpoint>").Strings()
+
+	strictEndpointGroups := extkingpin.Addrs(cmd.Flag("endpoint-group-strict", "Experimental: DNS name of statically configured Thanos API server groups (repeatable) that are always used, even if the health check fails.").
+		PlaceHolder("<endpoint-group-strict>"))
 
 	fileSDFiles := cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
@@ -296,6 +302,7 @@ func registerQuery(app *extkingpin.App) {
 			selectorLset,
 			getFlagsMap(cmd.Flags()),
 			*endpoints,
+			*endpointGroups,
 			*stores,
 			*ruleEndpoints,
 			*targetEndpoints,
@@ -317,6 +324,7 @@ func registerQuery(app *extkingpin.App) {
 			*defaultMetadataTimeRange,
 			*strictStores,
 			*strictEndpoints,
+			*strictEndpointGroups,
 			*webDisableCORS,
 			enableQueryPushdown,
 			*alertQueryURL,
@@ -374,6 +382,7 @@ func runQuery(
 	selectorLset labels.Labels,
 	flagsMap map[string]string,
 	endpointAddrs []string,
+	endpointGroupAddrs []string,
 	storeAddrs []string,
 	ruleAddrs []string,
 	targetAddrs []string,
@@ -395,6 +404,7 @@ func runQuery(
 	defaultMetadataTimeRange time.Duration,
 	strictStores []string,
 	strictEndpoints []string,
+	strictEndpointGroups []string,
 	disableCORS bool,
 	enableQueryPushdown bool,
 	alertQueryURL string,
@@ -507,6 +517,18 @@ func runQuery(
 					}
 					tmpSpecs = removeDuplicateEndpointSpecs(logger, duplicatedStores, tmpSpecs)
 					specs = append(specs, tmpSpecs...)
+				}
+
+				for _, eg := range endpointGroupAddrs {
+					addr := fmt.Sprintf("dns:///%s", eg)
+					spec := query.NewGRPCEndpointSpec(addr, false, extgrpc.EndpointGroupGRPCOpts()...)
+					specs = append(specs, spec)
+				}
+
+				for _, eg := range strictEndpointGroups {
+					addr := fmt.Sprintf("dns:///%s", eg)
+					spec := query.NewGRPCEndpointSpec(addr, true, extgrpc.EndpointGroupGRPCOpts()...)
+					specs = append(specs, spec)
 				}
 
 				return specs

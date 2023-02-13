@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -116,7 +117,6 @@ func Downsample(
 		reuseIt    chunkenc.Iterator
 	)
 	for postings.Next() {
-		builder.Reset()
 		chks = chks[:0]
 		all = all[:0]
 		aggrChunks = aggrChunks[:0]
@@ -126,6 +126,7 @@ func Downsample(
 		if err := indexr.Series(postings.At(), &builder, &chks); err != nil {
 			return id, errors.Wrapf(err, "get series %d", postings.At())
 		}
+		lset := builder.Labels()
 
 		for i, c := range chks[1:] {
 			if chks[i].MaxTime >= c.MinTime {
@@ -153,7 +154,7 @@ func Downsample(
 					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
 				}
 			}
-			if err := streamedBlockWriter.WriteSeries(builder.Labels(), DownsampleRaw(all, resolution)); err != nil {
+			if err := streamedBlockWriter.WriteSeries(lset, DownsampleRaw(all, resolution)); err != nil {
 				return id, errors.Wrapf(err, "downsample raw data, series: %d", postings.At())
 			}
 		} else {
@@ -182,7 +183,7 @@ func Downsample(
 			if err != nil {
 				return id, errors.Wrapf(err, "downsample aggregate block, series: %d", postings.At())
 			}
-			if err := streamedBlockWriter.WriteSeries(builder.Labels(), downsampledChunks); err != nil {
+			if err := streamedBlockWriter.WriteSeries(lset, downsampledChunks); err != nil {
 				return id, errors.Wrapf(err, "write series: %d", postings.At())
 			}
 		}

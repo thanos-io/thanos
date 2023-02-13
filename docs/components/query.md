@@ -280,6 +280,17 @@ Flags:
                                  prefixed with 'dns+' or 'dnssrv+' to detect
                                  Thanos API servers through respective DNS
                                  lookups.
+      --endpoint-group=<endpoint-group> ...
+                                 Experimental: DNS name of statically configured
+                                 Thanos API server groups (repeatable). Targets
+                                 resolved from the DNS name will be queried in
+                                 a round-robin, instead of a fanout manner.
+                                 This flag should be used when connecting a
+                                 Thanos Query to HA groups of Thanos components.
+      --endpoint-group-strict=<endpoint-group-strict> ...
+                                 Experimental: DNS name of statically configured
+                                 Thanos API server groups (repeatable) that are
+                                 always used, even if the health check fails.
       --endpoint-strict=<staticendpoint> ...
                                  Addresses of only statically configured Thanos
                                  API servers that are always used, even if

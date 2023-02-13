@@ -103,8 +103,8 @@ SeriesLoop:
 
 		d.curr = &storage.ChunkSeriesEntry{
 			Lset: lbls,
-			ChunkIteratorFn: func(iterator chunks.Iterator) chunks.Iterator {
-				return NewDelGenericSeriesIterator(s.Iterator(iterator), intervals, func(intervals tombstones.Intervals) {
+			ChunkIteratorFn: func(it chunks.Iterator) chunks.Iterator {
+				return NewDelGenericSeriesIterator(s.Iterator(it), intervals, func(intervals tombstones.Intervals) {
 					d.log.DeleteSeries(lbls, intervals)
 				}).ToChunkSeriesIterator()
 			},
@@ -461,7 +461,7 @@ func newChunkSeriesBuilder(lset labels.Labels) *mergeChunkSeries {
 
 func (s *mergeChunkSeries) addIter(iter chunkenc.Iterator) {
 	s.ss = append(s.ss, &storage.SeriesEntry{
-		SampleIteratorFn: func(chunkenc.Iterator) chunkenc.Iterator {
+		SampleIteratorFn: func(iterator chunkenc.Iterator) chunkenc.Iterator {
 			return iter
 		},
 	})
@@ -471,15 +471,15 @@ func (s *mergeChunkSeries) Labels() labels.Labels {
 	return s.lset
 }
 
-func (s *mergeChunkSeries) Iterator(iter chunks.Iterator) chunks.Iterator {
+func (s *mergeChunkSeries) Iterator(iterator chunks.Iterator) chunks.Iterator {
 	if len(s.ss) == 0 {
 		return nil
 	}
 	if len(s.ss) == 1 {
-		return storage.NewSeriesToChunkEncoder(s.ss[0]).Iterator(iter)
+		return storage.NewSeriesToChunkEncoder(s.ss[0]).Iterator(iterator)
 	}
 
-	return storage.NewSeriesToChunkEncoder(storage.ChainedSeriesMerge(s.ss...)).Iterator(iter)
+	return storage.NewSeriesToChunkEncoder(storage.ChainedSeriesMerge(s.ss...)).Iterator(iterator)
 }
 
 type errorOnlyStringIter struct {

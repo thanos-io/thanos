@@ -25,6 +25,7 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
@@ -476,9 +477,13 @@ func TestDownsample(t *testing.T) {
 			testutil.Equals(t, 1, len(series))
 
 			var builder labels.ScratchBuilder
+
+			var lset labels.Labels
 			var chks []chunks.Meta
 			testutil.Ok(t, indexr.Series(series[0], &builder, &chks))
-			testutil.Equals(t, labels.FromStrings("__name__", "a"), builder.Labels())
+
+			lset = builder.Labels()
+			testutil.Equals(t, labels.FromStrings("__name__", "a"), lset)
 
 			var got []map[AggrType][]sample
 			for _, c := range chks {
@@ -1101,6 +1106,7 @@ func (b *memBlock) Series(id storage.SeriesRef, builder *labels.ScratchBuilder, 
 	}
 	s := b.series[id]
 
+	builder.Reset()
 	builder.Assign(s.lset)
 	*chks = append((*chks)[:0], s.chunks...)
 

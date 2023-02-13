@@ -48,14 +48,19 @@ const (
 type GRPCEndpointSpec struct {
 	addr           string
 	isStrictStatic bool
+	dialOpts       []grpc.DialOption
 }
 
 const externalLabelLimit = 1000
 
 // NewGRPCEndpointSpec creates gRPC endpoint spec.
 // It uses InfoAPI to get Metadata.
-func NewGRPCEndpointSpec(addr string, isStrictStatic bool) *GRPCEndpointSpec {
-	return &GRPCEndpointSpec{addr: addr, isStrictStatic: isStrictStatic}
+func NewGRPCEndpointSpec(addr string, isStrictStatic bool, dialOpts ...grpc.DialOption) *GRPCEndpointSpec {
+	return &GRPCEndpointSpec{
+		addr:           addr,
+		isStrictStatic: isStrictStatic,
+		dialOpts:       dialOpts,
+	}
 }
 
 func (es *GRPCEndpointSpec) Addr() string {
@@ -622,7 +627,8 @@ type endpointRef struct {
 // newEndpointRef creates a new endpointRef with a gRPC channel to the given the IP address.
 // The call to newEndpointRef will return an error if establishing the channel fails.
 func (e *EndpointSet) newEndpointRef(ctx context.Context, spec *GRPCEndpointSpec) (*endpointRef, error) {
-	conn, err := grpc.DialContext(ctx, spec.Addr(), e.dialOpts...)
+	dialOpts := append(e.dialOpts, spec.dialOpts...)
+	conn, err := grpc.DialContext(ctx, spec.Addr(), dialOpts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "dialing connection")
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
