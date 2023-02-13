@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -112,20 +113,20 @@ func Downsample(
 		aggrChunks []*AggrChunk
 		all        []sample
 		chks       []chunks.Meta
-		lset       labels.Labels
+		builder    labels.ScratchBuilder
 		reuseIt    chunkenc.Iterator
 	)
 	for postings.Next() {
-		lset = lset[:0]
 		chks = chks[:0]
 		all = all[:0]
 		aggrChunks = aggrChunks[:0]
 
 		// Get series labels and chunks. Downsampled data is sensitive to chunk boundaries
 		// and we need to preserve them to properly downsample previously downsampled data.
-		if err := indexr.Series(postings.At(), &lset, &chks); err != nil {
+		if err := indexr.Series(postings.At(), &builder, &chks); err != nil {
 			return id, errors.Wrapf(err, "get series %d", postings.At())
 		}
+		lset := builder.Labels()
 
 		for i, c := range chks[1:] {
 			if chks[i].MaxTime >= c.MinTime {
