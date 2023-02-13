@@ -477,7 +477,7 @@ func (s *Sample) MarshalJSON() ([]byte, error) {
 	sample.Timestamp = model.Time(s.Timestamp)
 	if s.Histogram != nil {
 		msh := toModelSampleHistogram(*s.Histogram)
-		sample.Histogram = &msh
+		sample.Histogram = msh
 	}
 	return json.Marshal(sample)
 }

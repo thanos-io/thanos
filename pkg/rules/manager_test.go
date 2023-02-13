@@ -45,7 +45,7 @@ func (n nopAppender) AppendExemplar(storage.SeriesRef, labels.Labels, exemplar.E
 	return 0, nil
 }
 
-func (n nopAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram) (storage.SeriesRef, error) {
+func (n nopAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
 	return 0, nil
 }
 

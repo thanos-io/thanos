@@ -76,10 +76,10 @@ func TestRewrite(t *testing.T) {
 	testutil.Ok(t, err)
 
 	for p := ir2.SortedPostings(all); p.Next(); {
-		var lset labels.Labels
+		var builder labels.ScratchBuilder
 		var chks []chunks.Meta
 
-		testutil.Ok(t, ir2.Series(p.At(), &lset, &chks))
+		testutil.Ok(t, ir2.Series(p.At(), &builder, &chks))
 		testutil.Equals(t, 1, len(chks))
 	}
 }

@@ -475,10 +475,10 @@ func TestDownsample(t *testing.T) {
 			testutil.Ok(t, pall.Err())
 			testutil.Equals(t, 1, len(series))
 
-			var lset labels.Labels
+			var builder labels.ScratchBuilder
 			var chks []chunks.Meta
-			testutil.Ok(t, indexr.Series(series[0], &lset, &chks))
-			testutil.Equals(t, labels.FromStrings("__name__", "a"), lset)
+			testutil.Ok(t, indexr.Series(series[0], &builder, &chks))
+			testutil.Equals(t, labels.FromStrings("__name__", "a"), builder.Labels())
 
 			var got []map[AggrType][]sample
 			for _, c := range chks {
@@ -1095,13 +1095,13 @@ func (b *memBlock) Postings(name string, val ...string) (index.Postings, error) 
 	return index.NewListPostings(b.postings), nil
 }
 
-func (b *memBlock) Series(id storage.SeriesRef, lset *labels.Labels, chks *[]chunks.Meta) error {
+func (b *memBlock) Series(id storage.SeriesRef, builder *labels.ScratchBuilder, chks *[]chunks.Meta) error {
 	if int(id) >= len(b.series) {
 		return errors.Wrapf(storage.ErrNotFound, "series with ID %d does not exist", id)
 	}
 	s := b.series[id]
 
-	*lset = append((*lset)[:0], s.lset...)
+	builder.Assign(s.lset)
 	*chks = append((*chks)[:0], s.chunks...)
 
 	return nil

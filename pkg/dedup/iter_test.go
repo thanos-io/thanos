@@ -51,7 +51,7 @@ type series struct {
 }
 
 func (s series) Labels() labels.Labels { return s.lset }
-func (s series) Iterator() chunkenc.Iterator {
+func (s series) Iterator(chunkenc.Iterator) chunkenc.Iterator {
 	return newMockedSeriesIterator(s.samples)
 }
 
@@ -477,7 +477,7 @@ func TestDedupSeriesSet(t *testing.T) {
 
 			for i, s := range ats {
 				testutil.Equals(t, tcase.exp[i].lset, s.Labels(), "labels mismatch for series %v", i)
-				res := expandSeries(t, s.Iterator())
+				res := expandSeries(t, s.Iterator(nil))
 				testutil.Equals(t, tcase.exp[i].samples, res, "values mismatch for series :%v", i)
 			}
 		})

@@ -159,7 +159,7 @@ func (s *chunkSeries) Labels() labels.Labels {
 	return s.lset
 }
 
-func (s *chunkSeries) Iterator() chunkenc.Iterator {
+func (s *chunkSeries) Iterator(chunkenc.Iterator) chunkenc.Iterator {
 	var sit chunkenc.Iterator
 	its := make([]chunkenc.Iterator, 0, len(s.chunks))
 

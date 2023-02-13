@@ -68,7 +68,7 @@ func TestQueryNativeHistograms(t *testing.T) {
 	t.Run("query histogram using histogram_count fn and deduplication", func(t *testing.T) {
 		queryAndAssert(t, ctx, querier.Endpoint("http"), func() string { return fmt.Sprintf("histogram_count(%v)", testHistogramMetricName) }, ts, promclient.QueryOptions{Deduplicate: true}, model.Vector{
 			&model.Sample{
-				Value: 17,
+				Value: 34,
 				Metric: model.Metric{
 					"foo":        "bar",
 					"prometheus": "prom-ha",
@@ -346,7 +346,7 @@ func expectedHistogramModelVector(histogram *histogram.Histogram, externalLabels
 	return model.Vector{
 		&model.Sample{
 			Metric:    metrics,
-			Histogram: &sh,
+			Histogram: sh,
 		},
 	}
 }
@@ -377,17 +377,22 @@ func expectedHistogramModelMatrix(histograms []*histogram.Histogram, startTime t
 	}
 }
 
-func histogramToSampleHistogram(h *histogram.Histogram) model.SampleHistogram {
+func histogramToSampleHistogram(h *histogram.Histogram) *model.SampleHistogram {
 	var buckets []*model.HistogramBucket
+
+	it := h.NegativeBucketIterator()
+	for it.Next() {
+		buckets = append([]*model.HistogramBucket{bucketToSampleHistogramBucket(it.At())}, buckets...)
+	}
 
 	buckets = append(buckets, bucketToSampleHistogramBucket(h.ZeroBucket()))
 
-	it := h.PositiveBucketIterator()
+	it = h.PositiveBucketIterator()
 	for it.Next() {
 		buckets = append(buckets, bucketToSampleHistogramBucket(it.At()))
 	}
 
-	return model.SampleHistogram{
+	return &model.SampleHistogram{
 		Count:   model.FloatString(h.Count),
 		Sum:     model.FloatString(h.Sum),
 		Buckets: buckets,
@@ -403,7 +408,7 @@ func bucketToSampleHistogramBucket(bucket histogram.Bucket[uint64]) *model.Histo
 	}
 }
 
-func boundaries(bucket histogram.Bucket[uint64]) int {
+func boundaries(bucket histogram.Bucket[uint64]) int32 {
 	switch {
 	case bucket.UpperInclusive && !bucket.LowerInclusive:
 		return 0

@@ -21,7 +21,7 @@ func toModelSampleHistogramPair(s SampleHistogramPair) model.SampleHistogramPair
 func fromModelSampleHistogramPair(modelSampleHistogram model.SampleHistogramPair) (s SampleHistogramPair) {
 	return SampleHistogramPair{
 		Timestamp: int64(modelSampleHistogram.Timestamp),
-		Histogram: fromModelSampleHistogram(&modelSampleHistogram.Histogram),
+		Histogram: fromModelSampleHistogram(modelSampleHistogram.Histogram),
 	}
 }
 
@@ -33,7 +33,7 @@ func fromModelSampleHistogram(modelSampleHistogram *model.SampleHistogram) (s Sa
 			Lower:      float64(b.Lower),
 			Upper:      float64(b.Upper),
 			Count:      float64(b.Count),
-			Boundaries: int64(b.Boundaries),
+			Boundaries: b.Boundaries,
 		}
 	}
 
@@ -44,7 +44,7 @@ func fromModelSampleHistogram(modelSampleHistogram *model.SampleHistogram) (s Sa
 	}
 }
 
-func toModelSampleHistogram(s SampleHistogram) model.SampleHistogram {
+func toModelSampleHistogram(s SampleHistogram) *model.SampleHistogram {
 	modelBuckets := make([]*model.HistogramBucket, len(s.Buckets))
 
 	for i, b := range s.Buckets {
@@ -52,11 +52,11 @@ func toModelSampleHistogram(s SampleHistogram) model.SampleHistogram {
 			Lower:      model.FloatString(b.Lower),
 			Upper:      model.FloatString(b.Upper),
 			Count:      model.FloatString(b.Count),
-			Boundaries: int(b.Boundaries),
+			Boundaries: b.Boundaries,
 		}
 	}
 
-	return model.SampleHistogram{
+	return &model.SampleHistogram{
 		Count:   model.FloatString(s.Count),
 		Sum:     model.FloatString(s.Sum),
 		Buckets: modelBuckets,

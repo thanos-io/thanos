@@ -664,9 +664,11 @@ func readBlockSeries(t *testing.T, bDir string) []seriesSamples {
 
 	var series []seriesSamples
 	var chks []chunks.Meta
+	sb := labels.ScratchBuilder{}
 	for all.Next() {
 		s := seriesSamples{}
-		testutil.Ok(t, indexr.Series(all.At(), &s.lset, &chks))
+
+		testutil.Ok(t, indexr.Series(all.At(), &sb, &chks))
 
 		for _, c := range chks {
 			c.Chunk, err = chunkr.Chunk(c)
@@ -682,6 +684,7 @@ func readBlockSeries(t *testing.T, bDir string) []seriesSamples {
 			testutil.Ok(t, iter.Err())
 			s.chunks = append(s.chunks, chk)
 		}
+		s.lset = sb.Labels()
 		series = append(series, s)
 	}
 	testutil.Ok(t, all.Err())

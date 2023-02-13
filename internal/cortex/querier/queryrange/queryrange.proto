@@ -125,7 +125,7 @@ message SampleHistogram {
 }
 
 message HistogramBucket {
-  int64 boundaries = 1;
+  int32 boundaries = 1;
   double lower = 2;
   double upper = 3;
   double count = 4;

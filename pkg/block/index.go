@@ -222,7 +222,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 	}
 	var (
 		lastLset labels.Labels
-		lset     labels.Labels
+		builder  labels.ScratchBuilder
 		chks     []chunks.Meta
 
 		seriesLifeDuration                          = newMinMaxSumInt64()
@@ -246,27 +246,27 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 
 	// Per series.
 	for p.Next() {
-		lastLset = append(lastLset[:0], lset...)
+		lastLset = append(lastLset[:0], builder.Labels()...)
 
 		id := p.At()
 		stats.TotalSeries++
 
-		if err := r.Series(id, &lset, &chks); err != nil {
+		if err := r.Series(id, &builder, &chks); err != nil {
 			return stats, errors.Wrap(err, "read series")
 		}
-		if len(lset) == 0 {
+		if len(builder.Labels()) == 0 {
 			return stats, errors.Errorf("empty label set detected for series %d", id)
 		}
-		if lastLset != nil && labels.Compare(lastLset, lset) >= 0 {
-			return stats, errors.Errorf("series %v out of order; previous %v", lset, lastLset)
+		if labels.Compare(lastLset, builder.Labels()) >= 0 {
+			return stats, errors.Errorf("series %v out of order; previous %v", builder.Labels(), lastLset)
 		}
-		l0 := lset[0]
-		for _, l := range lset[1:] {
+		l0 := builder.Labels()[0]
+		for _, l := range builder.Labels()[1:] {
 			if l.Name < l0.Name {
 				stats.OutOfOrderLabels++
 				level.Warn(logger).Log("msg",
 					"out-of-order label set: known bug in Prometheus 2.8.0 and below",
-					"labelset", lset.String(),
+					"labelset", builder.Labels().String(),
 					"series", fmt.Sprintf("%d", id),
 				)
 			}
@@ -328,7 +328,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		if ooo > 0 {
 			stats.OutOfOrderSeries++
 			stats.OutOfOrderChunks += ooo
-			level.Debug(logger).Log("msg", "found out of order series", "labels", lset)
+			level.Debug(logger).Log("msg", "found out of order series", "labels", builder.Labels())
 		}
 
 		seriesChunks.Add(int64(len(chks)))
@@ -567,16 +567,16 @@ func rewrite(
 		series   = []seriesRepair{}
 	)
 
-	var lset labels.Labels
+	var builder labels.ScratchBuilder
 	var chks []chunks.Meta
 	for all.Next() {
 		id := all.At()
 
-		if err := indexr.Series(id, &lset, &chks); err != nil {
+		if err := indexr.Series(id, &builder, &chks); err != nil {
 			return errors.Wrap(err, "series")
 		}
 		// Make sure labels are in sorted order.
-		sort.Sort(lset)
+		builder.Sort()
 
 		for i, c := range chks {
 			chks[i].Chunk, err = chunkr.Chunk(c)
@@ -595,7 +595,7 @@ func rewrite(
 		}
 
 		series = append(series, seriesRepair{
-			lset: lset,
+			lset: builder.Labels(),
 			chks: chks,
 		})
 	}

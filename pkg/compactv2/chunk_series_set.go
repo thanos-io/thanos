@@ -24,7 +24,7 @@ type lazyPopulateChunkSeriesSet struct {
 	all index.Postings
 
 	bufChks []chunks.Meta
-	bufLbls labels.Labels
+	bufBldr labels.ScratchBuilder
 
 	curr *storage.ChunkSeriesEntry
 	err  error
@@ -36,7 +36,7 @@ func newLazyPopulateChunkSeriesSet(sReader seriesReader, all index.Postings) *la
 
 func (s *lazyPopulateChunkSeriesSet) Next() bool {
 	for s.all.Next() {
-		if err := s.sReader.ir.Series(s.all.At(), &s.bufLbls, &s.bufChks); err != nil {
+		if err := s.sReader.ir.Series(s.all.At(), &s.bufBldr, &s.bufChks); err != nil {
 			// Postings may be stale. Skip if no underlying series exists.
 			if errors.Cause(err) == storage.ErrNotFound {
 				continue
@@ -53,13 +53,11 @@ func (s *lazyPopulateChunkSeriesSet) Next() bool {
 			s.bufChks[i].Chunk = &lazyPopulatableChunk{cr: s.sReader.cr, m: &s.bufChks[i]}
 		}
 		s.curr = &storage.ChunkSeriesEntry{
-			Lset: make(labels.Labels, len(s.bufLbls)),
-			ChunkIteratorFn: func() chunks.Iterator {
+			Lset: s.bufBldr.Labels().Copy(),
+			ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
 				return storage.NewListChunkSeriesIterator(s.bufChks...)
 			},
 		}
-		// TODO: Do we need to copy this?
-		copy(s.curr.Lset, s.bufLbls)
 		return true
 	}
 	return false
@@ -187,7 +185,7 @@ func (w *Compactor) write(ctx context.Context, symbols index.StringIter, populat
 		}
 
 		s := populatedSet.At()
-		chksIter := s.Iterator()
+		chksIter := s.Iterator(nil)
 		chks = chks[:0]
 		for chksIter.Next() {
 			// We are not iterating in streaming way over chunk as it's more efficient to do bulk write for index and

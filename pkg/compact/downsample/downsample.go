@@ -112,18 +112,18 @@ func Downsample(
 		aggrChunks []*AggrChunk
 		all        []sample
 		chks       []chunks.Meta
-		lset       labels.Labels
+		builder    labels.ScratchBuilder
 		reuseIt    chunkenc.Iterator
 	)
 	for postings.Next() {
-		lset = lset[:0]
+		builder.Reset()
 		chks = chks[:0]
 		all = all[:0]
 		aggrChunks = aggrChunks[:0]
 
 		// Get series labels and chunks. Downsampled data is sensitive to chunk boundaries
 		// and we need to preserve them to properly downsample previously downsampled data.
-		if err := indexr.Series(postings.At(), &lset, &chks); err != nil {
+		if err := indexr.Series(postings.At(), &builder, &chks); err != nil {
 			return id, errors.Wrapf(err, "get series %d", postings.At())
 		}
 
@@ -153,7 +153,7 @@ func Downsample(
 					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
 				}
 			}
-			if err := streamedBlockWriter.WriteSeries(lset, DownsampleRaw(all, resolution)); err != nil {
+			if err := streamedBlockWriter.WriteSeries(builder.Labels(), DownsampleRaw(all, resolution)); err != nil {
 				return id, errors.Wrapf(err, "downsample raw data, series: %d", postings.At())
 			}
 		} else {
@@ -182,7 +182,7 @@ func Downsample(
 			if err != nil {
 				return id, errors.Wrapf(err, "downsample aggregate block, series: %d", postings.At())
 			}
-			if err := streamedBlockWriter.WriteSeries(lset, downsampledChunks); err != nil {
+			if err := streamedBlockWriter.WriteSeries(builder.Labels(), downsampledChunks); err != nil {
 				return id, errors.Wrapf(err, "write series: %d", postings.At())
 			}
 		}

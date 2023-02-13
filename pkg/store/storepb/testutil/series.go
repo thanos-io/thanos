@@ -117,16 +117,15 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 	defer func() { testutil.Ok(t, ir.Close()) }()
 
 	var (
-		lset       labels.Labels
+		builder    labels.ScratchBuilder
 		chunkMetas []chunks.Meta
 		expected   = make([]*storepb.Series, 0, opts.Series)
 	)
 
 	all := allPostings(t, ir)
 	for all.Next() {
-		testutil.Ok(t, ir.Series(all.At(), &lset, &chunkMetas))
-		allLabels := append(append(opts.PrependLabels.Copy(), lset...), opts.AppendLabels.Copy()...)
-		expected = append(expected, &storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(allLabels)})
+		testutil.Ok(t, ir.Series(all.At(), &builder, &chunkMetas))
+		expected = append(expected, &storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(append(opts.PrependLabels.Copy(), builder.Labels()...))})
 
 		if opts.SkipChunks {
 			continue

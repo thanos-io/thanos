@@ -711,7 +711,7 @@ func testSelectResponse(t *testing.T, expected []series, res storage.SeriesSet) 
 
 	for i, s := range series {
 		testutil.Equals(t, expected[i].lset, s.Labels())
-		samples := expandSeries(t, s.Iterator())
+		samples := expandSeries(t, s.Iterator(nil))
 		expectedCpy := make([]sample, 0, len(expected[i].samples))
 		for _, s := range expected[i].samples {
 			v := s.v
