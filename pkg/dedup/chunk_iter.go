@@ -26,7 +26,7 @@ func NewChunkSeriesMerger() storage.VerticalChunkSeriesMergeFunc {
 			ChunkIteratorFn: func(iterator chunks.Iterator) chunks.Iterator {
 				iterators := make([]chunks.Iterator, 0, len(series))
 				for _, s := range series {
-					iterators = append(iterators, s.Iterator(iterator))
+					iterators = append(iterators, s.Iterator(nil))
 				}
 				return &dedupChunksIterator{
 					iterators: iterators,
