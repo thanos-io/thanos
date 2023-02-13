@@ -440,6 +440,17 @@ Flags:
                                  that are always used, even if the health check
                                  fails. Useful if you have a caching layer on
                                  top.
+      --store.limits.request-samples=0
+                                 The maximum samples allowed for a single
+                                 Series request, The Series call fails if
+                                 this limit is exceeded. 0 means no limit.
+                                 NOTE: For efficiency the limit is internally
+                                 implemented as 'chunks limit' considering each
+                                 chunk contains a maximum of 120 samples.
+      --store.limits.request-series=0
+                                 The maximum series allowed for a single Series
+                                 request. The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
       --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored

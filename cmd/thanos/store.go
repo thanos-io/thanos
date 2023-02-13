@@ -64,8 +64,7 @@ type storeConfig struct {
 	indexCacheSizeBytes         units.Base2Bytes
 	chunkPoolSize               units.Base2Bytes
 	seriesBatchSize             int
-	maxSampleCount              uint64
-	maxTouchedSeriesCount       uint64
+	storeRateLimits             store.SeriesSelectLimits
 	maxDownloadedBytes          units.Base2Bytes
 	maxConcurrency              int
 	component                   component.StoreAPI
@@ -90,6 +89,7 @@ type storeConfig struct {
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.httpConfig = *sc.httpConfig.registerFlag(cmd)
 	sc.grpcConfig = *sc.grpcConfig.registerFlag(cmd)
+	sc.storeRateLimits.RegisterFlags(cmd)
 
 	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar. Ignored if -no-cache-index-header option is specified.").
 		Default("./data").StringVar(&sc.dataDir)
@@ -113,13 +113,8 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").
 		Default("2GB").BytesVar(&sc.chunkPoolSize)
 
-	cmd.Flag("store.grpc.series-sample-limit",
-		"Maximum amount of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains 120 samples (it's the max number of samples each chunk can contain), so the actual number of samples might be lower, even though the maximum could be hit.").
-		Default("0").Uint64Var(&sc.maxSampleCount)
-
-	cmd.Flag("store.grpc.touched-series-limit",
-		"Maximum amount of touched series returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
-		Default("0").Uint64Var(&sc.maxTouchedSeriesCount)
+	cmd.Flag("store.grpc.touched-series-limit", "DEPRECATED: use store.limits.request-series.").Default("0").Uint64Var(&sc.storeRateLimits.SeriesPerRequest)
+	cmd.Flag("store.grpc.series-sample-limit", "DEPRECATED: use store.limits.request-samples.").Default("0").Uint64Var(&sc.storeRateLimits.SamplesPerRequest)
 
 	cmd.Flag("store.grpc.downloaded-bytes-limit",
 		"Maximum amount of downloaded (either fetched or touched) bytes in a single Series/LabelNames/LabelValues call. The Series call fails if this limit is exceeded. 0 means no limit.").
@@ -370,8 +365,8 @@ func runStore(
 		bkt,
 		metaFetcher,
 		dataDir,
-		store.NewChunksLimiterFactory(conf.maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
-		store.NewSeriesLimiterFactory(conf.maxTouchedSeriesCount),
+		store.NewChunksLimiterFactory(conf.storeRateLimits.SamplesPerRequest/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
+		store.NewSeriesLimiterFactory(conf.storeRateLimits.SeriesPerRequest),
 		store.NewBytesLimiterFactory(conf.maxDownloadedBytes),
 		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
 		conf.blockSyncConcurrency,
@@ -453,8 +448,9 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
+		storeServer := store.NewInstrumentedStoreServer(reg, bs)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, conf.component, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(bs, logger)),
+			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
 			grpcserver.WithGracePeriod(time.Duration(conf.grpcConfig.gracePeriod)),

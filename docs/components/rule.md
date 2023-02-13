@@ -453,6 +453,17 @@ Flags:
                                  Works only if compaction is disabled on
                                  Prometheus. Do it once and then disable the
                                  flag when done.
+      --store.limits.request-samples=0
+                                 The maximum samples allowed for a single
+                                 Series request, The Series call fails if
+                                 this limit is exceeded. 0 means no limit.
+                                 NOTE: For efficiency the limit is internally
+                                 implemented as 'chunks limit' considering each
+                                 chunk contains a maximum of 120 samples.
+      --store.limits.request-series=0
+                                 The maximum series allowed for a single Series
+                                 request. The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file
