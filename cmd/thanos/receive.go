@@ -313,6 +313,7 @@ func runReceive(
 			labels.Labels{},
 			0,
 			store.LazyRetrieval,
+			nil,
 		)
 		mts := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), conf.storeRateLimits)
 		rw := store.ReadWriteTSDBStore{

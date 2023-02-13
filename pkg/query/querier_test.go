@@ -698,7 +698,7 @@ func newProxyForStore(storesWithSortedSeries bool, storeAPI ...storepb.StoreServ
 		return clients
 	}
 
-	return store.NewProxyStore(nil, nil, clientsFunc, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
+	return store.NewProxyStore(nil, nil, clientsFunc, component.Store, nil, 1*time.Minute, store.LazyRetrieval, nil)
 }
 
 func testSelectResponse(t *testing.T, expected []series, res storage.SeriesSet) {
