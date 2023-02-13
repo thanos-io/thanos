@@ -257,16 +257,16 @@ func (s *dedupSeries) allSeriesIterator(chunkenc.Iterator) chunkenc.Iterator {
 	return newDedupSeriesIterator(pushedDownIterator, replicasIterator)
 }
 
-func (s *dedupSeries) Iterator(iterator chunkenc.Iterator) chunkenc.Iterator {
+func (s *dedupSeries) Iterator(chunkenc.Iterator) chunkenc.Iterator {
 	// This function needs a regular iterator over all series. Behavior is identical
 	// whether it was pushed down or not.
 	if s.f == "group" {
-		return s.allSeriesIterator(iterator)
+		return s.allSeriesIterator(nil)
 	}
 	// If there are no replicas then jump straight to constructing an iterator
 	// for pushed down series.
 	if len(s.replicas) == 0 {
-		return s.pushdownIterator(iterator)
+		return s.pushdownIterator(nil)
 	}
 
 	// Finally, if we have both then construct a tree out of them.
@@ -274,17 +274,17 @@ func (s *dedupSeries) Iterator(iterator chunkenc.Iterator) chunkenc.Iterator {
 	// We deduplicate everything in the end.
 	var it adjustableSeriesIterator
 	if s.isCounter {
-		it = &counterErrAdjustSeriesIterator{Iterator: s.replicas[0].Iterator(iterator)}
+		it = &counterErrAdjustSeriesIterator{Iterator: s.replicas[0].Iterator(nil)}
 	} else {
-		it = noopAdjustableSeriesIterator{Iterator: s.replicas[0].Iterator(iterator)}
+		it = noopAdjustableSeriesIterator{Iterator: s.replicas[0].Iterator(nil)}
 	}
 
 	for _, o := range s.replicas[1:] {
 		var replicaIter adjustableSeriesIterator
 		if s.isCounter {
-			replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(iterator)}
+			replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
 		} else {
-			replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator(iterator)}
+			replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
 		}
 		it = newDedupSeriesIterator(it, replicaIter)
 	}
@@ -296,18 +296,18 @@ func (s *dedupSeries) Iterator(iterator chunkenc.Iterator) chunkenc.Iterator {
 	// Join all of the pushed down iterators into one.
 	var pushedDownIterator adjustableSeriesIterator
 	if s.isCounter {
-		pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator(iterator)}
+		pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
 	} else {
-		pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator(iterator)}
+		pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
 	}
 
 	for _, o := range s.pushedDown[1:] {
 		var replicaIterator adjustableSeriesIterator
 
 		if s.isCounter {
-			replicaIterator = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(iterator)}
+			replicaIterator = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
 		} else {
-			replicaIterator = noopAdjustableSeriesIterator{Iterator: o.Iterator(iterator)}
+			replicaIterator = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
 		}
 
 		pushedDownIterator = noopAdjustableSeriesIterator{newPushdownSeriesIterator(pushedDownIterator, replicaIterator, s.f)}

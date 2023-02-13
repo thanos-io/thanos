@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -225,8 +226,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{lset: unsortedLabelsFromStrings("a", "1", "region", "eu-west", "z", "1")},
-				{lset: unsortedLabelsFromStrings("a", "1", "region", "eu-west", "z", "1")},
 				{lset: unsortedLabelsFromStrings("a", "1", "region", "eu-west", "z", "2")},
+				{lset: unsortedLabelsFromStrings("a", "1", "region", "eu-west", "z", "1")},
 				{lset: unsortedLabelsFromStrings("a", "1", "region", "eu-west", "z", "2")},
 				{lset: unsortedLabelsFromStrings("a", "2", "region", "eu-west", "z", "1")},
 				{lset: unsortedLabelsFromStrings("a", "2", "region", "eu-west", "z", "1")},

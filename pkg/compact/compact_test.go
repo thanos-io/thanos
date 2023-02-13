@@ -23,6 +23,7 @@ import (
 	"github.com/thanos-io/objstore"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -96,28 +97,28 @@ func TestGroupKey(t *testing.T) {
 	}{
 		{
 			input:    metadata.Thanos{},
-			expected: "0@17241709254077376921",
+			expected: "0@G17241709254077376921",
 		},
 		{
 			input: metadata.Thanos{
 				Labels:     map[string]string{},
 				Downsample: metadata.ThanosDownsample{Resolution: 0},
 			},
-			expected: "0@17241709254077376921",
+			expected: "0@G17241709254077376921",
 		},
 		{
 			input: metadata.Thanos{
 				Labels:     map[string]string{"foo": "bar", "foo1": "bar2"},
 				Downsample: metadata.ThanosDownsample{Resolution: 0},
 			},
-			expected: "0@2124638872457683483",
+			expected: "0@G2124638872457683483",
 		},
 		{
 			input: metadata.Thanos{
 				Labels:     map[string]string{`foo/some..thing/some.thing/../`: `a_b_c/bar-something-a\metric/a\x`},
 				Downsample: metadata.ThanosDownsample{Resolution: 0},
 			},
-			expected: "0@16590761456214576373",
+			expected: "0@G16590761456214576373",
 		},
 	} {
 		if ok := t.Run("", func(t *testing.T) {

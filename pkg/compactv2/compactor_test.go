@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
@@ -662,13 +663,13 @@ func readBlockSeries(t *testing.T, bDir string) []seriesSamples {
 	testutil.Ok(t, err)
 	all = indexr.SortedPostings(all)
 
+	var builder labels.ScratchBuilder
 	var series []seriesSamples
 	var chks []chunks.Meta
-	sb := labels.ScratchBuilder{}
 	for all.Next() {
+		testutil.Ok(t, indexr.Series(all.At(), &builder, &chks))
 		s := seriesSamples{}
-
-		testutil.Ok(t, indexr.Series(all.At(), &sb, &chks))
+		s.lset = builder.Labels()
 
 		for _, c := range chks {
 			c.Chunk, err = chunkr.Chunk(c)
@@ -684,7 +685,6 @@ func readBlockSeries(t *testing.T, bDir string) []seriesSamples {
 			testutil.Ok(t, iter.Err())
 			s.chunks = append(s.chunks, chk)
 		}
-		s.lset = sb.Labels()
 		series = append(series, s)
 	}
 	testutil.Ok(t, all.Err())

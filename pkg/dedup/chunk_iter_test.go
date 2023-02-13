@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
 

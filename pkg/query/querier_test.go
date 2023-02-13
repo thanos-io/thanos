@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/prometheus/util/gate"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/store"

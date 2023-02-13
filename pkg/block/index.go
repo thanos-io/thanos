@@ -222,6 +222,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 	}
 	var (
 		lastLset labels.Labels
+		lset     labels.Labels
 		builder  labels.ScratchBuilder
 		chks     []chunks.Meta
 
@@ -246,7 +247,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 
 	// Per series.
 	for p.Next() {
-		lastLset = append(lastLset[:0], builder.Labels()...)
+		lastLset = append(lastLset[:0], lset...)
 
 		id := p.At()
 		stats.TotalSeries++
@@ -254,19 +255,20 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		if err := r.Series(id, &builder, &chks); err != nil {
 			return stats, errors.Wrap(err, "read series")
 		}
-		if len(builder.Labels()) == 0 {
+		lset = builder.Labels()
+		if len(lset) == 0 {
 			return stats, errors.Errorf("empty label set detected for series %d", id)
 		}
-		if labels.Compare(lastLset, builder.Labels()) >= 0 {
-			return stats, errors.Errorf("series %v out of order; previous %v", builder.Labels(), lastLset)
+		if labels.Compare(lastLset, lset) >= 0 {
+			return stats, errors.Errorf("series %v out of order; previous %v", lset, lastLset)
 		}
-		l0 := builder.Labels()[0]
-		for _, l := range builder.Labels()[1:] {
+		l0 := lset[0]
+		for _, l := range lset[1:] {
 			if l.Name < l0.Name {
 				stats.OutOfOrderLabels++
 				level.Warn(logger).Log("msg",
 					"out-of-order label set: known bug in Prometheus 2.8.0 and below",
-					"labelset", builder.Labels().String(),
+					"labelset", lset,
 					"series", fmt.Sprintf("%d", id),
 				)
 			}
@@ -328,7 +330,7 @@ func GatherIndexHealthStats(logger log.Logger, fn string, minTime, maxTime int64
 		if ooo > 0 {
 			stats.OutOfOrderSeries++
 			stats.OutOfOrderChunks += ooo
-			level.Debug(logger).Log("msg", "found out of order series", "labels", builder.Labels())
+			level.Debug(logger).Log("msg", "found out of order series", "labels", lset)
 		}
 
 		seriesChunks.Add(int64(len(chks)))
