@@ -259,6 +259,7 @@ type QuerierBuilder struct {
 
 	replicaLabels []string
 	tracingConfig string
+	relabelConfig string
 
 	e2e.Linkable
 	f e2e.FutureRunnable
@@ -345,6 +346,11 @@ func (q *QuerierBuilder) WithExternalPrefix(externalPrefix string) *QuerierBuild
 
 func (q *QuerierBuilder) WithTracingConfig(tracingConfig string) *QuerierBuilder {
 	q.tracingConfig = tracingConfig
+	return q
+}
+
+func (q *QuerierBuilder) WithSelectorRelabelConfig(relabelConfig string) *QuerierBuilder {
+	q.relabelConfig = relabelConfig
 	return q
 }
 
@@ -458,6 +464,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	if q.tracingConfig != "" {
 		args = append(args, "--tracing.config="+q.tracingConfig)
+	}
+	if q.relabelConfig != "" {
+		args = append(args, "--selector.relabel-config="+q.relabelConfig)
 	}
 	return args, nil
 }

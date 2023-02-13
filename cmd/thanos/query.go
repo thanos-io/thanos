@@ -13,6 +13,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -32,6 +33,7 @@ import (
 	"github.com/thanos-community/promql-engine/engine"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
@@ -225,6 +227,8 @@ func registerQuery(app *extkingpin.App) {
 	queryTelemetrySeriesQuantiles := cmd.Flag("query.telemetry.request-series-seconds-quantiles", "The quantiles for exporting metrics about the series count quantiles.").Default("10", "100", "1000", "10000", "100000").Int64List()
 
 	var storeRateLimits store.SeriesSelectLimits
+	storeSelectorRelabelConf := *extkingpin.RegisterSelectorRelabelFlags(cmd)
+
 	storeRateLimits.RegisterFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -347,6 +351,7 @@ func registerQuery(app *extkingpin.App) {
 			promqlEngineType(*promqlEngine),
 			storeRateLimits,
 			queryMode(*promqlQueryMode),
+			storeSelectorRelabelConf,
 		)
 	})
 }
@@ -427,6 +432,7 @@ func runQuery(
 	promqlEngine promqlEngineType,
 	storeRateLimits store.SeriesSelectLimits,
 	queryMode queryMode,
+	storeSelectorRelabelConf extflag.PathOrContent,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -497,7 +503,15 @@ func runQuery(
 		extprom.WrapRegistererWithPrefix("thanos_query_exemplar_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
+	relabelContentYaml, err := storeSelectorRelabelConf.Content()
+	if err != nil {
+		return errors.Wrap(err, "get content of relabel configuration")
+	}
 
+	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, store.SupportedRelabelActions)
+	if err != nil {
+		return err
+	}
 	var (
 		endpoints = query.NewEndpointSet(
 			time.Now,
@@ -549,7 +563,7 @@ func runQuery(
 			endpointInfoTimeout,
 			queryConnMetricLabels...,
 		)
-		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy))
+		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy), relabelConfig)
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)

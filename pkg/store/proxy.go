@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -76,6 +77,7 @@ type ProxyStore struct {
 	responseTimeout   time.Duration
 	metrics           *proxyStoreMetrics
 	retrievalStrategy RetrievalStrategy
+	storeSelector     *storeSelector
 }
 
 type proxyStoreMetrics struct {
@@ -109,12 +111,14 @@ func NewProxyStore(
 	selectorLabels labels.Labels,
 	responseTimeout time.Duration,
 	retrievalStrategy RetrievalStrategy,
+	relabelConfig []*relabel.Config,
 ) *ProxyStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
 	metrics := newProxyStoreMetrics(reg)
+	storeSelector := newStoreSelector(relabelConfig)
 	s := &ProxyStore{
 		logger:         logger,
 		stores:         stores,
@@ -127,6 +131,7 @@ func NewProxyStore(
 		responseTimeout:   responseTimeout,
 		metrics:           metrics,
 		retrievalStrategy: retrievalStrategy,
+		storeSelector:     storeSelector,
 	}
 	return s
 }
@@ -269,7 +274,8 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
 	}
 
-	stores := []Client{}
+	var storeLabelSets []labels.Labels
+	var stores []Client
 	for _, st := range s.stores() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(srv.Context(), st, originalRequest.MinTime, originalRequest.MaxTime, matchers...); !ok {
@@ -277,8 +283,15 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			continue
 		}
 
+		match, matchedLabelSets := s.storeSelector.matchStore(st.LabelSets())
+		if !match {
+			continue
+		}
+
+		storeLabelSets = append(storeLabelSets, matchedLabelSets...)
 		stores = append(stores, st)
 	}
+	r.Matchers = append(r.Matchers, s.storeSelector.buildLabelMatchers(storeLabelSets)...)
 
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
@@ -289,7 +302,6 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	for _, st := range stores {
 		st := st
-
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
 		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
