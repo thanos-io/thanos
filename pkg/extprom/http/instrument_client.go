@@ -62,10 +62,12 @@ func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 
 	m.requestDurationHistogram = promauto.With(reg).NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: "http_client",
-			Name:      "request_duration_seconds",
-			Help:      "A histogram of request latencies.",
-			Buckets:   []float64{0.025, .05, .1, .5, 1, 5, 10},
+			Subsystem:                      "http_client",
+			Name:                           "request_duration_seconds",
+			Help:                           "A histogram of request latencies.",
+			Buckets:                        []float64{0.025, .05, .1, .5, 1, 5, 10},
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 100,
 		},
 		[]string{"code", "method"},
 	)

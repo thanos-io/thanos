@@ -172,11 +172,13 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 		writeTimeseriesTotal: promauto.With(registerer).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Namespace: "thanos",
-				Subsystem: "receive",
-				Name:      "write_timeseries",
-				Help:      "The number of timeseries received in the incoming write requests.",
-				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
+				Namespace:                      "thanos",
+				Subsystem:                      "receive",
+				Name:                           "write_timeseries",
+				Help:                           "The number of timeseries received in the incoming write requests.",
+				Buckets:                        []float64{10, 50, 100, 500, 1000, 5000, 10000},
+				NativeHistogramBucketFactor:    1.1,
+				NativeHistogramMaxBucketNumber: 100,
 			}, []string{"code", "tenant"},
 		),
 		writeSamplesTotal: promauto.With(registerer).NewHistogramVec(
