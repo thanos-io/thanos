@@ -62,7 +62,7 @@ func TestDoWithBatch(t *testing.T) {
 			items:           []string{"key1", "key2", "key3", "key4", "key5"},
 			batchSize:       2,
 			expectedBatches: 3,
-			concurrency:     gate.New(prometheus.NewPedanticRegistry(), 1),
+			concurrency:     gate.New(prometheus.NewPedanticRegistry(), 1, gate.Queries),
 		},
 	}
 

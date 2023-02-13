@@ -38,7 +38,7 @@ local utils = import '../lib/utils.libsonnet';
           g.queryPanel(
             |||
               (
-                max by(%(dimensions)s, rule_group) (prometheus_rule_group_last_duration_seconds{%(selector)s})
+                sum by(%(dimensions)s, rule_group) (prometheus_rule_group_last_duration_seconds{%(selector)s})
                 >
                 sum by(%(dimensions)s, rule_group) (prometheus_rule_group_interval_seconds{%(selector)s})
               )

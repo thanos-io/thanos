@@ -259,7 +259,9 @@ Flags:
                                  the hashring configuration.
       --receive.hashrings-algorithm=hashmod
                                  The algorithm used when distributing series in
-                                 the hashrings. Must be one of hashmod, ketama
+                                 the hashrings. Must be one of hashmod, ketama.
+                                 Will be overwritten by the tenant-specific
+                                 algorithm in the hashring config.
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
                                  configuration. A watcher is initialized
@@ -332,6 +334,17 @@ Flags:
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
+      --store.limits.request-samples=0
+                                 The maximum samples allowed for a single
+                                 Series request, The Series call fails if
+                                 this limit is exceeded. 0 means no limit.
+                                 NOTE: For efficiency the limit is internally
+                                 implemented as 'chunks limit' considering each
+                                 chunk contains a maximum of 120 samples.
+      --store.limits.request-series=0
+                                 The maximum series allowed for a single Series
+                                 request. The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file
@@ -358,7 +371,8 @@ Flags:
                                  next startup.
       --tsdb.path="./data"       Data directory of TSDB.
       --tsdb.retention=15d       How long to retain raw samples on local
-                                 storage. 0d - disables this retention.
+                                 storage. 0d - disables the retention
+                                 policy (i.e. infinite retention).
                                  For more details on how retention is
                                  enforced for individual tenants, please
                                  refer to the Tenant lifecycle management
