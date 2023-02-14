@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -141,7 +142,7 @@ func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels) {
 					gotSeriesCount++
 
 					// This is when resource usage should actually start growing.
-					iter := s.Iterator()
+					iter := s.Iterator(nil)
 					for iter.Next() != chunkenc.ValNone {
 						testT, testV = iter.At()
 					}
@@ -159,7 +160,7 @@ func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels) {
 				s := ss.At()
 				gotSeries = append(gotSeries, s.Labels())
 
-				iter := s.Iterator()
+				iter := s.Iterator(nil)
 				for iter.Next() != chunkenc.ValNone {
 					testT, testV = iter.At()
 				}

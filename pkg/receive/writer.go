@@ -135,7 +135,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 		for _, hp := range t.Histograms {
 			h := storepb.HistogramProtoToHistogram(hp)
-			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h)
+			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, nil)
 			switch err {
 			case storage.ErrOutOfOrderSample:
 				numSamplesOutOfOrder++

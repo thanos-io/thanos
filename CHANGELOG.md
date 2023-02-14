@@ -31,6 +31,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6082](https://github.com/thanos-io/thanos/pull/6082) Store: Don't error when no stores are matched.
 - [#6098](https://github.com/thanos-io/thanos/pull/6098) Cache/Redis: upgrade `rueidis` to v0.0.93 to fix potential panic when the client-side caching is disabled.
 - [#6103](https://github.com/thanos-io/thanos/pull/6103) Mixins(Rule): Fix query for long rule evaluations.
+- [#6121](https://github.com/thanos-io/thanos/pull/6121) Receive: Deduplicate metamonitoring queries.
 
 ### Changed
 
