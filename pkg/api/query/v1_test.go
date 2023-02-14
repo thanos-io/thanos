@@ -56,6 +56,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
@@ -192,7 +193,7 @@ func TestQueryEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:       query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, db, component.Query, nil), 2, timeout),
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
 		queryEngine:           qe,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
 		gate:                  gate.New(nil, 4, gate.Queries),
@@ -642,6 +643,24 @@ func TestQueryEndpoints(t *testing.T) {
 	}
 }
 
+func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
+	c := &storetestutil.TestClient{
+		Name:        "1",
+		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil), 0),
+		MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
+	}
+
+	return store.NewProxyStore(
+		nil,
+		nil,
+		func() []store.Client { return []store.Client{c} },
+		component.Query,
+		nil,
+		0,
+		store.EagerRetrieval,
+	)
+}
+
 func TestMetadataEndpoints(t *testing.T) {
 	var old = []labels.Labels{
 		{
@@ -733,7 +752,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:     query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, db, component.Query, nil), 2, timeout),
+		queryableCreate:     query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
 		queryEngine:         qe,
 		lookbackDeltaCreate: func(m int64) time.Duration { return time.Duration(0) },
 		gate:                gate.New(nil, 4, gate.Queries),
@@ -746,7 +765,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:          query.NewQueryableCreator(nil, nil, store.NewTSDBStore(nil, db, component.Query, nil), 2, timeout),
+		queryableCreate:          query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
 		queryEngine:              qe,
 		lookbackDeltaCreate:      func(m int64) time.Duration { return time.Duration(0) },
 		gate:                     gate.New(nil, 4, gate.Queries),

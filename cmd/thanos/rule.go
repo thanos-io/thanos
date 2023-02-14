@@ -627,10 +627,10 @@ func runRule(
 				if httpProbe.IsReady() {
 					mint, maxt := tsdbStore.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime:           mint,
-						MaxTime:           maxt,
-						SupportsSharding:  true,
-						SendsSortedSeries: true,
+						MinTime:                      mint,
+						MaxTime:                      maxt,
+						SupportsSharding:             true,
+						SupportsWithoutReplicaLabels: false, // TODO(bwplotka): Add support for efficiency.
 					}
 				}
 				return nil

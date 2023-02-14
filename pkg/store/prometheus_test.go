@@ -67,7 +67,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	limitMinT := int64(0)
 	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return limitMinT, -1 }, nil) // Maxt does not matter.
+		func() (int64, int64) { return limitMinT, -1 }, nil) // MaxTime does not matter.
 	testutil.Ok(t, err)
 
 	// Query all three samples except for the first one. Since we round up queried data

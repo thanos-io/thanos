@@ -2141,7 +2141,7 @@ func TestLabelNamesAndValuesHints(t *testing.T) {
 	}
 }
 
-func TestSeries_ChuncksHaveHashRepresentation(t *testing.T) {
+func TestSeries_ChunksHaveHashRepresentation(t *testing.T) {
 	tb := testutil.NewTB(t)
 
 	tmpDir := t.TempDir()
@@ -2441,7 +2441,19 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 				testutil.Ok(b, err)
 
 				dummyHistogram := prometheus.NewHistogram(prometheus.HistogramOpts{})
-				blockClient := newBlockSeriesClient(ctx, nil, blk, req, chunksLimiter, NewBytesLimiterFactory(0)(nil), nil, false, SeriesBatchSize, dummyHistogram)
+				blockClient := newBlockSeriesClient(
+					ctx,
+					nil,
+					blk,
+					req,
+					chunksLimiter,
+					NewBytesLimiterFactory(0)(nil),
+					nil,
+					false,
+					SeriesBatchSize,
+					dummyHistogram,
+					nil,
+				)
 				testutil.Ok(b, blockClient.ExpandPostings(matchers, seriesLimiter))
 				defer blockClient.Close()
 

@@ -327,10 +327,10 @@ func runReceive(
 				if httpProbe.IsReady() {
 					minTime, maxTime := proxy.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime:           minTime,
-						MaxTime:           maxTime,
-						SupportsSharding:  true,
-						SendsSortedSeries: true,
+						MinTime:                      minTime,
+						MaxTime:                      maxTime,
+						SupportsSharding:             true,
+						SupportsWithoutReplicaLabels: false, // TODO(bwplotka): Add support for efficiency.
 					}
 				}
 				return nil

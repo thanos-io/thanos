@@ -244,7 +244,6 @@ func gatherFamily(t testing.TB, reg prometheus.Gatherer, familyName string) *dto
 	return nil
 }
 
-// TODO(bwplotka): Benchmark Series.
 func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 	t.Helper()
 
@@ -284,6 +283,27 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
 				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
+				},
+				MinTime:              mint,
+				MaxTime:              maxt,
+				WithoutReplicaLabels: []string{"ext1", "ext2"},
+			},
+			expectedChunkLen: 3,
+			expected: [][]labelpb.ZLabel{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}},
 			},
 		},
 		{

@@ -853,8 +853,9 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest) {
 	}
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
-		lbls := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
-		if lbls == nil {
+		var keep bool
+		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		if !keep {
 			continue
 		}
 		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)

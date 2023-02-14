@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
+
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -162,7 +163,7 @@ func bucketToSampleHistogramBucket(bucket histogram.Bucket[uint64]) *model.Histo
 	}
 }
 
-func boundaries(bucket histogram.Bucket[uint64]) int {
+func boundaries(bucket histogram.Bucket[uint64]) int32 {
 	switch {
 	case bucket.UpperInclusive && !bucket.LowerInclusive:
 		return 0
