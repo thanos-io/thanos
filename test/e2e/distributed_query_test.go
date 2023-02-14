@@ -69,6 +69,8 @@ func TestDistributedQueryExecution(t *testing.T) {
 		distQryRangeResult = res
 		return nil
 	})
+	testutil.Assert(t, len(fanoutQryRangeResult) != 0)
+	testutil.Assert(t, len(distQryRangeResult) != 0)
 	testutil.Equals(t, fanoutQryRangeResult, distQryRangeResult)
 
 	// Test instant query.

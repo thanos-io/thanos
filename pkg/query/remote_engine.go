@@ -93,19 +93,16 @@ func (r remoteEngine) LabelSets() []labels.Labels {
 
 	// Strip replica labels from the result.
 	labelSets := r.Client.LabelSets()
-	result := make([]labels.Labels, len(labelSets))
-	for i := range labelSets {
-		numLabels := len(labelSets[i]) - len(r.opts.ReplicaLabels)
-		if numLabels <= 0 {
-			continue
-		}
-		result[i] = make(labels.Labels, 0, numLabels)
-		for _, lbl := range labelSets[i] {
+	result := make([]labels.Labels, 0, len(labelSets))
+	for _, labelSet := range labelSets {
+		var builder labels.ScratchBuilder
+		for _, lbl := range labelSet {
 			if _, ok := replicaLabelSet[lbl.Name]; ok {
 				continue
 			}
-			result[i] = append(result[i], lbl)
+			builder.Add(lbl.Name, lbl.Value)
 		}
+		result = append(result, builder.Labels())
 	}
 
 	return result
