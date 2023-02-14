@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/wlog"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -121,9 +122,12 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 		expected   = make([]*storepb.Series, 0, opts.Series)
 	)
 
+	var builder labels.ScratchBuilder
+
 	all := allPostings(t, ir)
 	for all.Next() {
-		testutil.Ok(t, ir.Series(all.At(), &lset, &chunkMetas))
+		testutil.Ok(t, ir.Series(all.At(), &builder, &chunkMetas))
+		lset = builder.Labels()
 		expected = append(expected, &storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(append(opts.PrependLabels.Copy(), lset...))})
 
 		if opts.SkipChunks {

@@ -186,7 +186,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		frameBytesLeft := bytesLeftForChunks
 
 		seriesChunks := []storepb.AggrChunk{}
-		chIter := series.Iterator()
+		chIter := series.Iterator(nil)
 		isNext := chIter.Next()
 		for isNext {
 			chk := chIter.At()
