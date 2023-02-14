@@ -261,6 +261,7 @@ func TestQueryInstantCodec_EncodeRequest(t *testing.T) {
 
 func TestMergeResponse(t *testing.T) {
 	codec := NewThanosQueryInstantCodec(false)
+	defaultQuery := "sum(up)"
 	for _, tc := range []struct {
 		name         string
 		resps        []queryrange.Response
@@ -284,6 +285,7 @@ func TestMergeResponse(t *testing.T) {
 			name: "one response",
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
+					Query:  defaultQuery,
 					Status: queryrange.StatusSuccess,
 					Data: queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
@@ -326,9 +328,10 @@ func TestMergeResponse(t *testing.T) {
 			},
 		},
 		{
-			name: "merge two responses",
+			name: "merge two responses with sort",
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
+					Query:  "sort(up)",
 					Status: queryrange.StatusSuccess,
 					Data: queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
@@ -350,6 +353,161 @@ func TestMergeResponse(t *testing.T) {
 					},
 				},
 				&queryrange.PrometheusInstantQueryResponse{
+					Query:  "sort(up)",
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Sample: cortexpb.Sample{TimestampMs: 0, Value: 2},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedResp: &queryrange.PrometheusInstantQueryResponse{
+				Status: queryrange.StatusSuccess,
+				Data: queryrange.PrometheusInstantQueryData{
+					ResultType: model.ValVector.String(),
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Vector{
+							Vector: &queryrange.Vector{
+								Samples: []*queryrange.Sample{
+									{
+										Sample: cortexpb.Sample{TimestampMs: 0, Value: 1},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "foo",
+										})),
+									},
+									{
+										Sample: cortexpb.Sample{TimestampMs: 0, Value: 2},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "bar",
+										})),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "merge two responses with sort_desc",
+			resps: []queryrange.Response{
+				&queryrange.PrometheusInstantQueryResponse{
+					Query:  "sort_desc(up)",
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Sample: cortexpb.Sample{TimestampMs: 0, Value: 3},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				&queryrange.PrometheusInstantQueryResponse{
+					Query:  "sort(up)",
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Sample: cortexpb.Sample{TimestampMs: 0, Value: 10},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedResp: &queryrange.PrometheusInstantQueryResponse{
+				Status: queryrange.StatusSuccess,
+				Data: queryrange.PrometheusInstantQueryData{
+					ResultType: model.ValVector.String(),
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Vector{
+							Vector: &queryrange.Vector{
+								Samples: []*queryrange.Sample{
+									{
+										Sample: cortexpb.Sample{TimestampMs: 0, Value: 10},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "bar",
+										})),
+									},
+									{
+										Sample: cortexpb.Sample{TimestampMs: 0, Value: 3},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "foo",
+										})),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "merge two responses",
+			resps: []queryrange.Response{
+				&queryrange.PrometheusInstantQueryResponse{
+					Query:  defaultQuery,
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Sample: cortexpb.Sample{TimestampMs: 0, Value: 1},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				&queryrange.PrometheusInstantQueryResponse{
+					Query:  defaultQuery,
 					Status: queryrange.StatusSuccess,
 					Data: queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
@@ -404,6 +562,7 @@ func TestMergeResponse(t *testing.T) {
 			name: "merge multiple responses with same label sets, won't happen if sharding is enabled on downstream querier",
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
+					Query:  defaultQuery,
 					Status: queryrange.StatusSuccess,
 					Data: queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
@@ -425,6 +584,7 @@ func TestMergeResponse(t *testing.T) {
 					},
 				},
 				&queryrange.PrometheusInstantQueryResponse{
+					Query:  defaultQuery,
 					Status: queryrange.StatusSuccess,
 					Data: queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValVector.String(),
@@ -472,6 +632,7 @@ func TestMergeResponse(t *testing.T) {
 			name: "responses don't contain vector, return empty vector",
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
+					Query:  defaultQuery,
 					Status: queryrange.StatusSuccess,
 					Data: queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValScalar.String(),
@@ -486,6 +647,7 @@ func TestMergeResponse(t *testing.T) {
 					},
 				},
 				&queryrange.PrometheusInstantQueryResponse{
+					Query:  defaultQuery,
 					Status: queryrange.StatusSuccess,
 					Data: queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValScalar.String(),
@@ -518,6 +680,7 @@ func TestMergeResponse(t *testing.T) {
 			name: "merge two matrix responses with non-duplicate samples",
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
+					Query:  defaultQuery,
 					Status: queryrange.StatusSuccess,
 					Data: queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValMatrix.String(),
@@ -547,6 +710,7 @@ func TestMergeResponse(t *testing.T) {
 				},
 				&queryrange.PrometheusInstantQueryResponse{
 					Status: queryrange.StatusSuccess,
+					Query:  defaultQuery,
 					Data: queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValMatrix.String(),
 						Result: queryrange.PrometheusInstantQueryResult{
@@ -607,6 +771,7 @@ func TestMergeResponse(t *testing.T) {
 			name: "merge two matrix responses with duplicate samples",
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
+					Query:  defaultQuery,
 					Status: queryrange.StatusSuccess,
 					Data: queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValMatrix.String(),
@@ -635,6 +800,7 @@ func TestMergeResponse(t *testing.T) {
 					},
 				},
 				&queryrange.PrometheusInstantQueryResponse{
+					Query:  defaultQuery,
 					Status: queryrange.StatusSuccess,
 					Data: queryrange.PrometheusInstantQueryData{
 						ResultType: model.ValMatrix.String(),
@@ -703,17 +869,23 @@ func TestMergeResponse(t *testing.T) {
 
 func TestDecodeResponse(t *testing.T) {
 	codec := NewThanosQueryInstantCodec(false)
+	query := "sum(up)"
+	defaultReq := &queryrange.PrometheusRequest{
+		Query: query,
+	}
 	headers := []*queryrange.PrometheusResponseHeader{
 		{Name: "Content-Type", Values: []string{"application/json"}},
 	}
 	for _, tc := range []struct {
 		name             string
 		body             string
+		req              queryrange.Request
 		expectedResponse queryrange.Response
 		expectedErr      error
 	}{
 		{
 			name: "empty vector",
+			req:  defaultReq,
 			body: `{
   "status": "success",
   "data": {
@@ -726,6 +898,7 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
+				Query:   query,
 				Data: queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValVector.String(),
 					Result: queryrange.PrometheusInstantQueryResult{
@@ -740,6 +913,7 @@ func TestDecodeResponse(t *testing.T) {
 		},
 		{
 			name: "vector",
+			req:  defaultReq,
 			body: `{
   "status": "success",
   "data": {
@@ -762,6 +936,7 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
+				Query:   query,
 				Data: queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValVector.String(),
 					Result: queryrange.PrometheusInstantQueryResult{
@@ -785,6 +960,7 @@ func TestDecodeResponse(t *testing.T) {
 		},
 		{
 			name: "scalar",
+			req:  defaultReq,
 			body: `{
   "status": "success",
   "data": {
@@ -798,6 +974,7 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
+				Query:   query,
 				Data: queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValScalar.String(),
 					Result: queryrange.PrometheusInstantQueryResult{
@@ -810,6 +987,7 @@ func TestDecodeResponse(t *testing.T) {
 		},
 		{
 			name: "string",
+			req:  defaultReq,
 			body: `{
   "status": "success",
   "data": {
@@ -823,6 +1001,7 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
+				Query:   query,
 				Data: queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValString.String(),
 					Result: queryrange.PrometheusInstantQueryResult{
@@ -835,6 +1014,7 @@ func TestDecodeResponse(t *testing.T) {
 		},
 		{
 			name: "empty matrix",
+			req:  defaultReq,
 			body: `{
   "status": "success",
   "data": {
@@ -847,6 +1027,7 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
+				Query:   query,
 				Data: queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValMatrix.String(),
 					Result: queryrange.PrometheusInstantQueryResult{
@@ -861,6 +1042,7 @@ func TestDecodeResponse(t *testing.T) {
 		},
 		{
 			name: "matrix",
+			req:  defaultReq,
 			body: `{
   "status": "success",
   "data": {
@@ -897,6 +1079,7 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
+				Query:   query,
 				Data: queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValMatrix.String(),
 					Result: queryrange.PrometheusInstantQueryResult{
@@ -925,6 +1108,7 @@ func TestDecodeResponse(t *testing.T) {
 		},
 		{
 			name: "matrix with multiple metrics",
+			req:  defaultReq,
 			body: `{
   "status": "success",
   "data": {
@@ -990,6 +1174,7 @@ func TestDecodeResponse(t *testing.T) {
 			expectedResponse: &queryrange.PrometheusInstantQueryResponse{
 				Status:  queryrange.StatusSuccess,
 				Headers: headers,
+				Query:   query,
 				Data: queryrange.PrometheusInstantQueryData{
 					ResultType: model.ValMatrix.String(),
 					Result: queryrange.PrometheusInstantQueryResult{
@@ -1039,7 +1224,7 @@ func TestDecodeResponse(t *testing.T) {
 			Header:     http.Header{"Content-Type": []string{"application/json"}},
 			Body:       io.NopCloser(bytes.NewBuffer([]byte(tc.body))),
 		}
-		gotResponse, err := codec.DecodeResponse(context.Background(), resp, nil)
+		gotResponse, err := codec.DecodeResponse(context.Background(), resp, tc.req)
 		testutil.Equals(t, tc.expectedErr, err)
 		testutil.Equals(t, tc.expectedResponse, gotResponse)
 	}

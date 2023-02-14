@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -19,6 +20,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/weaveworks/common/httpgrpc"
 
+	promqlparser "github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexutil "github.com/thanos-io/thanos/internal/cortex/util"
@@ -45,7 +47,14 @@ func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (quer
 	if len(responses) == 0 {
 		return queryrange.NewEmptyPrometheusInstantQueryResponse(), nil
 	} else if len(responses) == 1 {
-		return responses[0], nil
+		resp := responses[0].(*queryrange.PrometheusInstantQueryResponse)
+		return &queryrange.PrometheusInstantQueryResponse{
+			Status:    resp.Status,
+			Data:      resp.Data,
+			ErrorType: resp.ErrorType,
+			Error:     resp.Error,
+			Headers:   resp.Headers,
+		}, nil
 	}
 
 	promResponses := make([]*queryrange.PrometheusInstantQueryResponse, 0, len(responses))
@@ -68,13 +77,17 @@ func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (quer
 			},
 		}
 	default:
+		v, err := vectorMerge(promResponses)
+		if err != nil {
+			return nil, err
+		}
 		res = &queryrange.PrometheusInstantQueryResponse{
 			Status: queryrange.StatusSuccess,
 			Data: queryrange.PrometheusInstantQueryData{
 				ResultType: model.ValVector.String(),
 				Result: queryrange.PrometheusInstantQueryResult{
 					Result: &queryrange.PrometheusInstantQueryResult_Vector{
-						Vector: vectorMerge(promResponses),
+						Vector: v,
 					},
 				},
 				Stats: queryrange.StatsMerge(responses),
@@ -228,7 +241,7 @@ func (c queryInstantCodec) EncodeResponse(ctx context.Context, res queryrange.Re
 	return &resp, nil
 }
 
-func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response, _ queryrange.Request) (queryrange.Response, error) {
+func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response, req queryrange.Request) (queryrange.Response, error) {
 	if r.StatusCode/100 != 2 {
 		body, _ := io.ReadAll(r.Body)
 		return nil, httpgrpc.Errorf(r.StatusCode, string(body))
@@ -247,6 +260,8 @@ func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response,
 	if err := json.Unmarshal(buf, &resp); err != nil {
 		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error decoding response: %v", err)
 	}
+	// The query will be used later for merging responses.
+	resp.Query = req.GetQuery()
 
 	for h, hv := range r.Header {
 		resp.Headers = append(resp.Headers, &queryrange.PrometheusResponseHeader{Name: h, Values: hv})
@@ -254,8 +269,12 @@ func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response,
 	return &resp, nil
 }
 
-func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Vector {
+func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) (*queryrange.Vector, error) {
 	output := map[string]*queryrange.Sample{}
+	sortAsc, sortDesc, err := parseQueryForSort(resps[0].Query)
+	if err != nil {
+		return nil, err
+	}
 	for _, resp := range resps {
 		if resp == nil {
 			continue
@@ -283,22 +302,55 @@ func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange
 	if len(output) == 0 {
 		return &queryrange.Vector{
 			Samples: make([]*queryrange.Sample, 0),
+		}, nil
+	}
+
+	var ss []*queryrange.Sample
+	for _, v := range output {
+		ss = append(ss, v)
+	}
+
+	sort.Slice(ss, func(i, j int) bool {
+		// Order is determined by the sortFn in the query.
+		if sortAsc {
+			return ss[i].Sample.Value < ss[j].Sample.Value
+		} else if sortDesc {
+			return ss[i].Sample.Value > ss[j].Sample.Value
+		} else {
+			// Fallback on sorting by series
+			m1 := cortexpb.FromLabelAdaptersToLabels(ss[i].Labels).String()
+			m2 := cortexpb.FromLabelAdaptersToLabels(ss[j].Labels).String()
+			return m1 < m2
 		}
-	}
-
-	keys := make([]string, 0, len(output))
-	for key := range output {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
+	})
 	result := &queryrange.Vector{
 		Samples: make([]*queryrange.Sample, 0, len(output)),
 	}
-	for _, key := range keys {
-		result.Samples = append(result.Samples, output[key])
-	}
-	return result
+	result.Samples = append(result.Samples, ss...)
+	return result, nil
+}
+
+func parseQueryForSort(q string) (bool, bool, error) {
+	expr, err := promqlparser.ParseExpr(q)
+	var sortAsc bool = false
+	var sortDesc bool = false
+	promqlparser.Inspect(expr, func(n promqlparser.Node, _ []promqlparser.Node) error {
+		if call, ok := n.(*promqlparser.Call); ok {
+			sortFn := promqlparser.Functions["sort"]
+			sortDescFn := promqlparser.Functions["sort_desc"]
+			if call.Func.Name == sortFn.Name {
+				sortAsc = true
+				return errors.New("done")
+			}
+			if call.Func.Name == sortDescFn.Name {
+				sortDesc = true
+				return errors.New("done")
+			}
+		}
+		return nil
+	})
+
+	return sortAsc, sortDesc, err
 }
 
 func matrixMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Matrix {
