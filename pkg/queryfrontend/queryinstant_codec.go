@@ -305,28 +305,36 @@ func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) (*queryrang
 		}, nil
 	}
 
-	var ss []*queryrange.Sample
-	for _, v := range output {
-		ss = append(ss, v)
+	type pair struct {
+		metric string
+		s      *queryrange.Sample
 	}
 
-	sort.Slice(ss, func(i, j int) bool {
+	samples := make([]*pair, 0, len(output))
+	for k, v := range output {
+		samples = append(samples, &pair{
+			metric: k,
+			s:      v,
+		})
+	}
+
+	sort.Slice(samples, func(i, j int) bool {
 		// Order is determined by the sortFn in the query.
 		if sortAsc {
-			return ss[i].Sample.Value < ss[j].Sample.Value
+			return samples[i].s.Sample.Value < samples[j].s.Sample.Value
 		} else if sortDesc {
-			return ss[i].Sample.Value > ss[j].Sample.Value
+			return samples[i].s.Sample.Value > samples[j].s.Sample.Value
 		} else {
-			// Fallback on sorting by series
-			m1 := cortexpb.FromLabelAdaptersToLabels(ss[i].Labels).String()
-			m2 := cortexpb.FromLabelAdaptersToLabels(ss[j].Labels).String()
-			return m1 < m2
+			// Fallback on sorting by labels.
+			return samples[i].metric < samples[j].metric
 		}
 	})
 	result := &queryrange.Vector{
 		Samples: make([]*queryrange.Sample, 0, len(output)),
 	}
-	result.Samples = append(result.Samples, ss...)
+	for _, p := range samples {
+		result.Samples = append(result.Samples, p.s)
+	}
 	return result, nil
 }
 
@@ -336,13 +344,11 @@ func parseQueryForSort(q string) (bool, bool, error) {
 	var sortDesc bool = false
 	promqlparser.Inspect(expr, func(n promqlparser.Node, _ []promqlparser.Node) error {
 		if call, ok := n.(*promqlparser.Call); ok {
-			sortFn := promqlparser.Functions["sort"]
-			sortDescFn := promqlparser.Functions["sort_desc"]
-			if call.Func.Name == sortFn.Name {
+			if call.Func.Name == "sort" {
 				sortAsc = true
 				return errors.New("done")
 			}
-			if call.Func.Name == sortDescFn.Name {
+			if call.Func.Name == "sort_desc" {
 				sortDesc = true
 				return errors.New("done")
 			}

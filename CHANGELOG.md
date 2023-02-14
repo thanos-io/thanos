@@ -32,7 +32,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6098](https://github.com/thanos-io/thanos/pull/6098) Cache/Redis: upgrade `rueidis` to v0.0.93 to fix potential panic when the client-side caching is disabled.
 - [#6103](https://github.com/thanos-io/thanos/pull/6103) Mixins(Rule): Fix query for long rule evaluations.
 - [#6121](https://github.com/thanos-io/thanos/pull/6121) Receive: Deduplicate metamonitoring queries.
-- [#6123](https://github.com/thanos-io/thanos/pull/5123) Query Frontend: Fix sorted queries do not produce sorted results for shardable queries. Fixes [#6059](https://github.com/thanos-io/thanos/issues/6059)
+- [#6125](https://github.com/thanos-io/thanos/pull/6125) Query Frontend: Fix sorted queries do not produce sorted results for shardable queries.
 
 ### Changed
 
