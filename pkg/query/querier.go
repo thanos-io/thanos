@@ -5,7 +5,6 @@ package query
 
 import (
 	"context"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -17,12 +16,10 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
-
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
@@ -59,10 +56,11 @@ type QueryableCreator func(
 ) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
+// NOTE(bwplotka): Proxy assumes to be replica_aware, see thanos.store.info.StoreInfo.replica_aware field.
 func NewQueryableCreator(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	proxy storepb.StoreServer,
+	proxy *store.ProxyStore,
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
 ) QueryableCreator {
@@ -104,7 +102,7 @@ type queryable struct {
 	logger               log.Logger
 	replicaLabels        []string
 	storeDebugMatchers   [][]*labels.Matcher
-	proxy                storepb.StoreServer
+	proxy                *store.ProxyStore
 	deduplicate          bool
 	maxResolutionMillis  int64
 	partialResponse      bool
@@ -123,22 +121,22 @@ func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Quer
 }
 
 type querier struct {
-	ctx                 context.Context
-	logger              log.Logger
-	cancel              func()
-	mint, maxt          int64
-	replicaLabels       map[string]struct{}
-	storeDebugMatchers  [][]*labels.Matcher
-	proxy               storepb.StoreServer
-	deduplicate         bool
-	maxResolutionMillis int64
-	partialResponse     bool
-	enableQueryPushdown bool
-	skipChunks          bool
-	selectGate          gate.Gate
-	selectTimeout       time.Duration
-	shardInfo           *storepb.ShardInfo
-	seriesStatsReporter seriesStatsReporter
+	ctx                     context.Context
+	logger                  log.Logger
+	cancel                  func()
+	mint, maxt              int64
+	replicaLabels           []string
+	storeDebugMatchers      [][]*labels.Matcher
+	proxy                   *store.ProxyStore
+	deduplicate             bool
+	maxResolutionMillis     int64
+	partialResponseStrategy storepb.PartialResponseStrategy
+	enableQueryPushdown     bool
+	skipChunks              bool
+	selectGate              gate.Gate
+	selectTimeout           time.Duration
+	shardInfo               *storepb.ShardInfo
+	seriesStatsReporter     seriesStatsReporter
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -150,7 +148,7 @@ func newQuerier(
 	maxt int64,
 	replicaLabels []string,
 	storeDebugMatchers [][]*labels.Matcher,
-	proxy storepb.StoreServer,
+	proxy *store.ProxyStore,
 	deduplicate bool,
 	maxResolutionMillis int64,
 	partialResponse,
@@ -170,6 +168,11 @@ func newQuerier(
 	for _, replicaLabel := range replicaLabels {
 		rl[replicaLabel] = struct{}{}
 	}
+
+	partialResponseStrategy := storepb.PartialResponseStrategy_ABORT
+	if partialResponse {
+		partialResponseStrategy = storepb.PartialResponseStrategy_WARN
+	}
 	return &querier{
 		ctx:           ctx,
 		logger:        logger,
@@ -177,18 +180,18 @@ func newQuerier(
 		selectGate:    selectGate,
 		selectTimeout: selectTimeout,
 
-		mint:                mint,
-		maxt:                maxt,
-		replicaLabels:       rl,
-		storeDebugMatchers:  storeDebugMatchers,
-		proxy:               proxy,
-		deduplicate:         deduplicate,
-		maxResolutionMillis: maxResolutionMillis,
-		partialResponse:     partialResponse,
-		skipChunks:          skipChunks,
-		enableQueryPushdown: enableQueryPushdown,
-		shardInfo:           shardInfo,
-		seriesStatsReporter: seriesStatsReporter,
+		mint:                    mint,
+		maxt:                    maxt,
+		replicaLabels:           replicaLabels,
+		storeDebugMatchers:      storeDebugMatchers,
+		proxy:                   proxy,
+		deduplicate:             deduplicate,
+		maxResolutionMillis:     maxResolutionMillis,
+		partialResponseStrategy: partialResponseStrategy,
+		skipChunks:              skipChunks,
+		enableQueryPushdown:     enableQueryPushdown,
+		shardInfo:               shardInfo,
+		seriesStatsReporter:     seriesStatsReporter,
 	}
 }
 
@@ -276,8 +279,9 @@ func (q *querier) Select(_ bool, hints *storage.SelectHints, ms ...*labels.Match
 		matchers[i] = m.String()
 	}
 
-	// The querier has a context but it gets canceled, as soon as query evaluation is completed, by the engine.
+	// The querier has a context, but it gets canceled as soon as query evaluation is completed by the engine.
 	// We want to prevent this from happening for the async store API calls we make while preserving tracing context.
+	// TODO(bwplotka): Does the above still is true? It feels weird to leave unfinished calls behind query API.
 	ctx := tracing.CopyTraceContext(context.Background(), q.ctx)
 	ctx, cancel := context.WithTimeout(ctx, q.selectTimeout)
 	span, ctx := tracing.StartSpan(ctx, "querier_select", opentracing.Tags{
@@ -337,26 +341,29 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	// TODO(bwplotka): Pass it using the SeriesRequest instead of relying on context.
 	ctx = context.WithValue(ctx, store.StoreMatcherKey, q.storeDebugMatchers)
 
-	// TODO(bwplotka): Use inprocess gRPC.
+	// TODO(bwplotka): Use inprocess gRPC when we want to stream responses.
+	// Currently streaming won't help due to nature of the both PromQL engine which
+	// pulls all series before computations anyway.
 	resp := &seriesServer{ctx: ctx}
-	var queryHints *storepb.QueryHints
-	if q.enableQueryPushdown {
-		queryHints = storeHintsFromPromHints(hints)
-	}
-
-	if err := q.proxy.Series(&storepb.SeriesRequest{
-		MinTime:                 q.mint,
-		MaxTime:                 q.maxt,
+	req := storepb.SeriesRequest{
+		MinTime:                 hints.Start,
+		MaxTime:                 hints.End,
 		Matchers:                sms,
 		MaxResolutionWindow:     q.maxResolutionMillis,
 		Aggregates:              aggrs,
-		QueryHints:              queryHints,
 		ShardInfo:               q.shardInfo,
-		PartialResponseDisabled: !q.partialResponse,
+		PartialResponseStrategy: q.partialResponseStrategy,
 		SkipChunks:              q.skipChunks,
-		Step:                    hints.Step,
-		Range:                   hints.Range,
-	}, resp); err != nil {
+	}
+	if q.enableQueryPushdown {
+		req.QueryHints = storeHintsFromPromHints(hints)
+	}
+	if q.isDedupEnabled() {
+		// Soft ask to sort without replica labels and push them at the end of labelset.
+		req.WithoutReplicaLabels = q.replicaLabels
+	}
+
+	if err := q.proxy.Series(&req, resp); err != nil {
 		return nil, storepb.SeriesStatsCounter{}, errors.Wrap(err, "proxy Series()")
 	}
 
@@ -365,10 +372,10 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		warns = append(warns, errors.New(w))
 	}
 
-	// Delete the metric's name from the result because that's what the
-	// PromQL does either way and we want our iterator to work with data
-	// that was either pushed down or not.
 	if q.enableQueryPushdown && (hints.Func == "max_over_time" || hints.Func == "min_over_time") {
+		// On query pushdown, delete the metric's name from the result because that's what the
+		// PromQL does either way, and we want our iterator to work with data
+		// that was either pushed down or not.
 		for i := range resp.seriesSet {
 			lbls := resp.seriesSet[i].Labels
 			for j, lbl := range lbls {
@@ -382,7 +389,6 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 	}
 
 	if !q.isDedupEnabled() {
-		// Return data without any deduplication.
 		return &promSeriesSet{
 			mint:  q.mint,
 			maxt:  q.maxt,
@@ -392,48 +398,18 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		}, resp.seriesSetStats, nil
 	}
 
-	// TODO(fabxc): this could potentially pushed further down into the store API to make true streaming possible.
-	sortDedupLabels(resp.seriesSet, q.replicaLabels)
+	// TODO(bwplotka): Move to deduplication on chunk level inside promSeriesSet, similar to what we have in dedup.NewDedupChunkMerger().
+	// This however require big refactor, caring about correct AggrChunk to iterator conversion, pushdown logic and counter reset apply.
+	// For now we apply simple logic that splits potential overlapping chunks into separate replica series, so we can split the work.
 	set := &promSeriesSet{
 		mint:  q.mint,
 		maxt:  q.maxt,
-		set:   newStoreSeriesSet(resp.seriesSet),
+		set:   dedup.NewOverlapSplit(newStoreSeriesSet(resp.seriesSet)),
 		aggrs: aggrs,
 		warns: warns,
 	}
 
-	// The merged series set assembles all potentially-overlapping time ranges of the same series into a single one.
-	// TODO(bwplotka): We could potentially dedup on chunk level, use chunk iterator for that when available.
-	return dedup.NewSeriesSet(set, q.replicaLabels, hints.Func, q.enableQueryPushdown), resp.seriesSetStats, nil
-}
-
-// sortDedupLabels re-sorts the set so that the same series with different replica
-// labels are coming right after each other.
-func sortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
-	for _, s := range set {
-		// Move the replica labels to the very end.
-		sort.Slice(s.Labels, func(i, j int) bool {
-			if _, ok := replicaLabels[s.Labels[i].Name]; ok {
-				return false
-			}
-			if _, ok := replicaLabels[s.Labels[j].Name]; ok {
-				return true
-			}
-			// Ensure that dedup marker goes just right before the replica labels.
-			if s.Labels[i].Name == dedup.PushdownMarker.Name {
-				return false
-			}
-			if s.Labels[j].Name == dedup.PushdownMarker.Name {
-				return true
-			}
-			return s.Labels[i].Name < s.Labels[j].Name
-		})
-	}
-	// With the re-ordered label sets, re-sorting all series aligns the same series
-	// from different replicas sequentially.
-	sort.Slice(set, func(i, j int) bool {
-		return labels.Compare(labelpb.ZLabelsToPromLabels(set[i].Labels), labelpb.ZLabelsToPromLabels(set[j].Labels)) < 0
-	})
+	return dedup.NewSeriesSet(set, hints.Func, q.enableQueryPushdown), resp.seriesSetStats, nil
 }
 
 // LabelValues returns all potential values for a label name.
@@ -451,7 +427,7 @@ func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]strin
 
 	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label:                   name,
-		PartialResponseDisabled: !q.partialResponse,
+		PartialResponseStrategy: q.partialResponseStrategy,
 		Start:                   q.mint,
 		End:                     q.maxt,
 		Matchers:                pbMatchers,
@@ -483,7 +459,7 @@ func (q *querier) LabelNames(matchers ...*labels.Matcher) ([]string, storage.War
 	}
 
 	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{
-		PartialResponseDisabled: !q.partialResponse,
+		PartialResponseStrategy: q.partialResponseStrategy,
 		Start:                   q.mint,
 		End:                     q.maxt,
 		Matchers:                pbMatchers,

@@ -53,11 +53,9 @@ type Client interface {
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
 
-	// SendsSortedSeries returns true if the underlying store sends series sorded by
-	// their labels.
-	// The field can be used to indicate to the querier whether it needs to sort
-	// received series before deduplication.
-	SendsSortedSeries() bool
+	// SupportsWithoutReplicaLabels returns true if trimming replica labels
+	// and sorted response is supported by the underlying store.
+	SupportsWithoutReplicaLabels() bool
 
 	// String returns the string representation of the store client.
 	String() string
@@ -268,6 +266,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
 		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		ShardInfo:               originalRequest.ShardInfo,
+		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
 	}
 
 	stores := []Client{}
@@ -293,7 +292,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
+		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
@@ -384,7 +383,7 @@ func labelSetsMatch(matchers []*labels.Matcher, lset ...labels.Labels) bool {
 	for _, ls := range lset {
 		notMatched := false
 		for _, m := range matchers {
-			if lv := ls.Get(m.Name); lv != "" && !m.Matches(lv) {
+			if lv := ls.Get(m.Name); ls.Has(m.Name) && !m.Matches(lv) {
 				notMatched = true
 				break
 			}

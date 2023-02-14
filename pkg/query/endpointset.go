@@ -190,7 +190,7 @@ type EndpointStatus struct {
 
 // endpointSetNodeCollector is a metric collector reporting the number of available storeAPIs for Querier.
 // A Collector is required as we want atomic updates for all 'thanos_store_nodes_grpc_connections' series.
-// TODO(hitanshu-mehta) Currently,only collecting metrics of storeAPI. Make this struct generic.
+// TODO(hitanshu-mehta) Currently,only collecting metrics of storeEndpoints. Make this struct generic.
 type endpointSetNodeCollector struct {
 	mtx             sync.Mutex
 	storeNodes      map[component.Component]map[string]int
@@ -436,7 +436,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 		if er.HasStoreAPI() && (er.ComponentType() == component.Sidecar || er.ComponentType() == component.Rule) &&
 			stats[component.Sidecar][extLset]+stats[component.Rule][extLset] > 0 {
 
-			level.Warn(e.logger).Log("msg", "found duplicate storeAPI producer (sidecar or ruler). This is not advices as it will malform data in in the same bucket",
+			level.Warn(e.logger).Log("msg", "found duplicate storeEndpoints producer (sidecar or ruler). This is not advices as it will malform data in in the same bucket",
 				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar][extLset]+stats[component.Rule][extLset]+1))
 		}
 		stats[er.ComponentType()][extLset]++
@@ -807,7 +807,7 @@ func (er *endpointRef) SupportsSharding() bool {
 	return er.metadata.Store.SupportsSharding
 }
 
-func (er *endpointRef) SendsSortedSeries() bool {
+func (er *endpointRef) SupportsWithoutReplicaLabels() bool {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
@@ -815,13 +815,13 @@ func (er *endpointRef) SendsSortedSeries() bool {
 		return false
 	}
 
-	return er.metadata.Store.SendsSortedSeries
+	return er.metadata.Store.SupportsWithoutReplicaLabels
 }
 
 func (er *endpointRef) String() string {
 	mint, maxt := er.TimeRange()
 	return fmt.Sprintf(
-		"Addr: %s LabelSets: %v Mint: %d Maxt: %d",
+		"Addr: %s LabelSets: %v MinTime: %d MaxTime: %d",
 		er.addr, labelpb.PromLabelSetsToString(er.LabelSets()), mint, maxt,
 	)
 }
@@ -838,7 +838,7 @@ func (er *endpointRef) apisPresent() []string {
 	var apisPresent []string
 
 	if er.HasStoreAPI() {
-		apisPresent = append(apisPresent, "storeAPI")
+		apisPresent = append(apisPresent, "storeEndpoints")
 	}
 
 	if er.HasRulesAPI() {

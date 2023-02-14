@@ -4,8 +4,6 @@
 package query
 
 import (
-	"sort"
-
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -18,87 +16,27 @@ import (
 )
 
 // promSeriesSet implements the SeriesSet interface of the Prometheus storage
-// package on top of our storepb SeriesSet.
+// package on top of our storepb SeriesSet. Overlapping chunks will be naively deduplicated (random selection).
 type promSeriesSet struct {
-	set  storepb.SeriesSet
-	done bool
+	set storepb.SeriesSet
 
 	mint, maxt int64
 	aggrs      []storepb.Aggr
-	initiated  bool
-
-	currLset   labels.Labels
-	currChunks []storepb.AggrChunk
 
 	warns storage.Warnings
 }
 
 func (s *promSeriesSet) Next() bool {
-	if !s.initiated {
-		s.initiated = true
-		s.done = s.set.Next()
-	}
-
-	if !s.done {
-		return false
-	}
-
-	// storage.Series are more strict then SeriesSet:
-	// * It requires storage.Series to iterate over full series.
-	s.currLset, s.currChunks = s.set.At()
-	for {
-		s.done = s.set.Next()
-		if !s.done {
-			break
-		}
-		nextLset, nextChunks := s.set.At()
-		if labels.Compare(s.currLset, nextLset) != 0 {
-			break
-		}
-		s.currChunks = append(s.currChunks, nextChunks...)
-	}
-
-	// Samples (so chunks as well) have to be sorted by time.
-	// TODO(bwplotka): Benchmark if we can do better.
-	// For example we could iterate in above loop and write our own binary search based insert sort.
-	// We could also remove duplicates in same loop.
-	sort.Slice(s.currChunks, func(i, j int) bool {
-		return s.currChunks[i].MinTime < s.currChunks[j].MinTime
-	})
-
-	// Proxy handles duplicates between different series, let's handle duplicates within single series now as well.
-	// We don't need to decode those.
-	s.currChunks = removeExactDuplicates(s.currChunks)
-	return true
-}
-
-// removeExactDuplicates returns chunks without 1:1 duplicates.
-// NOTE: input chunks has to be sorted by minTime.
-func removeExactDuplicates(chks []storepb.AggrChunk) []storepb.AggrChunk {
-	if len(chks) <= 1 {
-		return chks
-	}
-	head := 0
-	for i, c := range chks[1:] {
-		if chks[head].Compare(c) == 0 {
-			continue
-		}
-		head++
-		if i+1 == head {
-			// `chks[head] == chks[i+1] == c` so this is a no-op.
-			// This way we get no copies in case the input had no duplicates.
-			continue
-		}
-		chks[head] = c
-	}
-	return chks[:head+1]
+	return s.set.Next()
 }
 
 func (s *promSeriesSet) At() storage.Series {
-	if !s.initiated || s.set.Err() != nil {
+	if s.set.Err() != nil {
 		return nil
 	}
-	return newChunkSeries(s.currLset, s.currChunks, s.mint, s.maxt, s.aggrs)
+
+	currLset, currChunks := s.set.At()
+	return newChunkSeries(currLset, currChunks, s.mint, s.maxt, s.aggrs)
 }
 
 func (s *promSeriesSet) Err() error {
@@ -128,11 +66,11 @@ func (s *storeSeriesSet) Next() bool {
 	return true
 }
 
-func (storeSeriesSet) Err() error {
+func (*storeSeriesSet) Err() error {
 	return nil
 }
 
-func (s storeSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
+func (s *storeSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
 	return s.series[s.i].PromLabels(), s.series[s.i].Chunks
 }
 

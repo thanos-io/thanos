@@ -6,9 +6,11 @@ package query
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
@@ -81,15 +83,24 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 	}
 
 	logger := log.NewNopLogger()
-	q := &querier{
-		ctx:                 context.Background(),
-		logger:              logger,
-		proxy:               &mockedStoreServer{responses: resps},
-		replicaLabels:       map[string]struct{}{"a_replica": {}},
-		deduplicate:         dedup,
-		selectGate:          gate.NewNoop(),
-		seriesStatsReporter: NoopSeriesStatsReporter,
-	}
+	q := newQuerier(
+		context.Background(),
+		logger,
+		math.MinInt64,
+		math.MaxInt64,
+		[]string{"a_replica"},
+		nil,
+		newProxyStore(&mockedStoreServer{responses: resps}),
+		dedup,
+		0,
+		false,
+		false,
+		false,
+		gate.NewNoop(),
+		10*time.Second,
+		nil,
+		NoopSeriesStatsReporter,
+	)
 	testSelect(t, q, expectedSeries)
 }
 
@@ -119,7 +130,8 @@ func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels) {
 		t.ResetTimer()
 
 		for i := 0; i < t.N(); i++ {
-			ss := q.Select(true, nil) // Select all.
+			ss := q.Select(true, nil, &labels.Matcher{Value: "foo", Name: "bar", Type: labels.MatchEqual})
+			testutil.Ok(t, ss.Err())
 			testutil.Equals(t, 0, len(ss.Warnings()))
 
 			if t.IsBenchmark() {
@@ -138,22 +150,23 @@ func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels) {
 				}
 
 				testutil.Equals(t, len(expectedSeries), gotSeriesCount)
-			} else {
-				// Check more carefully.
-				var gotSeries []labels.Labels
-				for ss.Next() {
-					s := ss.At()
-					gotSeries = append(gotSeries, s.Labels())
-
-					// This is when resource usage should actually start growing.
-					iter := s.Iterator(nil)
-					for iter.Next() != chunkenc.ValNone {
-						testT, testV = iter.At()
-					}
-					testutil.Ok(t, iter.Err())
-				}
-				testutil.Equals(t, expectedSeries, gotSeries)
+				testutil.Ok(t, ss.Err())
+				return
 			}
+
+			// Check more carefully.
+			var gotSeries []labels.Labels
+			for ss.Next() {
+				s := ss.At()
+				gotSeries = append(gotSeries, s.Labels())
+
+				iter := s.Iterator(nil)
+				for iter.Next() != chunkenc.ValNone {
+					testT, testV = iter.At()
+				}
+				testutil.Ok(t, iter.Err())
+			}
+			testutil.Equals(t, expectedSeries, gotSeries)
 			testutil.Ok(t, ss.Err())
 		}
 	})

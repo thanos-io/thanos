@@ -6,6 +6,7 @@ package e2e_test
 import (
 	"context"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -711,6 +712,13 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "5"}, {Name: "handler", Value: "/metrics"}},
 		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/"}},
 		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/metrics"}},
+	}
+
+	// Ensure labels are ordered.
+	for _, ts := range timeSeries {
+		sort.Slice(ts, func(i, j int) bool {
+			return ts[i].Name < ts[j].Name
+		})
 	}
 
 	startTime := now.Time().Add(-1 * time.Hour)

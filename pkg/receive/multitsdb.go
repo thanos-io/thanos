@@ -116,7 +116,7 @@ func (l *localClient) TimeRange() (mint int64, maxt int64) {
 func (l *localClient) String() string {
 	mint, maxt := l.timeRangeFunc()
 	return fmt.Sprintf(
-		"LabelSets: %v Mint: %d Maxt: %d",
+		"LabelSets: %v MinTime: %d MaxTime: %d",
 		labelpb.PromLabelSetsToString(l.LabelSets()), mint, maxt,
 	)
 }
@@ -129,7 +129,7 @@ func (l *localClient) SupportsSharding() bool {
 	return true
 }
 
-func (l *localClient) SendsSortedSeries() bool {
+func (l *localClient) SupportsWithoutReplicaLabels() bool {
 	return true
 }
 
