@@ -19,6 +19,7 @@ import (
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -690,9 +691,10 @@ func runQuery(
 				EngineOpts:  engineOpts,
 			}
 			remoteEngineEndpoints := query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
-				AutoDownSample: enableAutodownsampling,
-				ReplicaLabels:  queryReplicaLabels,
-				Timeout:        queryTimeout,
+				AutoDownSample:        enableAutodownsampling,
+				ReplicaLabels:         queryReplicaLabels,
+				Timeout:               queryTimeout,
+				EnablePartialResponse: enableQueryPartialResponse,
 			})
 			queryEngine = engine.NewDistributedEngine(opts, remoteEngineEndpoints)
 		}

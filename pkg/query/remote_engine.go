@@ -23,9 +23,10 @@ import (
 
 // Opts are the options for a PromQL query.
 type Opts struct {
-	AutoDownSample bool
-	ReplicaLabels  []string
-	Timeout        time.Duration
+	AutoDownSample        bool
+	ReplicaLabels         []string
+	Timeout               time.Duration
+	EnablePartialResponse bool
 }
 
 // Client is a query client that executes PromQL queries.
@@ -149,11 +150,12 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	}
 
 	request := &querypb.QueryRangeRequest{
-		Query:            r.qs,
-		StartTimeSeconds: r.start.Unix(),
-		EndTimeSeconds:   r.end.Unix(),
-		IntervalSeconds:  int64(r.interval.Seconds()),
-		TimeoutSeconds:   int64(r.opts.Timeout.Seconds()),
+		Query:                 r.qs,
+		StartTimeSeconds:      r.start.Unix(),
+		EndTimeSeconds:        r.end.Unix(),
+		IntervalSeconds:       int64(r.interval.Seconds()),
+		TimeoutSeconds:        int64(r.opts.Timeout.Seconds()),
+		EnablePartialResponse: r.opts.EnablePartialResponse,
 		// TODO (fpetkovski): Allow specifying these parameters at query time.
 		// This will likely require a change in the remote engine interface.
 		ReplicaLabels:        r.opts.ReplicaLabels,
