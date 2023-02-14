@@ -185,7 +185,7 @@ func (s *dedupSeries) Labels() labels.Labels {
 
 // pushdownIterator creates an iterator that handles
 // all pushed down series.
-func (s *dedupSeries) pushdownIterator(chunkenc.Iterator) chunkenc.Iterator {
+func (s *dedupSeries) pushdownIterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	var pushedDownIterator adjustableSeriesIterator
 	if s.isCounter {
 		pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
@@ -210,7 +210,7 @@ func (s *dedupSeries) pushdownIterator(chunkenc.Iterator) chunkenc.Iterator {
 
 // allSeriesIterator creates an iterator over all series - pushed down
 // and regular replicas.
-func (s *dedupSeries) allSeriesIterator(chunkenc.Iterator) chunkenc.Iterator {
+func (s *dedupSeries) allSeriesIterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	var replicasIterator, pushedDownIterator adjustableSeriesIterator
 	if len(s.replicas) != 0 {
 		if s.isCounter {
@@ -257,7 +257,7 @@ func (s *dedupSeries) allSeriesIterator(chunkenc.Iterator) chunkenc.Iterator {
 	return newDedupSeriesIterator(pushedDownIterator, replicasIterator)
 }
 
-func (s *dedupSeries) Iterator(chunkenc.Iterator) chunkenc.Iterator {
+func (s *dedupSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	// This function needs a regular iterator over all series. Behavior is identical
 	// whether it was pushed down or not.
 	if s.f == "group" {

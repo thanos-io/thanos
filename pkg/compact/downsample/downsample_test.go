@@ -477,7 +477,6 @@ func TestDownsample(t *testing.T) {
 			testutil.Equals(t, 1, len(series))
 
 			var builder labels.ScratchBuilder
-
 			var lset labels.Labels
 			var chks []chunks.Meta
 			testutil.Ok(t, indexr.Series(series[0], &builder, &chks))

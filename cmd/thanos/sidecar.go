@@ -283,9 +283,9 @@ func runSidecar(
 			info.WithMetricMetadataInfoFunc(),
 		)
 
-		instrumentedStore := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), conf.storeRateLimits)
+		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), reg, conf.storeRateLimits)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(instrumentedStore, logger)),
+			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rules.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(targets.RegisterTargetsServer(targets.NewPrometheus(conf.prometheus.url, c, m.Labels))),
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
@@ -485,7 +485,7 @@ type sidecarConfig struct {
 	objStore        extflag.PathOrContent
 	shipper         shipperConfig
 	limitMinTime    thanosmodel.TimeOrDurationValue
-	storeRateLimits store.RateLimits
+	storeRateLimits store.SeriesSelectLimits
 }
 
 func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
