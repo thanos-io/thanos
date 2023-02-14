@@ -146,7 +146,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 
 	var maxResolution int64
 	if r.opts.AutoDownSample {
-		maxResolution = int64(r.interval / 5)
+		maxResolution = int64(r.interval.Seconds() / 5)
 	}
 
 	request := &querypb.QueryRangeRequest{
