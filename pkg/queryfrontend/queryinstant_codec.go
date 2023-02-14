@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
+	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/weaveworks/common/httpgrpc"
 
@@ -340,23 +340,27 @@ func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) (*queryrang
 
 func parseQueryForSort(q string) (bool, bool, error) {
 	expr, err := promqlparser.ParseExpr(q)
+	if err != nil {
+		return false, false, err
+	}
 	var sortAsc bool = false
 	var sortDesc bool = false
 	promqlparser.Inspect(expr, func(n promqlparser.Node, _ []promqlparser.Node) error {
-		if call, ok := n.(*promqlparser.Call); ok {
-			if call.Func.Name == "sort" {
-				sortAsc = true
-				return errors.New("done")
-			}
-			if call.Func.Name == "sort_desc" {
-				sortDesc = true
-				return errors.New("done")
+		if n, ok := n.(*promqlparser.Call); ok {
+			if n.Func != nil {
+				if n.Func.Name == "sort" {
+					sortAsc = true
+					return errors.New("done")
+				}
+				if n.Func.Name == "sort_desc" {
+					sortDesc = true
+					return errors.New("done")
+				}
 			}
 		}
 		return nil
 	})
-
-	return sortAsc, sortDesc, err
+	return sortAsc, sortDesc, nil
 }
 
 func matrixMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Matrix {
