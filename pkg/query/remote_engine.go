@@ -95,7 +95,7 @@ func (r remoteEngine) LabelSets() []labels.Labels {
 	result := make([]labels.Labels, len(labelSets))
 	for i := range labelSets {
 		numLabels := len(labelSets[i]) - len(r.opts.ReplicaLabels)
-		if numLabels < 0 {
+		if numLabels <= 0 {
 			continue
 		}
 		result[i] = make(labels.Labels, 0, numLabels)
