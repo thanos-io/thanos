@@ -14,7 +14,7 @@ jobs:
     env:
       GOBIN: /tmp/.bin
     steps:
-      - name: Checkout code into the Go module directory.
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Install Go
@@ -38,5 +38,6 @@ jobs:
 
       - name: Check docs
         run: make check-docs
+
       - name: Check examples
         run: make check-examples
