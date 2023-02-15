@@ -252,6 +252,7 @@ type QuerierBuilder struct {
 	exemplarAddresses       []string
 	enableFeatures          []string
 	endpoints               []string
+	strictEndpoints         []string
 
 	engine    string
 	queryMode string
@@ -324,6 +325,11 @@ func (q *QuerierBuilder) WithMetadataAddresses(metadataAddresses ...string) *Que
 
 func (q *QuerierBuilder) WithEndpoints(endpoints ...string) *QuerierBuilder {
 	q.endpoints = endpoints
+	return q
+}
+
+func (q *QuerierBuilder) WithStrictEndpoints(strictEndpoints ...string) *QuerierBuilder {
+	q.strictEndpoints = strictEndpoints
 	return q
 }
 
@@ -419,6 +425,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	for _, addr := range q.endpoints {
 		args = append(args, "--endpoint="+addr)
+	}
+	for _, addr := range q.strictEndpoints {
+		args = append(args, "--endpoint-strict="+addr)
 	}
 	if len(q.fileSDStoreAddresses) > 0 {
 		if err := os.MkdirAll(q.Dir(), 0750); err != nil {
