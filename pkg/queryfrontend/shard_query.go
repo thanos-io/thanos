@@ -74,7 +74,7 @@ func (s querySharder) Do(ctx context.Context, r queryrange.Request) (queryrange.
 		resps = append(resps, reqResp.Response)
 	}
 
-	response, err := s.merger.MergeResponse(resps...)
+	response, err := s.merger.MergeResponse(r, resps...)
 	if err != nil {
 		return nil, err
 	}

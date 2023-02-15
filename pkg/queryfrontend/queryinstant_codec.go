@@ -43,18 +43,11 @@ func NewThanosQueryInstantCodec(partialResponse bool) *queryInstantCodec {
 // MergeResponse merges multiple responses into a single response. For instant query
 // only vector and matrix responses will be merged because other types of queries
 // are not shardable like number literal, string literal, scalar, etc.
-func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (queryrange.Response, error) {
+func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...queryrange.Response) (queryrange.Response, error) {
 	if len(responses) == 0 {
 		return queryrange.NewEmptyPrometheusInstantQueryResponse(), nil
 	} else if len(responses) == 1 {
-		resp := responses[0].(*queryrange.PrometheusInstantQueryResponse)
-		return &queryrange.PrometheusInstantQueryResponse{
-			Status:    resp.Status,
-			Data:      resp.Data,
-			ErrorType: resp.ErrorType,
-			Error:     resp.Error,
-			Headers:   resp.Headers,
-		}, nil
+		return responses[0], nil
 	}
 
 	promResponses := make([]*queryrange.PrometheusInstantQueryResponse, 0, len(responses))
@@ -77,7 +70,7 @@ func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (quer
 			},
 		}
 	default:
-		v, err := vectorMerge(promResponses)
+		v, err := vectorMerge(req, promResponses)
 		if err != nil {
 			return nil, err
 		}
@@ -260,8 +253,6 @@ func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response,
 	if err := json.Unmarshal(buf, &resp); err != nil {
 		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "error decoding response: %v", err)
 	}
-	// The query will be used later for merging responses.
-	resp.Query = req.GetQuery()
 
 	for h, hv := range r.Header {
 		resp.Headers = append(resp.Headers, &queryrange.PrometheusResponseHeader{Name: h, Values: hv})
@@ -269,9 +260,9 @@ func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response,
 	return &resp, nil
 }
 
-func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) (*queryrange.Vector, error) {
+func vectorMerge(req queryrange.Request, resps []*queryrange.PrometheusInstantQueryResponse) (*queryrange.Vector, error) {
 	output := map[string]*queryrange.Sample{}
-	sortAsc, sortDesc, err := parseQueryForSort(resps[0].Query)
+	sortAsc, sortDesc, err := parseQueryForSort(req.GetQuery())
 	if err != nil {
 		return nil, err
 	}
@@ -345,16 +336,17 @@ func parseQueryForSort(q string) (bool, bool, error) {
 	}
 	var sortAsc bool = false
 	var sortDesc bool = false
+	done := errors.New("done")
 	promqlparser.Inspect(expr, func(n promqlparser.Node, _ []promqlparser.Node) error {
 		if n, ok := n.(*promqlparser.Call); ok {
 			if n.Func != nil {
 				if n.Func.Name == "sort" {
 					sortAsc = true
-					return errors.New("done")
+					return done
 				}
 				if n.Func.Name == "sort_desc" {
 					sortDesc = true
-					return errors.New("done")
+					return done
 				}
 			}
 		}

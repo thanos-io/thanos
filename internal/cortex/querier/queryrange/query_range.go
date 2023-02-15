@@ -72,7 +72,7 @@ type Codec interface {
 // Merger is used by middlewares making multiple requests to merge back all responses into a single one.
 type Merger interface {
 	// MergeResponse merges responses from multiple requests into a single Response
-	MergeResponse(...Response) (Response, error)
+	MergeResponse(Request, ...Response) (Response, error)
 }
 
 // Request represents a query range request that can be process by middlewares.
@@ -192,7 +192,7 @@ func NewEmptyPrometheusInstantQueryResponse() *PrometheusInstantQueryResponse {
 	}
 }
 
-func (prometheusCodec) MergeResponse(responses ...Response) (Response, error) {
+func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response, error) {
 	if len(responses) == 0 {
 		return NewEmptyPrometheusResponse(), nil
 	}
