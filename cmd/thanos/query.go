@@ -217,7 +217,7 @@ func registerQuery(app *extkingpin.App) {
 
 	storeSelectorRelabelConf := *extkingpin.RegisterSelectorRelabelFlags(cmd)
 
-	var storeRateLimits store.RateLimits
+	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
@@ -420,7 +420,7 @@ func runQuery(
 	queryTelemetrySeriesQuantiles []int64,
 	promqlEngine promqlEngineType,
 	enableThanosPromQLEngOptimizer bool,
-	storeRateLimits store.RateLimits,
+	storeRateLimits store.SeriesSelectLimits,
 	storeSelectorRelabelConf extflag.PathOrContent,
 ) error {
 	if alertQueryURL == "" {
@@ -810,10 +810,10 @@ func runQuery(
 		)
 
 		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, queryEngine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
-		instrumentedProxy := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), storeRateLimits)
+		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, storeRateLimits)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),
-			grpcserver.WithServer(store.RegisterStoreServer(instrumentedProxy, logger)),
+			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithServer(targets.RegisterTargetsServer(targetsProxy)),
 			grpcserver.WithServer(metadata.RegisterMetadataServer(metadataProxy)),

@@ -17,6 +17,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5926](https://github.com/thanos-io/thanos/pull/5926) Receiver: Add experimental string interning in writer. Can be enabled with a hidden flag `writer.intern`.
 - [#5773](https://github.com/thanos-io/thanos/pull/5773) Store: Support disable cache index header file.
 - [#5653](https://github.com/thanos-io/thanos/pull/5653) Receive: Allow setting hashing algorithm per tenant in hashrings config
+- [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Add histogram metrics `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested` to all Stores.
+- [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Allow configuring series and sample limits per `Series` request for all Stores.
 - [#6104](https://github.com/thanos-io/thanos/pull/6104) Objstore: Support S3 session token.
 - [#5548](https://github.com/thanos-io/thanos/pull/5548) Query: Added experimental support for load balancing across multiple Store endpoints.
 
@@ -29,6 +31,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6082](https://github.com/thanos-io/thanos/pull/6082) Store: Don't error when no stores are matched.
 - [#6098](https://github.com/thanos-io/thanos/pull/6098) Cache/Redis: upgrade `rueidis` to v0.0.93 to fix potential panic when the client-side caching is disabled.
 - [#6103](https://github.com/thanos-io/thanos/pull/6103) Mixins(Rule): Fix query for long rule evaluations.
+- [#6121](https://github.com/thanos-io/thanos/pull/6121) Receive: Deduplicate metamonitoring queries.
 
 ### Changed
 

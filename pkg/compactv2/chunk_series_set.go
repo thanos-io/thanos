@@ -54,7 +54,7 @@ func (s *lazyPopulateChunkSeriesSet) Next() bool {
 		}
 		s.curr = &storage.ChunkSeriesEntry{
 			Lset: s.bufLbls.Labels(),
-			ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
+			ChunkIteratorFn: func(_ chunks.Iterator) chunks.Iterator {
 				return storage.NewListChunkSeriesIterator(s.bufChks...)
 			},
 		}

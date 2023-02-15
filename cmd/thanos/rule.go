@@ -94,7 +94,7 @@ type ruleConfig struct {
 	dataDir           string
 	lset              labels.Labels
 	ignoredLabelNames []string
-	storeRateLimits   store.RateLimits
+	storeRateLimits   store.SeriesSelectLimits
 }
 
 func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -637,7 +637,7 @@ func runRule(
 				return nil
 			}),
 		)
-		storeServer := store.NewRateLimitedStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), conf.storeRateLimits)
+		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), reg, conf.storeRateLimits)
 		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)))
 	}
 
