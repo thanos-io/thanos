@@ -154,10 +154,26 @@ func (resp *PrometheusResponse) minTime() int64 {
 	if len(result) == 0 {
 		return -1
 	}
-	if len(result[0].Samples) == 0 {
+	if len(result[0].Samples) == 0 && len(result[0].Histograms) == 0 {
 		return -1
 	}
-	return result[0].Samples[0].TimestampMs
+
+	if len(result[0].Samples) == 0 {
+		return result[0].Histograms[0].Timestamp
+	}
+
+	if len(result[0].Histograms) == 0 {
+		return result[0].Samples[0].TimestampMs
+	}
+
+	return minInt64(result[0].Samples[0].TimestampMs, result[0].Histograms[0].Timestamp)
+}
+
+func minInt64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (resp *PrometheusResponse) GetStats() *PrometheusResponseStats {
