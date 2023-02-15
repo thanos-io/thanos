@@ -283,16 +283,16 @@ NOTE: Why you cannot just allocate slice and release and in new iteration alloca
 ```go
 var messages []string
 for _, msg := range recv {
-    messages = append(messages, msg)
+	messages = append(messages, msg)
 
-    if len(messages) > maxMessageLen {
-        marshalAndSend(messages)
-        // This creates new array. Previous array
-        // will be garbage collected only after
-        // some time (seconds), which
-        // can create enormous memory pressure.
-        messages = []string
-    }
+	if len(messages) > maxMessageLen {
+		marshalAndSend(messages)
+		// This creates new array. Previous array
+		// will be garbage collected only after
+		// some time (seconds), which
+		// can create enormous memory pressure.
+		messages = []string
+	}
 }
 ```
 
