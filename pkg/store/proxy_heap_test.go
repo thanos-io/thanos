@@ -13,6 +13,15 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
+func TestRmLabelsCornerCases(t *testing.T) {
+	testutil.Equals(t, rmLabels(labelsFromStrings("aa", "bb"), map[string]struct{}{
+		"aa": {},
+	}), labels.Labels{})
+	testutil.Equals(t, rmLabels(labelsFromStrings(), map[string]struct{}{
+		"aa": {},
+	}), labels.Labels{})
+}
+
 func TestSortWithoutLabels(t *testing.T) {
 	for _, tcase := range []struct {
 		input       []*storepb.SeriesResponse
