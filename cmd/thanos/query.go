@@ -691,7 +691,7 @@ func runQuery(
 				EngineOpts:  engineOpts,
 			}
 			remoteEngineEndpoints := query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
-				AutoDownSample:        enableAutodownsampling,
+				AutoDownsample:        enableAutodownsampling,
 				ReplicaLabels:         queryReplicaLabels,
 				Timeout:               queryTimeout,
 				EnablePartialResponse: enableQueryPartialResponse,

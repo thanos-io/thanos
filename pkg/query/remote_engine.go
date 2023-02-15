@@ -23,7 +23,7 @@ import (
 
 // Opts are the options for a PromQL query.
 type Opts struct {
-	AutoDownSample        bool
+	AutoDownsample        bool
 	ReplicaLabels         []string
 	Timeout               time.Duration
 	EnablePartialResponse bool
@@ -142,7 +142,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	defer cancel()
 
 	var maxResolution int64
-	if r.opts.AutoDownSample {
+	if r.opts.AutoDownsample {
 		maxResolution = int64(r.interval.Seconds() / 5)
 	}
 
