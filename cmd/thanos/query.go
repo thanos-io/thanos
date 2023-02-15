@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -686,17 +685,13 @@ func runQuery(
 		if queryMode == queryModeLocal {
 			queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts})
 		} else {
-			opts := engine.Opts{
-				DebugWriter: os.Stdout,
-				EngineOpts:  engineOpts,
-			}
 			remoteEngineEndpoints := query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
 				AutoDownsample:        enableAutodownsampling,
 				ReplicaLabels:         queryReplicaLabels,
 				Timeout:               queryTimeout,
 				EnablePartialResponse: enableQueryPartialResponse,
 			})
-			queryEngine = engine.NewDistributedEngine(opts, remoteEngineEndpoints)
+			queryEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: engineOpts}, remoteEngineEndpoints)
 		}
 	default:
 		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)
