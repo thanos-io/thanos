@@ -28,13 +28,13 @@ func TestDistributedQueryExecution(t *testing.T) {
 	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "prom2", e2ethanos.DefaultPromConfig("prom2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, sidecar1, sidecar2))
 
-	qry1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).Init()
-	qry2 := e2ethanos.NewQuerierBuilder(e, "2", sidecar2.InternalEndpoint("grpc")).Init()
+	qry1 := e2ethanos.NewQuerierBuilder(e, "1").WithStrictEndpoints(sidecar1.InternalEndpoint("grpc")).Init()
+	qry2 := e2ethanos.NewQuerierBuilder(e, "2").WithStrictEndpoints(sidecar2.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(qry1, qry2))
 
 	qryEndpoints := []string{qry1.InternalEndpoint("grpc"), qry2.InternalEndpoint("grpc")}
-	fanoutQry := e2ethanos.NewQuerierBuilder(e, "3", qryEndpoints...).Init()
-	distQry := e2ethanos.NewQuerierBuilder(e, "4", qryEndpoints...).
+	fanoutQry := e2ethanos.NewQuerierBuilder(e, "3").WithStrictEndpoints(qryEndpoints...).Init()
+	distQry := e2ethanos.NewQuerierBuilder(e, "4").WithStrictEndpoints(qryEndpoints...).
 		WithEngine("thanos").
 		WithQueryMode("distributed").
 		Init()
