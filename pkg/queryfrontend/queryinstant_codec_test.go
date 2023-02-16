@@ -334,7 +334,7 @@ func TestMergeResponse(t *testing.T) {
 		{
 			name: "merge two responses with sort",
 			req: &queryrange.PrometheusRequest{
-				Query: "sort(up)",
+				Query: "1 + sort(topk(1, up))",
 			},
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
@@ -412,7 +412,7 @@ func TestMergeResponse(t *testing.T) {
 		{
 			name: "merge two responses with sort_desc",
 			req: &queryrange.PrometheusRequest{
-				Query: "sort_desc(up)",
+				Query: "1 + sort_desc(bottomk(1, up))",
 			},
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
@@ -478,6 +478,162 @@ func TestMergeResponse(t *testing.T) {
 										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
 											"__name__": "up",
 											"job":      "foo",
+										})),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "merge two responses with topk",
+			req: &queryrange.PrometheusRequest{
+				Query: "1 + topk(10, sort(up))",
+			},
+			resps: []queryrange.Response{
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Sample: cortexpb.Sample{TimestampMs: 0, Value: 1},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Sample: cortexpb.Sample{TimestampMs: 0, Value: 2},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedResp: &queryrange.PrometheusInstantQueryResponse{
+				Status: queryrange.StatusSuccess,
+				Data: queryrange.PrometheusInstantQueryData{
+					ResultType: model.ValVector.String(),
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Vector{
+							Vector: &queryrange.Vector{
+								Samples: []*queryrange.Sample{
+									{
+										Sample: cortexpb.Sample{TimestampMs: 0, Value: 2},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "bar",
+										})),
+									},
+									{
+										Sample: cortexpb.Sample{TimestampMs: 0, Value: 1},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "foo",
+										})),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "merge two responses with bottomk",
+			req: &queryrange.PrometheusRequest{
+				Query: "1 + bottomk(10, sort(up))",
+			},
+			resps: []queryrange.Response{
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Sample: cortexpb.Sample{TimestampMs: 0, Value: 1},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "foo",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				&queryrange.PrometheusInstantQueryResponse{
+					Status: queryrange.StatusSuccess,
+					Data: queryrange.PrometheusInstantQueryData{
+						ResultType: model.ValVector.String(),
+						Result: queryrange.PrometheusInstantQueryResult{
+							Result: &queryrange.PrometheusInstantQueryResult_Vector{
+								Vector: &queryrange.Vector{
+									Samples: []*queryrange.Sample{
+										{
+											Sample: cortexpb.Sample{TimestampMs: 0, Value: 2},
+											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+												"__name__": "up",
+												"job":      "bar",
+											})),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedResp: &queryrange.PrometheusInstantQueryResponse{
+				Status: queryrange.StatusSuccess,
+				Data: queryrange.PrometheusInstantQueryData{
+					ResultType: model.ValVector.String(),
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Vector{
+							Vector: &queryrange.Vector{
+								Samples: []*queryrange.Sample{
+									{
+										Sample: cortexpb.Sample{TimestampMs: 0, Value: 1},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "foo",
+										})),
+									},
+									{
+										Sample: cortexpb.Sample{TimestampMs: 0, Value: 2},
+										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+											"__name__": "up",
+											"job":      "bar",
 										})),
 									},
 								},

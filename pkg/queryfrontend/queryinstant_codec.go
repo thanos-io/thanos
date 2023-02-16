@@ -338,6 +338,17 @@ func parseQueryForSort(q string) (bool, bool, error) {
 	var sortDesc bool = false
 	done := errors.New("done")
 	promqlparser.Inspect(expr, func(n promqlparser.Node, _ []promqlparser.Node) error {
+		if n, ok := n.(*promqlparser.AggregateExpr); ok {
+			if n.Op == promqlparser.TOPK {
+				sortDesc = true
+				return done
+			}
+			if n.Op == promqlparser.BOTTOMK {
+				sortAsc = true
+				return done
+			}
+			return nil
+		}
 		if n, ok := n.(*promqlparser.Call); ok {
 			if n.Func != nil {
 				if n.Func.Name == "sort" {
