@@ -144,7 +144,6 @@ func (p *PrometheusStore) putBuffer(b *[]byte) {
 // Series returns all series for a requested time range and label matcher.
 func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_SeriesServer) error {
 	extLset := p.externalLabelsFn()
-
 	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -175,9 +174,20 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		}
 	}
 
-	sortedSeriesSrv := newSortedSeriesServer(s, r.StrippedLabels())
+	var extLsetToRemove map[string]struct{}
+	if len(r.WithoutReplicaLabels) > 0 {
+		extLsetToRemove = make(map[string]struct{})
+		for _, l := range r.WithoutReplicaLabels {
+			extLsetToRemove[l] = struct{}{}
+		}
+	}
+
+	if extLsetToRemove != nil {
+		extLset = rmLabels(extLset.Copy(), extLsetToRemove)
+	}
+
 	if r.SkipChunks {
-		labelMaps, err := p.client.SeriesInGRPC(sortedSeriesSrv.Context(), p.base, matchers, r.MinTime, r.MaxTime)
+		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, matchers, r.MinTime, r.MaxTime)
 		if err != nil {
 			return err
 		}
@@ -190,7 +200,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			sort.Slice(lset, func(i, j int) bool {
 				return lset[i].Name < lset[j].Name
 			})
-			if err = sortedSeriesSrv.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
+			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
 				return err
 			}
 		}
@@ -201,7 +211,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	defer shardMatcher.Close()
 
 	if r.QueryHints != nil && r.QueryHints.IsSafeToExecute() && !shardMatcher.IsSharded() {
-		return p.queryPrometheus(sortedSeriesSrv, r)
+		return p.queryPrometheus(s, r)
 	}
 
 	q := &prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
@@ -223,7 +233,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		q.Matchers = append(q.Matchers, pm)
 	}
 
-	queryPrometheusSpan, ctx := tracing.StartSpan(sortedSeriesSrv.Context(), "query_prometheus")
+	queryPrometheusSpan, ctx := tracing.StartSpan(s.Context(), "query_prometheus")
 	queryPrometheusSpan.SetTag("query.request", q.String())
 
 	httpResp, err := p.startPromRemoteRead(ctx, q)
@@ -236,13 +246,13 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	// remote read.
 	contentType := httpResp.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "application/x-protobuf") {
-		return p.handleSampledPrometheusResponse(sortedSeriesSrv, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
+		return p.handleSampledPrometheusResponse(s, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
 	}
 
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
-	return p.handleStreamedPrometheusResponse(sortedSeriesSrv, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
+	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
 }
 
 func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *storepb.SeriesRequest) error {
@@ -315,7 +325,7 @@ func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *store
 }
 
 func (p *PrometheusStore) handleSampledPrometheusResponse(
-	s *sortedSeriesServer,
+	s storepb.Store_SeriesServer,
 	httpResp *http.Response,
 	querySpan tracing.Span,
 	extLset labels.Labels,
@@ -365,7 +375,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 }
 
 func (p *PrometheusStore) handleStreamedPrometheusResponse(
-	s *sortedSeriesServer,
+	s storepb.Store_SeriesServer,
 	shardMatcher *storepb.ShardMatcher,
 	httpResp *http.Response,
 	querySpan tracing.Span,

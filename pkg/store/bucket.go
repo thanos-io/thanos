@@ -867,16 +867,22 @@ func newBlockSeriesClient(
 	calculateChunkHash bool,
 	batchSize int,
 	chunkFetchDuration prometheus.Histogram,
+	extLsetToRemove map[string]struct{},
 ) *blockSeriesClient {
 	var chunkr *bucketChunkReader
 	if !req.SkipChunks {
 		chunkr = b.chunkReader()
 	}
 
+	extLset := b.extLset
+	if extLsetToRemove != nil {
+		extLset = rmLabels(extLset.Copy(), extLsetToRemove)
+	}
+
 	return &blockSeriesClient{
 		ctx:                ctx,
 		logger:             logger,
-		extLset:            b.extLset,
+		extLset:            extLset,
 		mint:               req.MinTime,
 		maxt:               req.MaxTime,
 		indexr:             b.indexReader(),
@@ -1205,7 +1211,14 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
-	sortWithoutLabelSet := req.StrippedLabels()
+	var extLsetToRemove map[string]struct{}
+	if len(req.WithoutReplicaLabels) > 0 {
+		extLsetToRemove = make(map[string]struct{})
+		for _, l := range req.WithoutReplicaLabels {
+			extLsetToRemove[l] = struct{}{}
+		}
+	}
+
 	s.mtx.RLock()
 
 	for _, bs := range s.blockSets {
@@ -1242,6 +1255,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				s.enableChunkHashCalculation,
 				s.seriesBatchSize,
 				s.metrics.chunkFetchDuration,
+				extLsetToRemove,
 			)
 
 			defer blockClient.Close()
@@ -1271,7 +1285,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					blk.meta.ULID.String(),
 					[]labels.Labels{blk.extLset},
 					onClose,
-					newSortedSeriesClient(blockClient, sortWithoutLabelSet),
+					blockClient,
 					shardMatcher,
 					false,
 					s.metrics.emptyPostingCount,
@@ -1488,7 +1502,19 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				blockClient := newBlockSeriesClient(
+					newCtx,
+					s.logger,
+					b,
+					seriesReq,
+					nil,
+					bytesLimiter,
+					nil,
+					true,
+					SeriesBatchSize,
+					s.metrics.chunkFetchDuration,
+					nil,
+				)
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
@@ -1663,7 +1689,19 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				blockClient := newBlockSeriesClient(
+					newCtx,
+					s.logger,
+					b,
+					seriesReq,
+					nil,
+					bytesLimiter,
+					nil,
+					true,
+					SeriesBatchSize,
+					s.metrics.chunkFetchDuration,
+					nil,
+				)
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
@@ -3069,37 +3107,4 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 // NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
 func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Bytes, error) {
 	return pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, maxChunkPoolBytes)
-}
-
-// sortedSeriesSet contains series whose labels are sorted
-// by moving ignoreLabelSet at the end.
-type sortedSeriesSet struct {
-	grpc.ClientStream
-	upstream       storepb.Store_SeriesClient
-	ignoreLabelSet map[string]struct{}
-}
-
-func newSortedSeriesClient(seriesClient storepb.Store_SeriesClient, ignoreLabelSet map[string]struct{}) storepb.Store_SeriesClient {
-	if len(ignoreLabelSet) == 0 {
-		return seriesClient
-	}
-
-	return &sortedSeriesSet{
-		upstream:       seriesClient,
-		ignoreLabelSet: ignoreLabelSet,
-	}
-}
-
-func (s *sortedSeriesSet) Recv() (*storepb.SeriesResponse, error) {
-	resp, err := s.upstream.Recv()
-	if err != nil {
-		return nil, err
-	}
-	series := resp.GetSeries()
-	if series == nil {
-		return resp, nil
-	}
-
-	series.Labels = stripLabels(series.Labels, s.ignoreLabelSet)
-	return resp, nil
 }

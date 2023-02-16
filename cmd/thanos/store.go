@@ -431,11 +431,10 @@ func runStore(
 			if httpProbe.IsReady() {
 				mint, maxt := bs.TimeRange()
 				return &infopb.StoreInfo{
-					MinTime:                        mint,
-					MaxTime:                        maxt,
-					SupportsSharding:               true,
-					SendsSortedSeries:              true,
-					SendsSortedSeriesWithoutLabels: true,
+					MinTime:                      mint,
+					MaxTime:                      maxt,
+					SupportsSharding:             true,
+					SupportsWithoutReplicaLabels: true,
 				}
 			}
 			return nil

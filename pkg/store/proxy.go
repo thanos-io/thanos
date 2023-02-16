@@ -54,16 +54,9 @@ type Client interface {
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
 
-	// Deprecated: Use SendsSeriesSortedForDedup.
-	// SendsSortedSeries returns true if the underlying store sends series sorded by
-	// their labels.
-	SendsSortedSeries() bool
-
-	// SendsSeriesSortedForDedup returns true if a store sends series sorted without
-	// taking replica labels into account.
-	// The field can be used to indicate to the querier whether it needs to sort
-	// received series before deduplication.
-	SendsSeriesSortedForDedup() bool
+	// SupportsWithoutReplicaLabels returns true if trimming replica labels
+	// and sorted response is supported by the underlying store.
+	SupportsWithoutReplicaLabels() bool
 
 	// String returns the string representation of the store client.
 	String() string
@@ -278,7 +271,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
 		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		ShardInfo:               originalRequest.ShardInfo,
-		SortWithoutLabels:       originalRequest.SortWithoutLabels,
+		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
 	}
 
 	var storeLabelSets []labels.Labels
@@ -305,17 +298,17 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		return nil
 	}
 
-	sortedSeriesSrv := newSortedSeriesServer(srv, r.StrippedLabels())
 	storeResponses := make([]respSet, 0, len(stores))
 	for _, st := range stores {
 		st := st
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
-		respSet, err := newAsyncRespSet(sortedSeriesSrv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, st.SupportsSharding(), &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
+
+		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
 			if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
-				if err := sortedSeriesSrv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
+				if err := srv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
 					return err
 				}
 				continue
@@ -338,7 +331,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			return status.Error(codes.Aborted, resp.GetWarning())
 		}
 
-		if err := sortedSeriesSrv.Send(resp); err != nil {
+		if err := srv.Send(resp); err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 		}
 	}
@@ -401,7 +394,7 @@ func labelSetsMatch(matchers []*labels.Matcher, lset ...labels.Labels) bool {
 	for _, ls := range lset {
 		notMatched := false
 		for _, m := range matchers {
-			if lv := ls.Get(m.Name); lv != "" && !m.Matches(lv) {
+			if lv := ls.Get(m.Name); ls.Has(m.Name) && !m.Matches(lv) {
 				notMatched = true
 				break
 			}

@@ -208,7 +208,7 @@ func (s *storeRef) SupportsSharding() bool {
 	return false
 }
 
-func (s *storeRef) SendsSortedSeries() bool {
+func (s *storeRef) SupportsWithoutReplicaLabels() bool {
 	return false
 }
 
@@ -219,7 +219,7 @@ func (s *storeRef) SendsSeriesSortedForDedup() bool {
 func (s *storeRef) String() string {
 	mint, maxt := s.TimeRange()
 	return fmt.Sprintf(
-		"Addr: %s LabelSets: %v Mint: %d Maxt: %d",
+		"Addr: %s LabelSets: %v MinTime: %d MaxTime: %d",
 		s.addr, labelpb.PromLabelSetsToString(s.LabelSets()), mint, maxt,
 	)
 }

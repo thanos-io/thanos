@@ -221,16 +221,16 @@ func TestTSDBStore_Series(t *testing.T) {
 				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_RE, Name: "a", Value: ".+"},
 				},
-				SkipChunks:        true,
-				SortWithoutLabels: []string{"r"},
+				SkipChunks:           true,
+				WithoutReplicaLabels: []string{"r"},
 			},
 			expectedSeries: []rawSeries{
-				{lset: unsortedLabelsFromStrings("a", "1", "region", "eu-west", "z", "1")},
-				{lset: unsortedLabelsFromStrings("a", "1", "region", "eu-west", "z", "2")},
-				{lset: unsortedLabelsFromStrings("a", "1", "region", "eu-west", "z", "1")},
-				{lset: unsortedLabelsFromStrings("a", "1", "region", "eu-west", "z", "2")},
-				{lset: unsortedLabelsFromStrings("a", "2", "region", "eu-west", "z", "1")},
-				{lset: unsortedLabelsFromStrings("a", "2", "region", "eu-west", "z", "1")},
+				{lset: unsortedLabelsFromStrings("a", "1", "r", "1", "region", "eu-west", "z", "1")},
+				{lset: unsortedLabelsFromStrings("a", "1", "r", "1", "region", "eu-west", "z", "2")},
+				{lset: unsortedLabelsFromStrings("a", "1", "r", "2", "region", "eu-west", "z", "1")},
+				{lset: unsortedLabelsFromStrings("a", "1", "r", "2", "region", "eu-west", "z", "2")},
+				{lset: unsortedLabelsFromStrings("a", "2", "r", "1", "region", "eu-west", "z", "1")},
+				{lset: unsortedLabelsFromStrings("a", "2", "r", "2", "region", "eu-west", "z", "1")},
 			},
 		},
 		{
@@ -248,8 +248,8 @@ func TestTSDBStore_Series(t *testing.T) {
 				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_RE, Name: "a", Value: ".+"},
 				},
-				SkipChunks:        true,
-				SortWithoutLabels: []string{"ext1"},
+				SkipChunks:           true,
+				WithoutReplicaLabels: []string{"ext1"},
 			},
 			expectedSeries: []rawSeries{
 				{lset: unsortedLabelsFromStrings("a", "1", "region", "eu-west", "z", "1")},

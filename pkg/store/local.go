@@ -182,7 +182,8 @@ func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 		chosen = chosen[:0]
 		resp := &storepb.Series{
-			Labels: series.Labels,
+			// Copy labels as in-process clients like proxy tend to work on same memory for labels.
+			Labels: labelpb.DeepCopy(series.Labels),
 			Chunks: make([]storepb.AggrChunk, 0, len(s.sortedChunks[si])),
 		}
 
