@@ -531,7 +531,7 @@ func OpenSomeFileAndDoSomeStuff() (f *os.File, err error) {
         if err != nil {
              runutil.CloseWithErrCapture(&err, f, "close file")
         }
-    }
+    }()
 
     if err := doStuff1(); err != nil {
         return nil, err
