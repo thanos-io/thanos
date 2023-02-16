@@ -186,7 +186,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			TenantHeader:      DefaultTenantHeader,
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
-			ForwardTimeout:    5 * time.Minute,
+			ForwardTimeout:    2 * time.Second,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i]), false),
 			Limiter:           limiter,
 		})
@@ -480,6 +480,43 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			},
 		},
 		{
+			name:              "size 3 with replication and differing unrecoverable errors",
+			status:            http.StatusConflict,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfOrderSample}), nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, cycleErrors([]error{storage.ErrDuplicateSampleForTimestamp}), nil),
+				},
+			},
+		},
+		{
+			name:              "size 3 with replication one conflict and one commit error (unrecoverable) with context cancellation",
+			status:            http.StatusInternalServerError,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, cycleErrors([]error{storage.ErrOutOfBounds}), nil),
+				},
+				{
+					appender: newFakeAppender(nil, func() error {
+						time.Sleep(time.Second * 2)
+						return storage.ErrOutOfBounds
+					}, nil),
+				},
+			},
+		},
+		{
 			name:              "size 3 with replication two commit errors",
 			status:            http.StatusInternalServerError,
 			replicationFactor: 3,
@@ -492,7 +529,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 					appender: newFakeAppender(nil, commitErrFn, nil),
 				},
 				{
-					appender: newFakeAppender(nil, nil, nil),
+					appender: newFakeAppender(nil, commitErrFn, nil),
 				},
 			},
 		},
@@ -1506,4 +1543,7 @@ func TestRelabel(t *testing.T) {
 			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
 		})
 	}
+}
+
+type predeterminedReceiver struct {
 }
