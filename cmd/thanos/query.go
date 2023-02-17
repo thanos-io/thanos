@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
+	"google.golang.org/grpc"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -26,9 +29,8 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
-	"google.golang.org/grpc"
-
 	v1 "github.com/prometheus/prometheus/web/api/v1"
+
 	"github.com/thanos-community/promql-engine/engine"
 	"github.com/thanos-community/promql-engine/logicalplan"
 
@@ -75,6 +77,13 @@ const (
 	promqlEngineThanos     promqlEngineType = "thanos"
 )
 
+type queryMode string
+
+const (
+	queryModeLocal       queryMode = "local"
+	queryModeDistributed queryMode = "distributed"
+)
+
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
@@ -105,6 +114,11 @@ func registerQuery(app *extkingpin.App) {
 	promqlEngine := cmd.Flag("query.promql-engine", "PromQL engine to use.").Default(string(promqlEnginePrometheus)).
 		Enum(string(promqlEnginePrometheus), string(promqlEngineThanos))
 	enableThanosPromQLEngOptimizer := cmd.Flag("query.enable-thanos-promql-engine-optimizer", "Enable query optimizer for Thanos PromQL engine ").Default("true").Bool()
+
+	promqlQueryMode := cmd.Flag("query.mode", "PromQL query mode. One of: local, distributed.").
+		Hidden().
+		Default(string(queryModeLocal)).
+		Enum(string(queryModeLocal), string(queryModeDistributed))
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
@@ -341,6 +355,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableThanosPromQLEngOptimizer,
 			storeRateLimits,
 			storeSelectorRelabelConf,
+			queryMode(*promqlQueryMode),
 		)
 	})
 }
@@ -422,6 +437,7 @@ func runQuery(
 	enableThanosPromQLEngOptimizer bool,
 	storeRateLimits store.SeriesSelectLimits,
 	storeSelectorRelabelConf extflag.PathOrContent,
+	queryMode queryMode,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -689,7 +705,21 @@ func runQuery(
 	case promqlEnginePrometheus:
 		queryEngine = promql.NewEngine(engineOpts)
 	case promqlEngineThanos:
-		queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts, LogicalOptimizers: logicalOptimizers})
+		if queryMode == queryModeLocal {
+			queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts, LogicalOptimizers: logicalOptimizers})
+		} else {
+			opts := engine.Opts{
+				DebugWriter:       os.Stdout,
+				EngineOpts:        engineOpts,
+				LogicalOptimizers: logicalOptimizers,
+			}
+			remoteEngineEndpoints := query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
+				AutoDownsample: enableAutodownsampling,
+				ReplicaLabels:  queryReplicaLabels,
+				Timeout:        queryTimeout,
+			})
+			queryEngine = engine.NewDistributedEngine(opts, remoteEngineEndpoints)
+		}
 	default:
 		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)
 	}
