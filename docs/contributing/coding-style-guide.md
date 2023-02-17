@@ -523,26 +523,26 @@ func OpenSomeFileAndDoSomeStuff() (*os.File, error) {
 
 ```go
 func OpenSomeFileAndDoSomeStuff() (f *os.File, err error) {
-    f, err = os.OpenFile("file.txt", os.O_RDONLY, 0)
-    if err != nil {
-        return nil, err
-    }
-    defer func() {
-        if err != nil {
-             runutil.CloseWithErrCapture(&err, f, "close file")
-        }
-    }()
+	f, err = os.OpenFile("file.txt", os.O_RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			runutil.CloseWithErrCapture(&err, f, "close file")
+		}
+	}()
 
-    if err := doStuff1(); err != nil {
-        return nil, err
-    }
-    if err := doStuff2(); err != nil {
-        return nil, err
-    }
-    if err := doStuff232241(); err != nil {
-        return nil, err
-    }
-    return f, nil
+	if err := doStuff1(); err != nil {
+		return nil, err
+	}
+	if err := doStuff2(); err != nil {
+		return nil, err
+	}
+	if err := doStuff232241(); err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 ```
 
