@@ -543,16 +543,21 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 
 	ser := &series{lset: labels.FromStrings("__name__", "a")}
 	aggr := map[AggrType][]sample{
-		AggrCount:   {{t: 1587690299999, v: 20}, {t: 1587690599999, v: 20}, {t: 1587690899999, v: 20}, {t: 1587691199999, v: 20}, {t: 1587691499999, v: 20}, {t: 1587691799999, v: 20}, {t: 1587692099999, v: 20}, {t: 1587692399999, v: 20}, {t: 1587692699999, v: 16}, {t: 1587692999999, v: 20}, {t: 1587693299999, v: 20}, {t: 1587693590791, v: 20}},
-		AggrSum:     {{t: 1587690299999, v: 9.276972e+06}, {t: 1587690599999, v: 9.359861e+06}, {t: 1587690899999, v: 9.447457e+06}, {t: 1587691199999, v: 9.542732e+06}, {t: 1587691499999, v: 9.630379e+06}, {t: 1587691799999, v: 9.715631e+06}, {t: 1587692099999, v: 9.799808e+06}, {t: 1587692399999, v: 9.888117e+06}, {t: 1587692699999, v: 2.98928e+06}, {t: 1587692999999, v: 81592}, {t: 1587693299999, v: 163711}, {t: 1587693590791, v: 255746}},
-		AggrMin:     {{t: 1587690299999, v: 461968}, {t: 1587690599999, v: 466070}, {t: 1587690899999, v: 470131}, {t: 1587691199999, v: 474913}, {t: 1587691499999, v: 479625}, {t: 1587691799999, v: 483709}, {t: 1587692099999, v: 488036}, {t: 1587692399999, v: 492223}, {t: 1587692699999, v: 75}, {t: 1587692999999, v: 2261}, {t: 1587693299999, v: 6210}, {t: 1587693590791, v: 10464}},
-		AggrMax:     {{t: 1587690299999, v: 465870}, {t: 1587690599999, v: 469951}, {t: 1587690899999, v: 474726}, {t: 1587691199999, v: 479368}, {t: 1587691499999, v: 483566}, {t: 1587691799999, v: 487787}, {t: 1587692099999, v: 492065}, {t: 1587692399999, v: 496245}, {t: 1587692699999, v: 496544}, {t: 1587692999999, v: 6010}, {t: 1587693299999, v: 10242}, {t: 1587693590791, v: 14956}},
-		AggrCounter: {{t: 1587690005791, v: 461968}, {t: 1587690299999, v: 465870}, {t: 1587690599999, v: 469951}, {t: 1587690899999, v: 474726}, {t: 1587691199999, v: 479368}, {t: 1587691499999, v: 483566}, {t: 1587691799999, v: 487787}, {t: 1587692099999, v: 492065}, {t: 1587692399999, v: 496245}, {t: 1587692699999, v: 498647}, {t: 1587692999999, v: 502554}, {t: 1587693299999, v: 506786}, {t: 1587693590791, v: 511500}, {t: 1587693590791, v: 14956}},
+		AggrCount:   {{t: 1587690299999, v: 20}},
+		AggrSum:     {{t: 1587693590791, v: 255746}},
+		AggrMin:     {{t: 1587690299999, v: 461968}},
+		AggrMax:     {{t: 1587690299999, v: 465870}},
+		AggrCounter: {{t: 1587690005791, v: 461968}},
 	}
 	raw := chunkenc.NewXORChunk()
 	app, err := raw.Appender()
 	testutil.Ok(t, err)
+	// this comes in !ok and passes through our newly created funcionality
 	app.Append(1587690005794, 42.5)
+	//app.Append(1587690005795, 42.6)
+	// app.Append(1587690005796, 42.7)
+	// app.Append(1587690005797, 42.8)
+	// app.Append(1587690005798, 42.9)
 	ser.chunks = append(ser.chunks, encodeTestAggrSeries(aggr), chunks.Meta{
 		MinTime: math.MaxInt64,
 		MaxTime: math.MinInt64,
@@ -563,10 +568,12 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 	mb.addSeries(ser)
 
 	fakeMeta := &metadata.Meta{}
+	// target
 	fakeMeta.Thanos.Downsample.Resolution = 300_000
+	// already existing resolution
 	id, err := Downsample(logger, fakeMeta, mb, dir, 3_600_000)
 	_ = id
-	testutil.NotOk(t, err)
+	testutil.Ok(t, err)
 }
 
 func chunksToSeriesIteratable(t *testing.T, inRaw [][]sample, inAggr []map[AggrType][]sample) *series {

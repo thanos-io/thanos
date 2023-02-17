@@ -167,10 +167,23 @@ func Downsample(
 						// https://github.com/thanos-io/thanos/issues/5272
 						level.Warn(logger).Log("msg", fmt.Sprintf("expected downsampled chunk (*downsample.AggrChunk) got an empty %T instead for series: %d", c.Chunk, postings.At()))
 						continue
+					} else {
+						if err := expandChunkIterator(c.Chunk.Iterator(reuseIt), &all); err != nil {
+							return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
+						}
+						aggrDataChunks := DownsampleRaw(all, ResLevel1)
+						for _, cn := range aggrDataChunks {
+							ac, ok = cn.Chunk.(*AggrChunk)
+							if !ok {
+								level.Warn(logger).Log("Not able to convert non-empty XOR chunks into 5m downsampled Aggregated chunks")
+								continue
+							}
+						}
 					}
-					return id, errors.Errorf("expected downsampled chunk (*downsample.AggrChunk) got a non-empty %T instead for series: %d", c.Chunk, postings.At())
+
 				}
 				aggrChunks = append(aggrChunks, ac)
+
 			}
 			downsampledChunks, err := downsampleAggr(
 				aggrChunks,
