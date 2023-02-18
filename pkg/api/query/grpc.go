@@ -9,11 +9,14 @@ import (
 
 	"github.com/prometheus/prometheus/promql"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"google.golang.org/grpc"
 )
 
 type GRPCAPI struct {
@@ -103,8 +106,14 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	defer qry.Close()
 
 	result := qry.Exec(ctx)
-	if err := server.Send(querypb.NewQueryWarningsResponse(result.Warnings)); err != nil {
-		return nil
+	if result.Err != nil {
+		return status.Error(codes.Aborted, result.Err.Error())
+	}
+
+	if len(result.Warnings) != 0 {
+		if err := server.Send(querypb.NewQueryWarningsResponse(result.Warnings...)); err != nil {
+			return err
+		}
 	}
 
 	switch vector := result.Value.(type) {
@@ -183,8 +192,14 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	defer qry.Close()
 
 	result := qry.Exec(ctx)
-	if err := srv.Send(querypb.NewQueryRangeWarningsResponse(result.Warnings)); err != nil {
-		return err
+	if result.Err != nil {
+		return status.Error(codes.Aborted, result.Err.Error())
+	}
+
+	if len(result.Warnings) != 0 {
+		if err := srv.Send(querypb.NewQueryRangeWarningsResponse(result.Warnings...)); err != nil {
+			return err
+		}
 	}
 
 	switch matrix := result.Value.(type) {

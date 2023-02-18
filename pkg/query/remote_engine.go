@@ -5,6 +5,7 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -153,12 +154,14 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		IntervalSeconds:       int64(r.interval.Seconds()),
 		TimeoutSeconds:        int64(r.opts.Timeout.Seconds()),
 		EnablePartialResponse: r.opts.EnablePartialResponse,
+		LookbackDeltaSeconds:  300,
 		// TODO (fpetkovski): Allow specifying these parameters at query time.
 		// This will likely require a change in the remote engine interface.
 		ReplicaLabels:        r.opts.ReplicaLabels,
 		MaxResolutionSeconds: maxResolution,
 		EnableDedup:          true,
 	}
+
 	qry, err := r.client.QueryRange(qctx, request)
 	if err != nil {
 		return &promql.Result{Err: err}
@@ -167,6 +170,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	result := make(promql.Matrix, 0)
 	for {
 		msg, err := qry.Recv()
+		fmt.Println(msg)
 		if err == io.EOF {
 			break
 		}
