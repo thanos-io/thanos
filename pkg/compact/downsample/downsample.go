@@ -175,8 +175,7 @@ func Downsample(
 						for _, cn := range aggrDataChunks {
 							ac, ok = cn.Chunk.(*AggrChunk)
 							if !ok {
-								level.Warn(logger).Log("Not able to convert non-empty XOR chunks into 5m downsampled Aggregated chunks")
-								continue
+								return id, errors.New("Not able to convert non-empty XOR chunks to 5m downsampled aggregated chunks.")
 							}
 						}
 					}
