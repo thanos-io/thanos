@@ -895,8 +895,6 @@ github.com/tencentyun/cos-go-sdk-v5 v0.7.40 h1:W6vDGKCHe4wBACI1d2UgE6+50sJFhRWU4
 github.com/tencentyun/cos-go-sdk-v5 v0.7.40/go.mod h1:4dCEtLHGh8QPxHEkgq+nFaky7yZxQuYwgSJM87icDaw=
 github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e h1:f1Zsv7OAU9iQhZwigp50Yl38W10g/vd5NC8Rdk1Jzng=
 github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e/go.mod h1:jXcofnrSln/cLI6/dhlBxPQZEEQHVPCcFaH75M+nSzM=
-github.com/thanos-community/promql-engine v0.0.0-20230216083447-f09127b8558c h1:OdZQB4odMXlyveKKnELUWofUJ+ZOWvM4IrAIkX+HOY4=
-github.com/thanos-community/promql-engine v0.0.0-20230216083447-f09127b8558c/go.mod h1:gREn4JarQ2DZdWirOtqZQd3p+c1xH+UVpGRjGKVoWx8=
 github.com/thanos-community/promql-engine v0.0.0-20230220065524-5c852f0ee850 h1:z3+UhV1VKsNXAx9hevukrh/PN8ojwsIXxkkP2assTMg=
 github.com/thanos-community/promql-engine v0.0.0-20230220065524-5c852f0ee850/go.mod h1:gREn4JarQ2DZdWirOtqZQd3p+c1xH+UVpGRjGKVoWx8=
 github.com/thanos-io/objstore v0.0.0-20230201072718-11ffbc490204 h1:W4w5Iph7j32Sf1QFWLJDCqvO0WgZS0jHGID+qnq3wV0=
