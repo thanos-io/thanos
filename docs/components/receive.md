@@ -24,7 +24,7 @@ This algorithm uses a `hashmod` function over all labels to decide which receive
 
 The Ketama algorithm is a consistent hashing scheme which enables stable scaling of Receivers without the drawbacks of the `hashmod` algorithm. This is the recommended algorithm for all new installations.
 
-If you are using the `hashmod` algorithm and wish to migrate to `ketama`, the simples and safest way would be to set up a new pool receivers with `ketama` hashrings and start remote-writing to them. Provided you are on the latest Thanos version, old receivers will flush their TSDBs after the configured retention period and will upload blocks to object storage. Once you have verified that is done, decommission the old receivers.
+If you are using the `hashmod` algorithm and wish to migrate to `ketama`, the simplest and safest way would be to set up a new pool receivers with `ketama` hashrings and start remote-writing to them. Provided you are on the latest Thanos version, old receivers will flush their TSDBs after the configured retention period and will upload blocks to object storage. Once you have verified that is done, decommission the old receivers.
 
 ## TSDB stats
 
