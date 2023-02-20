@@ -4,6 +4,7 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -12,7 +13,9 @@ import (
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
+	"github.com/weaveworks/common/logging"
+
+	// "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/ulid"
 	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v2"
@@ -105,7 +108,7 @@ func validateLevel(level string) error {
 }
 
 // NewGRPCOption adds in the config options and returns tags for logging middleware.
-func NewGRPCOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, error) {
+func NewGRPCOption(configYAML []byte,ctx context.Context) (grpc_logging.Fields, []grpc_logging.Option, error) {
 
 	// Configure tagOpts and logOpts.
 	tagOpts := []tags.Option{
@@ -124,6 +127,8 @@ func NewGRPCOption(configYAML []byte) ([]tags.Option, []grpc_logging.Option, err
 			return tagMap
 		}),
 	}
+	fields := make(grpc_logging.Fields,0)
+	fields := 
 	logOpts := []grpc_logging.Option{
 		grpc_logging.WithDecider(func(_ string, _ error) grpc_logging.Decision {
 			return grpc_logging.NoLogCall
