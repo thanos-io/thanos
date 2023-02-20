@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -118,7 +119,7 @@ func NewSeriesSet(set storage.SeriesSet, f string, pushdownEnabled bool) storage
 // trimPushdownMarker trims the pushdown marker from the given labels.
 // Returns true if there was a pushdown marker.
 func trimPushdownMarker(lbls labels.Labels) (labels.Labels, bool) {
-	return labels.NewBuilder(lbls).Del(PushdownMarkerLabel).Labels(nil), lbls.Has(PushdownMarkerLabel)
+	return labels.NewBuilder(lbls).Del(PushdownMarker.Name).Labels(nil), lbls.Has(PushdownMarker.Name)
 }
 
 func (s *dedupSeriesSet) Next() bool {

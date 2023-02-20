@@ -284,9 +284,7 @@ func (p *PrometheusStore) queryPrometheus(
 		}
 	}
 
-	externalLbls := p.externalLabelsFn()
-	extLabelsHash := fmt.Sprintf("%d", externalLbls.Hash())
-	externalLbls = rmLabels(externalLbls.Copy(), extLsetToRemove)
+	externalLbls := rmLabels(p.externalLabelsFn().Copy(), extLsetToRemove)
 	for _, vector := range matrix {
 		seriesLbls := labels.Labels(make([]labels.Label, 0, len(vector.Metric)))
 
@@ -300,7 +298,7 @@ func (p *PrometheusStore) queryPrometheus(
 
 		// Attach external labels for compatibility with remote read.
 		finalLbls := labelpb.ExtendSortedLabels(seriesLbls, externalLbls)
-		finalLbls = append(finalLbls, labels.Label{Name: dedup.PushdownMarkerLabel, Value: extLabelsHash})
+		finalLbls = append(finalLbls, dedup.PushdownMarker)
 
 		series := &prompb.TimeSeries{
 			Labels:  labelpb.ZLabelsFromPromLabels(finalLbls),
