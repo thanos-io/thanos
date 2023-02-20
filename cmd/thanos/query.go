@@ -795,10 +795,25 @@ func runQuery(
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 				if httpProbe.IsReady() {
 					mint, maxt := proxy.TimeRange()
+
+					// If all clients support without replica labels
+					// then we also support that.
+					clients := endpoints.GetStoreClients()
+					supportsWithoutReplicaLabels := true
+
+					for _, cl := range clients {
+						if cl.SupportsWithoutReplicaLabels() {
+							continue
+						}
+						supportsWithoutReplicaLabels = false
+						break
+					}
+
 					return &infopb.StoreInfo{
-						MinTime:          mint,
-						MaxTime:          maxt,
-						SupportsSharding: true,
+						MinTime:                      mint,
+						MaxTime:                      maxt,
+						SupportsSharding:             true,
+						SupportsWithoutReplicaLabels: supportsWithoutReplicaLabels,
 					}
 				}
 				return nil
