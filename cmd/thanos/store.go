@@ -13,7 +13,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpclogging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
-	// "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/tags"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -204,7 +203,7 @@ func registerStore(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
-		tagOpts, grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
+		grpcLogOpts, err := logging.ParsegRPCOptions("", conf.reqLogConfig)
 		if err != nil {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
@@ -217,7 +216,6 @@ func registerStore(app *extkingpin.App) {
 			tracer,
 			httpLogOpts,
 			grpcLogOpts,
-			tagOpts,
 			*conf,
 			getFlagsMap(cmd.Flags()),
 		)
@@ -232,7 +230,6 @@ func runStore(
 	tracer opentracing.Tracer,
 	httpLogOpts []logging.Option,
 	grpcLogOpts []grpclogging.Option,
-	tagOpts []tags.Option,
 	conf storeConfig,
 	flagsMap map[string]string,
 ) error {
@@ -448,9 +445,8 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		storeServer := store.NewInstrumentedStoreServer(reg, bs)
-		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, conf.component, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
+		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, conf.component, grpcProbe,
+			grpcserver.WithServer(store.RegisterStoreServer(bs, logger)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
 			grpcserver.WithGracePeriod(time.Duration(conf.grpcConfig.gracePeriod)),
