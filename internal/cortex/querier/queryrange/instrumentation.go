@@ -45,10 +45,12 @@ type InstrumentMiddlewareMetrics struct {
 func NewInstrumentMiddlewareMetrics(registerer prometheus.Registerer) *InstrumentMiddlewareMetrics {
 	return &InstrumentMiddlewareMetrics{
 		duration: promauto.With(registerer).NewHistogramVec(prometheus.HistogramOpts{
-			Namespace: "cortex",
-			Name:      "frontend_query_range_duration_seconds",
-			Help:      "Total time spent in seconds doing query range requests.",
-			Buckets:   prometheus.DefBuckets,
+			Namespace:                      "cortex",
+			Name:                           "frontend_query_range_duration_seconds",
+			Help:                           "Total time spent in seconds doing query range requests.",
+			Buckets:                        prometheus.DefBuckets,
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 100,
 		}, []string{"method", "status_code"}),
 	}
 }

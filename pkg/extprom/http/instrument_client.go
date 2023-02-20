@@ -42,20 +42,24 @@ func NewClientMetrics(reg prometheus.Registerer) *ClientMetrics {
 
 	m.dnsLatencyHistogram = promauto.With(reg).NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: "http_client",
-			Name:      "dns_duration_seconds",
-			Help:      "Trace dns latency histogram.",
-			Buckets:   []float64{0.025, .05, .1, .5, 1, 5, 10},
+			Subsystem:                      "http_client",
+			Name:                           "dns_duration_seconds",
+			Help:                           "Trace dns latency histogram.",
+			Buckets:                        []float64{0.025, .05, .1, .5, 1, 5, 10},
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 100,
 		},
 		[]string{"event"},
 	)
 
 	m.tlsLatencyHistogram = promauto.With(reg).NewHistogramVec(
 		prometheus.HistogramOpts{
-			Subsystem: "http_client",
-			Name:      "tls_duration_seconds",
-			Help:      "Trace tls latency histogram.",
-			Buckets:   []float64{0.025, .05, .1, .5, 1, 5, 10},
+			Subsystem:                      "http_client",
+			Name:                           "tls_duration_seconds",
+			Help:                           "Trace tls latency histogram.",
+			Buckets:                        []float64{0.025, .05, .1, .5, 1, 5, 10},
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 100,
 		},
 		[]string{"event"},
 	)

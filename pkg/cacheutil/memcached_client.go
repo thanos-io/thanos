@@ -338,9 +338,11 @@ func newMemcachedClient(
 	c.skipped.WithLabelValues(opSet, reasonAsyncBufferFull)
 
 	c.duration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "thanos_memcached_operation_duration_seconds",
-		Help:    "Duration of operations against memcached.",
-		Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 3, 6, 10},
+		Name:                           "thanos_memcached_operation_duration_seconds",
+		Help:                           "Duration of operations against memcached.",
+		Buckets:                        []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 3, 6, 10},
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	}, []string{"operation"})
 	c.duration.WithLabelValues(opGetMulti)
 	c.duration.WithLabelValues(opSet)
@@ -351,6 +353,8 @@ func newMemcachedClient(
 		Buckets: []float64{
 			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
 		},
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	},
 		[]string{"operation"},
 	)

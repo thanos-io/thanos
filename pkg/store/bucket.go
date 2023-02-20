@@ -200,14 +200,18 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Help: "Number of blocks in a bucket store that were touched to satisfy a query.",
 	})
 	m.seriesGetAllDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_series_get_all_duration_seconds",
-		Help:    "Time it takes until all per-block prepares and loads for a query are finished.",
-		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+		Name:                           "thanos_bucket_store_series_get_all_duration_seconds",
+		Help:                           "Time it takes until all per-block prepares and loads for a query are finished.",
+		Buckets:                        []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	})
 	m.seriesMergeDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_series_merge_duration_seconds",
-		Help:    "Time it takes to merge sub-results from all queried blocks into a single result.",
-		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+		Name:                           "thanos_bucket_store_series_merge_duration_seconds",
+		Help:                           "Time it takes to merge sub-results from all queried blocks into a single result.",
+		Buckets:                        []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	})
 	m.resultSeriesCount = promauto.With(reg).NewSummary(prometheus.SummaryOpts{
 		Name: "thanos_bucket_store_series_result_series",
@@ -220,6 +224,8 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Buckets: []float64{
 			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
 		},
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	})
 
 	m.postingsSizeBytes = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
@@ -228,6 +234,8 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Buckets: []float64{
 			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
 		},
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	})
 
 	m.queriesDropped = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -270,21 +278,27 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	})
 
 	m.seriesFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_cached_series_fetch_duration_seconds",
-		Help:    "The time it takes to fetch series to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses.",
-		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+		Name:                           "thanos_bucket_store_cached_series_fetch_duration_seconds",
+		Help:                           "The time it takes to fetch series to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses.",
+		Buckets:                        []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	})
 
 	m.postingsFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_cached_postings_fetch_duration_seconds",
-		Help:    "The time it takes to fetch postings to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses.",
-		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+		Name:                           "thanos_bucket_store_cached_postings_fetch_duration_seconds",
+		Help:                           "The time it takes to fetch postings to respond to a request sent to a store gateway. It includes both the time to fetch it from the cache and from storage in case of cache misses.",
+		Buckets:                        []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	})
 
 	m.chunkFetchDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_bucket_store_chunks_fetch_duration_seconds",
-		Help:    "The total time spent fetching chunks within a single request a store gateway.",
-		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+		Name:                           "thanos_bucket_store_chunks_fetch_duration_seconds",
+		Help:                           "The total time spent fetching chunks within a single request a store gateway.",
+		Buckets:                        []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	})
 
 	m.emptyPostingCount = promauto.With(reg).NewCounter(prometheus.CounterOpts{

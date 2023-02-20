@@ -97,9 +97,11 @@ func NewPrometheusStore(
 		}},
 		framesRead: promauto.With(reg).NewHistogram(
 			prometheus.HistogramOpts{
-				Name:    "prometheus_store_received_frames",
-				Help:    "Number of frames received per streamed response.",
-				Buckets: prometheus.ExponentialBuckets(10, 10, 5),
+				Name:                           "prometheus_store_received_frames",
+				Help:                           "Number of frames received per streamed response.",
+				Buckets:                        prometheus.ExponentialBuckets(10, 10, 5),
+				NativeHistogramBucketFactor:    1.1,
+				NativeHistogramMaxBucketNumber: 100,
 			},
 		),
 	}

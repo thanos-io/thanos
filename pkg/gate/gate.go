@@ -124,9 +124,11 @@ var (
 	}
 	durationHistogramOpts = func(opName OperationName) prometheus.HistogramOpts {
 		return prometheus.HistogramOpts{
-			Name:    fmt.Sprintf("gate_%s_duration_seconds", opName),
-			Help:    fmt.Sprintf("How many seconds it took for %s to wait at the gate.", opName),
-			Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
+			Name:                           fmt.Sprintf("gate_%s_duration_seconds", opName),
+			Help:                           fmt.Sprintf("How many seconds it took for %s to wait at the gate.", opName),
+			Buckets:                        []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 100,
 		}
 	}
 )

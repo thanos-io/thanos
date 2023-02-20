@@ -85,9 +85,11 @@ func newSyncerMetrics(reg prometheus.Registerer, blocksMarkedForDeletion, garbag
 		Help: "Total number of failed garbage collection operations.",
 	})
 	m.garbageCollectionDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Name:    "thanos_compact_garbage_collection_duration_seconds",
-		Help:    "Time it took to perform garbage collection iteration.",
-		Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
+		Name:                           "thanos_compact_garbage_collection_duration_seconds",
+		Help:                           "Time it took to perform garbage collection iteration.",
+		Buckets:                        []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	})
 
 	m.blocksMarkedForDeletion = blocksMarkedForDeletion

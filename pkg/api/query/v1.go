@@ -173,9 +173,11 @@ func NewQueryAPI(
 		seriesStatsAggregator:                  statsAggregator,
 
 		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-			Name:    "thanos_query_range_requested_timespan_duration_seconds",
-			Help:    "A histogram of the query range window in seconds",
-			Buckets: prometheus.ExponentialBuckets(15*60, 2, 12),
+			Name:                           "thanos_query_range_requested_timespan_duration_seconds",
+			Help:                           "A histogram of the query range window in seconds",
+			Buckets:                        prometheus.ExponentialBuckets(15*60, 2, 12),
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 100,
 		}),
 	}
 }

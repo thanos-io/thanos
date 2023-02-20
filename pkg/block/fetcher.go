@@ -101,10 +101,12 @@ func NewFetcherMetrics(reg prometheus.Registerer, syncedExtraLabels, modifiedExt
 		Help:      "Total blocks metadata synchronization failures",
 	})
 	m.SyncDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-		Subsystem: fetcherSubSys,
-		Name:      "sync_duration_seconds",
-		Help:      "Duration of the blocks metadata synchronization in seconds",
-		Buckets:   []float64{0.01, 1, 10, 100, 300, 600, 1000},
+		Subsystem:                      fetcherSubSys,
+		Name:                           "sync_duration_seconds",
+		Help:                           "Duration of the blocks metadata synchronization in seconds",
+		Buckets:                        []float64{0.01, 1, 10, 100, 300, 600, 1000},
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	})
 	m.Synced = extprom.NewTxGaugeVec(
 		reg,

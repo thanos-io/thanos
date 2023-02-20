@@ -57,9 +57,11 @@ func NewLazyBinaryReaderMetrics(reg prometheus.Registerer) *LazyBinaryReaderMetr
 			Help: "Total number of failed index-header lazy unload operations.",
 		}),
 		loadDuration: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-			Name:    "indexheader_lazy_load_duration_seconds",
-			Help:    "Duration of the index-header lazy loading in seconds.",
-			Buckets: []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 120, 300},
+			Name:                           "indexheader_lazy_load_duration_seconds",
+			Help:                           "Duration of the index-header lazy loading in seconds.",
+			Buckets:                        []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 120, 300},
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 100,
 		}),
 	}
 }

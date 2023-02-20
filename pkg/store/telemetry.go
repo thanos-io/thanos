@@ -31,9 +31,11 @@ func NewSeriesStatsAggregator(
 ) *seriesStatsAggregator {
 	return &seriesStatsAggregator{
 		queryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "thanos_store_api_query_duration_seconds",
-			Help:    "Duration of the Thanos Store API select phase for a query.",
-			Buckets: durationQuantiles,
+			Name:                           "thanos_store_api_query_duration_seconds",
+			Help:                           "Duration of the Thanos Store API select phase for a query.",
+			Buckets:                        durationQuantiles,
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 100,
 		}, []string{"series_le", "samples_le"}),
 		seriesLeBuckets:  seriesQuantiles,
 		samplesLeBuckets: sampleQuantiles,
@@ -100,14 +102,18 @@ func NewInstrumentedStoreServer(reg prometheus.Registerer, store storepb.StoreSe
 	return &instrumentedStoreServer{
 		StoreServer: store,
 		seriesRequested: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-			Name:    "thanos_store_server_series_requested",
-			Help:    "Number of requested series for Series calls",
-			Buckets: []float64{1, 10, 100, 1000, 10000, 100000, 1000000},
+			Name:                           "thanos_store_server_series_requested",
+			Help:                           "Number of requested series for Series calls",
+			Buckets:                        []float64{1, 10, 100, 1000, 10000, 100000, 1000000},
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 100,
 		}),
 		chunksRequested: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
-			Name:    "thanos_store_server_chunks_requested",
-			Help:    "Number of requested chunks for Series calls",
-			Buckets: []float64{1, 100, 1000, 10000, 100000, 10000000, 100000000, 1000000000},
+			Name:                           "thanos_store_server_chunks_requested",
+			Help:                           "Number of requested chunks for Series calls",
+			Buckets:                        []float64{1, 100, 1000, 10000, 100000, 10000000, 100000000, 1000000000},
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 100,
 		}),
 	}
 }

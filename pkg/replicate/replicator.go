@@ -151,8 +151,10 @@ func RunReplicate(
 	replicationRunCounter.WithLabelValues(labelError)
 
 	replicationRunDuration := promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-		Name: "thanos_replicate_replication_run_duration_seconds",
-		Help: "The Duration of replication runs split by success and error.",
+		Name:                           "thanos_replicate_replication_run_duration_seconds",
+		Help:                           "The Duration of replication runs split by success and error.",
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	}, []string{"result"})
 	replicationRunDuration.WithLabelValues(labelSuccess)
 	replicationRunDuration.WithLabelValues(labelError)

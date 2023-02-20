@@ -53,9 +53,11 @@ func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
 		Help: "Total number of failed downsampling attempts.",
 	}, []string{"group"})
 	m.downsampleDuration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "thanos_compact_downsample_duration_seconds",
-		Help:    "Duration of downsample runs",
-		Buckets: []float64{60, 300, 900, 1800, 3600, 7200, 14400}, // 1m, 5m, 15m, 30m, 60m, 120m, 240m
+		Name:                           "thanos_compact_downsample_duration_seconds",
+		Help:                           "Duration of downsample runs",
+		Buckets:                        []float64{60, 300, 900, 1800, 3600, 7200, 14400}, // 1m, 5m, 15m, 30m, 60m, 120m, 240m
+		NativeHistogramBucketFactor:    1.1,
+		NativeHistogramMaxBucketNumber: 100,
 	}, []string{"group"})
 
 	return m

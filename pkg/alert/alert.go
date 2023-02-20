@@ -277,8 +277,10 @@ func NewSender(
 		}),
 
 		latency: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-			Name: "thanos_alert_sender_latency_seconds",
-			Help: "Latency for sending alert notifications (not including dropped notifications).",
+			Name:                           "thanos_alert_sender_latency_seconds",
+			Help:                           "Latency for sending alert notifications (not including dropped notifications).",
+			NativeHistogramBucketFactor:    1.1,
+			NativeHistogramMaxBucketNumber: 100,
 		}, []string{"alertmanager"}),
 	}
 	return s

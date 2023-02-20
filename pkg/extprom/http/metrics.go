@@ -24,9 +24,11 @@ func newDefaultMetrics(reg prometheus.Registerer, buckets []float64, extraLabels
 	return &defaultMetrics{
 		requestDuration: promauto.With(reg).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "http_request_duration_seconds",
-				Help:    "Tracks the latencies for HTTP requests.",
-				Buckets: buckets,
+				Name:                           "http_request_duration_seconds",
+				Help:                           "Tracks the latencies for HTTP requests.",
+				Buckets:                        buckets,
+				NativeHistogramBucketFactor:    1.1,
+				NativeHistogramMaxBucketNumber: 100,
 			},
 			append([]string{"code", "handler", "method"}, extraLabels...),
 		),
