@@ -166,23 +166,21 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 
-	var extLsetToRemove map[string]struct{}
-	if len(r.WithoutReplicaLabels) > 0 {
-		extLsetToRemove = make(map[string]struct{})
-		for _, l := range r.WithoutReplicaLabels {
-			extLsetToRemove[l] = struct{}{}
-		}
+	extLsetToRemove := map[string]struct{}{}
+	for _, lbl := range r.WithoutReplicaLabels {
+		extLsetToRemove[lbl] = struct{}{}
 	}
-	extLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 
+	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
-		completeLabelSet := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), extLset)
-		if !shardMatcher.MatchesLabels(completeLabelSet) {
+
+		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
+		if !shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
-		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelSet)}
+		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
