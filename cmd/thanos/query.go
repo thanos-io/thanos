@@ -12,6 +12,8 @@ import (
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
+	"google.golang.org/grpc"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -27,8 +29,6 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
-	"google.golang.org/grpc"
-
 	"github.com/thanos-community/promql-engine/engine"
 	"github.com/thanos-community/promql-engine/logicalplan"
 

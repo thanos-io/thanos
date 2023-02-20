@@ -257,6 +257,9 @@ type QuerierBuilder struct {
 	engine    string
 	queryMode string
 
+	engine    string
+	queryMode string
+
 	replicaLabels []string
 	tracingConfig string
 	relabelConfig string
