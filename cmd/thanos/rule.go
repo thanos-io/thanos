@@ -630,7 +630,7 @@ func runRule(
 						MinTime:                      mint,
 						MaxTime:                      maxt,
 						SupportsSharding:             true,
-						SupportsWithoutReplicaLabels: false, // TODO(bwplotka): Add support for efficiency.
+						SupportsWithoutReplicaLabels: true,
 					}
 				}
 				return nil
