@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -48,11 +49,11 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+100, 1)
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+200, 2)
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+300, 3)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -67,7 +68,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	limitMinT := int64(0)
 	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return limitMinT, -1 }, nil) // Maxt does not matter.
+		func() (int64, int64) { return limitMinT, -1 }, nil) // MaxTime does not matter.
 	testutil.Ok(t, err)
 
 	// Query all three samples except for the first one. Since we round up queried data
@@ -197,7 +198,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		func() (int64, int64) { return math.MinInt64/1000 + 62135596801, math.MaxInt64/1000 - 62135596801 }, nil)
 	testutil.Ok(t, err)
 
-	for _, tcase := range []struct {
+	for tid, tcase := range []struct {
 		req         *storepb.SeriesRequest
 		expected    []storepb.Series
 		expectedErr error
@@ -330,8 +331,30 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 				},
 			},
 		},
+		{
+			req: &storepb.SeriesRequest{
+				SkipChunks: true,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
+				},
+				MinTime:              func() int64 { minTime, _ := promStore.timestamps(); return minTime }(),
+				MaxTime:              func() int64 { _, maxTime := promStore.timestamps(); return maxTime }(),
+				WithoutReplicaLabels: []string{"region"},
+			},
+			expected: []storepb.Series{
+				{
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "c"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}},
+				},
+				{
+					Labels: []labelpb.ZLabel{{Name: "a", Value: "d"}, {Name: "b", Value: "d"}, {Name: "job", Value: "test"}},
+				},
+				{
+					Labels: []labelpb.ZLabel{{Name: "b", Value: "d"}, {Name: "job", Value: "test"}},
+				},
+			},
+		},
 	} {
-		t.Run("", func(t *testing.T) {
+		t.Run(fmt.Sprintf("%d", tid), func(t *testing.T) {
 			srv := newStoreSeriesServer(ctx)
 			err = promStore.Series(tcase.req, srv)
 			if tcase.expectedErr != nil {
@@ -381,11 +404,11 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+100, 1)
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+200, 2)
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+300, 3)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -507,7 +530,7 @@ func testSeries_SplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, appender st
 
 	offset := int64(2*math.MaxUint16 + 5)
 	for i := int64(0); i < offset; i++ {
-		_, err := appender.Append(0, labels.FromStrings("a", "b"), baseT+i, 1)
+		_, err := appender.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+i, 1)
 		testutil.Ok(t, err)
 	}
 

@@ -120,14 +120,14 @@ type bucketStoreMetrics struct {
 	lastLoadedBlock       prometheus.Gauge
 	blockDrops            prometheus.Counter
 	blockDropFailures     prometheus.Counter
-	seriesDataTouched     *prometheus.SummaryVec
-	seriesDataFetched     *prometheus.SummaryVec
-	seriesDataSizeTouched *prometheus.SummaryVec
-	seriesDataSizeFetched *prometheus.SummaryVec
-	seriesBlocksQueried   prometheus.Summary
+	seriesDataTouched     *prometheus.HistogramVec
+	seriesDataFetched     *prometheus.HistogramVec
+	seriesDataSizeTouched *prometheus.HistogramVec
+	seriesDataSizeFetched *prometheus.HistogramVec
+	seriesBlocksQueried   prometheus.Histogram
 	seriesGetAllDuration  prometheus.Histogram
 	seriesMergeDuration   prometheus.Histogram
-	resultSeriesCount     prometheus.Summary
+	resultSeriesCount     prometheus.Histogram
 	chunkSizeBytes        prometheus.Histogram
 	postingsSizeBytes     prometheus.Histogram
 	queriesDropped        *prometheus.CounterVec
@@ -173,31 +173,32 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Help: "Timestamp when last block got loaded.",
 	})
 
-	m.seriesDataTouched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name:       "thanos_bucket_store_series_data_touched",
-		Help:       "Number of items of a data type touched to fulfill a single Store API series request.",
-		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
+	m.seriesDataTouched = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_data_touched",
+		Help:    "Number of items of a data type touched to fulfill a single Store API series request.",
+		Buckets: prometheus.ExponentialBuckets(200, 2, 15),
 	}, []string{"data_type"})
-	m.seriesDataFetched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name:       "thanos_bucket_store_series_data_fetched",
-		Help:       "Number of items of a data type retrieved to fulfill a single Store API series request.",
-		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
-	}, []string{"data_type"})
-
-	m.seriesDataSizeTouched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name:       "thanos_bucket_store_series_data_size_touched_bytes",
-		Help:       "Total size of items of a data type touched to fulfill a single Store API series request in Bytes.",
-		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
-	}, []string{"data_type"})
-	m.seriesDataSizeFetched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name:       "thanos_bucket_store_series_data_size_fetched_bytes",
-		Help:       "Total size of items of a data type fetched to fulfill a single Store API series request in Bytes.",
-		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
+	m.seriesDataFetched = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_data_fetched",
+		Help:    "Number of items of a data type retrieved to fulfill a single Store API series request.",
+		Buckets: prometheus.ExponentialBuckets(200, 2, 15),
 	}, []string{"data_type"})
 
-	m.seriesBlocksQueried = promauto.With(reg).NewSummary(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_blocks_queried",
-		Help: "Number of blocks in a bucket store that were touched to satisfy a query.",
+	m.seriesDataSizeTouched = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_data_size_touched_bytes",
+		Help:    "Total size of items of a data type touched to fulfill a single Store API series request in Bytes.",
+		Buckets: prometheus.ExponentialBuckets(1024, 2, 15),
+	}, []string{"data_type"})
+	m.seriesDataSizeFetched = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_data_size_fetched_bytes",
+		Help:    "Total size of items of a data type fetched to fulfill a single Store API series request in Bytes.",
+		Buckets: prometheus.ExponentialBuckets(1024, 2, 15),
+	}, []string{"data_type"})
+
+	m.seriesBlocksQueried = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_blocks_queried",
+		Help:    "Number of blocks in a bucket store that were touched to satisfy a query.",
+		Buckets: prometheus.ExponentialBuckets(1, 2, 10),
 	})
 	m.seriesGetAllDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Name:                           "thanos_bucket_store_series_get_all_duration_seconds",
@@ -213,9 +214,10 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		NativeHistogramBucketFactor:    1.1,
 		NativeHistogramMaxBucketNumber: 100,
 	})
-	m.resultSeriesCount = promauto.With(reg).NewSummary(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_result_series",
-		Help: "Number of series observed in the final result of a query.",
+	m.resultSeriesCount = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_result_series",
+		Help:    "Number of series observed in the final result of a query.",
+		Buckets: prometheus.ExponentialBuckets(1, 2, 15),
 	})
 
 	m.chunkSizeBytes = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
@@ -881,16 +883,22 @@ func newBlockSeriesClient(
 	calculateChunkHash bool,
 	batchSize int,
 	chunkFetchDuration prometheus.Histogram,
+	extLsetToRemove map[string]struct{},
 ) *blockSeriesClient {
 	var chunkr *bucketChunkReader
 	if !req.SkipChunks {
 		chunkr = b.chunkReader()
 	}
 
+	extLset := b.extLset
+	if extLsetToRemove != nil {
+		extLset = rmLabels(extLset.Copy(), extLsetToRemove)
+	}
+
 	return &blockSeriesClient{
 		ctx:                ctx,
 		logger:             logger,
-		extLset:            b.extLset,
+		extLset:            extLset,
 		mint:               req.MinTime,
 		maxt:               req.MaxTime,
 		indexr:             b.indexReader(),
@@ -1219,7 +1227,14 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
-	sortWithoutLabelSet := req.StrippedLabels()
+	var extLsetToRemove map[string]struct{}
+	if len(req.WithoutReplicaLabels) > 0 {
+		extLsetToRemove = make(map[string]struct{})
+		for _, l := range req.WithoutReplicaLabels {
+			extLsetToRemove[l] = struct{}{}
+		}
+	}
+
 	s.mtx.RLock()
 
 	for _, bs := range s.blockSets {
@@ -1256,6 +1271,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				s.enableChunkHashCalculation,
 				s.seriesBatchSize,
 				s.metrics.chunkFetchDuration,
+				extLsetToRemove,
 			)
 
 			defer blockClient.Close()
@@ -1285,7 +1301,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					blk.meta.ULID.String(),
 					[]labels.Labels{blk.extLset},
 					onClose,
-					newSortedSeriesClient(blockClient, sortWithoutLabelSet),
+					blockClient,
 					shardMatcher,
 					false,
 					s.metrics.emptyPostingCount,
@@ -1502,7 +1518,19 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				blockClient := newBlockSeriesClient(
+					newCtx,
+					s.logger,
+					b,
+					seriesReq,
+					nil,
+					bytesLimiter,
+					nil,
+					true,
+					SeriesBatchSize,
+					s.metrics.chunkFetchDuration,
+					nil,
+				)
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
@@ -1677,7 +1705,19 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				blockClient := newBlockSeriesClient(
+					newCtx,
+					s.logger,
+					b,
+					seriesReq,
+					nil,
+					bytesLimiter,
+					nil,
+					true,
+					SeriesBatchSize,
+					s.metrics.chunkFetchDuration,
+					nil,
+				)
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
@@ -3083,37 +3123,4 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 // NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
 func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Bytes, error) {
 	return pool.NewBucketedBytes(chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, maxChunkPoolBytes)
-}
-
-// sortedSeriesSet contains series whose labels are sorted
-// by moving ignoreLabelSet at the end.
-type sortedSeriesSet struct {
-	grpc.ClientStream
-	upstream       storepb.Store_SeriesClient
-	ignoreLabelSet map[string]struct{}
-}
-
-func newSortedSeriesClient(seriesClient storepb.Store_SeriesClient, ignoreLabelSet map[string]struct{}) storepb.Store_SeriesClient {
-	if len(ignoreLabelSet) == 0 {
-		return seriesClient
-	}
-
-	return &sortedSeriesSet{
-		upstream:       seriesClient,
-		ignoreLabelSet: ignoreLabelSet,
-	}
-}
-
-func (s *sortedSeriesSet) Recv() (*storepb.SeriesResponse, error) {
-	resp, err := s.upstream.Recv()
-	if err != nil {
-		return nil, err
-	}
-	series := resp.GetSeries()
-	if series == nil {
-		return resp, nil
-	}
-
-	series.Labels = stripLabels(series.Labels, s.ignoreLabelSet)
-	return resp, nil
 }

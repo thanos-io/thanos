@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -30,7 +29,6 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
-
 	"github.com/thanos-community/promql-engine/engine"
 	"github.com/thanos-community/promql-engine/logicalplan"
 
@@ -708,17 +706,13 @@ func runQuery(
 		if queryMode == queryModeLocal {
 			queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts, LogicalOptimizers: logicalOptimizers})
 		} else {
-			opts := engine.Opts{
-				DebugWriter:       os.Stdout,
-				EngineOpts:        engineOpts,
-				LogicalOptimizers: logicalOptimizers,
-			}
 			remoteEngineEndpoints := query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
-				AutoDownsample: enableAutodownsampling,
-				ReplicaLabels:  queryReplicaLabels,
-				Timeout:        queryTimeout,
+				AutoDownsample:        enableAutodownsampling,
+				ReplicaLabels:         queryReplicaLabels,
+				Timeout:               queryTimeout,
+				EnablePartialResponse: enableQueryPartialResponse,
 			})
-			queryEngine = engine.NewDistributedEngine(opts, remoteEngineEndpoints)
+			queryEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: engineOpts}, remoteEngineEndpoints)
 		}
 	default:
 		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)
@@ -822,12 +816,12 @@ func runQuery(
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 				if httpProbe.IsReady() {
 					mint, maxt := proxy.TimeRange()
+
 					return &infopb.StoreInfo{
-						MinTime:                        mint,
-						MaxTime:                        maxt,
-						SupportsSharding:               true,
-						SendsSortedSeries:              true,
-						SendsSortedSeriesWithoutLabels: true,
+						MinTime:                      mint,
+						MaxTime:                      maxt,
+						SupportsSharding:             true,
+						SupportsWithoutReplicaLabels: true,
 					}
 				}
 				return nil

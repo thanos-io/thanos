@@ -166,18 +166,23 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 
-	sortedSeriesSrv := newSortedSeriesServer(srv, r.StrippedLabels())
+	extLsetToRemove := map[string]struct{}{}
+	for _, lbl := range r.WithoutReplicaLabels {
+		extLsetToRemove[lbl] = struct{}{}
+	}
+
+	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
-		completeLabelset := labelpb.ExtendSortedLabels(series.Labels(), s.extLset)
+
+		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
 		if !shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
-
 		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
 		if r.SkipChunks {
-			if err := sortedSeriesSrv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
+			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
 			}
 			continue
@@ -217,7 +222,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 			if frameBytesLeft > 0 && isNext {
 				continue
 			}
-			if err := sortedSeriesSrv.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: storeSeries.Labels, Chunks: seriesChunks})); err != nil {
+			if err := srv.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: storeSeries.Labels, Chunks: seriesChunks})); err != nil {
 				return status.Error(codes.Aborted, err.Error())
 			}
 
@@ -235,7 +240,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		return status.Error(codes.Internal, err.Error())
 	}
 	for _, w := range set.Warnings() {
-		if err := sortedSeriesSrv.Send(storepb.NewWarnSeriesResponse(w)); err != nil {
+		if err := srv.Send(storepb.NewWarnSeriesResponse(w)); err != nil {
 			return status.Error(codes.Aborted, err.Error())
 		}
 	}
