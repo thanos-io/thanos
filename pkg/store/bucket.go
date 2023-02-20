@@ -1055,8 +1055,11 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 		if err != nil {
 			return err
 		}
-		storeEnc := storepb.Chunk_Encoding(in.Encoding() - 1)
-		out.Raw = &storepb.Chunk{Type: storeEnc, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+		out.Raw = &storepb.Chunk{
+			Data: b,
+			Type: storepb.Chunk_Encoding(in.Encoding() - 1),
+			Hash: hashChunk(hasher, b, calculateChecksum),
+		}
 		return nil
 	}
 

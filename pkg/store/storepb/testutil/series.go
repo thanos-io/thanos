@@ -26,7 +26,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/wlog"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
@@ -150,11 +149,14 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 				c.MaxTime = c.MinTime + int64(chEnc.NumSamples()) - 1
 			}
 
-			storeChunkEnc := storepb.Chunk_Encoding(chEnc.Encoding() - 1)
 			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, storepb.AggrChunk{
 				MinTime: c.MinTime,
 				MaxTime: c.MaxTime,
-				Raw:     &storepb.Chunk{Type: storeChunkEnc, Data: chEnc.Bytes(), Hash: xxhash.Sum64(chEnc.Bytes())},
+				Raw: &storepb.Chunk{
+					Data: chEnc.Bytes(),
+					Type: storepb.Chunk_Encoding(chEnc.Encoding() - 1),
+					Hash: xxhash.Sum64(chEnc.Bytes()),
+				},
 			})
 		}
 	}
@@ -308,14 +310,14 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 					}
 
 					// Huge responses can produce unreadable diffs - make it more human readable.
-					if len(c.ExpectedSeries) > 1 {
+					if len(c.ExpectedSeries) > 4 {
 						for j := range c.ExpectedSeries {
 							testutil.Equals(t, c.ExpectedSeries[j].Labels, srv.SeriesSet[j].Labels, "%v series chunks mismatch", j)
 
 							// Check chunks when it is not a skip chunk query
 							if !c.Req.SkipChunks {
 								if len(c.ExpectedSeries[j].Chunks) > 20 {
-									require.Equal(t, len(c.ExpectedSeries[j].Chunks), len(srv.SeriesSet[j].Chunks), "%v series chunks number mismatch", j)
+									testutil.Equals(t, len(c.ExpectedSeries[j].Chunks), len(srv.SeriesSet[j].Chunks), "%v series chunks number mismatch", j)
 								}
 								for ci := range c.ExpectedSeries[j].Chunks {
 									testutil.Equals(t, c.ExpectedSeries[j].Chunks[ci], srv.SeriesSet[j].Chunks[ci], "%v series chunks mismatch %v", j, ci)
@@ -323,7 +325,7 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 							}
 						}
 					} else {
-						require.Equal(t, c.ExpectedSeries, srv.SeriesSet)
+						testutil.Equals(t, c.ExpectedSeries, srv.SeriesSet)
 					}
 
 					var actualHints []hintspb.SeriesResponseHints
