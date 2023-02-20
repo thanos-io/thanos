@@ -173,17 +173,16 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 			extLsetToRemove[l] = struct{}{}
 		}
 	}
+	extLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
-		completeLabelSet := labelpb.ExtendSortedLabels(series.Labels(), s.extLset.Copy())
+		completeLabelSet := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), extLset)
 		if !shardMatcher.MatchesLabels(completeLabelSet) {
 			continue
 		}
-		// Strip replica labels.
-		finalLabelSet := rmLabels(completeLabelSet, extLsetToRemove)
-		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(finalLabelSet)}
+		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelSet)}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
