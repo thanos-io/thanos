@@ -17,8 +17,8 @@ func NewQueryResponse(series *prompb.TimeSeries) *QueryResponse {
 	}
 }
 
-func NewQueryWarningsResponse(errs []error) *QueryResponse {
-	warnings := make([]string, len(errs))
+func NewQueryWarningsResponse(errs ...error) *QueryResponse {
+	warnings := make([]string, 0, len(errs))
 	for _, err := range errs {
 		warnings = append(warnings, err.Error())
 	}
@@ -37,8 +37,8 @@ func NewQueryRangeResponse(series *prompb.TimeSeries) *QueryRangeResponse {
 	}
 }
 
-func NewQueryRangeWarningsResponse(errs []error) *QueryRangeResponse {
-	warnings := make([]string, len(errs))
+func NewQueryRangeWarningsResponse(errs ...error) *QueryRangeResponse {
+	warnings := make([]string, 0, len(errs))
 	for _, err := range errs {
 		warnings = append(warnings, err.Error())
 	}
