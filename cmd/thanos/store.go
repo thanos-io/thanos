@@ -353,7 +353,7 @@ func runStore(
 
 	options := []store.BucketStoreOption{
 		store.WithLogger(logger),
-		store.WithRegistry(reg),
+		store.WithRegistry(extprom.WrapRegistererWithPrefix("thanos_", reg)),
 		store.WithIndexCache(indexCache),
 		store.WithQueryGate(queriesGate),
 		store.WithChunkPool(chunkPool),
