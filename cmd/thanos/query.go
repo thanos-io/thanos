@@ -513,10 +513,12 @@ func runQuery(
 		return err
 	}
 	var (
-		endpoints = query.NewEndpointSet(
+		storeSelector = store.NewStoreSelector(relabelConfig)
+		endpoints     = query.NewEndpointSet(
 			time.Now,
 			logger,
 			reg,
+			storeSelector,
 			func() (specs []*query.GRPCEndpointSpec) {
 				// Add strict & static nodes.
 				for _, addr := range strictStores {
@@ -563,7 +565,7 @@ func runQuery(
 			endpointInfoTimeout,
 			queryConnMetricLabels...,
 		)
-		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy), relabelConfig)
+		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy), storeSelector)
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)

@@ -288,6 +288,7 @@ type EndpointSet struct {
 	endpointsMtx    sync.RWMutex
 	endpoints       map[string]*endpointRef
 	endpointsMetric *endpointSetNodeCollector
+	storeSelector   *store.StoreSelector
 }
 
 // nowFunc is a function that returns time.Time.
@@ -301,6 +302,7 @@ func NewEndpointSet(
 	now nowFunc,
 	logger log.Logger,
 	reg *prometheus.Registry,
+	storeSelector *store.StoreSelector,
 	endpointSpecs func() []*GRPCEndpointSpec,
 	dialOpts []grpc.DialOption,
 	unhealthyEndpointTimeout time.Duration,
@@ -319,6 +321,9 @@ func NewEndpointSet(
 	if endpointSpecs == nil {
 		endpointSpecs = func() []*GRPCEndpointSpec { return nil }
 	}
+	if storeSelector == nil {
+		storeSelector = store.NewStoreSelector(nil)
+	}
 
 	return &EndpointSet{
 		now:             now,
@@ -335,7 +340,8 @@ func NewEndpointSet(
 			}
 			return specs
 		},
-		endpoints: make(map[string]*endpointRef),
+		endpoints:     make(map[string]*endpointRef),
+		storeSelector: storeSelector,
 	}
 }
 
@@ -601,7 +607,9 @@ func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 	for _, v := range e.endpoints {
 		status := v.getStatus()
 		if status != nil {
-			statuses = append(statuses, *status)
+			if keep, _ := e.storeSelector.MatchStore(v.labelSets()); keep {
+				statuses = append(statuses, *status)
+			}
 		}
 	}
 

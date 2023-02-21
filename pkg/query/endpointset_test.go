@@ -724,7 +724,7 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 	nowFunc := func() time.Time { return now }
 	// Testing if duplicates can cause weird results.
 	discoveredEndpointAddr = append(discoveredEndpointAddr, discoveredEndpointAddr[0])
-	endpointSet := NewEndpointSet(nowFunc, nil, nil,
+	endpointSet := NewEndpointSet(nowFunc, nil, nil, nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, false))
@@ -1105,7 +1105,7 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 	endpoints.CloseOne(initialEndpointAddr[0])
 	endpoints.CloseOne(initialEndpointAddr[1])
 
-	endpointSet := NewEndpointSet(time.Now, nil, nil,
+	endpointSet := NewEndpointSet(time.Now, nil, nil, nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range initialEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, false))
@@ -1215,7 +1215,7 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 
 	staticEndpointAddr := discoveredEndpointAddr[0]
 	slowStaticEndpointAddr := discoveredEndpointAddr[2]
-	endpointSet := NewEndpointSet(time.Now, nil, nil, func() (specs []*GRPCEndpointSpec) {
+	endpointSet := NewEndpointSet(time.Now, nil, nil, nil, func() (specs []*GRPCEndpointSpec) {
 		return []*GRPCEndpointSpec{
 			NewGRPCEndpointSpec(discoveredEndpointAddr[0], true),
 			NewGRPCEndpointSpec(discoveredEndpointAddr[1], false),
@@ -1392,7 +1392,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			currentState := 0
 
-			endpointSet := NewEndpointSet(time.Now, nil, nil,
+			endpointSet := NewEndpointSet(time.Now, nil, nil, nil,
 				func() []*GRPCEndpointSpec {
 					if tc.states[currentState].endpointSpec == nil {
 						return nil
@@ -1579,7 +1579,7 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 }
 
 func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc, metricLabels ...string) *EndpointSet {
-	endpointSet := NewEndpointSet(now, nil, nil,
+	endpointSet := NewEndpointSet(now, nil, nil, nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, strict))

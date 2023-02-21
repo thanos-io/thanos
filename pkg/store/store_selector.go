@@ -20,16 +20,17 @@ var (
 	SupportedRelabelActions = map[relabel.Action]struct{}{relabel.Keep: {}, relabel.Drop: {}, relabel.HashMod: {}, relabel.LabelDrop: {}, relabel.LabelKeep: {}}
 )
 
-type storeSelector struct {
+type StoreSelector struct {
 	relabelConfig []*relabel.Config
 }
 
-func newStoreSelector(relabelConfig []*relabel.Config) *storeSelector {
-	return &storeSelector{
+func NewStoreSelector(relabelConfig []*relabel.Config) *StoreSelector {
+	return &StoreSelector{
 		relabelConfig: relabelConfig,
 	}
 }
-func (sr *storeSelector) matchStore(labelSets []labels.Labels) (bool, []labels.Labels) {
+
+func (sr *StoreSelector) MatchStore(labelSets []labels.Labels) (bool, []labels.Labels) {
 	if sr.relabelConfig == nil {
 		return true, nil
 	}
@@ -37,7 +38,7 @@ func (sr *storeSelector) matchStore(labelSets []labels.Labels) (bool, []labels.L
 	return len(matchedLabelSets) > 0, matchedLabelSets
 }
 
-func (sr *storeSelector) runRelabelRules(labelSets []labels.Labels) []labels.Labels {
+func (sr *StoreSelector) runRelabelRules(labelSets []labels.Labels) []labels.Labels {
 	result := make([]labels.Labels, 0)
 	for _, labelSet := range labelSets {
 		if _, keep := relabel.Process(labelSet, sr.relabelConfig...); !keep {
@@ -50,7 +51,7 @@ func (sr *storeSelector) runRelabelRules(labelSets []labels.Labels) []labels.Lab
 	return result
 }
 
-func (sr *storeSelector) buildLabelMatchers(labelSets []labels.Labels) []storepb.LabelMatcher {
+func (sr *StoreSelector) buildLabelMatchers(labelSets []labels.Labels) []storepb.LabelMatcher {
 	labelCounts := make(map[string]int)
 	matcherSet := make(map[string]map[string]struct{})
 	for _, labelSet := range labelSets {

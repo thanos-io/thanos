@@ -720,6 +720,7 @@ func TestProxyStore_Series(t *testing.T) {
 				t.Run(fmt.Sprintf("replica_support=%v", replicaLabelSupport), func(t *testing.T) {
 					relabelConfig, err := block.ParseRelabelConfig([]byte(tc.relableConfig), SupportedRelabelActions)
 					testutil.Ok(t, err)
+					storeSelector := NewStoreSelector(relabelConfig)
 					for _, s := range tc.storeAPIs {
 						cl := s.(*storetestutil.TestClient)
 						cl.WithoutReplicaLabelsEnabled = replicaLabelSupport
@@ -733,7 +734,7 @@ func TestProxyStore_Series(t *testing.T) {
 								component.Query,
 								tc.selectorLabels,
 								5*time.Second, strategy,
-								relabelConfig,
+								storeSelector,
 							)
 
 							ctx := context.Background()
@@ -2041,7 +2042,7 @@ func benchProxySeries(t testutil.TB, totalSamples, totalSeries int) {
 		metrics:           newProxyStoreMetrics(nil),
 		responseTimeout:   5 * time.Second,
 		retrievalStrategy: EagerRetrieval,
-		storeSelector:     newStoreSelector(nil),
+		storeSelector:     NewStoreSelector(nil),
 	}
 
 	var allResps []*storepb.SeriesResponse
@@ -2170,7 +2171,7 @@ func TestProxyStore_NotLeakingOnPrematureFinish(t *testing.T) {
 		metrics:           newProxyStoreMetrics(nil),
 		responseTimeout:   0,
 		retrievalStrategy: EagerRetrieval,
-		storeSelector:     newStoreSelector(nil),
+		storeSelector:     NewStoreSelector(nil),
 	}
 
 	t.Run("failling send", func(t *testing.T) {

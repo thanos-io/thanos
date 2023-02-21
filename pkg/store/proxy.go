@@ -18,7 +18,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/model/relabel"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -77,7 +76,7 @@ type ProxyStore struct {
 	responseTimeout   time.Duration
 	metrics           *proxyStoreMetrics
 	retrievalStrategy RetrievalStrategy
-	storeSelector     *storeSelector
+	storeSelector     *StoreSelector
 }
 
 type proxyStoreMetrics struct {
@@ -111,14 +110,16 @@ func NewProxyStore(
 	selectorLabels labels.Labels,
 	responseTimeout time.Duration,
 	retrievalStrategy RetrievalStrategy,
-	relabelConfig []*relabel.Config,
+	storeSelector *StoreSelector,
 ) *ProxyStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-
+	if storeSelector == nil {
+		storeSelector = NewStoreSelector(nil)
+	}
 	metrics := newProxyStoreMetrics(reg)
-	storeSelector := newStoreSelector(relabelConfig)
+
 	s := &ProxyStore{
 		logger:         logger,
 		stores:         stores,
@@ -283,7 +284,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			continue
 		}
 
-		match, matchedLabelSets := s.storeSelector.matchStore(st.LabelSets())
+		match, matchedLabelSets := s.storeSelector.MatchStore(st.LabelSets())
 		if !match {
 			continue
 		}
