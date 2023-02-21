@@ -284,7 +284,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			continue
 		}
 
-		match, matchedLabelSets := s.storeSelector.MatchStore(st.LabelSets())
+		match, matchedLabelSets := s.storeSelector.MatchStore(st.LabelSets()...)
 		if !match {
 			continue
 		}
@@ -300,7 +300,6 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	}
 
 	storeResponses := make([]respSet, 0, len(stores))
-
 	for _, st := range stores {
 		st := st
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))

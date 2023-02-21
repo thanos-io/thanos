@@ -30,8 +30,12 @@ func NewStoreSelector(relabelConfig []*relabel.Config) *StoreSelector {
 	}
 }
 
-func (sr *StoreSelector) MatchStore(labelSets []labels.Labels) (bool, []labels.Labels) {
-	if sr.relabelConfig == nil {
+func (sr *StoreSelector) RelabelConfigEnabled() bool {
+	return sr.relabelConfig != nil
+}
+
+func (sr *StoreSelector) MatchStore(labelSets ...labels.Labels) (bool, []labels.Labels) {
+	if !sr.RelabelConfigEnabled() {
 		return true, nil
 	}
 	matchedLabelSets := sr.runRelabelRules(labelSets)

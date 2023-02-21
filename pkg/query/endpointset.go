@@ -604,13 +604,22 @@ func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 	defer e.endpointsMtx.RUnlock()
 
 	statuses := make([]EndpointStatus, 0, len(e.endpoints))
+	lblsSet := make([]labels.Labels, 0)
 	for _, v := range e.endpoints {
 		status := v.getStatus()
-		if status != nil {
-			if keep, _ := e.storeSelector.MatchStore(v.labelSets()); keep {
+		if status != nil && e.storeSelector.RelabelConfigEnabled() {
+			for _, labelSet := range v.labelSets() {
+				if keep, _ := e.storeSelector.MatchStore(labelSet); keep {
+					lblsSet = append(lblsSet, labelSet)
+				}
+			}
+			if len(lblsSet) > 0 {
+				status.LabelSets = lblsSet
 				statuses = append(statuses, *status)
+				lblsSet = lblsSet[:0]
 			}
 		}
+
 	}
 
 	sort.Slice(statuses, func(i, j int) bool {
