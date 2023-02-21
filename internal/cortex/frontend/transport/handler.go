@@ -177,8 +177,6 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 		thanosTraceID = traceID
 	}
 
-	level.Info(util_log.WithContext(r.Context(), f.log)).Log("aba trace id", thanosTraceID)
-
 	logMessage := append([]interface{}{
 		"msg", "slow query detected",
 		"method", r.Method,
