@@ -20,7 +20,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Add histogram metrics `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested` to all Stores.
 - [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Allow configuring series and sample limits per `Series` request for all Stores.
 - [#6104](https://github.com/thanos-io/thanos/pull/6104) Objstore: Support S3 session token.
-- [#5548](https://github.com/thanos-io/thanos/pull/5548) Query: Added experimental support for load balancing across multiple Store endpoints.
+
+- [#6148](https://github.com/thanos-io/thanos/pull/6148) Query-frontend: add traceID to slow query detected log line
 
 ### Fixed
 
