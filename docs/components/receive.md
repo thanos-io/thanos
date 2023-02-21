@@ -16,15 +16,19 @@ For more information please check out [initial design proposal](../proposals-don
 
 The Receive component currently supports two algorithms for distributing timeseries across Receive nodes and can be set using the `receive.hashrings-algorithm` flag.
 
-### Hashmod (discouraged)
-
-This algorithm uses a `hashmod` function over all labels to decide which receiver is responsible for a given timeseries. This is the default algorithm due to historical reasons. However, its usage for new Receive installations is discouraged since adding new Receiver nodes leads to series churn and memory usage spikes.
-
 ### Ketama (recommended)
 
 The Ketama algorithm is a consistent hashing scheme which enables stable scaling of Receivers without the drawbacks of the `hashmod` algorithm. This is the recommended algorithm for all new installations.
 
 If you are using the `hashmod` algorithm and wish to migrate to `ketama`, the simplest and safest way would be to set up a new pool receivers with `ketama` hashrings and start remote-writing to them. Provided you are on the latest Thanos version, old receivers will flush their TSDBs after the configured retention period and will upload blocks to object storage. Once you have verified that is done, decommission the old receivers.
+
+### Hashmod (discouraged)
+
+This algorithm uses a `hashmod` function over all labels to decide which receiver is responsible for a given timeseries. This is the default algorithm due to historical reasons. However, its usage for new Receive installations is discouraged since adding new Receiver nodes leads to series churn and memory usage spikes.
+
+### Hashring management and autoscaling in Kubernetes
+
+The [Thanos Receive Controller](https://github.com/observatorium/thanos-receive-controller) project aims to automate hashring management when running Thanos in Kubernetes. In combination with the Ketama hashring algorithm, this controller can also be used to keep hashrings up to date when Receivers are scaled automatically using an HPA or [Keda](https://keda.sh/).
 
 ## TSDB stats
 
