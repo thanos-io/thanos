@@ -1050,14 +1050,19 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 
-	if in.Encoding() == chunkenc.EncXOR {
+	if in.Encoding() == chunkenc.EncXOR || in.Encoding() == chunkenc.EncHistogram {
 		b, err := save(in.Bytes())
 		if err != nil {
 			return err
 		}
-		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+		out.Raw = &storepb.Chunk{
+			Data: b,
+			Type: storepb.Chunk_Encoding(in.Encoding() - 1),
+			Hash: hashChunk(hasher, b, calculateChecksum),
+		}
 		return nil
 	}
+
 	if in.Encoding() != downsample.ChunkEncAggr {
 		return errors.Errorf("unsupported chunk encoding %d", in.Encoding())
 	}
