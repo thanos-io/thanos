@@ -154,7 +154,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if shouldReportSlowQuery {
-		f.reportSlowQuery(r, queryString, queryResponseTime)
+		f.reportSlowQuery(r, hs, queryString, queryResponseTime)
 	}
 	if f.cfg.QueryStatsEnabled {
 		f.reportQueryStats(r, queryString, queryResponseTime, stats)
@@ -162,7 +162,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // reportSlowQuery reports slow queries.
-func (f *Handler) reportSlowQuery(r *http.Request, queryString url.Values, queryResponseTime time.Duration) {
+func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, queryString url.Values, queryResponseTime time.Duration) {
 	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
 	grafanaDashboardUID := "-"
 	if dashboardUID := r.Header.Get("X-Dashboard-Uid"); dashboardUID != "" {
@@ -172,6 +172,12 @@ func (f *Handler) reportSlowQuery(r *http.Request, queryString url.Values, query
 	if panelID := r.Header.Get("X-Panel-Id"); panelID != "" {
 		grafanaPanelID = panelID
 	}
+	thanosTraceID := "-"
+	if traceID := responseHeaders.Get("X-Thanos-Trace-Id"); traceID != "" {
+		thanosTraceID = traceID
+	}
+
+	level.Info(util_log.WithContext(r.Context(), f.log)).Log("aba trace id", thanosTraceID)
 
 	logMessage := append([]interface{}{
 		"msg", "slow query detected",
@@ -181,6 +187,7 @@ func (f *Handler) reportSlowQuery(r *http.Request, queryString url.Values, query
 		"time_taken", queryResponseTime.String(),
 		"grafana_dashboard_uid", grafanaDashboardUID,
 		"grafana_panel_id", grafanaPanelID,
+		"trace_id", thanosTraceID,
 	}, formatQueryString(queryString)...)
 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
