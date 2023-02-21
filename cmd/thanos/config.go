@@ -69,6 +69,7 @@ type prometheusConfig struct {
 	getConfigInterval time.Duration
 	getConfigTimeout  time.Duration
 	httpClient        *extflag.PathOrContent
+	externalLabels    []string
 }
 
 func (pc *prometheusConfig) registerFlag(cmd extkingpin.FlagClause) *prometheusConfig {
@@ -84,6 +85,8 @@ func (pc *prometheusConfig) registerFlag(cmd extkingpin.FlagClause) *prometheusC
 	cmd.Flag("prometheus.get_config_timeout",
 		"Timeout for getting Prometheus config").
 		Default("5s").DurationVar(&pc.getConfigTimeout)
+	cmd.Flag("prometheus.external_label", "Override prometheus external labels (repeated).").
+		PlaceHolder("<name>=\"<value>\"").StringsVar(&pc.externalLabels)
 	pc.httpClient = extflag.RegisterPathOrContent(
 		cmd,
 		"prometheus.http-client",

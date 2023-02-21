@@ -7,6 +7,7 @@ import (
 	"context"
 	"math"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -102,7 +103,8 @@ func runSidecar(
 	reloader.SetHttpClient(*httpClient)
 
 	var m = &promMetadata{
-		promURL: conf.prometheus.url,
+		promURL:            conf.prometheus.url,
+		promExternalLabels: conf.prometheus.externalLabels,
 
 		// Start out with the full time range. The shipper will constrain it later.
 		// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
@@ -402,13 +404,13 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 }
 
 type promMetadata struct {
-	promURL *url.URL
-
-	mtx         sync.Mutex
-	mint        int64
-	maxt        int64
-	labels      labels.Labels
-	promVersion string
+	promURL            *url.URL
+	promExternalLabels []string
+	mtx                sync.Mutex
+	mint               int64
+	maxt               int64
+	labels             labels.Labels
+	promVersion        string
 
 	limitMinTime thanosmodel.TimeOrDurationValue
 
@@ -416,11 +418,20 @@ type promMetadata struct {
 }
 
 func (s *promMetadata) UpdateLabels(ctx context.Context) error {
-	elset, err := s.client.ExternalLabels(ctx, s.promURL)
-	if err != nil {
-		return err
+	var elset labels.Labels
+	if len(s.promExternalLabels) == 0 {
+		var err error
+		elset, err = s.client.ExternalLabels(ctx, s.promURL)
+		if err != nil {
+			return err
+		}
+	} else {
+		elset = labels.Labels{}
+		for _, labelString := range s.promExternalLabels {
+			labelArray := strings.Split(labelString, "=")
+			elset = append(elset, labels.Label{Name: labelArray[0], Value: labelArray[1]})
+		}
 	}
-
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 

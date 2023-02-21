@@ -125,6 +125,8 @@ Flags:
                                  Path to YAML file that contains object
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
+      --prometheus.external_label=<name>="<value>" ...
+                                 Override prometheus external labels (repeated).
       --prometheus.get_config_interval=30s
                                  How often to get Prometheus config
       --prometheus.get_config_timeout=5s
