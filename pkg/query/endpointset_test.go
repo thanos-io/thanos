@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/store"
 
 	"golang.org/x/sync/errgroup"
@@ -660,8 +661,99 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 	testutil.Equals(t, numResponses, len(endpointSet.GetStoreClients()))
 	wg.Wait()
 }
+func TestEndpointSetUpdate_WithRelableConfig(t *testing.T) {
+	relabelConfigYml := `
+- source_labels: [ext]
+  action: hashmod
+  target_label: shard
+  modulus: 2
+- action: keep
+  source_labels: [shard]
+  regex: 1
+`
+	endpoints, err := startTestEndpoints([]testEndpointMeta{
+		{
+			InfoResponse: sidecarInfo,
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
+					{
+						Labels: []labelpb.ZLabel{
+							{Name: "addr", Value: addr},
+						},
+					},
+					{
+						Labels: []labelpb.ZLabel{
+							{Name: "ext", Value: "1"},
+						},
+					},
+				}
+			},
+		},
+		{
+			InfoResponse: sidecarInfo,
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
+					{
+						Labels: []labelpb.ZLabel{
+							{Name: "addr", Value: addr},
+						},
+					},
+					{
+						Labels: []labelpb.ZLabel{
+							{Name: "ext", Value: "2"},
+						},
+					},
+				}
+			},
+		},
+		{
+			InfoResponse: queryInfo,
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return []labelpb.ZLabelSet{
+					{
+						Labels: []labelpb.ZLabel{
+							{Name: "addr", Value: addr},
+						},
+					},
+					{
+						Labels: []labelpb.ZLabel{
+							{Name: "ext", Value: "1"},
+						},
+					},
+				}
+			},
+		},
+	})
+	testutil.Ok(t, err)
+	defer endpoints.Close()
 
+	discoveredEndpointAddr := endpoints.EndpointAddresses()
+	now := time.Now()
+	nowFunc := func() time.Time { return now }
+
+	relabelConfig, err := block.ParseRelabelConfig([]byte(relabelConfigYml), store.SupportedRelabelActions)
+	testutil.Ok(t, err)
+	storeSelector := store.NewStoreSelector(relabelConfig)
+
+	endpointSet := NewEndpointSet(nowFunc, nil, nil, storeSelector,
+		func() (specs []*GRPCEndpointSpec) {
+			for _, addr := range discoveredEndpointAddr {
+				specs = append(specs, NewGRPCEndpointSpec(addr, false))
+			}
+			return specs
+		},
+		testGRPCOpts, time.Minute, 2*time.Second)
+
+	defer endpointSet.Close()
+
+	// Initial update.
+	endpointSet.Update(context.Background())
+	testutil.Equals(t, 3, len(endpointSet.endpoints))
+	testutil.Equals(t, 3, len(endpointSet.GetStoreClients()))
+	testutil.Equals(t, 2, len(endpointSet.GetEndpointStatus()))
+}
 func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
+
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
 		{
 			InfoResponse: sidecarInfo,

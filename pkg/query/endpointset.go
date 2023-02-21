@@ -607,19 +607,21 @@ func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 	lblsSet := make([]labels.Labels, 0)
 	for _, v := range e.endpoints {
 		status := v.getStatus()
-		if status != nil && e.storeSelector.RelabelConfigEnabled() {
-			for _, labelSet := range v.labelSets() {
-				if keep, _ := e.storeSelector.MatchStore(labelSet); keep {
-					lblsSet = append(lblsSet, labelSet)
+		if status != nil {
+			if e.storeSelector.RelabelConfigEnabled() {
+				for _, labelSet := range v.labelSets() {
+					if keep, _ := e.storeSelector.MatchStore(labelSet); keep {
+						lblsSet = append(lblsSet, labelSet)
+					}
 				}
-			}
-			if len(lblsSet) > 0 {
+				if len(lblsSet) == 0 {
+					continue
+				}
 				status.LabelSets = lblsSet
-				statuses = append(statuses, *status)
 				lblsSet = lblsSet[:0]
 			}
+			statuses = append(statuses, *status)
 		}
-
 	}
 
 	sort.Slice(statuses, func(i, j int) bool {
