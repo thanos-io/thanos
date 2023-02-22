@@ -661,6 +661,7 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 	testutil.Equals(t, numResponses, len(endpointSet.GetStoreClients()))
 	wg.Wait()
 }
+
 func TestEndpointSetUpdate_WithRelableConfig(t *testing.T) {
 	relabelConfigYml := `
 - source_labels: [ext]
@@ -748,10 +749,11 @@ func TestEndpointSetUpdate_WithRelableConfig(t *testing.T) {
 
 	// Initial update.
 	endpointSet.Update(context.Background())
-	testutil.Equals(t, 3, len(endpointSet.endpoints))
-	testutil.Equals(t, 3, len(endpointSet.GetStoreClients()))
+	testutil.Equals(t, 2, len(endpointSet.endpoints))
+	testutil.Equals(t, 2, len(endpointSet.GetStoreClients()))
 	testutil.Equals(t, 2, len(endpointSet.GetEndpointStatus()))
 }
+
 func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 
 	endpoints, err := startTestEndpoints([]testEndpointMeta{

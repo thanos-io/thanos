@@ -395,7 +395,20 @@ func (e *EndpointSet) Update(ctx context.Context) {
 				newRef.Close()
 				return
 			}
+			if len(newRef.labelSets()) > 0 {
+				keepEndpointRef := false
+				for _, labelSet := range newRef.labelSets() {
+					if keep, _ := e.storeSelector.MatchStore(labelSet); keep {
+						keepEndpointRef = true
+						break
+					}
+				}
 
+				if !keepEndpointRef {
+					newRef.Close()
+					return
+				}
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			newRefs[spec.Addr()] = newRef
@@ -608,19 +621,20 @@ func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 	for _, v := range e.endpoints {
 		status := v.getStatus()
 		if status != nil {
-			if e.storeSelector.RelabelConfigEnabled() {
+			if len(v.labelSets()) > 0 {
 				for _, labelSet := range v.labelSets() {
 					if keep, _ := e.storeSelector.MatchStore(labelSet); keep {
 						lblsSet = append(lblsSet, labelSet)
 					}
 				}
-				if len(lblsSet) == 0 {
-					continue
+				if len(lblsSet) > 0 {
+					status.LabelSets = lblsSet
+					statuses = append(statuses, *status)
+					lblsSet = lblsSet[:0]
 				}
-				status.LabelSets = lblsSet
-				lblsSet = lblsSet[:0]
+			} else {
+				statuses = append(statuses, *status)
 			}
-			statuses = append(statuses, *status)
 		}
 	}
 
