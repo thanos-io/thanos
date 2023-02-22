@@ -410,165 +410,9 @@ func TestMergeResponse(t *testing.T) {
 			},
 		},
 		{
-			name: "merge two responses with sort_desc",
-			req: &queryrange.PrometheusRequest{
-				Query: "1 + sort_desc(bottomk(1, up))",
-			},
-			resps: []queryrange.Response{
-				&queryrange.PrometheusInstantQueryResponse{
-					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
-						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
-							Result: &queryrange.PrometheusInstantQueryResult_Vector{
-								Vector: &queryrange.Vector{
-									Samples: []*queryrange.Sample{
-										{
-											Sample: cortexpb.Sample{TimestampMs: 0, Value: 3},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
-												"__name__": "up",
-												"job":      "foo",
-											})),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				&queryrange.PrometheusInstantQueryResponse{
-					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
-						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
-							Result: &queryrange.PrometheusInstantQueryResult_Vector{
-								Vector: &queryrange.Vector{
-									Samples: []*queryrange.Sample{
-										{
-											Sample: cortexpb.Sample{TimestampMs: 0, Value: 10},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
-												"__name__": "up",
-												"job":      "bar",
-											})),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedResp: &queryrange.PrometheusInstantQueryResponse{
-				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
-					ResultType: model.ValVector.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
-						Result: &queryrange.PrometheusInstantQueryResult_Vector{
-							Vector: &queryrange.Vector{
-								Samples: []*queryrange.Sample{
-									{
-										Sample: cortexpb.Sample{TimestampMs: 0, Value: 10},
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
-											"__name__": "up",
-											"job":      "bar",
-										})),
-									},
-									{
-										Sample: cortexpb.Sample{TimestampMs: 0, Value: 3},
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
-											"__name__": "up",
-											"job":      "foo",
-										})),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
 			name: "merge two responses with topk",
 			req: &queryrange.PrometheusRequest{
-				Query: "1 + topk(10, sort(up))",
-			},
-			resps: []queryrange.Response{
-				&queryrange.PrometheusInstantQueryResponse{
-					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
-						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
-							Result: &queryrange.PrometheusInstantQueryResult_Vector{
-								Vector: &queryrange.Vector{
-									Samples: []*queryrange.Sample{
-										{
-											Sample: cortexpb.Sample{TimestampMs: 0, Value: 1},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
-												"__name__": "up",
-												"job":      "foo",
-											})),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				&queryrange.PrometheusInstantQueryResponse{
-					Status: queryrange.StatusSuccess,
-					Data: queryrange.PrometheusInstantQueryData{
-						ResultType: model.ValVector.String(),
-						Result: queryrange.PrometheusInstantQueryResult{
-							Result: &queryrange.PrometheusInstantQueryResult_Vector{
-								Vector: &queryrange.Vector{
-									Samples: []*queryrange.Sample{
-										{
-											Sample: cortexpb.Sample{TimestampMs: 0, Value: 2},
-											Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
-												"__name__": "up",
-												"job":      "bar",
-											})),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedResp: &queryrange.PrometheusInstantQueryResponse{
-				Status: queryrange.StatusSuccess,
-				Data: queryrange.PrometheusInstantQueryData{
-					ResultType: model.ValVector.String(),
-					Result: queryrange.PrometheusInstantQueryResult{
-						Result: &queryrange.PrometheusInstantQueryResult_Vector{
-							Vector: &queryrange.Vector{
-								Samples: []*queryrange.Sample{
-									{
-										Sample: cortexpb.Sample{TimestampMs: 0, Value: 2},
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
-											"__name__": "up",
-											"job":      "bar",
-										})),
-									},
-									{
-										Sample: cortexpb.Sample{TimestampMs: 0, Value: 1},
-										Labels: cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
-											"__name__": "up",
-											"job":      "foo",
-										})),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "merge two responses with bottomk",
-			req: &queryrange.PrometheusRequest{
-				Query: "1 + bottomk(10, sort(up))",
+				Query: "topk(10, sort(up)) by (job)",
 			},
 			resps: []queryrange.Response{
 				&queryrange.PrometheusInstantQueryResponse{
@@ -1365,5 +1209,71 @@ func TestDecodeResponse(t *testing.T) {
 		gotResponse, err := codec.DecodeResponse(context.Background(), resp, nil)
 		testutil.Equals(t, tc.expectedErr, err)
 		testutil.Equals(t, tc.expectedResponse, gotResponse)
+	}
+}
+
+func Test_sortPlanForQuery(t *testing.T) {
+	tc := []struct {
+		query        string
+		expectedPlan sortPlan
+		err          bool
+	}{
+		{
+			query:        "invalid(10, up)",
+			expectedPlan: mergeOnly,
+			err:          true,
+		},
+		{
+			query:        "topk(10, up)",
+			expectedPlan: mergeOnly,
+			err:          false,
+		},
+		{
+			query:        "bottomk(10, up)",
+			expectedPlan: mergeOnly,
+			err:          false,
+		},
+		{
+			query:        "1 + topk(10, up)",
+			expectedPlan: sortByLabels,
+			err:          false,
+		},
+		{
+			query:        "1 + sort_desc(sum by (job) (up) )",
+			expectedPlan: sortByValuesDesc,
+			err:          false,
+		},
+		{
+			query:        "sort(topk by (job) (10, up))",
+			expectedPlan: sortByValuesAsc,
+			err:          false,
+		},
+		{
+			query:        "topk(5, up) by (job) + sort_desc(up)",
+			expectedPlan: sortByValuesDesc,
+			err:          false,
+		},
+		{
+			query:        "sort(up) + topk(5, up) by (job)",
+			expectedPlan: sortByValuesAsc,
+			err:          false,
+		},
+		{
+			query:        "sum(up) by (job)",
+			expectedPlan: sortByLabels,
+			err:          false,
+		},
+	}
+
+	for _, tc := range tc {
+		t.Run(tc.query, func(t *testing.T) {
+			p, err := sortPlanForQuery(tc.query)
+			if tc.err {
+				testutil.NotOk(t, err)
+			} else {
+				testutil.Ok(t, err)
+				testutil.Equals(t, tc.expectedPlan, p)
+			}
+		})
 	}
 }
