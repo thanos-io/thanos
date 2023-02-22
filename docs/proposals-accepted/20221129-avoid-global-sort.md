@@ -165,8 +165,8 @@ This might be not needed for now. We can add more awareness of replication later
 
 The tasks to do in order to migrate to the new idea.
 
-* [ ] Merging the PR with the proposal (also includes implementation)
-* [ ] Add support for `without_replica_label` to other store API servers.
+* [X] Merging the PR with the proposal (also includes implementation)
+* [X] Add support for `without_replica_label` to other store API servers.
 * [ ] Move to deduplicate over chunks from series See [TODO in querier.go:405](../../pkg/query/querier.go)
 
 ```go

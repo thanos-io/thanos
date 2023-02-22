@@ -174,17 +174,23 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		}
 	}
 
+	extLsetToRemove := map[string]struct{}{}
+	for _, lbl := range r.WithoutReplicaLabels {
+		extLsetToRemove[lbl] = struct{}{}
+	}
+
 	if r.SkipChunks {
+		finalExtLset := rmLabels(extLset.Copy(), extLsetToRemove)
 		labelMaps, err := p.client.SeriesInGRPC(s.Context(), p.base, matchers, r.MinTime, r.MaxTime)
 		if err != nil {
 			return err
 		}
 		for _, lbm := range labelMaps {
-			lset := make([]labelpb.ZLabel, 0, len(lbm)+len(extLset))
+			lset := make([]labelpb.ZLabel, 0, len(lbm)+len(finalExtLset))
 			for k, v := range lbm {
 				lset = append(lset, labelpb.ZLabel{Name: k, Value: v})
 			}
-			lset = append(lset, labelpb.ZLabelsFromPromLabels(extLset)...)
+			lset = append(lset, labelpb.ZLabelsFromPromLabels(finalExtLset)...)
 			sort.Slice(lset, func(i, j int) bool {
 				return lset[i].Name < lset[j].Name
 			})
@@ -199,7 +205,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	defer shardMatcher.Close()
 
 	if r.QueryHints != nil && r.QueryHints.IsSafeToExecute() && !shardMatcher.IsSharded() {
-		return p.queryPrometheus(s, r)
+		return p.queryPrometheus(s, r, extLsetToRemove)
 	}
 
 	q := &prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
@@ -234,16 +240,20 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	// remote read.
 	contentType := httpResp.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "application/x-protobuf") {
-		return p.handleSampledPrometheusResponse(s, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
+		return p.handleSampledPrometheusResponse(s, httpResp, queryPrometheusSpan, enableChunkHashCalculation, extLsetToRemove)
 	}
 
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
-	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation)
+	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, enableChunkHashCalculation, extLsetToRemove)
 }
 
-func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *storepb.SeriesRequest) error {
+func (p *PrometheusStore) queryPrometheus(
+	s storepb.Store_SeriesServer,
+	r *storepb.SeriesRequest,
+	extLsetToRemove map[string]struct{},
+) error {
 	var matrix model.Matrix
 
 	opts := promclient.QueryOptions{}
@@ -274,7 +284,7 @@ func (p *PrometheusStore) queryPrometheus(s storepb.Store_SeriesServer, r *store
 		}
 	}
 
-	externalLbls := p.externalLabelsFn()
+	externalLbls := rmLabels(p.externalLabelsFn().Copy(), extLsetToRemove)
 	for _, vector := range matrix {
 		seriesLbls := labels.Labels(make([]labels.Label, 0, len(vector.Metric)))
 
@@ -314,8 +324,8 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 	s storepb.Store_SeriesServer,
 	httpResp *http.Response,
 	querySpan tracing.Span,
-	extLset labels.Labels,
 	calculateChecksums bool,
+	extLsetToRemove map[string]struct{},
 ) error {
 	level.Debug(p.logger).Log("msg", "started handling ReadRequest_SAMPLED response type.")
 
@@ -330,7 +340,9 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 	span.SetTag("series_count", len(resp.Results[0].Timeseries))
 
 	for _, e := range resp.Results[0].Timeseries {
-		lset := labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(e.Labels), extLset)
+		// Sampled remote read handler already adds external labels for us:
+		// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/read_handler.go#L166.
+		lset := rmLabels(labelpb.ZLabelsToPromLabels(e.Labels), extLsetToRemove)
 		if len(e.Samples) == 0 {
 			// As found in https://github.com/thanos-io/thanos/issues/381
 			// Prometheus can give us completely empty time series. Ignore these with log until we figure out that
@@ -365,8 +377,8 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	shardMatcher *storepb.ShardMatcher,
 	httpResp *http.Response,
 	querySpan tracing.Span,
-	extLset labels.Labels,
 	calculateChecksums bool,
+	extLsetToRemove map[string]struct{},
 ) error {
 	level.Debug(p.logger).Log("msg", "started handling ReadRequest_STREAMED_XOR_CHUNKS streamed read response.")
 
@@ -405,7 +417,10 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 
 		framesNum++
 		for _, series := range res.ChunkedSeries {
-			completeLabelset := labelpb.ExtendSortedLabels(labelpb.ZLabelsToPromLabels(series.Labels), extLset)
+			// Streamed remote read handler already adds
+			// external labels:
+			// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/codec.go#L210.
+			completeLabelset := rmLabels(labelpb.ZLabelsToPromLabels(series.Labels), extLsetToRemove)
 			if !shardMatcher.MatchesLabels(completeLabelset) {
 				continue
 			}

@@ -163,10 +163,18 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	defer shardMatcher.Close()
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
+
+	extLsetToRemove := map[string]struct{}{}
+	for _, lbl := range r.WithoutReplicaLabels {
+		extLsetToRemove[lbl] = struct{}{}
+	}
+
+	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
-		completeLabelset := labelpb.ExtendSortedLabels(series.Labels(), s.extLset)
+
+		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
 		if !shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}

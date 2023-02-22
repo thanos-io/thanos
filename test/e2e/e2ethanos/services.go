@@ -28,6 +28,7 @@ import (
 	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/thanos-io/objstore/exthttp"
+
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 
@@ -251,6 +252,10 @@ type QuerierBuilder struct {
 	exemplarAddresses       []string
 	enableFeatures          []string
 	endpoints               []string
+	strictEndpoints         []string
+
+	engine    string
+	queryMode string
 
 	replicaLabels []string
 	tracingConfig string
@@ -323,6 +328,11 @@ func (q *QuerierBuilder) WithEndpoints(endpoints ...string) *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithStrictEndpoints(strictEndpoints ...string) *QuerierBuilder {
+	q.strictEndpoints = strictEndpoints
+	return q
+}
+
 func (q *QuerierBuilder) WithRoutePrefix(routePrefix string) *QuerierBuilder {
 	q.routePrefix = routePrefix
 	return q
@@ -346,6 +356,16 @@ func (q *QuerierBuilder) WithReplicaLabels(labels ...string) *QuerierBuilder {
 
 func (q *QuerierBuilder) WithDisablePartialResponses(disable bool) *QuerierBuilder {
 	q.disablePartialResponses = disable
+	return q
+}
+
+func (q *QuerierBuilder) WithEngine(engine string) *QuerierBuilder {
+	q.engine = engine
+	return q
+}
+
+func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
+	q.queryMode = mode
 	return q
 }
 
@@ -405,6 +425,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	for _, addr := range q.endpoints {
 		args = append(args, "--endpoint="+addr)
+	}
+	for _, addr := range q.strictEndpoints {
+		args = append(args, "--endpoint-strict="+addr)
 	}
 	if len(q.fileSDStoreAddresses) > 0 {
 		if err := os.MkdirAll(q.Dir(), 0750); err != nil {
