@@ -31,7 +31,7 @@ func NewStoreSelector(relabelConfig []*relabel.Config) *StoreSelector {
 }
 
 func (sr *StoreSelector) MatchStore(labelSets ...labels.Labels) (bool, []labels.Labels) {
-	if sr.relabelConfig == nil {
+	if sr.relabelConfig == nil || len(labelSets) == 0 {
 		return true, nil
 	}
 	matchedLabelSets := sr.runRelabelRules(labelSets)
