@@ -33,6 +33,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6098](https://github.com/thanos-io/thanos/pull/6098) Cache/Redis: upgrade `rueidis` to v0.0.93 to fix potential panic when the client-side caching is disabled.
 - [#6103](https://github.com/thanos-io/thanos/pull/6103) Mixins(Rule): Fix query for long rule evaluations.
 - [#6121](https://github.com/thanos-io/thanos/pull/6121) Receive: Deduplicate metamonitoring queries.
+- [#6137](https://github.com/thanos-io/thanos/pull/6137) Downsample: Repair of non-empty XOR chunks during 1h downsampling.
 
 ### Changed
 
@@ -41,7 +42,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5887](https://github.com/thanos-io/thanos/pull/5887) Tracing: Make sure rate limiting sampler is the default, as was the case in version pre-0.29.0.
 - [#5997](https://github.com/thanos-io/thanos/pull/5997) Rule: switch to miekgdns DNS resolver as the default one.
 - [#6035](https://github.com/thanos-io/thanos/pull/6035) Replicate: Support all types of matchers to match blocks for replication. Change matcher parameter from string slice to a single string.
-- [#6131](https://github.com/thanos-io/thanos/pull/6131) Store: Use Histograms for bucket metrics.
+- [#6131](https://github.com/thanos-io/thanos/pull/6131) Store: *breaking :warning:* Use Histograms for bucket metrics.
 
 ## [v0.30.2](https://github.com/thanos-io/thanos/tree/release-0.30) - 28.01.2023
 
