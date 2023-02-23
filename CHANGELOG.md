@@ -34,7 +34,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6103](https://github.com/thanos-io/thanos/pull/6103) Mixins(Rule): Fix query for long rule evaluations.
 - [#6121](https://github.com/thanos-io/thanos/pull/6121) Receive: Deduplicate metamonitoring queries.
 - [#6137](https://github.com/thanos-io/thanos/pull/6137) Downsample: Repair of non-empty XOR chunks during 1h downsampling.
-- [#6125](https://github.com/thanos-io/thanos/pull/6125) Query Frontend: Fix sorted queries do not produce sorted results for shardable queries.
+- [#6125](https://github.com/thanos-io/thanos/pull/6125) Query Frontend: Fix vertical shardable instant queries do not produce sorted results for `sort`, `sort_desc`, `topk` and `bottomk` functions.
 
 ### Changed
 
