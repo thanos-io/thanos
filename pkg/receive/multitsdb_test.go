@@ -423,9 +423,9 @@ func TestMultiTSDBPrune(t *testing.T) {
 			defer func() { testutil.Ok(t, m.Close()) }()
 
 			for i := 0; i < 100; i++ {
-				testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10+i))))
-				testutil.Ok(t, appendSample(m, "bar", time.Now().Add(-4*time.Hour)))
-				testutil.Ok(t, appendSample(m, "baz", time.Now().Add(time.Duration(i)*time.Second)))
+				testutil.Ok(t, appendSample(m, "deleted-tenant", time.UnixMilli(int64(10+i))))
+				testutil.Ok(t, appendSample(m, "compacted-tenant", time.Now().Add(-4*time.Hour)))
+				testutil.Ok(t, appendSample(m, "active-tenant", time.Now().Add(time.Duration(i)*time.Second)))
 			}
 			testutil.Equals(t, 3, len(m.TSDBLocalClients()))
 
