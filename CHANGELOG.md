@@ -12,6 +12,16 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+### Fixed
+
+### Changed
+
+### Removed
+
+## [v0.31.0-rc0 (in progress)](https://github.com/thanos-io/thanos/tree/release-0.31) - 24.02.2023
+
+### Added
+
 - [#5990](https://github.com/thanos-io/thanos/pull/5990) Cache/Redis: add support for Redis Sentinel via new option `master_name`.
 - [#6008](https://github.com/thanos-io/thanos/pull/6008) *: Add counter metric `gate_queries_total` to gate.
 - [#5926](https://github.com/thanos-io/thanos/pull/5926) Receiver: Add experimental string interning in writer. Can be enabled with a hidden flag `writer.intern`.
