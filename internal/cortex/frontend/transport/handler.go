@@ -177,11 +177,15 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 		thanosTraceID = traceID
 	}
 
+	remoteUser, _, _ := r.BasicAuth()
+
 	logMessage := append([]interface{}{
 		"msg", "slow query detected",
 		"method", r.Method,
 		"host", r.Host,
 		"path", r.URL.Path,
+		"remote_user", remoteUser,
+		"remote_addr", r.RemoteAddr,
 		"time_taken", queryResponseTime.String(),
 		"grafana_dashboard_uid", grafanaDashboardUID,
 		"grafana_panel_id", grafanaPanelID,
@@ -200,6 +204,7 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 	wallTime := stats.LoadWallTime()
 	numSeries := stats.LoadFetchedSeries()
 	numBytes := stats.LoadFetchedChunkBytes()
+	remoteUser, _, _ := r.BasicAuth()
 
 	// Track stats.
 	f.querySeconds.WithLabelValues(userID).Add(wallTime.Seconds())
@@ -213,6 +218,8 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 		"component", "query-frontend",
 		"method", r.Method,
 		"path", r.URL.Path,
+		"remote_user", remoteUser,
+		"remote_addr", r.RemoteAddr,
 		"response_time", queryResponseTime,
 		"query_wall_time_seconds", wallTime.Seconds(),
 		"fetched_series_count", numSeries,
