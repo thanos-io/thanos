@@ -136,7 +136,13 @@ message SeriesRequest {
   // This allows faster deduplication by clients.
   // NOTE(bwplotka): thanos.info.store.supports_without_replica_labels field has to return true to let client knows
   // server supports it.
-  repeated string without_replica_labels = 14;
+  repeated string without_replica_labels = 15;
+
+  // maximum_string_slots is the number of maximum strings
+  // that the receiver can send. It is safe to ignore this by
+  // the receiver if it does not intend on sending a symbol table
+  // via hints later on.
+  uint64 maximum_string_slots = 14;
 }
 
 // QueryHints represents hints from PromQL that might help to
