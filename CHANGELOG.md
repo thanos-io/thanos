@@ -34,7 +34,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#5995](https://github.com/thanos-io/thanos/pull/5995) Sidecar: Loads TLS certificate during startup.
-- [#6044](https://github.com/thanos-io/thanos/pull/6044) Receive: mark ouf of window errors as conflict when out-of-window samples ingestion is activated.
+- [#6044](https://github.com/thanos-io/thanos/pull/6044) Receive: Mark out-of-window errors as conflict when out-of-window samples ingestion is used.
 - [#6050](https://github.com/thanos-io/thanos/pull/6050) Store: Re-try bucket store initial sync upon failure.
 - [#6067](https://github.com/thanos-io/thanos/pull/6067) Receive: Fix panic when querying uninitialized TSDBs.
 - [#6082](https://github.com/thanos-io/thanos/pull/6082) Query: Don't error when no stores are matched.
