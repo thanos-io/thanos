@@ -15,6 +15,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 ### Changed
+- [#6168](https://github.com/thanos-io/thanos/pull/6168) Receiver: Make ketama hashring fail early when configured with number of nodes lower than the replication factor.
 
 ### Removed
 

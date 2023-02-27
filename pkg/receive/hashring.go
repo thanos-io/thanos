@@ -110,8 +110,13 @@ type ketamaHashring struct {
 	numEndpoints uint64
 }
 
-func newKetamaHashring(endpoints []string, sectionsPerNode int, replicationFactor uint64) *ketamaHashring {
+func newKetamaHashring(endpoints []string, sectionsPerNode int, replicationFactor uint64) (*ketamaHashring, error) {
 	numSections := len(endpoints) * sectionsPerNode
+
+	if len(endpoints) < int(replicationFactor) {
+		return nil, errors.New("ketama: amount of endpoints needs to be larger than replication factor")
+
+	}
 
 	hash := xxhash.New()
 	ringSections := make(sections, 0, numSections)
@@ -135,7 +140,7 @@ func newKetamaHashring(endpoints []string, sectionsPerNode int, replicationFacto
 		endpoints:    endpoints,
 		sections:     ringSections,
 		numEndpoints: uint64(len(endpoints)),
-	}
+	}, nil
 }
 
 // calculateSectionReplicas pre-calculates replicas for each section,
@@ -234,17 +239,21 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 // groups.
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
-func newMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg []HashringConfig) Hashring {
+func newMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg []HashringConfig) (Hashring, error) {
 	m := &multiHashring{
 		cache: make(map[string]Hashring),
 	}
 
 	for _, h := range cfg {
 		var hashring Hashring
+		var err error
 		if h.Algorithm != "" {
-			hashring = newHashring(h.Algorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants)
+			hashring, err = newHashring(h.Algorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants)
 		} else {
-			hashring = newHashring(algorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants)
+			hashring, err = newHashring(algorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants)
+		}
+		if err != nil {
+			return nil, err
 		}
 		m.hashrings = append(m.hashrings, hashring)
 		var t map[string]struct{}
@@ -256,7 +265,7 @@ func newMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		}
 		m.tenantSets = append(m.tenantSets, t)
 	}
-	return m
+	return m, nil
 }
 
 // HashringFromConfigWatcher creates multi-tenant hashrings from a
@@ -276,7 +285,11 @@ func HashringFromConfigWatcher(ctx context.Context, algorithm HashringAlgorithm,
 			if !ok {
 				return errors.New("hashring config watcher stopped unexpectedly")
 			}
-			updates <- newMultiHashring(algorithm, replicationFactor, cfg)
+			h, err := newMultiHashring(algorithm, replicationFactor, cfg)
+			if err != nil {
+				return errors.Wrap(err, "unable to create new hashring from config")
+			}
+			updates <- h
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -295,13 +308,13 @@ func HashringFromConfig(algorithm HashringAlgorithm, replicationFactor uint64, c
 		return nil, errors.Wrapf(err, "failed to load configuration")
 	}
 
-	return newMultiHashring(algorithm, replicationFactor, config), err
+	return newMultiHashring(algorithm, replicationFactor, config)
 }
 
-func newHashring(algorithm HashringAlgorithm, endpoints []string, replicationFactor uint64, hashring string, tenants []string) Hashring {
+func newHashring(algorithm HashringAlgorithm, endpoints []string, replicationFactor uint64, hashring string, tenants []string) (Hashring, error) {
 	switch algorithm {
 	case AlgorithmHashmod:
-		return simpleHashring(endpoints)
+		return simpleHashring(endpoints), nil
 	case AlgorithmKetama:
 		return newKetamaHashring(endpoints, SectionsPerNode, replicationFactor)
 	default:
@@ -309,6 +322,6 @@ func newHashring(algorithm HashringAlgorithm, endpoints []string, replicationFac
 		level.Warn(l).Log("msg", "Unrecognizable hashring algorithm. Fall back to hashmod algorithm.",
 			"hashring", hashring,
 			"tenants", tenants)
-		return simpleHashring(endpoints)
+		return simpleHashring(endpoints), nil
 	}
 }
