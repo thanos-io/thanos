@@ -351,13 +351,22 @@ func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
 	})
 }
 
+func BenchmarkTransformWithAndWithoutCopyWithSingleLabel(b *testing.B) {
+	benchmarkTransformWithAndWithoutCopy(b, 1)
+}
+
+func BenchmarkTransformWithAndWithoutCopyWith1000Labels(b *testing.B) {
+	benchmarkTransformWithAndWithoutCopy(b, 1000)
+}
+
+func BenchmarkTransformWithAndWithoutCopyWith100000Labels(b *testing.B) {
+	benchmarkTransformWithAndWithoutCopy(b, 100000)
+}
+
 var ret labels.Labels
 
-func BenchmarkTransformWithAndWithoutCopy(b *testing.B) {
-	const (
-		fmtLbl = "%07daaaaaaaaaabbbbbbbbbbccccccccccdddddddddd"
-		num    = 1000000
-	)
+func benchmarkTransformWithAndWithoutCopy(b *testing.B, num int) {
+	const fmtLbl = "%07daaaaaaaaaabbbbbbbbbbccccccccccdddddddddd"
 
 	b.Run("ZLabelsToPromLabels", func(b *testing.B) {
 		b.ReportAllocs()
@@ -380,7 +389,7 @@ func BenchmarkTransformWithAndWithoutCopy(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			ReAllocZLabelsStrings(&lbls)
+			ReAllocZLabelsStrings(&lbls, true)
 			ret = ZLabelsToPromLabels(lbls)
 		}
 	})

@@ -25,6 +25,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/storage"
@@ -32,9 +33,11 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
@@ -52,6 +55,19 @@ const (
 	// A placeholder for actual Prometheus instance address in the scrape config.
 	PromAddrPlaceHolder = "PROMETHEUS_ADDRESS"
 )
+
+var histogramSample = histogram.Histogram{
+	Schema:        0,
+	Count:         9,
+	Sum:           -3.1415,
+	ZeroCount:     12,
+	ZeroThreshold: 0.001,
+	NegativeSpans: []histogram.Span{
+		{Offset: 0, Length: 4},
+		{Offset: 1, Length: 1},
+	},
+	NegativeBuckets: []int64{1, 2, -2, 1, -1},
+}
 
 func PrometheusBinary() string {
 	return "prometheus-" + defaultPrometheusVersion
@@ -362,7 +378,7 @@ func CreateBlock(
 	resolution int64,
 	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc, chunkenc.ValFloat)
 }
 
 // CreateBlockWithTombstone is same as CreateBlock but leaves tombstones which mimics the Prometheus local block.
@@ -376,7 +392,7 @@ func CreateBlockWithTombstone(
 	resolution int64,
 	hashFunc metadata.HashFunc,
 ) (id ulid.ULID, err error) {
-	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true, hashFunc)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true, hashFunc, chunkenc.ValFloat)
 }
 
 // CreateBlockWithBlockDelay writes a block with the given series and numSamples samples each.
@@ -393,7 +409,27 @@ func CreateBlockWithBlockDelay(
 	resolution int64,
 	hashFunc metadata.HashFunc,
 ) (ulid.ULID, error) {
-	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc)
+	return createBlockWithDelay(ctx, dir, series, numSamples, mint, maxt, blockDelay, extLset, resolution, hashFunc, chunkenc.ValFloat)
+}
+
+// CreateHistogramBlockWithDelay writes a block with the given native histogram series and numSamples samples each.
+// Samples will be in the time range [mint, maxt).
+func CreateHistogramBlockWithDelay(
+	ctx context.Context,
+	dir string,
+	series []labels.Labels,
+	numSamples int,
+	mint, maxt int64,
+	blockDelay time.Duration,
+	extLset labels.Labels,
+	resolution int64,
+	hashFunc metadata.HashFunc,
+) (id ulid.ULID, err error) {
+	return createBlockWithDelay(ctx, dir, series, numSamples, mint, maxt, blockDelay, extLset, resolution, hashFunc, chunkenc.ValHistogram)
+}
+
+func createBlockWithDelay(ctx context.Context, dir string, series []labels.Labels, numSamples int, mint int64, maxt int64, blockDelay time.Duration, extLset labels.Labels, resolution int64, hashFunc metadata.HashFunc, samplesType chunkenc.ValueType) (ulid.ULID, error) {
+	blockID, err := createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false, hashFunc, samplesType)
 	if err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "block creation")
 	}
@@ -428,10 +464,12 @@ func createBlock(
 	resolution int64,
 	tombstones bool,
 	hashFunc metadata.HashFunc,
+	sampleType chunkenc.ValueType,
 ) (id ulid.ULID, err error) {
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = filepath.Join(dir, "chunks")
 	headOpts.ChunkRange = 10000000000
+	headOpts.EnableNativeHistograms = *atomic.NewBool(true)
 	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
@@ -462,7 +500,16 @@ func createBlock(
 				app := h.Appender(ctx)
 
 				for _, lset := range batch {
-					_, err := app.Append(0, lset, t, rand.Float64())
+					sort.Slice(lset, func(i, j int) bool {
+						return lset[i].Name < lset[j].Name
+					})
+
+					var err error
+					if sampleType == chunkenc.ValFloat {
+						_, err = app.Append(0, lset, t, rand.Float64())
+					} else if sampleType == chunkenc.ValHistogram {
+						_, err = app.AppendHistogram(0, lset, t, &histogramSample, nil)
+					}
 					if err != nil {
 						if rerr := app.Rollback(); rerr != nil {
 							err = errors.Wrapf(err, "rollback failed: %v", rerr)

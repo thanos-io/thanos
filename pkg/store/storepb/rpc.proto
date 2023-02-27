@@ -27,6 +27,7 @@ option (gogoproto.goproto_sizecache_all) = false;
 service Store {
   /// Info returns meta information about a store e.g labels that makes that store unique as well as time range that is
   /// available.
+  /// Deprecated. Use `thanos.info` instead.
   rpc Info(InfoRequest) returns (InfoResponse);
 
   /// Series streams each Series (Labels and chunk/downsampling chunk) for given label matchers and time range.
@@ -62,8 +63,10 @@ message WriteRequest {
   int64 replica = 3;
 }
 
+// Deprecated. Use `thanos.info` instead.
 message InfoRequest {}
 
+// Deprecated. Use `thanos.info` instead.
 enum StoreType {
   UNKNOWN = 0;
   QUERY = 1;
@@ -75,6 +78,7 @@ enum StoreType {
   DEBUG = 6;
 }
 
+// Deprecated. Use `thanos.info` instead.
 message InfoResponse {
   // Deprecated. Use label_sets instead.
   repeated Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
@@ -117,15 +121,28 @@ message SeriesRequest {
 
   // query_hints are the hints coming from the PromQL engine when
   // requesting a storage.SeriesSet for a given expression.
+  // As hints name suggest using those is best effort.
   QueryHints query_hints = 12;
 
   // shard_info is used by the querier to request a specific
   // shard of blocks instead of entire blocks.
   ShardInfo shard_info = 13;
+
+  // without_replica_labels are replica labels which have to be excluded from series set results.
+  // The sorting requirement has to be preserved, so series should be sorted without those labels.
+  // If the requested label is NOT a replica label (labels that identify replication group) it should be not affected by
+  // this setting (label should be included in sorting and response).
+  // It is the server responsibility to detect and track what is replica label and what is not.
+  // This allows faster deduplication by clients.
+  // NOTE(bwplotka): thanos.info.store.supports_without_replica_labels field has to return true to let client knows
+  // server supports it.
+  repeated string without_replica_labels = 14;
 }
 
-
-// Analogous to storage.SelectHints.
+// QueryHints represents hints from PromQL that might help to
+// pre-aggregate or prepare series for faster use by clients.
+// Analogous to storage.SelectHints plus additional info.
+// As "hints" name suggests all of the items here are best effort.
 message QueryHints {
   // Query step size in milliseconds.
   int64 step_millis = 1;

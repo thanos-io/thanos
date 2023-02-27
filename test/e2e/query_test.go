@@ -1453,6 +1453,10 @@ func TestSidecarAlignmentPushdown(t *testing.T) {
 			return errors.Errorf("unexpected warnings %s", warnings)
 		}
 
+		if len(res) == 0 {
+			return errors.Errorf("got empty result")
+		}
+
 		expectedRes = res
 		return nil
 	}))

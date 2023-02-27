@@ -71,6 +71,7 @@ config:
   insecure: false
   signature_version2: false
   secret_key: ""
+  session_token: ""
   put_user_metadata: {}
   http_config:
     idle_conn_timeout: 1m30s
@@ -358,16 +359,15 @@ config:
   storage_account_key: ""
   container: ""
   endpoint: ""
-  max_retries: 0
-  msi_resource: ""
   user_assigned_id: ""
+  max_retries: 0
+  reader_config:
+    max_retry_requests: 0
   pipeline_config:
     max_tries: 0
     try_timeout: 0s
     retry_delay: 0s
     max_retry_delay: 0s
-  reader_config:
-    max_retry_requests: 0
   http_config:
     idle_conn_timeout: 0s
     response_header_timeout: 0s
@@ -384,6 +384,7 @@ config:
       server_name: ""
       insecure_skip_verify: false
     disable_compression: false
+  msi_resource: ""
 prefix: ""
 ```
 
@@ -644,7 +645,7 @@ total 2209344
 drwxr-xr-x 2 bwplotka bwplotka       4096 Dec 10  2019 chunks
 -rw-r--r-- 1 bwplotka bwplotka 1962383742 Dec 10  2019 index
 -rw-r--r-- 1 bwplotka bwplotka       6761 Dec 10  2019 meta.json
--rw-r--r-- 1 bwplotka bwplotka        111 Dec 10  2019 delete-mark.json      # <-- Optional marker.
+-rw-r--r-- 1 bwplotka bwplotka        111 Dec 10  2019 deletion-mark.json    # <-- Optional marker.
 -rw-r--r-- 1 bwplotka bwplotka        124 Dec 10  2019 no-compact-mark.json  # <-- Optional marker.
 
 01DN3SK96XDAEKRB1AN30AAW6E/chunks:

@@ -150,7 +150,7 @@ local utils = import '../lib/utils.libsonnet';
             [
               'histogram_quantile(0.99, sum by (%s) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{%s}[$__rate_interval])))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'le']), thanos.store.dashboard.selector],
               'sum by (%(dimensions)s) (rate(thanos_bucket_store_sent_chunk_size_bytes_sum{%(selector)s}[$__rate_interval])) / sum by (%(dimensions)s) (rate(thanos_bucket_store_sent_chunk_size_bytes_count{%(selector)s}[$__rate_interval]))' % thanos.store.dashboard,
-              'histogram_quantile(0.99, sum by (%s) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{%s}[$__rate_interval])))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'le']), thanos.store.dashboard.selector],
+              'histogram_quantile(0.50, sum by (%s) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{%s}[$__rate_interval])))' % [utils.joinLabels([thanos.store.dashboard.dimensions, 'le']), thanos.store.dashboard.selector],
             ],
             [
               'P99',
@@ -167,9 +167,9 @@ local utils = import '../lib/utils.libsonnet';
           g.panel('Block queried') +
           g.queryPanel(
             [
-              'thanos_bucket_store_series_blocks_queried{%s, quantile="0.99"}' % thanos.store.dashboard.selector,
+              'histogram_quantile(0.99, sum by (le) (rate(thanos_bucket_store_series_blocks_queried{%s}[$__rate_interval])))' % thanos.store.dashboard.selector,
               'sum by (%(dimensions)s) (rate(thanos_bucket_store_series_blocks_queried_sum{%(selector)s}[$__rate_interval])) / sum by (%(dimensions)s) (rate(thanos_bucket_store_series_blocks_queried_count{%(selector)s}[$__rate_interval]))' % thanos.store.dashboard,
-              'thanos_bucket_store_series_blocks_queried{%s, quantile="0.50"}' % thanos.store.dashboard.selector,
+              'histogram_quantile(0.50, sum by (le) (rate(thanos_bucket_store_series_blocks_queried{%s}[$__rate_interval])))' % thanos.store.dashboard.selector,
             ], [
               'P99',
               'mean {{job}}',
@@ -181,9 +181,9 @@ local utils = import '../lib/utils.libsonnet';
           g.panel('Data Fetched', 'Show the size of data fetched') +
           g.queryPanel(
             [
-              'thanos_bucket_store_series_data_fetched{%s, quantile="0.99"}' % thanos.store.dashboard.selector,
+              'histogram_quantile(0.99, sum by (le) (rate(thanos_bucket_store_series_data_fetched{%s}[$__rate_interval])))' % thanos.store.dashboard.selector,
               'sum by (%s) (rate(thanos_bucket_store_series_data_fetched_sum{%s}[$__rate_interval])) / sum by (%s) (rate(thanos_bucket_store_series_data_fetched_count{%s}[$__rate_interval]))' % [dataSizeDimensions, thanos.store.dashboard.selector, dataSizeDimensions, thanos.store.dashboard.selector],
-              'thanos_bucket_store_series_data_fetched{%s, quantile="0.50"}' % thanos.store.dashboard.selector,
+              'histogram_quantile(0.50, sum by (le) (rate(thanos_bucket_store_series_data_fetched{%s}[$__rate_interval])))' % thanos.store.dashboard.selector,
             ], [
               'P99: {{data_type}} / {{job}}',
               'mean: {{data_type}} / {{job}}',
@@ -196,9 +196,9 @@ local utils = import '../lib/utils.libsonnet';
           g.panel('Data Touched', 'Show the size of data touched') +
           g.queryPanel(
             [
-              'thanos_bucket_store_series_data_touched{%s, quantile="0.99"}' % thanos.store.dashboard.selector,
+              'histogram_quantile(0.99, sum by (le) (rate(thanos_bucket_store_series_data_touched{%s}[$__rate_interval])))' % thanos.store.dashboard.selector,
               'sum by (%s) (rate(thanos_bucket_store_series_data_touched_sum{%s}[$__rate_interval])) / sum by (%s) (rate(thanos_bucket_store_series_data_touched_count{%s}[$__rate_interval]))' % [dataSizeDimensions, thanos.store.dashboard.selector, dataSizeDimensions, thanos.store.dashboard.selector],
-              'thanos_bucket_store_series_data_touched{%s, quantile="0.50"}' % thanos.store.dashboard.selector,
+              'histogram_quantile(0.50, sum by (le) (rate(thanos_bucket_store_series_data_touched{%s}[$__rate_interval])))' % thanos.store.dashboard.selector,
             ], [
               'P99: {{data_type}} / {{job}}',
               'mean: {{data_type}} / {{job}}',
@@ -211,9 +211,9 @@ local utils = import '../lib/utils.libsonnet';
           g.panel('Result series') +
           g.queryPanel(
             [
-              'thanos_bucket_store_series_result_series{%s,quantile="0.99"}' % thanos.store.dashboard.selector,
+              'histogram_quantile(0.99, sum by (le) (rate(thanos_bucket_store_series_result_series{%s}[$__rate_interval])))' % thanos.store.dashboard.selector,
               'sum by (%(dimensions)s) (rate(thanos_bucket_store_series_result_series_sum{%(selector)s}[$__rate_interval])) / sum by (%(dimensions)s) (rate(thanos_bucket_store_series_result_series_count{%(selector)s}[$__rate_interval]))' % thanos.store.dashboard,
-              'thanos_bucket_store_series_result_series{%s,quantile="0.50"}' % thanos.store.dashboard.selector,
+              'histogram_quantile(0.50, sum by (le) (rate(thanos_bucket_store_series_result_series{%s}[$__rate_interval])))' % thanos.store.dashboard.selector,
             ], [
               'P99',
               'mean {{job}}',

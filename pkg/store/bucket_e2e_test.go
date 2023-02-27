@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -243,7 +244,6 @@ func gatherFamily(t testing.TB, reg prometheus.Gatherer, familyName string) *dto
 	return nil
 }
 
-// TODO(bwplotka): Benchmark Series.
 func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 	t.Helper()
 
@@ -283,6 +283,27 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
 				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
+				},
+				MinTime:              mint,
+				MaxTime:              maxt,
+				WithoutReplicaLabels: []string{"ext1", "ext2"},
+			},
+			expectedChunkLen: 3,
+			expected: [][]labelpb.ZLabel{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}},
 			},
 		},
 		{
@@ -765,6 +786,10 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				vals, err := s.store.LabelNames(ctx, tc.req)
+				for _, b := range s.store.blocks {
+					waitTimeout(t, &b.pendingReaders, 5*time.Second)
+				}
+
 				testutil.Ok(t, err)
 
 				testutil.Equals(t, tc.expected, vals.Names)
@@ -868,6 +893,10 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				vals, err := s.store.LabelValues(ctx, tc.req)
+				for _, b := range s.store.blocks {
+					waitTimeout(t, &b.pendingReaders, 5*time.Second)
+				}
+
 				testutil.Ok(t, err)
 
 				testutil.Equals(t, tc.expected, emptyToNil(vals.Values))
@@ -881,4 +910,18 @@ func emptyToNil(values []string) []string {
 		return nil
 	}
 	return values
+}
+
+func waitTimeout(t *testing.T, wg *sync.WaitGroup, timeout time.Duration) {
+	c := make(chan struct{})
+	go func() {
+		defer close(c)
+		wg.Wait()
+	}()
+	select {
+	case <-c:
+		return
+	case <-time.After(timeout):
+		t.Fatalf("timeout waiting wg for %v", timeout)
+	}
 }

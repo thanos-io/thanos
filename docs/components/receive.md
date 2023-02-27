@@ -12,6 +12,24 @@ For more information please check out [initial design proposal](../proposals-don
 
 > NOTE: As the block producer it's important to set correct "external labels" that will identify data block across Thanos clusters. See [external labels](../storage.md#external-labels) docs for details.
 
+## Series distribution algorithms
+
+The Receive component currently supports two algorithms for distributing timeseries across Receive nodes and can be set using the `receive.hashrings-algorithm` flag.
+
+### Ketama (recommended)
+
+The Ketama algorithm is a consistent hashing scheme which enables stable scaling of Receivers without the drawbacks of the `hashmod` algorithm. This is the recommended algorithm for all new installations.
+
+If you are using the `hashmod` algorithm and wish to migrate to `ketama`, the simplest and safest way would be to set up a new pool receivers with `ketama` hashrings and start remote-writing to them. Provided you are on the latest Thanos version, old receivers will flush their TSDBs after the configured retention period and will upload blocks to object storage. Once you have verified that is done, decommission the old receivers.
+
+### Hashmod (discouraged)
+
+This algorithm uses a `hashmod` function over all labels to decide which receiver is responsible for a given timeseries. This is the default algorithm due to historical reasons. However, its usage for new Receive installations is discouraged since adding new Receiver nodes leads to series churn and memory usage spikes.
+
+### Hashring management and autoscaling in Kubernetes
+
+The [Thanos Receive Controller](https://github.com/observatorium/thanos-receive-controller) project aims to automate hashring management when running Thanos in Kubernetes. In combination with the Ketama hashring algorithm, this controller can also be used to keep hashrings up to date when Receivers are scaled automatically using an HPA or [Keda](https://keda.sh/).
+
 ## TSDB stats
 
 Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
@@ -259,7 +277,9 @@ Flags:
                                  the hashring configuration.
       --receive.hashrings-algorithm=hashmod
                                  The algorithm used when distributing series in
-                                 the hashrings. Must be one of hashmod, ketama
+                                 the hashrings. Must be one of hashmod, ketama.
+                                 Will be overwritten by the tenant-specific
+                                 algorithm in the hashring config.
       --receive.hashrings-file=<path>
                                  Path to file that contains the hashring
                                  configuration. A watcher is initialized
@@ -332,6 +352,17 @@ Flags:
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
+      --store.limits.request-samples=0
+                                 The maximum samples allowed for a single
+                                 Series request, The Series call fails if
+                                 this limit is exceeded. 0 means no limit.
+                                 NOTE: For efficiency the limit is internally
+                                 implemented as 'chunks limit' considering each
+                                 chunk contains a maximum of 120 samples.
+      --store.limits.request-series=0
+                                 The maximum series allowed for a single Series
+                                 request. The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file
@@ -358,7 +389,8 @@ Flags:
                                  next startup.
       --tsdb.path="./data"       Data directory of TSDB.
       --tsdb.retention=15d       How long to retain raw samples on local
-                                 storage. 0d - disables this retention.
+                                 storage. 0d - disables the retention
+                                 policy (i.e. infinite retention).
                                  For more details on how retention is
                                  enforced for individual tenants, please
                                  refer to the Tenant lifecycle management
