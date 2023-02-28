@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/weaveworks/common/httpgrpc"
 	"hash"
 	"io"
 	"math"
@@ -20,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/cespare/xxhash"
 
