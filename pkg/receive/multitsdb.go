@@ -306,7 +306,7 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 	for _, tenantID := range prunedTenants {
-		// Check that the tenant hasn't been reinitialized in-betewen locks.
+		// Check that the tenant hasn't been reinitialized in-between locks.
 		if t.tenants[tenantID].readyStorage().get() != nil {
 			continue
 		}
