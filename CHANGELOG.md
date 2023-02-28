@@ -14,6 +14,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#6171](https://github.com/thanos-io/thanos/pull/6171) Store: fix error handling on limits.
+
 ### Changed
 
 ### Removed
