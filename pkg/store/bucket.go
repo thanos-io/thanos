@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/weaveworks/common/httpgrpc"
 	"hash"
 	"io"
 	"math"
@@ -932,7 +933,7 @@ func (b *blockSeriesClient) ExpandPostings(
 	}
 
 	if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
-		return errors.Wrap(err, "exceeded series limit")
+		return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
 	}
 
 	b.postings = ps
@@ -1031,7 +1032,7 @@ func (b *blockSeriesClient) nextBatch() error {
 
 		// Ensure sample limit through chunksLimiter if we return chunks.
 		if err := b.chunksLimiter.Reserve(uint64(len(b.chkMetas))); err != nil {
-			return errors.Wrap(err, "exceeded chunks limit")
+			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded chunks limit: %s", err)
 		}
 
 		b.entries = append(b.entries, s)
