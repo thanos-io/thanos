@@ -8,16 +8,16 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/providers/opentracing/v2"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/tls"
+	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"github.com/thanos-io/thanos/pkg/tls"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // EndpointGroupGRPCOpts creates gRPC dial options for connecting to endpoint groups.
@@ -47,6 +47,10 @@ func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 	grpcMets.EnableClientHandlingTimeHistogram(
 		grpc_prometheus.WithHistogramBuckets([]float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720}),
 	)
+	grpc_tracing_opts := []grpc_opentracing.Option{
+		grpc_opentracing.WithTracer(tracer),
+		grpc_opentracing.WithTraceHeaderName("store-client-tracer"),
+	}
 	dialOpts := []grpc.DialOption{
 		// We want to make sure that we can receive huge gRPC messages from storeAPI.
 		// On TCP level we can be fine, but the gRPC overhead for huge messages could be significant.
@@ -56,13 +60,13 @@ func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 		grpc.WithUnaryInterceptor(
 			grpc_middleware.ChainUnaryClient(
 				grpcMets.UnaryClientInterceptor(),
-				tracing.UnaryClientInterceptor(tracer),
+				tracing.UnaryClientInterceptor(grpc_tracing_opts...),
 			),
 		),
 		grpc.WithStreamInterceptor(
 			grpc_middleware.ChainStreamClient(
 				grpcMets.StreamClientInterceptor(),
-				tracing.StreamClientInterceptor(tracer),
+				tracing.StreamClientInterceptor(grpc_tracing_opts...),
 			),
 		),
 	}

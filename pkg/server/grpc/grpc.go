@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2"
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/providers/opentracing/v2"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -19,6 +20,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -26,10 +30,6 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
-
-	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/prober"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // A Server defines parameters to serve RPC requests, a wrapper around grpc.Server.
@@ -68,7 +68,10 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		level.Error(logger).Log("msg", "recovered from panic", "panic", p, "stack", debug.Stack())
 		return status.Errorf(codes.Internal, "%s", p)
 	}
-
+	grpc_tracing_opts := []grpc_opentracing.Option{
+		grpc_opentracing.WithTracer(tracer),
+		grpc_opentracing.WithTraceHeaderName("store-client-tracer"),
+	}
 	options.grpcOpts = append(options.grpcOpts, []grpc.ServerOption{
 		// NOTE: It is recommended for gRPC messages to not go over 1MB, yet it is typical for remote write requests and store API responses to go over 4MB.
 		// Remove limits and allow users to use histogram message sizes to detect those situations.
@@ -78,13 +81,13 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		grpc.ChainUnaryInterceptor(
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.UnaryServerInterceptor(),
-			tracing.UnaryServerInterceptor(tracer),
+			tracing.UnaryServerInterceptor(grpc_tracing_opts...),
 			grpc_logging.UnaryServerInterceptor(kit.InterceptorLogger(logger), logOpts...),
 		),
 		grpc.ChainStreamInterceptor(
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.StreamServerInterceptor(),
-			tracing.StreamServerInterceptor(tracer),
+			tracing.StreamServerInterceptor(grpc_tracing_opts...),
 			grpc_logging.StreamServerInterceptor(kit.InterceptorLogger(logger), logOpts...),
 		),
 	}...)

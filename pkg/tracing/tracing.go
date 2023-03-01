@@ -6,6 +6,7 @@ package tracing
 import (
 	"context"
 
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/providers/opentracing/v2"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 )
@@ -34,6 +35,9 @@ type Tracer interface {
 }
 
 // ContextWithTracer returns a new `context.Context` that holds a reference to given opentracing.Tracer.
+func NewContextWithTracer(ctx context.Context, opts ...[]grpc_opentracing.Option) context.Context {
+	return context.WithValue(ctx, tracerKey, opts)
+}
 func ContextWithTracer(ctx context.Context, tracer opentracing.Tracer) context.Context {
 	return context.WithValue(ctx, tracerKey, tracer)
 }
