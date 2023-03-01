@@ -90,19 +90,31 @@ func NewMultiTSDB(
 	}
 }
 
+// nowMillis is a function that returns the current time in milliseconds.
+type nowMillis func() int64
+
 type localClient struct {
 	storepb.StoreClient
-
+	nowFunc       nowMillis
 	labelSetFunc  func() []labelpb.ZLabelSet
 	timeRangeFunc func() (int64, int64)
+	tsdbOpts      *tsdb.Options
 }
 
-func newLocalClient(
+func NewLocalClient(
 	c storepb.StoreClient,
+	nowFunc nowMillis,
 	labelSetFunc func() []labelpb.ZLabelSet,
 	timeRangeFunc func() (int64, int64),
-) *localClient {
-	return &localClient{c, labelSetFunc, timeRangeFunc}
+	tsdbOpts *tsdb.Options,
+) store.Client {
+	return &localClient{
+		StoreClient:   c,
+		nowFunc:       nowFunc,
+		labelSetFunc:  labelSetFunc,
+		timeRangeFunc: timeRangeFunc,
+		tsdbOpts:      tsdbOpts,
+	}
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
@@ -111,6 +123,11 @@ func (l *localClient) LabelSets() []labels.Labels {
 
 func (l *localClient) TimeRange() (mint int64, maxt int64) {
 	return l.timeRangeFunc()
+}
+
+func (l *localClient) GuaranteedMinTime() int64 {
+	mint, _ := l.timeRangeFunc()
+	return store.GuaranteedMinTime(l.nowFunc(), mint, l.tsdbOpts.RetentionDuration, l.tsdbOpts.MinBlockDuration)
 }
 
 func (l *localClient) String() string {
@@ -159,7 +176,7 @@ func (t *tenant) store() *store.TSDBStore {
 	return t.storeTSDB
 }
 
-func (t *tenant) client(logger log.Logger) store.Client {
+func (t *tenant) client(logger log.Logger, tsdbOpts *tsdb.Options) store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -167,8 +184,12 @@ func (t *tenant) client(logger log.Logger) store.Client {
 	if tsdbStore == nil {
 		return nil
 	}
+	nowInMillis := func() int64 {
+		return time.Now().UnixMilli()
+	}
+
 	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore), 0)
-	return newLocalClient(client, tsdbStore.LabelSet, tsdbStore.TimeRange)
+	return NewLocalClient(client, nowInMillis, tsdbStore.LabelSet, tsdbStore.TimeRange, tsdbOpts)
 }
 
 func (t *tenant) exemplars() *exemplars.TSDB {
@@ -467,7 +488,7 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
-		client := tenant.client(t.logger)
+		client := tenant.client(t.logger, t.tsdbOpts)
 		if client != nil {
 			res = append(res, client)
 		}

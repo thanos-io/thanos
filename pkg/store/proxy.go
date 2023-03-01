@@ -32,6 +32,9 @@ import (
 
 type ctxKey int
 
+// UninitializedTSDBTime is the TSDB start time of an uninitialized TSDB instance.
+const UninitializedTSDBTime = math.MaxInt64
+
 // StoreMatcherKey is the context key for the store's allow list.
 const StoreMatcherKey = ctxKey(0)
 
@@ -49,6 +52,9 @@ type Client interface {
 
 	// TimeRange returns minimum and maximum time range of data in the store.
 	TimeRange() (mint int64, maxt int64)
+
+	// GuaranteedMinTime returns the minimum time that a store always guarantees to have.
+	GuaranteedMinTime() int64
 
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
@@ -234,6 +240,7 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 
 	return labelSets
 }
+
 func (s *ProxyStore) TimeRange() (int64, int64) {
 	stores := s.stores()
 	if len(stores) == 0 {
@@ -252,6 +259,26 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 	}
 
 	return minTime, maxTime
+}
+
+func (s *ProxyStore) GuaranteedMinTime() int64 {
+	stores := s.stores()
+	if len(stores) == 0 {
+		return UninitializedTSDBTime
+	}
+
+	var mint int64 = math.MinInt64
+	for _, s := range stores {
+		storeMint := s.GuaranteedMinTime()
+		if storeMint == UninitializedTSDBTime {
+			continue
+		}
+		if storeMint > mint {
+			mint = storeMint
+		}
+	}
+
+	return mint
 }
 
 func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {

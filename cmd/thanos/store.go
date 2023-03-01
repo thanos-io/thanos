@@ -436,6 +436,7 @@ func runStore(
 				return &infopb.StoreInfo{
 					MinTime:                      mint,
 					MaxTime:                      maxt,
+					GuaranteedMinTime:            mint,
 					SupportsSharding:             true,
 					SupportsWithoutReplicaLabels: true,
 				}

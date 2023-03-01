@@ -20,6 +20,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	e2edb "github.com/efficientgo/e2e/db"
+
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -173,6 +174,7 @@ func assertStoreStatus(t *testing.T, component string, res map[string][]query.En
 		// Set value of the fields which keep changing in every test run to their default value.
 		v.MaxTime = 0
 		v.MinTime = 0
+		v.GuaranteedMinTime = 0
 		v.LastCheck = time.Time{}
 
 		testutil.Equals(t, expected[component][i], v)
