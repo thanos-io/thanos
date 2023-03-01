@@ -4,9 +4,12 @@
 package queryfrontend
 
 import (
+	"encoding/json"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
@@ -237,4 +240,21 @@ func TestSplitQuery(t *testing.T) {
 			require.Equal(t, tc.expected, queries)
 		})
 	}
+}
+
+func TestSplitQuery_PromQLErrorReturnsJson(t *testing.T) {
+	input := &ThanosQueryRangeRequest{
+		Start: 2 * 3600 * seconds,
+		End:   3 * 3 * 3600 * seconds,
+		Step:  15 * seconds,
+		Query: "foo{",
+	}
+	queries, err := splitQuery(input, 1*time.Hour)
+	require.Error(t, err)
+	require.Nil(t, queries)
+
+	resp, ok := httpgrpc.HTTPResponseFromError(err)
+	require.True(t, ok, "could not assemble httpgrpc.HTTPResponse, is not status.Status")
+
+	require.True(t, json.Valid(resp.Body), "error message is not valid JSON: %s", resp.Body)
 }
