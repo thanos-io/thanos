@@ -106,8 +106,9 @@ func runSidecar(
 
 		// Start out with the full time range. The shipper will constrain it later.
 		// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
-		mint: conf.limitMinTime.PrometheusTimestamp(),
-		maxt: math.MaxInt64,
+		mint:      conf.limitMinTime.PrometheusTimestamp(),
+		maxt:      math.MaxInt64,
+		retention: math.MaxInt64,
 
 		limitMinTime: conf.limitMinTime,
 		client:       promclient.NewWithTracingClient(logger, httpClient, "thanos-sidecar"),
@@ -161,8 +162,12 @@ func runSidecar(
 			// Only check Prometheus's flags when upload is enabled.
 			if uploads {
 				// Check prometheus's flags to ensure same sidecar flags.
-				if err := validatePrometheus(ctx, m.client, logger, conf.shipper.ignoreBlockSize, m); err != nil {
+				flags, err := validatePrometheus(ctx, m.client, logger, conf.shipper.ignoreBlockSize, m)
+				if err != nil {
 					return errors.Wrap(err, "validate Prometheus flags")
+				}
+				if flags != nil {
+					m.UpdateRetention(time.Duration(flags.TSDBRetention).Milliseconds())
 				}
 			}
 
@@ -267,9 +272,14 @@ func runSidecar(
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 				if httpProbe.IsReady() {
 					mint, maxt := promStore.Timestamps()
+					guaranteedMinTime := maxt - m.Retention()
+					if mint < guaranteedMinTime {
+						guaranteedMinTime = mint
+					}
 					return &infopb.StoreInfo{
 						MinTime:                      mint,
 						MaxTime:                      maxt,
+						GuaranteedMinTime:            guaranteedMinTime,
 						SupportsSharding:             true,
 						SupportsWithoutReplicaLabels: true,
 					}
@@ -364,7 +374,7 @@ func runSidecar(
 	return nil
 }
 
-func validatePrometheus(ctx context.Context, client *promclient.Client, logger log.Logger, ignoreBlockSize bool, m *promMetadata) error {
+func validatePrometheus(ctx context.Context, client *promclient.Client, logger log.Logger, ignoreBlockSize bool, m *promMetadata) (*promclient.Flags, error) {
 	var (
 		flagErr error
 		flags   promclient.Flags
@@ -377,18 +387,18 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 		}
 		return nil
 	}); err != nil {
-		return errors.Wrapf(err, "fetch Prometheus flags")
+		return nil, errors.Wrapf(err, "fetch Prometheus flags")
 	}
 
 	if flagErr != nil {
 		level.Warn(logger).Log("msg", "failed to check Prometheus flags, due to potentially older Prometheus. No extra validation is done.", "err", flagErr)
-		return nil
+		return nil, nil
 	}
 
 	// Check if compaction is disabled.
 	if flags.TSDBMinTime != flags.TSDBMaxTime {
 		if !ignoreBlockSize {
-			return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
+			return nil, errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
 				"Compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration)", flags.TSDBMaxTime, flags.TSDBMinTime)
 		}
 		level.Warn(logger).Log("msg", "flag to ignore Prometheus min/max block duration flags differing is being used. If the upload of a 2h block fails and a Prometheus compaction happens that block may be missing from your Thanos bucket storage.")
@@ -398,7 +408,7 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 		level.Warn(logger).Log("msg", "found that TSDB block time is not 2h. Only 2h block time is recommended.", "block-time", flags.TSDBMinTime)
 	}
 
-	return nil
+	return &flags, nil
 }
 
 type promMetadata struct {
@@ -407,6 +417,7 @@ type promMetadata struct {
 	mtx         sync.Mutex
 	mint        int64
 	maxt        int64
+	retention   int64
 	labels      labels.Labels
 	promVersion string
 
@@ -452,6 +463,24 @@ func (s *promMetadata) Timestamps() (mint, maxt int64) {
 	defer s.mtx.Unlock()
 
 	return s.mint, s.maxt
+}
+
+func (s *promMetadata) UpdateRetention(retention int64) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.retention = retention
+}
+
+func (s *promMetadata) Retention() int64 {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	if s.retention == 0 {
+		return s.mint
+	}
+
+	return s.retention
 }
 
 func (s *promMetadata) BuildVersion(ctx context.Context) error {

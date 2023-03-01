@@ -96,6 +96,7 @@ type localClient struct {
 	sendsSortedSeries bool
 	labelSetFunc      func() []labelpb.ZLabelSet
 	timeRangeFunc     func() (int64, int64)
+	retentionMillis   int64
 }
 
 func NewLocalClient(
@@ -103,8 +104,9 @@ func NewLocalClient(
 	sendsSortedSeries bool,
 	labelSetFunc func() []labelpb.ZLabelSet,
 	timeRangeFunc func() (int64, int64),
+	retentionMillis int64,
 ) store.Client {
-	return &localClient{c, sendsSortedSeries, labelSetFunc, timeRangeFunc}
+	return &localClient{c, sendsSortedSeries, labelSetFunc, timeRangeFunc, retentionMillis}
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
@@ -113,6 +115,15 @@ func (l *localClient) LabelSets() []labels.Labels {
 
 func (l *localClient) TimeRange() (mint int64, maxt int64) {
 	return l.timeRangeFunc()
+}
+
+func (l *localClient) GuaranteedMinTime() int64 {
+	mint, _ := l.timeRangeFunc()
+	retentionTime := time.Now().UnixMilli() - l.retentionMillis
+	if mint < retentionTime {
+		return mint
+	}
+	return retentionTime
 }
 
 func (l *localClient) String() string {
@@ -165,7 +176,7 @@ func (t *tenant) store() *store.TSDBStore {
 	return t.storeTSDB
 }
 
-func (t *tenant) client(logger log.Logger) store.Client {
+func (t *tenant) client(logger log.Logger, retentionMillis int64) store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -175,7 +186,7 @@ func (t *tenant) client(logger log.Logger) store.Client {
 	}
 	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore), 0)
 
-	return NewLocalClient(client, true, tsdbStore.LabelSet, tsdbStore.TimeRange)
+	return NewLocalClient(client, true, tsdbStore.LabelSet, tsdbStore.TimeRange, retentionMillis)
 }
 
 func (t *tenant) exemplars() *exemplars.TSDB {
@@ -465,7 +476,7 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
-		client := tenant.client(t.logger)
+		client := tenant.client(t.logger, t.tsdbOpts.RetentionDuration)
 		if client != nil {
 			res = append(res, client)
 		}

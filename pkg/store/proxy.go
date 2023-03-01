@@ -51,6 +51,9 @@ type Client interface {
 	// TimeRange returns minimum and maximum time range of data in the store.
 	TimeRange() (mint int64, maxt int64)
 
+	// GuaranteedMinTime returns the minimum time that a store always guarantees to have.
+	GuaranteedMinTime() int64
+
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
 
@@ -222,6 +225,7 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 
 	return labelSets
 }
+
 func (s *ProxyStore) TimeRange() (int64, int64) {
 	stores := s.stores()
 	if len(stores) == 0 {
@@ -240,6 +244,23 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 	}
 
 	return minTime, maxTime
+}
+
+func (s *ProxyStore) GuaranteedMinTime() int64 {
+	stores := s.stores()
+	if len(stores) == 0 {
+		return math.MaxInt64
+	}
+
+	var mint int64 = math.MinInt64
+	for _, s := range stores {
+		storeMint := s.GuaranteedMinTime()
+		if storeMint != math.MaxInt64 && storeMint > mint {
+			mint = storeMint
+		}
+	}
+
+	return mint
 }
 
 func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
