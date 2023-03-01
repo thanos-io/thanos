@@ -330,6 +330,7 @@ func runReceive(
 					return &infopb.StoreInfo{
 						MinTime:                      minTime,
 						MaxTime:                      maxTime,
+						GuaranteedMinTime:            proxy.GuaranteedMinTime(),
 						SupportsSharding:             true,
 						SupportsWithoutReplicaLabels: true,
 					}

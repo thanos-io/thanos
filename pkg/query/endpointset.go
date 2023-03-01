@@ -179,13 +179,14 @@ func (e *stringError) Error() string {
 }
 
 type EndpointStatus struct {
-	Name          string              `json:"name"`
-	LastCheck     time.Time           `json:"lastCheck"`
-	LastError     *stringError        `json:"lastError"`
-	LabelSets     []labels.Labels     `json:"labelSets"`
-	ComponentType component.Component `json:"-"`
-	MinTime       int64               `json:"minTime"`
-	MaxTime       int64               `json:"maxTime"`
+	Name              string              `json:"name"`
+	LastCheck         time.Time           `json:"lastCheck"`
+	LastError         *stringError        `json:"lastError"`
+	LabelSets         []labels.Labels     `json:"labelSets"`
+	ComponentType     component.Component `json:"-"`
+	MinTime           int64               `json:"minTime"`
+	MaxTime           int64               `json:"maxTime"`
+	GuaranteedMinTime int64               `json:"guaranteedMinTime"`
 }
 
 // endpointSetNodeCollector is a metric collector reporting the number of available storeAPIs for Querier.
@@ -522,7 +523,7 @@ func (e *EndpointSet) GetQueryAPIClients() []Client {
 		if er.HasQueryAPI() {
 			_, maxt := er.timeRange()
 			client := querypb.NewQueryClient(er.cc)
-			queryClients = append(queryClients, NewClient(client, er.addr, maxt, er.labelSets()))
+			queryClients = append(queryClients, NewClient(client, er.addr, er.GuaranteedMinTime(), maxt, er.labelSets()))
 		}
 	}
 	return queryClients
@@ -666,6 +667,7 @@ func (er *endpointRef) updateStatus(now nowFunc, err error) {
 		er.status.ComponentType = er.componentType()
 		er.status.MinTime = mint
 		er.status.MaxTime = maxt
+		er.status.GuaranteedMinTime = er.guaranteedMinTime()
 		er.status.LastError = nil
 	} else {
 		er.status.LastError = &stringError{originalErr: err}
@@ -786,7 +788,8 @@ func (er *endpointRef) TimeRange() (mint, maxt int64) {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 
-	return er.timeRange()
+	mint, maxt = er.timeRange()
+	return mint, maxt
 }
 
 func (er *endpointRef) timeRange() (int64, int64) {
@@ -796,6 +799,22 @@ func (er *endpointRef) timeRange() (int64, int64) {
 
 	// Currently, min/max time of only StoreAPI is being updated by all components.
 	return er.metadata.Store.MinTime, er.metadata.Store.MaxTime
+}
+
+func (er *endpointRef) GuaranteedMinTime() int64 {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	return er.guaranteedMinTime()
+}
+
+func (er *endpointRef) guaranteedMinTime() int64 {
+	if er.metadata == nil || er.metadata.Store == nil {
+		return math.MinInt64
+	}
+
+	// Currently, min/max time of only StoreAPI is being updated by all components.
+	return er.metadata.Store.GuaranteedMinTime
 }
 
 func (er *endpointRef) SupportsSharding() bool {
