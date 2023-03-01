@@ -9,7 +9,8 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"sort"
+	"sync"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -169,9 +170,7 @@ func newReplicationScheme(
 	}
 }
 
-func (rs *replicationScheme) execute(ctx context.Context) error {
-	availableBlocks := []*metadata.Meta{}
-
+func (rs *replicationScheme) execute(ctx context.Context, replicateConcurrency int, reg *prometheus.Registry) error {
 	metas, partials, err := rs.fetcher.Fetch(ctx)
 	if err != nil {
 		return err
@@ -181,22 +180,74 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 		level.Info(rs.logger).Log("msg", "block meta not uploaded yet. Skipping.", "block_uuid", id.String())
 	}
 
+	filteredMetas := map[ulid.ULID]*metadata.Meta{}
 	for id, meta := range metas {
 		if rs.blockFilter(meta) {
 			level.Info(rs.logger).Log("msg", "adding block to be replicated", "block_uuid", id.String())
-			availableBlocks = append(availableBlocks, meta)
+			filteredMetas[id] = meta
 		}
 	}
 
-	// In order to prevent races in compactions by the target environment, we
-	// need to replicate oldest start timestamp first.
-	sort.Slice(availableBlocks, func(i, j int) bool {
-		return availableBlocks[i].BlockMeta.MinTime < availableBlocks[j].BlockMeta.MinTime
-	})
+	const (
+		deleteDelay = time.Duration(48 * time.Hour)
+	)
+	var (
+		compactMetrics                = newCompactMetrics(reg, deleteDelay)
+		acceptMalformedIndex          = false
+		enableVerticalCompaction      = false
+		blockFilesConcurrency         = 1
+		compactBlocksFetchConcurrency = 1
+	)
 
-	for _, b := range availableBlocks {
-		if err := rs.ensureBlockIsReplicated(ctx, b.BlockMeta.ULID); err != nil {
-			return errors.Wrapf(err, "ensure block %v is replicated", b.BlockMeta.ULID.String())
+	grouper := compact.NewDefaultGrouper(
+		rs.logger,
+		rs.toBkt,
+		acceptMalformedIndex,
+		enableVerticalCompaction,
+		reg,
+		compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
+		compactMetrics.garbageCollectedBlocks,
+		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason),
+		metadata.HashFunc(""),
+		blockFilesConcurrency,
+		compactBlocksFetchConcurrency,
+	)
+
+	groups, err := grouper.Groups(filteredMetas)
+	if err != nil {
+		return errors.Wrapf(err, "could not group metadata for Thanos blocks")
+	}
+
+	for _, group := range groups {
+
+		var wg sync.WaitGroup
+		errs := make(chan error, len(group.IDs()))
+
+		blockChan := make(chan ulid.ULID, len(group.IDs()))
+		for _, blockId := range group.IDs() {
+			blockChan <- blockId
+		}
+		close(blockChan)
+
+		wg.Add(replicateConcurrency)
+
+		for i := 0; i < replicateConcurrency; i++ {
+			go func(errs chan<- error) {
+				defer wg.Done()
+				for block := range blockChan {
+					if err := rs.ensureBlockIsReplicated(ctx, block); err != nil {
+						errs <- err
+					}
+				}
+			}(errs)
+		}
+
+		wg.Wait()
+		close(errs)
+
+		for {
+			err := <-errs
+			return err
 		}
 	}
 
@@ -312,4 +363,70 @@ func (rs *replicationScheme) ensureObjectReplicated(ctx context.Context, objectN
 	rs.metrics.objectsReplicated.Inc()
 
 	return nil
+}
+
+type compactMetrics struct {
+	halted                      prometheus.Gauge
+	retried                     prometheus.Counter
+	iterations                  prometheus.Counter
+	cleanups                    prometheus.Counter
+	partialUploadDeleteAttempts prometheus.Counter
+	blocksCleaned               prometheus.Counter
+	blockCleanupFailures        prometheus.Counter
+	blocksMarked                *prometheus.CounterVec
+	garbageCollectedBlocks      prometheus.Counter
+}
+
+func newCompactMetrics(reg *prometheus.Registry, deleteDelay time.Duration) *compactMetrics {
+	_ = promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "thanos_delete_delay_seconds",
+		Help: "Configured delete delay in seconds.",
+	}, func() float64 {
+		return deleteDelay.Seconds()
+	})
+
+	m := &compactMetrics{}
+
+	m.halted = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_compact_halted",
+		Help: "Set to 1 if the compactor halted due to an unexpected error.",
+	})
+	m.halted.Set(0)
+	m.retried = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_retries_total",
+		Help: "Total number of retries after retriable compactor error.",
+	})
+	m.iterations = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_iterations_total",
+		Help: "Total number of iterations that were executed successfully.",
+	})
+	m.cleanups = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_block_cleanup_loops_total",
+		Help: "Total number of concurrent cleanup loops of partially uploaded blocks and marked blocks that were executed successfully.",
+	})
+	m.partialUploadDeleteAttempts = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_aborted_partial_uploads_deletion_attempts_total",
+		Help: "Total number of started deletions of blocks that are assumed aborted and only partially uploaded.",
+	})
+	m.blocksCleaned = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_blocks_cleaned_total",
+		Help: "Total number of blocks deleted in compactor.",
+	})
+	m.blockCleanupFailures = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_block_cleanup_failures_total",
+		Help: "Failures encountered while deleting blocks in compactor.",
+	})
+	m.blocksMarked = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_blocks_marked_total",
+		Help: "Total number of blocks marked in compactor.",
+	}, []string{"marker", "reason"})
+	m.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.OutOfOrderChunksNoCompactReason)
+	m.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.IndexSizeExceedingNoCompactReason)
+	m.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")
+
+	m.garbageCollectedBlocks = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_garbage_collected_blocks_total",
+		Help: "Total number of blocks marked for deletion by compactor.",
+	})
+	return m
 }
