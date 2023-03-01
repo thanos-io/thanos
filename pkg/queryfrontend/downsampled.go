@@ -86,7 +86,7 @@ forLoop:
 			break forLoop
 		}
 	}
-	response, err := d.merger.MergeResponse(resps...)
+	response, err := d.merger.MergeResponse(req, resps...)
 	if err != nil {
 		return nil, err
 	}

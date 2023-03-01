@@ -513,7 +513,7 @@ func TestLabelsCodec_MergeResponse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Default partial response value doesn't matter when encoding requests.
 			codec := NewThanosLabelsCodec(false, time.Hour*2)
-			r, err := codec.MergeResponse(tc.responses...)
+			r, err := codec.MergeResponse(nil, tc.responses...)
 			if tc.expectedError != nil {
 				testutil.Equals(t, err, tc.expectedError)
 			} else {
@@ -677,7 +677,7 @@ func benchmarkMergeResponses(b *testing.B, size int) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			_, _ = codec.MergeResponse(queryResSeries...)
+			_, _ = codec.MergeResponse(nil, queryResSeries...)
 		}
 	})
 
@@ -686,7 +686,7 @@ func benchmarkMergeResponses(b *testing.B, size int) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			_, _ = codec.MergeResponse(queryResLabel...)
+			_, _ = codec.MergeResponse(nil, queryResLabel...)
 		}
 	})
 
