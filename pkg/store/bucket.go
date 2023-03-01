@@ -53,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/pool"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -767,6 +768,25 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 	maxt = s.limitMaxTime(maxt)
 
 	return mint, maxt
+}
+
+// TSDBInfos returns a list of infopb.TSDBInfos for blocks in the bucket store.
+func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	infos := make([]infopb.TSDBInfo, 0, len(s.blocks))
+	for _, b := range s.blocks {
+		infos = append(infos, infopb.TSDBInfo{
+			Labels: labelpb.ZLabelSet{
+				Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(b.meta.Thanos.Labels)),
+			},
+			MinTime: b.meta.MinTime,
+			MaxTime: b.meta.MaxTime,
+		})
+	}
+
+	return infos
 }
 
 func (s *BucketStore) LabelSet() []labelpb.ZLabelSet {
