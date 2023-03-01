@@ -99,7 +99,7 @@ func splitQuery(r Request, interval time.Duration) ([]Request, error) {
 func EvaluateAtModifierFunction(query string, start, end int64) (string, error) {
 	expr, err := parser.ParseExpr(query)
 	if err != nil {
-		return "", httpgrpc.Errorf(http.StatusBadRequest, "%s", err)
+		return "", httpgrpc.Errorf(http.StatusBadRequest, `{"status": "error", "error": "%s"}`, err)
 	}
 	parser.Inspect(expr, func(n parser.Node, _ []parser.Node) error {
 		if selector, ok := n.(*parser.VectorSelector); ok {
