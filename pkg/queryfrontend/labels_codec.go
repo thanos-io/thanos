@@ -48,7 +48,7 @@ func NewThanosLabelsCodec(partialResponse bool, defaultMetadataTimeRange time.Du
 }
 
 // MergeResponse merges multiple responses into a single Response. It needs to dedup the responses and ensure the order.
-func (c labelsCodec) MergeResponse(responses ...queryrange.Response) (queryrange.Response, error) {
+func (c labelsCodec) MergeResponse(_ queryrange.Request, responses ...queryrange.Response) (queryrange.Response, error) {
 	if len(responses) == 0 {
 		// Empty response for label_names, label_values and series API.
 		return &ThanosLabelsResponse{

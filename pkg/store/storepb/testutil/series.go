@@ -16,20 +16,18 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
-	"github.com/prometheus/prometheus/model/histogram"
-	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
-
+	"github.com/efficientgo/core/testutil"
 	"github.com/gogo/protobuf/types"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/wlog"
-
-	"github.com/efficientgo/core/testutil"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -72,6 +70,10 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 	}
 	if opts.ScrapeInterval == 0 {
 		opts.ScrapeInterval = 1 * time.Millisecond
+	}
+	// Use float type if sample type is not set.
+	if opts.SampleType == chunkenc.ValNone {
+		opts.SampleType = chunkenc.ValFloat
 	}
 
 	fmt.Printf(
@@ -147,11 +149,14 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 				c.MaxTime = c.MinTime + int64(chEnc.NumSamples()) - 1
 			}
 
-			storeChunkEnc := storepb.Chunk_Encoding(chEnc.Encoding() - 1)
 			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, storepb.AggrChunk{
 				MinTime: c.MinTime,
 				MaxTime: c.MaxTime,
-				Raw:     &storepb.Chunk{Type: storeChunkEnc, Data: chEnc.Bytes(), Hash: xxhash.Sum64(chEnc.Bytes())},
+				Raw: &storepb.Chunk{
+					Data: chEnc.Bytes(),
+					Type: storepb.Chunk_Encoding(chEnc.Encoding() - 1),
+					Hash: xxhash.Sum64(chEnc.Bytes()),
+				},
 			})
 		}
 	}

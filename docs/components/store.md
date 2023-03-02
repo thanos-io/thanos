@@ -56,7 +56,7 @@ Flags:
                                  NOTE: Putting raw blocks here will not
                                  cause the store to read them. For such use
                                  cases use Prometheus + sidecar. Ignored if
-                                 -no-cache-index-header option is specified.
+                                 --no-cache-index-header option is specified.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable

@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weaveworks/common/httpgrpc"
+
 	"github.com/cespare/xxhash"
 
 	"github.com/alecthomas/units"
@@ -946,7 +948,7 @@ func (b *blockSeriesClient) ExpandPostings(
 	}
 
 	if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
-		return errors.Wrap(err, "exceeded series limit")
+		return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
 	}
 
 	b.postings = ps
@@ -1045,7 +1047,7 @@ func (b *blockSeriesClient) nextBatch() error {
 
 		// Ensure sample limit through chunksLimiter if we return chunks.
 		if err := b.chunksLimiter.Reserve(uint64(len(b.chkMetas))); err != nil {
-			return errors.Wrap(err, "exceeded chunks limit")
+			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded chunks limit: %s", err)
 		}
 
 		b.entries = append(b.entries, s)
@@ -1069,8 +1071,11 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 		if err != nil {
 			return err
 		}
-		storeEnc := storepb.Chunk_Encoding(in.Encoding() - 1)
-		out.Raw = &storepb.Chunk{Type: storeEnc, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+		out.Raw = &storepb.Chunk{
+			Data: b,
+			Type: storepb.Chunk_Encoding(in.Encoding() - 1),
+			Hash: hashChunk(hasher, b, calculateChecksum),
+		}
 		return nil
 	}
 
