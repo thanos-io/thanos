@@ -5,8 +5,12 @@ package store
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/gogo/status"
+	"google.golang.org/grpc/codes"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/prometheus/client_golang/prometheus"
@@ -34,7 +38,7 @@ func TestLimiter(t *testing.T) {
 	testutil.Equals(t, float64(1), prom_testutil.ToFloat64(c))
 }
 
-func TestRateLimitedServer(t *testing.T) {
+func TestLimitedStoreServer(t *testing.T) {
 	numSamples := 60
 	series := []*storepb.SeriesResponse{
 		storeSeriesResponse(t, labels.FromStrings("series", "1"), makeSamples(numSamples)),
@@ -42,10 +46,11 @@ func TestRateLimitedServer(t *testing.T) {
 		storeSeriesResponse(t, labels.FromStrings("series", "3"), makeSamples(numSamples)),
 	}
 	tests := []struct {
-		name   string
-		limits SeriesSelectLimits
-		series []*storepb.SeriesResponse
-		err    string
+		name     string
+		limits   SeriesSelectLimits
+		series   []*storepb.SeriesResponse
+		err      string
+		grpcCode codes.Code
 	}{
 		{
 			name: "no limits",
@@ -69,8 +74,9 @@ func TestRateLimitedServer(t *testing.T) {
 				SeriesPerRequest:  2,
 				SamplesPerRequest: 0,
 			},
-			series: series,
-			err:    "failed to send series: limit 2 violated (got 3)",
+			series:   series,
+			err:      "exceeded series limit: limit 2 violated (got 3)",
+			grpcCode: codes.ResourceExhausted,
 		},
 		{
 			name: "chunks bellow limit",
@@ -86,8 +92,9 @@ func TestRateLimitedServer(t *testing.T) {
 				SeriesPerRequest:  0,
 				SamplesPerRequest: 50,
 			},
-			series: series,
-			err:    "failed to send samples: limit 50 violated (got 120)",
+			series:   series,
+			err:      "exceeded samples limit: limit 50 violated (got 120)",
+			grpcCode: codes.ResourceExhausted,
 		},
 	}
 	for _, test := range tests {
@@ -102,7 +109,10 @@ func TestRateLimitedServer(t *testing.T) {
 				testutil.Ok(t, err)
 			} else {
 				testutil.NotOk(t, err)
-				testutil.Assert(t, test.err == err.Error(), "want %s, got %s", test.err, err.Error())
+				testutil.Assert(t, strings.Contains(err.Error(), test.err), "want %s, got %s", test.err, err.Error())
+				grpcStatus, ok := status.FromError(err)
+				testutil.Assert(t, ok == true)
+				testutil.Assert(t, test.grpcCode == grpcStatus.Code())
 			}
 		})
 	}

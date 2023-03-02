@@ -6,6 +6,9 @@ package store
 import (
 	"sync"
 
+	"github.com/weaveworks/common/httpgrpc"
+	"google.golang.org/grpc/codes"
+
 	"github.com/alecthomas/units"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -169,10 +172,10 @@ func (i *limitedServer) Send(response *storepb.SeriesResponse) error {
 	}
 
 	if err := i.seriesLimiter.Reserve(1); err != nil {
-		return errors.Wrapf(err, "failed to send series")
+		return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
 	}
 	if err := i.samplesLimiter.Reserve(uint64(len(series.Chunks) * MaxSamplesPerChunk)); err != nil {
-		return errors.Wrapf(err, "failed to send samples")
+		return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded samples limit: %s", err)
 	}
 
 	return i.Store_SeriesServer.Send(response)
