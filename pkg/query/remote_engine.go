@@ -19,6 +19,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 // Opts are the options for a PromQL query.
@@ -190,6 +191,12 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			series.Points = append(series.Points, promql.Point{
 				T: s.Timestamp,
 				V: s.Value,
+			})
+		}
+		for _, h := range ts.Histograms {
+			series.Points = append(series.Points, promql.Point{
+				T: h.Timestamp,
+				H: prompb.HistogramProtoToFloatHistogram(h),
 			})
 		}
 		result = append(result, series)
