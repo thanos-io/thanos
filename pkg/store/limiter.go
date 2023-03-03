@@ -4,8 +4,9 @@
 package store
 
 import (
-	"google.golang.org/grpc/status"
 	"sync"
+
+	"google.golang.org/grpc/status"
 
 	"google.golang.org/grpc/codes"
 
