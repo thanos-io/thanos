@@ -4,9 +4,9 @@
 package store
 
 import (
+	"google.golang.org/grpc/status"
 	"sync"
 
-	"github.com/weaveworks/common/httpgrpc"
 	"google.golang.org/grpc/codes"
 
 	"github.com/alecthomas/units"
@@ -172,10 +172,10 @@ func (i *limitedServer) Send(response *storepb.SeriesResponse) error {
 	}
 
 	if err := i.seriesLimiter.Reserve(1); err != nil {
-		return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
+		return status.Errorf(codes.ResourceExhausted, "exceeded series limit: %s", err)
 	}
 	if err := i.samplesLimiter.Reserve(uint64(len(series.Chunks) * MaxSamplesPerChunk)); err != nil {
-		return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded samples limit: %s", err)
+		return status.Errorf(codes.ResourceExhausted, "exceeded samples limit: %s", err)
 	}
 
 	return i.Store_SeriesServer.Send(response)
