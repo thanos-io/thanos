@@ -1407,7 +1407,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 
 		if err = srv.Send(storepb.NewHintsSeriesResponse(anyHints)); err != nil {
-			err = status.Error(codes.Unknown, errors.Wrap(err, "send series response hints").Error())
+			err = status.Error(status.Code(err), errors.Wrap(err, "send series response hints").Error())
 			return
 		}
 	}
