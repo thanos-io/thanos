@@ -1277,7 +1277,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 				if err := blockClient.ExpandPostings(blockMatchers, seriesLimiter); err != nil {
 					span.Finish()
-					return errors.Wrapf(err, "fetch series for block %s", blk.meta.ULID)
+					return status.Errorf(status.Code(err), "fetch series for block %s: %s", blk.meta.ULID, err.Error())
 				}
 				onClose := func() {
 					mtx.Lock()
@@ -1344,11 +1344,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			err = g.Wait()
 		})
 		if err != nil {
-			code := codes.Aborted
-			if s, ok := status.FromError(errors.Cause(err)); ok {
-				code = s.Code()
-			}
-			return status.Error(code, err.Error())
+			return status.Error(status.Code(err), err.Error())
 		}
 		stats.blocksQueried = len(respSets)
 		stats.GetAllDuration = time.Since(begin)
@@ -1385,7 +1381,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				}
 			}
 			if err = srv.Send(at); err != nil {
-				err = status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+				errCause := errors.Cause(err)
+				err = status.Error(status.Code(errCause), errors.Wrap(errCause, "send series response").Error())
 				return
 			}
 		}
