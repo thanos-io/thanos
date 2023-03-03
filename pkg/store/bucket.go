@@ -20,8 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weaveworks/common/httpgrpc"
-
 	"github.com/cespare/xxhash"
 
 	"github.com/alecthomas/units"
