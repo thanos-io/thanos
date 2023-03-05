@@ -484,6 +484,7 @@ func createBlock(
 	var g errgroup.Group
 	var timeStepSize = (maxt - mint) / int64(numSamples+1)
 	var batchSize = len(series) / runtime.GOMAXPROCS(0)
+	r := rand.New(rand.NewSource(int64(numSamples)))
 
 	for len(series) > 0 {
 		l := batchSize
@@ -506,7 +507,7 @@ func createBlock(
 
 					var err error
 					if sampleType == chunkenc.ValFloat {
-						_, err = app.Append(0, lset, t, rand.Float64())
+						_, err = app.Append(0, lset, t, r.Float64())
 					} else if sampleType == chunkenc.ValHistogram {
 						_, err = app.AppendHistogram(0, lset, t, &histogramSample, nil)
 					}
