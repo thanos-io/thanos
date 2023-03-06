@@ -91,7 +91,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.grpcConfig = *sc.grpcConfig.registerFlag(cmd)
 	sc.storeRateLimits.RegisterFlags(cmd)
 
-	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar. Ignored if -no-cache-index-header option is specified.").
+	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar. Ignored if --no-cache-index-header option is specified.").
 		Default("./data").StringVar(&sc.dataDir)
 
 	cmd.Flag("cache-index-header", "Cache TSDB index-headers on disk to reduce startup time. When set to true, Thanos Store will download index headers from remote object storage on startup and create a header file on disk. Use --data-dir to set the directory in which index headers will be downloaded.").

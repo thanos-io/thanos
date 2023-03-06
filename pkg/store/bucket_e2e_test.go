@@ -22,7 +22,6 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/weaveworks/common/httpgrpc"
 	"google.golang.org/grpc/codes"
 
 	"github.com/thanos-io/objstore"
@@ -51,20 +50,6 @@ var (
 
 type swappableCache struct {
 	ptr storecache.IndexCache
-}
-
-type customLimiter struct {
-	limiter *Limiter
-	code    codes.Code
-}
-
-func (c *customLimiter) Reserve(num uint64) error {
-	err := c.limiter.Reserve(num)
-	if err != nil {
-		return httpgrpc.Errorf(int(c.code), err.Error())
-	}
-
-	return nil
 }
 
 func (c *swappableCache) SwapWith(ptr2 storecache.IndexCache) {
@@ -133,24 +118,6 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 	}
 
 	return
-}
-
-func newCustomChunksLimiterFactory(limit uint64, code codes.Code) ChunksLimiterFactory {
-	return func(failedCounter prometheus.Counter) ChunksLimiter {
-		return &customLimiter{
-			limiter: NewLimiter(limit, failedCounter),
-			code:    code,
-		}
-	}
-}
-
-func newCustomSeriesLimiterFactory(limit uint64, code codes.Code) SeriesLimiterFactory {
-	return func(failedCounter prometheus.Counter) SeriesLimiter {
-		return &customLimiter{
-			limiter: NewLimiter(limit, failedCounter),
-			code:    code,
-		}
-	}
 }
 
 func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, chunksLimiterFactory ChunksLimiterFactory, seriesLimiterFactory SeriesLimiterFactory, bytesLimiterFactory BytesLimiterFactory, relabelConfig []*relabel.Config, filterConf *FilterConfig) *storeSuite {
@@ -645,16 +612,11 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 			expectedErr:    "exceeded chunks limit",
 			code:           codes.ResourceExhausted,
 		},
-		"should fail if the max chunks limit is exceeded - 422": {
-			maxChunksLimit: expectedChunks - 1,
-			expectedErr:    "exceeded chunks limit",
-			code:           422,
-		},
-		"should fail if the max series limit is exceeded - 422": {
+		"should fail if the max series limit is exceeded - ResourceExhausted": {
 			maxChunksLimit: expectedChunks,
 			expectedErr:    "exceeded series limit",
 			maxSeriesLimit: 1,
-			code:           422,
+			code:           codes.ResourceExhausted,
 		},
 	}
 
@@ -666,7 +628,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 
 			dir := t.TempDir()
 
-			s := prepareStoreWithTestBlocks(t, dir, bkt, false, newCustomChunksLimiterFactory(testData.maxChunksLimit, testData.code), newCustomSeriesLimiterFactory(testData.maxSeriesLimit, testData.code), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+			s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(testData.maxChunksLimit), NewSeriesLimiterFactory(testData.maxSeriesLimit), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
 			testutil.Ok(t, s.store.SyncBlocks(ctx))
 
 			req := &storepb.SeriesRequest{

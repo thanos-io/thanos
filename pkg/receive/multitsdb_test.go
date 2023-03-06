@@ -162,6 +162,35 @@ func TestMultiTSDB(t *testing.T) {
 
 		testMulitTSDBSeries(t, m)
 	})
+
+	t.Run("flush with one sample produces a block", func(t *testing.T) {
+		const testTenant = "test_tenant"
+		m := NewMultiTSDB(
+			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+				RetentionDuration: (6 * time.Hour).Milliseconds(),
+				NoLockfile:        true,
+			},
+			labels.FromStrings("replica", "01"),
+			"tenant_id",
+			nil,
+			false,
+			metadata.NoneFunc,
+		)
+		defer func() { testutil.Ok(t, m.Close()) }()
+
+		testutil.Ok(t, m.Flush())
+		testutil.Ok(t, m.Open())
+		testutil.Ok(t, appendSample(m, testTenant, time.Now()))
+
+		tenant := m.tenants[testTenant]
+		db := tenant.readyStorage().Get()
+
+		testutil.Equals(t, 0, len(db.Blocks()))
+		testutil.Ok(t, m.Flush())
+		testutil.Equals(t, 1, len(db.Blocks()))
+	})
 }
 
 var (
@@ -419,9 +448,9 @@ func TestMultiTSDBPrune(t *testing.T) {
 			defer func() { testutil.Ok(t, m.Close()) }()
 
 			for i := 0; i < 100; i++ {
-				testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10+i))))
-				testutil.Ok(t, appendSample(m, "bar", time.Now().Add(-4*time.Hour)))
-				testutil.Ok(t, appendSample(m, "baz", time.Now().Add(time.Duration(i)*time.Second)))
+				testutil.Ok(t, appendSample(m, "deleted-tenant", time.UnixMilli(int64(10+i))))
+				testutil.Ok(t, appendSample(m, "compacted-tenant", time.Now().Add(-4*time.Hour)))
+				testutil.Ok(t, appendSample(m, "active-tenant", time.Now().Add(time.Duration(i)*time.Second)))
 			}
 			testutil.Equals(t, 3, len(m.TSDBLocalClients()))
 
