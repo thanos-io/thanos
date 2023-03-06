@@ -453,7 +453,8 @@ func runStore(
 			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
-			grpcserver.WithGracePeriod(time.Duration(conf.grpcConfig.gracePeriod)),
+			grpcserver.WithGracePeriod(conf.grpcConfig.gracePeriod),
+			grpcserver.WithMaxConnAge(conf.grpcConfig.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 
