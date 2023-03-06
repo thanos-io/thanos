@@ -15,40 +15,47 @@ jobs:
     env:
       GOBIN: /tmp/.bin
     steps:
-      - name: Install Go.
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.19.x
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v1
+          go-version: 1.20.x
 
       - uses: actions/cache@v3
         with:
-          path: ~/go/pkg/mod
+          path: |
+            ~/.cache/go-build
+            ~/.cache/golangci-lint
+            ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Cross build check.
+      - name: Cross build check
         run: make crossbuild
+
   lint:
     runs-on: ubuntu-latest
     name: Linters (Static Analysis) for Go
     env:
       GOBIN: /tmp/.bin
     steps:
-      - name: Checkout code into the Go module directory.
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Install Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.19.x
+          go-version: 1.20.x
 
       - uses: actions/cache@v3
         with:
-          path: ~/go/pkg/mod
+          path: |
+            ~/.cache/go-build
+            ~/.cache/golangci-lint
+            ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
@@ -56,8 +63,9 @@ jobs:
       - name: Format.
         run: make format
 
-      - name: Linting & vetting.
+      - name: Linting & vetting
         run: make go-lint
+
   e2e:
     strategy:
       fail-fast: false
@@ -69,18 +77,21 @@ jobs:
     env:
       GOBIN: /tmp/.bin
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Install Go.
         uses: actions/setup-go@v3
         with:
-          go-version: 1.19.x
-
-      - name: Check out code into the Go module directory.
-        uses: actions/checkout@v3
+          go-version: 1.20.x
 
       - uses: actions/cache@v3
         with:
-          path: ~/go/pkg/mod
+          path: |
+            ~/.cache/go-build
+            ~/.cache/golangci-lint
+            ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
-      - name: Run e2e docker-based tests.
+      - name: Run e2e docker-based tests
         run: make test-e2e GH_PARALLEL=${{ matrix.parallelism }} GH_INDEX=${{ matrix.index }}
