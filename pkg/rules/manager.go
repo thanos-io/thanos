@@ -72,6 +72,7 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
 					// UTC needed due to https://github.com/gogo/protobuf/issues/519.
 					LastEvaluation: rule.GetEvaluationTimestamp().UTC(),
+					KeepFiringFor:  rule.KeepFiringFor(),
 				}}})
 		case *rules.RecordingRule:
 			ret.Rules = append(ret.Rules, &rulespb.Rule{
