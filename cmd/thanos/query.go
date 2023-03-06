@@ -30,6 +30,7 @@ import (
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 
 	"github.com/thanos-community/promql-engine/engine"
+	"github.com/thanos-community/promql-engine/logicalplan"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -73,6 +74,14 @@ const (
 	promqlEngineThanos     promqlEngineType = "thanos"
 )
 
+type promqlEngineOptimizer string
+
+const (
+	sortMatchers      promqlEngineOptimizer = "sort-matchers"
+	mergeSelects      promqlEngineOptimizer = "merge-selects"
+	propagateMatchers promqlEngineOptimizer = "propagate-matchers"
+)
+
 type queryMode string
 
 const (
@@ -114,6 +123,9 @@ func registerQuery(app *extkingpin.App) {
 		Hidden().
 		Default(string(queryModeLocal)).
 		Enum(string(queryModeLocal), string(queryModeDistributed))
+
+	promqlEngineOptimizers := cmd.Flag("query.promql-engine.optimizers", "Specifies the PromQL engine query plan optimizers to use. Only used with thanos engine.").
+		Enums(string(sortMatchers), string(mergeSelects), string(propagateMatchers))
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
@@ -344,9 +356,10 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetryDurationQuantiles,
 			*queryTelemetrySamplesQuantiles,
 			*queryTelemetrySeriesQuantiles,
-			promqlEngineType(*promqlEngine),
 			storeRateLimits,
+			promqlEngineType(*promqlEngine),
 			queryMode(*promqlQueryMode),
+			*promqlEngineOptimizers,
 		)
 	})
 }
@@ -424,9 +437,10 @@ func runQuery(
 	queryTelemetryDurationQuantiles []float64,
 	queryTelemetrySamplesQuantiles []int64,
 	queryTelemetrySeriesQuantiles []int64,
-	promqlEngine promqlEngineType,
 	storeRateLimits store.SeriesSelectLimits,
+	promqlEngine promqlEngineType,
 	queryMode queryMode,
+	promqlEngineOptimizers []string,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -682,8 +696,29 @@ func runQuery(
 	case promqlEnginePrometheus:
 		queryEngine = promql.NewEngine(engineOpts)
 	case promqlEngineThanos:
+		newEngineOpts := engine.Opts{EngineOpts: engineOpts}
+
+		if len(promqlEngineOptimizers) != 0 {
+			var optimizers []logicalplan.Optimizer
+
+			for _, o := range promqlEngineOptimizers {
+				switch promqlEngineOptimizer(o) {
+				case sortMatchers:
+					optimizers = append(optimizers, logicalplan.SortMatchers{})
+				case mergeSelects:
+					optimizers = append(optimizers, logicalplan.MergeSelectsOptimizer{})
+				case propagateMatchers:
+					optimizers = append(optimizers, logicalplan.PropagateMatchersOptimizer{})
+				default:
+					return errors.Errorf("unknown query.promql-engine.optimizer type %v", o)
+				}
+			}
+
+			newEngineOpts.LogicalOptimizers = optimizers
+		}
+
 		if queryMode == queryModeLocal {
-			queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts})
+			queryEngine = engine.New(newEngineOpts)
 		} else {
 			remoteEngineEndpoints := query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
 				AutoDownsample:        enableAutodownsampling,
@@ -691,7 +726,7 @@ func runQuery(
 				Timeout:               queryTimeout,
 				EnablePartialResponse: enableQueryPartialResponse,
 			})
-			queryEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: engineOpts}, remoteEngineEndpoints)
+			queryEngine = engine.NewDistributedEngine(newEngineOpts, remoteEngineEndpoints)
 		}
 	default:
 		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)

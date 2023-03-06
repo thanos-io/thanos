@@ -398,6 +398,10 @@ Flags:
                                  --no-query.partial-response for disabling.
       --query.promql-engine=prometheus
                                  PromQL engine to use.
+      --query.promql-engine.optimizers=QUERY.PROMQL-ENGINE.OPTIMIZERS ...
+                                 Specifies the PromQL engine query plan
+                                 optimizers to use. Only used with thanos
+                                 engine.
       --query.replica-label=QUERY.REPLICA-LABEL ...
                                  Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will
