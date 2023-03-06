@@ -12,6 +12,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#6186](https://github.com/thanos-io/thanos/pull/6186) query: Add `--query.promql-engine.optimizers` flag to allow selecting specific query plan optimizers
+
 ### Fixed
 
 - [#6172](https://github.com/thanos-io/thanos/pull/6172) query-frontend: return JSON formatted errors for invalid PromQL expression in the split by interval middleware.
