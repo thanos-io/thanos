@@ -79,6 +79,7 @@ type storeConfig struct {
 	ignoreDeletionMarksDelay    commonmodel.Duration
 	disableWeb                  bool
 	webConfig                   webConfig
+	label                       string
 	postingOffsetsInMemSampling int
 	cachingBucketConfig         extflag.PathOrContent
 	reqLogConfig                *extflag.PathOrContent
@@ -182,6 +183,8 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").
 		Default("false").BoolVar(&sc.webConfig.disableCORS)
+
+	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&sc.label)
 
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 }
@@ -476,7 +479,7 @@ func runStore(
 
 			// Configure Request Logging for HTTP calls.
 			logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
-			api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, "", flagsMap, bkt)
+			api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, conf.label, flagsMap, bkt)
 			api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 			metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {

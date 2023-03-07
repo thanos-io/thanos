@@ -295,8 +295,8 @@ Flags:
                                 local and remote view for /global Block Viewer
                                 UI.
       --bucket-web-label=BUCKET-WEB-LABEL
-                                Prometheus label to use as timeline title in the
-                                bucket web UI
+                                External block label to use as group title in
+                                the bucket web UI
       --compact.blocks-fetch-concurrency=1
                                 Number of goroutines to use when download block
                                 during compaction.
