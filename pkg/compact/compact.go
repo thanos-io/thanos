@@ -797,7 +797,7 @@ type Compactor interface {
 	//  * The source dirs are marked Deletable.
 	//  * Returns empty ulid.ULID{}.
 	Compact(dest string, dirs []string, open []*tsdb.Block) (ulid.ULID, error)
-	CompactWithAdditionalPostings(dest string, dirs []string, open []*tsdb.Block, additionalPostingsProvider tsdb.AdditionalPostingsFunc) (ulid.ULID, error)
+	CompactWithPopulateBlockFunc(dest string, dirs []string, open []*tsdb.Block, populateBlockFunc tsdb.PopulateBlockFunc) (ulid.ULID, error)
 }
 
 // Compact plans and runs a single compaction against the group. The compacted result
@@ -1137,11 +1137,11 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	begin = time.Now()
 	if err := tracing.DoInSpanWithErr(ctx, "compaction", func(ctx context.Context) (e error) {
-		additionalPostingsFunc := &ShardedPostingsFunc{
-			partitionID:    uint64(cg.partitionID),
-			partitionCount: uint64(cg.partitionCount),
+		populateBlockFunc := ShardedPopulateBlockFunc{
+			partitionCount: cg.partitionCount,
+			partitionId:    cg.partitionID,
 		}
-		compID, e = comp.CompactWithAdditionalPostings(dir, toCompactDirs, nil, additionalPostingsFunc)
+		compID, e = comp.CompactWithPopulateBlockFunc(dir, toCompactDirs, nil, populateBlockFunc)
 		return e
 	}); err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact blocks %v", toCompactDirs))
