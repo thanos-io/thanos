@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 	_ "google.golang.org/grpc/encoding/gzip"
 	"gopkg.in/yaml.v2"
 )
@@ -58,13 +59,16 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 	}
 
 	processor := tracesdk.NewBatchSpanProcessor(exporter)
-	tp := newTraceProvider(ctx, processor, logger)
+	tp := newTraceProvider(ctx, processor, logger, config.ServiceName)
 
 	return tp, nil
 }
 
-func newTraceProvider(ctx context.Context, processor tracesdk.SpanProcessor, logger log.Logger) *tracesdk.TracerProvider {
-	resource, err := resource.New(ctx)
+func newTraceProvider(ctx context.Context, processor tracesdk.SpanProcessor, logger log.Logger, serviceName string) *tracesdk.TracerProvider {
+	resource, err := resource.New(
+		ctx,
+		resource.WithAttributes(semconv.ServiceNameKey.String(serviceName)),
+	)
 	if err != nil {
 		level.Warn(logger).Log("msg", "jaeger: detecting resources for tracing provider failed", "err", err)
 	}
