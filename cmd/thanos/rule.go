@@ -612,7 +612,8 @@ func runRule(
 	options := []grpcserver.Option{
 		grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
 		grpcserver.WithListen(conf.grpc.bindAddress),
-		grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
+		grpcserver.WithGracePeriod(conf.grpc.gracePeriod),
+		grpcserver.WithGracePeriod(conf.grpc.maxConnectionAge),
 		grpcserver.WithTLSConfig(tlsCfg),
 	}
 	infoOptions := []info.ServerOptionFunc{info.WithRulesInfoFunc()}
