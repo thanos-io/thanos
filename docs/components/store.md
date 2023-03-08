@@ -36,6 +36,9 @@ Flags:
                                  Number of goroutines to use when constructing
                                  index-cache.json blocks from object storage.
                                  Must be equal or greater than 1.
+      --bucket-web-label=BUCKET-WEB-LABEL
+                                 External block label to use as group title in
+                                 the bucket web UI
       --cache-index-header       Cache TSDB index-headers on disk to reduce
                                  startup time. When set to true, Thanos Store
                                  will download index headers from remote object

@@ -781,5 +781,5 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cc.webConf.registerFlag(cmd)
 
-	cmd.Flag("bucket-web-label", "Prometheus label to use as timeline title in the bucket web UI").StringVar(&cc.label)
+	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&cc.label)
 }
