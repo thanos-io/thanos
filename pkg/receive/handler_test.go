@@ -164,6 +164,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 	var (
 		cfg      = []HashringConfig{{Hashring: "test"}}
 		handlers []*Handler
+		wOpts    = &WriterOptions{}
 	)
 	// create a fake peer group where we manually fill the cache with fake addresses pointed to our handlers
 	// This removes the network from the tests and creates a more consistent testing harness.
@@ -187,7 +188,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
 			ForwardTimeout:    5 * time.Minute,
-			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i]), false),
+			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i]), wOpts),
 			Limiter:           limiter,
 		})
 		handlers = append(handlers, h)
@@ -948,7 +949,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		metadata.NoneFunc,
 	)
 	defer func() { testutil.Ok(b, m.Close()) }()
-	handler.writer = NewWriter(logger, m, false)
+	handler.writer = NewWriter(logger, m, &WriterOptions{})
 
 	testutil.Ok(b, m.Flush())
 	testutil.Ok(b, m.Open())
