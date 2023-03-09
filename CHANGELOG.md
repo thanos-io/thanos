@@ -20,6 +20,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6172](https://github.com/thanos-io/thanos/pull/6172) query-frontend: return JSON formatted errors for invalid PromQL expression in the split by interval middleware.
 - [#6171](https://github.com/thanos-io/thanos/pull/6171) Store: fix error handling on limits.
 - [#6183](https://github.com/thanos-io/thanos/pull/6183) Receiver: fix off by one in multitsdb flush that will result in empty blocks if the head only contains one sample
+- [#6197](https://github.com/thanos-io/thanos/pull/6197) Exemplar OTel: Fix exemplar for otel to use traceId instead of spanId and sample only if trace is sampled
 
 ### Changed
 - [#6168](https://github.com/thanos-io/thanos/pull/6168) Receiver: Make ketama hashring fail early when configured with number of nodes lower than the replication factor.
