@@ -121,9 +121,10 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range t.Samples {
-			if tooFarInFuture != 0 && tooFarInFuture.Before(model.Time(s.Timestamp)) {
+			if r.opts.TooFarInFutureTimeWindow != 0 && tooFarInFuture.Before(model.Time(s.Timestamp)) {
 				// now + tooFarInFutureTimeWindow < sample timestamp
 				err = storage.ErrOutOfBounds
+				level.Debug(tLogger).Log("msg", "block metric too far in the future", "lset", lset, "timestamp", s.Timestamp, "bound", tooFarInFuture)
 			} else {
 				ref, err = app.Append(ref, lset, s.Timestamp, s.Value)
 			}
