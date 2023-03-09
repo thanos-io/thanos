@@ -11,7 +11,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 
 ### Added
-
+- [#6199](https://github.com/thanos-io/thanos/pull/6199) Rule: added support for keep_firing_for option of protmetheus to AlertingRule
 - [#6185](https://github.com/thanos-io/thanos/pull/6185) Tracing: tracing in OTLP support configuring service_name.
 - [#6192](https://github.com/thanos-io/thanos/pull/6192) Store: add flag `bucket-web-label` to select the label to use as timeline title in web UI
 
