@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -712,7 +713,7 @@ func runQuery(
 				Timeout:               queryTimeout,
 				EnablePartialResponse: enableQueryPartialResponse,
 			})
-			queryEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: engineOpts}, remoteEngineEndpoints)
+			queryEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: engineOpts, DebugWriter: os.Stdout}, remoteEngineEndpoints)
 		}
 	default:
 		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)
