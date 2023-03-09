@@ -133,9 +133,10 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 						Name: "group1",
 						Rules: []testpromcompatibility.Rule{
 							testpromcompatibility.AlertingRule{
-								Name:  "alert1",
-								Type:  RuleAlertingType,
-								State: "sdfsdf",
+								Name:          "alert1",
+								Type:          RuleAlertingType,
+								State:         "sdfsdf",
+								KeepFiringFor: 0,
 							},
 						},
 						File:                    "file1.yml",
@@ -146,7 +147,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("rule: alerting rule unmarshal: {\"state\":\"sdfsdf\",\"name\":\"alert1\",\"query\":\"\",\"duration\":0,\"labels\":{},\"annotations\":{},\"alerts\":null,\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"type\":\"alerting\"}: unknown alertState: \"sdfsdf\""),
+			expectedErr: errors.New("rule: alerting rule unmarshal: {\"state\":\"sdfsdf\",\"name\":\"alert1\",\"query\":\"\",\"duration\":0,\"labels\":{},\"annotations\":{},\"alerts\":null,\"health\":\"\",\"evaluationTime\":0,\"lastEvaluation\":\"0001-01-01T00:00:00Z\",\"keepFiringFor\":0,\"type\":\"alerting\"}: unknown alertState: \"sdfsdf\""),
 		},
 		{
 			name: "one group with WRONG partial response fields",
@@ -188,6 +189,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 								Duration:       60,
 								State:          "pending",
 								EvaluationTime: 1.1,
+								KeepFiringFor:  1,
 							},
 						},
 						File:                    "file1.yml",
@@ -233,7 +235,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 				},
 			},
 			// Different than input due to the alerts slice being initialized to a zero-length slice instead of nil.
-			expectedJSONOutput: `{"groups":[{"name":"group1","file":"file1.yml","rules":[{"state":"pending","name":"alert1","query":"up == 0","duration":60,"labels":{"a2":"b2","c2":"d2"},"annotations":{"ann1":"ann44","ann2":"ann33"},"alerts":[],"health":"health2","lastError":"1","evaluationTime":1.1,"lastEvaluation":"0001-01-01T00:00:00Z","type":"alerting"}],"interval":2442,"evaluationTime":2.1,"lastEvaluation":"0001-01-01T00:00:00Z","limit":0,"partialResponseStrategy":"ABORT"}]}`,
+			expectedJSONOutput: `{"groups":[{"name":"group1","file":"file1.yml","rules":[{"state":"pending","name":"alert1","query":"up == 0","duration":60,"labels":{"a2":"b2","c2":"d2"},"annotations":{"ann1":"ann44","ann2":"ann33"},"alerts":[],"health":"health2","lastError":"1","evaluationTime":1.1,"lastEvaluation":"0001-01-01T00:00:00Z","keepFiringFor":1,"type":"alerting"}],"interval":2442,"evaluationTime":2.1,"lastEvaluation":"0001-01-01T00:00:00Z","limit":0,"partialResponseStrategy":"ABORT"}]}`,
 		},
 		{
 			name: "one valid group, with 1 rule and alert each and second empty group.",
@@ -296,6 +298,7 @@ func TestJSONUnmarshalMarshal(t *testing.T) {
 								State:          "pending",
 								LastEvaluation: now.Add(-1 * time.Minute),
 								EvaluationTime: 1.1,
+								KeepFiringFor:  1,
 							},
 						},
 						File:                    "file1.yml",
