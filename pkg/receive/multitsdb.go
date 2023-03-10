@@ -90,10 +90,14 @@ func NewMultiTSDB(
 	}
 }
 
+// nowMillis is a function that returns the current time in milliseconds.
+type nowMillis func() int64
+
 type localClient struct {
 	storepb.StoreClient
 
 	sendsSortedSeries bool
+	nowFunc           nowMillis
 	labelSetFunc      func() []labelpb.ZLabelSet
 	timeRangeFunc     func() (int64, int64)
 	tsdbOpts          *tsdb.Options
@@ -102,11 +106,19 @@ type localClient struct {
 func NewLocalClient(
 	c storepb.StoreClient,
 	sendsSortedSeries bool,
+	nowFunc nowMillis,
 	labelSetFunc func() []labelpb.ZLabelSet,
 	timeRangeFunc func() (int64, int64),
 	tsdbOpts *tsdb.Options,
 ) store.Client {
-	return &localClient{c, sendsSortedSeries, labelSetFunc, timeRangeFunc, tsdbOpts}
+	return &localClient{
+		StoreClient:       c,
+		sendsSortedSeries: sendsSortedSeries,
+		nowFunc:           nowFunc,
+		labelSetFunc:      labelSetFunc,
+		timeRangeFunc:     timeRangeFunc,
+		tsdbOpts:          tsdbOpts,
+	}
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
@@ -124,10 +136,10 @@ func (l *localClient) GuaranteedMinTime() int64 {
 		return store.UninitializedTSDBTime
 	}
 
-	// Since retention is applied at head compaction,
-	// TSDB ends up keeping one more block past the retention period.
-	estimatedRetentionTime := time.Now().UnixMilli() - l.tsdbOpts.RetentionDuration - l.tsdbOpts.MinBlockDuration
-	return minInt64(mint, estimatedRetentionTime)
+	estimatedRetentionTime := time.UnixMilli(l.nowFunc() - l.tsdbOpts.RetentionDuration)
+	estimatedRetentionTime = estimatedRetentionTime.Truncate(time.Duration(l.tsdbOpts.MinBlockDuration) * time.Millisecond)
+
+	return estimatedRetentionTime.UnixMilli()
 }
 
 func (l *localClient) String() string {
@@ -188,9 +200,12 @@ func (t *tenant) client(logger log.Logger, tsdbOpts *tsdb.Options) store.Client 
 	if tsdbStore == nil {
 		return nil
 	}
-	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore), 0)
+	nowInMillis := func() int64 {
+		return time.Now().UnixMilli()
+	}
 
-	return NewLocalClient(client, true, tsdbStore.LabelSet, tsdbStore.TimeRange, tsdbOpts)
+	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore), 0)
+	return NewLocalClient(client, true, nowInMillis, tsdbStore.LabelSet, tsdbStore.TimeRange, tsdbOpts)
 }
 
 func (t *tenant) exemplars() *exemplars.TSDB {
@@ -789,11 +804,4 @@ func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
 			panic(err)
 		}
 	}
-}
-
-func minInt64(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
 }
