@@ -136,10 +136,18 @@ func (l *localClient) GuaranteedMinTime() int64 {
 		return store.UninitializedTSDBTime
 	}
 
-	estimatedRetentionTime := time.UnixMilli(l.nowFunc() - l.tsdbOpts.RetentionDuration)
-	estimatedRetentionTime = estimatedRetentionTime.Truncate(time.Duration(l.tsdbOpts.MinBlockDuration) * time.Millisecond)
+	now := l.nowFunc()
+	estimatedRetention := time.UnixMilli(now - l.tsdbOpts.RetentionDuration)
 
-	return estimatedRetentionTime.UnixMilli()
+	roundTo := time.Duration(l.tsdbOpts.MinBlockDuration) * time.Millisecond
+	blockAlignedRetention := estimatedRetention.Truncate(roundTo).UnixMilli()
+
+	// The first few samples in a block are sometimes not wall-clock aligned.
+	// We add a small offset proportional to the block size to make sure we skip
+	// the first few minutes in a TSDB.
+	blockAlignedRetention += l.tsdbOpts.MinBlockDuration / 8
+
+	return blockAlignedRetention
 }
 
 func (l *localClient) String() string {

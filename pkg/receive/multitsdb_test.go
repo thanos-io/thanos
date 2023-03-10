@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -586,36 +587,39 @@ func TestLocalClientGuaranteedMinTime(t *testing.T) {
 			expected:      store.UninitializedTSDBTime,
 		},
 		{
-			name:          "case 1",
 			now:           mustParseTime("2000-01-01T08:15:13Z").UnixMilli(),
 			minTime:       mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
 			retention:     6 * time.Hour,
 			blockDuration: 2 * time.Hour,
-			expected:      mustParseTime("2000-01-01T02:00:00Z").UnixMilli(),
+			expected:      mustParseTime("2000-01-01T02:15:00Z").UnixMilli(),
 		},
 		{
-			name:          "case 2",
+			now:           mustParseTime("2000-01-01T08:12:41Z").UnixMilli(),
+			minTime:       mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
+			retention:     6 * time.Hour,
+			blockDuration: 2 * time.Hour,
+			expected:      mustParseTime("2000-01-01T02:15:00Z").UnixMilli(),
+		},
+		{
 			now:           mustParseTime("2000-01-01T08:00:00Z").UnixMilli(),
 			minTime:       mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
 			retention:     6 * time.Hour,
 			blockDuration: 2 * time.Hour,
-			expected:      mustParseTime("2000-01-01T02:00:00Z").UnixMilli(),
+			expected:      mustParseTime("2000-01-01T02:15:00Z").UnixMilli(),
 		},
 		{
-			name:          "case 3",
 			now:           mustParseTime("2000-01-01T07:59:59Z").UnixMilli(),
 			minTime:       mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
 			retention:     6 * time.Hour,
 			blockDuration: 2 * time.Hour,
-			expected:      mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
+			expected:      mustParseTime("2000-01-01T00:15:00Z").UnixMilli(),
 		},
 		{
-			name:          "case 4",
 			now:           mustParseTime("2000-01-01T07:15:13Z").UnixMilli(),
 			minTime:       mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
 			retention:     6 * time.Hour,
 			blockDuration: 2 * time.Hour,
-			expected:      mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
+			expected:      mustParseTime("2000-01-01T00:15:00Z").UnixMilli(),
 		},
 	}
 
@@ -629,7 +633,7 @@ func TestLocalClientGuaranteedMinTime(t *testing.T) {
 			})
 
 			result := client.GuaranteedMinTime()
-			testutil.Equals(t, test.expected, result, "expected", time.UnixMilli(test.expected), "got", time.UnixMilli(result))
+			testutil.Equals(t, test.expected, result, fmt.Sprintf("expected %s, got %s", time.UnixMilli(test.expected), time.UnixMilli(result)))
 		})
 	}
 
