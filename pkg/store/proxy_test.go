@@ -1828,6 +1828,51 @@ func TestStoreMatches(t *testing.T) {
 	}
 }
 
+func TestGuaranteedMinTime(t *testing.T) {
+
+	tests := []struct {
+		name     string
+		minTimes []int64
+		expected int64
+	}{
+		{
+			name:     "no clients",
+			minTimes: nil,
+			expected: math.MaxInt64,
+		},
+		{
+			name:     "single client",
+			minTimes: []int64{1},
+			expected: 1,
+		},
+		{
+			name:     "multiple clients",
+			minTimes: []int64{1, 2},
+			expected: 2,
+		},
+		{
+			name:     "uninitialized tsdb client",
+			minTimes: []int64{1, 2, math.MaxInt64},
+			expected: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clients := make([]Client, 0, len(test.minTimes))
+			for _, minTime := range test.minTimes {
+				clients = append(clients, storetestutil.TestClient{MinTime: minTime})
+			}
+			proxy := NewProxyStore(log.NewNopLogger(), prometheus.NewRegistry(), func() []Client {
+				return clients
+			}, component.Store, nil, 1*time.Second, LazyRetrieval, nil)
+
+			testutil.Equals(t, test.expected, proxy.GuaranteedMinTime())
+		})
+	}
+
+}
+
 // storeSeriesServer is test gRPC storeAPI series server.
 type storeSeriesServer struct {
 	// This field just exist to pseudo-implement the unused methods of the interface.

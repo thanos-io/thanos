@@ -96,7 +96,7 @@ type localClient struct {
 	sendsSortedSeries bool
 	labelSetFunc      func() []labelpb.ZLabelSet
 	timeRangeFunc     func() (int64, int64)
-	retentionMillis   int64
+	tsdbOpts          *tsdb.Options
 }
 
 func NewLocalClient(
@@ -104,9 +104,9 @@ func NewLocalClient(
 	sendsSortedSeries bool,
 	labelSetFunc func() []labelpb.ZLabelSet,
 	timeRangeFunc func() (int64, int64),
-	retentionMillis int64,
+	tsdbOpts *tsdb.Options,
 ) store.Client {
-	return &localClient{c, sendsSortedSeries, labelSetFunc, timeRangeFunc, retentionMillis}
+	return &localClient{c, sendsSortedSeries, labelSetFunc, timeRangeFunc, tsdbOpts}
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
@@ -119,11 +119,15 @@ func (l *localClient) TimeRange() (mint int64, maxt int64) {
 
 func (l *localClient) GuaranteedMinTime() int64 {
 	mint, _ := l.timeRangeFunc()
-	retentionTime := time.Now().UnixMilli() - l.retentionMillis
-	if mint < retentionTime {
-		return mint
+	// Having a mint of math.MaxInt64 means the database is not yet initialized.
+	if mint == store.UninitializedTSDBTime {
+		return store.UninitializedTSDBTime
 	}
-	return retentionTime
+
+	// Since retention is applied at head compaction,
+	// TSDB ends up keeping one more block past the retention period.
+	estimatedRetentionTime := time.Now().UnixMilli() - l.tsdbOpts.RetentionDuration - l.tsdbOpts.MinBlockDuration
+	return minInt64(mint, estimatedRetentionTime)
 }
 
 func (l *localClient) String() string {
@@ -176,7 +180,7 @@ func (t *tenant) store() *store.TSDBStore {
 	return t.storeTSDB
 }
 
-func (t *tenant) client(logger log.Logger, retentionMillis int64) store.Client {
+func (t *tenant) client(logger log.Logger, tsdbOpts *tsdb.Options) store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -186,7 +190,7 @@ func (t *tenant) client(logger log.Logger, retentionMillis int64) store.Client {
 	}
 	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore), 0)
 
-	return NewLocalClient(client, true, tsdbStore.LabelSet, tsdbStore.TimeRange, retentionMillis)
+	return NewLocalClient(client, true, tsdbStore.LabelSet, tsdbStore.TimeRange, tsdbOpts)
 }
 
 func (t *tenant) exemplars() *exemplars.TSDB {
@@ -476,7 +480,7 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
-		client := tenant.client(t.logger, t.tsdbOpts.RetentionDuration)
+		client := tenant.client(t.logger, t.tsdbOpts)
 		if client != nil {
 			res = append(res, client)
 		}
@@ -785,4 +789,11 @@ func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
 			panic(err)
 		}
 	}
+}
+
+func minInt64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }

@@ -33,6 +33,9 @@ import (
 
 type ctxKey int
 
+// UninitializedTSDBTime is the TSDB start time of an uninitialized TSDB instance.
+const UninitializedTSDBTime = math.MaxInt64
+
 // StoreMatcherKey is the context key for the store's allow list.
 const StoreMatcherKey = ctxKey(0)
 
@@ -249,13 +252,16 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 func (s *ProxyStore) GuaranteedMinTime() int64 {
 	stores := s.stores()
 	if len(stores) == 0 {
-		return math.MaxInt64
+		return UninitializedTSDBTime
 	}
 
 	var mint int64 = math.MinInt64
 	for _, s := range stores {
 		storeMint := s.GuaranteedMinTime()
-		if storeMint != math.MaxInt64 && storeMint > mint {
+		if storeMint == UninitializedTSDBTime {
+			continue
+		}
+		if storeMint > mint {
 			mint = storeMint
 		}
 	}
