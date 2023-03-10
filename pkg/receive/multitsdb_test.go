@@ -6,6 +6,7 @@ package receive
 import (
 	"context"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -557,6 +558,81 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 	// Wait for tenant to become ready before terminating the test.
 	// This allows the tear down procedure to cleanup properly.
 	testutil.Ok(t, appendSample(m, tenantID, time.Now()))
+}
+
+func TestLocalClientGuaranteedMinTime(t *testing.T) {
+	mustParseTime := func(timeString string) time.Time {
+		t, err := time.Parse(time.RFC3339, timeString)
+		if err != nil {
+			panic(err)
+		}
+		return t
+	}
+
+	testCases := []struct {
+		name          string
+		now           int64
+		minTime       int64
+		retention     time.Duration
+		blockDuration time.Duration
+		expected      int64
+	}{
+		{
+			name:          "tsdb not initialized",
+			now:           mustParseTime("2000-01-01T08:15:13Z").UnixMilli(),
+			minTime:       math.MaxInt64,
+			retention:     6 * time.Hour,
+			blockDuration: 2 * time.Hour,
+			expected:      store.UninitializedTSDBTime,
+		},
+		{
+			name:          "case 1",
+			now:           mustParseTime("2000-01-01T08:15:13Z").UnixMilli(),
+			minTime:       mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
+			retention:     6 * time.Hour,
+			blockDuration: 2 * time.Hour,
+			expected:      mustParseTime("2000-01-01T02:00:00Z").UnixMilli(),
+		},
+		{
+			name:          "case 2",
+			now:           mustParseTime("2000-01-01T08:00:00Z").UnixMilli(),
+			minTime:       mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
+			retention:     6 * time.Hour,
+			blockDuration: 2 * time.Hour,
+			expected:      mustParseTime("2000-01-01T02:00:00Z").UnixMilli(),
+		},
+		{
+			name:          "case 3",
+			now:           mustParseTime("2000-01-01T07:59:59Z").UnixMilli(),
+			minTime:       mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
+			retention:     6 * time.Hour,
+			blockDuration: 2 * time.Hour,
+			expected:      mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
+		},
+		{
+			name:          "case 4",
+			now:           mustParseTime("2000-01-01T07:15:13Z").UnixMilli(),
+			minTime:       mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
+			retention:     6 * time.Hour,
+			blockDuration: 2 * time.Hour,
+			expected:      mustParseTime("2000-01-01T00:00:00Z").UnixMilli(),
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			nowFunc := func() int64 { return test.now }
+			timeFunc := func() (int64, int64) { return test.minTime, 0 }
+			client := NewLocalClient(nil, true, nowFunc, nil, timeFunc, &tsdb.Options{
+				RetentionDuration: test.retention.Milliseconds(),
+				MinBlockDuration:  test.blockDuration.Milliseconds(),
+			})
+
+			result := client.GuaranteedMinTime()
+			testutil.Equals(t, test.expected, result, "expected", time.UnixMilli(test.expected), "got", time.UnixMilli(result))
+		})
+	}
+
 }
 
 func appendSample(m *MultiTSDB, tenant string, timestamp time.Time) error {
