@@ -67,6 +67,7 @@ func (g Group) toProto() *rulespb.RuleGroup {
 					Labels:                    labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(rule.Labels())},
 					Annotations:               labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(rule.Annotations())},
 					Alerts:                    ActiveAlertsToProto(g.PartialResponseStrategy, rule),
+					Restored:                  rule.Restored(),
 					Health:                    string(rule.Health()),
 					LastError:                 lastError,
 					EvaluationDurationSeconds: rule.GetEvaluationDuration().Seconds(),
@@ -99,12 +100,20 @@ func ActiveAlertsToProto(s storepb.PartialResponseStrategy, a *rules.AlertingRul
 	for i, ruleAlert := range active {
 		// UTC needed due to https://github.com/gogo/protobuf/issues/519.
 		activeAt := ruleAlert.ActiveAt.UTC()
+		firedAt := ruleAlert.FiredAt.UTC()
+		resolvedAt := ruleAlert.ResolvedAt.UTC()
+		lastSentAt := ruleAlert.LastSentAt.UTC()
+		validUntil := ruleAlert.ValidUntil.UTC()
 		ret[i] = &rulespb.AlertInstance{
 			PartialResponseStrategy: s,
 			Labels:                  labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ruleAlert.Labels)},
 			Annotations:             labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ruleAlert.Annotations)},
 			State:                   rulespb.AlertState(ruleAlert.State),
 			ActiveAt:                &activeAt,
+			FiredAt:                 &firedAt,
+			ResolvedAt:              &resolvedAt,
+			LastSentAt:              &lastSentAt,
+			ValidUntil:              &validUntil,
 			Value:                   strconv.FormatFloat(ruleAlert.Value, 'e', -1, 64),
 		}
 	}
