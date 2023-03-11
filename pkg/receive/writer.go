@@ -149,8 +149,13 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		}
 
 		for _, hp := range t.Histograms {
-			h := prompb.HistogramProtoToHistogram(hp)
-			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, nil)
+			if r.opts.TooFarInFutureTimeWindow != 0 && tooFarInFuture.Before(model.Time(hp.Timestamp)) {
+				err = storage.ErrOutOfBounds
+				level.Debug(tLogger).Log("msg", "block metric too far in the future", "lset", lset, "timestamp", hp.Timestamp, "bound", tooFarInFuture)
+			} else {
+				h := prompb.HistogramProtoToHistogram(hp)
+				ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, nil)
+			}
 			switch err {
 			case storage.ErrOutOfOrderSample:
 				numSamplesOutOfOrder++
@@ -177,7 +182,11 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			for _, ex := range t.Exemplars {
 				exLset := labelpb.ZLabelsToPromLabels(ex.Labels)
 				exLogger := log.With(tLogger, "exemplarLset", exLset, "exemplar", ex.String())
-
+				if r.opts.TooFarInFutureTimeWindow != 0 && tooFarInFuture.Before(model.Time(ex.Timestamp)) {
+					err = storage.ErrOutOfBounds
+					level.Debug(tLogger).Log("msg", "block metric too far in the future", "lset", lset, "timestamp", ex.Timestamp, "bound", tooFarInFuture)
+					continue
+				}
 				if _, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
 					Labels: exLset,
 					Value:  ex.Value,
