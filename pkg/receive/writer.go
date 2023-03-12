@@ -133,8 +133,10 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 				numSamplesOutOfOrder++
 				level.Debug(tLogger).Log("msg", "Out of order sample", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
 			case storage.ErrDuplicateSampleForTimestamp:
-				numSamplesDuplicates++
-				level.Debug(tLogger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
+				// we don't care about duplicated sample for the same timestamp
+				continue
+				// numSamplesDuplicates++
+				// level.Debug(tLogger).Log("msg", "Duplicate sample for timestamp", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
 			case storage.ErrOutOfBounds:
 				numSamplesOutOfBounds++
 				level.Debug(tLogger).Log("msg", "Out of bounds metric", "lset", lset, "value", s.Value, "timestamp", s.Timestamp)
