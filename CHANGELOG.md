@@ -14,11 +14,15 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#6203](https://github.com/thanos-io/thanos/pull/6203) Receive: Fix panic in head compaction under high query load.
-
 ### Changed
 
 ### Removed
+
+## [v0.31.0-rc1](https://github.com/thanos-io/thanos/tree/release-0.31) - 13.03.2023
+
+### Fixed
+
+- [#6203](https://github.com/thanos-io/thanos/pull/6203) Receive: Fix panic in head compaction under high query load.
 
 ## [v0.31.0-rc0](https://github.com/thanos-io/thanos/tree/release-0.31) - 24.02.2023
 
