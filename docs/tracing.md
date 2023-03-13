@@ -78,6 +78,7 @@ Thanos supports exporting traces in the OpenTelemetry Protocol (OTLP). Both gRPC
 type: OTLP
 config:
   client_type: ""
+  service_name: ""
   reconnection_period: 0s
   compression: ""
   insecure: false

@@ -301,7 +301,8 @@ func runSidecar(
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarSrv)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpc.bindAddress),
-			grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
+			grpcserver.WithGracePeriod(conf.grpc.gracePeriod),
+			grpcserver.WithMaxConnAge(conf.grpc.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 		g.Add(func() error {

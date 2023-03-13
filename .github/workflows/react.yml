@@ -14,15 +14,19 @@ jobs:
         node: [ '14' ]
     name: React UI test on Node ${{ matrix.node }}
     steps:
-      - uses: actions/checkout@v2
-      - name: install nodejs
-        uses: actions/setup-node@v2
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install nodejs
+        uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node }}
+
       - uses: actions/cache@v3
         with:
           path: ~/.npm
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
+
       - run: make react-app-test
