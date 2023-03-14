@@ -6,7 +6,6 @@ package extkingpin
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/pkg/errors"
@@ -71,32 +70,6 @@ func validateAddrs(addrs addressSlice) error {
 	}
 
 	return nil
-}
-
-// RegisterGRPCFlags registers flags commonly used to configure gRPC servers with.
-func RegisterGRPCFlags(cmd FlagClause) (
-	grpcBindAddr *string,
-	grpcGracePeriod *model.Duration,
-	grpcTLSSrvCert *string,
-	grpcTLSSrvKey *string,
-	grpcTLSSrvClientCA *string,
-	grpcMaxConnectionAge *time.Duration,
-) {
-	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.").
-		Default("0.0.0.0:10901").String()
-	grpcGracePeriod = ModelDuration(cmd.Flag("grpc-grace-period", "Time to wait after an interrupt received for GRPC Server.").Default("2m")) // by default it's the same as query.timeout.
-
-	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
-	grpcTLSSrvKey = cmd.Flag("grpc-server-tls-key", "TLS Key for the gRPC server, leave blank to disable TLS").Default("").String()
-	grpcTLSSrvClientCA = cmd.Flag("grpc-server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
-	grpcMaxConnectionAge = cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-read the tls certificates and redo the TLS handshake ").Default("60m").Duration()
-
-	return grpcBindAddr,
-		grpcGracePeriod,
-		grpcTLSSrvCert,
-		grpcTLSSrvKey,
-		grpcTLSSrvClientCA,
-		grpcMaxConnectionAge
 }
 
 // RegisterCommonObjStoreFlags register flags commonly used to configure http servers with.

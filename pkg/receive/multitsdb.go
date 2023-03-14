@@ -231,10 +231,14 @@ func (t *tenant) shipper() *shipper.Shipper {
 func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
 	t.readyS.Set(tenantTSDB)
 	t.mtx.Lock()
+	t.setComponents(storeTSDB, ship, exemplarsTSDB)
+	t.mtx.Unlock()
+}
+
+func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
 	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.exemplarsTSDB = exemplarsTSDB
-	t.mtx.Unlock()
 }
 
 func (t *MultiTSDB) Open() error {
@@ -280,7 +284,7 @@ func (t *MultiTSDB) Flush() error {
 		wg.Add(1)
 		go func() {
 			head := db.Head()
-			if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()-1)); err != nil {
+			if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -351,7 +355,7 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 	for _, tenantID := range prunedTenants {
-		// Check that the tenant hasn't been reinitialized in-betewen locks.
+		// Check that the tenant hasn't been reinitialized in-between locks.
 		if t.tenants[tenantID].readyStorage().get() != nil {
 			continue
 		}
@@ -395,6 +399,10 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	tenantTSDB.mtx.Lock()
 	defer tenantTSDB.mtx.Unlock()
 
+	// Lock the entire tenant to make sure the shipper is not running in parallel.
+	tenantInstance.mtx.Lock()
+	defer tenantInstance.mtx.Unlock()
+
 	sinceLastAppendMillis = time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
 	if sinceLastAppendMillis <= compactThreshold {
 		return false, nil
@@ -410,8 +418,8 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	}
 
 	level.Info(logger).Log("msg", "Pruning tenant")
-	if tenantInstance.shipper() != nil {
-		uploaded, err := tenantInstance.shipper().Sync(ctx)
+	if tenantInstance.ship != nil {
+		uploaded, err := tenantInstance.ship.Sync(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -430,6 +438,7 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	}
 
 	tenantInstance.readyS.set(nil)
+	tenantInstance.setComponents(nil, nil, nil)
 
 	return true, nil
 }

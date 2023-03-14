@@ -88,7 +88,9 @@ func registerQuery(app *extkingpin.App) {
 	cmd := app.Command(comp.String(), "Query node exposing PromQL enabled Query API with data retrieved from multiple store nodes.")
 
 	httpBindAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
-	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA, grpcMaxConnAge := extkingpin.RegisterGRPCFlags(cmd)
+
+	var grpcServerConfig grpcConfig
+	grpcServerConfig.registerFlag(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
 	skipVerify := cmd.Flag("grpc-client-tls-skip-verify", "Disable TLS certificate verification i.e self signed, signed by fake CA").Default("false").Bool()
@@ -286,12 +288,7 @@ func registerQuery(app *extkingpin.App) {
 			httpLogOpts,
 			grpcLogOpts,
 			tagOpts,
-			*grpcBindAddr,
-			time.Duration(*grpcGracePeriod),
-			*grpcCert,
-			*grpcKey,
-			*grpcClientCA,
-			*grpcMaxConnAge,
+			grpcServerConfig,
 			*grpcCompression,
 			*secure,
 			*skipVerify,
@@ -368,12 +365,7 @@ func runQuery(
 	httpLogOpts []logging.Option,
 	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
-	grpcBindAddr string,
-	grpcGracePeriod time.Duration,
-	grpcCert string,
-	grpcKey string,
-	grpcClientCA string,
-	grpcMaxConnAge time.Duration,
+	grpcServerConfig grpcConfig,
 	grpcCompression string,
 	secure bool,
 	skipVerify bool,
@@ -805,7 +797,7 @@ func runQuery(
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcServerConfig.tlsSrvCert, grpcServerConfig.tlsSrvKey, grpcServerConfig.tlsSrvClientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
@@ -843,10 +835,10 @@ func runQuery(
 			grpcserver.WithServer(metadata.RegisterMetadataServer(metadataProxy)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarsProxy)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
-			grpcserver.WithListen(grpcBindAddr),
-			grpcserver.WithGracePeriod(grpcGracePeriod),
+			grpcserver.WithListen(grpcServerConfig.bindAddress),
+			grpcserver.WithGracePeriod(grpcServerConfig.gracePeriod),
+			grpcserver.WithMaxConnAge(grpcServerConfig.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
-			grpcserver.WithMaxConnAge(grpcMaxConnAge),
 		)
 
 		g.Add(func() error {

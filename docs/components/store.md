@@ -36,6 +36,9 @@ Flags:
                                  Number of goroutines to use when constructing
                                  index-cache.json blocks from object storage.
                                  Must be equal or greater than 1.
+      --bucket-web-label=BUCKET-WEB-LABEL
+                                 External block label to use as group title in
+                                 the bucket web UI
       --cache-index-header       Cache TSDB index-headers on disk to reduce
                                  startup time. When set to true, Thanos Store
                                  will download index headers from remote object
@@ -63,6 +66,10 @@ Flags:
                                  from other components.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
+      --grpc-server-max-connection-age=0s
+                                 The grpc server max connection age. This
+                                 controls how often to re-establish connections
+                                 and redo TLS handshakes.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-client-ca=""

@@ -198,7 +198,7 @@ func (tbc *bucketWebConfig) registerBucketWebFlag(cmd extkingpin.FlagClause) *bu
 
 	cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").DurationVar(&tbc.timeout)
 
-	cmd.Flag("label", "Prometheus label to use as timeline title").StringVar(&tbc.label)
+	cmd.Flag("label", "External block label to use as group title").StringVar(&tbc.label)
 	return tbc
 }
 
