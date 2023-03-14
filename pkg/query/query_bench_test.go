@@ -66,14 +66,14 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 			SamplesPerSeries: samplesPerSeriesPerReplica,
 			Series:           seriesPerReplica,
 			Random:           random,
-			AppendLabels:     labels.FromStrings("z_replica", fmt.Sprintf("%d", j)), // z_ prefix to keep replica label at the end.
+			PrependLabels:    labels.FromStrings("z_replica", fmt.Sprintf("%d", j)), // z_ prefix to keep replica label at the end.
 		})
 		testutil.Ok(t, head.Close())
 		for i := 0; i < len(created); i++ {
 			if !dedup || j == 0 {
 				lset := labelpb.ZLabelsToPromLabels(created[i].Labels).Copy()
 				if dedup {
-					lset = lset[:len(lset)-1]
+					lset = lset[1:]
 				}
 				expectedSeries = append(expectedSeries, lset)
 			}
@@ -89,7 +89,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		logger,
 		math.MinInt64,
 		math.MaxInt64,
-		[]string{"a_replica"},
+		[]string{"z_replica"},
 		nil,
 		newProxyStore(stores...),
 		dedup,
