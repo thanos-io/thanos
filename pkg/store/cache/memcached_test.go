@@ -101,10 +101,10 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			testutil.Equals(t, testData.expectedMisses, misses)
 
 			// Assert on metrics.
-			testutil.Equals(t, float64(len(testData.fetchLabels)), prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypePostings)))
-			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypePostings)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypeSeries)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypeSeries)))
+			testutil.Equals(t, float64(len(testData.fetchLabels)), prom_testutil.ToFloat64(c.postingRequests))
+			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.postingHits))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.seriesRequests))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.seriesHits))
 		})
 	}
 }
@@ -190,10 +190,10 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 			testutil.Equals(t, testData.expectedMisses, misses)
 
 			// Assert on metrics.
-			testutil.Equals(t, float64(len(testData.fetchIds)), prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypeSeries)))
-			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypeSeries)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypePostings)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypePostings)))
+			testutil.Equals(t, float64(len(testData.fetchIds)), prom_testutil.ToFloat64(c.seriesRequests))
+			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.seriesHits))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.postingRequests))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.postingHits))
 		})
 	}
 }
