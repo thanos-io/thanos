@@ -255,8 +255,8 @@ replace (
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
-	// Pointing to branch adjust-start-times, commit 288056846738357ccb8a63472ccd378b2c44d15c.
-	github.com/thanos-community/promql-engine => github.com/fpetkovski/promql-engine v0.0.0-20230314100317-288056846738
+	// Pointing to branch adjust-start-times, commit 35224884143f94f3ecd4db3505f8ea3ec452a1e9.
+	github.com/thanos-community/promql-engine => github.com/fpetkovski/promql-engine v0.0.0-20230315083842-35224884143f
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
 
