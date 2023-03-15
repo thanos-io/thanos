@@ -328,7 +328,8 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	storeResponses := make([]respSet, 0, len(stores))
 	for _, st := range stores {
 		st := st
-		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
+		addr, _ := st.Addr()
+		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", addr))
 
 		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
@@ -453,7 +454,8 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to %v", st, reason))
 			continue
 		}
-		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))
+		addr, _ := st.Addr()
+		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", addr))
 
 		g.Go(func() error {
 			resp, err := st.LabelNames(gctx, &storepb.LabelNamesRequest{
@@ -524,7 +526,8 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(gctx, st, r.Start, r.End); !ok {
-			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to %v", st, reason))
+			addr, _ := st.Addr()
+			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s filtered out due to %v", addr, reason))
 			continue
 		}
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("Store %s queried", st))

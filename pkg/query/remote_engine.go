@@ -8,6 +8,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/efficientgo/core/backoff"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
@@ -112,7 +113,7 @@ func (r remoteEngine) LabelSets() []labels.Labels {
 }
 
 func (r remoteEngine) NewRangeQuery(opts *promql.QueryOpts, qs string, start, end time.Time, interval time.Duration) (promql.Query, error) {
-	return &remoteQuery{
+	qry := &remoteQuery{
 		logger: r.logger,
 		client: r.Client,
 		opts:   r.opts,
@@ -121,7 +122,9 @@ func (r remoteEngine) NewRangeQuery(opts *promql.QueryOpts, qs string, start, en
 		start:    start,
 		end:      end,
 		interval: interval,
-	}, nil
+	}
+
+	return newRetriableQuery(qry), nil
 }
 
 type remoteQuery struct {
@@ -208,17 +211,11 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	return &promql.Result{Value: result}
 }
 
-func (r *remoteQuery) Close() {
-	r.Cancel()
-}
+func (r *remoteQuery) Close() { r.Cancel() }
 
-func (r *remoteQuery) Statement() parser.Statement {
-	return nil
-}
+func (r *remoteQuery) Statement() parser.Statement { return nil }
 
-func (r *remoteQuery) Stats() *stats.Statistics {
-	return nil
-}
+func (r *remoteQuery) Stats() *stats.Statistics { return nil }
 
 func (r *remoteQuery) Cancel() {
 	if r.cancel != nil {
@@ -226,6 +223,31 @@ func (r *remoteQuery) Cancel() {
 	}
 }
 
-func (r *remoteQuery) String() string {
-	return r.qs
+func (r *remoteQuery) String() string { return r.qs }
+
+type retriableQuery struct {
+	*remoteQuery
+}
+
+func newRetriableQuery(remoteQuery *remoteQuery) *retriableQuery {
+	return &retriableQuery{remoteQuery: remoteQuery}
+}
+
+func (q *retriableQuery) Exec(ctx context.Context) *promql.Result {
+	retries := backoff.New(ctx, backoff.Config{
+		Min:        100 * time.Millisecond,
+		Max:        1 * time.Second,
+		MaxRetries: 3,
+	})
+
+	var result *promql.Result
+	for retries.Ongoing() {
+		result = q.remoteQuery.Exec(ctx)
+		if result.Err == nil {
+			return result
+		}
+		retries.Wait()
+	}
+
+	return result
 }
