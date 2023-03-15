@@ -92,7 +92,7 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			// Store the postings expected before running the test.
 			ctx := context.Background()
 			for _, p := range testData.setup {
-				c.StorePostings(ctx, p.block, p.label, p.value)
+				c.StorePostings(p.block, p.label, p.value)
 			}
 
 			// Fetch postings from cached and assert on it.
@@ -181,7 +181,7 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 			// Store the series expected before running the test.
 			ctx := context.Background()
 			for _, p := range testData.setup {
-				c.StoreSeries(ctx, p.block, p.id, p.value)
+				c.StoreSeries(p.block, p.id, p.value)
 			}
 
 			// Fetch series from cached and assert on it.
@@ -238,7 +238,7 @@ func (c *mockedMemcachedClient) GetMulti(ctx context.Context, keys []string) map
 	return hits
 }
 
-func (c *mockedMemcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *mockedMemcachedClient) SetAsync(key string, value []byte, ttl time.Duration) error {
 	c.cache[key] = value
 
 	return nil

@@ -63,10 +63,10 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 // StorePostings sets the postings identified by the ulid and label to the value v.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
-func (c *RemoteIndexCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {
+func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
 	key := cacheKey{blockID, cacheKeyPostings(l)}.string()
 
-	if err := c.memcached.SetAsync(ctx, key, v, memcachedDefaultTTL); err != nil {
+	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache postings in memcached", "err", err)
 	}
 }
@@ -123,10 +123,10 @@ func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.
 // StoreSeries sets the series identified by the ulid and id to the value v.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
-func (c *RemoteIndexCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id storage.SeriesRef, v []byte) {
+func (c *RemoteIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte) {
 	key := cacheKey{blockID, cacheKeySeries(id)}.string()
 
-	if err := c.memcached.SetAsync(ctx, key, v, memcachedDefaultTTL); err != nil {
+	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache series in memcached", "err", err)
 	}
 }

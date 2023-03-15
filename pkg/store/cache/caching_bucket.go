@@ -162,7 +162,7 @@ func (cb *CachingBucket) Iter(ctx context.Context, dir string, f func(string) er
 	if err == nil && remainingTTL > 0 {
 		data, encErr := cfg.Codec.Encode(list)
 		if encErr == nil {
-			cfg.Cache.Store(ctx, map[string][]byte{key: data}, remainingTTL)
+			cfg.Cache.Store(map[string][]byte{key: data}, remainingTTL)
 			return nil
 		}
 		level.Warn(cb.logger).Log("msg", "failed to encode Iter result", "key", key, "err", encErr)
@@ -194,13 +194,13 @@ func (cb *CachingBucket) Exists(ctx context.Context, name string) (bool, error) 
 	existsTime := time.Now()
 	ok, err := cb.Bucket.Exists(ctx, name)
 	if err == nil {
-		storeExistsCacheEntry(ctx, key, ok, existsTime, cfg.Cache, cfg.ExistsTTL, cfg.DoesntExistTTL)
+		storeExistsCacheEntry(key, ok, existsTime, cfg.Cache, cfg.ExistsTTL, cfg.DoesntExistTTL)
 	}
 
 	return ok, err
 }
 
-func storeExistsCacheEntry(ctx context.Context, cachingKey string, exists bool, ts time.Time, cache cache.Cache, existsTTL, doesntExistTTL time.Duration) {
+func storeExistsCacheEntry(cachingKey string, exists bool, ts time.Time, cache cache.Cache, existsTTL, doesntExistTTL time.Duration) {
 	var ttl time.Duration
 	if exists {
 		ttl = existsTTL - time.Since(ts)
@@ -209,7 +209,7 @@ func storeExistsCacheEntry(ctx context.Context, cachingKey string, exists bool, 
 	}
 
 	if ttl > 0 {
-		cache.Store(ctx, map[string][]byte{cachingKey: []byte(strconv.FormatBool(exists))}, ttl)
+		cache.Store(map[string][]byte{cachingKey: []byte(strconv.FormatBool(exists))}, ttl)
 	}
 }
 
@@ -245,13 +245,13 @@ func (cb *CachingBucket) Get(ctx context.Context, name string) (io.ReadCloser, e
 	if err != nil {
 		if cb.Bucket.IsObjNotFoundErr(err) {
 			// Cache that object doesn't exist.
-			storeExistsCacheEntry(ctx, existsKey, false, getTime, cfg.Cache, cfg.ExistsTTL, cfg.DoesntExistTTL)
+			storeExistsCacheEntry(existsKey, false, getTime, cfg.Cache, cfg.ExistsTTL, cfg.DoesntExistTTL)
 		}
 
 		return nil, err
 	}
 
-	storeExistsCacheEntry(ctx, existsKey, true, getTime, cfg.Cache, cfg.ExistsTTL, cfg.DoesntExistTTL)
+	storeExistsCacheEntry(existsKey, true, getTime, cfg.Cache, cfg.ExistsTTL, cfg.DoesntExistTTL)
 	return &getReader{
 		c:         cfg.Cache,
 		ctx:       ctx,
@@ -314,7 +314,7 @@ func (cb *CachingBucket) cachedAttributes(ctx context.Context, name, cfgName str
 	}
 
 	if raw, err := json.Marshal(attrs); err == nil {
-		cache.Store(ctx, map[string][]byte{key: raw}, ttl)
+		cache.Store(map[string][]byte{key: raw}, ttl)
 	} else {
 		level.Warn(cb.logger).Log("msg", "failed to encode cached Attributes result", "key", key, "err", err)
 	}
@@ -466,7 +466,7 @@ func (cb *CachingBucket) fetchMissingSubranges(ctx context.Context, name string,
 
 				if storeToCache {
 					cb.fetchedGetRangeBytes.WithLabelValues(originBucket, cfgName).Add(float64(len(subrangeData)))
-					cfg.Cache.Store(gctx, map[string][]byte{key: subrangeData}, cfg.SubrangeTTL)
+					cfg.Cache.Store(map[string][]byte{key: subrangeData}, cfg.SubrangeTTL)
 				} else {
 					cb.refetchedGetRangeBytes.WithLabelValues(originCache, cfgName).Add(float64(len(subrangeData)))
 				}
@@ -594,7 +594,7 @@ func (g *getReader) Read(p []byte) (n int, err error) {
 	if err == io.EOF && g.buf != nil {
 		remainingTTL := g.ttl - time.Since(g.startTime)
 		if remainingTTL > 0 {
-			g.c.Store(g.ctx, map[string][]byte{g.cacheKey: g.buf.Bytes()}, remainingTTL)
+			g.c.Store(map[string][]byte{g.cacheKey: g.buf.Bytes()}, remainingTTL)
 		}
 		// Clear reference, to avoid doing another Store on next read.
 		g.buf = nil

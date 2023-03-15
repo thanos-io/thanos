@@ -368,12 +368,12 @@ func (s *BucketStore) validate() error {
 
 type noopCache struct{}
 
-func (noopCache) StorePostings(context.Context, ulid.ULID, labels.Label, []byte) {}
+func (noopCache) StorePostings(ulid.ULID, labels.Label, []byte) {}
 func (noopCache) FetchMultiPostings(_ context.Context, _ ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
 	return map[labels.Label][]byte{}, keys
 }
 
-func (noopCache) StoreSeries(context.Context, ulid.ULID, storage.SeriesRef, []byte) {}
+func (noopCache) StoreSeries(ulid.ULID, storage.SeriesRef, []byte) {}
 func (noopCache) FetchMultiSeries(_ context.Context, _ ulid.ULID, ids []storage.SeriesRef) (map[storage.SeriesRef][]byte, []storage.SeriesRef) {
 	return map[storage.SeriesRef][]byte{}, ids
 }
@@ -2446,7 +2446,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 				// Truncate first 4 bytes which are length of posting.
 				output[p.keyID] = newBigEndianPostings(pBytes[4:])
 
-				r.block.indexCache.StorePostings(ctx, r.block.meta.ULID, keys[p.keyID], dataToCache)
+				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[p.keyID], dataToCache)
 
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
@@ -2607,7 +2607,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 		c = c[n : n+int(l)]
 		r.mtx.Lock()
 		r.loadedSeries[id] = c
-		r.block.indexCache.StoreSeries(ctx, r.block.meta.ULID, id, c)
+		r.block.indexCache.StoreSeries(r.block.meta.ULID, id, c)
 		r.mtx.Unlock()
 	}
 	return nil

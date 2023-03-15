@@ -73,7 +73,7 @@ type RemoteCacheClient interface {
 	// SetAsync enqueues an asynchronous operation to store a key into memcached.
 	// Returns an error in case it fails to enqueue the operation. In case the
 	// underlying async operation will fail, the error will be tracked/logged.
-	SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error
+	SetAsync(key string, value []byte, ttl time.Duration) error
 
 	// Stop client and release underlying resources.
 	Stop()
@@ -384,7 +384,7 @@ func (c *memcachedClient) Stop() {
 	c.workers.Wait()
 }
 
-func (c *memcachedClient) SetAsync(_ context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) error {
 	// Skip hitting memcached at all if the item is bigger than the max allowed size.
 	if c.config.MaxItemSize > 0 && uint64(len(value)) > uint64(c.config.MaxItemSize) {
 		c.skipped.WithLabelValues(opSet, reasonMaxItemSize).Inc()

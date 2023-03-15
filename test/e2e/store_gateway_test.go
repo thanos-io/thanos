@@ -928,7 +928,7 @@ func TestRedisClient_Rueidis(t *testing.T) {
 	}, nil)
 	testutil.Ok(t, err)
 
-	err = redisClient.SetAsync(context.TODO(), "foo", []byte(`bar`), 1*time.Minute)
+	err = redisClient.SetAsync("foo", []byte(`bar`), 1*time.Minute)
 	testutil.Ok(t, err)
 
 	returnedVals := redisClient.GetMulti(context.TODO(), []string{"foo"})
