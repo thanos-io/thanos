@@ -321,7 +321,8 @@ replace (
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab
 
-	github.com/thanos-community/promql-engine => github.com/fpetkovski/promql-engine v0.0.0-20230309153451-4fa269b36948
+	// Pointing to branch adjust-start-times, commit 5f91ace172797bfa84f6f9c495dc3518c79cb0d0.
+	github.com/thanos-community/promql-engine => github.com/fpetkovski/promql-engine v0.0.0-20230316104749-5f91ace17279
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
 
