@@ -19,7 +19,7 @@
             alert: 'ThanosStoreGrpcErrorRate',
             annotations: {
               description: 'Thanos Store {{$labels.job}}%s is failing to handle {{$value | humanize}}%% of requests.' % location,
-              summary: 'Thanos Store is failing to handle qrpcd requests.',
+              summary: 'Thanos Store is failing to handle grpc requests.',
             },
             expr: |||
               (
