@@ -23,7 +23,7 @@
             },
             expr: |||
               (
-                sum by (%(dimensions)s) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", %(selector)s}[5m]))
+                sum by (%(dimensions)s) (rate(grpc_server_handled_total{grpc_code=~"Unknown|Internal|Unavailable|DataLoss|DeadlineExceeded", %(selector)s}[5m]))
               /
                 sum by (%(dimensions)s) (rate(grpc_server_started_total{%(selector)s}[5m]))
               * 100 > %(grpcErrorThreshold)s
