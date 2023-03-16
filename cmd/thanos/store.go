@@ -508,8 +508,8 @@ func metadataFilterFactory(
 	consistencyDelay commonmodel.Duration,
 ) []block.MetadataFilter {
 	return []block.MetadataFilter{
-		block.NewDeduplicateFilter(fetchConcurrency),
 		block.NewTimePartitionMetaFilter(minTime, maxTime),
+		block.NewDeduplicateFilter(fetchConcurrency),
 		block.NewLabelShardedMetaFilter(relabelConfig),
 		block.NewConsistencyDelayMetaFilter(logger, time.Duration(consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
 		ignoreDeletionMarkFilter,
