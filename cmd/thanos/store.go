@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/thanos-io/objstore/client"
 
 	commonmodel "github.com/prometheus/common/model"
@@ -326,13 +327,15 @@ func runStore(
 
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
 	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
-		[]block.MetadataFilter{
-			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
-			block.NewLabelShardedMetaFilter(relabelConfig),
-			block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
+		metadataFilterFactory(
+			conf.filterConf.MinTime,
+			conf.filterConf.MaxTime,
+			relabelConfig,
+			logger,
+			reg,
 			ignoreDeletionMarkFilter,
-			block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
-		})
+			conf.blockMetaFetchConcurrency,
+			conf.consistencyDelay))
 	if err != nil {
 		return errors.Wrap(err, "meta fetcher")
 	}
@@ -493,4 +496,22 @@ func runStore(
 
 	level.Info(logger).Log("msg", "starting store node")
 	return nil
+}
+
+func metadataFilterFactory(
+	minTime, maxTime model.TimeOrDurationValue,
+	relabelConfig []*relabel.Config,
+	logger log.Logger,
+	reg prometheus.Registerer,
+	ignoreDeletionMarkFilter block.MetadataFilter,
+	fetchConcurrency int,
+	consistencyDelay commonmodel.Duration,
+) []block.MetadataFilter {
+	return []block.MetadataFilter{
+		block.NewDeduplicateFilter(fetchConcurrency),
+		block.NewTimePartitionMetaFilter(minTime, maxTime),
+		block.NewLabelShardedMetaFilter(relabelConfig),
+		block.NewConsistencyDelayMetaFilter(logger, time.Duration(consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
+		ignoreDeletionMarkFilter,
+	}
 }
