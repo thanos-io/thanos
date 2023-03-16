@@ -24,17 +24,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore/client"
 
+	"github.com/thanos-io/thanos/internal/mimir-prometheus/storage"
+	"github.com/thanos-io/thanos/internal/mimir-prometheus/tsdb"
 	blocksAPI "github.com/thanos-io/thanos/pkg/api/blocks"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
+	"github.com/thanos-io/thanos/pkg/compact/downsamplemimir"
 	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/dedup"
+	"github.com/thanos-io/thanos/pkg/dedupmimir"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -227,8 +228,9 @@ func runCompact(
 	// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 	// This is to make sure compactor will not accidentally perform compactions with gap instead.
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
-	duplicateBlocksFilter := block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency)
+	ignoreDeletionMarkerFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
+	globalDuplicateBlocksFilter := block.NewDeduplicateFilterWithVerticalSharding(conf.blockMetaFetchConcurrency, conf.verticalBlockShards != 1)
+	duplicateBlocksFilter := block.NewDeduplicateFilterWithVerticalSharding(conf.blockMetaFetchConcurrency, conf.verticalBlockShards != 1)
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, bkt, conf.blockMetaFetchConcurrency)
 	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig)
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
@@ -258,12 +260,14 @@ func runCompact(
 	{
 		// Make sure all compactor meta syncs are done through Syncer.SyncMeta for readability.
 		cf := baseMetaFetcher.NewMetaFetcher(
-			extprom.WrapRegistererWithPrefix("thanos_", reg), []block.MetadataFilter{
+			extprom.WrapRegistererWithPrefix("thanos_", reg),
+			[]block.MetadataFilter{
+				block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels),
+				globalDuplicateBlocksFilter,
 				timePartitionMetaFilter,
 				labelShardedMetaFilter,
+				ignoreDeletionMarkerFilter,
 				consistencyDelayMetaFilter,
-				ignoreDeletionMarkFilter,
-				block.NewReplicaLabelRemover(logger, conf.dedupReplicaLabels),
 				duplicateBlocksFilter,
 				noCompactMarkerFilter,
 			},
@@ -277,7 +281,7 @@ func runCompact(
 			bkt,
 			cf,
 			duplicateBlocksFilter,
-			ignoreDeletionMarkFilter,
+			ignoreDeletionMarkerFilter,
 			compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
 			compactMetrics.garbageCollectedBlocks,
 		)
@@ -307,7 +311,7 @@ func runCompact(
 	var mergeFunc storage.VerticalChunkSeriesMergeFunc
 	switch conf.dedupFunc {
 	case compact.DedupAlgorithmPenalty:
-		mergeFunc = dedup.NewChunkSeriesMerger()
+		mergeFunc = dedupmimir.NewChunkSeriesMerger()
 
 		if len(conf.dedupReplicaLabels) == 0 {
 			return errors.New("penalty based deduplication needs at least one replica label specified")
@@ -321,7 +325,7 @@ func runCompact(
 
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
-	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool(), mergeFunc)
+	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsamplemimir.NewPool(), mergeFunc, conf.enableVerticalCompaction)
 	if err != nil {
 		return errors.Wrap(err, "create compactor")
 	}
@@ -351,6 +355,7 @@ func runCompact(
 		metadata.HashFunc(conf.hashFunc),
 		conf.blockFilesConcurrency,
 		conf.compactBlocksFetchConcurrency,
+		conf.verticalBlockShards,
 	)
 	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
 	planner := compact.WithLargeTotalIndexSizeFilter(
@@ -359,7 +364,32 @@ func runCompact(
 		int64(conf.maxBlockIndexSize),
 		compactMetrics.blocksMarked.WithLabelValues(metadata.NoCompactMarkFilename, metadata.IndexSizeExceedingNoCompactReason),
 	)
-	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, ignoreDeletionMarkFilter, deleteDelay, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
+
+	cleanerReg := extprom.WrapRegistererWithPrefix("thanos_cleaner_", reg)
+	cleanerDuplicateBlocksFilter := block.NewDeduplicateFilterWithVerticalSharding(conf.blockMetaFetchConcurrency, conf.verticalBlockShards != 1)
+	cleanerDeletionMarkerFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
+	cleanerFetcher := baseMetaFetcher.NewMetaFetcher(
+		cleanerReg,
+		[]block.MetadataFilter{
+			timePartitionMetaFilter,
+			labelShardedMetaFilter,
+			cleanerDeletionMarkerFilter,
+			cleanerDuplicateBlocksFilter,
+		})
+	cleanerSyncer, err := compact.NewMetaSyncer(
+		logger,
+		cleanerReg,
+		bkt,
+		cleanerFetcher,
+		cleanerDuplicateBlocksFilter,
+		cleanerDeletionMarkerFilter,
+		compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
+		compactMetrics.garbageCollectedBlocks,
+	)
+	if err != nil {
+		return errors.Wrap(err, "create syncer")
+	}
+	blocksCleaner := compact.NewBlocksCleaner(logger, bkt, cleanerDeletionMarkerFilter, deleteDelay, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
 	compactor, err := compact.NewBucketCompactor(
 		logger,
 		sy,
@@ -405,14 +435,18 @@ func runCompact(
 		cleanMtx.Lock()
 		defer cleanMtx.Unlock()
 
-		if err := sy.SyncMetas(ctx); err != nil {
-			return errors.Wrap(err, "syncing metas")
+		if err := cleanerSyncer.SyncMetas(ctx); err != nil {
+			return errors.Wrap(err, "syncing metas for cleaner")
+		}
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, cleanerSyncer.Partial(), bkt, compactMetrics.partialUploadDeleteAttempts, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
+
+		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+			level.Error(logger).Log("err", err)
+		}
+		if err := cleanerSyncer.GarbageCollect(ctx); err != nil {
+			return errors.Wrap(err, "garbage collecting metas")
 		}
 
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), bkt, compactMetrics.partialUploadDeleteAttempts, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
-		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
-			return errors.Wrap(err, "cleaning marked blocks")
-		}
 		compactMetrics.cleanups.Inc()
 
 		return nil
@@ -661,6 +695,7 @@ type compactConfig struct {
 	compactionConcurrency                          int
 	downsampleConcurrency                          int
 	compactBlocksFetchConcurrency                  int
+	verticalBlockShards                            uint64
 	deleteDelay                                    model.Duration
 	dedupReplicaLabels                             []string
 	selectorRelabelConf                            extflag.PathOrContent
@@ -732,6 +767,9 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("1").IntVar(&cc.compactBlocksFetchConcurrency)
 	cmd.Flag("downsample.concurrency", "Number of goroutines to use when downsampling blocks.").
 		Default("1").IntVar(&cc.downsampleConcurrency)
+
+	cmd.Flag("compact.vertical-block-shards", "The number of independent shards to create for newly compacted blocks.").
+		Default("1").Uint64Var(&cc.verticalBlockShards)
 
 	cmd.Flag("delete-delay", "Time before a block marked for deletion is deleted from bucket. "+
 		"If delete-delay is non zero, blocks will be marked for deletion and compactor component will delete blocks marked for deletion from the bucket. "+

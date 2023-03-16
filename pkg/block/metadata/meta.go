@@ -156,7 +156,17 @@ func InjectThanos(logger log.Logger, bdir string, meta Thanos, downsampledMeta *
 // Returns a unique identifier for the compaction group the block belongs to.
 // It considers the downsampling resolution and the block's labels.
 func (m *Thanos) GroupKey() string {
-	return m.GroupKeyForShard(m.VerticalShardID)
+	var shardKey string
+	if m.VerticalShardID != nil {
+		shardKey = fmt.Sprintf("@S%d", *m.VerticalShardID)
+	}
+
+	lbls := labels.FromMap(m.Labels)
+	lbls = append(lbls, labels.Label{
+		Name:  "__source",
+		Value: string(m.Source),
+	})
+	return fmt.Sprintf("%d%s@G%v", m.Downsample.Resolution, shardKey, lbls.Hash())
 }
 
 func (m *Thanos) GetVerticalShardID() string {
@@ -164,14 +174,6 @@ func (m *Thanos) GetVerticalShardID() string {
 		return ""
 	}
 	return fmt.Sprintf("%d", *m.VerticalShardID)
-}
-
-func (m *Thanos) GroupKeyForShard(verticalShard *uint64) string {
-	var shardKey string
-	if verticalShard != nil {
-		shardKey = fmt.Sprintf("@S%d", *verticalShard)
-	}
-	return fmt.Sprintf("%d%s@G%v", m.Downsample.Resolution, shardKey, labels.FromMap(m.Labels).Hash())
 }
 
 // WriteToDir writes the encoded meta into <dir>/meta.json.

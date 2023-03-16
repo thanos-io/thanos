@@ -72,8 +72,18 @@ func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompac
 	}
 
 	verticalCompactions := selectOverlappingMetas(notExcludedMetasByMinTime)
-	if len(verticalCompactions) > 0 {
-		return verticalCompactions, nil
+	rawResolutionCompactions := make([]CompactionTask, 0, len(verticalCompactions))
+	for _, task := range verticalCompactions {
+		if task[0].Thanos.Downsample.Resolution == 0 {
+			rawResolutionCompactions = append(rawResolutionCompactions, task)
+		} else {
+			for _, meta := range task {
+				noCompactMarked[meta.ULID] = &metadata.NoCompactMark{}
+			}
+		}
+	}
+	if len(rawResolutionCompactions) > 0 {
+		return rawResolutionCompactions, nil
 	}
 	// No overlapping blocks, do compaction the usual way.
 

@@ -530,6 +530,7 @@ func createBlock(
 	if err := g.Wait(); err != nil {
 		return id, err
 	}
+	// TODO(rabenhorst) Test with sharded compactor.
 	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")

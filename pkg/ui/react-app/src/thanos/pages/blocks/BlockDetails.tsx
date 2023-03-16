@@ -76,6 +76,9 @@ export const BlockDetails: FC<BlockDetailsProps> = ({ block, selectBlock }) => {
           <div data-testid="resolution">
             <b>Resolution:</b> <span>{block.thanos.downsample.resolution}</span>
           </div>
+          <div data-testid="vertical_shard_id">
+            <b>Vertical Shard:</b> <span>{block.thanos.vertical_shard_id}</span>
+          </div>
           <div data-testid="level">
             <b>Level:</b> <span>{block.compaction.level}</span>
           </div>

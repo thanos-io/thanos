@@ -1,4 +1,4 @@
-import { sortBlocks, isOverlapping, getFilteredBlockPools } from './helpers';
+import { getFilteredBlockPools, isOverlapping, sortBlocks } from './helpers';
 
 // Number of blocks in data: 8.
 const overlapCaseData = {
@@ -16,6 +16,7 @@ const overlapCaseData = {
         numChunks: 51057,
       },
       thanos: {
+        vertical_shard_id: '2',
         downsample: {
           resolution: 0,
         },
@@ -41,6 +42,7 @@ const overlapCaseData = {
         numChunks: 51057,
       },
       thanos: {
+        vertical_shard_id: '2',
         downsample: {
           resolution: 0,
         },
@@ -65,6 +67,7 @@ const overlapCaseData = {
         numChunks: 58325,
       },
       thanos: {
+        vertical_shard_id: '2',
         downsample: {
           resolution: 0,
         },
@@ -89,6 +92,7 @@ const overlapCaseData = {
         numChunks: 58325,
       },
       thanos: {
+        vertical_shard_id: '2',
         downsample: {
           resolution: 0,
         },
@@ -113,6 +117,7 @@ const overlapCaseData = {
         numChunks: 58325,
       },
       thanos: {
+        vertical_shard_id: '2',
         downsample: {
           resolution: 0,
         },
@@ -137,6 +142,7 @@ const overlapCaseData = {
         numChunks: 58325,
       },
       thanos: {
+        vertical_shard_id: '2',
         downsample: {
           resolution: 0,
         },
@@ -161,6 +167,7 @@ const overlapCaseData = {
         numChunks: 58325,
       },
       thanos: {
+        vertical_shard_id: '2',
         downsample: {
           resolution: 0,
         },
@@ -185,6 +192,7 @@ const overlapCaseData = {
         numChunks: 58325,
       },
       thanos: {
+        vertical_shard_id: '2',
         downsample: {
           resolution: 0,
         },
@@ -223,6 +231,7 @@ const blockPools = {
             labels: {
               prometheus: 'prom-1',
             },
+            vertical_shard_id: '2',
             downsample: {
               resolution: 0,
             },
@@ -261,6 +270,7 @@ const blockPools = {
             labels: {
               prometheus: 'prom-1',
             },
+            vertical_shard_id: '2',
             downsample: {
               resolution: 0,
             },
@@ -305,6 +315,7 @@ const blockPools = {
             labels: {
               prometheus: 'prom-2',
             },
+            vertical_shard_id: '2',
             downsample: {
               resolution: 0,
             },
@@ -343,6 +354,7 @@ const blockPools = {
             labels: {
               prometheus: 'prom-2',
             },
+            vertical_shard_id: '2',
             downsample: {
               resolution: 0,
             },
@@ -387,6 +399,7 @@ const blockPools = {
             labels: {
               prometheus: 'prom-2 random:2',
             },
+            vertical_shard_id: '2',
             downsample: {
               resolution: 0,
             },
@@ -425,6 +438,7 @@ const blockPools = {
             labels: {
               prometheus: 'prom-2 random:2',
             },
+            vertical_shard_id: '2',
             downsample: {
               resolution: 0,
             },
@@ -469,6 +483,7 @@ const blockPools = {
             labels: {
               prometheus: 'prom-1 random:1',
             },
+            vertical_shard_id: '2',
             downsample: {
               resolution: 0,
             },
@@ -507,6 +522,7 @@ const blockPools = {
             labels: {
               prometheus: 'prom-1 random:1',
             },
+            vertical_shard_id: '2',
             downsample: {
               resolution: 0,
             },
@@ -552,6 +568,7 @@ const filteredBlocks = [
       labels: {
         prometheus: 'prom-2',
       },
+      vertical_shard_id: '2',
       downsample: {
         resolution: 0,
       },

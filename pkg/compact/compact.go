@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
 
+	mimir_tsdb "github.com/thanos-io/thanos/internal/mimir-prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -236,6 +238,7 @@ type DefaultGrouper struct {
 	hashFunc                      metadata.HashFunc
 	blockFilesConcurrency         int
 	compactBlocksFetchConcurrency int
+	verticalBlockShards           uint64
 }
 
 // NewDefaultGrouper makes a new DefaultGrouper.
@@ -251,6 +254,7 @@ func NewDefaultGrouper(
 	hashFunc metadata.HashFunc,
 	blockFilesConcurrency int,
 	compactBlocksFetchConcurrency int,
+	verticalBlockShards uint64,
 ) *DefaultGrouper {
 	return &DefaultGrouper{
 		bkt:                      bkt,
@@ -283,6 +287,7 @@ func NewDefaultGrouper(
 		hashFunc:                      hashFunc,
 		blockFilesConcurrency:         blockFilesConcurrency,
 		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
+		verticalBlockShards:           verticalBlockShards,
 	}
 }
 
@@ -291,6 +296,11 @@ func NewDefaultGrouper(
 func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Group, err error) {
 	groups := map[string]*Group{}
 	for _, m := range blocks {
+		numVerticalShards := uint64(1)
+		// If the group is unsharded, set number of shards to the globally configured sharding factor.
+		if m.Thanos.VerticalShardID == nil {
+			numVerticalShards = g.verticalBlockShards
+		}
 		groupKey := m.Thanos.GroupKey()
 		group, ok := groups[groupKey]
 		if !ok {
@@ -314,6 +324,8 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 				g.hashFunc,
 				g.blockFilesConcurrency,
 				g.compactBlocksFetchConcurrency,
+				m.Thanos.VerticalShardID,
+				numVerticalShards,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
@@ -354,6 +366,8 @@ type Group struct {
 	hashFunc                      metadata.HashFunc
 	blockFilesConcurrency         int
 	compactBlocksFetchConcurrency int
+	verticalShard                 *uint64
+	verticalBlockShards           uint64
 }
 
 // NewGroup returns a new compaction group.
@@ -376,6 +390,8 @@ func NewGroup(
 	hashFunc metadata.HashFunc,
 	blockFilesConcurrency int,
 	compactBlocksFetchConcurrency int,
+	verticalShard *uint64,
+	verticalBlockShards uint64,
 ) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -389,6 +405,7 @@ func NewGroup(
 		logger:                        logger,
 		bkt:                           bkt,
 		key:                           key,
+		verticalShard:                 verticalShard,
 		labels:                        lset,
 		resolution:                    resolution,
 		acceptMalformedIndex:          acceptMalformedIndex,
@@ -404,6 +421,7 @@ func NewGroup(
 		hashFunc:                      hashFunc,
 		blockFilesConcurrency:         blockFilesConcurrency,
 		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
+		verticalBlockShards:           verticalBlockShards,
 	}
 	return g, nil
 }
@@ -742,7 +760,7 @@ type Planner interface {
 type Compactor interface {
 	// Write persists a Block into a directory.
 	// No Block is written when resulting Block has 0 samples, and returns empty ulid.ULID{}.
-	Write(dest string, b tsdb.BlockReader, mint, maxt int64, parent *tsdb.BlockMeta) (ulid.ULID, error)
+	Write(dest string, b mimir_tsdb.BlockReader, mint, maxt int64, parent *mimir_tsdb.BlockMeta) (ulid.ULID, error)
 
 	// Compact runs compaction against the provided directories. Must
 	// only be called concurrently with results of Plan().
@@ -752,7 +770,9 @@ type Compactor interface {
 	//  * No block is written.
 	//  * The source dirs are marked Deletable.
 	//  * Returns empty ulid.ULID{}.
-	Compact(dest string, dirs []string, open []*tsdb.Block) (ulid.ULID, error)
+	Compact(dest string, dirs []string, open []*mimir_tsdb.Block) (ulid.ULID, error)
+
+	CompactWithSplitting(dest string, dirs []string, open []*mimir_tsdb.Block, shardCount uint64) ([]ulid.ULID, error)
 }
 
 // GroupCompactionTask is an independent compaction task for a given compaction group.
@@ -1073,15 +1093,17 @@ func (cg *Group) compactBlocks(ctx context.Context, dir string, blocks Compactio
 
 	level.Info(cg.logger).Log("msg", "downloaded and verified blocks; compacting blocks", "plan", sourceBlockStr, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
 
-	var compID ulid.ULID
+	var compIDs []ulid.ULID
 	begin = time.Now()
 	if err := tracing.DoInSpanWithErr(ctx, "compaction", func(ctx context.Context) (e error) {
-		compID, e = comp.Compact(dir, toCompactDirs, nil)
+		ulids, e := comp.CompactWithSplitting(dir, toCompactDirs, nil, cg.verticalBlockShards)
+		compIDs = ulids
 		return e
 	}); err != nil {
 		return false, halt(errors.Wrapf(err, "compact blocks %v", toCompactDirs))
 	}
-	if compID == (ulid.ULID{}) {
+
+	if len(compIDs) == 0 {
 		// Prometheus compactor found that the compacted block would have no samples.
 		level.Info(cg.logger).Log("msg", "compacted block would have no samples, deleting source blocks", "blocks", sourceBlockStr)
 		for _, meta := range blocks {
@@ -1098,56 +1120,86 @@ func (cg *Group) compactBlocks(ctx context.Context, dir string, blocks Compactio
 	if hasOverlappingBlocks {
 		cg.verticalCompactions.Inc()
 	}
-	level.Info(cg.logger).Log("msg", "compacted blocks", "new", compID,
+	compULIDs := make([]string, 0, len(compIDs))
+	for _, c := range compIDs {
+		if c == (ulid.ULID{}) {
+			continue
+		}
+		compULIDs = append(compULIDs, c.String())
+	}
+
+	level.Info(cg.logger).Log("msg", "compacted blocks", "new", strings.Join(compULIDs, ", "),
 		"blocks", sourceBlockStr, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "overlapping_blocks", hasOverlappingBlocks)
 
-	bdir := filepath.Join(dir, compID.String())
-	index := filepath.Join(bdir, block.IndexFilename)
-
-	newMeta, err := metadata.InjectThanos(cg.logger, bdir, metadata.Thanos{
-		Labels:       cg.labels.Map(),
-		Downsample:   metadata.ThanosDownsample{Resolution: cg.resolution},
-		Source:       metadata.CompactorSource,
-		SegmentFiles: block.GetSegmentFiles(bdir),
-	}, nil)
-	if err != nil {
-		return false, errors.Wrapf(err, "failed to finalize the block %s", bdir)
-	}
-
-	if err = os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
-		return false, errors.Wrap(err, "remove tombstones")
-	}
-
-	// Ensure the output block is valid.
-	err = tracing.DoInSpanWithErr(ctx, "compaction_verify_index", func(ctx context.Context) error {
-		return block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime)
-	})
-	if !cg.acceptMalformedIndex && err != nil {
-		return false, halt(errors.Wrapf(err, "invalid result block %s", bdir))
-	}
-
-	// Ensure the output block is not overlapping with anything else,
-	// unless vertical compaction is enabled.
-	if !cg.enableVerticalCompaction {
-		if err := cg.areBlocksOverlapping([]*metadata.Meta{newMeta}, blocks...); err != nil {
-			return false, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
+	resultBlockShard := cg.verticalShard
+	for i, compID := range compULIDs {
+		if cg.verticalBlockShards > 1 {
+			shardID := uint64(i)
+			resultBlockShard = &shardID
 		}
+
+		bdir := filepath.Join(dir, compID)
+		index := filepath.Join(bdir, block.IndexFilename)
+
+		newMeta, err := metadata.InjectThanos(cg.logger, bdir, metadata.Thanos{
+			Labels:          cg.labels.Map(),
+			Downsample:      metadata.ThanosDownsample{Resolution: cg.resolution},
+			Source:          metadata.CompactorSource,
+			SegmentFiles:    block.GetSegmentFiles(bdir),
+			VerticalShardID: resultBlockShard,
+		}, nil)
+		if err != nil {
+			return false, errors.Wrapf(err, "failed to finalize the block %s", bdir)
+		}
+
+		if err = os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
+			return false, errors.Wrap(err, "remove tombstones")
+		}
+
+		// Ensure the output block is valid.
+		err = tracing.DoInSpanWithErr(ctx, "compaction_verify_index", func(ctx context.Context) error {
+			return block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime)
+		})
+		if !cg.acceptMalformedIndex && err != nil {
+			return false, halt(errors.Wrapf(err, "invalid result block %s", bdir))
+		}
+
+		// Ensure the output block is not overlapping with anything else,
+		// unless vertical compaction is enabled.
+		if !cg.enableVerticalCompaction {
+			if err := cg.areBlocksOverlapping([]*metadata.Meta{newMeta}, blocks...); err != nil {
+				return false, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
+			}
+		}
+
+		level.Info(cg.logger).Log("msg", "compacted block", "new", compID,
+			"blocks", sourceBlockStr, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds(), "overlapping_blocks", hasOverlappingBlocks)
 	}
 
-	begin = time.Now()
-	err = tracing.DoInSpanWithErr(ctx, "compaction_block_upload", func(ctx context.Context) error {
-		return block.Upload(ctx, cg.logger, cg.bkt, bdir, cg.hashFunc, objstore.WithUploadConcurrency(cg.blockFilesConcurrency))
-	})
-	if err != nil {
-		return false, retry(errors.Wrapf(err, "upload of %s failed", compID))
+	// Upload block with shard ID 0 at the end. The 0-th shard is used in the dedup filter to verify
+	// that an unsharded group has been fully sharded and uploaded to object storage.
+	g, gctx := errgroup.WithContext(ctx)
+	for i := 1; i < len(compULIDs); i++ {
+		compULID := compULIDs[i]
+		g.Go(func() error {
+			return cg.uploadBlock(gctx, dir, compULID)
+		})
 	}
-	level.Info(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
+	if err := g.Wait(); err != nil {
+		return false, retry(err)
+	}
+	if err := cg.uploadBlock(ctx, dir, compULIDs[0]); err != nil {
+		return false, retry(err)
+	}
+
+	level.Info(cg.logger).Log("msg", "finished compacting blocks", "result_blocks", strings.Join(compULIDs, ", "), "source_blocks", sourceBlockStr,
+		"duration", time.Since(compactionBegin), "duration_ms", time.Since(compactionBegin).Milliseconds())
 
 	// Mark for deletion the blocks we just compacted from the group and bucket so they do not get included
 	// into the next planning cycle.
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
 	for _, meta := range blocks {
-		err = tracing.DoInSpanWithErr(ctx, "compaction_block_delete", func(ctx context.Context) error {
+		err := tracing.DoInSpanWithErr(ctx, "compaction_block_delete", func(ctx context.Context) error {
 			return cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()))
 		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
@@ -1156,9 +1208,14 @@ func (cg *Group) compactBlocks(ctx context.Context, dir string, blocks Compactio
 		cg.groupGarbageCollectedBlocks.Inc()
 	}
 
-	level.Info(cg.logger).Log("msg", "finished compacting blocks", "result_block", compID, "source_blocks", sourceBlockStr,
-		"duration", time.Since(compactionBegin), "duration_ms", time.Since(compactionBegin).Milliseconds())
 	return true, nil
+}
+
+func (cg *Group) uploadBlock(ctx context.Context, dir string, compULID string) error {
+	bdir := filepath.Join(dir, compULID)
+	return tracing.DoInSpanWithErr(ctx, "compaction_block_upload", func(ctx context.Context) error {
+		return block.Upload(ctx, cg.logger, cg.bkt, bdir, cg.hashFunc, objstore.WithUploadConcurrency(cg.blockFilesConcurrency))
+	})
 }
 
 func (cg *Group) deleteBlock(id ulid.ULID, bdir string) error {

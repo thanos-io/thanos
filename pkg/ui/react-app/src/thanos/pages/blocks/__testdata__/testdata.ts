@@ -54,6 +54,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -78,6 +79,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -140,6 +142,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 300000,
           },
@@ -164,6 +167,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2214,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -188,6 +192,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2354,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -212,6 +217,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -236,6 +242,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -260,6 +267,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -284,6 +292,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2214,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -320,6 +329,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2684,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -344,6 +354,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2354,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -406,6 +417,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -468,6 +480,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 300000,
           },
@@ -504,6 +517,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2684,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -566,6 +580,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -590,6 +605,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -652,6 +668,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 300000,
           },
@@ -676,6 +693,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2214,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -700,6 +718,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2354,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -724,6 +743,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -748,6 +768,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -772,6 +793,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -796,6 +818,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2214,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -832,6 +855,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2684,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -856,6 +880,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2354,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -918,6 +943,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -980,6 +1006,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 300000,
           },
@@ -1016,6 +1043,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2684,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1078,6 +1106,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1102,6 +1131,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1164,6 +1194,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 300000,
           },
@@ -1188,6 +1219,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2214,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1212,6 +1244,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2354,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1236,6 +1269,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1260,6 +1294,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1284,6 +1319,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1308,6 +1344,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2214,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1344,6 +1381,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2684,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1368,6 +1406,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2354,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1430,6 +1469,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1492,6 +1532,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 300000,
           },
@@ -1528,6 +1569,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2684,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1590,6 +1632,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1614,6 +1657,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1676,6 +1720,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 300000,
           },
@@ -1700,6 +1745,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2214,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1724,6 +1770,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2354,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1748,6 +1795,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1772,6 +1820,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1796,6 +1845,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2213,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1820,6 +1870,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2214,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1856,6 +1907,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2684,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1880,6 +1932,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2354,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -1942,6 +1995,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },
@@ -2004,6 +2058,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2492,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 300000,
           },
@@ -2040,6 +2095,7 @@ export const sampleAPIResponse: { status: string; data: BlockListProps } = {
           numSeries: 2684,
         },
         thanos: {
+          vertical_shard_id: '2',
           downsample: {
             resolution: 0,
           },

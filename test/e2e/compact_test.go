@@ -33,6 +33,7 @@ import (
 	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -724,7 +725,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		operationMatcher, err := matchers.NewMatcher(matchers.MatchEqual, "operation", "get")
 		testutil.Ok(t, err)
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(
-			e2emon.Equals(635),
+			e2emon.Equals(636),
 			[]string{"thanos_objstore_bucket_operations_total"}, e2emon.WithLabelMatchers(
 				bucketMatcher,
 				operationMatcher,

@@ -91,6 +91,7 @@ func TestRetryError(t *testing.T) {
 }
 
 func TestGroupKey(t *testing.T) {
+	shardID := uint64(1)
 	for _, tcase := range []struct {
 		input    metadata.Thanos
 		expected string
@@ -115,10 +116,11 @@ func TestGroupKey(t *testing.T) {
 		},
 		{
 			input: metadata.Thanos{
-				Labels:     map[string]string{`foo/some..thing/some.thing/../`: `a_b_c/bar-something-a\metric/a\x`},
-				Downsample: metadata.ThanosDownsample{Resolution: 0},
+				Labels:          map[string]string{`foo/some..thing/some.thing/../`: `a_b_c/bar-something-a\metric/a\x`},
+				Downsample:      metadata.ThanosDownsample{Resolution: 0},
+				VerticalShardID: &shardID,
 			},
-			expected: "0@G16590761456214576373",
+			expected: "0@S1@G16590761456214576373",
 		},
 	} {
 		if ok := t.Run("", func(t *testing.T) {
@@ -211,7 +213,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
-	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1)
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1, 1)
 
 	type groupedResult map[string]float64
 
@@ -377,7 +379,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
-	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1)
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1, 1)
 
 	for _, tcase := range []struct {
 		testName string
@@ -514,7 +516,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for downsample progress tests"})
-	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1)
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1, 1)
 
 	for _, tcase := range []struct {
 		testName string

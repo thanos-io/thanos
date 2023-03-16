@@ -15,22 +15,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/tsdb"
+
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/objtesting"
-
-	"github.com/efficientgo/core/testutil"
-
+	"github.com/thanos-io/thanos/internal/mimir-prometheus/storage"
+	"github.com/thanos-io/thanos/internal/mimir-prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/dedup"
+	"github.com/thanos-io/thanos/pkg/dedupmimir"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
@@ -139,7 +138,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		testutil.Ok(t, sy.GarbageCollect(ctx))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
-		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks, blockMarkedForNoCompact, metadata.NoneFunc, 10, 10)
+		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks, blockMarkedForNoCompact, metadata.NoneFunc, 10, 10, 1)
 		groups, err := grouper.Groups(sy.Metas())
 		testutil.Ok(t, err)
 
@@ -185,7 +184,7 @@ func TestGroupCompactE2EWithHighConcurrency(t *testing.T) {
 
 // Penalty based merger should get the same result as the blocks don't have overlap.
 func TestGroupCompactPenaltyDedupE2E(t *testing.T) {
-	testGroupCompactE2e(t, dedup.NewChunkSeriesMerger(), 2)
+	testGroupCompactE2e(t, dedupmimir.NewChunkSeriesMerger(), 2)
 }
 
 func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMergeFunc, concurrency int) {
@@ -216,11 +215,11 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks)
 		testutil.Ok(t, err)
 
-		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil, mergeFunc)
+		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil, mergeFunc, false)
 		testutil.Ok(t, err)
 
 		planner := NewPlanner(logger, []int64{1000, 3000}, noCompactMarkerFilter)
-		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, blocksMaredForNoCompact, metadata.NoneFunc, 10, 10)
+		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, blocksMaredForNoCompact, metadata.NoneFunc, 10, 10, 1)
 		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, concurrency, true)
 		testutil.Ok(t, err)
 

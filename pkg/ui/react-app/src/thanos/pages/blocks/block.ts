@@ -16,6 +16,7 @@ export interface Block {
     numSeries: number;
   };
   thanos: {
+    vertical_shard_id: string | null;
     downsample: {
       resolution: number;
     };

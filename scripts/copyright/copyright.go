@@ -31,6 +31,10 @@ func applyLicenseToProtoAndGo() error {
 			return err
 		}
 
+		if strings.HasPrefix(path, "internal/mimir-prometheus") {
+			return nil
+		}
+
 		// Filter out stuff that does not need copyright.
 		if info.IsDir() {
 			switch path {

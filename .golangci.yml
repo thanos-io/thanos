@@ -17,6 +17,7 @@ run:
   skip-dirs:
     - vendor
     - internal/cortex
+    - internal/mimir-prometheus
 
 
 # output configuration options

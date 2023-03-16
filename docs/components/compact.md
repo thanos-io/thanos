@@ -314,6 +314,9 @@ Flags:
                                 Setting it to "0s" disables it. Now compaction,
                                 downsampling and retention progress are
                                 supported.
+      --compact.vertical-block-shards=1
+                                The number of independent shards to create for
+                                newly compacted blocks.
       --consistency-delay=30m   Minimum age of fresh (non-compacted)
                                 blocks before they are being processed.
                                 Malformed blocks older than the maximum of

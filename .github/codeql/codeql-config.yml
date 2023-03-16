@@ -1,2 +1,3 @@
 paths-ignore:
   - 'internal/cortex/**/*.go'
+  - 'internal/mimir-prometheus/**/*.go'

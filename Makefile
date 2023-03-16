@@ -267,7 +267,7 @@ check-docs: build examples $(MDOX)
 white-noise-cleanup: ## Cleans up white noise in docs.
 white-noise-cleanup:
 	@echo ">> cleaning up white noise"
-	@find . -type f \( -name "*.md" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+	@find . -type f \( -name "*.md" -not -path "./internal/mimir-prometheus*" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 
 .PHONY: shell-format
 shell-format: $(SHFMT)
@@ -375,7 +375,7 @@ web-serve: web-pre-process $(HUGO)
 lint: ## Runs various static analysis against our code.
 lint: go-lint react-app-lint shell-lint
 	@echo ">> detecting white noise"
-	@find . -type f \( -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+	@find . -type f \( -name "*.go" -not -path "./internal/mimir-prometheus*" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,'detected white noise, run make lint and commit changes')
 
 # PROTIP:
@@ -396,7 +396,7 @@ github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCoun
 NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}=github.com/prometheus/client_golang/prometheus/promauto.{NewCounter,\
 NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec},\
 sync/atomic=go.uber.org/atomic,github.com/cortexproject/cortex=github.com/thanos-io/thanos/internal/cortex,\
-io/ioutil.{Discard,NopCloser,ReadAll,ReadDir,ReadFile,TempDir,TempFile,Writefile}" $(shell go list ./... | grep -v "internal/cortex")
+io/ioutil.{Discard,NopCloser,ReadAll,ReadDir,ReadFile,TempDir,TempFile,Writefile}" $(shell go list ./... | grep -v -e "internal/cortex" -e "internal/mimir-prometheus")
 	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
 	@$(GOLANGCI_LINT) run

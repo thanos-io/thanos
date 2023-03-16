@@ -1137,6 +1137,7 @@ func appendTestData(t testing.TB, app storage.Appender, series int) {
 }
 
 func createBlockFromHead(t testing.TB, dir string, head *tsdb.Head) ulid.ULID {
+	// TODO(rabenhorst) Test with sharded compactor.
 	compactor, err := tsdb.NewLeveledCompactor(context.Background(), nil, log.NewNopLogger(), []int64{1000000}, nil, nil)
 	testutil.Ok(t, err)
 

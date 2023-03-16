@@ -36,6 +36,8 @@ import (
 
 const FetcherConcurrency = 32
 
+var shardZero uint64 = 0
+
 // FetcherMetrics holds metrics tracked by the metadata fetcher. This struct and its fields are exported
 // to allow depending projects (eg. Cortex) to implement their own custom metadata fetcher while tracking
 // compatible metrics.
@@ -561,25 +563,11 @@ func NewLabelShardedMetaFilter(relabelConfig []*relabel.Config) *LabelShardedMet
 // Special label that will have an ULID of the meta.json being referenced to.
 const BlockIDLabel = "__block_id"
 const ShardIDLabel = "__vertical_shard_id"
+const SourceLabel = "__source"
 
 // Filter filters out blocks that have no labels after relabelling of each block external (Thanos) labels.
 func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
-	var lbls labels.Labels
-	for id, m := range metas {
-		lbls = lbls[:0]
-		lbls = append(lbls,
-			labels.Label{Name: BlockIDLabel, Value: id.String()},
-			labels.Label{Name: ShardIDLabel, Value: m.Thanos.GetVerticalShardID()},
-		)
-		for k, v := range m.Thanos.Labels {
-			lbls = append(lbls, labels.Label{Name: k, Value: v})
-		}
-
-		if processedLabels, _ := relabel.Process(lbls, f.relabelConfig...); len(processedLabels) == 0 {
-			synced.WithLabelValues(labelExcludedMeta).Inc()
-			delete(metas, id)
-		}
-	}
+	relabelMetas(&metas, f.relabelConfig, synced)
 	return nil
 }
 
@@ -588,14 +576,20 @@ var _ MetadataFilter = &DeduplicateFilter{}
 // DeduplicateFilter is a BaseFetcher filter that filters out older blocks that have exactly the same data.
 // Not go-routine safe.
 type DeduplicateFilter struct {
-	duplicateIDs []ulid.ULID
-	concurrency  int
-	mu           sync.Mutex
+	duplicateIDs            []ulid.ULID
+	concurrency             int
+	mu                      sync.Mutex
+	verticalShardingEnabled bool
 }
 
 // NewDeduplicateFilter creates DeduplicateFilter.
 func NewDeduplicateFilter(concurrency int) *DeduplicateFilter {
 	return &DeduplicateFilter{concurrency: concurrency}
+}
+
+// NewDeduplicateFilterWithVerticalSharding creates DeduplicateFilter with vertical sharding enabled.
+func NewDeduplicateFilterWithVerticalSharding(concurrency int, verticalShardingEnabled bool) *DeduplicateFilter {
+	return &DeduplicateFilter{concurrency: concurrency, verticalShardingEnabled: verticalShardingEnabled}
 }
 
 // Filter filters out duplicate blocks that can be formed
@@ -620,7 +614,17 @@ func (f *DeduplicateFilter) Filter(_ context.Context, metas map[ulid.ULID]*metad
 	// We need only look within a compaction group for duplicates, so splitting by group key gives us parallelizable streams.
 	metasByCompactionGroup := make(map[string][]*metadata.Meta)
 	for _, meta := range metas {
-		groupKey := meta.Thanos.GroupKey()
+		// Make a copy of thanos meta to avoid modifying existing metas.
+		thanosMeta := (*meta).Thanos
+		// Ignore source when detecting duplicates.
+		thanosMeta.Source = ""
+		// If a block has no vertical shard ID, look for parent blocks in the 0-th shard.
+		// This shard always get uploaded last.
+		if f.verticalShardingEnabled && meta.Thanos.VerticalShardID == nil {
+			thanosMeta.VerticalShardID = &shardZero
+		}
+
+		groupKey := thanosMeta.GroupKey()
 		metasByCompactionGroup[groupKey] = append(metasByCompactionGroup[groupKey], meta)
 	}
 	for _, group := range metasByCompactionGroup {
@@ -925,4 +929,24 @@ func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]
 	}
 
 	return relabelConfig, nil
+}
+
+func relabelMetas(metas *map[ulid.ULID]*metadata.Meta, relabelConfig []*relabel.Config, synced GaugeVec) {
+	var lbls labels.Labels
+	for id, m := range *metas {
+		lbls = lbls[:0]
+		lbls = append(lbls,
+			labels.Label{Name: BlockIDLabel, Value: id.String()},
+			labels.Label{Name: ShardIDLabel, Value: m.Thanos.GetVerticalShardID()},
+			labels.Label{Name: SourceLabel, Value: string(m.Thanos.Source)},
+		)
+		for k, v := range m.Thanos.Labels {
+			lbls = append(lbls, labels.Label{Name: k, Value: v})
+		}
+
+		if processedLabels, _ := relabel.Process(lbls, relabelConfig...); len(processedLabels) == 0 {
+			synced.WithLabelValues(labelExcludedMeta).Inc()
+			delete(*metas, id)
+		}
+	}
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/objstore"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
@@ -72,15 +73,17 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 	}
 
 	// This mimics our default ExponentialBlockRanges with min block size equals to 20.
+	// TODO(rabenhorst) Test with sharded compactor.
 	tsdbComp, err := tsdb.NewLeveledCompactor(context.Background(), nil, nil, ranges, nil, nil)
 	testutil.Ok(t, err)
 	tsdbPlanner := &tsdbPlannerAdapter{comp: tsdbComp}
 	tsdbBasedPlanner := NewTSDBBasedPlanner(log.NewNopLogger(), ranges)
 
 	for _, c := range []struct {
-		name     string
-		metas    []*metadata.Meta
-		expected []CompactionTask
+		name              string
+		metas             []*metadata.Meta
+		expected          []CompactionTask
+		skipCompatibility bool
 	}{
 		{
 			name: "Outside range",
@@ -381,6 +384,24 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "Downsampled overlapping blocks",
+			metas: []*metadata.Meta{
+				{
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(1, nil), MinTime: 0, MaxTime: 30},
+					Thanos:    metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 300000}},
+				},
+				{
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 0, MaxTime: 60},
+					Thanos:    metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 300000}},
+				},
+				{
+					BlockMeta: tsdb.BlockMeta{Version: 1, ULID: ulid.MustNew(2, nil), MinTime: 0, MaxTime: 20},
+					Thanos:    metadata.Thanos{Downsample: metadata.ThanosDownsample{Resolution: 300000}},
+				},
+			},
+			skipCompatibility: true,
+		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			for _, e := range c.expected {
@@ -396,6 +417,9 @@ func TestPlanners_Plan_Compatibility(t *testing.T) {
 
 			// For compatibility.
 			t.Run("tsdbPlannerAdapter", func(t *testing.T) {
+				if c.skipCompatibility {
+					return
+				}
 				dir, err := os.MkdirTemp("", "test-compact")
 				testutil.Ok(t, err)
 				defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
@@ -443,8 +467,8 @@ func TestRangeWithFailedCompactionWontGetSelected(t *testing.T) {
 		540,
 		1620,
 	}
-
 	// This mimics our default ExponentialBlockRanges with min block size equals to 20.
+	// TODO(rabenhorst) Test with sharded compactor.
 	tsdbComp, err := tsdb.NewLeveledCompactor(context.Background(), nil, nil, ranges, nil, nil)
 	testutil.Ok(t, err)
 	tsdbPlanner := &tsdbPlannerAdapter{comp: tsdbComp}

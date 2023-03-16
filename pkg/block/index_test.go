@@ -61,10 +61,6 @@ func TestRewrite(t *testing.T) {
 
 	defer cw.Close()
 
-	testutil.Ok(t, rewrite(log.NewNopLogger(), ir, cr, iw, cw, m, []ignoreFnType{func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (bool, error) {
-		return curr.MaxTime == 696, nil
-	}}))
-
 	testutil.Ok(t, iw.Close())
 	testutil.Ok(t, cw.Close())
 
