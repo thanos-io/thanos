@@ -53,10 +53,14 @@ message InfoResponse {
 
 // StoreInfo holds the metadata related to Store API exposed by the component.
 message StoreInfo {
+    reserved 4; // Deprecated send_sorted, replaced by supports_without_replica_labels now.
+
     int64 min_time = 1;
     int64 max_time = 2;
-    bool  supports_sharding = 3;
-    bool  sends_sorted_series = 4;
+    bool supports_sharding = 3;
+
+    // replica_aware means this store supports without_replica_labels of StoreAPI.Series.
+    bool supports_without_replica_labels = 5;
 }
 
 // RulesInfo holds the metadata related to Rules API exposed by the component.

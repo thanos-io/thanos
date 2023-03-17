@@ -9,11 +9,14 @@ import (
 
 	"github.com/prometheus/prometheus/promql"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"google.golang.org/grpc"
 )
 
 type GRPCAPI struct {
@@ -103,8 +106,14 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	defer qry.Close()
 
 	result := qry.Exec(ctx)
-	if err := server.Send(querypb.NewQueryWarningsResponse(result.Warnings)); err != nil {
-		return nil
+	if result.Err != nil {
+		return status.Error(codes.Aborted, result.Err.Error())
+	}
+
+	if len(result.Warnings) != 0 {
+		if err := server.Send(querypb.NewQueryWarningsResponse(result.Warnings...)); err != nil {
+			return err
+		}
 	}
 
 	switch vector := result.Value.(type) {
@@ -117,9 +126,11 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		}
 	case promql.Vector:
 		for _, sample := range vector {
+			floats, histograms := prompb.SamplesFromPromqlPoints([]promql.Point{sample.Point})
 			series := &prompb.TimeSeries{
-				Labels:  labelpb.ZLabelsFromPromLabels(sample.Metric),
-				Samples: prompb.SamplesFromPromqlPoints([]promql.Point{sample.Point}),
+				Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
+				Samples:    floats,
+				Histograms: histograms,
 			}
 			if err := server.Send(querypb.NewQueryResponse(series)); err != nil {
 				return err
@@ -183,16 +194,24 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	defer qry.Close()
 
 	result := qry.Exec(ctx)
-	if err := srv.Send(querypb.NewQueryRangeWarningsResponse(result.Warnings)); err != nil {
-		return err
+	if result.Err != nil {
+		return status.Error(codes.Aborted, result.Err.Error())
+	}
+
+	if len(result.Warnings) != 0 {
+		if err := srv.Send(querypb.NewQueryRangeWarningsResponse(result.Warnings...)); err != nil {
+			return err
+		}
 	}
 
 	switch matrix := result.Value.(type) {
 	case promql.Matrix:
 		for _, series := range matrix {
+			floats, histograms := prompb.SamplesFromPromqlPoints(series.Points)
 			series := &prompb.TimeSeries{
-				Labels:  labelpb.ZLabelsFromPromLabels(series.Metric),
-				Samples: prompb.SamplesFromPromqlPoints(series.Points),
+				Labels:     labelpb.ZLabelsFromPromLabels(series.Metric),
+				Samples:    floats,
+				Histograms: histograms,
 			}
 			if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
 				return err

@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weaveworks/common/httpgrpc"
+
 	"github.com/cespare/xxhash"
 
 	"github.com/alecthomas/units"
@@ -120,14 +122,14 @@ type bucketStoreMetrics struct {
 	lastLoadedBlock       prometheus.Gauge
 	blockDrops            prometheus.Counter
 	blockDropFailures     prometheus.Counter
-	seriesDataTouched     *prometheus.SummaryVec
-	seriesDataFetched     *prometheus.SummaryVec
-	seriesDataSizeTouched *prometheus.SummaryVec
-	seriesDataSizeFetched *prometheus.SummaryVec
-	seriesBlocksQueried   prometheus.Summary
+	seriesDataTouched     *prometheus.HistogramVec
+	seriesDataFetched     *prometheus.HistogramVec
+	seriesDataSizeTouched *prometheus.HistogramVec
+	seriesDataSizeFetched *prometheus.HistogramVec
+	seriesBlocksQueried   prometheus.Histogram
 	seriesGetAllDuration  prometheus.Histogram
 	seriesMergeDuration   prometheus.Histogram
-	resultSeriesCount     prometheus.Summary
+	resultSeriesCount     prometheus.Histogram
 	chunkSizeBytes        prometheus.Histogram
 	postingsSizeBytes     prometheus.Histogram
 	queriesDropped        *prometheus.CounterVec
@@ -173,31 +175,32 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Help: "Timestamp when last block got loaded.",
 	})
 
-	m.seriesDataTouched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name:       "thanos_bucket_store_series_data_touched",
-		Help:       "Number of items of a data type touched to fulfill a single Store API series request.",
-		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
+	m.seriesDataTouched = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_data_touched",
+		Help:    "Number of items of a data type touched to fulfill a single Store API series request.",
+		Buckets: prometheus.ExponentialBuckets(200, 2, 15),
 	}, []string{"data_type"})
-	m.seriesDataFetched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name:       "thanos_bucket_store_series_data_fetched",
-		Help:       "Number of items of a data type retrieved to fulfill a single Store API series request.",
-		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
-	}, []string{"data_type"})
-
-	m.seriesDataSizeTouched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name:       "thanos_bucket_store_series_data_size_touched_bytes",
-		Help:       "Total size of items of a data type touched to fulfill a single Store API series request in Bytes.",
-		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
-	}, []string{"data_type"})
-	m.seriesDataSizeFetched = promauto.With(reg).NewSummaryVec(prometheus.SummaryOpts{
-		Name:       "thanos_bucket_store_series_data_size_fetched_bytes",
-		Help:       "Total size of items of a data type fetched to fulfill a single Store API series request in Bytes.",
-		Objectives: map[float64]float64{0.50: 0.1, 0.95: 0.1, 0.99: 0.001},
+	m.seriesDataFetched = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_data_fetched",
+		Help:    "Number of items of a data type retrieved to fulfill a single Store API series request.",
+		Buckets: prometheus.ExponentialBuckets(200, 2, 15),
 	}, []string{"data_type"})
 
-	m.seriesBlocksQueried = promauto.With(reg).NewSummary(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_blocks_queried",
-		Help: "Number of blocks in a bucket store that were touched to satisfy a query.",
+	m.seriesDataSizeTouched = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_data_size_touched_bytes",
+		Help:    "Total size of items of a data type touched to fulfill a single Store API series request in Bytes.",
+		Buckets: prometheus.ExponentialBuckets(1024, 2, 15),
+	}, []string{"data_type"})
+	m.seriesDataSizeFetched = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_data_size_fetched_bytes",
+		Help:    "Total size of items of a data type fetched to fulfill a single Store API series request in Bytes.",
+		Buckets: prometheus.ExponentialBuckets(1024, 2, 15),
+	}, []string{"data_type"})
+
+	m.seriesBlocksQueried = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_blocks_queried",
+		Help:    "Number of blocks in a bucket store that were touched to satisfy a query.",
+		Buckets: prometheus.ExponentialBuckets(1, 2, 10),
 	})
 	m.seriesGetAllDuration = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 		Name:    "thanos_bucket_store_series_get_all_duration_seconds",
@@ -209,9 +212,10 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Help:    "Time it takes to merge sub-results from all queried blocks into a single result.",
 		Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 	})
-	m.resultSeriesCount = promauto.With(reg).NewSummary(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_result_series",
-		Help: "Number of series observed in the final result of a query.",
+	m.resultSeriesCount = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		Name:    "thanos_bucket_store_series_result_series",
+		Help:    "Number of series observed in the final result of a query.",
+		Buckets: prometheus.ExponentialBuckets(1, 2, 15),
 	})
 
 	m.chunkSizeBytes = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
@@ -364,12 +368,12 @@ func (s *BucketStore) validate() error {
 
 type noopCache struct{}
 
-func (noopCache) StorePostings(context.Context, ulid.ULID, labels.Label, []byte) {}
+func (noopCache) StorePostings(ulid.ULID, labels.Label, []byte) {}
 func (noopCache) FetchMultiPostings(_ context.Context, _ ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
 	return map[labels.Label][]byte{}, keys
 }
 
-func (noopCache) StoreSeries(context.Context, ulid.ULID, storage.SeriesRef, []byte) {}
+func (noopCache) StoreSeries(ulid.ULID, storage.SeriesRef, []byte) {}
 func (noopCache) FetchMultiSeries(_ context.Context, _ ulid.ULID, ids []storage.SeriesRef) (map[storage.SeriesRef][]byte, []storage.SeriesRef) {
 	return map[storage.SeriesRef][]byte{}, ids
 }
@@ -867,16 +871,22 @@ func newBlockSeriesClient(
 	calculateChunkHash bool,
 	batchSize int,
 	chunkFetchDuration prometheus.Histogram,
+	extLsetToRemove map[string]struct{},
 ) *blockSeriesClient {
 	var chunkr *bucketChunkReader
 	if !req.SkipChunks {
 		chunkr = b.chunkReader()
 	}
 
+	extLset := b.extLset
+	if extLsetToRemove != nil {
+		extLset = rmLabels(extLset.Copy(), extLsetToRemove)
+	}
+
 	return &blockSeriesClient{
 		ctx:                ctx,
 		logger:             logger,
-		extLset:            b.extLset,
+		extLset:            extLset,
 		mint:               req.MinTime,
 		maxt:               req.MaxTime,
 		indexr:             b.indexReader(),
@@ -924,7 +934,7 @@ func (b *blockSeriesClient) ExpandPostings(
 	}
 
 	if err := seriesLimiter.Reserve(uint64(len(ps))); err != nil {
-		return errors.Wrap(err, "exceeded series limit")
+		return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded series limit: %s", err)
 	}
 
 	b.postings = ps
@@ -1023,7 +1033,7 @@ func (b *blockSeriesClient) nextBatch() error {
 
 		// Ensure sample limit through chunksLimiter if we return chunks.
 		if err := b.chunksLimiter.Reserve(uint64(len(b.chkMetas))); err != nil {
-			return errors.Wrap(err, "exceeded chunks limit")
+			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded chunks limit: %s", err)
 		}
 
 		b.entries = append(b.entries, s)
@@ -1042,14 +1052,19 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 
-	if in.Encoding() == chunkenc.EncXOR {
+	if in.Encoding() == chunkenc.EncXOR || in.Encoding() == chunkenc.EncHistogram {
 		b, err := save(in.Bytes())
 		if err != nil {
 			return err
 		}
-		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+		out.Raw = &storepb.Chunk{
+			Data: b,
+			Type: storepb.Chunk_Encoding(in.Encoding() - 1),
+			Hash: hashChunk(hasher, b, calculateChecksum),
+		}
 		return nil
 	}
+
 	if in.Encoding() != downsample.ChunkEncAggr {
 		return errors.Errorf("unsupported chunk encoding %d", in.Encoding())
 	}
@@ -1203,6 +1218,14 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 	}
 
+	var extLsetToRemove map[string]struct{}
+	if len(req.WithoutReplicaLabels) > 0 {
+		extLsetToRemove = make(map[string]struct{})
+		for _, l := range req.WithoutReplicaLabels {
+			extLsetToRemove[l] = struct{}{}
+		}
+	}
+
 	s.mtx.RLock()
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
@@ -1238,6 +1261,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				s.enableChunkHashCalculation,
 				s.seriesBatchSize,
 				s.metrics.chunkFetchDuration,
+				extLsetToRemove,
 			)
 
 			defer blockClient.Close()
@@ -1484,7 +1508,19 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				blockClient := newBlockSeriesClient(
+					newCtx,
+					s.logger,
+					b,
+					seriesReq,
+					nil,
+					bytesLimiter,
+					nil,
+					true,
+					SeriesBatchSize,
+					s.metrics.chunkFetchDuration,
+					nil,
+				)
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
@@ -1659,7 +1695,19 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					MaxTime:    req.End,
 					SkipChunks: true,
 				}
-				blockClient := newBlockSeriesClient(newCtx, s.logger, b, seriesReq, nil, bytesLimiter, nil, true, SeriesBatchSize, s.metrics.chunkFetchDuration)
+				blockClient := newBlockSeriesClient(
+					newCtx,
+					s.logger,
+					b,
+					seriesReq,
+					nil,
+					bytesLimiter,
+					nil,
+					true,
+					SeriesBatchSize,
+					s.metrics.chunkFetchDuration,
+					nil,
+				)
 				defer blockClient.Close()
 
 				if err := blockClient.ExpandPostings(
@@ -2398,7 +2446,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 				// Truncate first 4 bytes which are length of posting.
 				output[p.keyID] = newBigEndianPostings(pBytes[4:])
 
-				r.block.indexCache.StorePostings(ctx, r.block.meta.ULID, keys[p.keyID], dataToCache)
+				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[p.keyID], dataToCache)
 
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
@@ -2559,7 +2607,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 		c = c[n : n+int(l)]
 		r.mtx.Lock()
 		r.loadedSeries[id] = c
-		r.block.indexCache.StoreSeries(ctx, r.block.meta.ULID, id, c)
+		r.block.indexCache.StoreSeries(r.block.meta.ULID, id, c)
 		r.mtx.Unlock()
 	}
 	return nil

@@ -323,6 +323,10 @@ Flags:
                                  from other components.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
+      --grpc-server-max-connection-age=0s
+                                 The grpc server max connection age. This
+                                 controls how often to re-establish connections
+                                 and redo TLS handshakes.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-client-ca=""
@@ -453,6 +457,17 @@ Flags:
                                  Works only if compaction is disabled on
                                  Prometheus. Do it once and then disable the
                                  flag when done.
+      --store.limits.request-samples=0
+                                 The maximum samples allowed for a single
+                                 Series request, The Series call fails if
+                                 this limit is exceeded. 0 means no limit.
+                                 NOTE: For efficiency the limit is internally
+                                 implemented as 'chunks limit' considering each
+                                 chunk contains a maximum of 120 samples.
+      --store.limits.request-series=0
+                                 The maximum series allowed for a single Series
+                                 request. The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file

@@ -8,6 +8,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -86,3 +87,60 @@ type NoopSeriesStatsAggregator struct{}
 func (s *NoopSeriesStatsAggregator) Aggregate(_ storepb.SeriesStatsCounter) {}
 
 func (s *NoopSeriesStatsAggregator) Observe(_ float64) {}
+
+// instrumentedStoreServer is a storepb.StoreServer that exposes metrics about Series requests.
+type instrumentedStoreServer struct {
+	storepb.StoreServer
+	seriesRequested prometheus.Histogram
+	chunksRequested prometheus.Histogram
+}
+
+// NewInstrumentedStoreServer creates a new instrumentedStoreServer.
+func NewInstrumentedStoreServer(reg prometheus.Registerer, store storepb.StoreServer) storepb.StoreServer {
+	return &instrumentedStoreServer{
+		StoreServer: store,
+		seriesRequested: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+			Name:    "thanos_store_server_series_requested",
+			Help:    "Number of requested series for Series calls",
+			Buckets: []float64{1, 10, 100, 1000, 10000, 100000, 1000000},
+		}),
+		chunksRequested: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+			Name:    "thanos_store_server_chunks_requested",
+			Help:    "Number of requested chunks for Series calls",
+			Buckets: []float64{1, 100, 1000, 10000, 100000, 10000000, 100000000, 1000000000},
+		}),
+	}
+}
+
+func (s *instrumentedStoreServer) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	instrumented := newInstrumentedServer(srv)
+	if err := s.StoreServer.Series(req, instrumented); err != nil {
+		return err
+	}
+
+	s.seriesRequested.Observe(instrumented.seriesSent)
+	s.chunksRequested.Observe(instrumented.chunksSent)
+	return nil
+}
+
+// instrumentedServer is a storepb.Store_SeriesServer that tracks statistics about sent series.
+type instrumentedServer struct {
+	storepb.Store_SeriesServer
+	seriesSent float64
+	chunksSent float64
+}
+
+func newInstrumentedServer(upstream storepb.Store_SeriesServer) *instrumentedServer {
+	return &instrumentedServer{Store_SeriesServer: upstream}
+}
+
+func (i *instrumentedServer) Send(response *storepb.SeriesResponse) error {
+	if err := i.Store_SeriesServer.Send(response); err != nil {
+		return err
+	}
+	if series := response.GetSeries(); series != nil {
+		i.seriesSent++
+		i.chunksSent += float64(len(series.Chunks))
+	}
+	return nil
+}

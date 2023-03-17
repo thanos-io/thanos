@@ -94,6 +94,7 @@ type ruleConfig struct {
 	dataDir           string
 	lset              labels.Labels
 	ignoredLabelNames []string
+	storeRateLimits   store.SeriesSelectLimits
 }
 
 func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -103,6 +104,7 @@ func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.shipper.registerFlag(cmd)
 	rc.query.registerFlag(cmd)
 	rc.alertmgr.registerFlag(cmd)
+	rc.storeRateLimits.RegisterFlags(cmd)
 }
 
 // registerRule registers a rule command.
@@ -610,7 +612,8 @@ func runRule(
 	options := []grpcserver.Option{
 		grpcserver.WithServer(thanosrules.RegisterRulesServer(ruleMgr)),
 		grpcserver.WithListen(conf.grpc.bindAddress),
-		grpcserver.WithGracePeriod(time.Duration(conf.grpc.gracePeriod)),
+		grpcserver.WithGracePeriod(conf.grpc.gracePeriod),
+		grpcserver.WithGracePeriod(conf.grpc.maxConnectionAge),
 		grpcserver.WithTLSConfig(tlsCfg),
 	}
 	infoOptions := []info.ServerOptionFunc{info.WithRulesInfoFunc()}
@@ -625,16 +628,17 @@ func runRule(
 				if httpProbe.IsReady() {
 					mint, maxt := tsdbStore.TimeRange()
 					return &infopb.StoreInfo{
-						MinTime:           mint,
-						MaxTime:           maxt,
-						SupportsSharding:  true,
-						SendsSortedSeries: true,
+						MinTime:                      mint,
+						MaxTime:                      maxt,
+						SupportsSharding:             true,
+						SupportsWithoutReplicaLabels: true,
 					}
 				}
 				return nil
 			}),
 		)
-		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(tsdbStore, logger)))
+		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), reg, conf.storeRateLimits)
+		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)))
 	}
 
 	options = append(options, grpcserver.WithServer(

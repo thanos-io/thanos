@@ -17,9 +17,15 @@
 package querysharding
 
 import (
+	"fmt"
+
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/promql/parser"
+)
+
+var (
+	notShardableErr = fmt.Errorf("expressions are not shardable")
 )
 
 type Analyzer interface {
@@ -72,7 +78,9 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 
 // Analyze uses the following algorithm:
 //   - if a query has functions which cannot be sharded such as
-//     label_join or label_replace, then treat the query as non shardable.
+//     absent or absent_over_time, then treat the query as non shardable.
+//   - if a query has functions `label_join` or `label_replace`,
+//     calculate the shard labels based on grouping labels.
 //   - Walk the query and find the least common labelset
 //     used in grouping expressions. If non-empty, treat the query
 //     as shardable by those labels.
@@ -89,6 +97,7 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 		analysis      QueryAnalysis
 		dynamicLabels []string
 	)
+	isShardable := true
 	parser.Inspect(expr, func(node parser.Node, nodes []parser.Node) error {
 		switch n := node.(type) {
 		case *parser.Call:
@@ -96,6 +105,9 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 				if n.Func.Name == "label_join" || n.Func.Name == "label_replace" {
 					dstLabel := stringFromArg(n.Args[1])
 					dynamicLabels = append(dynamicLabels, dstLabel)
+				} else if n.Func.Name == "absent_over_time" || n.Func.Name == "absent" || n.Func.Name == "scalar" {
+					isShardable = false
+					return notShardableErr
 				}
 			}
 		case *parser.BinaryExpr:
@@ -116,6 +128,10 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 
 		return nil
 	})
+
+	if !isShardable {
+		return nonShardableQuery(), nil
+	}
 
 	// If currently it is shard by, it is still shardable if there is
 	// any label left after removing the dynamic labels.

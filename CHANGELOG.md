@@ -12,10 +12,40 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#6185](https://github.com/thanos-io/thanos/pull/6185) Tracing: tracing in OTLP support configuring service_name.
+- [#6192](https://github.com/thanos-io/thanos/pull/6192) Store: add flag `bucket-web-label` to select the label to use as timeline title in web UI
+
+### Fixed
+
+- [#6172](https://github.com/thanos-io/thanos/pull/6172) query-frontend: return JSON formatted errors for invalid PromQL expression in the split by interval middleware.
+- [#6171](https://github.com/thanos-io/thanos/pull/6171) Store: fix error handling on limits.
+- [#6183](https://github.com/thanos-io/thanos/pull/6183) Receiver: fix off by one in multitsdb flush that will result in empty blocks if the head only contains one sample
+- [#6197](https://github.com/thanos-io/thanos/pull/6197) Exemplar OTel: Fix exemplar for otel to use traceId instead of spanId and sample only if trace is sampled
+- [#6207](https://github.com/thanos-io/thanos/pull/6207) Receive: Remove the shipper once a tenant has been pruned.
+
+### Changed
+- [#6168](https://github.com/thanos-io/thanos/pull/6168) Receiver: Make ketama hashring fail early when configured with number of nodes lower than the replication factor.
+- [#6201](https://github.com/thanos-io/thanos/pull/6201) Query-Frontend: Disable absent and absent_over_time for vertical sharding.
+- [#6212](https://github.com/thanos-io/thanos/pull/6212) Query-Frontend: Disable scalar for vertical sharding.
+- [#6107](https://github.com/thanos-io/thanos/pull/6082) Change default user id in container image from 0(root) to 1001
+
+### Removed
+
+## [v0.31.0-rc0 (in progress)](https://github.com/thanos-io/thanos/tree/release-0.31) - 24.02.2023
+
+### Added
+
 - [#5990](https://github.com/thanos-io/thanos/pull/5990) Cache/Redis: add support for Redis Sentinel via new option `master_name`.
 - [#6008](https://github.com/thanos-io/thanos/pull/6008) *: Add counter metric `gate_queries_total` to gate.
 - [#5926](https://github.com/thanos-io/thanos/pull/5926) Receiver: Add experimental string interning in writer. Can be enabled with a hidden flag `writer.intern`.
 - [#5773](https://github.com/thanos-io/thanos/pull/5773) Store: Support disable cache index header file.
+- [#5653](https://github.com/thanos-io/thanos/pull/5653) Receive: Allow setting hashing algorithm per tenant in hashrings config
+- [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Add histogram metrics `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested` to all Stores.
+- [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Allow configuring series and sample limits per `Series` request for all Stores.
+- [#6104](https://github.com/thanos-io/thanos/pull/6104) Objstore: Support S3 session token.
+- [#5548](https://github.com/thanos-io/thanos/pull/5548) Query: Added experimental support for load balancing across multiple Store endpoints.
+- [#6148](https://github.com/thanos-io/thanos/pull/6148) Query-frontend: add traceID to slow query detected log line
+- [#6153](https://github.com/thanos-io/thanos/pull/6153) Query-frontend: add remote_user (from http basic auth) and remote_addr to slow query detected log line
 
 ### Fixed
 
@@ -24,6 +54,11 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6050](https://github.com/thanos-io/thanos/pull/6050) Store: Re-try bucket store initial sync upon failure.
 - [#6067](https://github.com/thanos-io/thanos/pull/6067) Receive: fixed panic when querying uninitialized TSDBs.
 - [#6082](https://github.com/thanos-io/thanos/pull/6082) Store: Don't error when no stores are matched.
+- [#6098](https://github.com/thanos-io/thanos/pull/6098) Cache/Redis: upgrade `rueidis` to v0.0.93 to fix potential panic when the client-side caching is disabled.
+- [#6103](https://github.com/thanos-io/thanos/pull/6103) Mixins(Rule): Fix query for long rule evaluations.
+- [#6121](https://github.com/thanos-io/thanos/pull/6121) Receive: Deduplicate metamonitoring queries.
+- [#6137](https://github.com/thanos-io/thanos/pull/6137) Downsample: Repair of non-empty XOR chunks during 1h downsampling.
+- [#6125](https://github.com/thanos-io/thanos/pull/6125) Query Frontend: Fix vertical shardable instant queries do not produce sorted results for `sort`, `sort_desc`, `topk` and `bottomk` functions.
 
 ### Changed
 
@@ -32,6 +67,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5887](https://github.com/thanos-io/thanos/pull/5887) Tracing: Make sure rate limiting sampler is the default, as was the case in version pre-0.29.0.
 - [#5997](https://github.com/thanos-io/thanos/pull/5997) Rule: switch to miekgdns DNS resolver as the default one.
 - [#6035](https://github.com/thanos-io/thanos/pull/6035) Replicate: Support all types of matchers to match blocks for replication. Change matcher parameter from string slice to a single string.
+- [#6126](https://github.com/thanos-io/thanos/pull/6126) Build with Go 1.20
+- [#6131](https://github.com/thanos-io/thanos/pull/6131) Store: *breaking :warning:* Use Histograms for bucket metrics.
 
 ## [v0.30.2](https://github.com/thanos-io/thanos/tree/release-0.30) - 28.01.2023
 

@@ -1677,7 +1677,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "histogram_quantile(0.99, sum by (job, le) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{job=~\"$job\"}[$__rate_interval])))",
+                     "expr": "histogram_quantile(0.50, sum by (job, le) (rate(thanos_bucket_store_sent_chunk_size_bytes_bucket{job=~\"$job\"}[$__rate_interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P50",
@@ -1765,7 +1765,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "thanos_bucket_store_series_blocks_queried{job=~\"$job\", quantile=\"0.99\"}",
+                     "expr": "histogram_quantile(0.99, sum by (le) (rate(thanos_bucket_store_series_blocks_queried{job=~\"$job\"}[$__rate_interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P99",
@@ -1781,7 +1781,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "thanos_bucket_store_series_blocks_queried{job=~\"$job\", quantile=\"0.50\"}",
+                     "expr": "histogram_quantile(0.50, sum by (le) (rate(thanos_bucket_store_series_blocks_queried{job=~\"$job\"}[$__rate_interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P50",
@@ -1858,7 +1858,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "thanos_bucket_store_series_data_fetched{job=~\"$job\", quantile=\"0.99\"}",
+                     "expr": "histogram_quantile(0.99, sum by (le) (rate(thanos_bucket_store_series_data_fetched{job=~\"$job\"}[$__rate_interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P99: {{data_type}} / {{job}}",
@@ -1874,7 +1874,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "thanos_bucket_store_series_data_fetched{job=~\"$job\", quantile=\"0.50\"}",
+                     "expr": "histogram_quantile(0.50, sum by (le) (rate(thanos_bucket_store_series_data_fetched{job=~\"$job\"}[$__rate_interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P50: {{data_type}} / {{job}}",
@@ -1951,7 +1951,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "thanos_bucket_store_series_data_touched{job=~\"$job\", quantile=\"0.99\"}",
+                     "expr": "histogram_quantile(0.99, sum by (le) (rate(thanos_bucket_store_series_data_touched{job=~\"$job\"}[$__rate_interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P99: {{data_type}} / {{job}}",
@@ -1967,7 +1967,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "thanos_bucket_store_series_data_touched{job=~\"$job\", quantile=\"0.50\"}",
+                     "expr": "histogram_quantile(0.50, sum by (le) (rate(thanos_bucket_store_series_data_touched{job=~\"$job\"}[$__rate_interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P50: {{data_type}} / {{job}}",
@@ -2043,7 +2043,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "thanos_bucket_store_series_result_series{job=~\"$job\",quantile=\"0.99\"}",
+                     "expr": "histogram_quantile(0.99, sum by (le) (rate(thanos_bucket_store_series_result_series{job=~\"$job\"}[$__rate_interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P99",
@@ -2059,7 +2059,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "thanos_bucket_store_series_result_series{job=~\"$job\",quantile=\"0.50\"}",
+                     "expr": "histogram_quantile(0.50, sum by (le) (rate(thanos_bucket_store_series_result_series{job=~\"$job\"}[$__rate_interval])))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "P50",

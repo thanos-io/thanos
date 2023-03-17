@@ -40,6 +40,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -143,7 +144,7 @@ func (f *fakeAppender) AppendExemplar(ref storage.SeriesRef, l labels.Labels, e 
 }
 
 // TODO(rabenhorst): Needs to be implement for native histogram support.
-func (f *fakeAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram) (storage.SeriesRef, error) {
+func (f *fakeAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
 	panic("not implemented")
 }
 
@@ -159,7 +160,7 @@ func (f *fakeAppender) Rollback() error {
 	return f.rollbackErr()
 }
 
-func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64, hashringAlgo HashringAlgorithm) ([]*Handler, Hashring) {
+func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64, hashringAlgo HashringAlgorithm) ([]*Handler, Hashring, error) {
 	var (
 		cfg      = []HashringConfig{{Hashring: "test"}}
 		handlers []*Handler
@@ -201,11 +202,14 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		hashringAlgo = AlgorithmHashmod
 	}
 
-	hashring := newMultiHashring(hashringAlgo, replicationFactor, cfg)
+	hashring, err := newMultiHashring(hashringAlgo, replicationFactor, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
 	for _, h := range handlers {
 		h.Hashring(hashring)
 	}
-	return handlers, hashring
+	return handlers, hashring, nil
 }
 
 func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsistencyDelay bool) {
@@ -575,7 +579,10 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring := newTestHandlerHashring(tc.appendables, tc.replicationFactor, hashringAlgo)
+			handlers, hashring, err := newTestHandlerHashring(tc.appendables, tc.replicationFactor, hashringAlgo)
+			if err != nil {
+				t.Fatalf("unable to create test handler: %v", err)
+			}
 			tenant := "test"
 			// Test from the point of view of every node
 			// so that we know status code does not depend
@@ -705,7 +712,10 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 					appender: newFakeAppender(nil, nil, nil),
 				},
 			}
-			handlers, _ := newTestHandlerHashring(appendables, 3, AlgorithmHashmod)
+			handlers, _, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod)
+			if err != nil {
+				t.Fatalf("unable to create test handler: %v", err)
+			}
 			handler := handlers[0]
 
 			tenant := "test"
@@ -914,7 +924,10 @@ func makeSeriesWithValues(numSeries int) []prompb.TimeSeries {
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	dir := b.TempDir()
 
-	handlers, _ := newTestHandlerHashring([]*fakeAppendable{nil}, 1, AlgorithmHashmod)
+	handlers, _, err := newTestHandlerHashring([]*fakeAppendable{nil}, 1, AlgorithmHashmod)
+	if err != nil {
+		b.Fatalf("unable to create test handler: %v", err)
+	}
 	handler := handlers[0]
 
 	reg := prometheus.NewRegistry()

@@ -97,12 +97,14 @@ func ActiveAlertsToProto(s storepb.PartialResponseStrategy, a *rules.AlertingRul
 	active := a.ActiveAlerts()
 	ret := make([]*rulespb.AlertInstance, len(active))
 	for i, ruleAlert := range active {
+		// UTC needed due to https://github.com/gogo/protobuf/issues/519.
+		activeAt := ruleAlert.ActiveAt.UTC()
 		ret[i] = &rulespb.AlertInstance{
 			PartialResponseStrategy: s,
 			Labels:                  labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ruleAlert.Labels)},
 			Annotations:             labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ruleAlert.Annotations)},
 			State:                   rulespb.AlertState(ruleAlert.State),
-			ActiveAt:                &ruleAlert.ActiveAt, //nolint:exportloopref
+			ActiveAt:                &activeAt,
 			Value:                   strconv.FormatFloat(ruleAlert.Value, 'e', -1, 64),
 		}
 	}
@@ -399,7 +401,7 @@ func (m *Manager) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer) (e
 
 	pgs := make([]*rulespb.RuleGroup, 0, len(groups))
 	for _, g := range groups {
-		// https://github.com/gogo/protobuf/issues/519
+		// UTC needed due to https://github.com/gogo/protobuf/issues/519.
 		g.LastEvaluation = g.LastEvaluation.UTC()
 		if r.Type == rulespb.RulesRequest_ALL {
 			pgs = append(pgs, g)

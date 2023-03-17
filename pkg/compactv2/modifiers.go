@@ -83,7 +83,7 @@ SeriesLoop:
 			}
 
 			// Special case: Delete whole series.
-			chksIter := s.Iterator()
+			chksIter := s.Iterator(nil)
 			var chks []chunks.Meta
 			for chksIter.Next() {
 				chks = append(chks, chksIter.At())
@@ -103,8 +103,8 @@ SeriesLoop:
 
 		d.curr = &storage.ChunkSeriesEntry{
 			Lset: lbls,
-			ChunkIteratorFn: func() chunks.Iterator {
-				return NewDelGenericSeriesIterator(s.Iterator(), intervals, func(intervals tombstones.Intervals) {
+			ChunkIteratorFn: func(it chunks.Iterator) chunks.Iterator {
+				return NewDelGenericSeriesIterator(s.Iterator(it), intervals, func(intervals tombstones.Intervals) {
 					d.log.DeleteSeries(lbls, intervals)
 				}).ToChunkSeriesIterator()
 			},
@@ -370,11 +370,11 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 	for set.Next() {
 		s := set.At()
 		lbls := s.Labels()
-		chksIter := s.Iterator()
+		chksIter := s.Iterator(nil)
 
 		// The labels have to be copied because `relabel.Process` is now overwriting the original
 		// labels to same memory. This happens since Prometheus v2.39.0.
-		if processedLabels := relabel.Process(lbls.Copy(), d.relabels...); len(processedLabels) == 0 {
+		if processedLabels, _ := relabel.Process(lbls.Copy(), d.relabels...); len(processedLabels) == 0 {
 			// Special case: Delete whole series if no labels are present.
 			var (
 				minT int64 = math.MaxInt64
@@ -461,7 +461,7 @@ func newChunkSeriesBuilder(lset labels.Labels) *mergeChunkSeries {
 
 func (s *mergeChunkSeries) addIter(iter chunkenc.Iterator) {
 	s.ss = append(s.ss, &storage.SeriesEntry{
-		SampleIteratorFn: func() chunkenc.Iterator {
+		SampleIteratorFn: func(iterator chunkenc.Iterator) chunkenc.Iterator {
 			return iter
 		},
 	})
@@ -471,15 +471,15 @@ func (s *mergeChunkSeries) Labels() labels.Labels {
 	return s.lset
 }
 
-func (s *mergeChunkSeries) Iterator() chunks.Iterator {
+func (s *mergeChunkSeries) Iterator(iterator chunks.Iterator) chunks.Iterator {
 	if len(s.ss) == 0 {
 		return nil
 	}
 	if len(s.ss) == 1 {
-		return storage.NewSeriesToChunkEncoder(s.ss[0]).Iterator()
+		return storage.NewSeriesToChunkEncoder(s.ss[0]).Iterator(iterator)
 	}
 
-	return storage.NewSeriesToChunkEncoder(storage.ChainedSeriesMerge(s.ss...)).Iterator()
+	return storage.NewSeriesToChunkEncoder(storage.ChainedSeriesMerge(s.ss...)).Iterator(iterator)
 }
 
 type errorOnlyStringIter struct {

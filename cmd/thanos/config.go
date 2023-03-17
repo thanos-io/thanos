@@ -13,24 +13,23 @@ import (
 	extflag "github.com/efficientgo/tools/extkingpin"
 
 	"github.com/prometheus/common/model"
+
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 )
 
 type grpcConfig struct {
-	bindAddress    string
-	gracePeriod    model.Duration
-	tlsSrvCert     string
-	tlsSrvKey      string
-	tlsSrvClientCA string
+	bindAddress      string
+	tlsSrvCert       string
+	tlsSrvKey        string
+	tlsSrvClientCA   string
+	gracePeriod      time.Duration
+	maxConnectionAge time.Duration
 }
 
 func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 	cmd.Flag("grpc-address",
 		"Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.").
 		Default("0.0.0.0:10901").StringVar(&gc.bindAddress)
-	cmd.Flag("grpc-grace-period",
-		"Time to wait after an interrupt received for GRPC Server.").
-		Default("2m").SetValue(&gc.gracePeriod)
 	cmd.Flag("grpc-server-tls-cert",
 		"TLS Certificate for gRPC server, leave blank to disable TLS").
 		Default("").StringVar(&gc.tlsSrvCert)
@@ -40,6 +39,12 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 	cmd.Flag("grpc-server-tls-client-ca",
 		"TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").
 		Default("").StringVar(&gc.tlsSrvClientCA)
+	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
+		Default("0s").DurationVar(&gc.maxConnectionAge)
+	cmd.Flag("grpc-grace-period",
+		"Time to wait after an interrupt received for GRPC Server.").
+		Default("2m").DurationVar(&gc.gracePeriod)
+
 	return gc
 }
 

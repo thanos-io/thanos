@@ -569,7 +569,7 @@ func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*
 			lbls = append(lbls, labels.Label{Name: k, Value: v})
 		}
 
-		if processedLabels := relabel.Process(lbls, f.relabelConfig...); len(processedLabels) == 0 {
+		if processedLabels, _ := relabel.Process(lbls, f.relabelConfig...); len(processedLabels) == 0 {
 			synced.WithLabelValues(labelExcludedMeta).Inc()
 			delete(metas, id)
 		}

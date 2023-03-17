@@ -14,7 +14,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -134,8 +133,8 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		}
 
 		for _, hp := range t.Histograms {
-			h := storepb.HistogramProtoToHistogram(hp)
-			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h)
+			h := prompb.HistogramProtoToHistogram(hp)
+			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, nil)
 			switch err {
 			case storage.ErrOutOfOrderSample:
 				numSamplesOutOfOrder++

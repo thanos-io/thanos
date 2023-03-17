@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
@@ -112,20 +113,20 @@ func Downsample(
 		aggrChunks []*AggrChunk
 		all        []sample
 		chks       []chunks.Meta
-		lset       labels.Labels
+		builder    labels.ScratchBuilder
 		reuseIt    chunkenc.Iterator
 	)
 	for postings.Next() {
-		lset = lset[:0]
 		chks = chks[:0]
 		all = all[:0]
 		aggrChunks = aggrChunks[:0]
 
 		// Get series labels and chunks. Downsampled data is sensitive to chunk boundaries
 		// and we need to preserve them to properly downsample previously downsampled data.
-		if err := indexr.Series(postings.At(), &lset, &chks); err != nil {
+		if err := indexr.Series(postings.At(), &builder, &chks); err != nil {
 			return id, errors.Wrapf(err, "get series %d", postings.At())
 		}
+		lset := builder.Labels()
 
 		for i, c := range chks[1:] {
 			if chks[i].MaxTime >= c.MinTime {
@@ -166,10 +167,22 @@ func Downsample(
 						// https://github.com/thanos-io/thanos/issues/5272
 						level.Warn(logger).Log("msg", fmt.Sprintf("expected downsampled chunk (*downsample.AggrChunk) got an empty %T instead for series: %d", c.Chunk, postings.At()))
 						continue
+					} else {
+						if err := expandChunkIterator(c.Chunk.Iterator(reuseIt), &all); err != nil {
+							return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
+						}
+						aggrDataChunks := DownsampleRaw(all, ResLevel1)
+						for _, cn := range aggrDataChunks {
+							ac, ok = cn.Chunk.(*AggrChunk)
+							if !ok {
+								return id, errors.New("Not able to convert non-empty XOR chunks to 5m downsampled aggregated chunks.")
+							}
+						}
 					}
-					return id, errors.Errorf("expected downsampled chunk (*downsample.AggrChunk) got a non-empty %T instead for series: %d", c.Chunk, postings.At())
+
 				}
 				aggrChunks = append(aggrChunks, ac)
+
 			}
 			downsampledChunks, err := downsampleAggr(
 				aggrChunks,
