@@ -28,8 +28,10 @@ type RemoteIndexCache struct {
 	memcached cacheutil.RemoteCacheClient
 
 	// Metrics.
-	requests *prometheus.CounterVec
-	hits     *prometheus.CounterVec
+	postingRequests prometheus.Counter
+	seriesRequests  prometheus.Counter
+	postingHits     prometheus.Counter
+	seriesHits      prometheus.Counter
 }
 
 // NewRemoteIndexCache makes a new RemoteIndexCache.
@@ -39,19 +41,19 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 		memcached: cacheClient,
 	}
 
-	c.requests = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+	requests := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_requests_total",
 		Help: "Total number of items requests to the cache.",
 	}, []string{"item_type"})
-	c.requests.WithLabelValues(cacheTypePostings)
-	c.requests.WithLabelValues(cacheTypeSeries)
+	c.postingRequests = requests.WithLabelValues(cacheTypePostings)
+	c.seriesRequests = requests.WithLabelValues(cacheTypeSeries)
 
-	c.hits = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+	hits := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_hits_total",
 		Help: "Total number of items requests to the cache that were a hit.",
 	}, []string{"item_type"})
-	c.hits.WithLabelValues(cacheTypePostings)
-	c.hits.WithLabelValues(cacheTypeSeries)
+	c.postingHits = hits.WithLabelValues(cacheTypePostings)
+	c.seriesHits = hits.WithLabelValues(cacheTypeSeries)
 
 	level.Info(logger).Log("msg", "created index cache")
 
@@ -61,10 +63,10 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 // StorePostings sets the postings identified by the ulid and label to the value v.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
-func (c *RemoteIndexCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {
+func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
 	key := cacheKey{blockID, cacheKeyPostings(l)}.string()
 
-	if err := c.memcached.SetAsync(ctx, key, v, memcachedDefaultTTL); err != nil {
+	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache postings in memcached", "err", err)
 	}
 }
@@ -86,7 +88,7 @@ func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.
 	}
 
 	// Fetch the keys from memcached in a single request.
-	c.requests.WithLabelValues(cacheTypePostings).Add(float64(len(keys)))
+	c.postingRequests.Add(float64(len(keys)))
 	results := c.memcached.GetMulti(ctx, keys)
 	if len(results) == 0 {
 		return nil, lbls
@@ -114,17 +116,17 @@ func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.
 		hits[lbl] = value
 	}
 
-	c.hits.WithLabelValues(cacheTypePostings).Add(float64(len(hits)))
+	c.postingHits.Add(float64(len(hits)))
 	return hits, misses
 }
 
 // StoreSeries sets the series identified by the ulid and id to the value v.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
-func (c *RemoteIndexCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id storage.SeriesRef, v []byte) {
+func (c *RemoteIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte) {
 	key := cacheKey{blockID, cacheKeySeries(id)}.string()
 
-	if err := c.memcached.SetAsync(ctx, key, v, memcachedDefaultTTL); err != nil {
+	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache series in memcached", "err", err)
 	}
 }
@@ -146,7 +148,7 @@ func (c *RemoteIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.UL
 	}
 
 	// Fetch the keys from memcached in a single request.
-	c.requests.WithLabelValues(cacheTypeSeries).Add(float64(len(ids)))
+	c.seriesRequests.Add(float64(len(ids)))
 	results := c.memcached.GetMulti(ctx, keys)
 	if len(results) == 0 {
 		return nil, ids
@@ -174,7 +176,7 @@ func (c *RemoteIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.UL
 		hits[id] = value
 	}
 
-	c.hits.WithLabelValues(cacheTypeSeries).Add(float64(len(hits)))
+	c.seriesHits.Add(float64(len(hits)))
 	return hits, misses
 }
 

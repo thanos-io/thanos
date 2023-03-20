@@ -75,6 +75,10 @@ http_requests_total`,
 			name:       "absent is not shardable",
 			expression: `sum by (url) (absent(http_requests_total{code="400"}))`,
 		},
+		{
+			name:       "scalar is not shardable",
+			expression: `scalar(sum by (url) (http_requests_total{code="400"}))`,
+		},
 	}
 
 	shardableByLabels := []testCase{

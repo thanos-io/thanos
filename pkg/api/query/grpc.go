@@ -126,7 +126,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		}
 	case promql.Vector:
 		for _, sample := range vector {
-			floats, histograms := prompb.SamplesFromPromqlPoints([]promql.Point{sample.Point})
+			floats, histograms := prompb.SamplesFromPromqlPoints(sample.Point)
 			series := &prompb.TimeSeries{
 				Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
 				Samples:    floats,
@@ -136,7 +136,6 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 				return err
 			}
 		}
-
 		return nil
 	}
 
@@ -205,10 +204,10 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		}
 	}
 
-	switch matrix := result.Value.(type) {
+	switch value := result.Value.(type) {
 	case promql.Matrix:
-		for _, series := range matrix {
-			floats, histograms := prompb.SamplesFromPromqlPoints(series.Points)
+		for _, series := range value {
+			floats, histograms := prompb.SamplesFromPromqlPoints(series.Points...)
 			series := &prompb.TimeSeries{
 				Labels:     labelpb.ZLabelsFromPromLabels(series.Metric),
 				Samples:    floats,
@@ -218,8 +217,25 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 				return err
 			}
 		}
-
+	case promql.Vector:
+		for _, sample := range value {
+			point := promql.Point{T: sample.T, V: sample.V, H: sample.H}
+			floats, histograms := prompb.SamplesFromPromqlPoints(point)
+			series := &prompb.TimeSeries{
+				Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
+				Samples:    floats,
+				Histograms: histograms,
+			}
+			if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
+				return err
+			}
+		}
 		return nil
+	case promql.Scalar:
+		series := &prompb.TimeSeries{
+			Samples: []prompb.Sample{{Value: value.V, Timestamp: value.T}},
+		}
+		return srv.Send(querypb.NewQueryRangeResponse(series))
 	}
 
 	return nil
