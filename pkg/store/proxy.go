@@ -68,6 +68,7 @@ type Client interface {
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
 	logger         log.Logger
+	debug          bool
 	stores         func() []Client
 	component      component.StoreAPI
 	selectorLabels labels.Labels
@@ -103,6 +104,7 @@ func RegisterStoreServer(storeSrv storepb.StoreServer, logger log.Logger) func(*
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL).
 func NewProxyStore(
 	logger log.Logger,
+	debug bool,
 	reg prometheus.Registerer,
 	stores func() []Client,
 	component component.StoreAPI,
@@ -117,6 +119,7 @@ func NewProxyStore(
 	metrics := newProxyStoreMetrics(reg)
 	s := &ProxyStore{
 		logger:         logger,
+		debug:          debug,
 		stores:         stores,
 		component:      component,
 		selectorLabels: selectorLabels,
@@ -273,7 +276,9 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 	for _, st := range s.stores() {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(srv.Context(), st, originalRequest.MinTime, originalRequest.MaxTime, matchers...); !ok {
-			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s filtered out: %v", st, reason))
+			if s.debug {
+				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s filtered out: %v", st, reason))
+			}
 			continue
 		}
 
@@ -289,8 +294,9 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	for _, st := range stores {
 		st := st
-
-		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
+		if s.debug {
+			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
+		}
 
 		respSet, err := newAsyncRespSet(srv.Context(), st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses)
 		if err != nil {
