@@ -16,6 +16,7 @@ kube/.minikube
 # Ignore e2e working dirs.
 /data/
 test/e2e/e2e_*
+scripts/data/
 
 # Ignore benchmarks dir.
 benchmarks/

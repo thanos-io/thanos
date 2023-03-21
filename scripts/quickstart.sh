@@ -147,6 +147,11 @@ fi
 
 # Start one sidecar for each Prometheus server.
 for i in $(seq 0 2); do
+  if [ -z ${CODESPACE_NAME+x} ]; then
+    PROMETHEUS_URL="http://localhost:909${i}"
+  else
+    PROMETHEUS_URL="https://${CODESPACE_NAME}-909${i}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+  fi
   ${THANOS_EXECUTABLE} sidecar \
     --debug.name sidecar-"${i}" \
     --log.level debug \
@@ -154,7 +159,7 @@ for i in $(seq 0 2); do
     --grpc-grace-period 1s \
     --http-address 0.0.0.0:109"${i}"2 \
     --http-grace-period 1s \
-    --prometheus.url http://localhost:909"${i}" \
+    --prometheus.url "${PROMETHEUS_URL}" \
     --tsdb.path data/prom"${i}" \
     ${OBJSTORECFG} &
 
