@@ -36,6 +36,7 @@ website/docs-pre-processed/
 # React build assets
 pkg/ui/static/react
 
+/tmp
 tmp/bin
 examples/tmp/
 
