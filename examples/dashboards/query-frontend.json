@@ -242,10 +242,9 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(http_requests_total{job=~\"$job\", handler=\"query-frontend\",code=~\"5..\"}[$interval])) / sum by (job) (rate(http_requests_total{job=~\"$job\", handler=\"query-frontend\"}[$interval]))",
+                     "expr": "sum by (job, code) (rate(http_requests_total{job=~\"$job\", handler=\"query-frontend\",code=~\"5..\"}[$interval])) / ignoring (code) group_left() sum by (job) (rate(http_requests_total{job=~\"$job\", handler=\"query-frontend\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "error",
                      "step": 10
                   }
                ],
