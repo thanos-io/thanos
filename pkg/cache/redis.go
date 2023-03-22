@@ -17,7 +17,7 @@ import (
 // RedisCache is a redis cache.
 type RedisCache struct {
 	logger      log.Logger
-	redisClient *cacheutil.RedisClient
+	redisClient cacheutil.RemoteCacheClient
 	name        string
 
 	// Metrics.
@@ -26,7 +26,7 @@ type RedisCache struct {
 }
 
 // NewRedisCache makes a new RedisCache.
-func NewRedisCache(name string, logger log.Logger, redisClient *cacheutil.RedisClient, reg prometheus.Registerer) *RedisCache {
+func NewRedisCache(name string, logger log.Logger, redisClient cacheutil.RemoteCacheClient, reg prometheus.Registerer) *RedisCache {
 	c := &RedisCache{
 		logger:      logger,
 		redisClient: redisClient,
@@ -52,7 +52,23 @@ func NewRedisCache(name string, logger log.Logger, redisClient *cacheutil.RedisC
 
 // Store data identified by keys.
 func (c *RedisCache) Store(data map[string][]byte, ttl time.Duration) {
-	c.redisClient.SetMulti(data, ttl)
+	var (
+		firstErr error
+		failed   int
+	)
+
+	for key, val := range data {
+		if err := c.redisClient.SetAsync(key, val, ttl); err != nil {
+			failed++
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+
+	if firstErr != nil {
+		level.Warn(c.logger).Log("msg", "failed to store one or more items into redis", "failed", failed, "firstErr", firstErr)
+	}
 }
 
 // Fetch fetches multiple keys and returns a map containing cache hits, along with a list of missing keys.
