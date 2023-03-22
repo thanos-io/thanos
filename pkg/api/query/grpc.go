@@ -24,6 +24,7 @@ type GRPCAPI struct {
 	replicaLabels               []string
 	queryableCreate             query.QueryableCreator
 	queryEngine                 v1.QueryEngine
+	thanosEngine                v1.QueryEngine
 	lookbackDeltaCreate         func(int64) time.Duration
 	defaultMaxResolutionSeconds time.Duration
 }
@@ -33,6 +34,7 @@ func NewGRPCAPI(
 	replicaLabels []string,
 	creator query.QueryableCreator,
 	queryEngine v1.QueryEngine,
+	thanosEngine v1.QueryEngine,
 	lookbackDeltaCreate func(int64) time.Duration,
 	defaultMaxResolutionSeconds time.Duration,
 ) *GRPCAPI {
@@ -41,6 +43,7 @@ func NewGRPCAPI(
 		replicaLabels:               replicaLabels,
 		queryableCreate:             creator,
 		queryEngine:                 queryEngine,
+		thanosEngine:                thanosEngine,
 		lookbackDeltaCreate:         lookbackDeltaCreate,
 		defaultMaxResolutionSeconds: defaultMaxResolutionSeconds,
 	}
@@ -99,7 +102,17 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		request.ShardInfo,
 		query.NoopSeriesStatsReporter,
 	)
-	qry, err := g.queryEngine.NewInstantQuery(queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, ts)
+
+	var engine v1.QueryEngine
+	switch promqlEngineType(request.Engine) {
+	case promqlEnginePrometheus:
+		engine = g.queryEngine
+	case promqlEngineThanos:
+		engine = g.thanosEngine
+	default:
+		engine = g.queryEngine
+	}
+	qry, err := engine.NewInstantQuery(queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, ts)
 	if err != nil {
 		return err
 	}
@@ -187,7 +200,16 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	endTime := time.Unix(request.EndTimeSeconds, 0)
 	interval := time.Duration(request.IntervalSeconds) * time.Second
 
-	qry, err := g.queryEngine.NewRangeQuery(queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, startTime, endTime, interval)
+	var engine v1.QueryEngine
+	switch promqlEngineType(request.Engine) {
+	case promqlEnginePrometheus:
+		engine = g.queryEngine
+	case promqlEngineThanos:
+		engine = g.thanosEngine
+	default:
+		engine = g.queryEngine
+	}
+	qry, err := engine.NewRangeQuery(queryable, &promql.QueryOpts{LookbackDelta: lookbackDelta}, request.Query, startTime, endTime, interval)
 	if err != nil {
 		return err
 	}
