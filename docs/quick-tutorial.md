@@ -34,7 +34,7 @@ Following the [KISS](https://en.wikipedia.org/wiki/KISS_principle) and Unix phil
 * Querier/Query: implements Prometheus's v1 API to aggregate data from the underlying components.
 * Query Frontend: implements Prometheus's v1 API to proxy it to Querier while caching the response and optionally splitting it by queries per day.
 
-Deployment via Kubernetes sidecar:
+Deployment with Thanos Sidecar for Kubernetes:
 
 <!---
 Source file to copy and edit: https://docs.google.com/drawings/d/1AiMc1qAjASMbtqL6PNs0r9-ynGoZ9LIAtf0b9PjILxw/edit?usp=sharing
