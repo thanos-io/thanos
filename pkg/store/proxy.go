@@ -76,7 +76,7 @@ type ProxyStore struct {
 	responseTimeout   time.Duration
 	metrics           *proxyStoreMetrics
 	retrievalStrategy RetrievalStrategy
-	debugLogging   bool
+	debugLogging      bool
 }
 
 type proxyStoreMetrics struct {
