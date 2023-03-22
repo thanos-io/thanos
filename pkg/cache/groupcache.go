@@ -289,7 +289,7 @@ func (c *unsafeByteCodec) UnmarshalBinary(data []byte, expire time.Time) error {
 	return nil
 }
 
-func (c *Groupcache) Store(ctx context.Context, data map[string][]byte, ttl time.Duration) {
+func (c *Groupcache) Store(data map[string][]byte, ttl time.Duration) {
 	// Noop since cache is already filled during fetching.
 }
 

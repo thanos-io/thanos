@@ -289,7 +289,7 @@ func (c *InMemoryCache) reset() {
 	c.curSize = 0
 }
 
-func (c *InMemoryCache) Store(ctx context.Context, data map[string][]byte, ttl time.Duration) {
+func (c *InMemoryCache) Store(data map[string][]byte, ttl time.Duration) {
 	for key, val := range data {
 		c.set(key, val, ttl)
 	}

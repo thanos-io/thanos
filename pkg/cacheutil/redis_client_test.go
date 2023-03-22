@@ -128,7 +128,7 @@ func TestRedisClient(t *testing.T) {
 					defer c.Stop()
 					defer s.FlushAll()
 					ctx := context.Background()
-					c.SetMulti(ctx, tt.args.data, time.Hour)
+					c.SetMulti(tt.args.data, time.Hour)
 					hits := c.GetMulti(ctx, tt.args.fetchKeys)
 					testutil.Equals(t, tt.want.hits, hits)
 				})

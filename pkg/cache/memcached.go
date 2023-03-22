@@ -54,14 +54,14 @@ func NewMemcachedCache(name string, logger log.Logger, memcached cacheutil.Remot
 // Store data identified by keys.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
-func (c *MemcachedCache) Store(ctx context.Context, data map[string][]byte, ttl time.Duration) {
+func (c *MemcachedCache) Store(data map[string][]byte, ttl time.Duration) {
 	var (
 		firstErr error
 		failed   int
 	)
 
 	for key, val := range data {
-		if err := c.memcached.SetAsync(ctx, key, val, ttl); err != nil {
+		if err := c.memcached.SetAsync(key, val, ttl); err != nil {
 			failed++
 			if firstErr == nil {
 				firstErr = err
