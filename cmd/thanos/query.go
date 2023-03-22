@@ -66,13 +66,6 @@ const (
 	queryPushdown        = "query-pushdown"
 )
 
-type promqlEngineType string
-
-const (
-	promqlEnginePrometheus promqlEngineType = "prometheus"
-	promqlEngineThanos     promqlEngineType = "thanos"
-)
-
 type queryMode string
 
 const (
@@ -108,9 +101,6 @@ func registerQuery(app *extkingpin.App) {
 
 	queryTimeout := extkingpin.ModelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
-
-	promqlEngine := cmd.Flag("query.promql-engine", "PromQL engine to use.").Default(string(promqlEnginePrometheus)).
-		Enum(string(promqlEnginePrometheus), string(promqlEngineThanos))
 
 	promqlQueryMode := cmd.Flag("query.mode", "PromQL query mode. One of: local, distributed.").
 		Hidden().
@@ -342,7 +332,6 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetryDurationQuantiles,
 			*queryTelemetrySamplesQuantiles,
 			*queryTelemetrySeriesQuantiles,
-			promqlEngineType(*promqlEngine),
 			storeRateLimits,
 			queryMode(*promqlQueryMode),
 		)
@@ -418,7 +407,6 @@ func runQuery(
 	queryTelemetryDurationQuantiles []float64,
 	queryTelemetrySamplesQuantiles []int64,
 	queryTelemetrySeriesQuantiles []int64,
-	promqlEngine promqlEngineType,
 	storeRateLimits store.SeriesSelectLimits,
 	queryMode queryMode,
 ) error {
@@ -670,30 +658,39 @@ func runQuery(
 		EnableAtModifier:     true,
 	}
 
+	thanosEngineOpts := promql.EngineOpts{
+		Logger: logger,
+		Reg:    extprom.WrapRegistererWithPrefix("tpe_", reg),
+		// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+		MaxSamples:    math.MaxInt32,
+		Timeout:       queryTimeout,
+		LookbackDelta: lookbackDelta,
+		NoStepSubqueryIntervalFn: func(int64) int64 {
+			return defaultEvaluationInterval.Milliseconds()
+		},
+		EnableNegativeOffset: true,
+		EnableAtModifier:     true,
+	}
+
 	// An active query tracker will be added only if the user specifies a non-default path.
 	// Otherwise, the nil active query tracker from existing engine options will be used.
 	if activeQueryDir != "" {
 		engineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
 	}
 
-	var queryEngine v1.QueryEngine
-	switch promqlEngine {
-	case promqlEnginePrometheus:
-		queryEngine = promql.NewEngine(engineOpts)
-	case promqlEngineThanos:
-		if queryMode == queryModeLocal {
-			queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts})
-		} else {
-			remoteEngineEndpoints := query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
-				AutoDownsample:        enableAutodownsampling,
-				ReplicaLabels:         queryReplicaLabels,
-				Timeout:               queryTimeout,
-				EnablePartialResponse: enableQueryPartialResponse,
-			})
-			queryEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: engineOpts}, remoteEngineEndpoints)
-		}
-	default:
-		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)
+	prometheusEngine := promql.NewEngine(engineOpts)
+
+	var thanosEngine v1.QueryEngine
+	if queryMode == queryModeLocal {
+		thanosEngine = engine.New(engine.Opts{EngineOpts: thanosEngineOpts})
+	} else {
+		remoteEngineEndpoints := query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
+			AutoDownsample:        enableAutodownsampling,
+			ReplicaLabels:         queryReplicaLabels,
+			Timeout:               queryTimeout,
+			EnablePartialResponse: enableQueryPartialResponse,
+		})
+		thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: thanosEngineOpts}, remoteEngineEndpoints)
 	}
 
 	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts, dynamicLookbackDelta)
@@ -726,7 +723,8 @@ func runQuery(
 		api := apiv1.NewQueryAPI(
 			logger,
 			endpoints.GetEndpointStatus,
-			queryEngine,
+			prometheusEngine,
+			thanosEngine,
 			lookbackDeltaCreator,
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
@@ -811,7 +809,7 @@ func runQuery(
 			info.WithQueryAPIInfoFunc(),
 		)
 
-		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, queryEngine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
+		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, prometheusEngine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, storeRateLimits)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),

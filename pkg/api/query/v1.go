@@ -75,6 +75,13 @@ const (
 	LookbackDeltaParam       = "lookback_delta"
 )
 
+type promqlEngineType string
+
+const (
+	promqlEnginePrometheus promqlEngineType = "prometheus"
+	promqlEngineThanos     promqlEngineType = "thanos"
+)
+
 // QueryAPI is an API used by Thanos Querier.
 type QueryAPI struct {
 	baseAPI         *api.BaseAPI
@@ -83,6 +90,7 @@ type QueryAPI struct {
 	queryableCreate query.QueryableCreator
 	// queryEngine returns appropriate promql.Engine for a query with a given step.
 	queryEngine         v1.QueryEngine
+	thanosEngine        v1.QueryEngine
 	lookbackDeltaCreate func(int64) time.Duration
 	ruleGroups          rules.UnaryClient
 	targets             targets.UnaryClient
@@ -120,6 +128,7 @@ func NewQueryAPI(
 	logger log.Logger,
 	endpointStatus func() []query.EndpointStatus,
 	qe v1.QueryEngine,
+	te v1.QueryEngine,
 	lookbackDeltaCreate func(int64) time.Duration,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
@@ -150,6 +159,7 @@ func NewQueryAPI(
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:                                 logger,
 		queryEngine:                            qe,
+		thanosEngine:                           te,
 		lookbackDeltaCreate:                    lookbackDeltaCreate,
 		queryableCreate:                        c,
 		gate:                                   gate,
@@ -232,6 +242,22 @@ func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplicatio
 		}
 	}
 	return enableDeduplication, nil
+}
+
+func (qapi *QueryAPI) parseEngineParam(r *http.Request) (queryEngine v1.QueryEngine, _ *api.ApiError) {
+	var engine v1.QueryEngine
+
+	param := promqlEngineType(r.FormValue("engine"))
+	switch param {
+	case promqlEnginePrometheus:
+		engine = qapi.queryEngine
+	case promqlEngineThanos:
+		engine = qapi.thanosEngine
+	default:
+		engine = qapi.queryEngine
+	}
+
+	return engine, nil
 }
 
 func (qapi *QueryAPI) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string, _ *api.ApiError) {
@@ -393,6 +419,11 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr, func() {}
 	}
 
+	engine, apiErr := qapi.parseEngineParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
+	}
+
 	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
 	// Get custom lookback delta from request.
 	lookbackDeltaFromReq, apiErr := qapi.parseLookbackDeltaParam(r)
@@ -408,7 +439,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	defer span.Finish()
 
 	var seriesStats []storepb.SeriesStatsCounter
-	qry, err := qapi.queryEngine.NewInstantQuery(
+	qry, err := engine.NewInstantQuery(
 		qapi.queryableCreate(
 			enableDedup,
 			replicaLabels,
@@ -541,6 +572,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr, func() {}
 	}
 
+	engine, apiErr := qapi.parseEngineParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr, func() {}
+	}
+
 	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
 	// Get custom lookback delta from request.
 	lookbackDeltaFromReq, apiErr := qapi.parseLookbackDeltaParam(r)
@@ -559,7 +595,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	defer span.Finish()
 
 	var seriesStats []storepb.SeriesStatsCounter
-	qry, err := qapi.queryEngine.NewRangeQuery(
+	qry, err := engine.NewRangeQuery(
 		qapi.queryableCreate(
 			enableDedup,
 			replicaLabels,
