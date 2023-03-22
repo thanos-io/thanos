@@ -229,7 +229,7 @@ func registerQuery(app *extkingpin.App) {
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debug bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -278,7 +278,7 @@ func registerQuery(app *extkingpin.App) {
 		return runQuery(
 			g,
 			logger,
-			debug,
+			debugLogging,
 			reg,
 			tracer,
 			httpLogOpts,
@@ -354,7 +354,7 @@ func registerQuery(app *extkingpin.App) {
 func runQuery(
 	g *run.Group,
 	logger log.Logger,
-	debug bool,
+	debugLogging bool,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	httpLogOpts []logging.Option,
@@ -492,6 +492,11 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
+	options := []store.ProxyStoreOption{}
+	if debugLogging {
+		options = append(options, store.WithProxyStoreDebugLogging())
+	}
+
 	var (
 		endpoints = query.NewEndpointSet(
 			time.Now,
@@ -543,7 +548,7 @@ func runQuery(
 			endpointInfoTimeout,
 			queryConnMetricLabels...,
 		)
-		proxy            = store.NewProxyStore(logger, debug, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy))
+		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy), options...)
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)

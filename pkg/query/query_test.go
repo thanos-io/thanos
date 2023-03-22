@@ -36,7 +36,7 @@ func TestQuerier_Proxy(t *testing.T) {
 		q := NewQueryableCreator(
 			logger,
 			nil,
-			store.NewProxyStore(logger, false, nil, func() []store.Client { return clients },
+			store.NewProxyStore(logger, nil, func() []store.Client { return clients },
 				component.Debug, nil, 5*time.Minute, store.EagerRetrieval),
 			1000000,
 			5*time.Minute,

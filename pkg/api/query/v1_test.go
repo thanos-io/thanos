@@ -652,7 +652,6 @@ func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 
 	return store.NewProxyStore(
 		nil,
-		false,
 		nil,
 		func() []store.Client { return []store.Client{c} },
 		component.Query,

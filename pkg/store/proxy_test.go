@@ -62,7 +62,6 @@ func TestProxyStore_Info(t *testing.T) {
 	defer cancel()
 
 	q := NewProxyStore(nil,
-		false,
 		nil,
 		func() []Client { return nil },
 		component.Query,
@@ -604,7 +603,6 @@ func TestProxyStore_Series(t *testing.T) {
 					for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 						t.Run(string(strategy), func(t *testing.T) {
 							q := NewProxyStore(nil,
-								false,
 								nil,
 								func() []Client { return tc.storeAPIs },
 								component.Query,
@@ -1138,7 +1136,6 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
 				if ok := t.Run(string(strategy), func(t *testing.T) {
 					q := NewProxyStore(nil,
-						false,
 						nil,
 						func() []Client { return tc.storeAPIs },
 						component.Query,
@@ -1197,7 +1194,6 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		},
 	}
 	q := NewProxyStore(nil,
-		false,
 		nil,
 		func() []Client { return cls },
 		component.Query,
@@ -1259,7 +1255,6 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 	}
 
 	q := NewProxyStore(nil,
-		false,
 		nil,
 		func() []Client { return cls },
 		component.Query,
@@ -1307,7 +1302,6 @@ func TestProxyStore_LabelValues(t *testing.T) {
 		},
 	}
 	q := NewProxyStore(nil,
-		false,
 		nil,
 		func() []Client { return cls },
 		component.Query,
@@ -1508,7 +1502,6 @@ func TestProxyStore_LabelNames(t *testing.T) {
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			q := NewProxyStore(
 				nil,
-				false,
 				nil,
 				func() []Client { return tc.storeAPIs },
 				component.Query,
