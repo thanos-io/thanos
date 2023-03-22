@@ -93,6 +93,7 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
   * [Running the Observability As a Service For Your Teams With Thanos](https://www.youtube.com/watch?v=I4Mfyfd_4M8)
   * [Monitoring multiple Kubernetes Clusters with Thanos](https://www.youtube.com/watch?v=V4v-c0VeqLw)
   * [Thanos: Scaling Prometheus 101](https://www.youtube.com/watch?v=iN6DR28gAyQ)
+  * [MaaS for the Masses: Build Your Monitoring-as-a-Service Solution With Prometheus](https://www.youtube.com/watch?v=EFPPic9dBS4)
 
 * 2021
   * [Adopting Thanos gradually across all of LastPass infrastructures](https://www.youtube.com/watch?v=Ddq8m04594A)
