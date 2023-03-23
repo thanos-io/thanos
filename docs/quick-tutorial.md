@@ -136,7 +136,7 @@ thanos query \
     --store        dnssrv+_grpc._tcp.thanos-store.monitoring.svc  # Supports DNS A & SRV records
 ```
 
-Go to the configured HTTP address, which should now show a UI similar to that of Prometheus. You can now query across all Prometheus instances within the cluster. You can also check out the Stores page, which shows all of your Stores.
+Go to the configured HTTP address, which should now show a UI similar to that of Prometheus. You can now query across all Prometheus instances within the cluster. You can also check out the Stores page, which shows all of your stores.
 
 [Query documentation](components/query.md)
 
