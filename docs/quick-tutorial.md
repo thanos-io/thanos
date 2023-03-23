@@ -42,7 +42,7 @@ Source file to copy and edit: https://docs.google.com/drawings/d/1AiMc1qAjASMbtq
 
 ![Sidecar](https://docs.google.com/drawings/d/e/2PACX-1vSJd32gPh8-MC5Ko0-P-v1KQ0Xnxa0qmsVXowtkwVGlczGfVW-Vd415Y6F129zvh3y0vHLBZcJeZEoz/pub?w=960&h=720)
 
-Deployment via Receive in order to scale out or implement with other remote write compatible sources:
+Deployment via Receive in order to scale out or integrate with other remote write-compatible sources:
 
 <!---
 Source file to copy and edit: https://docs.google.com/drawings/d/1iimTbcicKXqz0FYtSfz04JmmVFLVO9BjAjEzBm5538w/edit?usp=sharing
