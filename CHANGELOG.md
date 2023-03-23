@@ -29,6 +29,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6201](https://github.com/thanos-io/thanos/pull/6201) Query-Frontend: Disable absent and absent_over_time for vertical sharding.
 - [#6212](https://github.com/thanos-io/thanos/pull/6212) Query-Frontend: Disable scalar for vertical sharding.
 - [#6107](https://github.com/thanos-io/thanos/pull/6082) Change default user id in container image from 0(root) to 1001
+- [#6228](https://github.com/thanos-io/thanos/pull/6228) Conditionally generate debug messages in ProxyStore to avoid memory bloat.
 
 ### Removed
 
