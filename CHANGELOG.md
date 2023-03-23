@@ -18,13 +18,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
-## [v0.31.0-rc1](https://github.com/thanos-io/thanos/tree/release-0.31) - 13.03.2023
-
-### Fixed
-
-- [#6203](https://github.com/thanos-io/thanos/pull/6203) Receive: Fix panic in head compaction under high query load.
-
-## [v0.31.0-rc0](https://github.com/thanos-io/thanos/tree/release-0.31) - 24.02.2023
+## [v0.31.0](https://github.com/thanos-io/thanos/tree/release-0.31) - 22.03.2023
 
 ### Added
 
@@ -52,6 +46,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6121](https://github.com/thanos-io/thanos/pull/6121) Receive: Deduplicate meta-monitoring queries for [Active Series Limiting](https://thanos.io/tip/components/receive.md/#active-series-limiting-experimental).
 - [#6137](https://github.com/thanos-io/thanos/pull/6137) Downsample: Repair of non-empty XOR chunks during 1h downsampling.
 - [#6125](https://github.com/thanos-io/thanos/pull/6125) Query Frontend: Fix vertical shardable instant queries do not produce sorted results for `sort`, `sort_desc`, `topk` and `bottomk` functions.
+- [#6203](https://github.com/thanos-io/thanos/pull/6203) Receive: Fix panic in head compaction under high query load.
 
 ### Changed
 
