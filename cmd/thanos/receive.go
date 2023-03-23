@@ -85,7 +85,7 @@ func registerReceive(app *extkingpin.App) {
 			NoLockfile:                     conf.noLockFile,
 			WALCompression:                 conf.walCompression,
 			MaxExemplars:                   conf.tsdbMaxExemplars,
-			EnableExemplarStorage:          true,
+			EnableExemplarStorage:          conf.tsdbMaxExemplars > 0,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
 			EnableMemorySnapshotOnShutdown: conf.tsdbMemorySnapshotOnShutdown,
 			EnableNativeHistograms:         conf.tsdbEnableNativeHistograms,
