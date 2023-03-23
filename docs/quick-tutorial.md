@@ -126,7 +126,7 @@ The Querier component is stateless and horizontally scalable, and can be deploye
 
 Thanos Querier also implements Prometheus's official HTTP API and can thus be used with external tools such as Grafana. It also serves a derivative of Prometheus's UI for ad-hoc querying and stores its status.
 
-Below, we will set up a Thanos Querier to connect to our sidecars, and expose its HTTP UI:
+Below, we will set up a Thanos Querier to connect to our Sidecars, and expose its HTTP UI:
 
 ```bash
 thanos query \
