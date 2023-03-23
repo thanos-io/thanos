@@ -58,7 +58,7 @@ func registerReceive(app *extkingpin.App) {
 	conf := &receiveConfig{}
 	conf.registerFlag(cmd)
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		lset, err := parseFlagLabels(conf.labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
@@ -97,6 +97,7 @@ func registerReceive(app *extkingpin.App) {
 		return runReceive(
 			g,
 			logger,
+			debugLogging,
 			reg,
 			tracer,
 			grpcLogOpts, tagOpts,
@@ -113,6 +114,7 @@ func registerReceive(app *extkingpin.App) {
 func runReceive(
 	g *run.Group,
 	logger log.Logger,
+	debugLogging bool,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	grpcLogOpts []grpc_logging.Option,
@@ -305,6 +307,11 @@ func runReceive(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
+		options := []store.ProxyStoreOption{}
+		if debugLogging {
+			options = append(options, store.WithProxyStoreDebugLogging())
+		}
+
 		proxy := store.NewProxyStore(
 			logger,
 			reg,
@@ -313,6 +320,7 @@ func runReceive(
 			labels.Labels{},
 			0,
 			store.LazyRetrieval,
+			options...,
 		)
 		mts := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, conf.storeRateLimits)
 		rw := store.ReadWriteTSDBStore{
