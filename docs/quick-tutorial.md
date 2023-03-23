@@ -30,7 +30,7 @@ Following the [KISS](https://en.wikipedia.org/wiki/KISS_principle) and Unix phil
 * Store Gateway: serves metrics inside of a cloud storage bucket.
 * Compactor: compacts, downsamples and applies retention on the data stored in the cloud storage bucket.
 * Receiver: receives data from Prometheus's remote write write-ahead log, exposes it, and/or uploads it to cloud storage.
-* Ruler/Rule: evaluates recording and alerting rules against data in Thanos for exposure and/or upload.
+* Ruler/Rule: evaluates recording and alerting rules against data in Thanos for exposition and/or upload.
 * Querier/Query: implements Prometheus's v1 API to aggregate data from the underlying components.
 * Query Frontend: implements Prometheus's v1 API to proxy it to Querier while caching the response and optionally splitting it by queries per day.
 
