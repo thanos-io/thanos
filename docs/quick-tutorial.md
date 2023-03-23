@@ -54,20 +54,20 @@ Source file to copy and edit: https://docs.google.com/drawings/d/1iimTbcicKXqz0F
 
 Thanos integrates with existing Prometheus servers as a [sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server.
 
-The purpose of the Sidecar is to back up Prometheus's data into an object storage bucket, and give other Thanos components access to the Prometheus metrics via a gRPC API.
+The purpose of Thanos Sidecar is to back up Prometheus's data into an object storage bucket, and give other Thanos components access to the Prometheus metrics via a gRPC API.
 
 Sidecar makes use of Prometheus's `reload` endpoint. Make sure it's enabled with the flag `--web.enable-lifecycle`.
 
-[Component sidecar documentation](components/sidecar.md)
+[Sidecar component documentation](components/sidecar.md)
 
 ### External Storage
 
-The following configures the sidecar to write Prometheus's data into a configured object storage bucket:
+The following configures Sidecar to write Prometheus's data into a configured object storage bucket:
 
 ```bash
 thanos sidecar \
     --tsdb.path            /var/prometheus \          # TSDB data directory of Prometheus
-    --prometheus.url       "http://localhost:9090" \  # Be sure that the sidecar can use this URL!
+    --prometheus.url       "http://localhost:9090" \  # Be sure that Sidecar can use this URL!
     --objstore.config-file bucket_config.yaml \       # Storage configuration for uploading data
 ```
 
@@ -78,21 +78,21 @@ Rolling this out has little to no impact on the running Prometheus instance. Thi
 If you are not interested in backing up any data, the `--objstore.config-file` flag can simply be omitted.
 
 * *[Example Kubernetes manifests using Prometheus operator](https://github.com/coreos/prometheus-operator/tree/master/example/thanos)*
-* *[Example Deploying sidecar using official Prometheus Helm Chart](../tutorials/kubernetes-helm/README.md)*
+* *[Example Deploying Sidecar using official Prometheus Helm Chart](../tutorials/kubernetes-helm/README.md)*
 * *[Details & Config for other object stores](storage.md)*
 
 ### Store API
 
-The Sidecar component implements and exposes a gRPC *[Store API](https://github.com/thanos-io/thanos/blob/main/pkg/store/storepb/rpc.proto#L27)*. The sidecar implementation allows you to query the metric data stored in Prometheus.
+The Sidecar component implements and exposes a gRPC *[Store API](https://github.com/thanos-io/thanos/blob/main/pkg/store/storepb/rpc.proto#L27)*. This implementation allows you to query the metric data stored in Prometheus.
 
-Let's extend the Sidecar in the previous section to connect to a Prometheus server, and expose the Store API:
+Let's extend the Sidecar from the previous section to connect to a Prometheus server, and expose the Store API:
 
 ```bash
 thanos sidecar \
     --tsdb.path                 /var/prometheus \
     --objstore.config-file      bucket_config.yaml \       # Bucket config file to send data to
     --prometheus.url            http://localhost:9090 \    # Location of the Prometheus HTTP server
-    --http-address              0.0.0.0:19191 \            # HTTP endpoint for collecting metrics on the Sidecar
+    --http-address              0.0.0.0:19191 \            # HTTP endpoint for collecting metrics on Sidecar
     --grpc-address              0.0.0.0:19090              # GRPC endpoint for StoreAPI
 ```
 
@@ -120,9 +120,9 @@ global:
 
 ## Querier/Query
 
-Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos's global [Query Layer](components/query.md) to evaluate PromQL queries against all instances at once.
+Now that we have setup Sidecar for one or more Prometheus instances, we want to use Thanos's global [Query Layer](components/query.md) to evaluate PromQL queries against all instances at once.
 
-The Querier component is stateless and horizontally scalable, and can be deployed with any number of replicas. Once connected to the Sidecars, it automatically detects which Prometheus servers need to be contacted for a given PromQL query.
+The Querier component is stateless and horizontally scalable, and can be deployed with any number of replicas. Once connected to Thanos Sidecar, it automatically detects which Prometheus servers need to be contacted for a given PromQL query.
 
 Thanos Querier also implements Prometheus's official HTTP API and can thus be used with external tools such as Grafana. It also serves a derivative of Prometheus's UI for ad-hoc querying and checking the status of the Thanos stores.
 
@@ -193,7 +193,7 @@ Read more details [here](service-discovery.md).
 
 ## Store Gateway
 
-As the sidecar backs up data into the object storage bucket of your choice, you can decrease Prometheus's retention in order to store less data locally. However, we need a way to query all that historical data again. Store Gateway does just that, by implementing the same gRPC data API as the sidecars, but backing it with data it can find in your object storage bucket. Just like sidecars and query nodes, Store Gateway exposes a Store API and needs to be discovered by Thanos Querier.
+As Thanos Sidecar backs up data into the object storage bucket of your choice, you can decrease Prometheus's retention in order to store less data locally. However, we need a way to query all that historical data again. Store Gateway does just that, by implementing the same gRPC data API as Sidecar, but backing it with data it can find in your object storage bucket. Just like sidecars and query nodes, Store Gateway exposes a Store API and needs to be discovered by Thanos Querier.
 
 ```bash
 thanos store \
@@ -211,7 +211,7 @@ Store Gateway uses a small amount of disk space for caching basic information ab
 
 ## Compactor
 
-A local Prometheus installation periodically compacts older data to improve query efficiency. Since the sidecar backs up data into an object storage bucket as soon as possible, we need a way to apply the same process to data in the bucket.
+A local Prometheus installation periodically compacts older data to improve query efficiency. Since Sidecar backs up data into an object storage bucket as soon as possible, we need a way to apply the same process to data in the bucket.
 
 Thanos Compactor simply scans the object storage bucket and performs compaction where required. At the same time, it is responsible for creating downsampled copies of data in order to speed up queries.
 
@@ -232,6 +232,6 @@ Compactor is not in the critical path of querying or data backup. It can either 
 
 ## Ruler/Rule
 
-In case Prometheus running with a Thanos Sidecar does not have enough retention, or if you want to have alerts or recording rules that require a global view, Thanos has just the component for that: the [Ruler](components/rule.md), which does rule and alert evaluation on top of a given Thanos Querier.
+In case Prometheus running with Thanos Sidecar does not have enough retention, or if you want to have alerts or recording rules that require a global view, Thanos has just the component for that: the [Ruler](components/rule.md), which does rule and alert evaluation on top of a given Thanos Querier.
 
 [Rule documentation](components/rule.md)
