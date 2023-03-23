@@ -232,6 +232,6 @@ Compactor is not in the critical path of querying or data backup. It can either 
 
 ## Ruler/Rule
 
-In case Prometheus running with a Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that require a global view, Thanos has just the component for that: the [Ruler](components/rule.md), which does rule and alert evaluation on top of a given Thanos Querier.
+In case Prometheus running with a Thanos Sidecar does not have enough retention, or if you want to have alerts or recording rules that require a global view, Thanos has just the component for that: the [Ruler](components/rule.md), which does rule and alert evaluation on top of a given Thanos Querier.
 
 [Rule documentation](components/rule.md)
