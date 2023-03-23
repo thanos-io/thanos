@@ -8,7 +8,7 @@ On top of this, find our quick tutorial below.
 
 Thanos is based on Prometheus. With Thanos, Prometheus always remains as an integral foundation for collecting metrics and alerting using local data.
 
-Thanos bases itself on vanilla [Prometheus](https://prometheus.io/) (v2.2.1+). We plan to support *all* Prometheus versions beyond this one.
+Thanos bases itself on vanilla [Prometheus](https://prometheus.io/). We plan to support *all* Prometheus versions beyond v2.2.1.
 
 NOTE: It is highly recommended to use Prometheus v2.13.0+ due to its remote read improvements.
 
