@@ -54,7 +54,7 @@ Source file to copy and edit: https://docs.google.com/drawings/d/1iimTbcicKXqz0F
 
 Thanos integrates with existing Prometheus servers as a [sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server.
 
-The purpose of the sidecar is to back up Prometheus's data into an object storage bucket, and give other Thanos components access to the Prometheus metrics via a gRPC API.
+The purpose of the Sidecar is to back up Prometheus's data into an object storage bucket, and give other Thanos components access to the Prometheus metrics via a gRPC API.
 
 The sidecar makes use of the `reload` Prometheus endpoint. Make sure it's enabled with the flag `--web.enable-lifecycle`.
 
