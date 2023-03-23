@@ -120,7 +120,7 @@ global:
 
 ## Querier/Query
 
-Now that we have setup the sidecar for one or more Prometheus instances, we want to use Thanos's global [Query Layer](components/query.md) to evaluate PromQL queries against all instances at once.
+Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos's global [Query Layer](components/query.md) to evaluate PromQL queries against all instances at once.
 
 The Querier component is stateless and horizontally scalable, and can be deployed with any number of replicas. Once connected to the Sidecars, it automatically detects which Prometheus servers need to be contacted for a given PromQL query.
 
