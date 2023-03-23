@@ -56,7 +56,7 @@ Thanos integrates with existing Prometheus servers as a [sidecar process](https:
 
 The purpose of the Sidecar is to back up Prometheus's data into an object storage bucket, and give other Thanos components access to the Prometheus metrics via a gRPC API.
 
-The sidecar makes use of the `reload` Prometheus endpoint. Make sure it's enabled with the flag `--web.enable-lifecycle`.
+Sidecar makes use of Prometheus's `reload` endpoint. Make sure it's enabled with the flag `--web.enable-lifecycle`.
 
 [Component sidecar documentation](components/sidecar.md)
 
