@@ -28,6 +28,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6222](https://github.com/thanos-io/thanos/pull/6222) mixin(Receive): Fix tenant series received charts.
 - [#6218](https://github.com/thanos-io/thanos/pull/6218) mixin(Store): handle ResourceExhausted as a non-server error. As a consequence, this error won't contribute to Store's grpc errors alerts.
 - [#6271](https://github.com/thanos-io/thanos/pull/6271) Receive: Fix segfault in `LabelValues` during head compaction.
+- [#6229](https://github.com/thanos-io/thanos/pull/6229) Compact: Fixed issue with no-compact-mark.json being ignored
 
 ### Changed
 - [#6168](https://github.com/thanos-io/thanos/pull/6168) Receiver: Make ketama hashring fail early when configured with number of nodes lower than the replication factor.
