@@ -79,7 +79,7 @@ If you want to add yourself to this list, let us know!
 
 ## Deploying Thanos
 
-* [WIP] Detailed, free, in-browser interactive tutorial [as Killercoda Thanos Course](https://killercoda.com/thanos/)
+* Detailed, free, in-browser interactive tutorial [as Killercoda Thanos Course](https://killercoda.com/thanos/)
 * [Quick Tutorial](quick-tutorial.md) on Thanos website.
 
 ## Operating
@@ -88,34 +88,52 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 
 ## Talks
 
-* 10.2021: [Adopting Thanos gradually across all of LastPass infrastructures](https://www.youtube.com/watch?v=Ddq8m04594A)
-* 12.2020: [Absorbing Thanos Infinite Powers for Multi-Cluster Telemetry](https://www.youtube.com/watch?v=6Nx2BFyr7qQ)
-* 12.2020: [Turn It Up to a Million: Ingesting Millions of Metrics with Thanos Receive](https://www.youtube.com/watch?v=5MJqdJq41Ms)
-* 02.2018: [Very first Prometheus Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
-* 02.2019: [FOSDEM + demo](https://fosdem.org/2019/schedule/event/thanos_transforming_prometheus_to_a_global_scale_in_a_seven_simple_steps/)
-* 03.2019: [Alibaba Cloud user story](https://www.youtube.com/watch?v=ZS6zMksfipc)
-* 09.2019: [CloudNative Warsaw Slides](https://docs.google.com/presentation/d/1cKpbJY3jIAtr03M-zcNujwBA38_LDj7NqE4LjNfvglE/edit?usp=sharing)
-* 11.2019: [CloudNative Deep Dive](https://www.youtube.com/watch?v=qQN0N14HXPM)
-* 11.2019: [CloudNative Intro](https://www.youtube.com/watch?v=m0JgWlTc60Q)
-* 2019: [Prometheus in Practice: HA with Thanos](https://www.slideshare.net/ThomasRiley45/prometheus-in-practice-high-availability-with-thanos-devopsdays-edinburgh-2019)
+* 2022
+  * [Story of Correlation: Integrating Thanos Metrics with Observability Signals](https://www.youtube.com/watch?v=rWFb01GW0mQ)
+  * [Running the Observability As a Service For Your Teams With Thanos](https://www.youtube.com/watch?v=I4Mfyfd_4M8)
+  * [Monitoring multiple Kubernetes Clusters with Thanos](https://www.youtube.com/watch?v=V4v-c0VeqLw)
+  * [Thanos: Scaling Prometheus 101](https://www.youtube.com/watch?v=iN6DR28gAyQ)
+  * [MaaS for the Masses: Build Your Monitoring-as-a-Service Solution With Prometheus](https://www.youtube.com/watch?v=EFPPic9dBS4)
+
+* 2021
+  * [Adopting Thanos gradually across all of LastPass infrastructures](https://www.youtube.com/watch?v=Ddq8m04594A)
+  * [Using Thanos to gain a unified way to query over multiple clusters](https://www.youtube.com/watch?v=yefffBLuVh0)
+  * [Thanos: Easier Than Ever to Scale Prometheus and Make It Highly Available](https://www.youtube.com/watch?v=mtwwUqeIHAw)
+
+* 2020
+  * [Absorbing Thanos Infinite Powers for Multi-Cluster Telemetry](https://www.youtube.com/watch?v=6Nx2BFyr7qQ)
+  * [Turn It Up to a Million: Ingesting Millions of Metrics with Thanos Receive](https://www.youtube.com/watch?v=5MJqdJq41Ms)
+  * [Thanos: Cheap, Simple and Scalable Prometheus](https://www.youtube.com/watch?v=Wroo1n5GWwg)
+  * [Thanos: Prometheus at Scale!](https://www.youtube.com/watch?v=q9j8vpgFkoY)
+  * [Introduction to Thanos](https://www.youtube.com/watch?v=j4TAGO019HU)
+  * [Using Thanos as a long term storage for your Prometheus metrics](https://www.youtube.com/watch?v=cedzqLgRgaM)
+
+* 2019
+  * [FOSDEM + demo](https://fosdem.org/2019/schedule/event/thanos_transforming_prometheus_to_a_global_scale_in_a_seven_simple_steps/)
+  * [Alibaba Cloud user story](https://www.youtube.com/watch?v=ZS6zMksfipc)
+  * [CloudNative Warsaw Slides](https://docs.google.com/presentation/d/1cKpbJY3jIAtr03M-zcNujwBA38_LDj7NqE4LjNfvglE/edit?usp=sharing)
+  * [CloudNative Deep Dive](https://www.youtube.com/watch?v=qQN0N14HXPM)
+  * [CloudNative Intro](https://www.youtube.com/watch?v=m0JgWlTc60Q)
+  * [Prometheus in Practice: HA with Thanos](https://www.slideshare.net/ThomasRiley45/prometheus-in-practice-high-availability-with-thanos-devopsdays-edinburgh-2019)
+
+* 2018
+  * [Very first Prometheus Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 
 ## Blog posts
 
 * 2022:
+  * [Thanos at Medallia: A Hybrid Architecture Scaled to Support 1 Billion+ Series Across 40+ Data Centers](https://thanos.io/blog/2022-09-08-thanos-at-medallia/)
   * [Deploy Thanos Receive with native OCI Object Storage on Oracle Kubernetes Engine](https://medium.com/@lmukadam/deploy-thanos-receive-with-native-oci-object-storage-on-kubernetes-829326ea0bc6)
   * [Leveraging Consul for Thanos Query Discovery](https://nicolastakashi.medium.com/leveraging-consul-for-thanos-query-discovery-34212d496c88)
 
 * 2021:
-
   * [Adopting Thanos at LastPass](https://krisztianfekete.org/adopting-thanos-at-lastpass/)
 
 * 2020:
-
   * [Banzai Cloud user story](https://banzaicloud.com/blog/multi-cluster-monitoring/)
   * [Monitoring the Beat microservices: A tale of evolution](https://build.thebeat.co/monitoring-the-beat-microservices-a-tale-of-evolution-4e246882606e)
 
 * 2019:
-
   * [Metric monitoring architecture](https://improbable.io/blog/thanos-architecture-at-improbable)
   * [Red Hat user story](https://blog.openshift.com/federated-prometheus-with-thanos-receive/)
   * [HelloFresh blog posts part 1](https://engineering.hellofresh.com/monitoring-at-hellofresh-part-1-architecture-677b4bd6b728)
@@ -125,7 +143,6 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
   * [Thanos via Prometheus Operator](https://kkc.github.io/2019/02/10/prometheus-operator-with-thanos/)
 
 * 2018:
-
   * [Introduction blog post](https://improbable.io/blog/thanos-prometheus-at-scale)
   * [Monzo user story](https://monzo.com/blog/2018/07/27/how-we-monitor-monzo)
   * [Banzai Cloud hand's on](https://banzaicloud.com/blog/hands-on-thanos/)
