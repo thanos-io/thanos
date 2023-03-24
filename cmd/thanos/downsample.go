@@ -80,7 +80,7 @@ func RunDownsample(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Downsample.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), component.Downsample.String())
 	if err != nil {
 		return err
 	}

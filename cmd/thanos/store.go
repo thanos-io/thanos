@@ -275,7 +275,7 @@ func runStore(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, conf.component.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, extprom.WrapRegistererWithPrefix("thanos_", reg), conf.component.String())
 	if err != nil {
 		return errors.Wrap(err, "create bucket client")
 	}

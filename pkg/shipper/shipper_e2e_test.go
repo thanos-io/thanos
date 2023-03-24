@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"io"
 	"math/rand"
 	"os"
@@ -37,7 +38,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		// TODO(GiedriusS): consider switching to BucketWithMetrics() everywhere?
 		metrics := prometheus.NewRegistry()
-		metricsBucket := objstore.BucketWithMetrics("test", bkt, metrics)
+		metricsBucket := objstore.BucketWithMetrics("test", bkt, extprom.WrapRegistererWithPrefix("thanos_", metrics))
 
 		dir := t.TempDir()
 
