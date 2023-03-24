@@ -28,11 +28,22 @@ func ApplyRetentionPolicyByResolution(
 	metas map[ulid.ULID]*metadata.Meta,
 	retentionByResolution map[ResolutionLevel]time.Duration,
 	blocksMarkedForDeletion prometheus.Counter,
+	noCompactMarkerFilter *GatherNoCompactionMarkFilter,
 ) error {
 	level.Info(logger).Log("msg", "start optional retention")
+	var excludeMetas map[ulid.ULID]*metadata.NoCompactMark
+	if noCompactMarkerFilter != nil {
+		excludeMetas = noCompactMarkerFilter.NoCompactMarkedBlocks()
+	}
 	for id, m := range metas {
 		retentionDuration := retentionByResolution[ResolutionLevel(m.Thanos.Downsample.Resolution)]
 		if retentionDuration.Seconds() == 0 {
+			continue
+		}
+		if _, ok := excludeMetas[id]; ok {
+			level.Debug(logger).Log(
+				"msg", "applying retention: skipping block marked for no compaction",
+				"ulid", id.String())
 			continue
 		}
 

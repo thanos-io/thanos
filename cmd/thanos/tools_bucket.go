@@ -1376,7 +1376,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 
 		level.Warn(logger).Log("msg", "GLOBAL COMPACTOR SHOULD __NOT__ BE RUNNING ON THE SAME BUCKET")
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, stubCounter); err != nil {
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, stubCounter, nil); err != nil {
 			return errors.Wrap(err, "retention failed")
 		}
 		return nil

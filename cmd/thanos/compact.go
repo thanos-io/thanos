@@ -351,6 +351,7 @@ func runCompact(
 		metadata.HashFunc(conf.hashFunc),
 		conf.blockFilesConcurrency,
 		conf.compactBlocksFetchConcurrency,
+		noCompactMarkerFilter,
 	)
 	tsdbPlanner := compact.NewPlanner(logger, levels, noCompactMarkerFilter)
 	planner := compact.WithLargeTotalIndexSizeFilter(
@@ -458,7 +459,14 @@ func runCompact(
 			return errors.Wrap(err, "sync before retention")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")); err != nil {
+		if err := compact.ApplyRetentionPolicyByResolution(
+			ctx,
+			logger,
+			bkt,
+			sy.Metas(),
+			retentionByResolution,
+			compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
+			noCompactMarkerFilter); err != nil {
 			return errors.Wrap(err, "retention failed")
 		}
 
