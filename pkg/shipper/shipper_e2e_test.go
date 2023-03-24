@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/thanos-io/thanos/pkg/extprom"
 	"io"
 	"math/rand"
 	"os"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/extprom"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
