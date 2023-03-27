@@ -75,13 +75,14 @@ const (
 	Stats                    = "stats"
 	ShardInfoParam           = "shard_info"
 	LookbackDeltaParam       = "lookback_delta"
+	EngineParam              = "engine"
 )
 
-type promqlEngineType string
+type PromqlEngineType string
 
 const (
-	promqlEnginePrometheus promqlEngineType = "prometheus"
-	promqlEngineThanos     promqlEngineType = "thanos"
+	PromqlEnginePrometheus PromqlEngineType = "prometheus"
+	PromqlEngineThanos     PromqlEngineType = "thanos"
 )
 
 type QueryEngineFactory struct {
@@ -132,8 +133,8 @@ type QueryAPI struct {
 	gate            gate.Gate
 	queryableCreate query.QueryableCreator
 	// queryEngine returns appropriate promql.Engine for a query with a given step.
-	queryEngine         v1.QueryEngine
-	thanosEngine        v1.QueryEngine
+	engineFactory       QueryEngineFactory
+	defaultEngine       PromqlEngineType
 	lookbackDeltaCreate func(int64) time.Duration
 	ruleGroups          rules.UnaryClient
 	targets             targets.UnaryClient
@@ -170,8 +171,8 @@ type seriesQueryPerformanceMetricsAggregator interface {
 func NewQueryAPI(
 	logger log.Logger,
 	endpointStatus func() []query.EndpointStatus,
-	qe v1.QueryEngine,
-	te v1.QueryEngine,
+	engineFactory QueryEngineFactory,
+	de PromqlEngineType,
 	lookbackDeltaCreate func(int64) time.Duration,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
@@ -201,8 +202,8 @@ func NewQueryAPI(
 	return &QueryAPI{
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:                                 logger,
-		queryEngine:                            qe,
-		thanosEngine:                           te,
+		engineFactory:                          engineFactory,
+		defaultEngine:                          de,
 		lookbackDeltaCreate:                    lookbackDeltaCreate,
 		queryableCreate:                        c,
 		gate:                                   gate,
@@ -290,14 +291,18 @@ func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplicatio
 func (qapi *QueryAPI) parseEngineParam(r *http.Request) (queryEngine v1.QueryEngine, _ *api.ApiError) {
 	var engine v1.QueryEngine
 
-	param := promqlEngineType(r.FormValue("engine"))
+	param := PromqlEngineType(r.FormValue("engine"))
+	if param == "" {
+		param = qapi.defaultEngine
+	}
+
 	switch param {
-	case promqlEnginePrometheus:
-		engine = qapi.queryEngine
-	case promqlEngineThanos:
-		engine = qapi.thanosEngine
+	case PromqlEnginePrometheus:
+		engine = qapi.engineFactory.GetPrometheusEngine()
+	case PromqlEngineThanos:
+		engine = qapi.engineFactory.GetThanosEngine()
 	default:
-		engine = qapi.queryEngine
+		return nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("'%s' bad engine", param)}
 	}
 
 	return engine, nil
