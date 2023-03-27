@@ -2,8 +2,8 @@
 version: 2.1
 
 orbs:
-  go: circleci/go@1.7.1
-  git-shallow-clone: guitarrapc/git-shallow-clone@2.4.0
+  go: circleci/go@1.7.2
+  git-shallow-clone: guitarrapc/git-shallow-clone@2.5.0
 
 executors:
   golang:
