@@ -43,6 +43,8 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/stats"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
+	promqlapi "github.com/thanos-community/promql-engine/api"
+	"github.com/thanos-community/promql-engine/engine"
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -81,6 +83,47 @@ const (
 	promqlEnginePrometheus promqlEngineType = "prometheus"
 	promqlEngineThanos     promqlEngineType = "thanos"
 )
+
+type QueryEngineFactory struct {
+	engineOpts            promql.EngineOpts
+	remoteEngineEndpoints promqlapi.RemoteEndpoints
+
+	prometheusEngine v1.QueryEngine
+	thanosEngine     v1.QueryEngine
+}
+
+func (f *QueryEngineFactory) GetPrometheusEngine() v1.QueryEngine {
+	if f.prometheusEngine != nil {
+		return f.prometheusEngine
+	}
+
+	f.prometheusEngine = promql.NewEngine(f.engineOpts)
+	return f.prometheusEngine
+}
+
+func (f *QueryEngineFactory) GetThanosEngine() v1.QueryEngine {
+	if f.thanosEngine != nil {
+		return f.thanosEngine
+	}
+
+	if f.remoteEngineEndpoints == nil {
+		f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts})
+	} else {
+		f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts}, f.remoteEngineEndpoints)
+	}
+
+	return f.thanosEngine
+}
+
+func NewQueryEngineFactory(
+	engineOpts promql.EngineOpts,
+	remoteEngineEndpoints promqlapi.RemoteEndpoints,
+) *QueryEngineFactory {
+	return &QueryEngineFactory{
+		engineOpts:            engineOpts,
+		remoteEngineEndpoints: remoteEngineEndpoints,
+	}
+}
 
 // QueryAPI is an API used by Thanos Querier.
 type QueryAPI struct {
