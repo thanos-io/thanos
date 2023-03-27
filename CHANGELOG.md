@@ -34,28 +34,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
-## [v0.31.0](https://github.com/thanos-io/thanos/tree/release-0.31) - 24.02.2023
-
-### Added
-
-- [#5990](https://github.com/thanos-io/thanos/pull/5990) Cache/Redis: add support for Redis Sentinel via new option `master_name`.
-- [#6008](https://github.com/thanos-io/thanos/pull/6008) *: Add counter metric `gate_queries_total` to gate.
-- [#5926](https://github.com/thanos-io/thanos/pull/5926) Receiver: Add experimental string interning in writer. Can be enabled with a hidden flag `writer.intern`.
-- [#5773](https://github.com/thanos-io/thanos/pull/5773) Store: Support disable cache index header file.
-- [#5653](https://github.com/thanos-io/thanos/pull/5653) Receive: Allow setting hashing algorithm per tenant in hashrings config
-- [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Add histogram metrics `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested` to all Stores.
-- [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Allow configuring series and sample limits per `Series` request for all Stores.
-- [#6104](https://github.com/thanos-io/thanos/pull/6104) Objstore: Support S3 session token.
-- [#5548](https://github.com/thanos-io/thanos/pull/5548) Query: Added experimental support for load balancing across multiple Store endpoints.
-- [#6148](https://github.com/thanos-io/thanos/pull/6148) Query-frontend: add traceID to slow query detected log line
-- [#6153](https://github.com/thanos-io/thanos/pull/6153) Query-frontend: add remote_user (from http basic auth) and remote_addr to slow query detected log line
-
-### Fixed
-
-### Changed
-
-### Removed
-
 ## [v0.31.0](https://github.com/thanos-io/thanos/tree/release-0.31) - 22.03.2023
 
 ### Added
@@ -67,7 +45,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#5653](https://github.com/thanos-io/thanos/pull/5653) Receive: Allow setting hashing algorithm per tenant in hashrings config.
 - [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Add histogram metrics `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested` to all Stores.
 - [#6074](https://github.com/thanos-io/thanos/pull/6074) *: Allow configuring series and sample limits per `Series` request for all Stores.
-- [#6104](https://github.com/thanos-io/thanos/pull/6104) Store: Support S3 session token.
+- [#6104](https://github.com/thanos-io/thanos/pull/6104) Objstore: Support S3 session token.
 - [#5548](https://github.com/thanos-io/thanos/pull/5548) Query: Add experimental support for load balancing across multiple Store endpoints.
 - [#6148](https://github.com/thanos-io/thanos/pull/6148) Query-frontend: Add `traceID` to slow query detected log line.
 - [#6153](https://github.com/thanos-io/thanos/pull/6153) Query-frontend: Add `remote_user` (from http basic auth) and `remote_addr` to slow query detected log line.
