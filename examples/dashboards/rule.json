@@ -40,7 +40,7 @@
                "renderer": "flot",
                "seriesOverrides": [ ],
                "spaceLength": 10,
-               "span": 4,
+               "span": 3,
                "stack": false,
                "steppedLine": false,
                "targets": [
@@ -116,12 +116,12 @@
                "renderer": "flot",
                "seriesOverrides": [ ],
                "spaceLength": 10,
-               "span": 4,
+               "span": 3,
                "stack": false,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, rule_group, strategy) (increase(prometheus_rule_group_iterations_missed_total{job=~\"$job\"}[$__rate_interval]))",
+                     "expr": "sum by (job, rule_group, strategy) (rate(prometheus_rule_evaluation_failures_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{ rule_group }} {{ strategy }}",
@@ -132,7 +132,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "Rule Group Evaluations Missed",
+               "title": "Rule Group Evaluations Failed",
                "tooltip": {
                   "shared": false,
                   "sort": 0,
@@ -192,7 +192,83 @@
                "renderer": "flot",
                "seriesOverrides": [ ],
                "spaceLength": 10,
-               "span": 4,
+               "span": 3,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "sum by (job, rule_group, strategy) (increase(prometheus_rule_group_iterations_missed_total{job=~\"$job\"}[$__rate_interval]))",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "{{ rule_group }} {{ strategy }}",
+                     "legendLink": null,
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Rule Group Evaluations Missed",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            },
+            {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "fill": 1,
+               "id": 4,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 3,
                "stack": false,
                "steppedLine": false,
                "targets": [
@@ -261,7 +337,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of dropped alerts.",
                "fill": 1,
-               "id": 4,
+               "id": 5,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -338,7 +414,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of alerts that successfully sent to alert manager.",
                "fill": 10,
-               "id": 5,
+               "id": 6,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -417,7 +493,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of sent alerts.",
                "fill": 10,
-               "id": 6,
+               "id": 7,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -493,7 +569,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to send alerts to alert manager.",
                "fill": 1,
-               "id": 7,
+               "id": 8,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -623,7 +699,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of queued alerts.",
                "fill": 1,
-               "id": 8,
+               "id": 9,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -702,7 +778,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of dropped alerts compared to the total number of queued alerts.",
                "fill": 10,
-               "id": 9,
+               "id": 10,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -790,7 +866,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of handled Unary gRPC requests.",
                "fill": 10,
-               "id": 10,
+               "id": 11,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -941,7 +1017,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests.",
                "fill": 10,
-               "id": 11,
+               "id": 12,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1017,7 +1093,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests, in quantiles.",
                "fill": 1,
-               "id": 12,
+               "id": 13,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1147,7 +1223,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of handled Streamed gRPC requests.",
                "fill": 10,
-               "id": 13,
+               "id": 14,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1298,7 +1374,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests.",
                "fill": 10,
-               "id": 14,
+               "id": 15,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1374,7 +1450,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests, in quantiles",
                "fill": 1,
-               "id": 15,
+               "id": 16,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1503,7 +1579,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 16,
+               "id": 17,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1619,7 +1695,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 17,
+               "id": 18,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1695,7 +1771,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 18,
+               "id": 19,
                "legend": {
                   "avg": false,
                   "current": false,
