@@ -45,10 +45,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, strategy) (rate(prometheus_rule_evaluations_total{job=~\"$job\"}[$__rate_interval]))",
+                     "expr": "sum by (job, rule_group, strategy) (rate(prometheus_rule_evaluations_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{ strategy }}",
+                     "legendFormat": "{{ rule_group }} {{ strategy }}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -121,10 +121,10 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, strategy) (increase(prometheus_rule_group_iterations_missed_total{job=~\"$job\"}[$__rate_interval]))",
+                     "expr": "sum by (job, rule_group, strategy) (increase(prometheus_rule_group_iterations_missed_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "{{ strategy }}",
+                     "legendFormat": "{{ rule_group }} {{ strategy }}",
                      "legendLink": null,
                      "step": 10
                   }
@@ -208,7 +208,7 @@
                "thresholds": [ ],
                "timeFrom": null,
                "timeShift": null,
-               "title": "Rule Group Evlauations Too Slow",
+               "title": "Rule Group Evaluations Too Slow",
                "tooltip": {
                   "shared": false,
                   "sort": 0,

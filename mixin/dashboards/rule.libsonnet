@@ -22,19 +22,19 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rule Group Evaluations') +
           g.queryPanel(
-            'sum by (%s) (rate(prometheus_rule_evaluations_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.rule.dashboard.dimensions, 'strategy']), thanos.rule.dashboard.selector],
-            '{{ strategy }}',
+            'sum by (%s) (rate(prometheus_rule_evaluations_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.rule.dashboard.dimensions, 'rule_group', 'strategy']), thanos.rule.dashboard.selector],
+            '{{ rule_group }} {{ strategy }}',
           )
         )
         .addPanel(
           g.panel('Rule Group Evaluations Missed') +
           g.queryPanel(
-            'sum by (%s) (increase(prometheus_rule_group_iterations_missed_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.rule.dashboard.dimensions, 'strategy']), thanos.rule.dashboard.selector],
-            '{{ strategy }}',
+            'sum by (%s) (increase(prometheus_rule_group_iterations_missed_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.rule.dashboard.dimensions, 'rule_group', 'strategy']), thanos.rule.dashboard.selector],
+            '{{ rule_group }} {{ strategy }}',
           )
         )
         .addPanel(
-          g.panel('Rule Group Evlauations Too Slow') +
+          g.panel('Rule Group Evaluations Too Slow') +
           g.queryPanel(
             |||
               (
