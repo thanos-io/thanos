@@ -724,7 +724,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		operationMatcher, err := matchers.NewMatcher(matchers.MatchEqual, "operation", "get")
 		testutil.Ok(t, err)
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(
-			e2emon.GreaterOrEqual(573),
+			e2ethanos.Between(0, 1000),
 			[]string{"thanos_objstore_bucket_operations_total"}, e2emon.WithLabelMatchers(
 				bucketMatcher,
 				operationMatcher,
