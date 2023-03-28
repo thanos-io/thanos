@@ -183,18 +183,21 @@ func TestQueryEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	qe := promql.NewEngine(promql.EngineOpts{
-		Logger:     nil,
-		Reg:        nil,
-		MaxSamples: 10000,
-		Timeout:    timeout,
-	})
+	ef := QueryEngineFactory{
+		engineOpts: promql.EngineOpts{
+			Logger:     nil,
+			Reg:        nil,
+			MaxSamples: 10000,
+			Timeout:    timeout,
+		},
+	}
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
 		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
-		queryEngine:           qe,
+		engineFactory:         ef,
+		defaultEngine:         PromqlEnginePrometheus,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
 		gate:                  gate.New(nil, 4, gate.Queries),
 		defaultRangeQueryStep: time.Second,
@@ -742,18 +745,21 @@ func TestMetadataEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	qe := promql.NewEngine(promql.EngineOpts{
-		Logger:     nil,
-		Reg:        nil,
-		MaxSamples: 10000,
-		Timeout:    timeout,
-	})
+	ef := QueryEngineFactory{
+		engineOpts: promql.EngineOpts{
+			Logger:     nil,
+			Reg:        nil,
+			MaxSamples: 10000,
+			Timeout:    timeout,
+		},
+	}
 	api := &QueryAPI{
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
 		queryableCreate:     query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
-		queryEngine:         qe,
+		engineFactory:       ef,
+		defaultEngine:       PromqlEnginePrometheus,
 		lookbackDeltaCreate: func(m int64) time.Duration { return time.Duration(0) },
 		gate:                gate.New(nil, 4, gate.Queries),
 		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
@@ -766,7 +772,8 @@ func TestMetadataEndpoints(t *testing.T) {
 			Now: func() time.Time { return now },
 		},
 		queryableCreate:          query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout),
-		queryEngine:              qe,
+		engineFactory:            ef,
+		defaultEngine:            PromqlEnginePrometheus,
 		lookbackDeltaCreate:      func(m int64) time.Duration { return time.Duration(0) },
 		gate:                     gate.New(nil, 4, gate.Queries),
 		defaultMetadataTimeRange: apiLookbackDelta,
