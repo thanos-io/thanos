@@ -4,7 +4,6 @@
 package cachekey
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -38,10 +37,10 @@ type BucketCacheKey struct {
 // String returns the string representation of BucketCacheKey.
 func (ck BucketCacheKey) String() string {
 	if ck.Start == 0 && ck.End == 0 {
-		return fmt.Sprintf("%s:%s", ck.Verb, ck.Name)
+		return string(ck.Verb) + ":" + ck.Name
 	}
 
-	return fmt.Sprintf("%s:%s:%d:%d", ck.Verb, ck.Name, ck.Start, ck.End)
+	return strings.Join([]string{string(ck.Verb), ck.Name, strconv.FormatInt(ck.Start, 10), strconv.FormatInt(ck.End, 10)}, ":")
 }
 
 // IsValidVerb checks if the VerbType matches the predefined verbs.

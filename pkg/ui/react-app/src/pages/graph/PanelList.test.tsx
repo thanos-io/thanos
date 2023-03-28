@@ -10,7 +10,7 @@ describe('PanelList', () => {
     [
       { id: 'use-local-time-checkbox', label: 'Use local time', default: false },
       { id: 'query-history-checkbox', label: 'Enable query history', default: false },
-      { id: 'debug-mode-checkbox', label: 'Enable Store Filtering', default: false },
+      { id: 'store-filtering-checkbox', label: 'Enable Store Filtering', default: false },
       { id: 'autocomplete-checkbox', label: 'Enable autocomplete', default: true },
       { id: 'highlighting-checkbox', label: 'Enable highlighting', default: true },
       { id: 'linter-checkbox', label: 'Enable linter', default: true },

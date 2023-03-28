@@ -28,6 +28,7 @@ import (
 	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/thanos-io/objstore/exthttp"
+
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
 
@@ -64,7 +65,7 @@ const (
 
 // DefaultPrometheusImage sets default Prometheus image used in e2e service.
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.38.0"
+	return "quay.io/prometheus/prometheus:v2.41.0"
 }
 
 // DefaultAlertmanagerImage sets default Alertmanager image used in e2e service.
@@ -251,6 +252,10 @@ type QuerierBuilder struct {
 	exemplarAddresses       []string
 	enableFeatures          []string
 	endpoints               []string
+	strictEndpoints         []string
+
+	engine    string
+	queryMode string
 
 	replicaLabels []string
 	tracingConfig string
@@ -323,6 +328,11 @@ func (q *QuerierBuilder) WithEndpoints(endpoints ...string) *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithStrictEndpoints(strictEndpoints ...string) *QuerierBuilder {
+	q.strictEndpoints = strictEndpoints
+	return q
+}
+
 func (q *QuerierBuilder) WithRoutePrefix(routePrefix string) *QuerierBuilder {
 	q.routePrefix = routePrefix
 	return q
@@ -346,6 +356,16 @@ func (q *QuerierBuilder) WithReplicaLabels(labels ...string) *QuerierBuilder {
 
 func (q *QuerierBuilder) WithDisablePartialResponses(disable bool) *QuerierBuilder {
 	q.disablePartialResponses = disable
+	return q
+}
+
+func (q *QuerierBuilder) WithEngine(engine string) *QuerierBuilder {
+	q.engine = engine
+	return q
+}
+
+func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
+	q.queryMode = mode
 	return q
 }
 
@@ -406,6 +426,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	for _, addr := range q.endpoints {
 		args = append(args, "--endpoint="+addr)
 	}
+	for _, addr := range q.strictEndpoints {
+		args = append(args, "--endpoint-strict="+addr)
+	}
 	if len(q.fileSDStoreAddresses) > 0 {
 		if err := os.MkdirAll(q.Dir(), 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
@@ -455,6 +478,7 @@ type ReceiveBuilder struct {
 	relabelConfigs      []*relabel.Config
 	replication         int
 	image               string
+	nativeHistograms    bool
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -502,6 +526,11 @@ func (r *ReceiveBuilder) WithValidationEnabled(limit int, metaMonitoring string,
 	if len(query) > 0 {
 		r.metaMonitoringQuery = query[0]
 	}
+	return r
+}
+
+func (r *ReceiveBuilder) WithNativeHistograms() *ReceiveBuilder {
+	r.nativeHistograms = true
 	return r
 }
 
@@ -581,6 +610,10 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate relabel configs: %v", relabelConfigBytes))}
 		}
 		args["--receive.relabel-config"] = string(relabelConfigBytes)
+	}
+
+	if r.nativeHistograms {
+		args["--tsdb.enable-native-histograms"] = ""
 	}
 
 	return e2emon.AsInstrumented(r.f.Init(wrapWithDefaults(e2e.StartOptions{

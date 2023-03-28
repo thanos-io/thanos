@@ -36,6 +36,15 @@ Flags:
                                  Number of goroutines to use when constructing
                                  index-cache.json blocks from object storage.
                                  Must be equal or greater than 1.
+      --bucket-web-label=BUCKET-WEB-LABEL
+                                 External block label to use as group title in
+                                 the bucket web UI
+      --cache-index-header       Cache TSDB index-headers on disk to reduce
+                                 startup time. When set to true, Thanos Store
+                                 will download index headers from remote object
+                                 storage on startup and create a header file on
+                                 disk. Use --data-dir to set the directory in
+                                 which index headers will be downloaded.
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable
                                  bytes reserved strictly to reuse for chunks in
                                  memory.
@@ -47,15 +56,20 @@ Flags:
                                  purposes (index-header, in-mem cache items and
                                  meta.jsons). If removed, no data will be lost,
                                  just store will have to rebuild the cache.
-                                 NOTE: Putting raw blocks here will not cause
-                                 the store to read them. For such use cases use
-                                 Prometheus + sidecar.
+                                 NOTE: Putting raw blocks here will not
+                                 cause the store to read them. For such use
+                                 cases use Prometheus + sidecar. Ignored if
+                                 --no-cache-index-header option is specified.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
+      --grpc-server-max-connection-age=0s
+                                 The grpc server max connection age. This
+                                 controls how often to re-establish connections
+                                 and redo TLS handshakes.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-client-ca=""
@@ -171,19 +185,20 @@ Flags:
       --store.grpc.series-max-concurrency=20
                                  Maximum number of concurrent Series calls.
       --store.grpc.series-sample-limit=0
-                                 Maximum amount of samples returned via a
-                                 single Series call. The Series call fails
-                                 if this limit is exceeded. 0 means no limit.
-                                 NOTE: For efficiency the limit is internally
-                                 implemented as 'chunks limit' considering
-                                 each chunk contains 120 samples (it's the max
-                                 number of samples each chunk can contain),
-                                 so the actual number of samples might be lower,
-                                 even though the maximum could be hit.
+                                 DEPRECATED: use store.limits.request-samples.
       --store.grpc.touched-series-limit=0
-                                 Maximum amount of touched series returned via
-                                 a single Series call. The Series call fails if
+                                 DEPRECATED: use store.limits.request-series.
+      --store.limits.request-samples=0
+                                 The maximum samples allowed for a single
+                                 Series request, The Series call fails if
                                  this limit is exceeded. 0 means no limit.
+                                 NOTE: For efficiency the limit is internally
+                                 implemented as 'chunks limit' considering each
+                                 chunk contains a maximum of 120 samples.
+      --store.limits.request-series=0
+                                 The maximum series allowed for a single Series
+                                 request. The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
       --sync-block-duration=3m   Repeat interval for syncing the blocks between
                                  local and remote view.
       --tracing.config=<content>

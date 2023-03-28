@@ -219,7 +219,7 @@ Flags:
       --http.config=""          [EXPERIMENTAL] Path to the configuration file
                                 that can enable TLS or authentication for all
                                 HTTP endpoints.
-      --label=LABEL             Prometheus label to use as timeline title
+      --label=LABEL             External block label to use as group title
       --log.format=logfmt       Log format to use. Possible options: logfmt or
                                 json.
       --log.level=info          Log filtering level.

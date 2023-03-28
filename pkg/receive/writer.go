@@ -29,12 +29,14 @@ type TenantStorage interface {
 type Writer struct {
 	logger    log.Logger
 	multiTSDB TenantStorage
+	intern    bool
 }
 
-func NewWriter(logger log.Logger, multiTSDB TenantStorage) *Writer {
+func NewWriter(logger log.Logger, multiTSDB TenantStorage, intern bool) *Writer {
 	return &Writer{
 		logger:    logger,
 		multiTSDB: multiTSDB,
+		intern:    intern,
 	}
 }
 
@@ -103,7 +105,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
-			labelpb.ReAllocZLabelsStrings(&t.Labels)
+			labelpb.ReAllocZLabelsStrings(&t.Labels, r.intern)
 			lset = labelpb.ZLabelsToPromLabels(t.Labels)
 		}
 
@@ -126,6 +128,29 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 			default:
 				if err != nil {
 					level.Debug(tLogger).Log("msg", "Error ingesting sample", "err", err)
+				}
+			}
+		}
+
+		for _, hp := range t.Histograms {
+			h := prompb.HistogramProtoToHistogram(hp)
+			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, nil)
+			switch err {
+			case storage.ErrOutOfOrderSample:
+				numSamplesOutOfOrder++
+				level.Debug(tLogger).Log("msg", "Out of order histogram", "lset", lset, "timestamp", hp.Timestamp)
+			case storage.ErrDuplicateSampleForTimestamp:
+				numSamplesDuplicates++
+				level.Debug(tLogger).Log("msg", "Duplicate histogram for timestamp", "lset", lset, "timestamp", hp.Timestamp)
+			case storage.ErrOutOfBounds:
+				numSamplesOutOfBounds++
+				level.Debug(tLogger).Log("msg", "Out of bounds metric", "lset", lset, "timestamp", hp.Timestamp)
+			case storage.ErrTooOldSample:
+				numSamplesTooOld++
+				level.Debug(tLogger).Log("msg", "Histogram is too old", "lset", lset, "timestamp", hp.Timestamp)
+			default:
+				if err != nil {
+					level.Debug(tLogger).Log("msg", "Error ingesting histogram", "err", err)
 				}
 			}
 		}

@@ -136,7 +136,9 @@ func TestHashringGet(t *testing.T) {
 			},
 		},
 	} {
-		hs := newMultiHashring(AlgorithmHashmod, 3, tc.cfg)
+		hs, err := newMultiHashring(AlgorithmHashmod, 3, tc.cfg)
+		require.NoError(t, err)
+
 		h, err := hs.Get(tc.tenant, ts)
 		if tc.nodes != nil {
 			if err != nil {
@@ -226,13 +228,19 @@ func TestKetamaHashringGet(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			hashRing := newKetamaHashring(test.nodes, 10, test.n+1)
+			hashRing, err := newKetamaHashring(test.nodes, 10, test.n+1)
+			require.NoError(t, err)
 
 			result, err := hashRing.GetN("tenant", test.ts, test.n)
 			require.NoError(t, err)
 			require.Equal(t, test.expectedNode, result)
 		})
 	}
+}
+
+func TestKetamaHashringBadConfigIsRejected(t *testing.T) {
+	_, err := newKetamaHashring([]string{"node-1"}, 1, 2)
+	require.Error(t, err)
 }
 
 func TestKetamaHashringConsistency(t *testing.T) {
@@ -348,7 +356,10 @@ func assignSeries(series []prompb.TimeSeries, nodes []string) (map[string][]prom
 }
 
 func assignReplicatedSeries(series []prompb.TimeSeries, nodes []string, replicas uint64) (map[string][]prompb.TimeSeries, error) {
-	hashRing := newKetamaHashring(nodes, SectionsPerNode, replicas)
+	hashRing, err := newKetamaHashring(nodes, SectionsPerNode, replicas)
+	if err != nil {
+		return nil, err
+	}
 	assignments := make(map[string][]prompb.TimeSeries)
 	for i := uint64(0); i < replicas; i++ {
 		for _, ts := range series {

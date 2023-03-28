@@ -26,16 +26,20 @@ var (
 )
 
 // IndexCache is the interface exported by index cache backends.
+// Store operations do not support context.Context, deadlines need to be
+// supported by the backends themselves. This is because Set operations are
+// run async and it does not make sense to attach same context
+// (potentially with a deadline) as in the original user's request.
 type IndexCache interface {
 	// StorePostings stores postings for a single series.
-	StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte)
+	StorePostings(blockID ulid.ULID, l labels.Label, v []byte)
 
 	// FetchMultiPostings fetches multiple postings - each identified by a label -
 	// and returns a map containing cache hits, along with a list of missing keys.
 	FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label)
 
 	// StoreSeries stores a single series.
-	StoreSeries(ctx context.Context, blockID ulid.ULID, id storage.SeriesRef, v []byte)
+	StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte)
 
 	// FetchMultiSeries fetches multiple series - each identified by ID - from the cache
 	// and returns a map containing cache hits, along with a list of missing IDs.

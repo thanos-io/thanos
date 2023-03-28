@@ -280,6 +280,17 @@ Flags:
                                  prefixed with 'dns+' or 'dnssrv+' to detect
                                  Thanos API servers through respective DNS
                                  lookups.
+      --endpoint-group=<endpoint-group> ...
+                                 Experimental: DNS name of statically configured
+                                 Thanos API server groups (repeatable). Targets
+                                 resolved from the DNS name will be queried in
+                                 a round-robin, instead of a fanout manner.
+                                 This flag should be used when connecting a
+                                 Thanos Query to HA groups of Thanos components.
+      --endpoint-group-strict=<endpoint-group-strict> ...
+                                 Experimental: DNS name of statically configured
+                                 Thanos API server groups (repeatable) that are
+                                 always used, even if the health check fails.
       --endpoint-strict=<staticendpoint> ...
                                  Addresses of only statically configured Thanos
                                  API servers that are always used, even if
@@ -306,10 +317,10 @@ Flags:
                                  to other clients. Must be one of: snappy, none
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
-      --grpc-server-max-connection-age=60m
-                                 The grpc server max connection age.
-                                 This controls how often to re-read the tls
-                                 certificates and redo the TLS handshake
+      --grpc-server-max-connection-age=0s
+                                 The grpc server max connection age. This
+                                 controls how often to re-establish connections
+                                 and redo TLS handshakes.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-client-ca=""
@@ -429,6 +440,17 @@ Flags:
                                  that are always used, even if the health check
                                  fails. Useful if you have a caching layer on
                                  top.
+      --store.limits.request-samples=0
+                                 The maximum samples allowed for a single
+                                 Series request, The Series call fails if
+                                 this limit is exceeded. 0 means no limit.
+                                 NOTE: For efficiency the limit is internally
+                                 implemented as 'chunks limit' considering each
+                                 chunk contains a maximum of 120 samples.
+      --store.limits.request-series=0
+                                 The maximum series allowed for a single Series
+                                 request. The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
       --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored

@@ -67,6 +67,18 @@ http_requests_total`,
 			name:       "aggregate by expression with label_join, sharding label is dynamic",
 			expression: `sum by (dst_label) (label_join(metric, "dst_label", ",", "src_label"))`,
 		},
+		{
+			name:       "absent_over_time is not shardable",
+			expression: `sum by (url) (absent_over_time(http_requests_total{code="400"}[5m]))`,
+		},
+		{
+			name:       "absent is not shardable",
+			expression: `sum by (url) (absent(http_requests_total{code="400"}))`,
+		},
+		{
+			name:       "scalar is not shardable",
+			expression: `scalar(sum by (url) (http_requests_total{code="400"}))`,
+		},
 	}
 
 	shardableByLabels := []testCase{

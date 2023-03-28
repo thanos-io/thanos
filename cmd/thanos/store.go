@@ -49,17 +49,22 @@ import (
 	"github.com/thanos-io/thanos/pkg/ui"
 )
 
+const (
+	retryTimeoutDuration  = 30
+	retryIntervalDuration = 10
+)
+
 type storeConfig struct {
 	indexCacheConfigs           extflag.PathOrContent
 	objStoreConfig              extflag.PathOrContent
 	dataDir                     string
+	cacheIndexHeader            bool
 	grpcConfig                  grpcConfig
 	httpConfig                  httpConfig
 	indexCacheSizeBytes         units.Base2Bytes
 	chunkPoolSize               units.Base2Bytes
 	seriesBatchSize             int
-	maxSampleCount              uint64
-	maxTouchedSeriesCount       uint64
+	storeRateLimits             store.SeriesSelectLimits
 	maxDownloadedBytes          units.Base2Bytes
 	maxConcurrency              int
 	component                   component.StoreAPI
@@ -74,6 +79,7 @@ type storeConfig struct {
 	ignoreDeletionMarksDelay    commonmodel.Duration
 	disableWeb                  bool
 	webConfig                   webConfig
+	label                       string
 	postingOffsetsInMemSampling int
 	cachingBucketConfig         extflag.PathOrContent
 	reqLogConfig                *extflag.PathOrContent
@@ -84,9 +90,13 @@ type storeConfig struct {
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.httpConfig = *sc.httpConfig.registerFlag(cmd)
 	sc.grpcConfig = *sc.grpcConfig.registerFlag(cmd)
+	sc.storeRateLimits.RegisterFlags(cmd)
 
-	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar.").
+	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar. Ignored if --no-cache-index-header option is specified.").
 		Default("./data").StringVar(&sc.dataDir)
+
+	cmd.Flag("cache-index-header", "Cache TSDB index-headers on disk to reduce startup time. When set to true, Thanos Store will download index headers from remote object storage on startup and create a header file on disk. Use --data-dir to set the directory in which index headers will be downloaded.").
+		Default("true").BoolVar(&sc.cacheIndexHeader)
 
 	cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
 		Default("250MB").BytesVar(&sc.indexCacheSizeBytes)
@@ -104,13 +114,8 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").
 		Default("2GB").BytesVar(&sc.chunkPoolSize)
 
-	cmd.Flag("store.grpc.series-sample-limit",
-		"Maximum amount of samples returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit. NOTE: For efficiency the limit is internally implemented as 'chunks limit' considering each chunk contains 120 samples (it's the max number of samples each chunk can contain), so the actual number of samples might be lower, even though the maximum could be hit.").
-		Default("0").Uint64Var(&sc.maxSampleCount)
-
-	cmd.Flag("store.grpc.touched-series-limit",
-		"Maximum amount of touched series returned via a single Series call. The Series call fails if this limit is exceeded. 0 means no limit.").
-		Default("0").Uint64Var(&sc.maxTouchedSeriesCount)
+	cmd.Flag("store.grpc.touched-series-limit", "DEPRECATED: use store.limits.request-series.").Default("0").Uint64Var(&sc.storeRateLimits.SeriesPerRequest)
+	cmd.Flag("store.grpc.series-sample-limit", "DEPRECATED: use store.limits.request-samples.").Default("0").Uint64Var(&sc.storeRateLimits.SamplesPerRequest)
 
 	cmd.Flag("store.grpc.downloaded-bytes-limit",
 		"Maximum amount of downloaded (either fetched or touched) bytes in a single Series/LabelNames/LabelValues call. The Series call fails if this limit is exceeded. 0 means no limit.").
@@ -179,6 +184,8 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").
 		Default("false").BoolVar(&sc.webConfig.disableCORS)
 
+	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&sc.label)
+
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 }
 
@@ -232,6 +239,11 @@ func runStore(
 	conf storeConfig,
 	flagsMap map[string]string,
 ) error {
+	dataDir := conf.dataDir
+	if !conf.cacheIndexHeader {
+		dataDir = ""
+	}
+
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
 	statusProber := prober.Combine(
@@ -313,7 +325,7 @@ func runStore(
 	}
 
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, bkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
-	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, bkt, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{
 			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
 			block.NewLabelShardedMetaFilter(relabelConfig),
@@ -330,7 +342,7 @@ func runStore(
 		return errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", conf.maxConcurrency)
 	}
 
-	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), int(conf.maxConcurrency))
+	queriesGate := gate.New(extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg), int(conf.maxConcurrency), gate.Queries)
 
 	chunkPool, err := store.NewDefaultChunkBytesPool(uint64(conf.chunkPoolSize))
 	if err != nil {
@@ -355,9 +367,9 @@ func runStore(
 	bs, err := store.NewBucketStore(
 		bkt,
 		metaFetcher,
-		conf.dataDir,
-		store.NewChunksLimiterFactory(conf.maxSampleCount/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
-		store.NewSeriesLimiterFactory(conf.maxTouchedSeriesCount),
+		dataDir,
+		store.NewChunksLimiterFactory(conf.storeRateLimits.SamplesPerRequest/store.MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
+		store.NewSeriesLimiterFactory(conf.storeRateLimits.SeriesPerRequest),
 		store.NewBytesLimiterFactory(conf.maxDownloadedBytes),
 		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
 		conf.blockSyncConcurrency,
@@ -381,14 +393,25 @@ func runStore(
 
 			level.Info(logger).Log("msg", "initializing bucket store")
 			begin := time.Now()
-			if err := bs.InitialSync(ctx); err != nil {
+
+			// This will stop retrying after set timeout duration.
+			initialSyncCtx, cancel := context.WithTimeout(ctx, retryTimeoutDuration*time.Second)
+			defer cancel()
+
+			// Retry in case of error.
+			err := runutil.Retry(retryIntervalDuration*time.Second, initialSyncCtx.Done(), func() error {
+				return bs.InitialSync(ctx)
+			})
+
+			if err != nil {
 				close(bucketStoreReady)
 				return errors.Wrap(err, "bucket store initial sync")
 			}
+
 			level.Info(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
 			close(bucketStoreReady)
 
-			err := runutil.Repeat(conf.syncInterval, ctx.Done(), func() error {
+			err = runutil.Repeat(conf.syncInterval, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}
@@ -411,10 +434,10 @@ func runStore(
 			if httpProbe.IsReady() {
 				mint, maxt := bs.TimeRange()
 				return &infopb.StoreInfo{
-					MinTime:           mint,
-					MaxTime:           maxt,
-					SupportsSharding:  true,
-					SendsSortedSeries: true,
+					MinTime:                      mint,
+					MaxTime:                      maxt,
+					SupportsSharding:             true,
+					SupportsWithoutReplicaLabels: true,
 				}
 			}
 			return nil
@@ -428,11 +451,13 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
+		storeServer := store.NewInstrumentedStoreServer(reg, bs)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, conf.component, grpcProbe,
-			grpcserver.WithServer(store.RegisterStoreServer(bs)),
+			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
-			grpcserver.WithGracePeriod(time.Duration(conf.grpcConfig.gracePeriod)),
+			grpcserver.WithGracePeriod(conf.grpcConfig.gracePeriod),
+			grpcserver.WithMaxConnAge(conf.grpcConfig.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 
@@ -455,7 +480,7 @@ func runStore(
 
 			// Configure Request Logging for HTTP calls.
 			logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
-			api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, "", flagsMap, bkt)
+			api := blocksAPI.NewBlocksAPI(logger, conf.webConfig.disableCORS, conf.label, flagsMap, bkt)
 			api.Register(r.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
 
 			metaFetcher.UpdateOnChange(func(blocks []metadata.Meta, err error) {

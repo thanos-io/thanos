@@ -21,8 +21,8 @@ func NewTracingCache(cache Cache) Cache {
 	return TracingCache{c: cache}
 }
 
-func (t TracingCache) Store(ctx context.Context, data map[string][]byte, ttl time.Duration) {
-	t.c.Store(ctx, data, ttl)
+func (t TracingCache) Store(data map[string][]byte, ttl time.Duration) {
+	t.c.Store(data, ttl)
 }
 
 func (t TracingCache) Fetch(ctx context.Context, keys []string) (result map[string][]byte) {
