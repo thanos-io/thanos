@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/golang/snappy"
+	"github.com/klauspost/compress/s2"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/encoding"
@@ -101,7 +102,7 @@ func diffVarintSnappyDecode(input []byte) (closeablePostings, error) {
 		dstBuf = *(decodeBuf.(*[]byte))
 	}
 
-	raw, err := snappy.Decode(dstBuf, input[len(codecHeaderSnappy):])
+	raw, err := s2.Decode(dstBuf, input[len(codecHeaderSnappy):])
 	if err != nil {
 		return nil, errors.Wrap(err, "snappy decode")
 	}
