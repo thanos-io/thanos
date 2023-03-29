@@ -333,9 +333,9 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetryDurationQuantiles,
 			*queryTelemetrySamplesQuantiles,
 			*queryTelemetrySeriesQuantiles,
+			apiv1.PromqlEngineType(*defaultEngine),
 			storeRateLimits,
 			queryMode(*promqlQueryMode),
-			*defaultEngine,
 		)
 	})
 }
@@ -409,9 +409,9 @@ func runQuery(
 	queryTelemetryDurationQuantiles []float64,
 	queryTelemetrySamplesQuantiles []int64,
 	queryTelemetrySeriesQuantiles []int64,
+	defaultEngine apiv1.PromqlEngineType,
 	storeRateLimits store.SeriesSelectLimits,
 	queryMode queryMode,
-	defaultEngine string,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -713,7 +713,7 @@ func runQuery(
 			logger,
 			endpoints.GetEndpointStatus,
 			*engineFactory,
-			apiv1.PromqlEngineType(defaultEngine),
+			defaultEngine,
 			lookbackDeltaCreator,
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
@@ -798,7 +798,7 @@ func runQuery(
 			info.WithQueryAPIInfoFunc(),
 		)
 
-		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, *engineFactory, apiv1.PromqlEngineType(defaultEngine), lookbackDeltaCreator, instantDefaultMaxSourceResolution)
+		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, *engineFactory, defaultEngine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, storeRateLimits)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),
