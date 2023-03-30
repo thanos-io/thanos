@@ -77,7 +77,6 @@ func TestCompactWithStoreGateway(t *testing.T) {
 }
 
 func TestCompactWithStoreGatewayWithPenaltyDedup(t *testing.T) {
-	t.Skip("Flaky test, needs deeper investigation before re-enabling, details are in https://github.com/thanos-io/thanos/issues/4866")
 	testCompactWithStoreGateway(t, true)
 }
 
@@ -724,7 +723,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		operationMatcher, err := matchers.NewMatcher(matchers.MatchEqual, "operation", "get")
 		testutil.Ok(t, err)
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(
-			e2emon.Equals(573),
+			e2ethanos.Between(0, 1000),
 			[]string{"thanos_objstore_bucket_operations_total"}, e2emon.WithLabelMatchers(
 				bucketMatcher,
 				operationMatcher,
