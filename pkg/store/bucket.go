@@ -2163,14 +2163,14 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 	}
 
 	fetchedPostings, closeFns, err := r.fetchPostings(ctx, keys, bytesLimiter)
-	if err != nil {
-		return nil, errors.Wrap(err, "get postings")
-	}
 	defer func() {
 		for _, closeFn := range closeFns {
 			closeFn()
 		}
 	}()
+	if err != nil {
+		return nil, errors.Wrap(err, "get postings")
+	}
 
 	// Get "add" and "remove" postings from groups. We iterate over postingGroups and their keys
 	// again, and this is exactly the same order as before (when building the groups), so we can simply
