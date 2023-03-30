@@ -40,7 +40,7 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 		"TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").
 		Default("").StringVar(&gc.tlsSrvClientCA)
 	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
-		Default("0s").DurationVar(&gc.maxConnectionAge)
+		Default("60m").DurationVar(&gc.maxConnectionAge)
 	cmd.Flag("grpc-grace-period",
 		"Time to wait after an interrupt received for GRPC Server.").
 		Default("2m").DurationVar(&gc.gracePeriod)

@@ -304,10 +304,10 @@ groups:
     annotations:
       description: Thanos Store {{$labels.job}} is failing to handle {{$value | humanize}}% of requests.
       runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosstoregrpcerrorrate
-      summary: Thanos Store is failing to handle qrpcd requests.
+      summary: Thanos Store is failing to handle gRPC requests.
     expr: |
       (
-        sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", job=~".*thanos-store.*"}[5m]))
+        sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|Internal|Unavailable|DataLoss|DeadlineExceeded", job=~".*thanos-store.*"}[5m]))
       /
         sum by (job) (rate(grpc_server_started_total{job=~".*thanos-store.*"}[5m]))
       * 100 > 5
