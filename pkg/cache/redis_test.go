@@ -102,7 +102,7 @@ func TestRedisCache(t *testing.T) {
 			c := NewRedisCache(tt.name, logger, c, reg)
 			// Store the cache expected before running the test.
 			ctx := context.Background()
-			c.Store(ctx, tt.args.data, time.Hour)
+			c.Store(tt.args.data, time.Hour)
 
 			// Fetch postings from cached and assert on it.
 			hits := c.Fetch(ctx, tt.args.fetchKeys)

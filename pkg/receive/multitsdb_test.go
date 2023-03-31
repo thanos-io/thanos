@@ -425,7 +425,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 			name:            "prune tsdbs with object storage",
 			bucket:          objstore.NewInMemBucket(),
 			expectedTenants: 2,
-			expectedUploads: 1,
+			expectedUploads: 2,
 		},
 	}
 
@@ -454,9 +454,17 @@ func TestMultiTSDBPrune(t *testing.T) {
 			}
 			testutil.Equals(t, 3, len(m.TSDBLocalClients()))
 
-			testutil.Ok(t, m.Prune(context.Background()))
-			testutil.Equals(t, test.expectedTenants, len(m.TSDBLocalClients()))
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
+			if test.bucket != nil {
+				go func() {
+					testutil.Ok(t, syncTSDBs(ctx, m, 10*time.Millisecond))
+				}()
+			}
+
+			testutil.Ok(t, m.Prune(ctx))
+			testutil.Equals(t, test.expectedTenants, len(m.TSDBLocalClients()))
 			var shippedBlocks int
 			if test.bucket != nil {
 				testutil.Ok(t, test.bucket.Iter(context.Background(), "", func(s string) error {
@@ -466,6 +474,20 @@ func TestMultiTSDBPrune(t *testing.T) {
 			}
 			testutil.Equals(t, test.expectedUploads, shippedBlocks)
 		})
+	}
+}
+
+func syncTSDBs(ctx context.Context, m *MultiTSDB, interval time.Duration) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(interval):
+			_, err := m.Sync(ctx)
+			if err != nil {
+				return err
+			}
+		}
 	}
 }
 

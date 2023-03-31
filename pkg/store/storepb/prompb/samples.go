@@ -25,7 +25,7 @@ func SamplesFromSamplePairs(samples []model.SamplePair) []Sample {
 
 // SamplesFromPromqlPoints converts a slice of promql.Point
 // to a slice of Sample.
-func SamplesFromPromqlPoints(samples []promql.Point) ([]Sample, []Histogram) {
+func SamplesFromPromqlPoints(samples ...promql.Point) ([]Sample, []Histogram) {
 	floats := make([]Sample, 0, len(samples))
 	histograms := make([]Histogram, 0, len(samples))
 	for _, s := range samples {

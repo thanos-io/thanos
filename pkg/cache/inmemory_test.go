@@ -85,7 +85,7 @@ max_item_size: 2KB
 
 			// Store the postings expected before running the test.
 			ctx := context.Background()
-			c.Store(ctx, testData.setup, testData.ttl)
+			c.Store(testData.setup, testData.ttl)
 
 			// Add delay to test expiry functionality.
 			if testData.testTTL {

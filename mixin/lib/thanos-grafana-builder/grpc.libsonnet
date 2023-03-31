@@ -37,9 +37,10 @@ local utils = import '../utils.libsonnet';
   } + $.stack,
 
   grpcErrorsPanel(metric, selector, dimensions)::
-    $.qpsErrTotalPanel(
+    $.qpsErrTotalPerLabelPanel(
       '%s{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss",%s}' % [metric, selector],
       '%s{%s}' % [metric, selector],
-      dimensions
+      dimensions,
+      'grpc_code',
     ),
 }

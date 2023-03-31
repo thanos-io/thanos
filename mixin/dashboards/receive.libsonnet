@@ -134,7 +134,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate of series received (per tenant, only 2XX)') +
           g.queryPanel(
-            'sum(rate(thanos_receive_write_timeseries_bucket{%s}[$__rate_interval])) by (%s) ' % [
+            'sum(rate(thanos_receive_write_timeseries_sum{%s}[$__rate_interval])) by (%s) ' % [
               utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code=~"2.."']),
               thanos.receive.dashboard.tenantDimensions,
             ],
@@ -144,7 +144,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate of series not written (per tenant and code, non 2XX)') +
           g.queryPanel(
-            'sum(rate(thanos_receive_write_timeseries_bucket{%s}[$__rate_interval])) by (%s) ' % [
+            'sum(rate(thanos_receive_write_timeseries_sum{%s}[$__rate_interval])) by (%s) ' % [
               utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code!~"2.."']),
               tenantWithHttpCodeDimensions,
             ],

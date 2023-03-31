@@ -105,7 +105,7 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 				if n.Func.Name == "label_join" || n.Func.Name == "label_replace" {
 					dstLabel := stringFromArg(n.Args[1])
 					dynamicLabels = append(dynamicLabels, dstLabel)
-				} else if n.Func.Name == "absent_over_time" || n.Func.Name == "absent" {
+				} else if n.Func.Name == "absent_over_time" || n.Func.Name == "absent" || n.Func.Name == "scalar" {
 					isShardable = false
 					return notShardableErr
 				}

@@ -56,16 +56,16 @@ func (c *swappableCache) SwapWith(ptr2 storecache.IndexCache) {
 	c.ptr = ptr2
 }
 
-func (c *swappableCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {
-	c.ptr.StorePostings(ctx, blockID, l, v)
+func (c *swappableCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
+	c.ptr.StorePostings(blockID, l, v)
 }
 
 func (c *swappableCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
 	return c.ptr.FetchMultiPostings(ctx, blockID, keys)
 }
 
-func (c *swappableCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id storage.SeriesRef, v []byte) {
-	c.ptr.StoreSeries(ctx, blockID, id, v)
+func (c *swappableCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte) {
+	c.ptr.StoreSeries(blockID, id, v)
 }
 
 func (c *swappableCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef) (map[storage.SeriesRef][]byte, []storage.SeriesRef) {
