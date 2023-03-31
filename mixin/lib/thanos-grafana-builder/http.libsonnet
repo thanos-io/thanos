@@ -25,9 +25,10 @@ local utils = import '../utils.libsonnet';
   } + $.stack,
 
   httpErrPanel(metric, selector, dimensions)::
-    $.qpsErrTotalPanel(
+    $.qpsErrTotalPerLabelPanel(
       '%s{%s,code=~"5.."}' % [metric, selector],
       '%s{%s}' % [metric, selector],
-      dimensions
+      dimensions,
+      'code',
     ),
 }
