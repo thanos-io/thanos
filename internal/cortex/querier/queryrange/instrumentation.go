@@ -13,7 +13,7 @@ import (
 )
 
 const DAY = 24 * time.Hour
-const QUERYDURATIONBUCKET = "query_range_bucket"
+const queryRangeBucket = "query_range_bucket"
 
 // InstrumentMiddleware can be inserted into the middleware chain to expose timing information.
 func InstrumentMiddleware(name string, metrics *InstrumentMiddlewareMetrics) Middleware {
@@ -29,7 +29,7 @@ func InstrumentMiddleware(name string, metrics *InstrumentMiddlewareMetrics) Mid
 	return MiddlewareFunc(func(next Handler) Handler {
 		return HandlerFunc(func(ctx context.Context, req Request) (Response, error) {
 			queryRangeDurationBucket := getRangeBucket(req)
-			ctx = context.WithValue(ctx, QUERYDURATIONBUCKET, queryRangeDurationBucket)
+			ctx = context.WithValue(ctx, queryRangeBucket, queryRangeDurationBucket)
 			var resp Response
 			err := instrument.CollectedRequest(ctx, name, durationCol, instrument.ErrorCode, func(ctx context.Context) error {
 				var err error
@@ -43,7 +43,6 @@ func InstrumentMiddleware(name string, metrics *InstrumentMiddlewareMetrics) Mid
 
 func getRangeBucket(req Request) string {
 	queryRangeDuration := req.GetEnd() - req.GetStart()
-	var queryRangeDurationBucket string
 	switch {
 	case queryRangeDuration < 0:
 		return "Invalid"
@@ -64,7 +63,6 @@ func getRangeBucket(req Request) string {
 	default:
 		return "+INF"
 	}
-	return queryRangeDurationBucket
 }
 
 // InstrumentMiddlewareMetrics holds the metrics tracked by InstrumentMiddleware.
@@ -80,7 +78,7 @@ func NewInstrumentMiddlewareMetrics(registerer prometheus.Registerer) *Instrumen
 			Name:      "frontend_query_range_duration_seconds",
 			Help:      "Total time spent in seconds doing query range requests.",
 			Buckets:   prometheus.DefBuckets,
-		}, []string{"method", "status_code", QUERYDURATIONBUCKET}),
+		}, []string{"method", "status_code", queryRangeBucket}),
 	}
 }
 
@@ -102,18 +100,22 @@ type DurationHistogramCollector struct {
 	metric *prometheus.HistogramVec
 }
 
+func (c *DurationHistogramCollector) Register() {
+	prometheus.MustRegister(c.metric)
+}
+
 func (c *DurationHistogramCollector) Before(ctx context.Context, method string, start time.Time) {
 }
 
 func (c *DurationHistogramCollector) After(ctx context.Context, method, statusCode string, start time.Time) {
-	durationBucket, _ := ctx.Value(QUERYDURATIONBUCKET).(string)
+	durationBucket, ok := ctx.Value(queryRangeBucket).(string)
 
+	if !ok {
+		durationBucket = "null"
+	}
 	if c.metric != nil {
 		instrument.ObserveWithExemplar(ctx, c.metric.WithLabelValues(method, statusCode, durationBucket), time.Since(start).Seconds())
 	}
-}
-func (c *DurationHistogramCollector) Register() {
-	prometheus.MustRegister(c.metric)
 }
 
 func NewDurationHistogramCollector(metric *prometheus.HistogramVec) *DurationHistogramCollector {
