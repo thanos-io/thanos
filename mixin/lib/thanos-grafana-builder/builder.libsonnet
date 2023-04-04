@@ -78,6 +78,24 @@ local utils = import '../utils.libsonnet';
     ],
   },
 
+  qpsErrTotalPerLabelPanel(selectorErr, selectorTotal, dimensions, perLabel):: {
+    local errExpr = 'sum by (%s, %s) (rate(%s[$interval]))' % [dimensions, perLabel, selectorErr],
+    local totalExpr = 'sum by (%s) (rate(%s[$interval]))' % [dimensions, selectorTotal],
+
+    aliasColors: {
+      'error': '#E24D42',
+    },
+    targets: [
+      {
+        expr: '%s / ignoring (%s) group_left() %s' % [errExpr, perLabel, totalExpr],
+        format: 'time_series',
+        intervalFactor: 2,
+        step: 10,
+      },
+    ],
+    yaxes: $.yaxes({ format: 'percentunit' }),
+  } + $.stack,
+
   qpsErrTotalPanel(selectorErr, selectorTotal, dimensions):: {
     local expr(selector) = 'sum by (%s) (rate(%s[$interval]))' % [dimensions, selector],
 
