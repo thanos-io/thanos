@@ -1,7 +1,12 @@
 package queryrange
 
 import (
+	"context"
+	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -82,4 +87,28 @@ func TestGetRangeBucket(t *testing.T) {
 			t.Errorf("getRangeBucket(%v) returned %v, expected %v", req, bucket, c.expected)
 		}
 	}
+}
+
+func TestInstrumentMiddleware(t *testing.T) {
+	registry := prometheus.DefaultRegisterer
+
+	metrics := NewInstrumentMiddlewareMetrics(registry)
+
+	logger := log.NewNopLogger()
+
+	middleware := InstrumentMiddleware("step_align", metrics, logger)
+
+	// Create a new dummy Request object with a duration of 6 hours.
+	req := mockRequest{1, 6 * 60 * 60 * 1000}
+
+	// Create a dummy Handler object that just returns a Response object.
+	handler := HandlerFunc(func(ctx context.Context, req Request) (Response, error) {
+		return Response(nil), nil
+	})
+
+	_, err := middleware.Wrap(handler).Do(context.Background(), req)
+	assert.NoError(t, err)
+
+	_, error := testutil.CollectAndLint(metrics.duration, "cortex_frontend_query_range_duration_seconds")
+	assert.NoError(t, error)
 }

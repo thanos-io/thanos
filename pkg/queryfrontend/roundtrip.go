@@ -164,7 +164,7 @@ func newQueryRangeTripperware(
 	if config.AlignRangeWithStep {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
-			queryrange.InstrumentMiddleware("step_align", m),
+			queryrange.InstrumentMiddleware("step_align", m, logger),
 			queryrange.StepAlignMiddleware,
 		)
 	}
@@ -172,7 +172,7 @@ func newQueryRangeTripperware(
 	if config.RequestDownsampled {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
-			queryrange.InstrumentMiddleware("downsampled", m),
+			queryrange.InstrumentMiddleware("downsampled", m, logger),
 			DownsampledMiddleware(codec, reg),
 		)
 	}
@@ -182,7 +182,7 @@ func newQueryRangeTripperware(
 
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
-			queryrange.InstrumentMiddleware("split_by_interval", m),
+			queryrange.InstrumentMiddleware("split_by_interval", m, logger),
 			SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
 		)
 	}
@@ -213,7 +213,7 @@ func newQueryRangeTripperware(
 
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
-			queryrange.InstrumentMiddleware("results_cache", m),
+			queryrange.InstrumentMiddleware("results_cache", m, logger),
 			queryCacheMiddleware,
 		)
 	}
@@ -221,7 +221,7 @@ func newQueryRangeTripperware(
 	if config.MaxRetries > 0 {
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
-			queryrange.InstrumentMiddleware("retry", m),
+			queryrange.InstrumentMiddleware("retry", m, logger),
 			queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
 		)
 	}
@@ -276,7 +276,7 @@ func newLabelsTripperware(
 	if config.SplitQueriesByInterval != 0 {
 		labelsMiddleware = append(
 			labelsMiddleware,
-			queryrange.InstrumentMiddleware("split_interval", m),
+			queryrange.InstrumentMiddleware("split_interval", m, logger),
 			SplitByIntervalMiddleware(queryIntervalFn, limits, codec, reg),
 		)
 	}
@@ -300,7 +300,7 @@ func newLabelsTripperware(
 
 		labelsMiddleware = append(
 			labelsMiddleware,
-			queryrange.InstrumentMiddleware("results_cache", m),
+			queryrange.InstrumentMiddleware("results_cache", m, logger),
 			queryCacheMiddleware,
 		)
 	}
@@ -308,7 +308,7 @@ func newLabelsTripperware(
 	if config.MaxRetries > 0 {
 		labelsMiddleware = append(
 			labelsMiddleware,
-			queryrange.InstrumentMiddleware("retry", m),
+			queryrange.InstrumentMiddleware("retry", m, logger),
 			queryrange.NewRetryMiddleware(logger, config.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
 		)
 	}
@@ -333,7 +333,7 @@ func newInstantQueryTripperware(
 		analyzer := querysharding.NewQueryAnalyzer()
 		instantQueryMiddlewares = append(
 			instantQueryMiddlewares,
-			queryrange.InstrumentMiddleware("sharding", m),
+			queryrange.InstrumentMiddleware("sharding", m, log.NewNopLogger()),
 			PromQLShardingMiddleware(analyzer, numShards, limits, codec, reg),
 		)
 	}

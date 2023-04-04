@@ -5,6 +5,8 @@ package queryrange
 
 import (
 	"context"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -14,14 +16,15 @@ import (
 
 const DAY = 24 * time.Hour
 const queryRangeBucket = "query_range_bucket"
+const invalidDurationBucket = "Invalid"
 
 // InstrumentMiddleware can be inserted into the middleware chain to expose timing information.
-func InstrumentMiddleware(name string, metrics *InstrumentMiddlewareMetrics) Middleware {
+func InstrumentMiddleware(name string, metrics *InstrumentMiddlewareMetrics, log log.Logger) Middleware {
 
 	var durationCol instrument.Collector
 	// Support the case metrics shouldn't be tracked (ie. unit tests).
 	if metrics != nil {
-		durationCol = NewDurationHistogramCollector(metrics.duration)
+		durationCol = NewDurationHistogramCollector(metrics.duration, log)
 	} else {
 		durationCol = &NoopCollector{}
 	}
@@ -45,7 +48,9 @@ func getRangeBucket(req Request) string {
 	queryRangeDuration := req.GetEnd() - req.GetStart()
 	switch {
 	case queryRangeDuration < 0:
-		return "Invalid"
+		return invalidDurationBucket
+	case queryRangeDuration == 0:
+		return "Instant"
 	case queryRangeDuration <= time.Hour.Milliseconds():
 		return "1h"
 	case queryRangeDuration <= 6*time.Hour.Milliseconds():
@@ -83,7 +88,7 @@ func NewInstrumentMiddlewareMetrics(registerer prometheus.Registerer) *Instrumen
 }
 
 // NoopCollector is a noop collector that can be used as placeholder when no metric
-// should tracked by the instrumentation.
+// should be tracked by the instrumentation.
 type NoopCollector struct{}
 
 // Register implements instrument.Collector.
@@ -98,6 +103,7 @@ func (c *NoopCollector) After(ctx context.Context, method, statusCode string, st
 // DurationHistogramCollector collects the duration of a request
 type DurationHistogramCollector struct {
 	metric *prometheus.HistogramVec
+	log    log.Logger
 }
 
 func (c *DurationHistogramCollector) Register() {
@@ -111,13 +117,15 @@ func (c *DurationHistogramCollector) After(ctx context.Context, method, statusCo
 	durationBucket, ok := ctx.Value(queryRangeBucket).(string)
 
 	if !ok {
-		durationBucket = "null"
+		level.Warn(c.log).Log("msg", "failed to get query range bucket for frontend_query_range_duration_seconds metrics",
+			"method", method, "start_time", start)
+		durationBucket = invalidDurationBucket
 	}
 	if c.metric != nil {
 		instrument.ObserveWithExemplar(ctx, c.metric.WithLabelValues(method, statusCode, durationBucket), time.Since(start).Seconds())
 	}
 }
 
-func NewDurationHistogramCollector(metric *prometheus.HistogramVec) *DurationHistogramCollector {
-	return &DurationHistogramCollector{metric}
+func NewDurationHistogramCollector(metric *prometheus.HistogramVec, log log.Logger) *DurationHistogramCollector {
+	return &DurationHistogramCollector{metric, log}
 }

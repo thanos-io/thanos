@@ -157,11 +157,11 @@ func NewTripperware(
 
 	queryRangeMiddleware := []Middleware{NewLimitsMiddleware(limits)}
 	if cfg.AlignQueriesWithStep {
-		queryRangeMiddleware = append(queryRangeMiddleware, InstrumentMiddleware("step_align", metrics), StepAlignMiddleware)
+		queryRangeMiddleware = append(queryRangeMiddleware, InstrumentMiddleware("step_align", metrics, log), StepAlignMiddleware)
 	}
 	if cfg.SplitQueriesByInterval != 0 {
 		staticIntervalFn := func(_ Request) time.Duration { return cfg.SplitQueriesByInterval }
-		queryRangeMiddleware = append(queryRangeMiddleware, InstrumentMiddleware("split_by_interval", metrics), SplitByIntervalMiddleware(staticIntervalFn, limits, codec, registerer))
+		queryRangeMiddleware = append(queryRangeMiddleware, InstrumentMiddleware("split_by_interval", metrics, log), SplitByIntervalMiddleware(staticIntervalFn, limits, codec, registerer))
 	}
 
 	var c cache.Cache
@@ -174,11 +174,11 @@ func NewTripperware(
 			return nil, nil, err
 		}
 		c = cache
-		queryRangeMiddleware = append(queryRangeMiddleware, InstrumentMiddleware("results_cache", metrics), queryCacheMiddleware)
+		queryRangeMiddleware = append(queryRangeMiddleware, InstrumentMiddleware("results_cache", metrics, log), queryCacheMiddleware)
 	}
 
 	if cfg.MaxRetries > 0 {
-		queryRangeMiddleware = append(queryRangeMiddleware, InstrumentMiddleware("retry", metrics), NewRetryMiddleware(log, cfg.MaxRetries, NewRetryMiddlewareMetrics(registerer)))
+		queryRangeMiddleware = append(queryRangeMiddleware, InstrumentMiddleware("retry", metrics, log), NewRetryMiddleware(log, cfg.MaxRetries, NewRetryMiddlewareMetrics(registerer)))
 	}
 
 	// Start cleanup. If cleaner stops or fail, we will simply not clean the metrics for inactive users.
