@@ -9,6 +9,7 @@ local utils = import '../lib/utils.libsonnet';
     dashboard:: {
       selector: std.join(', ', thanos.dashboard.selector + ['job=~"$job"']),
       dimensions: std.join(', ', thanos.dashboard.dimensions + ['job']),
+      ruleGroupDimensions: std.join(', ', thanos.dashboard.dimensions + ['job', 'rule_group', 'strategy']),
     },
   },
   grafanaDashboards+:: {
@@ -22,19 +23,26 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rule Group Evaluations') +
           g.queryPanel(
-            'sum by (%s) (rate(prometheus_rule_evaluations_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.rule.dashboard.dimensions, 'strategy']), thanos.rule.dashboard.selector],
-            '{{ strategy }}',
+            'sum by (%(ruleGroupDimensions)s) (rate(prometheus_rule_evaluations_total{%(selector)s}[$__rate_interval]))' % thanos.rule.dashboard,
+            '{{ rule_group }} {{ strategy }}',
+          )
+        )
+        .addPanel(
+          g.panel('Rule Group Evaluations Failed') +
+          g.queryPanel(
+            'sum by (%(ruleGroupDimensions)s) (rate(prometheus_rule_evaluation_failures_total{%(selector)s}[$__rate_interval]))' % thanos.rule.dashboard,
+            '{{ rule_group }} {{ strategy }}',
           )
         )
         .addPanel(
           g.panel('Rule Group Evaluations Missed') +
           g.queryPanel(
-            'sum by (%s) (increase(prometheus_rule_group_iterations_missed_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.rule.dashboard.dimensions, 'strategy']), thanos.rule.dashboard.selector],
-            '{{ strategy }}',
+            'sum by (%(ruleGroupDimensions)s) (increase(prometheus_rule_group_iterations_missed_total{%(selector)s}[$__rate_interval]))' % thanos.rule.dashboard,
+            '{{ rule_group }} {{ strategy }}',
           )
         )
         .addPanel(
-          g.panel('Rule Group Evlauations Too Slow') +
+          g.panel('Rule Group Evaluations Too Slow') +
           g.queryPanel(
             |||
               (
