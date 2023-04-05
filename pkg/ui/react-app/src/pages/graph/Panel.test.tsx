@@ -42,6 +42,7 @@ const defaultProps: PanelProps = {
   defaultStep: '1s',
   enableHighlighting: true,
   enableLinter: true,
+  engine: 'prometheus',
 };
 
 describe('Panel', () => {

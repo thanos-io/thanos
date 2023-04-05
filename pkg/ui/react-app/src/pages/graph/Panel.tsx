@@ -31,6 +31,7 @@ export interface PanelProps {
   enableHighlighting: boolean;
   enableLinter: boolean;
   defaultStep: string;
+  engine: string;
 }
 
 interface PanelState {
@@ -169,11 +170,13 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         params.append('end', endTime.toString());
         params.append('step', resolution.toString());
         params.append('max_source_resolution', this.props.options.maxSourceResolution);
+        params.append('engine', this.props.engine);
         // TODO path prefix here and elsewhere.
         break;
       case 'table':
         path = '/api/v1/query';
         params.append('time', endTime.toString());
+        params.append('engine', this.props.engine);
         break;
       default:
         throw new Error('Invalid panel type "' + this.props.options.type + '"');
