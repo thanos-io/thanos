@@ -18,6 +18,8 @@ const DAY = 24 * time.Hour
 const queryRangeBucket = "query_range_bucket"
 const invalidDurationBucket = "Invalid"
 
+var queryRangeBuckets = []float64{.005, .01, .05, .1, .25, .5, 1, 3, 5, 10, 30, 60, 120}
+
 // InstrumentMiddleware can be inserted into the middleware chain to expose timing information.
 func InstrumentMiddleware(name string, metrics *InstrumentMiddlewareMetrics, log log.Logger) Middleware {
 
@@ -82,7 +84,7 @@ func NewInstrumentMiddlewareMetrics(registerer prometheus.Registerer) *Instrumen
 			Namespace: "cortex",
 			Name:      "frontend_query_range_duration_seconds",
 			Help:      "Total time spent in seconds doing query range requests.",
-			Buckets:   prometheus.DefBuckets,
+			Buckets:   queryRangeBuckets,
 		}, []string{"method", "status_code", queryRangeBucket}),
 	}
 }
