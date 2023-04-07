@@ -36,17 +36,17 @@ type ReceiveAppender struct {
 	storage.Appender
 }
 
-func (a *ReceiveAppender) Append(ref storage.SeriesRef, lset labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
-	if a.tooFarInFuture > 0 {
-		tooFar := model.Now().Add(time.Duration(a.tooFarInFuture))
+func (ra *ReceiveAppender) Append(ref storage.SeriesRef, lset labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
+	if ra.tooFarInFuture > 0 {
+		tooFar := model.Now().Add(time.Duration(ra.tooFarInFuture))
 		if tooFar.Before(model.Time(t)) {
-			level.Warn(a.tLogger).Log("msg", "block metric too far in the future", "lset", lset,
+			level.Warn(ra.tLogger).Log("msg", "block metric too far in the future", "lset", lset,
 				"timestamp", t, "bound", tooFar)
 			// now + tooFarInFutureTimeWindow < sample timestamp
 			return 0, storage.ErrOutOfBounds
 		}
 	}
-	return a.Appender.Append(ref, lset, t, v)
+	return ra.Appender.Append(ref, lset, t, v)
 }
 
 type WriterOptions struct {
