@@ -82,7 +82,7 @@ Flags:
                                  from other components.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
-      --grpc-server-max-connection-age=0s
+      --grpc-server-max-connection-age=60m
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
                                  and redo TLS handshakes.
