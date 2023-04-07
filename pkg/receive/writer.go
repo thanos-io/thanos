@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 
@@ -26,6 +27,26 @@ type Appendable interface {
 
 type TenantStorage interface {
 	TenantAppendable(string) (Appendable, error)
+}
+
+// Wraps storage.Appender to add validation and logging.
+type ReceiveAppender struct {
+	tLogger        log.Logger
+	tooFarInFuture int64 // Unit: nanoseconds
+	storage.Appender
+}
+
+func (a *ReceiveAppender) Append(ref storage.SeriesRef, lset labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
+	if a.tooFarInFuture > 0 {
+		tooFar := model.Now().Add(time.Duration(a.tooFarInFuture))
+		if tooFar.Before(model.Time(t)) {
+			level.Warn(a.tLogger).Log("msg", "block metric too far in the future", "lset", lset,
+				"timestamp", t, "bound", tooFar)
+			// now + tooFarInFutureTimeWindow < sample timestamp
+			return 0, storage.ErrOutOfBounds
+		}
+	}
+	return a.Appender.Append(ref, lset, t, v)
 }
 
 type WriterOptions struct {
@@ -81,11 +102,15 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		return errors.Wrap(err, "get appender")
 	}
 	getRef := app.(storage.GetRef)
-	tooFarInFuture := model.Now().Add(time.Duration(r.opts.TooFarInFutureTimeWindow))
 	var (
 		ref  storage.SeriesRef
 		errs writeErrors
 	)
+	app = &ReceiveAppender{
+		tLogger:        tLogger,
+		tooFarInFuture: r.opts.TooFarInFutureTimeWindow,
+		Appender:       app,
+	}
 	for _, t := range wreq.Timeseries {
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
@@ -121,13 +146,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range t.Samples {
-			if r.opts.TooFarInFutureTimeWindow != 0 && tooFarInFuture.Before(model.Time(s.Timestamp)) {
-				// now + tooFarInFutureTimeWindow < sample timestamp
-				err = storage.ErrOutOfBounds
-				level.Debug(tLogger).Log("msg", "block metric too far in the future", "lset", lset, "timestamp", s.Timestamp, "bound", tooFarInFuture)
-			} else {
-				ref, err = app.Append(ref, lset, s.Timestamp, s.Value)
-			}
+			ref, err = app.Append(ref, lset, s.Timestamp, s.Value)
 			switch err {
 			case storage.ErrOutOfOrderSample:
 				numSamplesOutOfOrder++
