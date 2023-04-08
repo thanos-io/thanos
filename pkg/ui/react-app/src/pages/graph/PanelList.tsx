@@ -4,7 +4,6 @@ import { UncontrolledAlert, Button } from 'reactstrap';
 
 import Panel, { PanelOptions, PanelDefaultOptions } from './Panel';
 import Checkbox from '../../components/Checkbox';
-import Dropdown from '../../components/Dropdown';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { StoreListProps } from '../../thanos/pages/stores/Stores';
 import { Store } from '../../thanos/pages/stores/store';
@@ -31,7 +30,7 @@ interface PanelListProps extends PathPrefixProps, RouteComponentProps {
   enableHighlighting: boolean;
   enableLinter: boolean;
   defaultStep: string;
-  engine: string;
+  defaultEngine: string;
 }
 
 export const PanelListContent: FC<PanelListProps> = ({
@@ -44,7 +43,7 @@ export const PanelListContent: FC<PanelListProps> = ({
   enableHighlighting,
   enableLinter,
   defaultStep,
-  engine,
+  defaultEngine,
   ...rest
 }) => {
   const [panels, setPanels] = useState(rest.panels);
@@ -126,7 +125,7 @@ export const PanelListContent: FC<PanelListProps> = ({
           stores={storeData}
           enableAutocomplete={enableAutocomplete}
           enableHighlighting={enableHighlighting}
-          engine={engine}
+          defaultEngine={defaultEngine}
           enableLinter={enableLinter}
           defaultStep={defaultStep}
         />
@@ -148,11 +147,6 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
   const [enableAutocomplete, setEnableAutocomplete] = useLocalStorage('enable-autocomplete', true);
   const [enableHighlighting, setEnableHighlighting] = useLocalStorage('enable-syntax-highlighting', true);
   const [enableLinter, setEnableLinter] = useLocalStorage('enable-linter', true);
-  const [engine, setEngine] = useLocalStorage<string>('engine', 'prometheus');
-  const engineOptions = [
-    { name: 'Prometheus', value: 'prometheus' },
-    { name: 'Thanos', value: 'thanos' },
-  ];
 
   const { response: metricsRes, error: metricsErr } = useFetch<string[]>(`${pathPrefix}/api/v1/label/__name__/values`);
   const {
@@ -166,6 +160,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
     isLoading: flagsLoading,
   } = useFetch<FlagMap>(`${pathPrefix}/api/v1/status/flags`);
   const defaultStep = flagsRes?.data?.['query.default-step'] || '1s';
+  const defaultEngine = flagsRes?.data?.['query.promql-engine'];
 
   const browserTime = new Date().getTime() / 1000;
   const { response: timeRes, error: timeErr } = useFetch<{ result: number[] }>(`${pathPrefix}/api/v1/query?query=time()`);
@@ -213,14 +208,6 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
           </Checkbox>
         </div>
         <div className="float-right">
-          <Dropdown
-            selected={engine}
-            options={engineOptions}
-            id="engine-dropdown"
-            onChange={({ target }) => setEngine(target.value)}
-          >
-            Engine
-          </Dropdown>
           <Checkbox
             wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
             id="autocomplete-checkbox"
@@ -283,7 +270,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         enableHighlighting={enableHighlighting}
         enableLinter={enableLinter}
         defaultStep={defaultStep}
-        engine={engine}
+        defaultEngine={defaultEngine}
         queryHistoryEnabled={enableQueryHistory}
         isLoading={storesLoading || flagsLoading}
       />
