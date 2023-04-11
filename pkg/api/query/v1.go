@@ -108,9 +108,9 @@ func (f *QueryEngineFactory) GetThanosEngine() v1.QueryEngine {
 	}
 
 	if f.remoteEngineEndpoints == nil {
-		f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts})
+		f.thanosEngine = engine.New(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine()})
 	} else {
-		f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts}, f.remoteEngineEndpoints)
+		f.thanosEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: f.engineOpts, Engine: f.GetPrometheusEngine()}, f.remoteEngineEndpoints)
 	}
 
 	return f.thanosEngine
@@ -172,7 +172,7 @@ func NewQueryAPI(
 	logger log.Logger,
 	endpointStatus func() []query.EndpointStatus,
 	engineFactory QueryEngineFactory,
-	de PromqlEngineType,
+	defaultEngine PromqlEngineType,
 	lookbackDeltaCreate func(int64) time.Duration,
 	c query.QueryableCreator,
 	ruleGroups rules.UnaryClient,
@@ -203,7 +203,7 @@ func NewQueryAPI(
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:                                 logger,
 		engineFactory:                          engineFactory,
-		defaultEngine:                          de,
+		defaultEngine:                          defaultEngine,
 		lookbackDeltaCreate:                    lookbackDeltaCreate,
 		queryableCreate:                        c,
 		gate:                                   gate,
