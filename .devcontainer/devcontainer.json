@@ -1,22 +1,68 @@
+// For more details, see https://aka.ms/devcontainer.json.
 {
-	"name": "Codespaces for Thanos",
-	"customizations": {
-	  "vscode": {
-		"settings": {
-		  "go.toolsManagement.checkForUpdates": "local",
-		  "go.useLanguageServer": true,
-		  "go.gopath": "/go"
-		}
-	  }
-	},
-	"extensions": [
-	  "ms-azuretools.vscode-docker",
-	  "ms-kubernetes-tools.vscode-kubernetes-tools",
-	  "davidanson.vscode-markdownlint",
-	  "timonwong.shellcheck",
-	  "docsmsft.docs-yaml",
-	  "Grafana.vscode-jsonnet",
-	  "codezombiech.gitignore",
-	  "golang.Go"
-	]
+  "name": "Codespaces for Thanos",
+  "build": {
+    "context": "..",
+    "dockerfile": "Dockerfile"
+  },
+
+  "workspaceFolder": "/go/src/github.com/thanos-io/thanos",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/go/src/github.com/thanos-io/thanos,type=bind,consistency=cached",
+
+  // Features to add to the dev container. More info: https://containers.dev/features.
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/node:1": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {}
+  },
+
+  "onCreateCommand": "make build",
+  "postAttachCommand": {
+    "Run quickstart": "bash scripts/quickstart.sh"
+  },
+
+  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  "forwardPorts": [
+    1313,
+    9090,
+    9091,
+    9092,
+    10904,
+    10914
+  ],
+  "portsAttributes": {
+    "1313": {
+      "label": "Website"
+    },
+    "9090": {
+      "label": "Prometheus Instance 1"
+    },
+    "9091": {
+      "label": "Prometheus Instance 2"
+    },
+    "9092": {
+      "label": "Prometheus Instance 3"
+    },
+    "10904": {
+      "label": "Thanos Query 1"
+    },
+    "10914": {
+      "label": "Thanos Query 2"
+    }
+  },
+
+  // Configure tool-specific properties.
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "davidanson.vscode-markdownlint",
+        "timonwong.shellcheck",
+        "docsmsft.docs-yaml",
+        "Grafana.vscode-jsonnet",
+        "codezombiech.gitignore"
+      ]
+    }
+  }
 }

@@ -19,6 +19,8 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/weaveworks/common/httpgrpc"
 
+	"github.com/prometheus/prometheus/promql/parser"
+	promqlparser "github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexutil "github.com/thanos-io/thanos/internal/cortex/util"
@@ -41,7 +43,7 @@ func NewThanosQueryInstantCodec(partialResponse bool) *queryInstantCodec {
 // MergeResponse merges multiple responses into a single response. For instant query
 // only vector and matrix responses will be merged because other types of queries
 // are not shardable like number literal, string literal, scalar, etc.
-func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (queryrange.Response, error) {
+func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...queryrange.Response) (queryrange.Response, error) {
 	if len(responses) == 0 {
 		return queryrange.NewEmptyPrometheusInstantQueryResponse(), nil
 	} else if len(responses) == 1 {
@@ -68,13 +70,17 @@ func (c queryInstantCodec) MergeResponse(responses ...queryrange.Response) (quer
 			},
 		}
 	default:
+		v, err := vectorMerge(req, promResponses)
+		if err != nil {
+			return nil, err
+		}
 		res = &queryrange.PrometheusInstantQueryResponse{
 			Status: queryrange.StatusSuccess,
 			Data: queryrange.PrometheusInstantQueryData{
 				ResultType: model.ValVector.String(),
 				Result: queryrange.PrometheusInstantQueryResult{
 					Result: &queryrange.PrometheusInstantQueryResult_Vector{
-						Vector: vectorMerge(promResponses),
+						Vector: v,
 					},
 				},
 				Stats: queryrange.StatsMerge(responses),
@@ -228,7 +234,7 @@ func (c queryInstantCodec) EncodeResponse(ctx context.Context, res queryrange.Re
 	return &resp, nil
 }
 
-func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response, _ queryrange.Request) (queryrange.Response, error) {
+func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response, req queryrange.Request) (queryrange.Response, error) {
 	if r.StatusCode/100 != 2 {
 		body, _ := io.ReadAll(r.Body)
 		return nil, httpgrpc.Errorf(r.StatusCode, string(body))
@@ -254,8 +260,13 @@ func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response,
 	return &resp, nil
 }
 
-func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Vector {
+func vectorMerge(req queryrange.Request, resps []*queryrange.PrometheusInstantQueryResponse) (*queryrange.Vector, error) {
 	output := map[string]*queryrange.Sample{}
+	metrics := []string{} // Used to preserve the order for topk and bottomk.
+	sortPlan, err := sortPlanForQuery(req.GetQuery())
+	if err != nil {
+		return nil, err
+	}
 	for _, resp := range resps {
 		if resp == nil {
 			continue
@@ -273,6 +284,7 @@ func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange
 			metric := cortexpb.FromLabelAdaptersToLabels(sample.Labels).String()
 			if existingSample, ok := output[metric]; !ok {
 				output[metric] = s
+				metrics = append(metrics, metric) // Preserve the order of metric.
 			} else if existingSample.GetSample().TimestampMs < s.GetSample().TimestampMs {
 				// Choose the latest sample if we see overlap.
 				output[metric] = s
@@ -280,25 +292,108 @@ func vectorMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange
 		}
 	}
 
-	if len(output) == 0 {
-		return &queryrange.Vector{
-			Samples: make([]*queryrange.Sample, 0),
-		}
-	}
-
-	keys := make([]string, 0, len(output))
-	for key := range output {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
 	result := &queryrange.Vector{
 		Samples: make([]*queryrange.Sample, 0, len(output)),
 	}
-	for _, key := range keys {
-		result.Samples = append(result.Samples, output[key])
+
+	if len(output) == 0 {
+		return result, nil
 	}
-	return result
+
+	if sortPlan == mergeOnly {
+		for _, k := range metrics {
+			result.Samples = append(result.Samples, output[k])
+		}
+		return result, nil
+	}
+
+	type pair struct {
+		metric string
+		s      *queryrange.Sample
+	}
+
+	samples := make([]*pair, 0, len(output))
+	for k, v := range output {
+		samples = append(samples, &pair{
+			metric: k,
+			s:      v,
+		})
+	}
+
+	sort.Slice(samples, func(i, j int) bool {
+		// Order is determined by vector
+		switch sortPlan {
+		case sortByValuesAsc:
+			return samples[i].s.Sample.Value < samples[j].s.Sample.Value
+		case sortByValuesDesc:
+			return samples[i].s.Sample.Value > samples[j].s.Sample.Value
+		}
+		return samples[i].metric < samples[j].metric
+	})
+
+	for _, p := range samples {
+		result.Samples = append(result.Samples, p.s)
+	}
+	return result, nil
+}
+
+type sortPlan int
+
+const (
+	mergeOnly        sortPlan = 0
+	sortByValuesAsc  sortPlan = 1
+	sortByValuesDesc sortPlan = 2
+	sortByLabels     sortPlan = 3
+)
+
+func sortPlanForQuery(q string) (sortPlan, error) {
+	expr, err := promqlparser.ParseExpr(q)
+	if err != nil {
+		return 0, err
+	}
+	// Check if the root expression is topk or bottomk
+	if aggr, ok := expr.(*parser.AggregateExpr); ok {
+		if aggr.Op == promqlparser.TOPK || aggr.Op == promqlparser.BOTTOMK {
+			return mergeOnly, nil
+		}
+	}
+	checkForSort := func(expr promqlparser.Expr) (sortAsc, sortDesc bool) {
+		if n, ok := expr.(*promqlparser.Call); ok {
+			if n.Func != nil {
+				if n.Func.Name == "sort" {
+					sortAsc = true
+				}
+				if n.Func.Name == "sort_desc" {
+					sortDesc = true
+				}
+			}
+		}
+		return sortAsc, sortDesc
+	}
+	// Check the root expression for sort
+	if sortAsc, sortDesc := checkForSort(expr); sortAsc || sortDesc {
+		if sortAsc {
+			return sortByValuesAsc, nil
+		}
+		return sortByValuesDesc, nil
+	}
+
+	// If the root expression is a binary expression, check the LHS and RHS for sort
+	if bin, ok := expr.(*parser.BinaryExpr); ok {
+		if sortAsc, sortDesc := checkForSort(bin.LHS); sortAsc || sortDesc {
+			if sortAsc {
+				return sortByValuesAsc, nil
+			}
+			return sortByValuesDesc, nil
+		}
+		if sortAsc, sortDesc := checkForSort(bin.RHS); sortAsc || sortDesc {
+			if sortAsc {
+				return sortByValuesAsc, nil
+			}
+			return sortByValuesDesc, nil
+		}
+	}
+	return sortByLabels, nil
 }
 
 func matrixMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Matrix {

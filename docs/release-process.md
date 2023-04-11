@@ -25,7 +25,7 @@ Release shepherd responsibilities:
 |---------|----------------------|-------------------------------|
 | v0.32.0 | (planned) 2023.03.09 | No one ATM                    |
 | v0.31.0 | (planned) 2023.01.26 | No one ATM                    |
-| v0.30.0 | (planned) 2022.12.15 | `@bwplotka`                   |
+| v0.30.0 | 2022.12.21           | `@bwplotka`                   |
 | v0.29.0 | 2022.10.21           | `@GiedriusS`                  |
 | v0.28.0 | 2022.08.22           | `@yeya24`                     |
 | v0.27.0 | 2022.06.21           | `@wiardvanrij` and `@matej-g` |

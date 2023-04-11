@@ -23,7 +23,8 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 	tracerOtel := newTraceProvider(
 		context.Background(),
 		tracesdk.NewSimpleSpanProcessor(exp),
-		log.NewNopLogger())
+		log.NewNopLogger(),
+		"thanos")
 	tracer, _ := migration.Bridge(tracerOtel, log.NewNopLogger())
 	clientRoot, _ := tracing.StartSpan(tracing.ContextWithTracer(context.Background(), tracer), "a")
 

@@ -27,9 +27,6 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-
-	"github.com/thanos-io/thanos/internal/cortex/chunk/purger"
-	"github.com/thanos-io/thanos/internal/cortex/prom1/storage/metric"
 )
 
 // ConcreteSeriesSet implements storage.SeriesSet.
@@ -89,7 +86,7 @@ func (c *ConcreteSeries) Labels() labels.Labels {
 }
 
 // Iterator implements storage.Series
-func (c *ConcreteSeries) Iterator() chunkenc.Iterator {
+func (c *ConcreteSeries) Iterator(chunkenc.Iterator) chunkenc.Iterator {
 	return NewConcreteSeriesIterator(c)
 }
 
@@ -204,18 +201,6 @@ func MatrixToSeriesSet(m model.Matrix) storage.SeriesSet {
 	return NewConcreteSeriesSet(series)
 }
 
-// MetricsToSeriesSet creates a storage.SeriesSet from a []metric.Metric
-func MetricsToSeriesSet(ms []metric.Metric) storage.SeriesSet {
-	series := make([]storage.Series, 0, len(ms))
-	for _, m := range ms {
-		series = append(series, &ConcreteSeries{
-			labels:  metricToLabels(m.Metric),
-			samples: nil,
-		})
-	}
-	return NewConcreteSeriesSet(series)
-}
-
 func metricToLabels(m model.Metric) labels.Labels {
 	ls := make(labels.Labels, 0, len(m))
 	for k, v := range m {
@@ -235,64 +220,6 @@ type byLabels []storage.Series
 func (b byLabels) Len() int           { return len(b) }
 func (b byLabels) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
 func (b byLabels) Less(i, j int) bool { return labels.Compare(b[i].Labels(), b[j].Labels()) < 0 }
-
-type DeletedSeriesSet struct {
-	seriesSet     storage.SeriesSet
-	tombstones    *purger.TombstonesSet
-	queryInterval model.Interval
-}
-
-func NewDeletedSeriesSet(seriesSet storage.SeriesSet, tombstones *purger.TombstonesSet, queryInterval model.Interval) storage.SeriesSet {
-	return &DeletedSeriesSet{
-		seriesSet:     seriesSet,
-		tombstones:    tombstones,
-		queryInterval: queryInterval,
-	}
-}
-
-func (d DeletedSeriesSet) Next() bool {
-	return d.seriesSet.Next()
-}
-
-func (d DeletedSeriesSet) At() storage.Series {
-	series := d.seriesSet.At()
-	deletedIntervals := d.tombstones.GetDeletedIntervals(series.Labels(), d.queryInterval.Start, d.queryInterval.End)
-
-	// series is deleted for whole query range so return empty series
-	if len(deletedIntervals) == 1 && deletedIntervals[0] == d.queryInterval {
-		return NewEmptySeries(series.Labels())
-	}
-
-	return NewDeletedSeries(series, deletedIntervals)
-}
-
-func (d DeletedSeriesSet) Err() error {
-	return d.seriesSet.Err()
-}
-
-func (d DeletedSeriesSet) Warnings() storage.Warnings {
-	return nil
-}
-
-type DeletedSeries struct {
-	series           storage.Series
-	deletedIntervals []model.Interval
-}
-
-func NewDeletedSeries(series storage.Series, deletedIntervals []model.Interval) storage.Series {
-	return &DeletedSeries{
-		series:           series,
-		deletedIntervals: deletedIntervals,
-	}
-}
-
-func (d DeletedSeries) Labels() labels.Labels {
-	return d.series.Labels()
-}
-
-func (d DeletedSeries) Iterator() chunkenc.Iterator {
-	return NewDeletedSeriesIterator(d.series.Iterator(), d.deletedIntervals)
-}
 
 type DeletedSeriesIterator struct {
 	itr              chunkenc.Iterator
@@ -371,83 +298,4 @@ func (d *DeletedSeriesIterator) isDeleted(ts int64) bool {
 	}
 
 	return false
-}
-
-type emptySeries struct {
-	labels labels.Labels
-}
-
-func NewEmptySeries(labels labels.Labels) storage.Series {
-	return emptySeries{labels}
-}
-
-func (e emptySeries) Labels() labels.Labels {
-	return e.labels
-}
-
-func (emptySeries) Iterator() chunkenc.Iterator {
-	return NewEmptySeriesIterator()
-}
-
-type emptySeriesIterator struct {
-}
-
-func NewEmptySeriesIterator() chunkenc.Iterator {
-	return emptySeriesIterator{}
-}
-
-func (emptySeriesIterator) Seek(t int64) chunkenc.ValueType {
-	return chunkenc.ValNone
-}
-
-func (emptySeriesIterator) At() (t int64, v float64) {
-	return 0, 0
-}
-
-func (emptySeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	return 0, nil
-}
-
-func (emptySeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	return 0, nil
-}
-
-func (emptySeriesIterator) AtT() int64 {
-	return 0
-}
-
-func (emptySeriesIterator) Next() chunkenc.ValueType {
-	return chunkenc.ValNone
-}
-
-func (emptySeriesIterator) Err() error {
-	return nil
-}
-
-type seriesSetWithWarnings struct {
-	wrapped  storage.SeriesSet
-	warnings storage.Warnings
-}
-
-func NewSeriesSetWithWarnings(wrapped storage.SeriesSet, warnings storage.Warnings) storage.SeriesSet {
-	return seriesSetWithWarnings{
-		wrapped:  wrapped,
-		warnings: warnings,
-	}
-}
-
-func (s seriesSetWithWarnings) Next() bool {
-	return s.wrapped.Next()
-}
-
-func (s seriesSetWithWarnings) At() storage.Series {
-	return s.wrapped.At()
-}
-
-func (s seriesSetWithWarnings) Err() error {
-	return s.wrapped.Err()
-}
-
-func (s seriesSetWithWarnings) Warnings() storage.Warnings {
-	return append(s.wrapped.Warnings(), s.warnings...)
 }

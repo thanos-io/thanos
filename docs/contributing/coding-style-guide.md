@@ -283,16 +283,16 @@ NOTE: Why you cannot just allocate slice and release and in new iteration alloca
 ```go
 var messages []string
 for _, msg := range recv {
-    messages = append(messages, msg)
+	messages = append(messages, msg)
 
-    if len(messages) > maxMessageLen {
-        marshalAndSend(messages)
-        // This creates new array. Previous array
-        // will be garbage collected only after
-        // some time (seconds), which
-        // can create enormous memory pressure.
-        messages = []string
-    }
+	if len(messages) > maxMessageLen {
+		marshalAndSend(messages)
+		// This creates new array. Previous array
+		// will be garbage collected only after
+		// some time (seconds), which
+		// can create enormous memory pressure.
+		messages = []string
+	}
 }
 ```
 
@@ -523,26 +523,26 @@ func OpenSomeFileAndDoSomeStuff() (*os.File, error) {
 
 ```go
 func OpenSomeFileAndDoSomeStuff() (f *os.File, err error) {
-    f, err = os.OpenFile("file.txt", os.O_RDONLY, 0)
-    if err != nil {
-        return nil, err
-    }
-    defer func() {
-        if err != nil {
-             runutil.CloseWithErrCapture(&err, f, "close file")
-        }
-    }
+	f, err = os.OpenFile("file.txt", os.O_RDONLY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			runutil.CloseWithErrCapture(&err, f, "close file")
+		}
+	}()
 
-    if err := doStuff1(); err != nil {
-        return nil, err
-    }
-    if err := doStuff2(); err != nil {
-        return nil, err
-    }
-    if err := doStuff232241(); err != nil {
-        return nil, err
-    }
-    return f, nil
+	if err := doStuff1(); err != nil {
+		return nil, err
+	}
+	if err := doStuff2(); err != nil {
+		return nil, err
+	}
+	if err := doStuff232241(); err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 ```
 

@@ -20,6 +20,27 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+// EndpointGroupGRPCOpts creates gRPC dial options for connecting to endpoint groups.
+// For details on retry capabilities, see https://github.com/grpc/proposal/blob/master/A6-client-retries.md#retry-policy-capabilities
+func EndpointGroupGRPCOpts() []grpc.DialOption {
+	serviceConfig := `
+{
+  "loadBalancingPolicy":"round_robin",
+  "retryPolicy": {
+    "maxAttempts": 3,
+    "initialBackoff": "0.1s",
+    "backoffMultiplier": 2,
+    "retryableStatusCodes": [
+  	  "UNAVAILABLE"
+    ]
+  }
+}`
+
+	return []grpc.DialOption{
+		grpc.WithDefaultServiceConfig(serviceConfig),
+	}
+}
+
 // StoreClientGRPCOpts creates gRPC dial options for connecting to a store client.
 func StoreClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure, skipVerify bool, cert, key, caCert, serverName string) ([]grpc.DialOption, error) {
 	grpcMets := grpc_prometheus.NewClientMetrics()

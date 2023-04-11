@@ -97,8 +97,8 @@ func httpInstrumentationHandler(baseLabels prometheus.Labels, metrics *defaultMe
 						// If OpenTracing span not found, try OTEL.
 						if !OTfound {
 							span := trace.SpanFromContext(r.Context())
-							if span != nil {
-								traceID = span.SpanContext().SpanID().String()
+							if span != nil && span.SpanContext().IsSampled() {
+								traceID = span.SpanContext().TraceID().String()
 							}
 						}
 

@@ -282,7 +282,7 @@ func newMockCache() *mockCache {
 	return c
 }
 
-func (m *mockCache) Store(_ context.Context, data map[string][]byte, ttl time.Duration) {
+func (m *mockCache) Store(data map[string][]byte, ttl time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

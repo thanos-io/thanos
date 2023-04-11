@@ -12,6 +12,7 @@ import (
 	stdlog "log"
 	"net"
 	"net/http"
+	"path"
 	"sort"
 	"strconv"
 	"sync"
@@ -403,6 +404,13 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, 
 	return h.forward(ctx, tenant, r, wreq)
 }
 
+func (h *Handler) isTenantValid(tenant string) error {
+	if tenant != path.Base(tenant) {
+		return errors.New("Tenant name not valid")
+	}
+	return nil
+}
+
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
@@ -420,6 +428,13 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+	}
+
+	err = h.isTenantValid(tenant)
+	if err != nil {
+		level.Error(h.logger).Log("msg", "tenant name not valid", "tenant", tenant)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	tLogger := log.With(h.logger, "tenant", tenant)
@@ -838,8 +853,9 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest) {
 	}
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
-		lbls := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
-		if lbls == nil {
+		var keep bool
+		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		if !keep {
 			continue
 		}
 		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
@@ -865,7 +881,8 @@ func isConflict(err error) bool {
 func isSampleConflictErr(err error) bool {
 	return err == storage.ErrDuplicateSampleForTimestamp ||
 		err == storage.ErrOutOfOrderSample ||
-		err == storage.ErrOutOfBounds
+		err == storage.ErrOutOfBounds ||
+		err == storage.ErrTooOldSample
 }
 
 // isExemplarConflictErr returns whether or not the given error represents

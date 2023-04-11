@@ -122,14 +122,13 @@ func (it *pushdownSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHis
 }
 
 func (it *pushdownSeriesIterator) AtT() int64 {
-	t, _ := it.a.At()
+	t := it.a.AtT()
 	return t
 }
 
-// TODO(rabenhorst): Native histogram support needs to be implemented, currently float type is hardcoded.
 func (it *pushdownSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	for {
-		ts, _ := it.At()
+		ts := it.AtT()
 		if ts >= t {
 			return chunkenc.ValFloat
 		}

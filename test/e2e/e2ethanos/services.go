@@ -4,14 +4,8 @@
 package e2ethanos
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
-	"math/big"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -31,8 +25,9 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/objstore/client"
-	"github.com/thanos-io/objstore/exthttp"
 	"github.com/thanos-io/objstore/providers/s3"
+
+	"github.com/thanos-io/objstore/exthttp"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/httpconfig"
@@ -70,7 +65,7 @@ const (
 
 // DefaultPrometheusImage sets default Prometheus image used in e2e service.
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v2.38.0"
+	return "quay.io/prometheus/prometheus:v2.41.0"
 }
 
 // DefaultAlertmanagerImage sets default Alertmanager image used in e2e service.
@@ -257,6 +252,10 @@ type QuerierBuilder struct {
 	exemplarAddresses       []string
 	enableFeatures          []string
 	endpoints               []string
+	strictEndpoints         []string
+
+	engine    string
+	queryMode string
 
 	replicaLabels []string
 	tracingConfig string
@@ -329,6 +328,11 @@ func (q *QuerierBuilder) WithEndpoints(endpoints ...string) *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithStrictEndpoints(strictEndpoints ...string) *QuerierBuilder {
+	q.strictEndpoints = strictEndpoints
+	return q
+}
+
 func (q *QuerierBuilder) WithRoutePrefix(routePrefix string) *QuerierBuilder {
 	q.routePrefix = routePrefix
 	return q
@@ -352,6 +356,16 @@ func (q *QuerierBuilder) WithReplicaLabels(labels ...string) *QuerierBuilder {
 
 func (q *QuerierBuilder) WithDisablePartialResponses(disable bool) *QuerierBuilder {
 	q.disablePartialResponses = disable
+	return q
+}
+
+func (q *QuerierBuilder) WithEngine(engine string) *QuerierBuilder {
+	q.engine = engine
+	return q
+}
+
+func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
+	q.queryMode = mode
 	return q
 }
 
@@ -412,6 +426,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	for _, addr := range q.endpoints {
 		args = append(args, "--endpoint="+addr)
 	}
+	for _, addr := range q.strictEndpoints {
+		args = append(args, "--endpoint-strict="+addr)
+	}
 	if len(q.fileSDStoreAddresses) > 0 {
 		if err := os.MkdirAll(q.Dir(), 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
@@ -461,6 +478,7 @@ type ReceiveBuilder struct {
 	relabelConfigs      []*relabel.Config
 	replication         int
 	image               string
+	nativeHistograms    bool
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -508,6 +526,11 @@ func (r *ReceiveBuilder) WithValidationEnabled(limit int, metaMonitoring string,
 	if len(query) > 0 {
 		r.metaMonitoringQuery = query[0]
 	}
+	return r
+}
+
+func (r *ReceiveBuilder) WithNativeHistograms() *ReceiveBuilder {
+	r.nativeHistograms = true
 	return r
 }
 
@@ -587,6 +610,10 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 			return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate relabel configs: %v", relabelConfigBytes))}
 		}
 		args["--receive.relabel-config"] = string(relabelConfigBytes)
+	}
+
+	if r.nativeHistograms {
+		args["--tsdb.enable-native-histograms"] = ""
 	}
 
 	return e2emon.AsInstrumented(r.f.Init(wrapWithDefaults(e2e.StartOptions{
@@ -945,57 +972,6 @@ http {
 	}), "http")
 }
 
-// NewMinio returns minio server, used as a local replacement for S3.
-// TODO(@matej-g): This is a temporary workaround for https://github.com/efficientgo/e2e/issues/11;
-// after this is addresses fixed all calls should be replaced with e2edb.NewMinio.
-func NewMinio(e e2e.Environment, name, bktName string) *e2emon.InstrumentedRunnable {
-	image := "minio/minio:RELEASE.2022-07-30T05-21-40Z"
-	minioKESGithubContent := "https://raw.githubusercontent.com/minio/kes/master"
-
-	httpsPort := 8090
-	consolePort := 8080
-	f := e.Runnable(fmt.Sprintf("minio-%s", name)).
-		WithPorts(map[string]int{"https": httpsPort, "console": consolePort}).
-		Future()
-
-	if err := os.MkdirAll(filepath.Join(f.Dir(), "certs", "CAs"), 0750); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create certs dir"))}
-	}
-
-	if err := genCerts(
-		filepath.Join(f.Dir(), "certs", "public.crt"),
-		filepath.Join(f.Dir(), "certs", "private.key"),
-		filepath.Join(f.Dir(), "certs", "CAs", "ca.crt"),
-		fmt.Sprintf("%s-minio-%s", e.Name(), name),
-	); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "fail to generate certs"))}
-	}
-
-	commands := []string{
-		fmt.Sprintf("curl -sSL --tlsv1.2 -O '%s/root.key' -O '%s/root.cert'", minioKESGithubContent, minioKESGithubContent),
-		fmt.Sprintf("mkdir -p /data/%s && minio server --certs-dir %s/certs --address :%v --console-address :%v /data", bktName, f.InternalDir(), httpsPort, consolePort),
-	}
-
-	minio := e2emon.AsInstrumented(f.Init(e2e.StartOptions{
-		Image: image,
-		// Create the required bucket before starting minio.
-		Command:   e2e.NewCommandWithoutEntrypoint("sh", "-c", strings.Join(commands, " && ")),
-		Readiness: e2e.NewHTTPSReadinessProbe("console", "/", 200, 200),
-		EnvVars: map[string]string{
-			"MINIO_ROOT_USER":     e2edb.MinioAccessKey,
-			"MINIO_ROOT_PASSWORD": e2edb.MinioSecretKey,
-			"MINIO_BROWSER":       "on",
-			"ENABLE_HTTPS":        "1",
-			// https://docs.min.io/docs/minio-kms-quickstart-guide.html
-			"MINIO_KMS_KES_ENDPOINT":  "https://play.min.io:7373",
-			"MINIO_KMS_KES_KEY_FILE":  "root.key",
-			"MINIO_KMS_KES_CERT_FILE": "root.cert",
-			"MINIO_KMS_KES_KEY_NAME":  "my-minio-key",
-		},
-	}), "https")
-	return minio
-}
-
 func NewMemcached(e e2e.Environment, name string) *e2emon.InstrumentedRunnable {
 	return e2emon.AsInstrumented(e.Runnable(fmt.Sprintf("memcached-%s", name)).
 		WithPorts(map[string]int{"memcached": 11211}).
@@ -1059,76 +1035,6 @@ func NewToolsBucketWeb(
 		Command:   e2e.NewCommand("tools", args...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	})), "http")
-}
-
-// genCerts generates certificates and writes those to the provided paths.
-func genCerts(certPath, privkeyPath, caPath, serverName string) error {
-	var caRoot = &x509.Certificate{
-		SerialNumber:          big.NewInt(2019),
-		NotAfter:              time.Now().AddDate(10, 0, 0),
-		IsCA:                  true,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		BasicConstraintsValid: true,
-	}
-
-	var cert = &x509.Certificate{
-		SerialNumber: big.NewInt(1658),
-		DNSNames:     []string{serverName},
-		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")},
-		NotAfter:     time.Now().AddDate(10, 0, 0),
-		SubjectKeyId: []byte{1, 2, 3},
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-	}
-
-	caPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return err
-	}
-
-	certPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return err
-	}
-	// Generate CA cert.
-	caBytes, err := x509.CreateCertificate(rand.Reader, caRoot, caRoot, &caPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return err
-	}
-	caPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: caBytes,
-	})
-	err = os.WriteFile(caPath, caPEM, 0644)
-	if err != nil {
-		return err
-	}
-
-	// Sign the cert with the CA private key.
-	certBytes, err := x509.CreateCertificate(rand.Reader, cert, caRoot, &certPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return err
-	}
-	certPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: certBytes,
-	})
-	err = os.WriteFile(certPath, certPEM, 0644)
-	if err != nil {
-		return err
-	}
-
-	certPrivKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
-	})
-	err = os.WriteFile(privkeyPath, certPrivKeyPEM, 0644)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func NewS3Config(bucket, endpoint, basePath string) s3.Config {

@@ -158,7 +158,7 @@ The most important metrics to alert on are:
 
 * `prometheus_rule_evaluation_failures_total`. If greater than 0, it means that that rule failed to be evaluated, which results in either gap in rule or potentially ignored alert. This metric might indicate problems on the queryAPI endpoint you use. Alert heavily on this if this happens for longer than your alert thresholds. `strategy` label will tell you if failures comes from rules that tolerate [partial response](#partial-response) or not.
 
-* `prometheus_rule_group_last_duration_seconds < prometheus_rule_group_interval_seconds` If the difference is large, it means that rule evaluation took more time than the scheduled interval. It can indicate that your query backend (e.g Querier) takes too much time to evaluate the query, i.e. that it is not fast enough to fill the rule. This might indicate other problems like slow StoreAPis or too complex query expression in rule.
+* `prometheus_rule_group_last_duration_seconds > prometheus_rule_group_interval_seconds` If the difference is positive, it means that rule evaluation took more time than the scheduled interval, and data for some intervals could be missing. It can indicate that your query backend (e.g Querier) takes too much time to evaluate the query, i.e. that it is not fast enough to fill the rule. This might indicate other problems like slow StoreAPis or too complex query expression in rule.
 
 * `thanos_rule_evaluation_with_warnings_total`. If you choose to use Rules and Alerts with [partial response strategy's](#partial-response) value as "warn", this metric will tell you how many evaluation ended up with some kind of warning. To see the actual warnings see WARN log level. This might suggest that those evaluations return partial response and might not be accurate.
 
@@ -323,6 +323,10 @@ Flags:
                                  from other components.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
+      --grpc-server-max-connection-age=60m
+                                 The grpc server max connection age. This
+                                 controls how often to re-establish connections
+                                 and redo TLS handshakes.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-client-ca=""
@@ -453,6 +457,17 @@ Flags:
                                  Works only if compaction is disabled on
                                  Prometheus. Do it once and then disable the
                                  flag when done.
+      --store.limits.request-samples=0
+                                 The maximum samples allowed for a single
+                                 Series request, The Series call fails if
+                                 this limit is exceeded. 0 means no limit.
+                                 NOTE: For efficiency the limit is internally
+                                 implemented as 'chunks limit' considering each
+                                 chunk contains a maximum of 120 samples.
+      --store.limits.request-series=0
+                                 The maximum series allowed for a single Series
+                                 request. The Series call fails if this limit is
+                                 exceeded. 0 means no limit.
       --tracing.config=<content>
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file

@@ -10,12 +10,12 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type dedupSeriesSet struct {
-	set           storage.SeriesSet
-	replicaLabels map[string]struct{}
-	isCounter     bool
+	set       storage.SeriesSet
+	isCounter bool
 
 	replicas []storage.Series
 	// Pushed down series. Currently, they are being handled in a specific way.
@@ -37,9 +37,77 @@ func isCounter(f string) bool {
 	return f == "increase" || f == "rate" || f == "irate" || f == "resets"
 }
 
-func NewSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}, f string, pushdownEnabled bool) storage.SeriesSet {
+// NewOverlapSplit splits overlapping chunks into separate series entry, so existing algorithm can work as usual.
+// We cannot do this in dedup.SeriesSet as it iterates over samples already.
+// TODO(bwplotka): Remove when we move to per chunk deduplication code.
+// We expect non-duplicated series with sorted chunks by min time (possibly overlapped).
+func NewOverlapSplit(set storepb.SeriesSet) storepb.SeriesSet {
+	return &overlapSplitSet{set: set, ok: true}
+}
+
+type overlapSplitSet struct {
+	ok  bool
+	set storepb.SeriesSet
+
+	currLabels labels.Labels
+	currI      int
+	replicas   [][]storepb.AggrChunk
+}
+
+func (o *overlapSplitSet) Next() bool {
+	if !o.ok {
+		return false
+	}
+
+	o.currI++
+	if o.currI < len(o.replicas) {
+		return true
+	}
+
+	o.currI = 0
+	o.replicas = o.replicas[:0]
+	o.replicas = append(o.replicas, nil)
+
+	o.ok = o.set.Next()
+	if !o.ok {
+		return false
+	}
+
+	var chunks []storepb.AggrChunk
+	o.currLabels, chunks = o.set.At()
+	if len(chunks) == 0 {
+		return true
+	}
+
+	o.replicas[0] = append(o.replicas[0], chunks[0])
+
+chunksLoop:
+	for i := 1; i < len(chunks); i++ {
+		currMinTime := chunks[i].MinTime
+		for ri := range o.replicas {
+			if len(o.replicas[ri]) == 0 || o.replicas[ri][len(o.replicas[ri])-1].MaxTime < currMinTime {
+				o.replicas[ri] = append(o.replicas[ri], chunks[i])
+				continue chunksLoop
+			}
+		}
+		o.replicas = append(o.replicas, []storepb.AggrChunk{chunks[i]}) // Not found, add to a new "fake" series.
+	}
+	return true
+}
+
+func (o *overlapSplitSet) At() (labels.Labels, []storepb.AggrChunk) {
+	return o.currLabels, o.replicas[o.currI]
+}
+
+func (o *overlapSplitSet) Err() error {
+	return o.set.Err()
+}
+
+// NewSeriesSet returns seriesSet that deduplicates the same series.
+// The series in series set are expected be sorted by all labels.
+func NewSeriesSet(set storage.SeriesSet, f string, pushdownEnabled bool) storage.SeriesSet {
 	// TODO: remove dependency on knowing whether it is a counter.
-	s := &dedupSeriesSet{pushdownEnabled: pushdownEnabled, set: set, replicaLabels: replicaLabels, isCounter: isCounter(f), f: f}
+	s := &dedupSeriesSet{pushdownEnabled: pushdownEnabled, set: set, isCounter: isCounter(f), f: f}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
@@ -63,9 +131,8 @@ func (s *dedupSeriesSet) Next() bool {
 	}
 	s.replicas = s.replicas[:0]
 
-	// Set the label set we are currently gathering to the peek element
-	// without the replica label if it exists.
-	s.lset = s.peekLset()
+	// Set the label set we are currently gathering to the peek element.
+	s.lset = s.peek.Labels()
 
 	pushedDown := false
 	if s.pushdownEnabled {
@@ -79,28 +146,6 @@ func (s *dedupSeriesSet) Next() bool {
 	return s.next()
 }
 
-// peekLset returns the label set of the current peek element stripped from the
-// replica label if it exists.
-func (s *dedupSeriesSet) peekLset() labels.Labels {
-	lset := s.peek.Labels()
-	if len(s.replicaLabels) == 0 {
-		return lset
-	}
-	// Check how many replica labels are present so that these are removed.
-	var totalToRemove int
-	for i := 0; i < len(s.replicaLabels); i++ {
-		if len(lset)-i == 0 {
-			break
-		}
-
-		if _, ok := s.replicaLabels[lset[len(lset)-i-1].Name]; ok {
-			totalToRemove++
-		}
-	}
-	// Strip all present replica labels.
-	return lset[:len(lset)-totalToRemove]
-}
-
 func (s *dedupSeriesSet) next() bool {
 	// Peek the next series to see whether it's a replica for the current series.
 	s.ok = s.set.Next()
@@ -109,7 +154,7 @@ func (s *dedupSeriesSet) next() bool {
 		return len(s.replicas) > 0 || len(s.pushedDown) > 0
 	}
 	s.peek = s.set.At()
-	nextLset := s.peekLset()
+	nextLset := s.peek.Labels()
 
 	var pushedDown bool
 	if s.pushdownEnabled {
@@ -185,21 +230,21 @@ func (s *dedupSeries) Labels() labels.Labels {
 
 // pushdownIterator creates an iterator that handles
 // all pushed down series.
-func (s *dedupSeries) pushdownIterator() chunkenc.Iterator {
+func (s *dedupSeries) pushdownIterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	var pushedDownIterator adjustableSeriesIterator
 	if s.isCounter {
-		pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator()}
+		pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
 	} else {
-		pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator()}
+		pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
 	}
 
 	for _, o := range s.pushedDown[1:] {
 		var replicaIterator adjustableSeriesIterator
 
 		if s.isCounter {
-			replicaIterator = &counterErrAdjustSeriesIterator{Iterator: o.Iterator()}
+			replicaIterator = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
 		} else {
-			replicaIterator = noopAdjustableSeriesIterator{Iterator: o.Iterator()}
+			replicaIterator = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
 		}
 
 		pushedDownIterator = noopAdjustableSeriesIterator{newPushdownSeriesIterator(pushedDownIterator, replicaIterator, s.f)}
@@ -210,21 +255,21 @@ func (s *dedupSeries) pushdownIterator() chunkenc.Iterator {
 
 // allSeriesIterator creates an iterator over all series - pushed down
 // and regular replicas.
-func (s *dedupSeries) allSeriesIterator() chunkenc.Iterator {
+func (s *dedupSeries) allSeriesIterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	var replicasIterator, pushedDownIterator adjustableSeriesIterator
 	if len(s.replicas) != 0 {
 		if s.isCounter {
-			replicasIterator = &counterErrAdjustSeriesIterator{Iterator: s.replicas[0].Iterator()}
+			replicasIterator = &counterErrAdjustSeriesIterator{Iterator: s.replicas[0].Iterator(nil)}
 		} else {
-			replicasIterator = noopAdjustableSeriesIterator{Iterator: s.replicas[0].Iterator()}
+			replicasIterator = noopAdjustableSeriesIterator{Iterator: s.replicas[0].Iterator(nil)}
 		}
 
 		for _, o := range s.replicas[1:] {
 			var replicaIter adjustableSeriesIterator
 			if s.isCounter {
-				replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator()}
+				replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
 			} else {
-				replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator()}
+				replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
 			}
 			replicasIterator = newDedupSeriesIterator(replicasIterator, replicaIter)
 		}
@@ -232,17 +277,17 @@ func (s *dedupSeries) allSeriesIterator() chunkenc.Iterator {
 
 	if len(s.pushedDown) != 0 {
 		if s.isCounter {
-			pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator()}
+			pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
 		} else {
-			pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator()}
+			pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
 		}
 
 		for _, o := range s.pushedDown[1:] {
 			var replicaIter adjustableSeriesIterator
 			if s.isCounter {
-				replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator()}
+				replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
 			} else {
-				replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator()}
+				replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
 			}
 			pushedDownIterator = newDedupSeriesIterator(pushedDownIterator, replicaIter)
 		}
@@ -257,16 +302,16 @@ func (s *dedupSeries) allSeriesIterator() chunkenc.Iterator {
 	return newDedupSeriesIterator(pushedDownIterator, replicasIterator)
 }
 
-func (s *dedupSeries) Iterator() chunkenc.Iterator {
+func (s *dedupSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	// This function needs a regular iterator over all series. Behavior is identical
 	// whether it was pushed down or not.
 	if s.f == "group" {
-		return s.allSeriesIterator()
+		return s.allSeriesIterator(nil)
 	}
 	// If there are no replicas then jump straight to constructing an iterator
 	// for pushed down series.
 	if len(s.replicas) == 0 {
-		return s.pushdownIterator()
+		return s.pushdownIterator(nil)
 	}
 
 	// Finally, if we have both then construct a tree out of them.
@@ -274,17 +319,17 @@ func (s *dedupSeries) Iterator() chunkenc.Iterator {
 	// We deduplicate everything in the end.
 	var it adjustableSeriesIterator
 	if s.isCounter {
-		it = &counterErrAdjustSeriesIterator{Iterator: s.replicas[0].Iterator()}
+		it = &counterErrAdjustSeriesIterator{Iterator: s.replicas[0].Iterator(nil)}
 	} else {
-		it = noopAdjustableSeriesIterator{Iterator: s.replicas[0].Iterator()}
+		it = noopAdjustableSeriesIterator{Iterator: s.replicas[0].Iterator(nil)}
 	}
 
 	for _, o := range s.replicas[1:] {
 		var replicaIter adjustableSeriesIterator
 		if s.isCounter {
-			replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator()}
+			replicaIter = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
 		} else {
-			replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator()}
+			replicaIter = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
 		}
 		it = newDedupSeriesIterator(it, replicaIter)
 	}
@@ -296,18 +341,18 @@ func (s *dedupSeries) Iterator() chunkenc.Iterator {
 	// Join all of the pushed down iterators into one.
 	var pushedDownIterator adjustableSeriesIterator
 	if s.isCounter {
-		pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator()}
+		pushedDownIterator = &counterErrAdjustSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
 	} else {
-		pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator()}
+		pushedDownIterator = noopAdjustableSeriesIterator{Iterator: s.pushedDown[0].Iterator(nil)}
 	}
 
 	for _, o := range s.pushedDown[1:] {
 		var replicaIterator adjustableSeriesIterator
 
 		if s.isCounter {
-			replicaIterator = &counterErrAdjustSeriesIterator{Iterator: o.Iterator()}
+			replicaIterator = &counterErrAdjustSeriesIterator{Iterator: o.Iterator(nil)}
 		} else {
-			replicaIterator = noopAdjustableSeriesIterator{Iterator: o.Iterator()}
+			replicaIterator = noopAdjustableSeriesIterator{Iterator: o.Iterator(nil)}
 		}
 
 		pushedDownIterator = noopAdjustableSeriesIterator{newPushdownSeriesIterator(pushedDownIterator, replicaIterator, s.f)}
@@ -323,7 +368,7 @@ type adjustableSeriesIterator interface {
 
 	// adjustAtValue allows to adjust value by implementation if needed knowing the last value. This is used by counter
 	// implementation which can adjust for obsolete counter value.
-	adjustAtValue(lastValue float64)
+	adjustAtValue(lastFloatValue float64)
 }
 
 type noopAdjustableSeriesIterator struct {
@@ -360,11 +405,11 @@ type counterErrAdjustSeriesIterator struct {
 	errAdjust float64
 }
 
-func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastValue float64) {
+func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastFloatValue float64) {
 	_, v := it.At()
-	if lastValue > v {
+	if lastFloatValue > v {
 		// This replica has obsolete value (did not see the correct "end" of counter value before app restart). Adjust.
-		it.errAdjust += lastValue - v
+		it.errAdjust += lastFloatValue - v
 	}
 }
 
@@ -380,8 +425,8 @@ type dedupSeriesIterator struct {
 
 	// TODO(bwplotka): Don't base on LastT, but on detected scrape interval. This will allow us to be more
 	// responsive to gaps: https://github.com/thanos-io/thanos/issues/981, let's do it in next PR.
-	lastT int64
-	lastV float64
+	lastT    int64
+	lastIter chunkenc.Iterator
 
 	penA, penB int64
 	useA       bool
@@ -389,23 +434,24 @@ type dedupSeriesIterator struct {
 
 func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator {
 	return &dedupSeriesIterator{
-		a:     a,
-		b:     b,
-		lastT: math.MinInt64,
-		lastV: float64(math.MinInt64),
-		aval:  a.Next(),
-		bval:  b.Next(),
+		a:        a,
+		b:        b,
+		lastT:    math.MinInt64,
+		lastIter: a,
+		aval:     a.Next(),
+		bval:     b.Next(),
 	}
 }
 
 func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
-	lastValue := it.lastV
+	lastFloatVal, isFloatVal := it.lastFloatVal()
 	lastUseA := it.useA
 	defer func() {
-		if it.useA != lastUseA {
+		if it.useA != lastUseA && isFloatVal {
 			// We switched replicas.
 			// Ensure values are correct bases on value before At.
-			it.adjustAtValue(lastValue)
+			// TODO(rabenhorst): Investigate if we also need to implement adjusting histograms here.
+			it.adjustAtValue(lastFloatVal)
 		}
 	}()
 
@@ -421,14 +467,16 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	if it.aval == chunkenc.ValNone {
 		it.useA = false
 		if it.bval != chunkenc.ValNone {
-			it.lastT, it.lastV = it.b.At()
+			it.lastT = it.b.AtT()
+			it.lastIter = it.b
 			it.penB = 0
 		}
 		return it.bval
 	}
 	if it.bval == chunkenc.ValNone {
 		it.useA = true
-		it.lastT, it.lastV = it.a.At()
+		it.lastT = it.a.AtT()
+		it.lastIter = it.a
 		it.penA = 0
 		return it.aval
 	}
@@ -436,8 +484,8 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	// with the smaller timestamp.
 	// The applied penalty potentially already skipped potential samples already
 	// that would have resulted in exaggerated sampling frequency.
-	ta, va := it.a.At()
-	tb, vb := it.b.At()
+	ta := it.a.AtT()
+	tb := it.b.AtT()
 
 	it.useA = ta <= tb
 
@@ -458,7 +506,8 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		}
 		it.penA = 0
 		it.lastT = ta
-		it.lastV = va
+		it.lastIter = it.a
+
 		return it.aval
 	}
 	if it.lastT != math.MinInt64 {
@@ -468,26 +517,40 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	}
 	it.penB = 0
 	it.lastT = tb
-	it.lastV = vb
+	it.lastIter = it.b
 	return it.bval
 }
 
-func (it *dedupSeriesIterator) adjustAtValue(lastValue float64) {
-	if it.aval != chunkenc.ValNone {
-		it.a.adjustAtValue(lastValue)
+func (it *dedupSeriesIterator) lastFloatVal() (float64, bool) {
+	if it.useA && it.aval == chunkenc.ValFloat {
+		_, v := it.lastIter.At()
+		return v, true
 	}
-	if it.bval != chunkenc.ValNone {
-		it.b.adjustAtValue(lastValue)
+	if !it.useA && it.bval == chunkenc.ValFloat {
+		_, v := it.lastIter.At()
+		return v, true
+	}
+	return 0, false
+}
+
+func (it *dedupSeriesIterator) adjustAtValue(lastFloatValue float64) {
+	if it.aval == chunkenc.ValFloat {
+		it.a.adjustAtValue(lastFloatValue)
+	}
+	if it.bval == chunkenc.ValFloat {
+		it.b.adjustAtValue(lastFloatValue)
 	}
 }
 
-// TODO(rabenhorst): Native histogram support needs to be implemented, float type hardcoded.
 func (it *dedupSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	// Don't use underlying Seek, but iterate over next to not miss gaps.
 	for {
-		ts, _ := it.At()
+		ts := it.AtT()
 		if ts >= t {
-			return chunkenc.ValFloat
+			if it.useA {
+				return it.a.Seek(ts)
+			}
+			return it.b.Seek(ts)
 		}
 		if it.Next() == chunkenc.ValNone {
 			return chunkenc.ValNone
@@ -496,27 +559,23 @@ func (it *dedupSeriesIterator) Seek(t int64) chunkenc.ValueType {
 }
 
 func (it *dedupSeriesIterator) At() (int64, float64) {
-	if it.useA {
-		return it.a.At()
-	}
-	return it.b.At()
+	return it.lastIter.At()
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (it *dedupSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	panic("not implemented")
+	return it.lastIter.AtHistogram()
 }
 
 func (it *dedupSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	panic("not implemented")
+	return it.lastIter.AtFloatHistogram()
 }
 
 func (it *dedupSeriesIterator) AtT() int64 {
 	var t int64
 	if it.useA {
-		t, _ = it.a.At()
+		t = it.a.AtT()
 	} else {
-		t, _ = it.b.At()
+		t = it.b.AtT()
 	}
 	return t
 }
@@ -553,18 +612,16 @@ func (it *boundedSeriesIterator) At() (t int64, v float64) {
 	return it.it.At()
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (it *boundedSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
-	panic("not implemented")
+	return it.it.AtHistogram()
 }
 
 func (it *boundedSeriesIterator) AtFloatHistogram() (int64, *histogram.FloatHistogram) {
-	panic("not implemented")
+	return it.it.AtFloatHistogram()
 }
 
 func (it *boundedSeriesIterator) AtT() int64 {
-	t, _ := it.it.At()
-	return t
+	return it.it.AtT()
 }
 
 func (it *boundedSeriesIterator) Next() chunkenc.ValueType {
@@ -572,14 +629,14 @@ func (it *boundedSeriesIterator) Next() chunkenc.ValueType {
 	if valueType == chunkenc.ValNone {
 		return chunkenc.ValNone
 	}
-	t, _ := it.it.At()
+	t := it.it.AtT()
 
 	// Advance the iterator if we are before the valid interval.
 	if t < it.mint {
 		if it.Seek(it.mint) == chunkenc.ValNone {
 			return chunkenc.ValNone
 		}
-		t, _ = it.it.At()
+		t = it.it.AtT()
 	}
 	// Once we passed the valid interval, there is no going back.
 	if t <= it.maxt {

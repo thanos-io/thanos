@@ -51,8 +51,8 @@ func NewRedisCache(name string, logger log.Logger, redisClient *cacheutil.RedisC
 }
 
 // Store data identified by keys.
-func (c *RedisCache) Store(ctx context.Context, data map[string][]byte, ttl time.Duration) {
-	c.redisClient.SetMulti(ctx, data, ttl)
+func (c *RedisCache) Store(data map[string][]byte, ttl time.Duration) {
+	c.redisClient.SetMulti(data, ttl)
 }
 
 // Fetch fetches multiple keys and returns a map containing cache hits, along with a list of missing keys.

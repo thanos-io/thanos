@@ -1,18 +1,21 @@
 on:
   workflow_dispatch:
   schedule:
-    - cron: '37 13 * * *'
+    - cron: '0 * * * *'
 name: busybox-update workflow
 jobs:
   checkVersionAndCreatePR:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v3
+
       - name: Run busybox updater
         run: |
           chmod +x ./scripts/busybox-updater.sh
           ./scripts/busybox-updater.sh
         shell: bash
+
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v3
         with:

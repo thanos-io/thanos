@@ -22,6 +22,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -160,6 +161,35 @@ func TestMultiTSDB(t *testing.T) {
 		testutil.Ok(t, err)
 
 		testMulitTSDBSeries(t, m)
+	})
+
+	t.Run("flush with one sample produces a block", func(t *testing.T) {
+		const testTenant = "test_tenant"
+		m := NewMultiTSDB(
+			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+				RetentionDuration: (6 * time.Hour).Milliseconds(),
+				NoLockfile:        true,
+			},
+			labels.FromStrings("replica", "01"),
+			"tenant_id",
+			nil,
+			false,
+			metadata.NoneFunc,
+		)
+		defer func() { testutil.Ok(t, m.Close()) }()
+
+		testutil.Ok(t, m.Flush())
+		testutil.Ok(t, m.Open())
+		testutil.Ok(t, appendSample(m, testTenant, time.Now()))
+
+		tenant := m.tenants[testTenant]
+		db := tenant.readyStorage().Get()
+
+		testutil.Equals(t, 0, len(db.Blocks()))
+		testutil.Ok(t, m.Flush())
+		testutil.Equals(t, 1, len(db.Blocks()))
 	})
 }
 
@@ -395,7 +425,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 			name:            "prune tsdbs with object storage",
 			bucket:          objstore.NewInMemBucket(),
 			expectedTenants: 2,
-			expectedUploads: 1,
+			expectedUploads: 2,
 		},
 	}
 
@@ -418,15 +448,23 @@ func TestMultiTSDBPrune(t *testing.T) {
 			defer func() { testutil.Ok(t, m.Close()) }()
 
 			for i := 0; i < 100; i++ {
-				testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10+i))))
-				testutil.Ok(t, appendSample(m, "bar", time.Now().Add(-4*time.Hour)))
-				testutil.Ok(t, appendSample(m, "baz", time.Now().Add(time.Duration(i)*time.Second)))
+				testutil.Ok(t, appendSample(m, "deleted-tenant", time.UnixMilli(int64(10+i))))
+				testutil.Ok(t, appendSample(m, "compacted-tenant", time.Now().Add(-4*time.Hour)))
+				testutil.Ok(t, appendSample(m, "active-tenant", time.Now().Add(time.Duration(i)*time.Second)))
 			}
 			testutil.Equals(t, 3, len(m.TSDBLocalClients()))
 
-			testutil.Ok(t, m.Prune(context.Background()))
-			testutil.Equals(t, test.expectedTenants, len(m.TSDBLocalClients()))
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
+			if test.bucket != nil {
+				go func() {
+					testutil.Ok(t, syncTSDBs(ctx, m, 10*time.Millisecond))
+				}()
+			}
+
+			testutil.Ok(t, m.Prune(ctx))
+			testutil.Equals(t, test.expectedTenants, len(m.TSDBLocalClients()))
 			var shippedBlocks int
 			if test.bucket != nil {
 				testutil.Ok(t, test.bucket.Iter(context.Background(), "", func(s string) error {
@@ -436,6 +474,20 @@ func TestMultiTSDBPrune(t *testing.T) {
 			}
 			testutil.Equals(t, test.expectedUploads, shippedBlocks)
 		})
+	}
+}
+
+func syncTSDBs(ctx context.Context, m *MultiTSDB, interval time.Duration) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(interval):
+			_, err := m.Sync(ctx)
+			if err != nil {
+				return err
+			}
+		}
 	}
 }
 
@@ -519,6 +571,39 @@ func TestMultiTSDBStats(t *testing.T) {
 			testutil.Equals(t, test.expectedStats, len(stats))
 		})
 	}
+}
+
+// Regression test for https://github.com/thanos-io/thanos/issues/6047.
+func TestMultiTSDBWithNilStore(t *testing.T) {
+	dir := t.TempDir()
+
+	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		nil,
+		false,
+		metadata.NoneFunc,
+	)
+	defer func() { testutil.Ok(t, m.Close()) }()
+
+	const tenantID = "test-tenant"
+	_, err := m.TenantAppendable(tenantID)
+	testutil.Ok(t, err)
+
+	// Get LabelSets of newly created TSDB.
+	clients := m.TSDBLocalClients()
+	for _, client := range clients {
+		testutil.Ok(t, testutil.FaultOrPanicToErr(func() { client.LabelSets() }))
+	}
+
+	// Wait for tenant to become ready before terminating the test.
+	// This allows the tear down procedure to cleanup properly.
+	testutil.Ok(t, appendSample(m, tenantID, time.Now()))
 }
 
 func appendSample(m *MultiTSDB, tenant string, timestamp time.Time) error {

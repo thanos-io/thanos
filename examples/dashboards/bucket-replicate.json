@@ -123,7 +123,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job, result) (rate(thanos_replicate_replication_runs_total{result=\"error\", job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job, result) (rate(thanos_replicate_replication_runs_total{result=\"error\", job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{result}}",
@@ -329,7 +329,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (job) (rate(blocks_meta_synced{state=\"loaded\", job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(blocks_meta_synced{state=\"loaded\", job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "meta loads",
@@ -337,7 +337,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(blocks_meta_synced{state=\"failed\", job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(blocks_meta_synced{state=\"failed\", job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "partial meta reads",
@@ -345,7 +345,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(thanos_replicate_blocks_already_replicated_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_replicate_blocks_already_replicated_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "already replicated blocks",
@@ -353,7 +353,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(thanos_replicate_blocks_replicated_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_replicate_blocks_replicated_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "replicated blocks",
@@ -361,7 +361,7 @@
                      "step": 10
                   },
                   {
-                     "expr": "sum by (job) (rate(thanos_replicate_objects_replicated_total{job=~\"$job\"}[$interval]))",
+                     "expr": "sum by (job) (rate(thanos_replicate_objects_replicated_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "replicated objects",

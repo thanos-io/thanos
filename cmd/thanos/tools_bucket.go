@@ -123,7 +123,7 @@ type bucketWebConfig struct {
 type bucketReplicateConfig struct {
 	resolutions []time.Duration
 	compactions []int
-	matcherStrs []string
+	matcherStrs string
 	singleRun   bool
 }
 
@@ -198,7 +198,7 @@ func (tbc *bucketWebConfig) registerBucketWebFlag(cmd extkingpin.FlagClause) *bu
 
 	cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").DurationVar(&tbc.timeout)
 
-	cmd.Flag("label", "Prometheus label to use as timeline title").StringVar(&tbc.label)
+	cmd.Flag("label", "External block label to use as group title").StringVar(&tbc.label)
 	return tbc
 }
 
@@ -207,7 +207,7 @@ func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.Fla
 
 	cmd.Flag("compaction", "Only blocks with these compaction levels will be replicated. Repeated flag.").Default("1", "2", "3", "4").IntsVar(&tbc.compactions)
 
-	cmd.Flag("matcher", "Only blocks whose external labels exactly match this matcher will be replicated.").PlaceHolder("key=\"value\"").StringsVar(&tbc.matcherStrs)
+	cmd.Flag("matcher", "blocks whose external labels match this matcher will be replicated. All Prometheus matchers are supported, including =, !=, =~ and !~.").StringVar(&tbc.matcherStrs)
 
 	cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").BoolVar(&tbc.singleRun)
 

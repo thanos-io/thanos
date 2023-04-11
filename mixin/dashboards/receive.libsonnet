@@ -65,14 +65,14 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate of write requests (by tenant and code)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_requests_total{%s}[$interval]))' % [tenantWithHttpCodeDimensions, tenantReceiveHandlerSeclector],
+            'sum by (%s) (rate(http_requests_total{%s}[$__rate_interval]))' % [tenantWithHttpCodeDimensions, tenantReceiveHandlerSeclector],
             '{{code}} - {{tenant}}'
           )
         )
         .addPanel(
           g.panel('Number of errors (by tenant and code)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_requests_total{%s}[$interval]))' % [
+            'sum by (%s) (rate(http_requests_total{%s}[$__rate_interval]))' % [
               tenantWithHttpCodeDimensions,
               tenantHttpCodeNot2XXSelector,
             ],
@@ -82,7 +82,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Average request duration (by tenant)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_request_duration_seconds_sum{%s}[$interval])) / sum by (%s) (http_request_duration_seconds_count{%s})' % [
+            'sum by (%s) (rate(http_request_duration_seconds_sum{%s}[$__rate_interval])) / sum by (%s) (http_request_duration_seconds_count{%s})' % [
               thanos.receive.dashboard.tenantDimensions,
               tenantReceiveHandlerSeclector,
               thanos.receive.dashboard.tenantDimensions,
@@ -97,7 +97,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Average successful HTTP request size (per tenant and code, only 2XX)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$interval])) / sum by (%s) (rate(http_request_size_bytes_count{%s}[$interval]))' % [
+            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$__rate_interval])) / sum by (%s) (rate(http_request_size_bytes_count{%s}[$__rate_interval]))' % [
               thanos.receive.dashboard.tenantDimensions,
               tenantHttpCode2XXSelector,
               thanos.receive.dashboard.tenantDimensions,
@@ -109,7 +109,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Average failed HTTP request size (per tenant and code, non 2XX)') +
           g.queryPanel(
-            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$interval])) / sum by (%s) (rate(http_request_size_bytes_count{%s}[$interval]))' % [
+            'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$__rate_interval])) / sum by (%s) (rate(http_request_size_bytes_count{%s}[$__rate_interval]))' % [
               thanos.receive.dashboard.tenantDimensions,
               tenantHttpCodeNot2XXSelector,
               thanos.receive.dashboard.tenantDimensions,
@@ -134,7 +134,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate of series received (per tenant, only 2XX)') +
           g.queryPanel(
-            'sum(rate(thanos_receive_write_timeseries_bucket{%s}[$interval])) by (%s) ' % [
+            'sum(rate(thanos_receive_write_timeseries_sum{%s}[$__rate_interval])) by (%s) ' % [
               utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code=~"2.."']),
               thanos.receive.dashboard.tenantDimensions,
             ],
@@ -144,7 +144,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate of series not written (per tenant and code, non 2XX)') +
           g.queryPanel(
-            'sum(rate(thanos_receive_write_timeseries_bucket{%s}[$interval])) by (%s) ' % [
+            'sum(rate(thanos_receive_write_timeseries_sum{%s}[$__rate_interval])) by (%s) ' % [
               utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code!~"2.."']),
               tenantWithHttpCodeDimensions,
             ],
@@ -154,7 +154,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate of samples received (per tenant, only 2XX)') +
           g.queryPanel(
-            'sum(rate(thanos_receive_write_samples_sum{%s}[$interval])) by (%s) ' % [
+            'sum(rate(thanos_receive_write_samples_sum{%s}[$__rate_interval])) by (%s) ' % [
               utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code=~"2.."']),
               thanos.receive.dashboard.tenantDimensions,
             ],
@@ -164,7 +164,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate of samples not written (per tenant and code, non 2XX)') +
           g.queryPanel(
-            'sum(rate(thanos_receive_write_samples_sum{%s}[$interval])) by (%s) ' % [
+            'sum(rate(thanos_receive_write_samples_sum{%s}[$__rate_interval])) by (%s) ' % [
               utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code!~"2.."']),
               tenantWithHttpCodeDimensions,
             ],
@@ -177,7 +177,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate', 'Shows rate of replications to other receive nodes.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_receive_replications_total{%s}[$interval]))' % [thanos.receive.dashboard.dimensions, thanos.receive.dashboard.selector],
+            'sum by (%s) (rate(thanos_receive_replications_total{%s}[$__rate_interval]))' % [thanos.receive.dashboard.dimensions, thanos.receive.dashboard.selector],
             'all {{job}}',
           )
         )
@@ -195,7 +195,7 @@ local utils = import '../lib/utils.libsonnet';
         .addPanel(
           g.panel('Rate', 'Shows rate of forwarded requests to other receive nodes.') +
           g.queryPanel(
-            'sum by (%s) (rate(thanos_receive_forward_requests_total{%s}[$interval]))' % [thanos.receive.dashboard.dimensions, thanos.receive.dashboard.selector],
+            'sum by (%s) (rate(thanos_receive_forward_requests_total{%s}[$__rate_interval]))' % [thanos.receive.dashboard.dimensions, thanos.receive.dashboard.selector],
             'all {{job}}',
           )
         )

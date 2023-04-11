@@ -116,7 +116,7 @@ func (l *localClient) TimeRange() (mint int64, maxt int64) {
 func (l *localClient) String() string {
 	mint, maxt := l.timeRangeFunc()
 	return fmt.Sprintf(
-		"LabelSets: %v Mint: %d Maxt: %d",
+		"LabelSets: %v MinTime: %d MaxTime: %d",
 		labelpb.PromLabelSetsToString(l.LabelSets()), mint, maxt,
 	)
 }
@@ -129,7 +129,7 @@ func (l *localClient) SupportsSharding() bool {
 	return true
 }
 
-func (l *localClient) SendsSortedSeries() bool {
+func (l *localClient) SupportsWithoutReplicaLabels() bool {
 	return true
 }
 
@@ -159,13 +159,16 @@ func (t *tenant) store() *store.TSDBStore {
 	return t.storeTSDB
 }
 
-func (t *tenant) client() store.Client {
+func (t *tenant) client(logger log.Logger) store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	store := t.store()
-	client := storepb.ServerAsClient(store, 0)
-	return newLocalClient(client, store.LabelSet, store.TimeRange)
+	tsdbStore := t.store()
+	if tsdbStore == nil {
+		return nil
+	}
+	client := storepb.ServerAsClient(store.NewRecoverableStoreServer(logger, tsdbStore), 0)
+	return newLocalClient(client, tsdbStore.LabelSet, tsdbStore.TimeRange)
 }
 
 func (t *tenant) exemplars() *exemplars.TSDB {
@@ -183,10 +186,14 @@ func (t *tenant) shipper() *shipper.Shipper {
 func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
 	t.readyS.Set(tenantTSDB)
 	t.mtx.Lock()
+	t.setComponents(storeTSDB, ship, exemplarsTSDB)
+	t.mtx.Unlock()
+}
+
+func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
 	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.exemplarsTSDB = exemplarsTSDB
-	t.mtx.Unlock()
 }
 
 func (t *MultiTSDB) Open() error {
@@ -232,7 +239,7 @@ func (t *MultiTSDB) Flush() error {
 		wg.Add(1)
 		go func() {
 			head := db.Head()
-			if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()-1)); err != nil {
+			if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -270,9 +277,6 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 		return nil
 	}
 
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-
 	var (
 		wg   sync.WaitGroup
 		merr errutil.SyncMultiError
@@ -281,6 +285,7 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 		pmtx          sync.Mutex
 	)
 
+	t.mtx.RLock()
 	for tenantID, tenantInstance := range t.tenants {
 		wg.Add(1)
 		go func(tenantID string, tenantInstance *tenant) {
@@ -300,8 +305,16 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 		}(tenantID, tenantInstance)
 	}
 	wg.Wait()
+	t.mtx.RUnlock()
 
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
 	for _, tenantID := range prunedTenants {
+		// Check that the tenant hasn't been reinitialized in-between locks.
+		if t.tenants[tenantID].readyStorage().get() != nil {
+			continue
+		}
+
 		level.Info(t.logger).Log("msg", "Pruned tenant", "tenant", tenantID)
 		delete(t.tenants, tenantID)
 	}
@@ -312,18 +325,40 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 // pruneTSDB removes a TSDB if its past the retention period.
 // It compacts the TSDB head, sends all remaining blocks to S3 and removes the TSDB from disk.
 func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInstance *tenant) (bool, error) {
-	tenantTSDB := tenantInstance.readyStorage().get()
+	tenantTSDB := tenantInstance.readyStorage()
 	if tenantTSDB == nil {
 		return false, nil
 	}
-	tdb := tenantTSDB.db
+	tenantTSDB.mtx.RLock()
+	if tenantTSDB.a == nil || tenantTSDB.a.db == nil {
+		tenantTSDB.mtx.RUnlock()
+		return false, nil
+	}
+
+	tdb := tenantTSDB.a.db
 	head := tdb.Head()
 	if head.MaxTime() < 0 {
+		tenantTSDB.mtx.RUnlock()
 		return false, nil
 	}
 
 	sinceLastAppendMillis := time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
 	compactThreshold := int64(1.5 * float64(t.tsdbOpts.MaxBlockDuration))
+	if sinceLastAppendMillis <= compactThreshold {
+		tenantTSDB.mtx.RUnlock()
+		return false, nil
+	}
+	tenantTSDB.mtx.RUnlock()
+
+	// Acquire a write lock and check that no writes have occurred in-between locks.
+	tenantTSDB.mtx.Lock()
+	defer tenantTSDB.mtx.Unlock()
+
+	// Lock the entire tenant to make sure the shipper is not running in parallel.
+	tenantInstance.mtx.Lock()
+	defer tenantInstance.mtx.Unlock()
+
+	sinceLastAppendMillis = time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
 	if sinceLastAppendMillis <= compactThreshold {
 		return false, nil
 	}
@@ -338,8 +373,8 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	}
 
 	level.Info(logger).Log("msg", "Pruning tenant")
-	if tenantInstance.shipper() != nil {
-		uploaded, err := tenantInstance.shipper().Sync(ctx)
+	if tenantInstance.ship != nil {
+		uploaded, err := tenantInstance.ship.Sync(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -353,9 +388,12 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 		return false, err
 	}
 
-	if err := os.RemoveAll(tenantTSDB.db.Dir()); err != nil {
+	if err := os.RemoveAll(tdb.Dir()); err != nil {
 		return false, err
 	}
+
+	tenantInstance.readyS.set(nil)
+	tenantInstance.setComponents(nil, nil, nil)
 
 	return true, nil
 }
@@ -429,7 +467,10 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
-		res = append(res, tenant.client())
+		client := tenant.client(t.logger)
+		if client != nil {
+			res = append(res, client)
+		}
 	}
 
 	return res
@@ -598,7 +639,11 @@ func (s *ReadyStorage) Set(db *tsdb.DB) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	s.a = &adapter{db: db}
+	s.set(&adapter{db: db})
+}
+
+func (s *ReadyStorage) set(a *adapter) {
+	s.a = a
 }
 
 // Get the storage.

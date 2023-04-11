@@ -5,4 +5,11 @@ LABEL maintainer="The Thanos Authors"
 
 COPY /thanos_tmp_for_docker /bin/thanos
 
+RUN adduser \
+    -D `#Dont assign a password` \
+    -H `#Dont create home directory` \
+    -u 1001 `#User id`\
+    thanos && \
+    chown thanos /bin/thanos
+USER 1001
 ENTRYPOINT [ "/bin/thanos" ]

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
@@ -25,9 +27,8 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
-	"google.golang.org/grpc"
-
 	v1 "github.com/prometheus/prometheus/web/api/v1"
+
 	"github.com/thanos-community/promql-engine/engine"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
@@ -72,13 +73,22 @@ const (
 	promqlEngineThanos     promqlEngineType = "thanos"
 )
 
+type queryMode string
+
+const (
+	queryModeLocal       queryMode = "local"
+	queryModeDistributed queryMode = "distributed"
+)
+
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
 	cmd := app.Command(comp.String(), "Query node exposing PromQL enabled Query API with data retrieved from multiple store nodes.")
 
 	httpBindAddr, httpGracePeriod, httpTLSConfig := extkingpin.RegisterHTTPFlags(cmd)
-	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA, grpcMaxConnAge := extkingpin.RegisterGRPCFlags(cmd)
+
+	var grpcServerConfig grpcConfig
+	grpcServerConfig.registerFlag(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
 	skipVerify := cmd.Flag("grpc-client-tls-skip-verify", "Disable TLS certificate verification i.e self signed, signed by fake CA").Default("false").Bool()
@@ -101,6 +111,11 @@ func registerQuery(app *extkingpin.App) {
 
 	promqlEngine := cmd.Flag("query.promql-engine", "PromQL engine to use.").Default(string(promqlEnginePrometheus)).
 		Enum(string(promqlEnginePrometheus), string(promqlEngineThanos))
+
+	promqlQueryMode := cmd.Flag("query.mode", "PromQL query mode. One of: local, distributed.").
+		Hidden().
+		Default(string(queryModeLocal)).
+		Enum(string(queryModeLocal), string(queryModeDistributed))
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
@@ -128,6 +143,9 @@ func registerQuery(app *extkingpin.App) {
 	endpoints := extkingpin.Addrs(cmd.Flag("endpoint", "Addresses of statically configured Thanos API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
 		PlaceHolder("<endpoint>"))
 
+	endpointGroups := extkingpin.Addrs(cmd.Flag("endpoint-group", "Experimental: DNS name of statically configured Thanos API server groups (repeatable). Targets resolved from the DNS name will be queried in a round-robin, instead of a fanout manner. This flag should be used when connecting a Thanos Query to HA groups of Thanos components.").
+		PlaceHolder("<endpoint-group>"))
+
 	stores := extkingpin.Addrs(cmd.Flag("store", "Deprecation Warning - This flag is deprecated and replaced with `endpoint`. Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
 		PlaceHolder("<store>"))
 
@@ -150,6 +168,9 @@ func registerQuery(app *extkingpin.App) {
 
 	strictEndpoints := cmd.Flag("endpoint-strict", "Addresses of only statically configured Thanos API servers that are always used, even if the health check fails. Useful if you have a caching layer on top.").
 		PlaceHolder("<staticendpoint>").Strings()
+
+	strictEndpointGroups := extkingpin.Addrs(cmd.Flag("endpoint-group-strict", "Experimental: DNS name of statically configured Thanos API server groups (repeatable) that are always used, even if the health check fails.").
+		PlaceHolder("<endpoint-group-strict>"))
 
 	fileSDFiles := cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
@@ -205,7 +226,10 @@ func registerQuery(app *extkingpin.App) {
 	queryTelemetrySamplesQuantiles := cmd.Flag("query.telemetry.request-samples-quantiles", "The quantiles for exporting metrics about the samples count quantiles.").Default("100", "1000", "10000", "100000", "1000000").Int64List()
 	queryTelemetrySeriesQuantiles := cmd.Flag("query.telemetry.request-series-seconds-quantiles", "The quantiles for exporting metrics about the series count quantiles.").Default("10", "100", "1000", "10000", "100000").Int64List()
 
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	var storeRateLimits store.SeriesSelectLimits
+	storeRateLimits.RegisterFlags(cmd)
+
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ <-chan struct{}, debugLogging bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -254,17 +278,13 @@ func registerQuery(app *extkingpin.App) {
 		return runQuery(
 			g,
 			logger,
+			debugLogging,
 			reg,
 			tracer,
 			httpLogOpts,
 			grpcLogOpts,
 			tagOpts,
-			*grpcBindAddr,
-			time.Duration(*grpcGracePeriod),
-			*grpcCert,
-			*grpcKey,
-			*grpcClientCA,
-			*grpcMaxConnAge,
+			grpcServerConfig,
 			*grpcCompression,
 			*secure,
 			*skipVerify,
@@ -291,6 +311,7 @@ func registerQuery(app *extkingpin.App) {
 			selectorLset,
 			getFlagsMap(cmd.Flags()),
 			*endpoints,
+			*endpointGroups,
 			*stores,
 			*ruleEndpoints,
 			*targetEndpoints,
@@ -312,6 +333,7 @@ func registerQuery(app *extkingpin.App) {
 			*defaultMetadataTimeRange,
 			*strictStores,
 			*strictEndpoints,
+			*strictEndpointGroups,
 			*webDisableCORS,
 			enableQueryPushdown,
 			*alertQueryURL,
@@ -321,6 +343,8 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetrySamplesQuantiles,
 			*queryTelemetrySeriesQuantiles,
 			promqlEngineType(*promqlEngine),
+			storeRateLimits,
+			queryMode(*promqlQueryMode),
 		)
 	})
 }
@@ -330,17 +354,13 @@ func registerQuery(app *extkingpin.App) {
 func runQuery(
 	g *run.Group,
 	logger log.Logger,
+	debugLogging bool,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	httpLogOpts []logging.Option,
 	grpcLogOpts []grpc_logging.Option,
 	tagOpts []tags.Option,
-	grpcBindAddr string,
-	grpcGracePeriod time.Duration,
-	grpcCert string,
-	grpcKey string,
-	grpcClientCA string,
-	grpcMaxConnAge time.Duration,
+	grpcServerConfig grpcConfig,
 	grpcCompression string,
 	secure bool,
 	skipVerify bool,
@@ -367,6 +387,7 @@ func runQuery(
 	selectorLset labels.Labels,
 	flagsMap map[string]string,
 	endpointAddrs []string,
+	endpointGroupAddrs []string,
 	storeAddrs []string,
 	ruleAddrs []string,
 	targetAddrs []string,
@@ -388,6 +409,7 @@ func runQuery(
 	defaultMetadataTimeRange time.Duration,
 	strictStores []string,
 	strictEndpoints []string,
+	strictEndpointGroups []string,
 	disableCORS bool,
 	enableQueryPushdown bool,
 	alertQueryURL string,
@@ -397,6 +419,8 @@ func runQuery(
 	queryTelemetrySamplesQuantiles []int64,
 	queryTelemetrySeriesQuantiles []int64,
 	promqlEngine promqlEngineType,
+	storeRateLimits store.SeriesSelectLimits,
+	queryMode queryMode,
 ) error {
 	if alertQueryURL == "" {
 		lastColon := strings.LastIndex(httpBindAddr, ":")
@@ -468,6 +492,11 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
+	options := []store.ProxyStoreOption{}
+	if debugLogging {
+		options = append(options, store.WithProxyStoreDebugLogging())
+	}
+
 	var (
 		endpoints = query.NewEndpointSet(
 			time.Now,
@@ -500,6 +529,18 @@ func runQuery(
 					specs = append(specs, tmpSpecs...)
 				}
 
+				for _, eg := range endpointGroupAddrs {
+					addr := fmt.Sprintf("dns:///%s", eg)
+					spec := query.NewGRPCEndpointSpec(addr, false, extgrpc.EndpointGroupGRPCOpts()...)
+					specs = append(specs, spec)
+				}
+
+				for _, eg := range strictEndpointGroups {
+					addr := fmt.Sprintf("dns:///%s", eg)
+					spec := query.NewGRPCEndpointSpec(addr, true, extgrpc.EndpointGroupGRPCOpts()...)
+					specs = append(specs, spec)
+				}
+
 				return specs
 			},
 			dialOpts,
@@ -507,7 +548,7 @@ func runQuery(
 			endpointInfoTimeout,
 			queryConnMetricLabels...,
 		)
-		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy))
+		proxy            = store.NewProxyStore(logger, reg, endpoints.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy), options...)
 		rulesProxy       = rules.NewProxy(logger, endpoints.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpoints.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpoints.GetMetricMetadataClients)
@@ -640,7 +681,17 @@ func runQuery(
 	case promqlEnginePrometheus:
 		queryEngine = promql.NewEngine(engineOpts)
 	case promqlEngineThanos:
-		queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts})
+		if queryMode == queryModeLocal {
+			queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts})
+		} else {
+			remoteEngineEndpoints := query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
+				AutoDownsample:        enableAutodownsampling,
+				ReplicaLabels:         queryReplicaLabels,
+				Timeout:               queryTimeout,
+				EnablePartialResponse: enableQueryPartialResponse,
+			})
+			queryEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: engineOpts}, remoteEngineEndpoints)
+		}
 	default:
 		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)
 	}
@@ -699,6 +750,7 @@ func runQuery(
 			gate.New(
 				extprom.WrapRegistererWithPrefix("thanos_query_concurrent_", reg),
 				maxConcurrentQueries,
+				gate.Queries,
 			),
 			store.NewSeriesStatsAggregator(
 				reg,
@@ -731,7 +783,7 @@ func runQuery(
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcServerConfig.tlsSrvCert, grpcServerConfig.tlsSrvKey, grpcServerConfig.tlsSrvClientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
@@ -742,11 +794,12 @@ func runQuery(
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 				if httpProbe.IsReady() {
 					mint, maxt := proxy.TimeRange()
+
 					return &infopb.StoreInfo{
-						MinTime:           mint,
-						MaxTime:           maxt,
-						SupportsSharding:  true,
-						SendsSortedSeries: true,
+						MinTime:                      mint,
+						MaxTime:                      maxt,
+						SupportsSharding:             true,
+						SupportsWithoutReplicaLabels: true,
 					}
 				}
 				return nil
@@ -759,18 +812,19 @@ func runQuery(
 		)
 
 		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, queryEngine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
+		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, storeRateLimits)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),
-			grpcserver.WithServer(store.RegisterStoreServer(proxy)),
+			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(rules.RegisterRulesServer(rulesProxy)),
 			grpcserver.WithServer(targets.RegisterTargetsServer(targetsProxy)),
 			grpcserver.WithServer(metadata.RegisterMetadataServer(metadataProxy)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarsProxy)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
-			grpcserver.WithListen(grpcBindAddr),
-			grpcserver.WithGracePeriod(grpcGracePeriod),
+			grpcserver.WithListen(grpcServerConfig.bindAddress),
+			grpcserver.WithGracePeriod(grpcServerConfig.gracePeriod),
+			grpcserver.WithMaxConnAge(grpcServerConfig.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
-			grpcserver.WithMaxConnAge(grpcMaxConnAge),
 		)
 
 		g.Add(func() error {
