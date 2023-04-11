@@ -5,8 +5,10 @@ package store
 
 import (
 	"bytes"
+	"sync"
 
 	"github.com/golang/snappy"
+	"github.com/klauspost/compress/s2"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/encoding"
@@ -82,27 +84,60 @@ func diffVarintEncodeNoHeader(p index.Postings, length int) ([]byte, error) {
 	return buf.B, nil
 }
 
-func diffVarintSnappyDecode(input []byte) (index.Postings, error) {
+var snappyDecodePool sync.Pool
+
+type closeablePostings interface {
+	index.Postings
+	close()
+}
+
+// alias returns true if given slices have the same both backing array.
+// See: https://groups.google.com/g/golang-nuts/c/C6ufGl73Uzk.
+func alias(x, y []byte) bool {
+	return cap(x) > 0 && cap(y) > 0 && &x[0:cap(x)][cap(x)-1] == &y[0:cap(y)][cap(y)-1]
+}
+
+func diffVarintSnappyDecode(input []byte) (closeablePostings, error) {
 	if !isDiffVarintSnappyEncodedPostings(input) {
 		return nil, errors.New("header not found")
 	}
 
-	raw, err := snappy.Decode(nil, input[len(codecHeaderSnappy):])
+	toFree := make([][]byte, 0, 2)
+
+	var dstBuf []byte
+	decodeBuf := snappyDecodePool.Get()
+	if decodeBuf != nil {
+		dstBuf = *(decodeBuf.(*[]byte))
+		toFree = append(toFree, dstBuf)
+	}
+
+	raw, err := s2.Decode(dstBuf, input[len(codecHeaderSnappy):])
 	if err != nil {
 		return nil, errors.Wrap(err, "snappy decode")
 	}
 
-	return newDiffVarintPostings(raw), nil
+	if !alias(raw, dstBuf) {
+		toFree = append(toFree, raw)
+	}
+
+	return newDiffVarintPostings(raw, toFree), nil
 }
 
-func newDiffVarintPostings(input []byte) *diffVarintPostings {
-	return &diffVarintPostings{buf: &encoding.Decbuf{B: input}}
+func newDiffVarintPostings(input []byte, freeSlices [][]byte) *diffVarintPostings {
+	return &diffVarintPostings{freeSlices: freeSlices, buf: &encoding.Decbuf{B: input}}
 }
 
 // diffVarintPostings is an implementation of index.Postings based on diff+varint encoded data.
 type diffVarintPostings struct {
-	buf *encoding.Decbuf
-	cur storage.SeriesRef
+	buf        *encoding.Decbuf
+	cur        storage.SeriesRef
+	freeSlices [][]byte
+}
+
+func (it *diffVarintPostings) close() {
+	for i := range it.freeSlices {
+		snappyDecodePool.Put(&it.freeSlices[i])
+	}
 }
 
 func (it *diffVarintPostings) At() storage.SeriesRef {

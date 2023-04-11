@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -27,12 +28,14 @@ import (
 )
 
 func TestWriter(t *testing.T) {
+	now := model.Now()
 	lbls := []labelpb.ZLabel{{Name: "__name__", Value: "test"}}
 	tests := map[string]struct {
 		reqs             []*prompb.WriteRequest
 		expectedErr      error
 		expectedIngested []prompb.TimeSeries
 		maxExemplars     int64
+		opts             *WriterOptions
 	}{
 		"should error out on series with no labels": {
 			reqs: []*prompb.WriteRequest{
@@ -121,6 +124,41 @@ func TestWriter(t *testing.T) {
 					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
 				},
 			},
+		},
+		"should succeed when sample timestamp is NOT too far in the future": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels:  lbls,
+							Samples: []prompb.Sample{{Value: 1, Timestamp: int64(now)}},
+						},
+					},
+				},
+			},
+			expectedErr: nil,
+			expectedIngested: []prompb.TimeSeries{
+				{
+					Labels:  lbls,
+					Samples: []prompb.Sample{{Value: 1, Timestamp: int64(now)}},
+				},
+			},
+			opts: &WriterOptions{TooFarInFutureTimeWindow: 30 * int64(time.Second)},
+		},
+		"should error out when sample timestamp is too far in the future": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels: lbls,
+							// A sample with a very large timestamp in year 5138 (milliseconds)
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 99999999999999}},
+						},
+					},
+				},
+			},
+			expectedErr: errors.Wrapf(storage.ErrOutOfBounds, "add 1 samples"),
+			opts:        &WriterOptions{TooFarInFutureTimeWindow: 10000},
 		},
 		"should succeed on valid series with exemplars": {
 			reqs: []*prompb.WriteRequest{{
@@ -299,7 +337,7 @@ func TestWriter(t *testing.T) {
 				return err
 			}))
 
-			w := NewWriter(logger, m, false)
+			w := NewWriter(logger, m, testData.opts)
 
 			for idx, req := range testData.reqs {
 				err = w.Write(context.Background(), DefaultTenant, req)
@@ -398,7 +436,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 	}
 
 	b.Run("without interning", func(b *testing.B) {
-		w := NewWriter(logger, m, false)
+		w := NewWriter(logger, m, &WriterOptions{Intern: false})
 
 		b.ReportAllocs()
 		b.ResetTimer()
@@ -409,7 +447,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 	})
 
 	b.Run("with interning", func(b *testing.B) {
-		w := NewWriter(logger, m, true)
+		w := NewWriter(logger, m, &WriterOptions{Intern: true})
 
 		b.ReportAllocs()
 		b.ResetTimer()
