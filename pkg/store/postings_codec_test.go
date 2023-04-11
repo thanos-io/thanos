@@ -55,9 +55,9 @@ func TestDiffVarintCodec(t *testing.T) {
 
 	codecs := map[string]struct {
 		codingFunction   func(index.Postings, int) ([]byte, error)
-		decodingFunction func([]byte) (index.Postings, error)
+		decodingFunction func([]byte) (closeablePostings, error)
 	}{
-		"raw":    {codingFunction: diffVarintEncodeNoHeader, decodingFunction: func(bytes []byte) (index.Postings, error) { return newDiffVarintPostings(bytes), nil }},
+		"raw":    {codingFunction: diffVarintEncodeNoHeader, decodingFunction: func(bytes []byte) (closeablePostings, error) { return newDiffVarintPostings(bytes, nil), nil }},
 		"snappy": {codingFunction: diffVarintSnappyEncode, decodingFunction: diffVarintSnappyDecode},
 	}
 
