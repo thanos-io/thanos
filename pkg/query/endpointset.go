@@ -527,9 +527,9 @@ func (e *EndpointSet) GetQueryAPIClients() []Client {
 	queryClients := make([]Client, 0, len(endpoints))
 	for _, er := range endpoints {
 		if er.HasQueryAPI() {
-			_, maxt := er.timeRange()
+			mint, maxt := er.timeRange()
 			client := querypb.NewQueryClient(er.cc)
-			queryClients = append(queryClients, NewClient(client, er.addr, maxt, er.labelSets()))
+			queryClients = append(queryClients, NewClient(client, er.addr, mint, maxt, er.labelSets()))
 		}
 	}
 	return queryClients
