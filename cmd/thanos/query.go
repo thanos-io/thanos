@@ -30,6 +30,7 @@ import (
 	"github.com/thanos-community/promql-engine/api"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
@@ -333,7 +334,7 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetryDurationQuantiles,
 			*queryTelemetrySamplesQuantiles,
 			*queryTelemetrySeriesQuantiles,
-			apiv1.PromqlEngineType(*defaultEngine),
+			*defaultEngine,
 			storeRateLimits,
 			queryMode(*promqlQueryMode),
 		)
@@ -409,7 +410,7 @@ func runQuery(
 	queryTelemetryDurationQuantiles []float64,
 	queryTelemetrySamplesQuantiles []int64,
 	queryTelemetrySeriesQuantiles []int64,
-	defaultEngine apiv1.PromqlEngineType,
+	defaultEngine string,
 	storeRateLimits store.SeriesSelectLimits,
 	queryMode queryMode,
 ) error {
@@ -713,7 +714,7 @@ func runQuery(
 			logger,
 			endpoints.GetEndpointStatus,
 			*engineFactory,
-			defaultEngine,
+			apiv1.PromqlEngineType(defaultEngine),
 			lookbackDeltaCreator,
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
@@ -798,7 +799,8 @@ func runQuery(
 			info.WithQueryAPIInfoFunc(),
 		)
 
-		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, *engineFactory, defaultEngine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
+		defaultEngineType := querypb.EngineType(querypb.EngineType_value[defaultEngine])
+		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, *engineFactory, defaultEngineType, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, storeRateLimits)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),

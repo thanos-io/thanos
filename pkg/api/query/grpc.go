@@ -24,7 +24,7 @@ type GRPCAPI struct {
 	replicaLabels               []string
 	queryableCreate             query.QueryableCreator
 	engineFactory               QueryEngineFactory
-	defaultEngine               PromqlEngineType
+	defaultEngine               querypb.EngineType
 	lookbackDeltaCreate         func(int64) time.Duration
 	defaultMaxResolutionSeconds time.Duration
 }
@@ -34,7 +34,7 @@ func NewGRPCAPI(
 	replicaLabels []string,
 	creator query.QueryableCreator,
 	engineFactory QueryEngineFactory,
-	defaultEngine PromqlEngineType,
+	defaultEngine querypb.EngineType,
 	lookbackDeltaCreate func(int64) time.Duration,
 	defaultMaxResolutionSeconds time.Duration,
 ) *GRPCAPI {
@@ -104,15 +104,15 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 	)
 
 	var engine v1.QueryEngine
-	engineParam := PromqlEngineType(request.Engine)
-	if engineParam == "" {
+	engineParam := request.Engine
+	if engineParam == querypb.EngineType_default {
 		engineParam = g.defaultEngine
 	}
 
 	switch engineParam {
-	case PromqlEnginePrometheus:
+	case querypb.EngineType_prometheus:
 		engine = g.engineFactory.GetPrometheusEngine()
-	case PromqlEngineThanos:
+	case querypb.EngineType_thanos:
 		engine = g.engineFactory.GetThanosEngine()
 	default:
 		return status.Error(codes.InvalidArgument, "invalid engine parameter")
@@ -206,15 +206,15 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	interval := time.Duration(request.IntervalSeconds) * time.Second
 
 	var engine v1.QueryEngine
-	engineParam := PromqlEngineType(request.Engine)
-	if engineParam == "" {
+	engineParam := request.Engine
+	if engineParam == querypb.EngineType_default {
 		engineParam = g.defaultEngine
 	}
 
 	switch engineParam {
-	case PromqlEnginePrometheus:
+	case querypb.EngineType_prometheus:
 		engine = g.engineFactory.GetPrometheusEngine()
-	case PromqlEngineThanos:
+	case querypb.EngineType_thanos:
 		engine = g.engineFactory.GetThanosEngine()
 	default:
 		return status.Error(codes.InvalidArgument, "invalid engine parameter")
