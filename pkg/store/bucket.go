@@ -2372,7 +2372,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		}
 
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "index header PostingsOffset")
+			return nil, closeFns, errors.Wrap(err, "index header PostingsOffset")
 		}
 
 		r.stats.postingsToFetch++
@@ -2394,7 +2394,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		length := int64(part.End) - start
 
 		if err := bytesLimiter.Reserve(uint64(length)); err != nil {
-			return nil, nil, errors.Wrap(err, "bytes limit exceeded while fetching postings")
+			return nil, closeFns, errors.Wrap(err, "bytes limit exceeded while fetching postings")
 		}
 	}
 
