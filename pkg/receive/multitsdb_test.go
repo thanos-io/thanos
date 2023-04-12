@@ -641,7 +641,7 @@ func TestProxyLabelValues(t *testing.T) {
 			case <-ctx.Done():
 				return
 			default:
-				queryLabelValues(ctx, m)
+				testutil.Ok(t, queryLabelValues(ctx, m))
 			}
 		}
 	}()
@@ -693,7 +693,7 @@ func queryLabelValues(ctx context.Context, m *MultiTSDB) error {
 			clients[0] = &slowClient{clients[0]}
 		}
 		return clients
-	}, component.Store, nil, 1*time.Minute, store.LazyRetrieval, nil)
+	}, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
 
 	req := &storepb.LabelValuesRequest{
 		Label: labels.MetricName,
