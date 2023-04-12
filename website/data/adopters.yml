@@ -213,3 +213,6 @@ adopters:
 - name: Open Systems
   url: https://www.open-systems.com
   logo: open-systems.png
+- name: Deno
+  url: https://deno.com/deploy
+  logo: deno.png
