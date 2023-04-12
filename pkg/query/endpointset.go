@@ -11,6 +11,7 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 
@@ -218,7 +219,13 @@ func newEndpointSetNodeCollector(labels ...string) *endpointSetNodeCollector {
 // truncateExtLabels truncates the stringify external labels with the format of {labels..}.
 func truncateExtLabels(s string, threshold int) string {
 	if len(s) > threshold {
-		return fmt.Sprintf("%s}", s[:threshold-1])
+		for cut := 1; cut < 4; cut++ {
+			for cap := 1; cap < 4; cap++ {
+				if utf8.ValidString(s[threshold-cut-cap : threshold-cut]) {
+					return fmt.Sprintf("%s}", s[:threshold-cut])
+				}
+			}
+		}
 	}
 	return s
 }
