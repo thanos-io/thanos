@@ -6,8 +6,8 @@ Both Thanos and Prometheus projects participate in various, periodic mentoring p
 
 Programs we participated / are participating:
 
-- [LFX Mentorship (previously Community Bridge)](https://github.com/cncf/mentoring/tree/master/lfx-mentorship)
-- [Google Summer of Code](https://github.com/cncf/mentoring/tree/master/summerofcode)
+- [LFX Mentorship (previously Community Bridge)](https://github.com/cncf/mentoring/tree/main/programs/lfx-mentorship)
+- [Google Summer of Code](https://github.com/cncf/mentoring/tree/main/programs/summerofcode)
 - [Red Hat Beyond](https://research.redhat.com/blog/2020/05/24/open-source-development-course-and-devops-methodology/)
 
 ## For Mentees
