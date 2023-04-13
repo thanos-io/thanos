@@ -350,9 +350,7 @@ type Group struct {
 	hashFunc                      metadata.HashFunc
 	blockFilesConcurrency         int
 	compactBlocksFetchConcurrency int
-	partitionedGroupID            uint32
-	partitionCount                int
-	partitionID                   int
+	partitionInfo                 metadata.PartitionInfo
 }
 
 // NewGroup returns a new compaction group.
@@ -493,22 +491,12 @@ func (cg *Group) Resolution() int64 {
 	return cg.resolution
 }
 
-func (cg *Group) PartitionedGroupID() uint32 {
-	return cg.partitionedGroupID
+func (cg *Group) PartitionedInfo() metadata.PartitionInfo {
+	return cg.partitionInfo
 }
 
-func (cg *Group) PartitionCount() int {
-	return cg.partitionCount
-}
-
-func (cg *Group) PartitionID() int {
-	return cg.partitionID
-}
-
-func (cg *Group) SetPartitionInfo(partitionedGroupID uint32, partitionCount int, partitionID int) {
-	cg.partitionedGroupID = partitionedGroupID
-	cg.partitionCount = partitionCount
-	cg.partitionID = partitionID
+func (cg *Group) SetPartitionInfo(partitionInfo metadata.PartitionInfo) {
+	cg.partitionInfo = partitionInfo
 }
 
 // CompactProgressMetrics contains Prometheus metrics related to compaction progress.
@@ -753,14 +741,14 @@ type Planner interface {
 	PlanWithPartition(ctx context.Context, metasByMinTime []*metadata.Meta, partitionID int, errChan chan error) ([]*metadata.Meta, error)
 }
 
-type ExtraCompactionCompleteChecker interface {
-	IsComplete(group *Group, blockID ulid.ULID) bool
+type BlockDeletableChecker interface {
+	CanDelete(group *Group, blockID ulid.ULID) bool
 }
 
-type DefaultCompactionCompleteChecker struct {
+type DefaultBlockDeletableChecker struct {
 }
 
-func (c DefaultCompactionCompleteChecker) IsComplete(_ *Group, _ ulid.ULID) bool {
+func (c DefaultBlockDeletableChecker) CanDelete(_ *Group, _ ulid.ULID) bool {
 	return true
 }
 
@@ -813,12 +801,12 @@ type Compactor interface {
 	//  * The source dirs are marked Deletable.
 	//  * Returns empty ulid.ULID{}.
 	Compact(dest string, dirs []string, open []*tsdb.Block) (ulid.ULID, error)
-	CompactWithPopulateBlockFunc(dest string, dirs []string, open []*tsdb.Block, populateBlockFunc tsdb.PopulateBlockFunc) (ulid.ULID, error)
+	CompactWithPopulateBlockFunc(dest string, dirs []string, open []*tsdb.Block, blockPopulator tsdb.PopulateBlockFunc) (ulid.ULID, error)
 }
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp Compactor, completeChecker ExtraCompactionCompleteChecker, compactionLifecycleCallback CompactionLifecycleCallback) (shouldRerun bool, compID ulid.ULID, rerr error) {
+func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback) (shouldRerun bool, compID ulid.ULID, rerr error) {
 	cg.compactionRunsStarted.Inc()
 
 	subDir := filepath.Join(dir, cg.Key())
@@ -840,7 +828,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 
 	errChan := make(chan error, 1)
 	err := tracing.DoInSpanWithErr(ctx, "compaction_group", func(ctx context.Context) (err error) {
-		shouldRerun, compID, err = cg.compact(ctx, subDir, planner, comp, completeChecker, compactionLifecycleCallback, errChan)
+		shouldRerun, compID, err = cg.compact(ctx, subDir, planner, comp, blockDeletableChecker, compactionLifecycleCallback, errChan)
 		return err
 	}, opentracing.Tags{"group.key": cg.Key()})
 	errChan <- err
@@ -1044,7 +1032,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp Compactor, completeChecker ExtraCompactionCompleteChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error) (shouldRerun bool, compID ulid.ULID, _ error) {
+func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error) (shouldRerun bool, compID ulid.ULID, _ error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
@@ -1062,8 +1050,8 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	var toCompact []*metadata.Meta
 	if err := tracing.DoInSpanWithErr(ctx, "compaction_planning", func(ctx context.Context) (e error) {
-		if cg.partitionCount > 0 {
-			toCompact, e = planner.PlanWithPartition(ctx, cg.metasByMinTime, cg.partitionID, errChan)
+		if cg.partitionInfo.PartitionCount > 0 {
+			toCompact, e = planner.PlanWithPartition(ctx, cg.metasByMinTime, cg.partitionInfo.PartitionID, errChan)
 			return e
 		} else {
 			toCompact, e = planner.Plan(ctx, cg.metasByMinTime)
@@ -1162,7 +1150,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		level.Info(cg.logger).Log("msg", "compacted block would have no samples, deleting source blocks", "blocks", sourceBlockStr)
 		for _, meta := range toCompact {
 			if meta.Stats.NumSamples == 0 {
-				if err := cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()), completeChecker); err != nil {
+				if err := cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()), blockDeletableChecker); err != nil {
 					level.Warn(cg.logger).Log("msg", "failed to mark for deletion an empty block found during compaction", "block", meta.ULID)
 				}
 			}
@@ -1181,15 +1169,11 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	index := filepath.Join(bdir, block.IndexFilename)
 
 	newMeta, err := metadata.InjectThanos(cg.logger, bdir, metadata.Thanos{
-		Labels:       cg.labels.Map(),
-		Downsample:   metadata.ThanosDownsample{Resolution: cg.resolution},
-		Source:       metadata.CompactorSource,
-		SegmentFiles: block.GetSegmentFiles(bdir),
-		PartitionInfo: &metadata.PartitionInfo{
-			PartitionedGroupID: cg.partitionedGroupID,
-			PartitionCount:     cg.partitionCount,
-			PartitionID:        cg.partitionID,
-		},
+		Labels:        cg.labels.Map(),
+		Downsample:    metadata.ThanosDownsample{Resolution: cg.resolution},
+		Source:        metadata.CompactorSource,
+		SegmentFiles:  block.GetSegmentFiles(bdir),
+		PartitionInfo: &cg.partitionInfo,
 	}, nil)
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to finalize the block %s", bdir)
@@ -1236,7 +1220,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
 	for _, meta := range toCompact {
 		err = tracing.DoInSpanWithErr(ctx, "compaction_block_delete", func(ctx context.Context) error {
-			return cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()), completeChecker)
+			return cg.deleteBlock(meta.ULID, filepath.Join(dir, meta.ULID.String()), blockDeletableChecker)
 		}, opentracing.Tags{"block.id": meta.ULID})
 		if err != nil {
 			return false, ulid.ULID{}, retry(errors.Wrapf(err, "mark old block for deletion from bucket"))
@@ -1249,12 +1233,12 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	return true, compID, nil
 }
 
-func (cg *Group) deleteBlock(id ulid.ULID, bdir string, completeChecker ExtraCompactionCompleteChecker) error {
+func (cg *Group) deleteBlock(id ulid.ULID, bdir string, blockDeletableChecker BlockDeletableChecker) error {
 	if err := os.RemoveAll(bdir); err != nil {
 		return errors.Wrapf(err, "remove old block dir %s", id)
 	}
 
-	if completeChecker.IsComplete(cg, id) {
+	if blockDeletableChecker.CanDelete(cg, id) {
 		// Spawn a new context so we always mark a block for deletion in full on shutdown.
 		delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -1273,7 +1257,7 @@ type BucketCompactor struct {
 	grouper                        Grouper
 	comp                           Compactor
 	planner                        Planner
-	completeChecker                ExtraCompactionCompleteChecker
+	blockDeletableChecker          BlockDeletableChecker
 	compactionLifecycleCallback    CompactionLifecycleCallback
 	compactDir                     string
 	bkt                            objstore.Bucket
@@ -1302,7 +1286,7 @@ func NewBucketCompactor(
 		grouper,
 		planner,
 		comp,
-		DefaultCompactionCompleteChecker{},
+		DefaultBlockDeletableChecker{},
 		DefaultCompactionLifecycleCallback{},
 		compactDir,
 		bkt,
@@ -1317,7 +1301,7 @@ func NewBucketCompactorWithCheckerAndCallback(
 	grouper Grouper,
 	planner Planner,
 	comp Compactor,
-	completeChecker ExtraCompactionCompleteChecker,
+	blockDeletableChecker BlockDeletableChecker,
 	compactionLifecycleCallback CompactionLifecycleCallback,
 	compactDir string,
 	bkt objstore.Bucket,
@@ -1333,7 +1317,7 @@ func NewBucketCompactorWithCheckerAndCallback(
 		grouper:                        grouper,
 		planner:                        planner,
 		comp:                           comp,
-		completeChecker:                completeChecker,
+		blockDeletableChecker:          blockDeletableChecker,
 		compactionLifecycleCallback:    compactionLifecycleCallback,
 		compactDir:                     compactDir,
 		bkt:                            bkt,
@@ -1375,7 +1359,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 			go func() {
 				defer wg.Done()
 				for g := range groupChan {
-					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp, c.completeChecker, c.compactionLifecycleCallback)
+					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
 					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()
