@@ -30,6 +30,7 @@ interface PanelListProps extends PathPrefixProps, RouteComponentProps {
   enableHighlighting: boolean;
   enableLinter: boolean;
   defaultStep: string;
+  defaultEngine: string;
 }
 
 export const PanelListContent: FC<PanelListProps> = ({
@@ -42,6 +43,7 @@ export const PanelListContent: FC<PanelListProps> = ({
   enableHighlighting,
   enableLinter,
   defaultStep,
+  defaultEngine,
   ...rest
 }) => {
   const [panels, setPanels] = useState(rest.panels);
@@ -123,6 +125,7 @@ export const PanelListContent: FC<PanelListProps> = ({
           stores={storeData}
           enableAutocomplete={enableAutocomplete}
           enableHighlighting={enableHighlighting}
+          defaultEngine={defaultEngine}
           enableLinter={enableLinter}
           defaultStep={defaultStep}
         />
@@ -157,6 +160,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
     isLoading: flagsLoading,
   } = useFetch<FlagMap>(`${pathPrefix}/api/v1/status/flags`);
   const defaultStep = flagsRes?.data?.['query.default-step'] || '1s';
+  const defaultEngine = flagsRes?.data?.['query.promql-engine'];
 
   const browserTime = new Date().getTime() / 1000;
   const { response: timeRes, error: timeErr } = useFetch<{ result: number[] }>(`${pathPrefix}/api/v1/query?query=time()`);
@@ -266,6 +270,7 @@ const PanelList: FC<RouteComponentProps & PathPrefixProps> = ({ pathPrefix = '' 
         enableHighlighting={enableHighlighting}
         enableLinter={enableLinter}
         defaultStep={defaultStep}
+        defaultEngine={defaultEngine}
         queryHistoryEnabled={enableQueryHistory}
         isLoading={storesLoading || flagsLoading}
       />

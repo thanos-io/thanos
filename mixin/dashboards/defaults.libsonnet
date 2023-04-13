@@ -9,6 +9,7 @@ local utils = import '../lib/utils.libsonnet';
     prefix: 'Thanos / ',
     tags: error 'must provide dashboard tags',
     timezone: 'UTC',
+    instance_name_filter: '',
   },
 
   // Automatically add a uid to each dashboard based on the base64 encoding
@@ -37,7 +38,13 @@ local utils = import '../lib/utils.libsonnet';
       ],
 
       templating+: {
-        list+: [
+        // Add optional filter to the datasource template variable
+        list: [
+          if variable.name == 'datasource'
+          then variable { regex: thanos.dashboard.instance_name_filter }
+          else variable
+          for variable in super.list
+        ] + [
           template.interval(
             'interval',
             '5m,10m,30m,1h,6h,12h,auto',

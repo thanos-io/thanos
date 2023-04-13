@@ -227,6 +227,9 @@ export const parseOption = (param: string): Partial<PanelOptions> => {
 
     case 'store_matches':
       return { storeMatches: JSON.parse(decodedValue) };
+
+    case 'engine':
+      return { engine: decodedValue };
   }
   return {};
 };
@@ -250,6 +253,7 @@ export const toQueryString = ({ key, options }: PanelMeta): string => {
     useDeduplication,
     usePartialResponse,
     storeMatches,
+    engine,
   } = options;
   const time = isPresent(endTime) ? formatTime(endTime) : false;
   const urlParams = [
@@ -261,6 +265,7 @@ export const toQueryString = ({ key, options }: PanelMeta): string => {
     formatWithKey('deduplicate', useDeduplication ? 1 : 0),
     formatWithKey('partial_response', usePartialResponse ? 1 : 0),
     formatWithKey('store_matches', JSON.stringify(storeMatches)),
+    formatWithKey('engine', engine),
     time ? `${formatWithKey('end_input', time)}&${formatWithKey('moment_input', time)}` : '',
     isPresent(resolution) ? formatWithKey('step_input', resolution) : '',
   ];
