@@ -21,6 +21,7 @@ const defaultProps: PanelProps = {
     useDeduplication: true,
     usePartialResponse: false,
     storeMatches: [],
+    engine: 'prometheus',
   },
   onOptionsChanged: (): void => {
     // Do nothing.
@@ -42,6 +43,7 @@ const defaultProps: PanelProps = {
   defaultStep: '1s',
   enableHighlighting: true,
   enableLinter: true,
+  defaultEngine: 'prometheus',
 };
 
 describe('Panel', () => {
@@ -89,6 +91,7 @@ describe('Panel', () => {
       useDeduplication: true,
       usePartialResponse: false,
       storeMatches: [],
+      engine: 'prometheus',
     };
     const graphPanel = mount(<Panel {...defaultProps} options={options} />);
     const controls = graphPanel.find(GraphControls);

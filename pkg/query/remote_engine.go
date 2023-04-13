@@ -34,14 +34,17 @@ type Opts struct {
 type Client struct {
 	querypb.QueryClient
 	address   string
+	mint      int64
 	maxt      int64
 	labelSets []labels.Labels
 }
 
 // NewClient creates a new Client.
-func NewClient(queryClient querypb.QueryClient, address string, maxt int64, labelSets []labels.Labels) Client {
-	return Client{QueryClient: queryClient, address: address, maxt: maxt, labelSets: labelSets}
+func NewClient(queryClient querypb.QueryClient, address string, mint int64, maxt int64, labelSets []labels.Labels) Client {
+	return Client{QueryClient: queryClient, address: address, mint: mint, maxt: maxt, labelSets: labelSets}
 }
+
+func (q Client) MinT() int64 { return q.mint }
 
 func (q Client) MaxT() int64 { return q.maxt }
 

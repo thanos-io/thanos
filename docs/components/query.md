@@ -397,7 +397,7 @@ Flags:
                                  no partial_response param is specified.
                                  --no-query.partial-response for disabling.
       --query.promql-engine=prometheus
-                                 PromQL engine to use.
+                                 Default PromQL engine to use.
       --query.replica-label=QUERY.REPLICA-LABEL ...
                                  Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will
