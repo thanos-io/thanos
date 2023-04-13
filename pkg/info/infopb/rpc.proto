@@ -61,6 +61,10 @@ message StoreInfo {
 
     // replica_aware means this store supports without_replica_labels of StoreAPI.Series.
     bool supports_without_replica_labels = 5;
+
+    // guaranteed_mint_time is the TSDB min time that a store guarantees to always have.
+    // It is calculated by taking into account the retention period configured in the store.
+    int64 guaranteed_min_time = 6;
 }
 
 // RulesInfo holds the metadata related to Rules API exposed by the component.

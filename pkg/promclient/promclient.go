@@ -192,7 +192,7 @@ func (c *Client) ExternalLabels(ctx context.Context, base *url.URL) (labels.Labe
 
 type Flags struct {
 	TSDBPath           string         `json:"storage.tsdb.path"`
-	TSDBRetention      model.Duration `json:"storage.tsdb.retention"`
+	TSDBRetention      model.Duration `json:"storage.tsdb.retention.time"`
 	TSDBMinTime        model.Duration `json:"storage.tsdb.min-block-duration"`
 	TSDBMaxTime        model.Duration `json:"storage.tsdb.max-block-duration"`
 	WebEnableAdminAPI  bool           `json:"web.enable-admin-api"`
@@ -206,7 +206,7 @@ func (f *Flags) UnmarshalJSON(b []byte) error {
 	// - prometheus/prometheus: flags should return proper JSON (not bool in string).
 	parsableFlags := struct {
 		TSDBPath           string        `json:"storage.tsdb.path"`
-		TSDBRetention      modelDuration `json:"storage.tsdb.retention"`
+		TSDBRetention      modelDuration `json:"storage.tsdb.retention.time"`
 		TSDBMinTime        modelDuration `json:"storage.tsdb.min-block-duration"`
 		TSDBMaxTime        modelDuration `json:"storage.tsdb.max-block-duration"`
 		WebEnableAdminAPI  modelBool     `json:"web.enable-admin-api"`

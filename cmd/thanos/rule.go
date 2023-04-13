@@ -626,10 +626,13 @@ func runRule(
 			}),
 			info.WithStoreInfoFunc(func() *infopb.StoreInfo {
 				if httpProbe.IsReady() {
+					now := time.Now().UnixMilli()
 					mint, maxt := tsdbStore.TimeRange()
+					guaranteedMinTime := store.GuaranteedMinTime(now, mint, tsdbOpts.RetentionDuration, tsdbOpts.MinBlockDuration)
 					return &infopb.StoreInfo{
 						MinTime:                      mint,
 						MaxTime:                      maxt,
+						GuaranteedMinTime:            guaranteedMinTime,
 						SupportsSharding:             true,
 						SupportsWithoutReplicaLabels: true,
 					}

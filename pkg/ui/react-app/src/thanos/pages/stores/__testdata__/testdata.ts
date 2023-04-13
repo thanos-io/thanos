@@ -17,6 +17,7 @@ export const sampleAPIResponse: { status: string; data: StoreListProps } = {
         lastError: null,
         maxTime: 9223372036854776000,
         minTime: -62167219200000,
+        guaranteedMinTime: -62167219200000,
         name: 'thanos_sidecar_one:10901',
       },
       {
@@ -25,6 +26,7 @@ export const sampleAPIResponse: { status: string; data: StoreListProps } = {
         lastError: 'some error message',
         maxTime: 92233720368547,
         minTime: 62167219200000,
+        guaranteedMinTime: 62167219200000,
         name: 'thanos_sidecar_two:10901',
       },
     ],
@@ -58,6 +60,7 @@ export const sampleAPIResponse: { status: string; data: StoreListProps } = {
         lastError: null,
         maxTime: 1592136000000,
         minTime: 1589461363260,
+        guaranteedMinTime: 1589461363260,
         name: 'thanos_store:10901',
       },
     ],

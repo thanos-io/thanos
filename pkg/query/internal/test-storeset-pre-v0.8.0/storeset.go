@@ -204,6 +204,13 @@ func (s *storeRef) TimeRange() (int64, int64) {
 	return s.minTime, s.maxTime
 }
 
+func (s *storeRef) GuaranteedMinTime() int64 {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	return s.minTime
+}
+
 func (s *storeRef) SupportsSharding() bool {
 	return false
 }

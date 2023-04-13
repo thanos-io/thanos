@@ -22,6 +22,7 @@ type TestClient struct {
 
 func (c TestClient) LabelSets() []labels.Labels         { return c.ExtLset }
 func (c TestClient) TimeRange() (mint, maxt int64)      { return c.MinTime, c.MaxTime }
+func (c TestClient) GuaranteedMinTime() int64           { return c.MinTime }
 func (c TestClient) SupportsSharding() bool             { return c.Shardable }
 func (c TestClient) SupportsWithoutReplicaLabels() bool { return c.WithoutReplicaLabelsEnabled }
 func (c TestClient) String() string                     { return c.Name }

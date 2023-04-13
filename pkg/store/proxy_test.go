@@ -20,6 +20,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/tsdb"
@@ -29,6 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -1693,6 +1695,50 @@ func TestStoreMatches(t *testing.T) {
 			testutil.Equals(t, c.expectedMatch, ok)
 			testutil.Equals(t, c.expectedReason, reason)
 
+		})
+	}
+}
+
+func TestGuaranteedMinTime(t *testing.T) {
+
+	tests := []struct {
+		name     string
+		minTimes []int64
+		expected int64
+	}{
+		{
+			name:     "no clients",
+			minTimes: nil,
+			expected: math.MaxInt64,
+		},
+		{
+			name:     "single client",
+			minTimes: []int64{1},
+			expected: 1,
+		},
+		{
+			name:     "multiple clients",
+			minTimes: []int64{1, 2},
+			expected: 2,
+		},
+		{
+			name:     "uninitialized tsdb client",
+			minTimes: []int64{1, 2, math.MaxInt64},
+			expected: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clients := make([]Client, 0, len(test.minTimes))
+			for _, minTime := range test.minTimes {
+				clients = append(clients, storetestutil.TestClient{MinTime: minTime})
+			}
+			proxy := NewProxyStore(log.NewNopLogger(), prometheus.NewRegistry(), func() []Client {
+				return clients
+			}, component.Store, nil, 1*time.Second, LazyRetrieval)
+
+			testutil.Equals(t, test.expected, proxy.GuaranteedMinTime())
 		})
 	}
 }
