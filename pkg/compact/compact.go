@@ -177,7 +177,7 @@ func (s *Syncer) GarbageCollect(ctx context.Context) error {
 		if _, exists := deletionMarkMap[id]; exists {
 			continue
 		}
-		//garbageIDs = append(garbageIDs, id)
+		garbageIDs = append(garbageIDs, id)
 	}
 
 	for _, id := range garbageIDs {
