@@ -459,14 +459,7 @@ func runCompact(
 			return errors.Wrap(err, "sync before retention")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(
-			ctx,
-			logger,
-			bkt,
-			sy.Metas(),
-			retentionByResolution,
-			compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, ""),
-			noCompactMarkerFilter); err != nil {
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, sy.Metas(), retentionByResolution, compactMetrics.blocksMarked.WithLabelValues(metadata.DeletionMarkFilename, "")); err != nil {
 			return errors.Wrap(err, "retention failed")
 		}
 

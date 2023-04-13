@@ -253,7 +253,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 			metas, _, err := metaFetcher.Fetch(ctx)
 			testutil.Ok(t, err)
 
-			if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, metas, tt.retentionByResolution, blocksMarkedForDeletion, nil); (err != nil) != tt.wantErr {
+			if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, metas, tt.retentionByResolution, blocksMarkedForDeletion); (err != nil) != tt.wantErr {
 				t.Errorf("ApplyRetentionPolicyByResolution() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
