@@ -105,9 +105,9 @@ type Rewrite struct {
 }
 
 type PartitionInfo struct {
-	PartitionedGroupID uint32 `json:"partitionedGroupID"`
-	PartitionCount     int    `json:"partitionCount"`
-	PartitionID        int    `json:"partitionID"`
+	PartitionedGroupID uint32 `json:"partitioned_group_id"`
+	PartitionCount     int    `json:"partition_count"`
+	PartitionID        int    `json:"partition_id"`
 }
 
 type Matchers []*labels.Matcher

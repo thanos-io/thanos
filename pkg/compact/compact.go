@@ -767,17 +767,33 @@ func (c DefaultCompactionCompleteChecker) IsComplete(_ *Group, _ ulid.ULID) bool
 type CompactionLifecycleCallback interface {
 	PreCompactionCallback(group *Group, toCompactBlocks []*metadata.Meta) error
 	PostCompactionCallback(group *Group, blockID ulid.ULID) error
+	GetBlockPopulator(group *Group, logger log.Logger) (tsdb.PopulateBlockFunc, error)
 }
 
-type NoopCompactionLifecycleCallback struct {
+type DefaultCompactionLifecycleCallback struct {
 }
 
-func (c NoopCompactionLifecycleCallback) PreCompactionCallback(_ *Group, _ []*metadata.Meta) error {
+func (c DefaultCompactionLifecycleCallback) PreCompactionCallback(_ *Group, toCompactBlocks []*metadata.Meta) error {
+	// Due to #183 we verify that none of the blocks in the plan have overlapping sources.
+	// This is one potential source of how we could end up with duplicated chunks.
+	uniqueSources := map[ulid.ULID]struct{}{}
+	for _, m := range toCompactBlocks {
+		for _, s := range m.Compaction.Sources {
+			if _, ok := uniqueSources[s]; ok {
+				return halt(errors.Errorf("overlapping sources detected for plan %v", toCompactBlocks))
+			}
+			uniqueSources[s] = struct{}{}
+		}
+	}
 	return nil
 }
 
-func (c NoopCompactionLifecycleCallback) PostCompactionCallback(_ *Group, _ ulid.ULID) error {
+func (c DefaultCompactionLifecycleCallback) PostCompactionCallback(_ *Group, _ ulid.ULID) error {
 	return nil
+}
+
+func (c DefaultCompactionLifecycleCallback) GetBlockPopulator(_ *Group, _ log.Logger) (tsdb.PopulateBlockFunc, error) {
+	return tsdb.DefaultPopulateBlockFunc{}, nil
 }
 
 // Compactor provides compaction against an underlying storage of time series data.
@@ -1061,41 +1077,35 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		return false, ulid.ULID{}, nil
 	}
 
-	level.Info(cg.logger).Log("msg", "running pre compaction callback", "plan", fmt.Sprintf("%v", toCompact))
-	if err := compactionLifecycleCallback.PreCompactionCallback(cg, toCompact); err != nil {
-		return false, ulid.ULID{}, errors.Wrapf(err, "failed to run pre compaction callback for plan: %s", fmt.Sprintf("%v", toCompact))
-	}
-	level.Info(cg.logger).Log("msg", "finished running pre compaction callback", "plan", fmt.Sprintf("%v", toCompact))
-
-	level.Info(cg.logger).Log("msg", "compaction available and planned; downloading blocks", "plan", fmt.Sprintf("%v", toCompact))
-
-	// Due to #183 we verify that none of the blocks in the plan have overlapping sources.
-	// This is one potential source of how we could end up with duplicated chunks.
-	//uniqueSources := map[ulid.ULID]struct{}{}
+	level.Info(cg.logger).Log("msg", "compaction available and planned", "plan", fmt.Sprintf("%v", toCompact))
 
 	// Once we have a plan we need to download the actual data.
 	groupCompactionBegin := time.Now()
 	begin := groupCompactionBegin
+
+	if err := compactionLifecycleCallback.PreCompactionCallback(cg, toCompact); err != nil {
+		return false, ulid.ULID{}, errors.Wrapf(err, "failed to run pre compaction callback for plan: %s", fmt.Sprintf("%v", toCompact))
+	}
+	level.Info(cg.logger).Log("msg", "finished running pre compaction callback; downloading blocks", "plan", fmt.Sprintf("%v", toCompact), "duration", time.Since(begin), "duration_ms", time.Since(begin).Milliseconds())
+
+	begin = time.Now()
 	g, errCtx := errgroup.WithContext(ctx)
 	g.SetLimit(cg.compactBlocksFetchConcurrency)
 
 	toCompactDirs := make([]string, 0, len(toCompact))
 	for _, m := range toCompact {
 		bdir := filepath.Join(dir, m.ULID.String())
-		//for _, s := range m.Compaction.Sources {
-		//	if _, ok := uniqueSources[s]; ok {
-		//		return false, ulid.ULID{}, halt(errors.Errorf("overlapping sources detected for plan %v", toCompact))
-		//	}
-		//	uniqueSources[s] = struct{}{}
-		//}
 		func(ctx context.Context, meta *metadata.Meta) {
 			g.Go(func() error {
+				start := time.Now()
 				if err := tracing.DoInSpanWithErr(ctx, "compaction_block_download", func(ctx context.Context) error {
 					return block.Download(ctx, cg.logger, cg.bkt, meta.ULID, bdir, objstore.WithFetchConcurrency(cg.blockFilesConcurrency))
 				}, opentracing.Tags{"block.id": meta.ULID}); err != nil {
 					return retry(errors.Wrapf(err, "download block %s", meta.ULID))
 				}
+				level.Debug(cg.logger).Log("msg", "downloaded block", "block", meta.ULID.String(), "duration", time.Since(start), "duration_ms", time.Since(start).Milliseconds())
 
+				start = time.Now()
 				// Ensure all input blocks are valid.
 				var stats block.HealthStats
 				if err := tracing.DoInSpanWithErr(ctx, "compaction_block_health_stats", func(ctx context.Context) (e error) {
@@ -1121,6 +1131,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 					return errors.Wrapf(err,
 						"block id %s, try running with --debug.accept-malformed-index", meta.ULID)
 				}
+				level.Debug(cg.logger).Log("msg", "verified block", "block", meta.ULID.String(), "duration", time.Since(start), "duration_ms", time.Since(start).Milliseconds())
 				return nil
 			})
 		}(errCtx, m)
@@ -1137,9 +1148,9 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	begin = time.Now()
 	if err := tracing.DoInSpanWithErr(ctx, "compaction", func(ctx context.Context) (e error) {
-		populateBlockFunc := ShardedPopulateBlockFunc{
-			partitionCount: cg.partitionCount,
-			partitionId:    cg.partitionID,
+		populateBlockFunc, e := compactionLifecycleCallback.GetBlockPopulator(cg, cg.logger)
+		if e != nil {
+			return e
 		}
 		compID, e = comp.CompactWithPopulateBlockFunc(dir, toCompactDirs, nil, populateBlockFunc)
 		return e
@@ -1292,7 +1303,7 @@ func NewBucketCompactor(
 		planner,
 		comp,
 		DefaultCompactionCompleteChecker{},
-		NoopCompactionLifecycleCallback{},
+		DefaultCompactionLifecycleCallback{},
 		compactDir,
 		bkt,
 		concurrency,
