@@ -100,7 +100,7 @@ For now extending receiver, seems the best approach to use. And, exact implement
 
 1. We will first access and aggregate the series, labels, and label-value pairs information within the Thanos receiver by extending its functionality while processing incoming data.
 
-2. There will be a new data structure to hold the statistics. This structure should have met to compute the required statistics.
+2. There will be a new data structure to hold the statistics. This structure should have methods to compute the required statistics.
 3. We will define a new HTTP endpoint in the Thanos receiver to expose the API,as `/api/v1/cardinality`.
 
 4. We will Implement a new API handler function that
