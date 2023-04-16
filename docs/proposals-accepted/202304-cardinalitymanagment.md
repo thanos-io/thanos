@@ -25,13 +25,22 @@ Implement APIs exposing series cardinalities in Thanos.
 
 ### Proposal
 
-We will be Developing a New API in Thanos to calculate series cardinality through Thanos Receiver.
+We will be Developing a new API in Thanos to calculate series cardinality through Thanos Receiver.
 
 #### API Design
 
-The new API will have the following endpoint:
+The new API will have the following endpoint-
 
-`/api/v1/cardinality`: It will retrieve the series cardinality information.
+`GET /api/v1/cardinality`
+
+It will retrieve the series cardinality information.
+
+The API will accept the following query parameters:
+
+- topK : (optional) An integer specifying the top K results to return for each category. Default is 10.
+- selector : (optional) A PromQL selector that will be used to filter series that must be analyzed.
+- focusLabel : (optional) A string representing the label name for which you want to retrieve the series count by its unique values. When provided, the API response will include the `seriesCountByFocusLabelValue` field, containing the unique values for the specified label and their corresponding series counts.
+
 The API response will contain
 
 - `totalSeries`: Total number of series.
@@ -40,32 +49,58 @@ The API response will contain
 - `seriesCountByLabelName`: List of objects containing label name and its corresponding series count.
 - `seriesCountByFocusLabelValue`: List of objects containing focus label-value and its corresponding series count.
 - `seriesCountByLabelValuePair`: List of objects containing label-value pair and its corresponding series count.
-- `labelValueCountByLabelName`: List of objects containing label name and its corresponding label value count.\*
+- `labelValueCountByLabelName`: List of objects containing label name and its corresponding label value count.
 
-The API response will be 
+For example, if we have the following dataset:
+
+```
+{__name__="metricA", instance="A", cluster="us"}
+{__name__="metricA", instance="B", cluster="eu"}
+{__name__="metricB", instance="C", cluster="us"}
+```
+
+Then, API response would be
 
 ```{
   "status": "success",
-  "isPartial": false,
   "data": {
-    "totalSeries": 14752,
-    "totalLabelValuePairs": 100544,
-    ... // other data fields
+    "totalSeries": 3,
+    "totalLabelValuePairs": 6,
+    "seriesCountByMetricName": [
+      { "name": "metricA", "value": 2 },
+      { "name": "metricB", "value": 1 }
+    ],
+    "seriesCountByLabelName": [
+      { "name": "cluster", "value": 3 },
+      { "name": "instance", "value": 3 }
+    ],
+    "seriesCountByLabelValuePair": [
+      { "name": "cluster=us", "value": 2 },
+      { "name": "cluster=eu", "value": 1 },
+      { "name": "instance=A", "value": 1 },
+      { "name": "instance=B", "value": 1 },
+      { "name": "instance=C", "value": 1 }
+    ],
+    "labelValueCountByLabelName": [
+      { "name": "cluster", "value": 2 },
+      { "name": "instance", "value": 3 }
+    ],
+    "seriesCountByFocusLabelValue": [
+      { "name": "us", "value": 2 },
+      { "name": "eu", "value": 1 }
+    ]
   }
 }
+
 ```
 
 #### Implementation
 
 For now extending receiver, seems the best approach to use. And, exact implementation can change while implementing the proposed API design.
 
-1. We will first access and aggregate the series, labels, and label-value pairs information within the Thanos receiver by extending its functionality while processing incoming data. The Thanos receiver ingests data and writes it to a TSDB instance.
-2. There will be a new data structure to hold the statistics. This structure should have methods to
+1. We will first access and aggregate the series, labels, and label-value pairs information within the Thanos receiver by extending its functionality while processing incoming data.
 
-   - Add new data points (series, labels, and label-value pairs).
-   - Compute the statistics required by the API.
-   - Serialize the data into a JSON format according to the API design.
-
+2. There will be a new data structure to hold the statistics. This structure should have met to compute the required statistics.
 3. We will define a new HTTP endpoint in the Thanos receiver to expose the API,as `/api/v1/cardinality`.
 
 4. We will Implement a new API handler function that
@@ -79,58 +114,76 @@ For now extending receiver, seems the best approach to use. And, exact implement
 
 ### Alternatives
 
-- Alternative approach could be through Prometheus's [`/api/v1/series`](https://prometheus.io/docs/prometheus/latest/querying/api/#finding-series-by-label-matchers) but, it not useful for large scale or large number of labels as when using the `/api/v1/series` endpoint, the Prometheus server must iterate over all the time series data to identify the series that match the label selectors in the match[] parameter. This can be a computationally intensive operation.
-- We can also perform another API design, where we will have two seperate endpoints for label names cardinality and label values cardinality.Let us take a look at it
+#### Two seperate APIs
 
-  - Label Names endpoint: This endpoint will be responsible for returning the realtime label names cardinality . It will count distinct label values per label name.<br>
-    Response: <br>
+- We can also perform another API design, where we will have two seperate endpoints for label names cardinality and label values cardinality.Let us take a look at it.
 
-  ```
+#### Label Names
+
+`GET,POST /api/v1/cardinality/label_names`
+
+This endpoint will be responsible for returning the realtime label names cardinality . It will count distinct label values per label name.
+
+Request parameters:
+
+- selector - (optional) specifies PromQL selector that will be used to filter series that must be analyzed.
+- limit - (optional) specifies max count of items in field cardinality in response (default=20, min=0, max=500)
+
+Response -
+
+```
+{
+"label_values_count_total": <number>,
+"label_names_count": <number>,
+"cardinality": [
   {
-  "label_values_count_total": <number>,
-  "label_names_count": <number>,
-  "cardinality": [
-    {
-      "label_name": <string>,
-      "label_values_count": <number>
-    }
-  ]
+    "label_name": <string>,
+    "label_values_count": <number>
   }
-  ```
+]
+}
+```
 
-  - Label values cardinality endpoint: This endpoint will return the label values cardinality associated with request parameter `label_names[]`. It will return the series count per label value for each label in the request parameter `label_names[]`.<br>
+#### Label values
 
-  ```proto
+This endpoint will return the label values cardinality associated with request parameter `label_names[]`. It will return the series count per label value for each label in the request parameter `label_names[]`.
+
+`GET,POST /api/v1/cardinality/label_values`
+
+Request parameters:
+
+- label_names[] - (required) specifies label names for which label values cardinality will be returned.
+- selector - (optional) specifies PromQL selector that will be used to filter series that must be analyzed.
+- limit - (optional) specifies max count of items in field cardinality in response (default=20, min=0, max=500).
+
+```
+{
+"series_count_total": <number>,
+"labels": [
   {
-  "series_count_total": <number>,
-  "labels": [
-    {
-      "label_name": <string>,
-      "label_values_count": <number>,
-      "series_count": <number>,
-      "cardinality": [
-        {
-          "label_value": <string>,
-          "series_count": <number>
-        }
-      ]
-    }
-  ]
+    "label_name": <string>,
+    "label_values_count": <number>,
+    "series_count": <number>,
+    "cardinality": [
+      {
+        "label_value": <string>,
+        "series_count": <number>
+      }
+    ]
   }
-  ```
-
-Now, both these endpoints can have a `limit` parameter which will specify number of items in the response.
+]
+}
+```
 
 #### Pros
 
 1. It provides more granularity about series data.Also, we can get specific information that we need.Users can choose to query label names, label values, or both depending on their requirements.
-2. Users can provide optional PromQL selectors to filter series to analyze, allowing them to focus on specific metrics or series of interest.
+2. It can be more efficient as we query only the data that we need.
 
 ### Cons
 
-1. Complexity: The API's granularity can make it more complex for users to consume the data, especially when compared to a more concise API that returns all information in one call.
-2. It might have a performance disadvantage when users require all the information provided by the API, as it may require multiple calls to retrieve the complete dataset.
+1. It will be more complex to users as they will have to query two endpoints to get the required information.
 
 ### Open Questions
 
-1. Both api designs are good, with which we should be going forward ?
+1. Do we need to deduplicate the series before computing the cardinality?
