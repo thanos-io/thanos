@@ -187,3 +187,4 @@ Request parameters:
 ### Open Questions
 
 1. Do we need to deduplicate the series before computing the cardinality?
+2. As tenant's data is distributed across multiple receivers, how can we query cardinality information for a specific tenant?
