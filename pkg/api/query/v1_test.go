@@ -277,10 +277,8 @@ func TestQueryEndpoints(t *testing.T) {
 								Value: "a",
 							},
 						},
-						Point: promql.Point{
-							T: 123000,
-							V: 2,
-						},
+						T: 123000,
+						F: 2,
 					},
 					{
 						Metric: labels.Labels{
@@ -297,10 +295,8 @@ func TestQueryEndpoints(t *testing.T) {
 								Value: "a",
 							},
 						},
-						Point: promql.Point{
-							T: 123000,
-							V: 2,
-						},
+						T: 123000,
+						F: 2,
 					},
 					{
 						Metric: labels.Labels{
@@ -317,10 +313,8 @@ func TestQueryEndpoints(t *testing.T) {
 								Value: "b",
 							},
 						},
-						Point: promql.Point{
-							T: 123000,
-							V: 2,
-						},
+						T: 123000,
+						F: 2,
 					},
 					{
 						Metric: labels.Labels{
@@ -337,10 +331,8 @@ func TestQueryEndpoints(t *testing.T) {
 								Value: "a",
 							},
 						},
-						Point: promql.Point{
-							T: 123000,
-							V: 2,
-						},
+						T: 123000,
+						F: 2,
 					},
 				},
 			},
@@ -367,10 +359,8 @@ func TestQueryEndpoints(t *testing.T) {
 								Value: "bar",
 							},
 						},
-						Point: promql.Point{
-							T: 123000,
-							V: 2,
-						},
+						T: 123000,
+						F: 2,
 					},
 					{
 						Metric: labels.Labels{
@@ -383,10 +373,8 @@ func TestQueryEndpoints(t *testing.T) {
 								Value: "boo",
 							},
 						},
-						Point: promql.Point{
-							T: 123000,
-							V: 2,
-						},
+						T: 123000,
+						F: 2,
 					},
 					{
 						Metric: labels.Labels{
@@ -403,10 +391,8 @@ func TestQueryEndpoints(t *testing.T) {
 								Value: "a",
 							},
 						},
-						Point: promql.Point{
-							T: 123000,
-							V: 2,
-						},
+						T: 123000,
+						F: 2,
 					},
 				},
 			},
@@ -433,10 +419,8 @@ func TestQueryEndpoints(t *testing.T) {
 								Value: "bar",
 							},
 						},
-						Point: promql.Point{
-							T: 123000,
-							V: 2,
-						},
+						T: 123000,
+						F: 2,
 					},
 					{
 						Metric: labels.Labels{
@@ -449,10 +433,8 @@ func TestQueryEndpoints(t *testing.T) {
 								Value: "boo",
 							},
 						},
-						Point: promql.Point{
-							T: 123000,
-							V: 2,
-						},
+						T: 123000,
+						F: 2,
 					},
 				},
 			},
@@ -491,10 +473,10 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeMatrix,
 				Result: promql.Matrix{
 					promql.Series{
-						Points: func(end, step float64) []promql.Point {
-							var res []promql.Point
+						Floats: func(end, step float64) []promql.FPoint {
+							var res []promql.FPoint
 							for v := float64(0); v <= end; v += step {
-								res = append(res, promql.Point{V: v, T: timestamp.FromTime(start.Add(time.Duration(v) * time.Second))})
+								res = append(res, promql.FPoint{F: v, T: timestamp.FromTime(start.Add(time.Duration(v) * time.Second))})
 							}
 							return res
 						}(500, 1),
@@ -515,10 +497,10 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeMatrix,
 				Result: promql.Matrix{
 					promql.Series{
-						Points: []promql.Point{
-							{V: 0, T: timestamp.FromTime(start)},
-							{V: 1, T: timestamp.FromTime(start.Add(1 * time.Second))},
-							{V: 2, T: timestamp.FromTime(start.Add(2 * time.Second))},
+						Floats: []promql.FPoint{
+							{F: 0, T: timestamp.FromTime(start)},
+							{F: 1, T: timestamp.FromTime(start.Add(1 * time.Second))},
+							{F: 2, T: timestamp.FromTime(start.Add(2 * time.Second))},
 						},
 						Metric: nil,
 					},
@@ -714,7 +696,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		for i := int64(0); i < 10; i++ {
 			samples = append(samples, sample{
 				t: i * 60_000,
-				v: float64(i),
+				f: float64(i),
 			})
 		}
 
@@ -1840,16 +1822,16 @@ func BenchmarkQueryResultEncoding(b *testing.B) {
 			"namespace", "something",
 			"long-label", "34grnt83j0qxj309je9rgt9jf2jd-92jd-92jf9wrfjre",
 		)
-		var points []promql.Point
+		var points []promql.FPoint
 		for j := 0; j < b.N/1000; j++ {
-			points = append(points, promql.Point{
+			points = append(points, promql.FPoint{
 				T: int64(j * 10000),
-				V: rand.Float64(),
+				F: rand.Float64(),
 			})
 		}
 		mat = append(mat, promql.Series{
 			Metric: lset,
-			Points: points,
+			Floats: points,
 		})
 	}
 	input := &queryData{
@@ -1874,15 +1856,15 @@ func (c mockedRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (
 
 type sample struct {
 	t int64
-	v float64
+	f float64
 }
 
 func (s sample) T() int64 {
 	return s.t
 }
 
-func (s sample) V() float64 {
-	return s.v
+func (s sample) F() float64 {
+	return s.f
 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.

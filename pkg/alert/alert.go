@@ -184,7 +184,7 @@ func (q *Queue) Push(alerts []*notifier.Alert) {
 			lb.Set(l.Name, l.Value)
 		}
 
-		if lset, keep := relabel.Process(lb.Labels(nil), q.alertRelabelConfigs...); keep {
+		if lset, keep := relabel.Process(lb.Labels(), q.alertRelabelConfigs...); keep {
 			a.Labels = lset
 			relabeledAlerts = append(relabeledAlerts, a)
 		}
