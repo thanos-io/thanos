@@ -56,7 +56,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"fmt"
 	"hash"
 	"io"
 	"net/http"
@@ -604,7 +603,6 @@ func (w *watcher) run(ctx context.Context) {
 			return
 
 		case event := <-w.w.Events:
-			fmt.Printf("event: %s\n", event.Name)
 			w.watchEvents.Inc()
 			if _, ok := w.watchedDirs[filepath.Dir(event.Name)]; ok {
 				select {
