@@ -42,7 +42,7 @@ func SamplesFromPromqlSamples(samples ...promql.Sample) ([]Sample, []Histogram) 
 	return floats, histograms
 }
 
-// SamplesFromPromqlSeries converts promql.Series to a slice of Sample.
+// SamplesFromPromqlSeries converts promql.Series to a slice of Sample and a slice of Histogram.
 func SamplesFromPromqlSeries(series promql.Series) ([]Sample, []Histogram) {
 	floats := make([]Sample, 0, len(series.Floats))
 	for _, f := range series.Floats {
