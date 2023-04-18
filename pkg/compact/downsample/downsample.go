@@ -776,7 +776,7 @@ func (it *AverageChunkIterator) Err() error {
 func SamplesFromTSDBSamples(samples []tsdbutil.Sample) []sample {
 	res := make([]sample, len(samples))
 	for i, s := range samples {
-		res[i] = sample{t: s.T(), v: s.V()}
+		res[i] = sample{t: s.T(), v: s.F()}
 	}
 	return res
 }

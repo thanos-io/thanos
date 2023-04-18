@@ -319,7 +319,7 @@ func createSamplesWithStep(start, numOfSamples, step int) []tsdbutil.Sample {
 	res := make([]tsdbutil.Sample, numOfSamples)
 	cur := start
 	for i := 0; i < numOfSamples; i++ {
-		res[i] = sample{t: int64(cur), v: float64(cur)}
+		res[i] = sample{t: int64(cur), f: float64(cur)}
 		cur += step
 	}
 

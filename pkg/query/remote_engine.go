@@ -187,17 +187,18 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			continue
 		}
 		series := promql.Series{
-			Metric: labelpb.ZLabelsToPromLabels(ts.Labels),
-			Points: make([]promql.Point, 0, len(ts.Samples)),
+			Metric:     labelpb.ZLabelsToPromLabels(ts.Labels),
+			Floats:     make([]promql.FPoint, 0, len(ts.Samples)),
+			Histograms: make([]promql.HPoint, 0, len(ts.Histograms)),
 		}
 		for _, s := range ts.Samples {
-			series.Points = append(series.Points, promql.Point{
+			series.Floats = append(series.Floats, promql.FPoint{
 				T: s.Timestamp,
-				V: s.Value,
+				F: s.Value,
 			})
 		}
 		for _, h := range ts.Histograms {
-			series.Points = append(series.Points, promql.Point{
+			series.Histograms = append(series.Histograms, promql.HPoint{
 				T: h.Timestamp,
 				H: prompb.HistogramProtoToFloatHistogram(h),
 			})
