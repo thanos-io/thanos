@@ -832,9 +832,10 @@ type seriesEntry struct {
 // single TSDB block in object storage.
 type blockSeriesClient struct {
 	grpc.ClientStream
-	ctx     context.Context
-	logger  log.Logger
-	extLset labels.Labels
+	ctx             context.Context
+	logger          log.Logger
+	extLset         labels.Labels
+	extLsetToRemove map[string]struct{}
 
 	mint           int64
 	maxt           int64
@@ -884,9 +885,11 @@ func newBlockSeriesClient(
 	}
 
 	return &blockSeriesClient{
-		ctx:                ctx,
-		logger:             logger,
-		extLset:            extLset,
+		ctx:             ctx,
+		logger:          logger,
+		extLset:         extLset,
+		extLsetToRemove: extLsetToRemove,
+
 		mint:               req.MinTime,
 		maxt:               req.MaxTime,
 		indexr:             b.indexReader(),
@@ -1006,6 +1009,10 @@ func (b *blockSeriesClient) nextBatch() error {
 		}
 
 		completeLabelset := labelpb.ExtendSortedLabels(b.lset, b.extLset)
+		if b.extLsetToRemove != nil {
+			completeLabelset = rmLabels(completeLabelset, b.extLsetToRemove)
+		}
+
 		if !b.shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}

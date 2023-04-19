@@ -17,7 +17,9 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/efficientgo/core/testutil"
+	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/types"
+	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -56,6 +58,19 @@ type HeadGenOptions struct {
 	SampleType    chunkenc.ValueType
 
 	Random *rand.Rand
+}
+
+func CreateBlockFromHead(t testing.TB, dir string, head *tsdb.Head) ulid.ULID {
+	compactor, err := tsdb.NewLeveledCompactor(context.Background(), nil, log.NewNopLogger(), []int64{1000000}, nil, nil)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, os.MkdirAll(dir, 0777))
+
+	// Add +1 millisecond to block maxt because block intervals are half-open: [b.MinTime, b.MaxTime).
+	// Because of this block intervals are always +1 than the total samples it includes.
+	ulid, err := compactor.Write(dir, head, head.MinTime(), head.MaxTime()+1, nil)
+	testutil.Ok(t, err)
+	return ulid
 }
 
 // CreateHeadWithSeries returns head filled with given samples and same series returned in separate list for assertion purposes.
