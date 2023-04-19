@@ -36,7 +36,9 @@ func TestQueryNativeHistograms(t *testing.T) {
 	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "ha2", e2ethanos.DefaultPromConfig("prom-ha", 1, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "", "native-histograms", "remote-write-receiver")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
-	querier := e2ethanos.NewQuerierBuilder(e, "querier", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).Init()
+	querier := e2ethanos.NewQuerierBuilder(e, "querier", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
+		WithEnabledFeatures([]string{"query-pushdown"}).
+		Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(querier))
 
 	rawRemoteWriteURL1 := "http://" + prom1.Endpoint("http") + "/api/v1/write"

@@ -679,7 +679,6 @@ func (it *ApplyCounterResetsSeriesIterator) At() (t int64, v float64) {
 	return it.lastT, it.totalV
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (it *ApplyCounterResetsSeriesIterator) AtHistogram() (int64, *histogram.Histogram) {
 	return it.chks[it.i].AtHistogram()
 }
