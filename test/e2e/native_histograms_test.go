@@ -6,6 +6,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"reflect"
 	"testing"
 	"time"
@@ -18,7 +19,6 @@ import (
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
-	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
@@ -45,7 +45,7 @@ func TestQueryNativeHistograms(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	histograms := tsdb.GenerateTestHistograms(4)
+	histograms := tsdbutil.GenerateTestHistograms(4)
 	now := time.Now()
 
 	_, err = writeHistograms(ctx, now, histograms, rawRemoteWriteURL1)
@@ -121,7 +121,7 @@ func TestWriteNativeHistograms(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	histograms := tsdb.GenerateTestHistograms(1)
+	histograms := tsdbutil.GenerateTestHistograms(1)
 	now := time.Now()
 	_, err = writeHistograms(ctx, now, histograms, rawRemoteWriteURL)
 	testutil.Ok(t, err)
@@ -162,7 +162,7 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	histograms := tsdb.GenerateTestHistograms(4)
+	histograms := tsdbutil.GenerateTestHistograms(4)
 	now := time.Now()
 	_, err = writeHistograms(ctx, now, histograms, rawRemoteWriteURL1)
 	testutil.Ok(t, err)

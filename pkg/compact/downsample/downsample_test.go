@@ -802,7 +802,7 @@ func TestApplyCounterResetsIterator(t *testing.T) {
 func TestApplyCounterResetsIteratorHistograms(t *testing.T) {
 	const lenChunks, lenChunk = 4, 10
 
-	histograms := tsdb.GenerateTestHistograms(lenChunks * lenChunk)
+	histograms := tsdbutil.GenerateTestHistograms(lenChunks * lenChunk)
 
 	var chunks [][]*histogramPair
 	for i := 0; i < lenChunks; i++ {
