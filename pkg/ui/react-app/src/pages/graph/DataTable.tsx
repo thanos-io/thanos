@@ -3,7 +3,7 @@ import React, { FC, ReactNode } from 'react';
 import { UncontrolledAlert, Table } from 'reactstrap';
 
 import SeriesName from './SeriesName';
-import { Metric, Histogram } from '../../types/types';
+import { Metric, Histogram, SampleValue, SampleHistogram } from '../../types/types';
 
 import moment from 'moment';
 
@@ -39,9 +39,6 @@ interface RangeSamples {
   values?: SampleValue[];
   histograms?: SampleHistogram[];
 }
-
-type SampleValue = [number, string];
-type SampleHistogram = [number, Histogram];
 
 const limitSeries = <S extends InstantSample | RangeSamples>(series: S[]): S[] => {
   const maxSeries = 10000;
@@ -83,7 +80,7 @@ const DataTable: FC<QueryResult> = ({ data }) => {
       break;
     case 'matrix':
       rows = (limitSeries(data.result) as RangeSamples[]).map((s, index) => {
-        const valueText = s.values
+        const valuesAndTimes = s.values
           ? s.values
               .map((v) => {
                 return v[1] + ' @' + v[0];
@@ -107,7 +104,7 @@ const DataTable: FC<QueryResult> = ({ data }) => {
               <SeriesName labels={s.metric} format={doFormat} />
             </td>
             <td>
-              {valueText} {histogramsAndTimes}
+              {valuesAndTimes} {histogramsAndTimes}
             </td>
           </tr>
         );

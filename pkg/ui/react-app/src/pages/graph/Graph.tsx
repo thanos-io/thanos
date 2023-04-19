@@ -3,7 +3,7 @@ import React, { PureComponent } from 'react';
 import ReactResizeDetector from 'react-resize-detector';
 
 import { Legend } from './Legend';
-import { Metric, QueryParams, Histogram } from '../../types/types';
+import { Metric, QueryParams, SampleValue, SampleHistogram } from '../../types/types';
 import { isPresent } from '../../utils';
 import { normalizeData, getOptions, toHoverColor } from './GraphHelpers';
 
@@ -16,7 +16,7 @@ require('jquery.flot.tooltip');
 export interface GraphProps {
   data: {
     resultType: string;
-    result: Array<{ metric: Metric; values: [number, string][]; histograms?: [number, Histogram][] }>;
+    result: Array<{ metric: Metric; values: SampleValue[]; histograms?: SampleHistogram[] }>;
   };
   stacked: boolean;
   useLocalTime: boolean;

@@ -10,6 +10,9 @@ export interface Histogram {
   buckets?: [number, string, string, string][];
 }
 
+export type SampleValue = [number, string];
+export type SampleHistogram = [number, Histogram];
+
 export interface QueryParams {
   startTime: number;
   endTime: number;
