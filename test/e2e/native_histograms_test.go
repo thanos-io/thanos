@@ -6,7 +6,6 @@ package e2e_test
 import (
 	"context"
 	"fmt"
-	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"reflect"
 	"testing"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
+	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/receive"
