@@ -17,14 +17,13 @@ import (
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/thanos-io/thanos/cmd/thanos/storeutils"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"go.uber.org/atomic"
 )
 
 type storeInspectConfig struct {
 	timeout time.Duration
-	http    storeutils.HttpOpts
+	http    HttpOpts
 	lister  Opts
 }
 
@@ -59,8 +58,8 @@ func registerInspectCommand(app extkingpin.AppClause) {
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 
-		discovery := storeutils.NewAddressProvider(logger, []string{config.lister.StoreGatewayService})
-		thanosClient := storeutils.NewClient(logger, config.http)
+		discovery := newAddressProvider(logger, []string{config.lister.StoreGatewayService})
+		thanosClient := NewClient(logger, config.http)
 		storeLister := newLister(logger, discovery, thanosClient)
 
 		ctx, cancel := context.WithTimeout(context.Background(), config.timeout)
@@ -131,8 +130,8 @@ func (s stringSet) add(val string) {
 }
 
 type Lister interface {
-	GetStoreInfo() []*storeutils.InstanceInfo
-	GetByLabelPairs(labelPair map[string]string) []*storeutils.InstanceInfo
+	GetStoreInfo() []*InstanceInfo
+	GetByLabelPairs(labelPair map[string]string) []*InstanceInfo
 	GetLabelMap() map[string][]string
 	LoadInfo(ctx context.Context)
 }
@@ -144,25 +143,25 @@ type Opts struct {
 
 type InMemoryLister struct {
 	m      *sync.RWMutex
-	ap     storeutils.AddressProvider
+	ap     addressProvider
 	logger log.Logger
-	client storeutils.Client
+	client Client
 
-	storeInfo  map[string]*storeutils.InstanceInfo
+	storeInfo  map[string]*InstanceInfo
 	labelMap   map[string]stringSet // label -> []values
 	lastUpdate time.Time
 }
 
 func newLister(
 	logger log.Logger,
-	ap storeutils.AddressProvider,
-	client storeutils.Client,
+	ap addressProvider,
+	client Client,
 ) Lister {
 	return &InMemoryLister{
 		ap:        ap,
 		logger:    logger,
 		client:    client,
-		storeInfo: make(map[string]*storeutils.InstanceInfo),
+		storeInfo: make(map[string]*InstanceInfo),
 		labelMap:  make(map[string]stringSet),
 		m:         &sync.RWMutex{},
 	}
@@ -223,10 +222,10 @@ func splitAddress(addr string) (string, string) {
 	return parts[0], parts[1]
 }
 
-func (r *InMemoryLister) GetStoreInfo() []*storeutils.InstanceInfo {
+func (r *InMemoryLister) GetStoreInfo() []*InstanceInfo {
 	r.m.RLock()
 	defer r.m.RUnlock()
-	values := make([]*storeutils.InstanceInfo, len(r.storeInfo))
+	values := make([]*InstanceInfo, len(r.storeInfo))
 	i := 0
 	for _, value := range r.storeInfo {
 		values[i] = value
@@ -248,11 +247,11 @@ func (r *InMemoryLister) GetLabelMap() map[string][]string {
 	return lm
 }
 
-func (r *InMemoryLister) GetByLabelPairs(pairs map[string]string) []*storeutils.InstanceInfo {
+func (r *InMemoryLister) GetByLabelPairs(pairs map[string]string) []*InstanceInfo {
 	r.m.Lock()
 	defer r.m.Unlock()
 
-	instances := make([]*storeutils.InstanceInfo, 0)
+	instances := make([]*InstanceInfo, 0)
 	for _, info := range r.storeInfo {
 		matchAll := true
 		for label, value := range pairs {
@@ -269,7 +268,7 @@ func (r *InMemoryLister) GetByLabelPairs(pairs map[string]string) []*storeutils.
 	return instances
 }
 
-func (r *InMemoryLister) createOrUpdate(ctx context.Context, name string, address string) (*storeutils.InstanceInfo, error) {
+func (r *InMemoryLister) createOrUpdate(ctx context.Context, name string, address string) (*InstanceInfo, error) {
 	storeInfo, err := r.client.GetInstanceInfo(ctx, address)
 	if err != nil {
 		return nil, err
