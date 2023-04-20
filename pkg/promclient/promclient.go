@@ -482,7 +482,8 @@ func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query st
 
 		vec = append(vec, promql.Sample{
 			Metric: lset,
-			Point:  promql.Point{T: int64(e.Timestamp), V: float64(e.Value)},
+			T:      int64(e.Timestamp),
+			F:      float64(e.Value),
 		})
 	}
 

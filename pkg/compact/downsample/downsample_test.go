@@ -912,15 +912,15 @@ func TestSamplesFromTSDBSamples(t *testing.T) {
 // testSample implements tsdbutil.Sample interface.
 type testSample struct {
 	t int64
-	v float64
+	f float64
 }
 
 func (s testSample) T() int64 {
 	return s.t
 }
 
-func (s testSample) V() float64 {
-	return s.v
+func (s testSample) F() float64 {
+	return s.f
 }
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.

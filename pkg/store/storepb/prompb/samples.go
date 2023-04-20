@@ -23,20 +23,37 @@ func SamplesFromSamplePairs(samples []model.SamplePair) []Sample {
 	return result
 }
 
-// SamplesFromPromqlPoints converts a slice of promql.Point
+// SamplesFromPromqlSamples converts a slice of promql.Sample
 // to a slice of Sample.
-func SamplesFromPromqlPoints(samples ...promql.Point) ([]Sample, []Histogram) {
+func SamplesFromPromqlSamples(samples ...promql.Sample) ([]Sample, []Histogram) {
 	floats := make([]Sample, 0, len(samples))
 	histograms := make([]Histogram, 0, len(samples))
 	for _, s := range samples {
 		if s.H == nil {
 			floats = append(floats, Sample{
-				Value:     s.V,
+				Value:     s.F,
 				Timestamp: s.T,
 			})
 		} else {
 			histograms = append(histograms, FloatHistogramToHistogramProto(s.T, s.H))
 		}
+	}
+
+	return floats, histograms
+}
+
+// SamplesFromPromqlSeries converts promql.Series to a slice of Sample and a slice of Histogram.
+func SamplesFromPromqlSeries(series promql.Series) ([]Sample, []Histogram) {
+	floats := make([]Sample, 0, len(series.Floats))
+	for _, f := range series.Floats {
+		floats = append(floats, Sample{
+			Value:     f.F,
+			Timestamp: f.T,
+		})
+	}
+	histograms := make([]Histogram, 0, len(series.Histograms))
+	for _, h := range series.Histograms {
+		histograms = append(histograms, FloatHistogramToHistogramProto(h.T, h.H))
 	}
 
 	return floats, histograms
