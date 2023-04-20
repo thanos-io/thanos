@@ -350,7 +350,7 @@ type Group struct {
 	hashFunc                      metadata.HashFunc
 	blockFilesConcurrency         int
 	compactBlocksFetchConcurrency int
-	partitionInfo                 metadata.PartitionInfo
+	partitionInfo                 *metadata.PartitionInfo
 }
 
 // NewGroup returns a new compaction group.
@@ -491,11 +491,11 @@ func (cg *Group) Resolution() int64 {
 	return cg.resolution
 }
 
-func (cg *Group) PartitionedInfo() metadata.PartitionInfo {
+func (cg *Group) PartitionedInfo() *metadata.PartitionInfo {
 	return cg.partitionInfo
 }
 
-func (cg *Group) SetPartitionInfo(partitionInfo metadata.PartitionInfo) {
+func (cg *Group) SetPartitionInfo(partitionInfo *metadata.PartitionInfo) {
 	cg.partitionInfo = partitionInfo
 }
 
@@ -755,7 +755,7 @@ func (c DefaultBlockDeletableChecker) CanDelete(_ *Group, _ ulid.ULID) bool {
 type CompactionLifecycleCallback interface {
 	PreCompactionCallback(group *Group, toCompactBlocks []*metadata.Meta) error
 	PostCompactionCallback(group *Group, blockID ulid.ULID) error
-	GetBlockPopulator(group *Group, logger log.Logger) (tsdb.PopulateBlockFunc, error)
+	GetBlockPopulator(group *Group, logger log.Logger) (tsdb.BlockPopulator, error)
 }
 
 type DefaultCompactionLifecycleCallback struct {
@@ -780,8 +780,8 @@ func (c DefaultCompactionLifecycleCallback) PostCompactionCallback(_ *Group, _ u
 	return nil
 }
 
-func (c DefaultCompactionLifecycleCallback) GetBlockPopulator(_ *Group, _ log.Logger) (tsdb.PopulateBlockFunc, error) {
-	return tsdb.DefaultPopulateBlockFunc{}, nil
+func (c DefaultCompactionLifecycleCallback) GetBlockPopulator(_ *Group, _ log.Logger) (tsdb.BlockPopulator, error) {
+	return tsdb.DefaultBlockPopulator{}, nil
 }
 
 // Compactor provides compaction against an underlying storage of time series data.
@@ -801,7 +801,7 @@ type Compactor interface {
 	//  * The source dirs are marked Deletable.
 	//  * Returns empty ulid.ULID{}.
 	Compact(dest string, dirs []string, open []*tsdb.Block) (ulid.ULID, error)
-	CompactWithPopulateBlockFunc(dest string, dirs []string, open []*tsdb.Block, blockPopulator tsdb.PopulateBlockFunc) (ulid.ULID, error)
+	CompactWithBlockPopulator(dest string, dirs []string, open []*tsdb.Block, blockPopulator tsdb.BlockPopulator) (ulid.ULID, error)
 }
 
 // Compact plans and runs a single compaction against the group. The compacted result
@@ -1050,7 +1050,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	var toCompact []*metadata.Meta
 	if err := tracing.DoInSpanWithErr(ctx, "compaction_planning", func(ctx context.Context) (e error) {
-		if cg.partitionInfo.PartitionCount > 0 {
+		if cg.partitionInfo != nil && cg.partitionInfo.PartitionCount > 0 {
 			toCompact, e = planner.PlanWithPartition(ctx, cg.metasByMinTime, cg.partitionInfo.PartitionID, errChan)
 			return e
 		} else {
@@ -1140,7 +1140,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		if e != nil {
 			return e
 		}
-		compID, e = comp.CompactWithPopulateBlockFunc(dir, toCompactDirs, nil, populateBlockFunc)
+		compID, e = comp.CompactWithBlockPopulator(dir, toCompactDirs, nil, populateBlockFunc)
 		return e
 	}); err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact blocks %v", toCompactDirs))
@@ -1173,7 +1173,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 		Downsample:    metadata.ThanosDownsample{Resolution: cg.resolution},
 		Source:        metadata.CompactorSource,
 		SegmentFiles:  block.GetSegmentFiles(bdir),
-		PartitionInfo: &cg.partitionInfo,
+		PartitionInfo: cg.partitionInfo,
 	}, nil)
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to finalize the block %s", bdir)
