@@ -9,7 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -37,6 +37,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
+// TODO: make configurable
+const shardsPerTenant = 10
+
 type TSDBStats interface {
 	// TenantStats returns TSDB head stats for the given tenants.
 	// If no tenantIDs are provided, stats for all tenants are returned.
@@ -53,7 +56,7 @@ type MultiTSDB struct {
 	bucket          objstore.Bucket
 
 	mtx                   *sync.RWMutex
-	tenants               map[string]*tenant
+	tenants               map[string]tenant
 	allowOutOfOrderUpload bool
 	hashFunc              metadata.HashFunc
 }
@@ -81,7 +84,7 @@ func NewMultiTSDB(
 		reg:                   reg,
 		tsdbOpts:              tsdbOpts,
 		mtx:                   &sync.RWMutex{},
-		tenants:               map[string]*tenant{},
+		tenants:               map[string]tenant{},
 		labels:                labels,
 		tenantLabelName:       tenantLabelName,
 		bucket:                bucket,
@@ -133,7 +136,9 @@ func (l *localClient) SupportsWithoutReplicaLabels() bool {
 	return true
 }
 
-type tenant struct {
+type tenant []*tenantShard
+
+type tenantShard struct {
 	readyS        *ReadyStorage
 	storeTSDB     *store.TSDBStore
 	exemplarsTSDB *exemplars.TSDB
@@ -142,24 +147,29 @@ type tenant struct {
 	mtx *sync.RWMutex
 }
 
-func newTenant() *tenant {
-	return &tenant{
-		readyS: &ReadyStorage{},
-		mtx:    &sync.RWMutex{},
+func newTenant(shards int) tenant {
+	tenantShards := make([]*tenantShard, shards)
+	for i := 0; i < shards; i++ {
+		tenantShards[i] = &tenantShard{
+			readyS: &ReadyStorage{},
+			mtx:    &sync.RWMutex{},
+		}
+
 	}
+	return tenant(tenantShards)
 }
 
-func (t *tenant) readyStorage() *ReadyStorage {
+func (t *tenantShard) readyStorage() *ReadyStorage {
 	return t.readyS
 }
 
-func (t *tenant) store() *store.TSDBStore {
+func (t *tenantShard) store() *store.TSDBStore {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	return t.storeTSDB
 }
 
-func (t *tenant) client(logger log.Logger) store.Client {
+func (t *tenantShard) client(logger log.Logger) store.Client {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -171,26 +181,26 @@ func (t *tenant) client(logger log.Logger) store.Client {
 	return newLocalClient(client, tsdbStore.LabelSet, tsdbStore.TimeRange)
 }
 
-func (t *tenant) exemplars() *exemplars.TSDB {
+func (t *tenantShard) exemplars() *exemplars.TSDB {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	return t.exemplarsTSDB
 }
 
-func (t *tenant) shipper() *shipper.Shipper {
+func (t *tenantShard) shipper() *shipper.Shipper {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	return t.ship
 }
 
-func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
+func (t *tenantShard) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
 	t.readyS.Set(tenantTSDB)
 	t.mtx.Lock()
 	t.setComponents(storeTSDB, ship, exemplarsTSDB)
 	t.mtx.Unlock()
 }
 
-func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
+func (t *tenantShard) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
 	t.storeTSDB = storeTSDB
 	t.ship = ship
 	t.exemplarsTSDB = exemplarsTSDB
@@ -230,22 +240,24 @@ func (t *MultiTSDB) Flush() error {
 	merr := errutil.MultiError{}
 	wg := &sync.WaitGroup{}
 	for id, tenant := range t.tenants {
-		db := tenant.readyStorage().Get()
-		if db == nil {
-			level.Error(t.logger).Log("msg", "flushing TSDB failed; not ready", "tenant", id)
-			continue
-		}
-		level.Info(t.logger).Log("msg", "flushing TSDB", "tenant", id)
-		wg.Add(1)
-		go func() {
-			head := db.Head()
-			if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
-				errmtx.Lock()
-				merr.Add(err)
-				errmtx.Unlock()
+		for sid, tenantShard := range tenant {
+			db := tenantShard.readyStorage().Get()
+			if db == nil {
+				level.Error(t.logger).Log("msg", "flushing TSDB failed; not ready", "tenant", id, "shard", sid)
+				continue
 			}
-			wg.Done()
-		}()
+			level.Info(t.logger).Log("msg", "flushing TSDB", "tenant", id, "shard", sid)
+			wg.Add(1)
+			go func() {
+				head := db.Head()
+				if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime())); err != nil {
+					errmtx.Lock()
+					merr.Add(err)
+					errmtx.Unlock()
+				}
+				wg.Done()
+			}()
+		}
 	}
 
 	wg.Wait()
@@ -258,13 +270,15 @@ func (t *MultiTSDB) Close() error {
 
 	merr := errutil.MultiError{}
 	for id, tenant := range t.tenants {
-		db := tenant.readyStorage().Get()
-		if db == nil {
-			level.Error(t.logger).Log("msg", "closing TSDB failed; not ready", "tenant", id)
-			continue
+		for sid, tenantShard := range tenant {
+			db := tenantShard.readyStorage().Get()
+			if db == nil {
+				level.Error(t.logger).Log("msg", "closing TSDB failed; not ready", "tenant", id, "shard", sid)
+				continue
+			}
+			level.Info(t.logger).Log("msg", "closing TSDB", "tenant", id, "shard", sid)
+			merr.Add(db.Close())
 		}
-		level.Info(t.logger).Log("msg", "closing TSDB", "tenant", id)
-		merr.Add(db.Close())
 	}
 	return merr.Err()
 }
@@ -277,55 +291,60 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 		return nil
 	}
 
-	var (
-		wg   sync.WaitGroup
-		merr errutil.SyncMultiError
+	// TODO what to do here
+	return nil
 
-		prunedTenants []string
-		pmtx          sync.Mutex
-	)
+	/*
+		var (
+			wg   sync.WaitGroup
+			merr errutil.SyncMultiError
 
-	t.mtx.RLock()
-	for tenantID, tenantInstance := range t.tenants {
-		wg.Add(1)
-		go func(tenantID string, tenantInstance *tenant) {
-			defer wg.Done()
-			tlog := log.With(t.logger, "tenant", tenantID)
-			pruned, err := t.pruneTSDB(ctx, tlog, tenantInstance)
-			if err != nil {
-				merr.Add(err)
-				return
+			prunedTenants []string
+			pmtx          sync.Mutex
+		)
+
+		t.mtx.RLock()
+		for tenantID, tenantInstance := range t.tenants {
+			wg.Add(1)
+			go func(tenantID string, tenantInstance *tenant) {
+				defer wg.Done()
+				tlog := log.With(t.logger, "tenant", tenantID)
+				pruned, err := t.pruneTSDB(ctx, tlog, tenantInstance)
+				if err != nil {
+					merr.Add(err)
+					return
+				}
+
+				if pruned {
+					pmtx.Lock()
+					defer pmtx.Unlock()
+					prunedTenants = append(prunedTenants, tenantID)
+				}
+			}(tenantID, tenantInstance)
+		}
+		wg.Wait()
+		t.mtx.RUnlock()
+
+		t.mtx.Lock()
+		defer t.mtx.Unlock()
+		for _, tenantID := range prunedTenants {
+			// Check that the tenant hasn't been reinitialized in-between locks.
+			if t.tenants[tenantID].readyStorage().get() != nil {
+				continue
 			}
 
-			if pruned {
-				pmtx.Lock()
-				defer pmtx.Unlock()
-				prunedTenants = append(prunedTenants, tenantID)
-			}
-		}(tenantID, tenantInstance)
-	}
-	wg.Wait()
-	t.mtx.RUnlock()
-
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-	for _, tenantID := range prunedTenants {
-		// Check that the tenant hasn't been reinitialized in-between locks.
-		if t.tenants[tenantID].readyStorage().get() != nil {
-			continue
+			level.Info(t.logger).Log("msg", "Pruned tenant", "tenant", tenantID)
+			delete(t.tenants, tenantID)
 		}
 
-		level.Info(t.logger).Log("msg", "Pruned tenant", "tenant", tenantID)
-		delete(t.tenants, tenantID)
-	}
-
-	return merr.Err()
+		return merr.Err()
+	*/
 }
 
 // pruneTSDB removes a TSDB if its past the retention period.
 // It compacts the TSDB head, sends all remaining blocks to S3 and removes the TSDB from disk.
-func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInstance *tenant) (bool, error) {
-	tenantTSDB := tenantInstance.readyStorage()
+func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantShard *tenantShard) (bool, error) {
+	tenantTSDB := tenantShard.readyStorage()
 	if tenantTSDB == nil {
 		return false, nil
 	}
@@ -355,8 +374,8 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	defer tenantTSDB.mtx.Unlock()
 
 	// Lock the entire tenant to make sure the shipper is not running in parallel.
-	tenantInstance.mtx.Lock()
-	defer tenantInstance.mtx.Unlock()
+	tenantShard.mtx.Lock()
+	defer tenantShard.mtx.Unlock()
 
 	sinceLastAppendMillis = time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
 	if sinceLastAppendMillis <= compactThreshold {
@@ -373,8 +392,8 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	}
 
 	level.Info(logger).Log("msg", "Pruning tenant")
-	if tenantInstance.ship != nil {
-		uploaded, err := tenantInstance.ship.Sync(ctx)
+	if tenantShard.ship != nil {
+		uploaded, err := tenantShard.ship.Sync(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -392,8 +411,8 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 		return false, err
 	}
 
-	tenantInstance.readyS.set(nil)
-	tenantInstance.setComponents(nil, nil, nil)
+	tenantShard.readyS.set(nil)
+	tenantShard.setComponents(nil, nil, nil)
 
 	return true, nil
 }
@@ -414,22 +433,24 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 	)
 
 	for tenantID, tenant := range t.tenants {
-		level.Debug(t.logger).Log("msg", "uploading block for tenant", "tenant", tenantID)
-		s := tenant.shipper()
-		if s == nil {
-			continue
-		}
-		wg.Add(1)
-		go func() {
-			up, err := s.Sync(ctx)
-			if err != nil {
-				errmtx.Lock()
-				merr.Add(errors.Wrap(err, "upload"))
-				errmtx.Unlock()
+		for shardId, tenantShard := range tenant {
+			level.Debug(t.logger).Log("msg", "uploading block for tenant", "tenant", tenantID, "shard", shardId)
+			s := tenantShard.shipper()
+			if s == nil {
+				continue
 			}
-			uploaded.Add(int64(up))
-			wg.Done()
-		}()
+			wg.Add(1)
+			go func() {
+				up, err := s.Sync(ctx)
+				if err != nil {
+					errmtx.Lock()
+					merr.Add(errors.Wrap(err, "upload"))
+					errmtx.Unlock()
+				}
+				uploaded.Add(int64(up))
+				wg.Done()
+			}()
+		}
 	}
 	wg.Wait()
 	return int(uploaded.Load()), merr.Err()
@@ -467,9 +488,11 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
-		client := tenant.client(t.logger)
-		if client != nil {
-			res = append(res, client)
+		for _, tenantShard := range tenant {
+			client := tenantShard.client(t.logger)
+			if client != nil {
+				res = append(res, client)
+			}
 		}
 	}
 
@@ -480,99 +503,113 @@ func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	res := make(map[string]*exemplars.TSDB, len(t.tenants))
-	for k, tenant := range t.tenants {
-		e := tenant.exemplars()
-		if e != nil {
-			res[k] = e
+	// TODO: what to do here
+	return nil
+	/*
+		res := make(map[string]*exemplars.TSDB, len(t.tenants))
+		for k, tenant := range t.tenants {
+			e := tenant.exemplars()
+			if e != nil {
+				res[k] = e
+			}
 		}
-	}
-	return res
+		return res
+	*/
 }
 
 func (t *MultiTSDB) TenantStats(statsByLabelName string, tenantIDs ...string) []status.TenantStats {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
-	if len(tenantIDs) == 0 {
-		for tenantID := range t.tenants {
-			tenantIDs = append(tenantIDs, tenantID)
-		}
-	}
 
-	var (
-		mu     sync.Mutex
-		wg     sync.WaitGroup
-		result = make([]status.TenantStats, 0, len(t.tenants))
-	)
-	for _, tenantID := range tenantIDs {
-		tenantInstance, ok := t.tenants[tenantID]
-		if !ok {
-			continue
-		}
+	// TODO: what to do here
+	return nil
+	/*
 
-		wg.Add(1)
-		go func(tenantID string, tenantInstance *tenant) {
-			defer wg.Done()
-			db := tenantInstance.readyS.Get()
-			if db == nil {
-				return
+		if len(tenantIDs) == 0 {
+			for tenantID := range t.tenants {
+				tenantIDs = append(tenantIDs, tenantID)
 			}
-			stats := db.Head().Stats(statsByLabelName)
+		}
 
-			mu.Lock()
-			defer mu.Unlock()
-			result = append(result, status.TenantStats{
-				Tenant: tenantID,
-				Stats:  stats,
-			})
-		}(tenantID, tenantInstance)
-	}
-	wg.Wait()
+		var (
+			mu     sync.Mutex
+			wg     sync.WaitGroup
+			result = make([]status.TenantStats, 0, len(t.tenants))
+		)
+		for _, tenantID := range tenantIDs {
+			tenantInstance, ok := t.tenants[tenantID]
+			if !ok {
+				continue
+			}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Tenant < result[j].Tenant
-	})
-	return result
+			wg.Add(1)
+			go func(tenantID string, tenantInstance *tenant) {
+				defer wg.Done()
+				db := tenantInstance.readyS.Get()
+				if db == nil {
+					return
+				}
+				stats := db.Head().Stats(statsByLabelName)
+
+				mu.Lock()
+				defer mu.Unlock()
+				result = append(result, status.TenantStats{
+					Tenant: tenantID,
+					Stats:  stats,
+				})
+			}(tenantID, tenantInstance)
+		}
+		wg.Wait()
+
+		sort.Slice(result, func(i, j int) bool {
+			return result[i].Tenant < result[j].Tenant
+		})
+		return result
+	*/
 }
 
-func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
-	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
-	reg = NewUnRegisterer(reg)
+func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant tenant) error {
+	for shardId, tenantShard := range tenant {
+		reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
+		reg = NewUnRegisterer(reg)
 
-	lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
-	dataDir := t.defaultTenantDataDir(tenantID)
+		shardIdStr := strconv.FormatInt(int64(shardId), 10)
 
-	level.Info(logger).Log("msg", "opening TSDB")
-	opts := *t.tsdbOpts
-	s, err := tsdb.Open(
-		dataDir,
-		logger,
-		reg,
-		&opts,
-		nil,
-	)
-	if err != nil {
-		t.mtx.Lock()
-		delete(t.tenants, tenantID)
-		t.mtx.Unlock()
-		return err
-	}
-	var ship *shipper.Shipper
-	if t.bucket != nil {
-		ship = shipper.New(
+		lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID, "shard_id", shardIdStr))
+		dataDir := filepath.Join(t.defaultTenantDataDir(tenantID), shardIdStr)
+
+		level.Info(logger).Log("msg", "opening TSDB")
+		opts := *t.tsdbOpts
+		s, err := tsdb.Open(
+			dataDir,
 			logger,
 			reg,
-			dataDir,
-			t.bucket,
-			func() labels.Labels { return lset },
-			metadata.ReceiveSource,
-			false,
-			t.allowOutOfOrderUpload,
-			t.hashFunc,
+			&opts,
+			nil,
 		)
+		if err != nil {
+			t.mtx.Lock()
+			delete(t.tenants, tenantID)
+			t.mtx.Unlock()
+			return err
+		}
+		var ship *shipper.Shipper
+		if t.bucket != nil {
+			ship = shipper.New(
+				logger,
+				reg,
+				dataDir,
+				t.bucket,
+				func() labels.Labels { return lset },
+				metadata.ReceiveSource,
+				false,
+				t.allowOutOfOrderUpload,
+				t.hashFunc,
+			)
+		}
+		tenantShard.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))
+		level.Info(logger).Log("msg", "TSDB is now ready")
 	}
-	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))
-	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }
 
@@ -580,7 +617,7 @@ func (t *MultiTSDB) defaultTenantDataDir(tenantID string) string {
 	return path.Join(t.dataDir, tenantID)
 }
 
-func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenant, error) {
+func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (tenant, error) {
 	// Fast path, as creating tenants is a very rare operation.
 	t.mtx.RLock()
 	tenant, exist := t.tenants[tenantID]
@@ -599,7 +636,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 		return tenant, nil
 	}
 
-	tenant = newTenant()
+	tenant = newTenant(shardsPerTenant)
 	t.tenants[tenantID] = tenant
 	t.mtx.Unlock()
 
@@ -615,12 +652,16 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 	return tenant, t.startTSDB(logger, tenantID, tenant)
 }
 
-func (t *MultiTSDB) TenantAppendable(tenantID string) (Appendable, error) {
+func (t *MultiTSDB) TenantAppendables(tenantID string) ([]Appendable, error) {
 	tenant, err := t.getOrLoadTenant(tenantID, false)
 	if err != nil {
 		return nil, err
 	}
-	return tenant.readyStorage(), nil
+	res := make([]Appendable, len(tenant))
+	for i, tenantShard := range tenant {
+		res[i] = tenantShard.readyStorage()
+	}
+	return res, nil
 }
 
 // ErrNotReady is returned if the underlying storage is not ready yet.
