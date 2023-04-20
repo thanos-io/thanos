@@ -681,11 +681,10 @@ for _, elem := range elems {
 
 ```go
 for _, elem := range elems {
+	something[i] = "no"
 	if a == 1 {
 		something[i] = "yes"
-		continue
 	}
-	something[i] = "no"
 }
 ```
 
