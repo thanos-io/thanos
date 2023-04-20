@@ -22,6 +22,123 @@ func TestRmLabelsCornerCases(t *testing.T) {
 	}), labels.Labels{})
 }
 
+type testingRespSet struct {
+	bufferedResponse []*storepb.SeriesResponse
+	i                int
+}
+
+func (l *testingRespSet) Close() {}
+
+func (l *testingRespSet) At() *storepb.SeriesResponse {
+	return l.bufferedResponse[l.i]
+}
+
+func (l *testingRespSet) Next() bool {
+	l.i++
+	return l.i < len(l.bufferedResponse)
+}
+
+func (l *testingRespSet) StoreID() string {
+	return ""
+}
+
+func (l *testingRespSet) Labelset() string {
+	return ""
+}
+
+func (l *testingRespSet) Empty() bool {
+	return l.i >= len(l.bufferedResponse)
+}
+
+func TestProxyResponseHeapSort(t *testing.T) {
+	for _, tcase := range []struct {
+		input []respSet
+		exp   []*storepb.SeriesResponse
+	}{
+		// Different sorted response sets
+		{
+			input: []respSet{
+				&testingRespSet{
+					bufferedResponse: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3", "d", "4")),
+					},
+				},
+				&testingRespSet{
+					bufferedResponse: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "d", "4")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "4", "e", "5")),
+					},
+				},
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "d", "4")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3", "d", "4")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "4", "e", "5")),
+			},
+		},
+		// Sorted response sets with different number of labels in their series
+		{
+			input: []respSet{
+				&testingRespSet{
+					bufferedResponse: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("b", "2", "c", "3")),
+					},
+				},
+				&testingRespSet{
+					bufferedResponse: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "e", "5")),
+					},
+				},
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "e", "5")),
+				storeSeriesResponse(t, labelsFromStrings("b", "2", "c", "3")),
+			},
+		},
+		// Duplicated response sets that are sorted if you remove common label-values
+		// This is similar to response sets from stores that sort the set before adding external labels
+		{
+			input: []respSet{
+				&testingRespSet{
+					bufferedResponse: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+					},
+				},
+				&testingRespSet{
+					bufferedResponse: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+					},
+				},
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+			},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			h := NewProxyResponseHeap(tcase.input...)
+			if !h.Empty() {
+				got := []*storepb.SeriesResponse{h.At()}
+				for h.Next() {
+					got = append(got, h.At())
+				}
+				testutil.Equals(t, tcase.exp, got)
+			}
+		})
+	}
+}
+
 func TestSortWithoutLabels(t *testing.T) {
 	for _, tcase := range []struct {
 		input       []*storepb.SeriesResponse

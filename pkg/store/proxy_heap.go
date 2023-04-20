@@ -172,7 +172,7 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 	if iResp.GetSeries() != nil && jResp.GetSeries() != nil {
 		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
 		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)
-		return labels.Compare(iLbls, jLbls) < 0
+		return compareDiffLabels(iLbls, jLbls) < 0
 	} else if iResp.GetSeries() == nil && jResp.GetSeries() != nil {
 		return true
 	} else if iResp.GetSeries() != nil && jResp.GetSeries() == nil {
@@ -735,6 +735,25 @@ func newEagerRespSet(
 	}(st, ret)
 
 	return ret
+}
+
+// compareDiffLabels compares the two label sets, skipping labels with the same value in both sets.
+func compareDiffLabels(a, b labels.Labels) int {
+	a = a.Copy()
+	b = b.Copy()
+	aMap := make(map[string]string)
+	labelsToRemove := make(map[string]struct{})
+	for i := 0; i < len(a); i++ {
+		aMap[a[i].Name] = a[i].Value
+	}
+	for i := 0; i < len(b); i++ {
+		if v, ok := aMap[b[i].Name]; ok {
+			if b[i].Value == v {
+				labelsToRemove[b[i].Name] = struct{}{}
+			}
+		}
+	}
+	return labels.Compare(rmLabels(a, labelsToRemove), rmLabels(b, labelsToRemove))
 }
 
 func rmLabels(l labels.Labels, labelsToRemove map[string]struct{}) labels.Labels {
