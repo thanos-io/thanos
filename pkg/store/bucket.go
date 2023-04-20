@@ -2340,9 +2340,9 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 				l   index.Postings
 				err error
 			)
-			if isDiffVarintSnappyEncodedPostings(b) {
+			if isDiffVarintSnappyEncodedPostings(b) || isDiffVarintSnappyStreamedEncodedPostings(b) {
 				s := time.Now()
-				clPostings, err := diffVarintSnappyDecode(b)
+				clPostings, err := getDecodingFunction(b)(b)
 				r.stats.cachedPostingsDecompressions += 1
 				r.stats.CachedPostingsDecompressionTimeSum += time.Since(s)
 				if err != nil {
@@ -2442,7 +2442,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 				compressions++
 				s := time.Now()
 				bep := newBigEndianPostings(pBytes[4:])
-				data, err := diffVarintSnappyEncode(bep, bep.length())
+				data, err := diffVarintSnappyStreamedEncode(bep, bep.length())
 				compressionTime = time.Since(s)
 				if err == nil {
 					dataToCache = data

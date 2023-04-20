@@ -5,6 +5,8 @@ package store
 
 import (
 	"bytes"
+	"encoding/binary"
+	"io"
 	"sync"
 
 	"github.com/golang/snappy"
@@ -25,12 +27,166 @@ import (
 // significantly (to about 20% of original), snappy then halves it to ~10% of the original.
 
 const (
-	codecHeaderSnappy = "dvs" // As in "diff+varint+snappy".
+	codecHeaderSnappy         = "dvs" // As in "diff+varint+snappy".
+	codecHeaderStreamedSnappy = "dss" // As in "diffvarint+streamed snappy".
 )
+
+func getDecodingFunction(input []byte) func([]byte) (closeablePostings, error) {
+	if isDiffVarintSnappyEncodedPostings(input) {
+		return diffVarintSnappyDecode
+	}
+	if isDiffVarintSnappyStreamedEncodedPostings(input) {
+		return diffVarintSnappyStreamedDecode
+	}
+	return nil
+}
 
 // isDiffVarintSnappyEncodedPostings returns true, if input looks like it has been encoded by diff+varint+snappy codec.
 func isDiffVarintSnappyEncodedPostings(input []byte) bool {
 	return bytes.HasPrefix(input, []byte(codecHeaderSnappy))
+}
+
+// isDiffVarintSnappyStreamedEncodedPostings returns true, if input looks like it has been encoded by diff+varint+snappy streamed codec.
+func isDiffVarintSnappyStreamedEncodedPostings(input []byte) bool {
+	return bytes.HasPrefix(input, []byte(codecHeaderStreamedSnappy))
+}
+
+func writeUvarint(w io.Writer, oneByteSlice []byte, x uint64) error {
+	for x >= 0x80 {
+		oneByteSlice[0] = byte(x) | 0x80
+		n, err := w.Write(oneByteSlice)
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return io.EOF
+		}
+		x >>= 7
+	}
+	oneByteSlice[0] = byte(x)
+	n, err := w.Write(oneByteSlice)
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return io.EOF
+	}
+	return nil
+}
+
+var snappyWriterPool, snappyReaderPool sync.Pool
+
+func diffVarintSnappyStreamedEncode(p index.Postings, length int) ([]byte, error) {
+	// 1.25 bytes per postings + header + snappy stream beginning.
+	out := make([]byte, 0, 10+snappy.MaxEncodedLen(5*length/4)+len(codecHeaderStreamedSnappy))
+	out = append(out, []byte(codecHeaderStreamedSnappy)...)
+	compressedBuf := bytes.NewBuffer(out[len(codecHeaderStreamedSnappy):])
+	var sw *snappy.Writer
+
+	oneByteSlice := make([]byte, 1)
+
+	pooledSW := snappyWriterPool.Get()
+	if pooledSW == nil {
+		sw = snappy.NewBufferedWriter(compressedBuf)
+	} else {
+		sw = pooledSW.(*snappy.Writer)
+		sw.Reset(compressedBuf)
+	}
+
+	defer func() {
+		snappyWriterPool.Put(sw)
+	}()
+
+	prev := storage.SeriesRef(0)
+	for p.Next() {
+		v := p.At()
+		if v < prev {
+			return nil, errors.Errorf("postings entries must be in increasing order, current: %d, previous: %d", v, prev)
+		}
+
+		if err := writeUvarint(sw, oneByteSlice, uint64(v-prev)); err != nil {
+			return nil, errors.Wrap(err, "writing uvarint encoded byte")
+		}
+		prev = v
+	}
+	if p.Err() != nil {
+		return nil, p.Err()
+	}
+	if err := sw.Close(); err != nil {
+		return nil, errors.Wrap(err, "closing snappy stream writer")
+	}
+
+	return out[:len(codecHeaderStreamedSnappy)+compressedBuf.Len()], nil
+}
+
+func diffVarintSnappyStreamedDecode(input []byte) (closeablePostings, error) {
+	if !isDiffVarintSnappyStreamedEncodedPostings(input) {
+		return nil, errors.New("header not found")
+	}
+
+	return newStreamedDiffVarintPostings(input[len(codecHeaderStreamedSnappy):]), nil
+}
+
+type streamedDiffVarintPostings struct {
+	cur storage.SeriesRef
+
+	sr  *snappy.Reader
+	err error
+}
+
+func newStreamedDiffVarintPostings(input []byte) closeablePostings {
+	var sr *snappy.Reader
+
+	srPooled := snappyReaderPool.Get()
+	if srPooled == nil {
+		sr = snappy.NewReader(bytes.NewBuffer(input))
+	} else {
+		sr = srPooled.(*snappy.Reader)
+		sr.Reset(bytes.NewBuffer(input))
+	}
+
+	return &streamedDiffVarintPostings{sr: sr}
+}
+
+func (it *streamedDiffVarintPostings) close() {
+	snappyReaderPool.Put(it.sr)
+}
+
+func (it *streamedDiffVarintPostings) At() storage.SeriesRef {
+	return it.cur
+}
+
+func (it *streamedDiffVarintPostings) Next() bool {
+	val, err := binary.ReadUvarint(it.sr)
+	if err != nil {
+		if err != io.EOF {
+			it.err = err
+		}
+		return false
+	}
+
+	it.cur = it.cur + storage.SeriesRef(val)
+	return true
+}
+
+func (it *streamedDiffVarintPostings) Err() error {
+	return it.err
+}
+
+func (it *streamedDiffVarintPostings) Seek(x storage.SeriesRef) bool {
+	if it.cur >= x {
+		return true
+	}
+
+	// We cannot do any search due to how values are stored,
+	// so we simply advance until we find the right value.
+	for it.Next() {
+		if it.At() >= x {
+			return true
+		}
+	}
+
+	return false
 }
 
 // diffVarintSnappyEncode encodes postings into diff+varint representation,

@@ -57,8 +57,9 @@ func TestDiffVarintCodec(t *testing.T) {
 		codingFunction   func(index.Postings, int) ([]byte, error)
 		decodingFunction func([]byte) (closeablePostings, error)
 	}{
-		"raw":    {codingFunction: diffVarintEncodeNoHeader, decodingFunction: func(bytes []byte) (closeablePostings, error) { return newDiffVarintPostings(bytes, nil), nil }},
-		"snappy": {codingFunction: diffVarintSnappyEncode, decodingFunction: diffVarintSnappyDecode},
+		"raw":            {codingFunction: diffVarintEncodeNoHeader, decodingFunction: func(bytes []byte) (closeablePostings, error) { return newDiffVarintPostings(bytes, nil), nil }},
+		"snappy":         {codingFunction: diffVarintSnappyEncode, decodingFunction: diffVarintSnappyDecode},
+		"snappyStreamed": {codingFunction: diffVarintSnappyStreamedEncode, decodingFunction: diffVarintSnappyStreamedDecode},
 	}
 
 	for postingName, postings := range postingsMap {
@@ -194,7 +195,7 @@ func (p *uint64Postings) len() int {
 	return len(p.vals)
 }
 
-func BenchmarkEncodePostings(b *testing.B) {
+func BenchmarkPostingsEncodingDecoding(b *testing.B) {
 	const max = 1000000
 	r := rand.New(rand.NewSource(0))
 
@@ -208,16 +209,51 @@ func BenchmarkEncodePostings(b *testing.B) {
 		p[ix] = p[ix-1] + storage.SeriesRef(d)
 	}
 
-	for _, count := range []int{10000, 100000, 1000000} {
-		b.Run(strconv.Itoa(count), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				ps := &uint64Postings{vals: p[:count]}
+	codecs := map[string]struct {
+		codingFunction   func(index.Postings, int) ([]byte, error)
+		decodingFunction func([]byte) (closeablePostings, error)
+	}{
+		"raw":            {codingFunction: diffVarintEncodeNoHeader, decodingFunction: func(bytes []byte) (closeablePostings, error) { return newDiffVarintPostings(bytes, nil), nil }},
+		"snappy":         {codingFunction: diffVarintSnappyEncode, decodingFunction: diffVarintSnappyDecode},
+		"snappyStreamed": {codingFunction: diffVarintSnappyStreamedEncode, decodingFunction: diffVarintSnappyStreamedDecode},
+	}
 
-				_, err := diffVarintEncodeNoHeader(ps, ps.len())
-				if err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
+	b.ReportAllocs()
+
+	for _, count := range []int{10000, 100000, 1000000} {
+		for codecName, codecFns := range codecs {
+			b.Run(strconv.Itoa(count), func(b *testing.B) {
+				b.Run(codecName, func(b *testing.B) {
+					b.Run("encode", func(b *testing.B) {
+						b.ResetTimer()
+						for i := 0; i < b.N; i++ {
+							ps := &uint64Postings{vals: p[:count]}
+
+							_, err := codecFns.codingFunction(ps, ps.len())
+							if err != nil {
+								b.Fatal(err)
+							}
+						}
+					})
+					b.Run("decode", func(b *testing.B) {
+						ps := &uint64Postings{vals: p[:count]}
+
+						encoded, err := codecFns.codingFunction(ps, ps.len())
+						if err != nil {
+							b.Fatal(err)
+						}
+
+						b.ResetTimer()
+						for i := 0; i < b.N; i++ {
+							_, err := codecFns.decodingFunction(encoded)
+							if err != nil {
+								b.Fatal(err)
+							}
+						}
+					})
+
+				})
+			})
+		}
 	}
 }
