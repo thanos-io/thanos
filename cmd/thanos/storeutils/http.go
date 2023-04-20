@@ -43,14 +43,14 @@ func (c *thanosClient) GetInstanceInfo(ctx context.Context, instanceAddress stri
 	response, err := c.client.R().
 		SetContext(ctx).
 		SetQueryParam("view", "loaded").
-		SetResult(&result).
+		SetSuccessResult(&result).
 		Get(fmt.Sprintf("http://%s/api/v1/blocks", instanceAddress))
 	if err != nil {
 		level.Error(c.logger).Log("msg", "failed to get instance info", "err", err, "responseDump", response.Dump())
 		return nil, err
 	}
 
-	if !response.IsSuccess() {
+	if !response.IsSuccessState() {
 		return nil, fmt.Errorf("http request failed. status code: %d", response.StatusCode)
 	}
 
