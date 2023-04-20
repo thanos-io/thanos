@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"math/rand"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
@@ -37,7 +39,6 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
-	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/objstore/client"
 	"gopkg.in/yaml.v2"
 
@@ -95,6 +96,8 @@ type ruleConfig struct {
 	lset              labels.Labels
 	ignoredLabelNames []string
 	storeRateLimits   store.SeriesSelectLimits
+
+	alertSourceTemplate string
 }
 
 func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -124,6 +127,7 @@ func registerRule(app *extkingpin.App) {
 	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").Bool()
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
+	cmd.Flag("alert-source-template", "Template to use in alerts source field. Need only include {{.Expr}} parameter").Default("/graph?g0.expr={{.Expr}}&g0.tab=1").StringVar(&conf.alertSourceTemplate)
 	cmd.Flag("data-dir", "data directory").Default("data/").StringVar(&conf.dataDir)
 	cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated). Note that rules are not automatically detected, use SIGHUP or do HTTP POST /-/reload to re-read them.").
 		Default("rules/").StringsVar(&conf.ruleFiles)
@@ -494,7 +498,7 @@ func runRule(
 					StartsAt:     alrt.FiredAt,
 					Labels:       alrt.Labels,
 					Annotations:  alrt.Annotations,
-					GeneratorURL: conf.alertQueryURL.String() + strutil.TableLinkForExpression(expr),
+					GeneratorURL: conf.alertQueryURL.String() + TableLinkForExpression(expr, conf.alertSourceTemplate),
 				}
 				if !alrt.ResolvedAt.IsZero() {
 					a.EndsAt = alrt.ResolvedAt
@@ -912,4 +916,24 @@ func reloadRules(logger log.Logger,
 		metrics.rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.OriginalFile, group.Name()).Set(float64(len(group.Rules())))
 	}
 	return errs.Err()
+}
+
+func TableLinkForExpression(expr string, tmpl string) string {
+	// template example: "/graph?g0.expr={{.Expr}}&g0.tab=1"
+	escapedExpression := url.QueryEscape(expr)
+
+	type expression struct {
+		Expr string
+	}
+	escapedExpr := expression{Expr: escapedExpression}
+	t, err := template.New("url").Parse(tmpl)
+	if err != nil {
+		panic(err)
+	}
+	var buf bytes.Buffer
+
+	if err := t.Execute(&buf, escapedExpr); err != nil {
+		panic(err)
+	}
+	return buf.String()
 }
