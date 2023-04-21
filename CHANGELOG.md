@@ -16,6 +16,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6192](https://github.com/thanos-io/thanos/pull/6192) Store: add flag `bucket-web-label` to select the label to use as timeline title in web UI
 - [#6167](https://github.com/thanos-io/thanos/pull/6195) Receive: add flag `tsdb.too-far-in-future.time-window` to prevent clock skewed samples to pollute TSDB head and block all valid incoming samples.
 - [#6273](https://github.com/thanos-io/thanos/pull/6273) Mixin: Allow specifying an instance name filter in dashboards
+- [#6305](https://github.com/thanos-io/thanos/pull/6305) UI: Added TraceID to query stats
 
 ### Fixed
 
