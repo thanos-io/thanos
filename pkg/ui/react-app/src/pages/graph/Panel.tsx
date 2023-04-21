@@ -197,10 +197,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       signal: abortController.signal,
     })
       .then((resp) => {
-        const traceID = resp.headers.get('X-Thanos-Trace-ID');
-        return resp.json()
+        return resp.json().then((json) => {
+          return {
+            json,
+            headers: resp.headers,
+          };
+        });
       })
-      .then((json) => {
+      .then(({ json, headers }) => {
+        const traceID = headers.get('X-Thanos-Trace-ID');
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
         }
@@ -228,7 +233,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             loadTime: Date.now() - queryStart,
             resolution,
             resultSeries,
-            traceID,
+            traceID: traceID ? traceID : '',
           },
           loading: false,
         });
