@@ -30,8 +30,6 @@ describe('QueryStatsView', () => {
     const queryStatsView = shallow(<QueryStatsView {...queryStatsProps} />);
     expect(queryStatsView.prop('className')).toEqual('query-stats');
     expect(queryStatsView.children().prop('className')).toEqual('float-right');
-    expect(queryStatsView.children().text()).toEqual(
-      'Load time: 100ms   Resolution: 5s   Result series: 10000'
-    );
+    expect(queryStatsView.children().text()).toEqual('Load time: 100ms   Resolution: 5s   Result series: 10000');
   });
 });
