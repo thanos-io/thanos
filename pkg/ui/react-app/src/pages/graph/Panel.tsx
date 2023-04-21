@@ -197,17 +197,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       signal: abortController.signal,
     })
       .then((resp) => {
-        return {
-          json: resp.json(),
-          headers: resp.headers,
-        };
+        const traceID = resp.headers.get('X-Thanos-Trace-ID');
+        return resp.json()
       })
-      .then(({json, headers}) => {
-        const traceID = headers.get('X-Thanos-Trace-ID');
-
-        (json) => { // need to resolve the promise
-          json.then()
-        }
+      .then((json) => {
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
         }
