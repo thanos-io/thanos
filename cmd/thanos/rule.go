@@ -6,6 +6,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"html/template"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -14,7 +16,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 
 	extflag "github.com/efficientgo/tools/extkingpin"
@@ -100,6 +101,10 @@ type ruleConfig struct {
 	alertSourceTemplate string
 }
 
+type Expression struct {
+	Expr string
+}
+
 func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.http.registerFlag(cmd)
 	rc.grpc.registerFlag(cmd)
@@ -127,7 +132,6 @@ func registerRule(app *extkingpin.App) {
 	noLockFile := cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").Bool()
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
-	cmd.Flag("alert-source-template", "Template to use in alerts source field. Need only include {{.Expr}} parameter").Default("/graph?g0.expr={{.Expr}}&g0.tab=1").StringVar(&conf.alertSourceTemplate)
 	cmd.Flag("data-dir", "data directory").Default("data/").StringVar(&conf.dataDir)
 	cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated). Note that rules are not automatically detected, use SIGHUP or do HTTP POST /-/reload to re-read them.").
 		Default("rules/").StringsVar(&conf.ruleFiles)
@@ -141,6 +145,14 @@ func registerRule(app *extkingpin.App) {
 		Default("10m").DurationVar(&conf.forGracePeriod)
 	cmd.Flag("restore-ignored-label", "Label names to be ignored when restoring alerts from the remote storage. This is only used in stateless mode.").
 		StringsVar(&conf.ignoredLabelNames)
+	cmd.Flag("alert-source-template", "Template to use in alerts source field. Need only include {{.Expr}} parameter").Default("/graph?g0.expr={{.Expr}}&g0.tab=1").StringVar(&conf.alertSourceTemplate)
+
+	// validate the user provided template is valid
+	// if not, use the default template
+	if err := validateTemplate(conf.alertSourceTemplate, Expression{Expr: "test_expr"}); err != nil {
+		conf.alertSourceTemplate = "/graph?g0.expr={{.Expr}}&g0.tab=1"
+		// log the error
+	}
 
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
@@ -494,11 +506,15 @@ func runRule(
 				if alrt.State == rules.StatePending {
 					continue
 				}
+				expressionURL, err := TableLinkForExpression(expr, conf.alertSourceTemplate)
+				if err != nil {
+					level.Warn(logger).Log("msg", "failed to generate link for expression", "expr", expr, "err", err)
+				}
 				a := &notifier.Alert{
 					StartsAt:     alrt.FiredAt,
 					Labels:       alrt.Labels,
 					Annotations:  alrt.Annotations,
-					GeneratorURL: conf.alertQueryURL.String() + TableLinkForExpression(expr, conf.alertSourceTemplate),
+					GeneratorURL: conf.alertQueryURL.String() + expressionURL,
 				}
 				if !alrt.ResolvedAt.IsZero() {
 					a.EndsAt = alrt.ResolvedAt
@@ -918,22 +934,34 @@ func reloadRules(logger log.Logger,
 	return errs.Err()
 }
 
-func TableLinkForExpression(expr string, tmpl string) string {
+func TableLinkForExpression(expr string, tmpl string) (string, error) {
 	// template example: "/graph?g0.expr={{.Expr}}&g0.tab=1"
 	escapedExpression := url.QueryEscape(expr)
 
-	type expression struct {
-		Expr string
-	}
-	escapedExpr := expression{Expr: escapedExpression}
+	escapedExpr := Expression{Expr: escapedExpression}
 	t, err := template.New("url").Parse(tmpl)
 	if err != nil {
-		panic(err)
+		return "", errors.Wrap(err, "failed to parse template")
 	}
 	var buf bytes.Buffer
 
 	if err := t.Execute(&buf, escapedExpr); err != nil {
-		panic(err)
+		return "", errors.Wrap(err, "failed to execute template")
 	}
-	return buf.String()
+	return buf.String(), nil
+}
+
+func validateTemplate(tmplStr string, data Expression) error {
+	tmpl, err := template.New("test").Parse(tmplStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse the template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, data)
+	if err != nil {
+		return fmt.Errorf("failed to execute the template: %w", err)
+	}
+
+	return nil
 }
