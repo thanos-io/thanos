@@ -147,13 +147,6 @@ func registerRule(app *extkingpin.App) {
 		StringsVar(&conf.ignoredLabelNames)
 	cmd.Flag("alert-source-template", "Template to use in alerts source field. Need only include {{.Expr}} parameter").Default("/graph?g0.expr={{.Expr}}&g0.tab=1").StringVar(&conf.alertSourceTemplate)
 
-	// validate the user provided template is valid
-	// if not, use the default template
-	if err := validateTemplate(conf.alertSourceTemplate, Expression{Expr: "test_expr"}); err != nil {
-		conf.alertSourceTemplate = "/graph?g0.expr={{.Expr}}&g0.tab=1"
-		// log the error
-	}
-
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
 	reqLogDecision := cmd.Flag("log.request.decision", "Deprecation Warning - This flag would be soon deprecated, and replaced with `request.logging-config`. Request Logging for logging the start and end of requests. By default this flag is disabled. LogFinishCall: Logs the finish call of the requests. LogStartAndFinishCall: Logs the start and finish call of the requests. NoLogCall: Disable request logging.").Default("").Enum("NoLogCall", "LogFinishCall", "LogStartAndFinishCall", "")
@@ -341,6 +334,10 @@ func runRule(
 				},
 			)
 		}
+	}
+
+	if err := validateTemplate(conf.alertSourceTemplate, Expression{Expr: "test_expr"}); err != nil {
+		return errors.Wrap(err, "invalid alert source template")
 	}
 
 	queryProvider := dns.NewProvider(
