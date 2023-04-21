@@ -13,7 +13,7 @@ describe('QueryStatsView', () => {
     const queryStatsView = shallow(<QueryStatsView {...queryStatsProps} />);
     expect(queryStatsView.prop('className')).toEqual('query-stats');
     expect(queryStatsView.children().prop('className')).toEqual('float-right');
-    expect(queryStatsView.children().text()).toEqual(
+    expect(queryStatsView.children().render()).toEqual(
       'Load time: 100ms   Resolution: 5s   Result series: 10000   Trace ID: 300277e5ef87c55f0d723965fbd8b7fd'
     );
   });
