@@ -205,7 +205,6 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         });
       })
       .then(({ json, headers }) => {
-        const traceID = headers.get('X-Thanos-Trace-ID');
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
         }
@@ -219,6 +218,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             resultSeries = result.length;
           }
         }
+
+        const traceID = headers.get('X-Thanos-Trace-ID');
 
         this.setState({
           error: null,
