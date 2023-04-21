@@ -18,3 +18,20 @@ describe('QueryStatsView', () => {
     );
   });
 });
+
+describe('QueryStatsView', () => {
+  it('does not render missing trace id', () => {
+    const queryStatsProps = {
+      loadTime: 100,
+      resolution: 5,
+      resultSeries: 10000,
+      traceID: '',
+    };
+    const queryStatsView = shallow(<QueryStatsView {...queryStatsProps} />);
+    expect(queryStatsView.prop('className')).toEqual('query-stats');
+    expect(queryStatsView.children().prop('className')).toEqual('float-right');
+    expect(queryStatsView.children().text()).toEqual(
+      'Load time: 100ms   Resolution: 5s   Result series: 10000'
+    );
+  });
+});
