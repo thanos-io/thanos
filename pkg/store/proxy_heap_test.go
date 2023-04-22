@@ -24,6 +24,7 @@ func TestRmLabelsCornerCases(t *testing.T) {
 
 type testingRespSet struct {
 	bufferedResponse []*storepb.SeriesResponse
+	storeLabels      map[string]struct{}
 	i                int
 }
 
@@ -50,13 +51,18 @@ func (l *testingRespSet) Empty() bool {
 	return l.i >= len(l.bufferedResponse)
 }
 
+func (l *testingRespSet) StoreLabels() map[string]struct{} {
+	return l.storeLabels
+}
+
 func TestProxyResponseHeapSort(t *testing.T) {
 	for _, tcase := range []struct {
+		title string
 		input []respSet
 		exp   []*storepb.SeriesResponse
 	}{
-		// Different sorted response sets
 		{
+			title: "merge sets with different series and common labels",
 			input: []respSet{
 				&testingRespSet{
 					bufferedResponse: []*storepb.SeriesResponse{
@@ -66,56 +72,59 @@ func TestProxyResponseHeapSort(t *testing.T) {
 				},
 				&testingRespSet{
 					bufferedResponse: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labelsFromStrings("a", "1", "d", "4")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "4", "e", "5")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "d", "4")),
 					},
 				},
 			},
 			exp: []*storepb.SeriesResponse{
 				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "d", "4")),
 				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3", "d", "4")),
 				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "4", "e", "5")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "d", "4")),
 			},
 		},
-		// Sorted response sets with different number of labels in their series
 		{
+			title: "merge sets with different series and labels",
 			input: []respSet{
 				&testingRespSet{
 					bufferedResponse: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
 						storeSeriesResponse(t, labelsFromStrings("b", "2", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("g", "7", "h", "8", "i", "9")),
 					},
 				},
 				&testingRespSet{
 					bufferedResponse: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2")),
-						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "e", "5")),
+						storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5")),
+						storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5", "f", "6")),
 					},
 				},
 			},
 			exp: []*storepb.SeriesResponse{
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2")),
 				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
-				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "e", "5")),
 				storeSeriesResponse(t, labelsFromStrings("b", "2", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5")),
+				storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5", "f", "6")),
+				storeSeriesResponse(t, labelsFromStrings("g", "7", "h", "8", "i", "9")),
 			},
 		},
-		// Duplicated response sets that are sorted if you remove common label-values
-		// This is similar to response sets from stores that sort the set before adding external labels
 		{
+			title: "merge sets that were ordered before adding external labels",
 			input: []respSet{
 				&testingRespSet{
 					bufferedResponse: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
 					},
+					storeLabels: map[string]struct{}{"c": {}},
 				},
 				&testingRespSet{
 					bufferedResponse: []*storepb.SeriesResponse{
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
 						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
 					},
+					storeLabels: map[string]struct{}{"c": {}},
 				},
 			},
 			exp: []*storepb.SeriesResponse{
@@ -126,7 +135,7 @@ func TestProxyResponseHeapSort(t *testing.T) {
 			},
 		},
 	} {
-		t.Run("", func(t *testing.T) {
+		t.Run(tcase.title, func(t *testing.T) {
 			h := NewProxyResponseHeap(tcase.input...)
 			if !h.Empty() {
 				got := []*storepb.SeriesResponse{h.At()}

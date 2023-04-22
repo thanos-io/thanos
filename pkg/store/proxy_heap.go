@@ -170,9 +170,13 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 	jResp := (*h)[j].rs.At()
 
 	if iResp.GetSeries() != nil && jResp.GetSeries() != nil {
+		// Response sets are sorted before adding external labels.
+		// This comparison excludes those labels to keep the same order.
+		iStoreLbls := (*h)[i].rs.StoreLabels()
+		jStoreLbls := (*h)[j].rs.StoreLabels()
 		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
 		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)
-		return compareDiffLabels(iLbls, jLbls) < 0
+		return labels.Compare(rmLabels(iLbls.Copy(), iStoreLbls), rmLabels(jLbls.Copy(), jStoreLbls)) < 0
 	} else if iResp.GetSeries() == nil && jResp.GetSeries() != nil {
 		return true
 	} else if iResp.GetSeries() != nil && jResp.GetSeries() == nil {
@@ -257,6 +261,10 @@ func (l *lazyRespSet) Labelset() string {
 	return labelpb.PromLabelSetsToString(l.storeLabelSets)
 }
 
+func (l *lazyRespSet) StoreLabels() map[string]struct{} {
+	return l.storeLabels
+}
+
 // lazyRespSet is a lazy storepb.SeriesSet that buffers
 // everything as fast as possible while at the same it permits
 // reading response-by-response. It blocks if there is no data
@@ -268,6 +276,7 @@ type lazyRespSet struct {
 	closeSeries    context.CancelFunc
 	storeName      string
 	storeLabelSets []labels.Labels
+	storeLabels    map[string]struct{}
 	frameTimeout   time.Duration
 	ctx            context.Context
 
@@ -373,6 +382,11 @@ func newLazyRespSet(
 		bufferedResponsesMtx: bufferedResponsesMtx,
 		bufferedResponses:    bufferedResponses,
 		shardMatcher:         shardMatcher,
+	}
+	for _, ls := range storeLabelSets {
+		for _, l := range ls {
+			respSet.storeLabels[l.Name] = struct{}{}
+		}
 	}
 
 	go func(st string, l *lazyRespSet) {
@@ -610,6 +624,7 @@ type eagerRespSet struct {
 
 	shardMatcher *storepb.ShardMatcher
 	removeLabels map[string]struct{}
+	storeLabels  map[string]struct{}
 
 	// Internal bookkeeping.
 	bufferedResponses []*storepb.SeriesResponse
@@ -640,6 +655,11 @@ func newEagerRespSet(
 		wg:                &sync.WaitGroup{},
 		shardMatcher:      shardMatcher,
 		removeLabels:      removeLabels,
+	}
+	for _, ls := range st.LabelSets() {
+		for _, l := range ls {
+			ret.storeLabels[l.Name] = struct{}{}
+		}
 	}
 
 	ret.wg.Add(1)
@@ -737,25 +757,6 @@ func newEagerRespSet(
 	return ret
 }
 
-// compareDiffLabels compares the two label sets, skipping labels with the same value in both sets.
-func compareDiffLabels(a, b labels.Labels) int {
-	a = a.Copy()
-	b = b.Copy()
-	aMap := make(map[string]string)
-	labelsToRemove := make(map[string]struct{})
-	for i := 0; i < len(a); i++ {
-		aMap[a[i].Name] = a[i].Value
-	}
-	for i := 0; i < len(b); i++ {
-		if v, ok := aMap[b[i].Name]; ok {
-			if b[i].Value == v {
-				labelsToRemove[b[i].Name] = struct{}{}
-			}
-		}
-	}
-	return labels.Compare(rmLabels(a, labelsToRemove), rmLabels(b, labelsToRemove))
-}
-
 func rmLabels(l labels.Labels, labelsToRemove map[string]struct{}) labels.Labels {
 	for i := 0; i < len(l); i++ {
 		if _, ok := labelsToRemove[l[i].Name]; !ok {
@@ -830,11 +831,16 @@ func (l *eagerRespSet) Labelset() string {
 	return labelpb.PromLabelSetsToString(l.st.LabelSets())
 }
 
+func (l *eagerRespSet) StoreLabels() map[string]struct{} {
+	return l.storeLabels
+}
+
 type respSet interface {
 	Close()
 	At() *storepb.SeriesResponse
 	Next() bool
 	StoreID() string
 	Labelset() string
+	StoreLabels() map[string]struct{}
 	Empty() bool
 }
