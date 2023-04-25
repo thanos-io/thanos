@@ -59,9 +59,34 @@ func isDiffVarintSnappyStreamedEncodedPostings(input []byte) bool {
 
 var snappyWriterPool, snappyReaderPool sync.Pool
 
+func estimateSnappyStreamSize(length int) int {
+	// Snappy stream writes data in chunks up to 65536 in size.
+	// The stream begins with bytes 0xff 0x06 0x00 0x00 's' 'N' 'a' 'P' 'p' 'Y'.
+	// Our encoded data also needs a header.
+	// Each encoded (or uncompressed) chunk needs tag (chunk type 1B + chunk len 3B) + checksum 4B.
+
+	// Mark for encoded data.
+	ret := len(codecHeaderStreamedSnappy)
+	// Magic snappy stream start.
+	ret += 10
+
+	const maxBlockSize = 65536
+
+	length = 5 * length / 4 // 1.25B per posting.
+
+	blocks := length / maxBlockSize
+
+	ret += blocks * snappy.MaxEncodedLen(maxBlockSize)
+	length -= blocks * maxBlockSize
+	if length > 0 {
+		ret += snappy.MaxEncodedLen(length)
+	}
+
+	return ret
+}
+
 func diffVarintSnappyStreamedEncode(p index.Postings, length int) ([]byte, error) {
-	// 1.25 bytes per postings + header + snappy stream beginning.
-	out := make([]byte, 0, 10+snappy.MaxEncodedLen(5*length/4)+len(codecHeaderStreamedSnappy))
+	out := make([]byte, 0, estimateSnappyStreamSize(length))
 	out = append(out, []byte(codecHeaderStreamedSnappy)...)
 	compressedBuf := bytes.NewBuffer(out[len(codecHeaderStreamedSnappy):])
 	var sw *snappy.Writer
