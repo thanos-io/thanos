@@ -4,6 +4,15 @@ export interface Metric {
   [key: string]: string;
 }
 
+export interface Histogram {
+  count: string;
+  sum: string;
+  buckets?: [number, string, string, string][];
+}
+
+export type SampleValue = [number, string];
+export type SampleHistogram = [number, Histogram];
+
 export interface QueryParams {
   startTime: number;
   endTime: number;
