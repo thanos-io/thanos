@@ -387,6 +387,7 @@ func newLazyRespSet(
 		bufferedResponses:    bufferedResponses,
 		shardMatcher:         shardMatcher,
 	}
+	respSet.storeLabels = make(map[string]struct{})
 	for _, ls := range storeLabelSets {
 		for _, l := range ls {
 			respSet.storeLabels[l.Name] = struct{}{}
@@ -660,6 +661,7 @@ func newEagerRespSet(
 		shardMatcher:      shardMatcher,
 		removeLabels:      removeLabels,
 	}
+	ret.storeLabels = make(map[string]struct{})
 	for _, ls := range st.LabelSets() {
 		for _, l := range ls {
 			ret.storeLabels[l.Name] = struct{}{}
