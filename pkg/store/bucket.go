@@ -2342,7 +2342,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 			)
 			if isDiffVarintSnappyEncodedPostings(b) || isDiffVarintSnappyStreamedEncodedPostings(b) {
 				s := time.Now()
-				clPostings, err := getDecodingFunction(b)(b)
+				clPostings, err := decodePostings(b)
 				r.stats.cachedPostingsDecompressions += 1
 				r.stats.CachedPostingsDecompressionTimeSum += time.Since(s)
 				if err != nil {
