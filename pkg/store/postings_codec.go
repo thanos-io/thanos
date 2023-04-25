@@ -59,6 +59,10 @@ func isDiffVarintSnappyStreamedEncodedPostings(input []byte) bool {
 
 var snappyWriterPool, snappyReaderPool sync.Pool
 
+// estimateSnappyStreamSize estimates the number of bytes
+// needed for encoding length postings. Note that in reality
+// the number of bytes needed could be much bigger if postings
+// different by a lot. Practically, stddev=64 is used.
 func estimateSnappyStreamSize(length int) int {
 	// Snappy stream writes data in chunks up to 65536 in size.
 	// The stream begins with bytes 0xff 0x06 0x00 0x00 's' 'N' 'a' 'P' 'p' 'Y'.
@@ -72,7 +76,7 @@ func estimateSnappyStreamSize(length int) int {
 
 	const maxBlockSize = 65536
 
-	length = 5 * length / 4 // 1.25B per posting.
+	length = 5 * length / 4 // estimate 1.25B per posting.
 
 	blocks := length / maxBlockSize
 
@@ -86,10 +90,14 @@ func estimateSnappyStreamSize(length int) int {
 }
 
 func diffVarintSnappyStreamedEncode(p index.Postings, length int) ([]byte, error) {
-	out := make([]byte, 0, estimateSnappyStreamSize(length))
-	out = append(out, []byte(codecHeaderStreamedSnappy)...)
-	compressedBuf := bytes.NewBuffer(out[len(codecHeaderStreamedSnappy):])
 	var sw *snappy.Writer
+
+	compressedBuf := bytes.NewBuffer(make([]byte, 0, estimateSnappyStreamSize(length)))
+	if n, err := compressedBuf.WriteString(codecHeaderStreamedSnappy); err != nil {
+		return nil, fmt.Errorf("writing streamed snappy header")
+	} else if n != len(codecHeaderStreamedSnappy) {
+		return nil, fmt.Errorf("short-write streamed snappy header")
+	}
 
 	uvarintEncodeBuf := make([]byte, binary.MaxVarintLen64)
 
@@ -128,7 +136,7 @@ func diffVarintSnappyStreamedEncode(p index.Postings, length int) ([]byte, error
 		return nil, errors.Wrap(err, "closing snappy stream writer")
 	}
 
-	return out[:len(codecHeaderStreamedSnappy)+compressedBuf.Len()], nil
+	return compressedBuf.Bytes(), nil
 }
 
 func diffVarintSnappyStreamedDecode(input []byte) (closeablePostings, error) {

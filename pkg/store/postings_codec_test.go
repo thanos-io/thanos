@@ -7,6 +7,7 @@ import (
 	"context"
 	"math"
 	"math/rand"
+	"sort"
 	"strconv"
 	"testing"
 
@@ -269,12 +270,14 @@ func FuzzSnappyStreamEncoding(f *testing.F) {
 		p := make([]storage.SeriesRef, postingsCount)
 
 		for ix := 1; ix < len(p); ix++ {
-			// Use normal distribution, with stddev=64 (i.e. most values are < 64).
-			// This is very rough approximation of experiments with real blocks.v
-			d := math.Abs(r.NormFloat64()*64) + 1
+			d := math.Abs(r.NormFloat64()*math.MaxUint64) + 1
 
 			p[ix] = p[ix-1] + storage.SeriesRef(d)
 		}
+
+		sort.Slice(p, func(i, j int) bool {
+			return p[i] < p[j]
+		})
 
 		ps := &uint64Postings{vals: p}
 
