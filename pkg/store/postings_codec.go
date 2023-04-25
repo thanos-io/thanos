@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
+	extsnappy "github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 )
 
 // This file implements encoding and decoding of postings using diff (or delta) + varint
@@ -57,8 +58,6 @@ func isDiffVarintSnappyStreamedEncodedPostings(input []byte) bool {
 	return bytes.HasPrefix(input, []byte(codecHeaderStreamedSnappy))
 }
 
-var snappyWriterPool, snappyReaderPool sync.Pool
-
 // estimateSnappyStreamSize estimates the number of bytes
 // needed for encoding length postings. Note that in reality
 // the number of bytes needed could be much bigger if postings
@@ -90,8 +89,6 @@ func estimateSnappyStreamSize(length int) int {
 }
 
 func diffVarintSnappyStreamedEncode(p index.Postings, length int) ([]byte, error) {
-	var sw *snappy.Writer
-
 	compressedBuf := bytes.NewBuffer(make([]byte, 0, estimateSnappyStreamSize(length)))
 	if n, err := compressedBuf.WriteString(codecHeaderStreamedSnappy); err != nil {
 		return nil, fmt.Errorf("writing streamed snappy header")
@@ -101,17 +98,10 @@ func diffVarintSnappyStreamedEncode(p index.Postings, length int) ([]byte, error
 
 	uvarintEncodeBuf := make([]byte, binary.MaxVarintLen64)
 
-	pooledSW := snappyWriterPool.Get()
-	if pooledSW == nil {
-		sw = snappy.NewBufferedWriter(compressedBuf)
-	} else {
-		sw = pooledSW.(*snappy.Writer)
-		sw.Reset(compressedBuf)
+	sw, err := extsnappy.Compressor.Compress(compressedBuf)
+	if err != nil {
+		return nil, fmt.Errorf("creating snappy compressor: %w", err)
 	}
-
-	defer func() {
-		snappyWriterPool.Put(sw)
-	}()
 
 	prev := storage.SeriesRef(0)
 	for p.Next() {
@@ -144,32 +134,26 @@ func diffVarintSnappyStreamedDecode(input []byte) (closeablePostings, error) {
 		return nil, errors.New("header not found")
 	}
 
-	return newStreamedDiffVarintPostings(input[len(codecHeaderStreamedSnappy):]), nil
+	return newStreamedDiffVarintPostings(input[len(codecHeaderStreamedSnappy):])
 }
 
 type streamedDiffVarintPostings struct {
 	cur storage.SeriesRef
 
-	sr  *snappy.Reader
+	sr  io.ByteReader
 	err error
 }
 
-func newStreamedDiffVarintPostings(input []byte) closeablePostings {
-	var sr *snappy.Reader
-
-	srPooled := snappyReaderPool.Get()
-	if srPooled == nil {
-		sr = snappy.NewReader(bytes.NewBuffer(input))
-	} else {
-		sr = srPooled.(*snappy.Reader)
-		sr.Reset(bytes.NewBuffer(input))
+func newStreamedDiffVarintPostings(input []byte) (closeablePostings, error) {
+	r, err := extsnappy.Compressor.DecompressByteReader(bytes.NewBuffer(input))
+	if err != nil {
+		return nil, fmt.Errorf("decompressing snappy postings: %w", err)
 	}
 
-	return &streamedDiffVarintPostings{sr: sr}
+	return &streamedDiffVarintPostings{sr: r}, nil
 }
 
 func (it *streamedDiffVarintPostings) close() {
-	snappyReaderPool.Put(it.sr)
 }
 
 func (it *streamedDiffVarintPostings) At() storage.SeriesRef {
