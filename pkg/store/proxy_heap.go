@@ -176,7 +176,11 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 		jStoreLbls := (*h)[j].rs.StoreLabels()
 		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
 		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)
-		return labels.Compare(rmLabels(iLbls.Copy(), iStoreLbls), rmLabels(jLbls.Copy(), jStoreLbls)) < 0
+		c := labels.Compare(rmLabels(iLbls.Copy(), iStoreLbls), rmLabels(jLbls.Copy(), jStoreLbls))
+		if c == 0 {
+			c = labels.Compare(iLbls, jLbls)
+		}
+		return c < 0
 	} else if iResp.GetSeries() == nil && jResp.GetSeries() != nil {
 		return true
 	} else if iResp.GetSeries() != nil && jResp.GetSeries() == nil {
