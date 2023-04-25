@@ -43,6 +43,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -58,6 +59,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -359,6 +361,9 @@ type BucketStore struct {
 
 	enableChunkHashCalculation bool
 
+	bmtx          sync.Mutex
+	labelNamesSet stringset.Set
+
 	blockEstimatedMaxSeriesFunc BlockEstimator
 	blockEstimatedMaxChunkFunc  BlockEstimator
 }
@@ -505,6 +510,7 @@ func NewBucketStore(
 		enableSeriesResponseHints:   enableSeriesResponseHints,
 		enableChunkHashCalculation:  enableChunkHashCalculation,
 		seriesBatchSize:             SeriesBatchSize,
+		labelNamesSet:               stringset.AllStrings(),
 	}
 
 	for _, option := range options {
@@ -874,9 +880,10 @@ type seriesEntry struct {
 // single TSDB block in object storage.
 type blockSeriesClient struct {
 	grpc.ClientStream
-	ctx     context.Context
-	logger  log.Logger
-	extLset labels.Labels
+	ctx             context.Context
+	logger          log.Logger
+	extLset         labels.Labels
+	extLsetToRemove map[string]struct{}
 
 	mint           int64
 	maxt           int64
@@ -926,9 +933,11 @@ func newBlockSeriesClient(
 	}
 
 	return &blockSeriesClient{
-		ctx:                ctx,
-		logger:             logger,
-		extLset:            extLset,
+		ctx:             ctx,
+		logger:          logger,
+		extLset:         extLset,
+		extLsetToRemove: extLsetToRemove,
+
 		mint:               req.MinTime,
 		maxt:               req.MaxTime,
 		indexr:             b.indexReader(),
@@ -1051,6 +1060,10 @@ func (b *blockSeriesClient) nextBatch() error {
 		}
 
 		completeLabelset := labelpb.ExtendSortedLabels(b.lset, b.extLset)
+		if b.extLsetToRemove != nil {
+			completeLabelset = rmLabels(completeLabelset, b.extLsetToRemove)
+		}
+
 		if !b.shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
@@ -1275,6 +1288,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		for _, l := range req.WithoutReplicaLabels {
 			extLsetToRemove[l] = struct{}{}
 		}
+	}
+
+	if s.labelNamesSet.HasAny(req.WithoutReplicaLabels) {
+		rs := &resortingServer{Store_SeriesServer: srv}
+		defer rs.Flush()
+		srv = rs
 	}
 
 	s.mtx.RLock()
@@ -1647,6 +1666,42 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		Names: strutil.MergeSlices(sets...),
 		Hints: anyHints,
 	}, nil
+}
+
+func (s *BucketStore) UpdateLabelNames() {
+	newSet := stringset.New()
+	for _, b := range s.blocks {
+		for _, l := range b.extLset {
+			newSet.Insert(l.Name)
+		}
+
+		indexr := b.indexReader()
+		defer runutil.CloseWithLogOnErr(b.logger, indexr, "label names")
+
+		res, err := indexr.block.indexHeaderReader.LabelNames()
+		if err != nil {
+			level.Warn(s.logger).Log("msg", "error getting label names", "block", b.meta.ULID, "err", err.Error())
+
+			s.bmtx.Lock()
+			s.labelNamesSet = stringset.AllStrings()
+			s.bmtx.Unlock()
+			return
+		}
+		for _, l := range res {
+			newSet.Insert(l)
+		}
+	}
+
+	s.bmtx.Lock()
+	s.labelNamesSet = newSet
+	s.bmtx.Unlock()
+}
+
+func (b *BucketStore) LabelNamesSet() stringset.Set {
+	b.bmtx.Lock()
+	defer b.bmtx.Unlock()
+
+	return b.labelNamesSet
 }
 
 func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*labels.Matcher, bool) {

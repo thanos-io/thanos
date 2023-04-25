@@ -30,6 +30,7 @@ import (
 	"github.com/thanos-io/objstore/objtesting"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/model"
@@ -774,6 +775,29 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 
 				testutil.Equals(t, tc.expected, vals.Names)
 			})
+		}
+	})
+}
+
+func TestBucketStore_LabelNamesSet_e2e(t *testing.T) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
+		dir := t.TempDir()
+
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+		s.cache.SwapWith(noopCache{})
+
+		mint, maxt := s.store.TimeRange()
+		testutil.Equals(t, s.minTime, mint)
+		testutil.Equals(t, s.maxTime, maxt)
+
+		s.store.UpdateLabelNames()
+		for _, b := range s.store.blocks {
+			waitTimeout(t, &b.pendingReaders, 5*time.Second)
+		}
+
+		filter := s.store.LabelNamesSet()
+		for _, n := range []string{"a", "b", "c", "ext1", "ext2"} {
+			testutil.Assert(t, filter.Has(n))
 		}
 	})
 }

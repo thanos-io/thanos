@@ -24,7 +24,7 @@ func NewRecoverableStoreServer(logger log.Logger, storeServer storepb.StoreServe
 }
 
 func (r *recoverableStoreServer) Series(request *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	defer r.recover(srv)
+	//defer r.recover(srv)
 	return r.StoreServer.Series(request, srv)
 }
 

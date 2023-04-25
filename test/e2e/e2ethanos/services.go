@@ -37,7 +37,8 @@ import (
 )
 
 const (
-	infoLogLevel = "info"
+	infoLogLevel  = "info"
+	debugLogLevel = "debug"
 )
 
 // Same as default for now.

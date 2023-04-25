@@ -42,6 +42,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/stringset"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -53,8 +54,10 @@ type PrometheusStore struct {
 	buffers          sync.Pool
 	component        component.StoreAPI
 	externalLabelsFn func() labels.Labels
-	promVersion      func() string
-	timestamps       func() (mint int64, maxt int64)
+	labelNamesSet    func() stringset.Set
+
+	promVersion func() string
+	timestamps  func() (mint int64, maxt int64)
 
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 
@@ -78,6 +81,7 @@ func NewPrometheusStore(
 	component component.StoreAPI,
 	externalLabelsFn func() labels.Labels,
 	timestamps func() (mint int64, maxt int64),
+	labelNamesSet func() stringset.Set,
 	promVersion func() string,
 ) (*PrometheusStore, error) {
 	if logger == nil {
@@ -91,6 +95,7 @@ func NewPrometheusStore(
 		externalLabelsFn:              externalLabelsFn,
 		promVersion:                   promVersion,
 		timestamps:                    timestamps,
+		labelNamesSet:                 labelNamesSet,
 		remoteReadAcceptableResponses: []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS, prompb.ReadRequest_SAMPLES},
 		buffers: sync.Pool{New: func() interface{} {
 			b := make([]byte, 0, initialBufSize)
@@ -179,6 +184,14 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	extLsetToRemove := map[string]struct{}{}
 	for _, lbl := range r.WithoutReplicaLabels {
 		extLsetToRemove[lbl] = struct{}{}
+	}
+
+	labelNames := p.labelNamesSet()
+	if labelNames.HasAny(r.WithoutReplicaLabels) {
+		level.Debug(p.logger).Log("msg", "resorting series due to internal label dedup")
+		rs := &resortingServer{Store_SeriesServer: s}
+		defer rs.Flush()
+		s = rs
 	}
 
 	if r.SkipChunks {
@@ -455,9 +468,7 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 			}
 
 			r := storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.ZLabelsFromPromLabels(
-					completeLabelset,
-				),
+				Labels: labelpb.ZLabelsFromPromLabels(completeLabelset),
 				Chunks: thanosChks,
 			})
 			if err := s.Send(r); err != nil {

@@ -45,6 +45,7 @@ import (
 	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -1036,7 +1037,7 @@ func TestQueryStoreDedup(t *testing.T) {
 		},
 		{
 			desc:            "Deduplication works on external label with resorting required",
-			intReplicaLabel: "a",
+			extReplicaLabel: "a",
 			series: []seriesWithLabels{
 				{
 					intLabels: labels.FromStrings("__name__", "simple_series"),
@@ -1071,8 +1072,8 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupint",
 			expectedSeries:   1,
-			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
-			// is fixed. This means that it will return double the expected series until then.
+			// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
+			// Until the bug was fixed, this testcase would return double the expected series.
 			expectedDedupBug: true,
 		},
 		{
@@ -1094,8 +1095,8 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupintresort",
 			expectedSeries:   2,
-			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
-			// is fixed. This means that it will return double the expected series until then.
+			// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
+			// Until the bug was fixed, this testcase would return double the expected series.
 			expectedDedupBug: true,
 		},
 		{
@@ -1117,8 +1118,8 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupintextra",
 			expectedSeries:   2,
-			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
-			// is fixed. This means that it will return double the expected series until then.
+			// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
+			// Until the bug was fixed, this testcase would return double the expected series.
 			expectedDedupBug: true,
 		},
 		{
@@ -1137,8 +1138,8 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupintext",
 			expectedSeries:   1,
-			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
-			// is fixed. This means that it will return double the expected series until then.
+			// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
+			// Until the bug was fixed, this testcase would return double the expected series.
 			expectedDedupBug: true,
 		},
 	}
@@ -1169,9 +1170,10 @@ func TestQueryStoreDedup(t *testing.T) {
 			testutil.Ok(t, e2e.StartAndWaitReady(querier))
 
 			expectedSeries := tt.expectedSeries
-			if tt.expectedDedupBug {
-				expectedSeries *= 2
-			}
+			// The below commented condition checks for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
+			// if tt.expectedDedupBug {
+			// 	expectedSeries *= 2
+			// }
 			instantQuery(t, ctx, querier.Endpoint("http"), func() string {
 				return fmt.Sprintf("max_over_time(simple_series{block_finder='%s'}[2h])", tt.blockFinderLabel)
 			}, time.Now, promclient.QueryOptions{
@@ -1302,13 +1304,13 @@ func TestSidecarQueryDedup(t *testing.T) {
 
 	t.Run("deduplication on internal label with reorder", func(t *testing.T) {
 		// Uses "a" as replica label, which is an internal label from the samples used.
-		// Should return 4 samples as long as the bug described by https://github.com/thanos-io/thanos/issues/6257#issuecomment-1544023978
-		// is not fixed. When it is fixed, it should return 2 samples.
+		// This is a regression test for the bug outlined in https://github.com/thanos-io/thanos/issues/6257.
+		// Until the bug was fixed, this testcase would return 4 samples instead of 2.
 		instantQuery(t, ctx, query4.Endpoint("http"), func() string {
 			return "my_fake_metric"
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
-		}, 4)
+		}, 2)
 	})
 }
 
