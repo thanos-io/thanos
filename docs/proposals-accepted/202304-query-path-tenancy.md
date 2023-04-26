@@ -91,10 +91,11 @@ Explain the full overview of the proposed solution. Some guidelines:
 * What open questions are left? (“Known unknowns”)
 -->
 
-* Implement a command line argument in the Query Frontend and Sidecar components that allows them to identify the tenant that is making the request. The example of Thanos Receive is a good starting point for this: it uses the `--receive.tenant-label-name="tenant_id"` flag to identify the tenant label and we can standardize on it. The default behavior is to not identify tenants, preserving backwards compatibility. 
-* Implement a mechanism to allow incoming requests to specify the tenant being queried in Query Frontend and Sidecar. Both an HTTP header or an URL param should be allowed methods. With the URL parameter we ensure the system is compatible with Grafana datasource definition and with the HTTP header it can be integrated more gracefully with other upstream projects. Again, we follow the example of Thanos Receive, which uses the `--receive.tenant-header="THANOS-TENANT"` flag to configure the tenant header (and URL param, in this case).
-* The tenant information from a given request should travel downstream to all the components being called through the HTTP header, so that it can be added to their metrics, traces, and logs without requiring duplicated/extra work to re-parse the query. This applies even to gRPC calls, so that the propagation of the tenant information reaches the Thanos Store.
-* The label verification and enforcement should be done by reusing prom-label-proxy's [Enforce.EnforceMatchers](https://github.com/prometheus-community/prom-label-proxy/blob/main/injectproxy/enforce.go#L141). There's no reason to (re)implement something specific and special for Thanos.
+* Implement a mechanism to allow incoming requests to specify the tenant being queried using an HTTP header. This applies to all components in the query path. We follow the example of Thanos Receive, which uses the `--receive.tenant-header="THANOS-TENANT"` flag to configure the tenant header, doing the correct adaptation for each component.
+* The tenant header value from a given request should travel downstream to all the components being called, so that it can be added to their metrics, traces, and logs without requiring duplicated/extra work to re-parse the query. This also applies to gRPC calls.
+* Implement a command line argument in the Querier component that will indicate with label name that should be used to enforce tenancy. The example of Thanos Receive is a good starting point for this: it uses the `--receive.tenant-label-name="tenant_id"` flag to achieve this. The default behavior, when the flag as an empty string as value, is to not identify tenants. 
+  * The label verification and enforcement should be done by reusing prom-label-proxy's [Enforce.EnforceMatchers](https://github.com/prometheus-community/prom-label-proxy/blob/main/injectproxy/enforce.go#L141). There's no reason to (re)implement something specific and special for Thanos.
+  * This behavior should be implemented as part of the base logic of both the HTTP and gRPC query APIs, before the query is handed to the query engine, so that users managing complex Querier trees can choose where they want this logic to be enabled. 
 * Update metrics exported by the components in the query path to include the tenant label when it's available. 
 * Implement a tenant selector in the Query Frontend UI, which should communicate the tenant to Query Frontend using the HTTP header.
 
@@ -108,9 +109,9 @@ The section stating potential alternatives. Highlight the objections reader shou
 
 ### Alternative implementations
 
-1. Apply verification and enforcement logic in Querier instead of Query Frontend.
+1. Apply verification and enforcement logic in the Query Frontend instead of Querier.
 
-It initially seems like a better idea, but we might still want some components to skip the tenant label verification, like the Ruler. Plus on big queries where the Query Frontend splits them into multiple smaller queries there would be a lot of extra work done to verify and enforce the tenant label in each one of them.
+The Query Frontend is an optional component on any Thanos deployment, while the Querier is always present. Plus, there might be deployments with multiple Querier layers where one or more might need to apply tenant verification and enforcement. On top of this, doing it in the Querier supports future work on using the 
 
 ### Alternative solutions
 
