@@ -16,7 +16,7 @@ menu: proposals-accepted
     * [Proposal: Native Multi-tenancy Support](https://github.com/thanos-io/thanos/pull/4055)
 
 * **Other docs:**
-    * `<Links…>`
+    * [Multi-tenancy in Thanos](https://thanos.io/tip/operating/multi-tenancy.md/)
 
 <!--
 > TL;DR: Give a summary of what this document is proposing and what components it is touching.
@@ -95,9 +95,14 @@ Explain the full overview of the proposed solution. Some guidelines:
 * The tenant header value from a given request should travel downstream to all the components being called, so that it can be added to their metrics, traces, and logs without requiring duplicated/extra work to re-parse the query. This also applies to gRPC calls.
 * Implement a command line argument in the Querier component that will indicate with label name that should be used to enforce tenancy. The example of Thanos Receive is a good starting point for this: it uses the `--receive.tenant-label-name="tenant_id"` flag to achieve this. The default behavior, when the flag as an empty string as value, is to not identify tenants. 
   * The label verification and enforcement should be done by reusing prom-label-proxy's [Enforce.EnforceMatchers](https://github.com/prometheus-community/prom-label-proxy/blob/main/injectproxy/enforce.go#L141). There's no reason to (re)implement something specific and special for Thanos.
-  * This behavior should be implemented as part of the base logic of both the HTTP and gRPC query APIs, before the query is handed to the query engine, so that users managing complex Querier trees can choose where they want this logic to be enabled. 
+  * This behavior should be implemented as part of the base logic of both the HTTP and gRPC query APIs, before the query is handed to the query engine. This allows users managing complex Querier trees can choose where they want this logic to be enabled. 
 * Update metrics exported by the components in the query path to include the tenant label when it's available. 
 * Implement a tenant selector in the Query Frontend UI, which should communicate the tenant to Query Frontend using the HTTP header.
+
+<figure>
+<img height="50%" src="../img/query-path-tenancy-proposal-diagram.svg" width="50%"/>
+<figcaption>Diagram also available <a href="https://excalidraw.com/#json=ozCXvw8LBURpWkmiA4Loq,Nclh-Sw9g_mzO3gsM6yaRQ">online</a>.</figcaption>
+</figure>
 
 ## Alternatives
 
