@@ -9,7 +9,7 @@ menu: proposals-accepted
 ## Tenancy awareness in query path
 
 * **Owners:**
-    * [@douglascamata](github.com/douglascamata)
+    * [@douglascamata](https://github.com/douglascamata)
 
 * **Related Tickets:**
     * [Querier: Added native multi-tenancy support](https://github.com/thanos-io/thanos/pull/4141).
