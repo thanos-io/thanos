@@ -285,7 +285,7 @@ func vectorMerge(req queryrange.Request, resps []*queryrange.PrometheusInstantQu
 			if existingSample, ok := output[metric]; !ok {
 				output[metric] = s
 				metrics = append(metrics, metric) // Preserve the order of metric.
-			} else if existingSample.GetSample().TimestampMs < s.GetSample().TimestampMs {
+			} else if existingSample.Timestamp < s.Timestamp {
 				// Choose the latest sample if we see overlap.
 				output[metric] = s
 			}
@@ -324,9 +324,9 @@ func vectorMerge(req queryrange.Request, resps []*queryrange.PrometheusInstantQu
 		// Order is determined by vector
 		switch sortPlan {
 		case sortByValuesAsc:
-			return samples[i].s.Sample.Value < samples[j].s.Sample.Value
+			return samples[i].s.SampleValue < samples[j].s.SampleValue
 		case sortByValuesDesc:
-			return samples[i].s.Sample.Value > samples[j].s.Sample.Value
+			return samples[i].s.SampleValue > samples[j].s.SampleValue
 		}
 		return samples[i].metric < samples[j].metric
 	})
