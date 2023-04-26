@@ -267,6 +267,9 @@ Flags:
                                  to alertmanager. This allows alert to be
                                  deduplicated on replica label (repeated).
                                  Similar Prometheus alert relabelling
+      --alert.query-template="/graph?g0.expr={{.Expr}}&g0.tab=1"
+                                 Template to use in alerts source field.
+                                 Need only include {{.Expr}} parameter
       --alert.query-url=ALERT.QUERY-URL
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
