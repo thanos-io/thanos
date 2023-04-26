@@ -154,10 +154,26 @@ func (resp *PrometheusResponse) minTime() int64 {
 	if len(result) == 0 {
 		return -1
 	}
-	if len(result[0].Samples) == 0 {
+	if len(result[0].Samples) == 0 && len(result[0].Histograms) == 0 {
 		return -1
 	}
-	return result[0].Samples[0].TimestampMs
+
+	if len(result[0].Samples) == 0 {
+		return result[0].Histograms[0].Timestamp
+	}
+
+	if len(result[0].Histograms) == 0 {
+		return result[0].Samples[0].TimestampMs
+	}
+
+	return minInt64(result[0].Samples[0].TimestampMs, result[0].Histograms[0].Timestamp)
+}
+
+func minInt64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (resp *PrometheusResponse) GetStats() *PrometheusResponseStats {
@@ -397,54 +413,86 @@ func (prometheusCodec) EncodeResponse(ctx context.Context, res Response) (*http.
 	return &resp, nil
 }
 
-// UnmarshalJSON implements json.Unmarshaler.
+// UnmarshalJSON implements json.Unmarshaler and is used for unmarshalling
+// a Prometheus range query response (matrix).
 func (s *SampleStream) UnmarshalJSON(data []byte) error {
-	var stream struct {
-		Metric model.Metric      `json:"metric"`
-		Values []cortexpb.Sample `json:"values"`
-	}
-	if err := json.Unmarshal(data, &stream); err != nil {
+	var sampleStream model.SampleStream
+	if err := json.Unmarshal(data, &sampleStream); err != nil {
 		return err
 	}
-	s.Labels = cortexpb.FromMetricsToLabelAdapters(stream.Metric)
-	s.Samples = stream.Values
+
+	s.Labels = cortexpb.FromMetricsToLabelAdapters(sampleStream.Metric)
+
+	if len(sampleStream.Values) > 0 {
+		s.Samples = make([]cortexpb.Sample, 0, len(sampleStream.Values))
+		for _, sample := range sampleStream.Values {
+			s.Samples = append(s.Samples, cortexpb.Sample{
+				Value:       float64(sample.Value),
+				TimestampMs: int64(sample.Timestamp),
+			})
+		}
+	}
+
+	if len(sampleStream.Histograms) > 0 {
+		s.Histograms = make([]SampleHistogramPair, 0, len(sampleStream.Histograms))
+		for _, h := range sampleStream.Histograms {
+			s.Histograms = append(s.Histograms, fromModelSampleHistogramPair(h))
+		}
+	}
+
 	return nil
 }
 
 // MarshalJSON implements json.Marshaler.
 func (s *SampleStream) MarshalJSON() ([]byte, error) {
-	stream := struct {
-		Metric model.Metric      `json:"metric"`
-		Values []cortexpb.Sample `json:"values"`
-	}{
-		Metric: cortexpb.FromLabelAdaptersToMetric(s.Labels),
-		Values: s.Samples,
+	var sampleStream model.SampleStream
+	sampleStream.Metric = cortexpb.FromLabelAdaptersToMetric(s.Labels)
+
+	sampleStream.Values = make([]model.SamplePair, 0, len(s.Samples))
+	for _, sample := range s.Samples {
+		sampleStream.Values = append(sampleStream.Values, model.SamplePair{
+			Value:     model.SampleValue(sample.Value),
+			Timestamp: model.Time(sample.TimestampMs),
+		})
 	}
-	return json.Marshal(stream)
+
+	sampleStream.Histograms = make([]model.SampleHistogramPair, 0, len(s.Histograms))
+	for _, h := range s.Histograms {
+		sampleStream.Histograms = append(sampleStream.Histograms, toModelSampleHistogramPair(h))
+	}
+
+	return json.Marshal(sampleStream)
 }
 
-// UnmarshalJSON implements json.Unmarshaler.
+// UnmarshalJSON implements json.Unmarshaler and is used for unmarshalling
+// a Prometheus instant query response (vector).
 func (s *Sample) UnmarshalJSON(data []byte) error {
-	var sample struct {
-		Metric model.Metric    `json:"metric"`
-		Value  cortexpb.Sample `json:"value"`
-	}
+	var sample model.Sample
 	if err := json.Unmarshal(data, &sample); err != nil {
 		return err
 	}
 	s.Labels = cortexpb.FromMetricsToLabelAdapters(sample.Metric)
-	s.Sample = sample.Value
+	s.SampleValue = float64(sample.Value)
+	s.Timestamp = int64(sample.Timestamp)
+
+	if sample.Histogram != nil {
+		sh := fromModelSampleHistogram(sample.Histogram)
+		s.Histogram = &sh
+	} else {
+		s.Histogram = nil
+	}
+
 	return nil
 }
 
 // MarshalJSON implements json.Marshaler.
 func (s *Sample) MarshalJSON() ([]byte, error) {
-	sample := struct {
-		Metric model.Metric    `json:"metric"`
-		Value  cortexpb.Sample `json:"value"`
-	}{
-		Metric: cortexpb.FromLabelAdaptersToMetric(s.Labels),
-		Value:  s.Sample,
+	var sample model.Sample
+	sample.Metric = cortexpb.FromLabelAdaptersToMetric(s.Labels)
+	sample.Value = model.SampleValue(s.SampleValue)
+	sample.Timestamp = model.Time(s.Timestamp)
+	if s.Histogram != nil {
+		sample.Histogram = toModelSampleHistogram(*s.Histogram)
 	}
 	return json.Marshal(sample)
 }
@@ -657,7 +705,20 @@ func matrixMerge(resps []*PrometheusResponse) []SampleStream {
 					stream.Samples = SliceSamples(stream.Samples, existingEndTs)
 				} // else there is no overlap, yay!
 			}
+			// Same for histograms as for samples above.
+			if len(existing.Histograms) > 0 && len(stream.Histograms) > 0 {
+				existingEndTs := existing.Histograms[len(existing.Histograms)-1].GetTimestamp()
+				if existingEndTs == stream.Histograms[0].GetTimestamp() {
+					stream.Histograms = stream.Histograms[1:]
+				} else if existingEndTs > stream.Histograms[0].GetTimestamp() {
+					stream.Histograms = SliceHistogram(stream.Histograms, existingEndTs)
+				}
+			}
+
 			existing.Samples = append(existing.Samples, stream.Samples...)
+
+			existing.Histograms = append(existing.Histograms, stream.Histograms...)
+
 			output[metric] = existing
 		}
 	}
@@ -694,6 +755,26 @@ func SliceSamples(samples []cortexpb.Sample, minTs int64) []cortexpb.Sample {
 	})
 
 	return samples[searchResult:]
+}
+
+// SliceHistogram assumes given histogram are sorted by timestamp in ascending order and
+// return a sub slice whose first element's is the smallest timestamp that is strictly
+// bigger than the given minTs. Empty slice is returned if minTs is bigger than all the
+// timestamps in histogram.
+func SliceHistogram(histograms []SampleHistogramPair, minTs int64) []SampleHistogramPair {
+	if len(histograms) <= 0 || minTs < histograms[0].GetTimestamp() {
+		return histograms
+	}
+
+	if len(histograms) > 0 && minTs > histograms[len(histograms)-1].GetTimestamp() {
+		return histograms[len(histograms):]
+	}
+
+	searchResult := sort.Search(len(histograms), func(i int) bool {
+		return histograms[i].GetTimestamp() > minTs
+	})
+
+	return histograms[searchResult:]
 }
 
 func parseDurationMs(s string) (int64, error) {

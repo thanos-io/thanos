@@ -3,7 +3,9 @@ import React, { FC, ReactNode } from 'react';
 import { UncontrolledAlert, Table } from 'reactstrap';
 
 import SeriesName from './SeriesName';
-import { Metric } from '../../types/types';
+import { Metric, Histogram, SampleValue, SampleHistogram } from '../../types/types';
+
+import moment from 'moment';
 
 export interface QueryResult {
   data:
@@ -28,15 +30,15 @@ export interface QueryResult {
 
 interface InstantSample {
   metric: Metric;
-  value: SampleValue;
+  value?: SampleValue;
+  histogram?: SampleHistogram;
 }
 
 interface RangeSamples {
   metric: Metric;
-  values: SampleValue[];
+  values?: SampleValue[];
+  histograms?: SampleHistogram[];
 }
-
-type SampleValue = [number, string];
 
 const limitSeries = <S extends InstantSample | RangeSamples>(series: S[]): S[] => {
   const maxSeries = 10000;
@@ -68,7 +70,9 @@ const DataTable: FC<QueryResult> = ({ data }) => {
             <td>
               <SeriesName labels={s.metric} format={doFormat} />
             </td>
-            <td>{s.value[1]}</td>
+            <td>
+              {s.value && s.value[1]} <HistogramString h={s.histogram && s.histogram[1]} />
+            </td>
           </tr>
         );
       });
@@ -76,17 +80,32 @@ const DataTable: FC<QueryResult> = ({ data }) => {
       break;
     case 'matrix':
       rows = (limitSeries(data.result) as RangeSamples[]).map((s, index) => {
-        const valueText = s.values
-          .map((v) => {
-            return v[1] + ' @' + v[0];
-          })
-          .join('\n');
+        const valuesAndTimes = s.values
+          ? s.values
+              .map((v) => {
+                return v[1] + ' @' + v[0];
+              })
+              .join('\n')
+          : [];
+        const histogramsAndTimes = s.histograms
+          ? s.histograms.map((h, hisIdx) => {
+              const printedDatetime = moment.unix(h[0]).toISOString(false);
+              return (
+                <React.Fragment key={-hisIdx}>
+                  <HistogramString h={h[1]} /> @{<span title={printedDatetime}>{h[0]}</span>}
+                  <br />
+                </React.Fragment>
+              );
+            })
+          : [];
         return (
           <tr style={{ whiteSpace: 'pre' }} key={index}>
             <td>
               <SeriesName labels={s.metric} format={doFormat} />
             </td>
-            <td>{valueText}</td>
+            <td>
+              {valuesAndTimes} {histogramsAndTimes}
+            </td>
           </tr>
         );
       });
@@ -128,6 +147,31 @@ const DataTable: FC<QueryResult> = ({ data }) => {
       <Table hover size="sm" className="data-table">
         <tbody>{rows}</tbody>
       </Table>
+    </>
+  );
+};
+
+export interface HistogramStringProps {
+  h?: Histogram;
+}
+
+export const HistogramString: FC<HistogramStringProps> = ({ h }) => {
+  if (!h) {
+    return <></>;
+  }
+  const buckets: string[] = [];
+
+  if (h.buckets) {
+    for (const bucket of h.buckets) {
+      const left = bucket[0] === 3 || bucket[0] === 1 ? '[' : '(';
+      const right = bucket[0] === 3 || bucket[0] === 0 ? ']' : ')';
+      buckets.push(left + bucket[1] + ',' + bucket[2] + right + ':' + bucket[3] + ' ');
+    }
+  }
+
+  return (
+    <>
+      {'{'} count:{h.count} sum:{h.sum} {buckets} {'}'}
     </>
   );
 };

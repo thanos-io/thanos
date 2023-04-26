@@ -1504,9 +1504,9 @@ func (f *GatherNoCompactionMarkFilter) NoCompactMarkedBlocks() map[ulid.ULID]*me
 
 // Filter passes all metas, while gathering no compact markers.
 func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced block.GaugeVec, modified block.GaugeVec) error {
-	f.mtx.Lock()
-	f.noCompactMarkedMap = make(map[ulid.ULID]*metadata.NoCompactMark)
-	f.mtx.Unlock()
+	var localNoCompactMapMtx sync.Mutex
+
+	noCompactMarkedMap := make(map[ulid.ULID]*metadata.NoCompactMark)
 
 	// Make a copy of block IDs to check, in order to avoid concurrency issues
 	// between the scheduler and workers.
@@ -1539,9 +1539,9 @@ func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[uli
 					continue
 				}
 
-				f.mtx.Lock()
-				f.noCompactMarkedMap[id] = m
-				f.mtx.Unlock()
+				localNoCompactMapMtx.Lock()
+				noCompactMarkedMap[id] = m
+				localNoCompactMapMtx.Unlock()
 				synced.WithLabelValues(block.MarkedForNoCompactionMeta).Inc()
 			}
 
@@ -1568,6 +1568,10 @@ func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[uli
 	if err := eg.Wait(); err != nil {
 		return errors.Wrap(err, "filter blocks marked for no compaction")
 	}
+
+	f.mtx.Lock()
+	f.noCompactMarkedMap = noCompactMarkedMap
+	f.mtx.Unlock()
 
 	return nil
 }
