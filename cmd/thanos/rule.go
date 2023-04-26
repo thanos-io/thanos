@@ -97,8 +97,6 @@ type ruleConfig struct {
 	lset              labels.Labels
 	ignoredLabelNames []string
 	storeRateLimits   store.SeriesSelectLimits
-
-	alertSourceTemplate string
 }
 
 type Expression struct {
@@ -145,7 +143,6 @@ func registerRule(app *extkingpin.App) {
 		Default("10m").DurationVar(&conf.forGracePeriod)
 	cmd.Flag("restore-ignored-label", "Label names to be ignored when restoring alerts from the remote storage. This is only used in stateless mode.").
 		StringsVar(&conf.ignoredLabelNames)
-	cmd.Flag("alert-source-template", "Template to use in alerts source field. Need only include {{.Expr}} parameter").Default("/graph?g0.expr={{.Expr}}&g0.tab=1").StringVar(&conf.alertSourceTemplate)
 
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
@@ -336,7 +333,7 @@ func runRule(
 		}
 	}
 
-	if err := validateTemplate(conf.alertSourceTemplate, Expression{Expr: "test_expr"}); err != nil {
+	if err := validateTemplate(*conf.alertmgr.alertSourceTemplate, Expression{Expr: "test_expr"}); err != nil {
 		return errors.Wrap(err, "invalid alert source template")
 	}
 
@@ -503,7 +500,7 @@ func runRule(
 				if alrt.State == rules.StatePending {
 					continue
 				}
-				expressionURL, err := TableLinkForExpression(expr, conf.alertSourceTemplate)
+				expressionURL, err := TableLinkForExpression(expr, *conf.alertmgr.alertSourceTemplate)
 				if err != nil {
 					level.Warn(logger).Log("msg", "failed to generate link for expression", "expr", expr, "err", err)
 				}
@@ -940,8 +937,8 @@ func TableLinkForExpression(expr string, tmpl string) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse template")
 	}
-	var buf bytes.Buffer
 
+	var buf bytes.Buffer
 	if err := t.Execute(&buf, escapedExpr); err != nil {
 		return "", errors.Wrap(err, "failed to execute template")
 	}
@@ -959,6 +956,5 @@ func validateTemplate(tmplStr string, data Expression) error {
 	if err != nil {
 		return fmt.Errorf("failed to execute the template: %w", err)
 	}
-
 	return nil
 }
