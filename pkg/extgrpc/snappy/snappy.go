@@ -14,8 +14,10 @@ import (
 // Name is the name registered for the snappy compressor.
 const Name = "snappy"
 
+var Compressor *compressor = newCompressor()
+
 func init() {
-	encoding.RegisterCompressor(newCompressor())
+	encoding.RegisterCompressor(Compressor)
 }
 
 type compressor struct {
@@ -46,6 +48,12 @@ func (c *compressor) Compress(w io.Writer) (io.WriteCloser, error) {
 	wr := c.writersPool.Get().(*snappy.Writer)
 	wr.Reset(w)
 	return writeCloser{wr, &c.writersPool}, nil
+}
+
+func (c *compressor) DecompressByteReader(r io.Reader) (io.ByteReader, error) {
+	dr := c.readersPool.Get().(*snappy.Reader)
+	dr.Reset(r)
+	return reader{dr, &c.readersPool}, nil
 }
 
 func (c *compressor) Decompress(r io.Reader) (io.Reader, error) {
@@ -87,4 +95,14 @@ func (r reader) Read(p []byte) (n int, err error) {
 		r.pool.Put(r.reader)
 	}
 	return n, err
+}
+
+func (r reader) ReadByte() (n byte, err error) {
+	n, err = r.reader.ReadByte()
+	if err == io.EOF {
+		r.reader.Reset(nil)
+		r.pool.Put(r.reader)
+	}
+	return n, err
+
 }
