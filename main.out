@@ -1,0 +1,58 @@
+Creating 250000 1-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries1000000SeriesWith1Samples1104028951/001/0
+Creating 250000 1-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries1000000SeriesWith1Samples1104028951/001/1
+Creating 250000 1-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries1000000SeriesWith1Samples1104028951/001/2
+Creating 250000 1-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries1000000SeriesWith1Samples1104028951/001/3
+goos: darwin
+goarch: arm64
+pkg: github.com/thanos-io/thanos/pkg/store
+BenchmarkProxySeries/1000000SeriesWith1Samples/4_client_with_1_samples,_250000_series_each-8         	       9	 122496806 ns/op	83946710 B/op	     303 allocs/op
+BenchmarkProxySeries/1000000SeriesWith1Samples/4_client_with_1_samples,_250000_series_each-8         	       9	 129038903 ns/op	83946470 B/op	     303 allocs/op
+BenchmarkProxySeries/1000000SeriesWith1Samples/4_client_with_1_samples,_250000_series_each-8         	       9	 125925921 ns/op	83946382 B/op	     301 allocs/op
+BenchmarkProxySeries/1000000SeriesWith1Samples/4_client_with_1_samples,_250000_series_each-8         	      10	 124710467 ns/op	83946406 B/op	     302 allocs/op
+BenchmarkProxySeries/1000000SeriesWith1Samples/4_client_with_1_samples,_250000_series_each-8         	       9	 125908588 ns/op	83946278 B/op	     302 allocs/op
+BenchmarkProxySeries/1000000SeriesWith1Samples/single_client_with_1_samples,_1000000_series-8        	       7	 178174250 ns/op	83360129 B/op	     152 allocs/op
+BenchmarkProxySeries/1000000SeriesWith1Samples/single_client_with_1_samples,_1000000_series-8        	       6	 175442931 ns/op	83360182 B/op	     152 allocs/op
+BenchmarkProxySeries/1000000SeriesWith1Samples/single_client_with_1_samples,_1000000_series-8        	       6	 177222250 ns/op	83360169 B/op	     152 allocs/op
+BenchmarkProxySeries/1000000SeriesWith1Samples/single_client_with_1_samples,_1000000_series-8        	       6	 177196979 ns/op	83360238 B/op	     152 allocs/op
+BenchmarkProxySeries/1000000SeriesWith1Samples/single_client_with_1_samples,_1000000_series-8        	       6	 176612146 ns/op	83360208 B/op	     153 allocs/op
+Creating 25000 25-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries100000SeriesWith100Samples1526467394/001/0
+Creating 25000 25-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries100000SeriesWith100Samples1526467394/001/1
+Creating 25000 25-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries100000SeriesWith100Samples1526467394/001/2
+Creating 25000 25-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries100000SeriesWith100Samples1526467394/001/3
+BenchmarkProxySeries/100000SeriesWith100Samples/4_client_with_25_samples,_25000_series_each-8        	      87	  13842230 ns/op	 7637714 B/op	     251 allocs/op
+BenchmarkProxySeries/100000SeriesWith100Samples/4_client_with_25_samples,_25000_series_each-8        	      87	  13614246 ns/op	 7637862 B/op	     252 allocs/op
+BenchmarkProxySeries/100000SeriesWith100Samples/4_client_with_25_samples,_25000_series_each-8        	      99	  13466323 ns/op	 7637441 B/op	     251 allocs/op
+BenchmarkProxySeries/100000SeriesWith100Samples/4_client_with_25_samples,_25000_series_each-8        	     100	  13463995 ns/op	 7637418 B/op	     251 allocs/op
+BenchmarkProxySeries/100000SeriesWith100Samples/4_client_with_25_samples,_25000_series_each-8        	      96	  12932889 ns/op	 7637346 B/op	     250 allocs/op
+BenchmarkProxySeries/100000SeriesWith100Samples/single_client_with_100_samples,_100000_series-8      	      73	  16950276 ns/op	 8206591 B/op	     132 allocs/op
+BenchmarkProxySeries/100000SeriesWith100Samples/single_client_with_100_samples,_100000_series-8      	      73	  16880842 ns/op	 8206579 B/op	     132 allocs/op
+BenchmarkProxySeries/100000SeriesWith100Samples/single_client_with_100_samples,_100000_series-8      	      74	  16871241 ns/op	 8206614 B/op	     132 allocs/op
+BenchmarkProxySeries/100000SeriesWith100Samples/single_client_with_100_samples,_100000_series-8      	      74	  16911964 ns/op	 8206600 B/op	     132 allocs/op
+BenchmarkProxySeries/100000SeriesWith100Samples/single_client_with_100_samples,_100000_series-8      	      73	  16867682 ns/op	 8206585 B/op	     132 allocs/op
+Creating 1 2500000-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries1SeriesWith10000000Samples2475373482/001/0
+Creating 1 2500000-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries1SeriesWith10000000Samples2475373482/001/1
+Creating 1 2500000-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries1SeriesWith10000000Samples2475373482/001/2
+Creating 1 2500000-sample series with 1ms interval in /var/folders/0b/r42s6hv96hs2w84ycr2yf7qh0000gn/T/BenchmarkProxySeries1SeriesWith10000000Samples2475373482/001/3
+BenchmarkProxySeries/1SeriesWith10000000Samples/4_client_with_2500000_samples,_1_series_each-8       	   70292	     16737 ns/op	    7852 B/op	     130 allocs/op
+BenchmarkProxySeries/1SeriesWith10000000Samples/4_client_with_2500000_samples,_1_series_each-8       	   74174	     16182 ns/op	    7852 B/op	     130 allocs/op
+BenchmarkProxySeries/1SeriesWith10000000Samples/4_client_with_2500000_samples,_1_series_each-8       	   74235	     16361 ns/op	    7852 B/op	     130 allocs/op
+BenchmarkProxySeries/1SeriesWith10000000Samples/4_client_with_2500000_samples,_1_series_each-8       	   75582	     16265 ns/op	    7852 B/op	     130 allocs/op
+BenchmarkProxySeries/1SeriesWith10000000Samples/4_client_with_2500000_samples,_1_series_each-8       	   73658	     16238 ns/op	    7851 B/op	     130 allocs/op
+BenchmarkProxySeries/1SeriesWith10000000Samples/single_client_with_10000000_samples,_1_series-8      	  158442	      7505 ns/op	    3521 B/op	      78 allocs/op
+BenchmarkProxySeries/1SeriesWith10000000Samples/single_client_with_10000000_samples,_1_series-8      	  157891	      7501 ns/op	    3521 B/op	      78 allocs/op
+BenchmarkProxySeries/1SeriesWith10000000Samples/single_client_with_10000000_samples,_1_series-8      	  160102	      7546 ns/op	    3521 B/op	      78 allocs/op
+BenchmarkProxySeries/1SeriesWith10000000Samples/single_client_with_10000000_samples,_1_series-8      	  159277	      7470 ns/op	    3521 B/op	      78 allocs/op
+BenchmarkProxySeries/1SeriesWith10000000Samples/single_client_with_10000000_samples,_1_series-8      	  160509	      7644 ns/op	    3521 B/op	      78 allocs/op
+PASS
+ok  	github.com/thanos-io/thanos/pkg/store	49.631s
+PASS
+ok  	github.com/thanos-io/thanos/pkg/store/cache	0.389s
+PASS
+ok  	github.com/thanos-io/thanos/pkg/store/cache/cachekey	0.098s
+?   	github.com/thanos-io/thanos/pkg/store/hintspb	[no test files]
+PASS
+ok  	github.com/thanos-io/thanos/pkg/store/labelpb	0.129s
+PASS
+ok  	github.com/thanos-io/thanos/pkg/store/storepb	0.262s
+?   	github.com/thanos-io/thanos/pkg/store/storepb/prompb	[no test files]
+?   	github.com/thanos-io/thanos/pkg/store/storepb/testutil	[no test files]

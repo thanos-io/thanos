@@ -810,7 +810,7 @@ func dropLabels(l labels.Labels, labelsToDrop map[string]struct{}) (labels.Label
 }
 
 func copyLabels(dest *labels.Labels, src labels.Labels) {
-	if len(*dest) < len(src) {
+	if len(*dest) < cap(src) {
 		*dest = make([]labels.Label, len(src))
 	}
 	*dest = (*dest)[:len(src)]
