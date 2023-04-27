@@ -136,7 +136,9 @@ func (l *localClient) SupportsWithoutReplicaLabels() bool {
 	return true
 }
 
-type tenant []*tenantShard
+type tenant struct {
+	shards []*tenantShard
+}
 
 type tenantShard struct {
 	readyS        *ReadyStorage
@@ -156,7 +158,7 @@ func newTenant(shards int) tenant {
 		}
 
 	}
-	return tenant(tenantShards)
+	return tenant{shards: tenantShards}
 }
 
 func (t *tenantShard) readyStorage() *ReadyStorage {
@@ -240,7 +242,7 @@ func (t *MultiTSDB) Flush() error {
 	merr := errutil.MultiError{}
 	wg := &sync.WaitGroup{}
 	for id, tenant := range t.tenants {
-		for sid, tenantShard := range tenant {
+		for sid, tenantShard := range tenant.shards {
 			db := tenantShard.readyStorage().Get()
 			if db == nil {
 				level.Error(t.logger).Log("msg", "flushing TSDB failed; not ready", "tenant", id, "shard", sid)
@@ -270,7 +272,7 @@ func (t *MultiTSDB) Close() error {
 
 	merr := errutil.MultiError{}
 	for id, tenant := range t.tenants {
-		for sid, tenantShard := range tenant {
+		for sid, tenantShard := range tenant.shards {
 			db := tenantShard.readyStorage().Get()
 			if db == nil {
 				level.Error(t.logger).Log("msg", "closing TSDB failed; not ready", "tenant", id, "shard", sid)
@@ -433,8 +435,8 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 	)
 
 	for tenantID, tenant := range t.tenants {
-		for shardId, tenantShard := range tenant {
-			level.Debug(t.logger).Log("msg", "uploading block for tenant", "tenant", tenantID, "shard", shardId)
+		for shardID, tenantShard := range tenant.shards {
+			level.Debug(t.logger).Log("msg", "uploading block for tenant", "tenant", tenantID, "shard", shardID)
 			s := tenantShard.shipper()
 			if s == nil {
 				continue
@@ -488,7 +490,7 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 
 	res := make([]store.Client, 0, len(t.tenants))
 	for _, tenant := range t.tenants {
-		for _, tenantShard := range tenant {
+		for _, tenantShard := range tenant.shards {
 			client := tenantShard.client(t.logger)
 			if client != nil {
 				res = append(res, client)
@@ -499,22 +501,21 @@ func (t *MultiTSDB) TSDBLocalClients() []store.Client {
 	return res
 }
 
-func (t *MultiTSDB) TSDBExemplars() map[string]*exemplars.TSDB {
+func (t *MultiTSDB) TSDBExemplars() map[string][]*exemplars.TSDB {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	// TODO: what to do here
-	return nil
-	/*
-		res := make(map[string]*exemplars.TSDB, len(t.tenants))
-		for k, tenant := range t.tenants {
-			e := tenant.exemplars()
-			if e != nil {
-				res[k] = e
+	res := make(map[string][]*exemplars.TSDB, 0)
+	for tenantID, tenant := range t.tenants {
+		perTenantExemplars := make([]*exemplars.TSDB, 0)
+		for _, shard := range tenant.shards {
+			if e := shard.exemplars(); e != nil {
+				perTenantExemplars = append(perTenantExemplars, e)
 			}
 		}
-		return res
-	*/
+		res[tenantID] = perTenantExemplars
+	}
+	return res
 }
 
 func (t *MultiTSDB) TenantStats(statsByLabelName string, tenantIDs ...string) []status.TenantStats {
@@ -569,14 +570,14 @@ func (t *MultiTSDB) TenantStats(statsByLabelName string, tenantIDs ...string) []
 }
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant tenant) error {
-	for shardId, tenantShard := range tenant {
-		reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
+	for shardID, tenantShard := range tenant.shards {
+		shardIDStr := strconv.FormatInt(int64(shardID), 10)
+
+		reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID, "shard": shardIDStr}, t.reg)
 		reg = NewUnRegisterer(reg)
 
-		shardIdStr := strconv.FormatInt(int64(shardId), 10)
-
-		lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID, "shard_id", shardIdStr))
-		dataDir := filepath.Join(t.defaultTenantDataDir(tenantID), shardIdStr)
+		lset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID, "shard_id", shardIDStr))
+		dataDir := filepath.Join(t.defaultTenantDataDir(tenantID), shardIDStr)
 
 		level.Info(logger).Log("msg", "opening TSDB")
 		opts := *t.tsdbOpts
@@ -657,8 +658,8 @@ func (t *MultiTSDB) TenantAppendables(tenantID string) ([]Appendable, error) {
 	if err != nil {
 		return nil, err
 	}
-	res := make([]Appendable, len(tenant))
-	for i, tenantShard := range tenant {
+	res := make([]Appendable, len(tenant.shards))
+	for i, tenantShard := range tenant.shards {
 		res[i] = tenantShard.readyStorage()
 	}
 	return res, nil

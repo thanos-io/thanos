@@ -14,11 +14,11 @@ import (
 
 // MultiTSDB implements exemplarspb.ExemplarsServer that allows to fetch exemplars a MultiTSDB instance.
 type MultiTSDB struct {
-	tsdbExemplarsServers func() map[string]*TSDB
+	tsdbExemplarsServers func() map[string][]*TSDB
 }
 
 // NewMultiTSDB creates new exemplars.MultiTSDB.
-func NewMultiTSDB(tsdbExemplarsServers func() map[string]*TSDB) *MultiTSDB {
+func NewMultiTSDB(tsdbExemplarsServers func() map[string][]*TSDB) *MultiTSDB {
 	return &MultiTSDB{
 		tsdbExemplarsServers: tsdbExemplarsServers,
 	}
@@ -32,9 +32,11 @@ func (m *MultiTSDB) Exemplars(r *exemplarspb.ExemplarsRequest, s exemplarspb.Exe
 	}
 	matchers := parser.ExtractSelectors(expr)
 
-	for tenant, es := range m.tsdbExemplarsServers() {
-		if err := es.Exemplars(matchers, r.Start, r.End, s); err != nil {
-			return status.Error(codes.Aborted, errors.Wrapf(err, "get exemplars for tenant %s", tenant).Error())
+	for tenant, ess := range m.tsdbExemplarsServers() {
+		for shard, es := range ess {
+			if err := es.Exemplars(matchers, r.Start, r.End, s); err != nil {
+				return status.Error(codes.Aborted, errors.Wrapf(err, "get exemplars for tenant %s, shard %d", tenant, shard).Error())
+			}
 		}
 	}
 	return nil

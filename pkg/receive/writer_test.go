@@ -406,70 +406,73 @@ func BenchmarkWriterTimeSeriesWithHistogramsWith10Labels_1000(b *testing.B) {
 }
 
 func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistograms bool) {
-	/*
-		dir := b.TempDir()
-		logger := log.NewNopLogger()
+	dir := b.TempDir()
+	logger := log.NewNopLogger()
 
-		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-			MinBlockDuration:       (2 * time.Hour).Milliseconds(),
-			MaxBlockDuration:       (2 * time.Hour).Milliseconds(),
-			RetentionDuration:      (6 * time.Hour).Milliseconds(),
-			NoLockfile:             true,
-			MaxExemplars:           0,
-			EnableExemplarStorage:  true,
-			EnableNativeHistograms: generateHistograms,
-		},
-			labels.FromStrings("replica", "01"),
-			"tenant_id",
-			nil,
-			false,
-			metadata.NoneFunc,
-		)
-		b.Cleanup(func() { testutil.Ok(b, m.Close()) })
+	m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+		MinBlockDuration:       (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:       (2 * time.Hour).Milliseconds(),
+		RetentionDuration:      (6 * time.Hour).Milliseconds(),
+		NoLockfile:             true,
+		MaxExemplars:           0,
+		EnableExemplarStorage:  true,
+		EnableNativeHistograms: generateHistograms,
+	},
+		labels.FromStrings("replica", "01"),
+		"tenant_id",
+		nil,
+		false,
+		metadata.NoneFunc,
+	)
+	b.Cleanup(func() { testutil.Ok(b, m.Close()) })
 
-		testutil.Ok(b, m.Flush())
-		testutil.Ok(b, m.Open())
+	testutil.Ok(b, m.Flush())
+	testutil.Ok(b, m.Open())
 
-		app, err := m.TenantAppendable("foo")
-		testutil.Ok(b, err)
+	apps, err := m.TenantAppendables("foo")
+	testutil.Ok(b, err)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-		testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+	testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+		for _, app := range apps {
 			_, err = app.Appender(context.Background())
-			return err
-		}))
-
-		timeSeries := generateLabelsAndSeries(labelsNum, seriesNum, generateHistograms)
-
-		wreq := &prompb.WriteRequest{
-			Timeseries: timeSeries,
+			if err != nil {
+				return err
+			}
 		}
+		return nil
+	}))
 
-		b.Run("without interning", func(b *testing.B) {
-			w := NewWriter(logger, m, &WriterOptions{Intern: false})
+	timeSeries := generateLabelsAndSeries(labelsNum, seriesNum, generateHistograms)
 
-			b.ReportAllocs()
-			b.ResetTimer()
+	wreq := &prompb.WriteRequest{
+		Timeseries: timeSeries,
+	}
 
-			for i := 0; i < b.N; i++ {
-				testutil.Ok(b, w.Write(ctx, "foo", wreq))
-			}
-		})
+	b.Run("without interning", func(b *testing.B) {
+		w := NewWriter(logger, m, &WriterOptions{Intern: false})
 
-		b.Run("with interning", func(b *testing.B) {
-			w := NewWriter(logger, m, &WriterOptions{Intern: true})
+		b.ReportAllocs()
+		b.ResetTimer()
 
-			b.ReportAllocs()
-			b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			testutil.Ok(b, w.Write(ctx, "foo", wreq))
+		}
+	})
 
-			for i := 0; i < b.N; i++ {
-				testutil.Ok(b, w.Write(ctx, "foo", wreq))
-			}
-		})
+	b.Run("with interning", func(b *testing.B) {
+		w := NewWriter(logger, m, &WriterOptions{Intern: true})
 
-	*/
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			testutil.Ok(b, w.Write(ctx, "foo", wreq))
+		}
+	})
+
 }
 
 // generateLabelsAndSeries generates time series for benchmark with specified number of labels.
