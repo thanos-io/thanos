@@ -26,11 +26,11 @@ In a multi-tenant environment, it is important to be able to identify which tena
 
 ### Pitfalls of the current solution
 
-The current lack of tenancy awareness in Thanos' query path makes it impossible to investigate issues related to multi-tenancy without the use of external tools or proxies. For example, it's impossible to determine which tenants are experiencing high latency or high error rates.
+The current lack of tenancy awareness in Thanos' query path makes it impossible to investigate issues related to multi-tenancy without the use of external tools, proxies, or deploying a full dedicated query path for each tenant (including one Query Frontend if the setup needs it, one Querier, and one Storage Gateway, to be as complete as possible). For example, it's impossible to determine which tenants are experiencing high latency or high error rates
 
 ## Goals
 
-* Allow the query path components to be configurable to identify tenants, opening the way to the implementation per-tenant features on the query path. These features include, but aren't limited to, the following:
+* Allow the query path components to be configurable to identify tenants, opening the way to the implementation per-tenant features on the query path without needing to run multiple copies of the components, each dedicated to a single tenant. These features include, but aren't limited to, the following:
   * Per-tenant observability.
   * Per-tenant settings. For example, having different limits per tenant, which is a common request.
   * Enforce presence of one or more tenant labels in queries.
