@@ -41,7 +41,7 @@ Any team running Thanos in a multi-tenant environment. For example, a team runni
 
 ## Non-Goals
 
-* Add multi-tenancy to Thanos Ruler. It's not needed. One will still be able to point their Ruler to the multi-tenant Query Frontend, effectively making it multi-tenant.
+* Add multi-tenancy to Thanos Ruler. 
 * Implement cross-tenant querying. It poses the question about how to track metrics of a multi-tenant query, probably requiring new logic for query splitting and/or separation of the concepts of query initiator tenant and query target tenants. To exemplify: if tenant A executes a query touching their own data and tenant B data (imagine a label matcher `tenant_id=~"A|B"`), how does Thanos export a request duration metric about this query? This is out of scope and an specific proposal can be created for it.
 
 ## How
