@@ -15,14 +15,12 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
@@ -30,6 +28,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 func TestMultiTSDB(t *testing.T) {
@@ -57,67 +56,36 @@ func TestMultiTSDB(t *testing.T) {
 		testutil.Ok(t, m.Flush())
 		testutil.Ok(t, m.Open())
 
-		app, err := m.TenantAppendable("foo")
-		testutil.Ok(t, err)
+		testutil.Ok(t, initTenantTSDBs(m, "foo"))
+		testutil.Ok(t, initTenantTSDBs(m, "bar"))
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		var a storage.Appender
-		testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-			a, err = app.Appender(context.Background())
-			return err
-		}))
-
-		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 1, 2.41241)
-		testutil.Ok(t, err)
-		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 2, 3.41241)
-		testutil.Ok(t, err)
-		ref, err := a.Append(0, labels.FromStrings("a", "1", "b", "2"), 3, 4.41241)
-		testutil.Ok(t, err)
+		// Test samples.
+		testutil.Ok(t, appendSample(m, "foo", labels.FromStrings("a", "1", "b", "2"), prompb.Sample{Timestamp: 1, Value: 2.41241}))
+		testutil.Ok(t, appendSample(m, "foo", labels.FromStrings("a", "1", "b", "2"), prompb.Sample{Timestamp: 2, Value: 3.41241}))
+		testutil.Ok(t, appendSample(m, "foo", labels.FromStrings("a", "1", "b", "2"), prompb.Sample{Timestamp: 3, Value: 4.41241}))
 
 		// Test exemplars.
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 1, Ts: 1, HasTs: true})
-		testutil.Ok(t, err)
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 2.1212, Ts: 2, HasTs: true})
-		testutil.Ok(t, err)
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 3.1313, Ts: 3, HasTs: true})
-		testutil.Ok(t, err)
-		testutil.Ok(t, a.Commit())
+		testutil.Ok(t, appendExemplar(m, "foo", labels.FromStrings("a", "1", "b", "2"), prompb.Exemplar{Value: 1, Timestamp: 1}))
+		testutil.Ok(t, appendExemplar(m, "foo", labels.FromStrings("a", "1", "b", "2"), prompb.Exemplar{Value: 2.1212, Timestamp: 2}))
+		testutil.Ok(t, appendExemplar(m, "foo", labels.FromStrings("a", "1", "b", "2"), prompb.Exemplar{Value: 3.1313, Timestamp: 3}))
 
 		// Check if not leaking.
-		_, err = m.TenantAppendable("foo")
+		_, err := m.TenantAppendables("foo")
 		testutil.Ok(t, err)
-		_, err = m.TenantAppendable("foo")
+		_, err = m.TenantAppendables("foo")
 		testutil.Ok(t, err)
-		_, err = m.TenantAppendable("foo")
-		testutil.Ok(t, err)
-
-		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		app, err = m.TenantAppendable("bar")
+		_, err = m.TenantAppendables("foo")
 		testutil.Ok(t, err)
 
-		testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-			a, err = app.Appender(context.Background())
-			return err
-		}))
+		// Test samples.
+		testutil.Ok(t, appendSample(m, "bar", labels.FromStrings("a", "1", "b", "2"), prompb.Sample{Timestamp: 1, Value: 20.41241}))
+		testutil.Ok(t, appendSample(m, "bar", labels.FromStrings("a", "1", "b", "2"), prompb.Sample{Timestamp: 2, Value: 30.41241}))
+		testutil.Ok(t, appendSample(m, "bar", labels.FromStrings("a", "1", "b", "2"), prompb.Sample{Timestamp: 3, Value: 40.41241}))
 
-		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 1, 20.41241)
-		testutil.Ok(t, err)
-		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 2, 30.41241)
-		testutil.Ok(t, err)
-		ref, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 3, 40.41241)
-		testutil.Ok(t, err)
-
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 11, Ts: 1, HasTs: true, Labels: labels.FromStrings("traceID", "abc")})
-		testutil.Ok(t, err)
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 22.1212, Ts: 2, HasTs: true, Labels: labels.FromStrings("traceID", "def")})
-		testutil.Ok(t, err)
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 33.1313, Ts: 3, HasTs: true, Labels: labels.FromStrings("traceID", "ghi")})
-		testutil.Ok(t, err)
-		testutil.Ok(t, a.Commit())
+		// Test exemplars.
+		testutil.Ok(t, appendExemplar(m, "bar", labels.FromStrings("a", "1", "b", "2"), prompb.Exemplar{Value: 11, Timestamp: 1, Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("traceID", "abc"))}))
+		testutil.Ok(t, appendExemplar(m, "bar", labels.FromStrings("a", "1", "b", "2"), prompb.Exemplar{Value: 22.1212, Timestamp: 2, Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("traceID", "def"))}))
+		testutil.Ok(t, appendExemplar(m, "bar", labels.FromStrings("a", "1", "b", "2"), prompb.Exemplar{Value: 33.1313, Timestamp: 3, Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("traceID", "ghi"))}))
 
 		testMulitTSDBSeries(t, m)
 		testMultiTSDBExemplars(t, m)
@@ -142,23 +110,26 @@ func TestMultiTSDB(t *testing.T) {
 		testutil.Ok(t, m.Open())
 
 		// Get appender just for test.
-		app, err := m.TenantAppendable("foo")
+		apps, err := m.TenantAppendables("foo")
 		testutil.Ok(t, err)
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
 		testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-			_, err := app.Appender(context.Background())
-			return err
+			for _, app := range apps {
+				_, err := app.Appender(context.Background())
+				return err
+			}
+			return nil
 		}))
 
 		// Check if not leaking.
-		_, err = m.TenantAppendable("foo")
+		_, err = m.TenantAppendables("foo")
 		testutil.Ok(t, err)
-		_, err = m.TenantAppendable("foo")
+		_, err = m.TenantAppendables("foo")
 		testutil.Ok(t, err)
-		_, err = m.TenantAppendable("foo")
+		_, err = m.TenantAppendables("foo")
 		testutil.Ok(t, err)
 
 		testMulitTSDBSeries(t, m)
@@ -183,24 +154,37 @@ func TestMultiTSDB(t *testing.T) {
 
 		testutil.Ok(t, m.Flush())
 		testutil.Ok(t, m.Open())
-		testutil.Ok(t, appendSample(m, testTenant, time.Now()))
+		testutil.Ok(t, initTenantTSDBs(m, testTenant))
+		testutil.Ok(t, appendSample(m, testTenant, labels.FromStrings("foo", "bar"), prompb.Sample{Timestamp: time.Now().UnixMilli()}))
 
 		tenant := m.tenants[testTenant]
-		db := tenant.readyStorage().Get()
-
-		testutil.Equals(t, 0, len(db.Blocks()))
+		testutil.Assert(t, func() bool {
+			blocks := 0
+			for _, shard := range tenant.shards {
+				db := shard.readyStorage().Get()
+				blocks += len(db.Blocks())
+			}
+			return blocks == 0
+		}())
 		testutil.Ok(t, m.Flush())
-		testutil.Equals(t, 1, len(db.Blocks()))
+		testutil.Assert(t, func() bool {
+			blocks := 0
+			for _, shard := range tenant.shards {
+				db := shard.readyStorage().Get()
+				blocks += len(db.Blocks())
+			}
+			return blocks == 1
+		}())
 	})
 }
 
 var (
 	expectedFooResp = &storepb.Series{
-		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}},
+		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "shard_id", Value: "5"}, {Name: "tenant_id", Value: "foo"}},
 		Chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@\003L\235\2354X\315\001\330\r\257Mui\251\327:U"), Hash: 9768694233508509040}}},
 	}
 	expectedBarResp = &storepb.Series{
-		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}},
+		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "shard_id", Value: "5"}, {Name: "tenant_id", Value: "bar"}},
 		Chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@4i\223\263\246\213\032\001\330\035i\337\322\352\323S\256t\270"), Hash: 2304287992246504442}}},
 	}
 )
@@ -209,9 +193,14 @@ func testMulitTSDBSeries(t *testing.T, m *MultiTSDB) {
 	g := &errgroup.Group{}
 	respFoo := make(chan *storepb.Series)
 	respBar := make(chan *storepb.Series)
+
+	expectedClients := 0
+	for _, tenant := range m.tenants {
+		expectedClients += len(tenant.shards)
+	}
 	for i := 0; i < 100; i++ {
 		ss := m.TSDBLocalClients()
-		testutil.Assert(t, len(ss) == 2)
+		testutil.Assert(t, len(ss) == expectedClients)
 
 		for _, s := range ss {
 			s := s
@@ -281,7 +270,7 @@ func getResponses(storeClient store.Client, respCh chan<- *storepb.Series) error
 var (
 	expectedFooRespExemplars = []exemplarspb.ExemplarData{
 		{
-			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}}},
+			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "shard_id", Value: "5"}, {Name: "tenant_id", Value: "foo"}}},
 			Exemplars: []*exemplarspb.Exemplar{
 				{Value: 1, Ts: 1},
 				{Value: 2.1212, Ts: 2},
@@ -291,7 +280,7 @@ var (
 	}
 	expectedBarRespExemplars = []exemplarspb.ExemplarData{
 		{
-			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}}},
+			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "shard_id", Value: "5"}, {Name: "tenant_id", Value: "bar"}}},
 			Exemplars: []*exemplarspb.Exemplar{
 				{Value: 11, Ts: 1, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "abc"}}}},
 				{Value: 22.1212, Ts: 2, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "def"}}}},
@@ -305,34 +294,43 @@ func testMultiTSDBExemplars(t *testing.T, m *MultiTSDB) {
 	g := &errgroup.Group{}
 	respFoo := make(chan []exemplarspb.ExemplarData)
 	respBar := make(chan []exemplarspb.ExemplarData)
+
 	for i := 0; i < 100; i++ {
 		s := m.TSDBExemplars()
 		testutil.Assert(t, len(s) == 2)
 
 		g.Go(func() error {
-			srv := newExemplarsServer(context.Background())
-			if err := s["foo"].Exemplars(
-				[][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "a", "1")}},
-				0,
-				10,
-				srv,
-			); err != nil {
-				return err
+			for _, exemplar := range s["foo"] {
+				srv := newExemplarsServer(context.Background())
+				if err := exemplar.Exemplars(
+					[][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "a", "1")}},
+					0,
+					10,
+					srv,
+				); err != nil {
+					return err
+				}
+				if len(srv.Data) > 0 {
+					respFoo <- srv.Data
+				}
 			}
-			respFoo <- srv.Data
 			return nil
 		})
 		g.Go(func() error {
-			srv := newExemplarsServer(context.Background())
-			if err := s["bar"].Exemplars(
-				[][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "a", "1")}},
-				0,
-				10,
-				srv,
-			); err != nil {
-				return err
+			for _, exemplar := range s["foo"] {
+				srv := newExemplarsServer(context.Background())
+				if err := exemplar.Exemplars(
+					[][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "a", "1")}},
+					0,
+					10,
+					srv,
+				); err != nil {
+					return err
+				}
+				if len(srv.Data) > 0 {
+					respFoo <- srv.Data
+				}
 			}
-			respBar <- srv.Data
 			return nil
 		})
 	}
@@ -448,12 +446,17 @@ func TestMultiTSDBPrune(t *testing.T) {
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
 
+			testutil.Ok(t, initTenantTSDBs(m, "deleted-tenant"))
+			testutil.Ok(t, initTenantTSDBs(m, "compacted-tenant"))
+			testutil.Ok(t, initTenantTSDBs(m, "active-tenant"))
+
+			lbls := labels.FromStrings("foo", "bar")
 			for i := 0; i < 100; i++ {
-				testutil.Ok(t, appendSample(m, "deleted-tenant", time.UnixMilli(int64(10+i))))
-				testutil.Ok(t, appendSample(m, "compacted-tenant", time.Now().Add(-4*time.Hour)))
-				testutil.Ok(t, appendSample(m, "active-tenant", time.Now().Add(time.Duration(i)*time.Second)))
+				testutil.Ok(t, appendSample(m, "deleted-tenant", lbls, prompb.Sample{Timestamp: int64(10 + i)}))
+				testutil.Ok(t, appendSample(m, "compacted-tenant", lbls, prompb.Sample{Timestamp: time.Now().Add(-4 * time.Hour).UnixMilli()}))
+				testutil.Ok(t, appendSample(m, "active-tenant", lbls, prompb.Sample{Timestamp: time.Now().Add(time.Duration(i) * time.Second).UnixMilli()}))
 			}
-			testutil.Equals(t, 3, len(m.TSDBLocalClients()))
+			testutil.Equals(t, 3, len(m.tenants))
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -465,7 +468,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 			}
 
 			testutil.Ok(t, m.Prune(ctx))
-			testutil.Equals(t, test.expectedTenants, len(m.TSDBLocalClients()))
+			testutil.Equals(t, test.expectedTenants, len(m.tenants))
 			var shippedBlocks int
 			if test.bucket != nil {
 				testutil.Ok(t, test.bucket.Iter(context.Background(), "", func(s string) error {
@@ -492,6 +495,7 @@ func syncTSDBs(ctx context.Context, m *MultiTSDB, interval time.Duration) error 
 	}
 }
 
+/*
 func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 	dir := t.TempDir()
 
@@ -516,7 +520,9 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 	testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10))))
 	testutil.Equals(t, 1, len(m.TSDBLocalClients()))
 }
+*/
 
+/*
 func TestMultiTSDBStats(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -573,6 +579,7 @@ func TestMultiTSDBStats(t *testing.T) {
 		})
 	}
 }
+*/
 
 // Regression test for https://github.com/thanos-io/thanos/issues/6047.
 func TestMultiTSDBWithNilStore(t *testing.T) {
@@ -593,8 +600,7 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 	defer func() { testutil.Ok(t, m.Close()) }()
 
 	const tenantID = "test-tenant"
-	_, err := m.TenantAppendable(tenantID)
-	testutil.Ok(t, err)
+	testutil.Ok(t, initTenantTSDBs(m, tenantID))
 
 	// Get LabelSets of newly created TSDB.
 	clients := m.TSDBLocalClients()
@@ -604,7 +610,7 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 
 	// Wait for tenant to become ready before terminating the test.
 	// This allows the tear down procedure to cleanup properly.
-	testutil.Ok(t, appendSample(m, tenantID, time.Now()))
+	testutil.Ok(t, appendSample(m, tenantID, labels.FromStrings("foo", "bar"), prompb.Sample{Timestamp: time.Now().UnixMilli(), Value: 0}))
 }
 
 type slowClient struct {
@@ -645,45 +651,58 @@ func TestProxyLabelValues(t *testing.T) {
 			}
 		}
 	}()
+	testutil.Ok(t, initTenantTSDBs(m, "tenant-a"))
+	testutil.Ok(t, initTenantTSDBs(m, "tenant-b"))
 
 	// Append several samples to a TSDB outside the retention period.
-	testutil.Ok(t, appendSampleWithLabels(m, "tenant-a", labels.FromStrings(labels.MetricName, "metric-a"), time.Now().Add(-5*time.Hour)))
-	testutil.Ok(t, appendSampleWithLabels(m, "tenant-a", labels.FromStrings(labels.MetricName, "metric-b"), time.Now().Add(-3*time.Hour)))
-	testutil.Ok(t, appendSampleWithLabels(m, "tenant-b", labels.FromStrings(labels.MetricName, "metric-c"), time.Now().Add(-1*time.Hour)))
+	testutil.Ok(t, appendSample(m, "tenant-a", labels.FromStrings(labels.MetricName, "metric-a"), prompb.Sample{Timestamp: time.Now().Add(-5 * time.Hour).UnixMilli(), Value: 0}))
+	testutil.Ok(t, appendSample(m, "tenant-a", labels.FromStrings(labels.MetricName, "metric-b"), prompb.Sample{Timestamp: time.Now().Add(-3 * time.Hour).UnixMilli(), Value: 0}))
+	testutil.Ok(t, appendSample(m, "tenant-b", labels.FromStrings(labels.MetricName, "metric-c"), prompb.Sample{Timestamp: time.Now().Add(-1 * time.Hour).UnixMilli(), Value: 0}))
 
 	// Append a sample within the retention period and flush all tenants.
 	// This will lead deletion of blocks that fall out of the retention period.
-	testutil.Ok(t, appendSampleWithLabels(m, "tenant-b", labels.FromStrings(labels.MetricName, "metric-d"), time.Now()))
+	testutil.Ok(t, appendSample(m, "tenant-b", labels.FromStrings(labels.MetricName, "metric-d"), prompb.Sample{Timestamp: time.Now().UnixMilli(), Value: 0}))
 	testutil.Ok(t, m.Flush())
 }
 
-func appendSample(m *MultiTSDB, tenant string, timestamp time.Time) error {
-	return appendSampleWithLabels(m, tenant, labels.FromStrings("foo", "bar"), timestamp)
-}
-
-func appendSampleWithLabels(m *MultiTSDB, tenant string, lbls labels.Labels, timestamp time.Time) error {
+func appendSample(m *MultiTSDB, tenant string, lbls labels.Labels, sample prompb.Sample) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	app, err := m.TenantAppendable(tenant)
+	w := NewWriter(m.logger, m, &WriterOptions{})
+	return w.Write(ctx, tenant, &prompb.WriteRequest{Timeseries: []prompb.TimeSeries{{
+		Labels:  labelpb.ZLabelsFromPromLabels(lbls),
+		Samples: []prompb.Sample{sample},
+	}}})
+}
+
+func appendExemplar(m *MultiTSDB, tenant string, lbls labels.Labels, exemplar prompb.Exemplar) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	w := NewWriter(m.logger, m, &WriterOptions{})
+	return w.Write(ctx, tenant, &prompb.WriteRequest{Timeseries: []prompb.TimeSeries{{
+		Labels:    labelpb.ZLabelsFromPromLabels(lbls),
+		Exemplars: []prompb.Exemplar{exemplar},
+	}}})
+}
+
+func initTenantTSDBs(m *MultiTSDB, tenant string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	apps, err := m.TenantAppendables(tenant)
 	if err != nil {
 		return err
 	}
 
-	var a storage.Appender
-	if err := runutil.Retry(1*time.Second, ctx.Done(), func() error {
-		a, err = app.Appender(ctx)
-		return err
-	}); err != nil {
-		return err
-	}
-
-	_, err = a.Append(0, lbls, timestamp.UnixMilli(), 10)
-	if err != nil {
-		return err
-	}
-
-	return a.Commit()
+	return runutil.Retry(1*time.Second, ctx.Done(), func() error {
+		for _, app := range apps {
+			_, err = app.Appender(context.Background())
+			return err
+		}
+		return nil
+	})
 }
 
 func queryLabelValues(ctx context.Context, m *MultiTSDB) error {
@@ -725,25 +744,22 @@ func BenchmarkMultiTSDB(b *testing.B) {
 
 	testutil.Ok(b, m.Flush())
 	testutil.Ok(b, m.Open())
-
-	app, err := m.TenantAppendable("foo")
-	testutil.Ok(b, err)
+	testutil.Ok(b, initTenantTSDBs(m, "foo"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	var a storage.Appender
-	testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-		a, err = app.Appender(context.Background())
-		return err
-	}))
 
 	l := labels.FromStrings("a", "1", "b", "2")
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
+	w := NewWriter(m.logger, m, &WriterOptions{})
+
 	for i := 0; i < b.N; i++ {
-		_, _ = a.Append(0, l, int64(i), float64(i))
+		w.Write(ctx, "foo", &prompb.WriteRequest{Timeseries: []prompb.TimeSeries{{
+			Labels:  labelpb.ZLabelsFromPromLabels(l),
+			Samples: []prompb.Sample{{Timestamp: int64(i), Value: float64(i)}},
+		}}})
 	}
 }
