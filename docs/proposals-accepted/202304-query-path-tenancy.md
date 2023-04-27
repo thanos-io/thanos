@@ -22,7 +22,7 @@ This design doc proposes to add tenancy awareness in the query path.
 
 ## Why
 
-In a multi-tenant environment, it's important to be able to identify which tenants are experiencing issues and configure (e.g. with different limits) each one of them individually and according to their usage of the platform so that the quality of service can be guaranteed to all the tenants.
+In a multi-tenant environment, it is important to be able to identify which tenants are experiencing issues and configure (e.g. with different limits) each one of them individually and according to their usage of the platform so that the quality of service can be guaranteed to all the tenants.
 
 ### Pitfalls of the current solution
 
