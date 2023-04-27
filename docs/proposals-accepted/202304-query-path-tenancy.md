@@ -57,7 +57,7 @@ Goals and use cases for the solution as proposed in [How](#how):
 * Have a design style that is concise and covers all the essential information.
 -->
 
-* Allow the query path components to be configurable to identify tenants, opening the way to the implementation per-tenant features on the query path. These features include, but aren't limited to, the following:
+* Allow the query path components to be configurable to identify tenants, opening the way to the implementation of per-tenant features on the query path. These features include, but aren't limited to, the following:
   * Per-tenant observability.
   * Per-tenant settings. For example, having different limits per tenant, which is a common request. 
   * Enforce presence of one or more tenant labels in queries.
@@ -68,7 +68,7 @@ Goals and use cases for the solution as proposed in [How](#how):
 If this is not clear already, provide the target audience for this change.
 -->
 
-Any team running Thanos in a multi-tenant environment.
+Any team running Thanos in a multi-tenant environment i.e, Monitoring-as-a-Service use cases.
 
 ## Non-Goals
 
@@ -93,7 +93,7 @@ Explain the full overview of the proposed solution. Some guidelines:
 
 * Implement a mechanism to allow incoming requests to specify the tenant being queried using an HTTP header. This applies to all components in the query path. We follow the example of Thanos Receive, which uses the `--receive.tenant-header="THANOS-TENANT"` flag to configure the tenant header, adapting its name to each component.
 * The tenant header value from a given request should travel downstream to all the components being called, so that it can be added to their metrics, traces, and logs without requiring duplicated/extra work to re-parse the query. This also applies to gRPC calls.
-* Implement a command line argument in the Querier component that will indicate with label name that should be used to enforce tenancy. Again, we follow the example of Thanos Receive, which uses the `--receive.tenant-label-name="tenant_id"` flag to achieve this, and adapt its name. The default behavior, when the flag as an empty string as value, is to not identify tenants. 
+* Implement a command line argument in the Querier component that will indicate the label name that should be used to enforce tenancy. Again, we follow the example of Thanos Receive, which uses the `--receive.tenant-label-name="tenant_id"` flag to achieve this, and adapt its name. The default behavior, when the flag is an empty string, is to not identify tenants. 
   * The label verification and enforcement should be done by reusing prom-label-proxy's [Enforce.EnforceMatchers](https://github.com/prometheus-community/prom-label-proxy/blob/main/injectproxy/enforce.go#L141). There's no reason to (re)implement something specific and special for Thanos.
   * This behavior should be implemented as part of the base logic of both the HTTP and gRPC query APIs, before the query is handed to the query engine. This allows users managing complex Querier trees can choose where they want this logic to be enabled. 
 * Update metrics exported by the components in the query path to include the tenant label when it's available. 
