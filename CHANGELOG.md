@@ -32,6 +32,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6306](https://github.com/thanos-io/thanos/pull/6306) Tracing: tracing in OTLP utilize the OTEL_TRACES_SAMPLER env variable
 - [#6330](https://github.com/thanos-io/thanos/pull/6330) Store: Fix inconsistent error for series limits.
 - [#6342](https://github.com/thanos-io/thanos/pull/6342) Cache/Redis: Upgrade `rueidis` to v1.0.2 to to improve error handling while shrinking a redis cluster.
+- [#6325](https://github.com/thanos-io/thanos/pull/6325) Store: return gRPC resource exhausted error for byte limiter.
 
 ### Changed
 - [#6168](https://github.com/thanos-io/thanos/pull/6168) Receiver: Make ketama hashring fail early when configured with number of nodes lower than the replication factor.
