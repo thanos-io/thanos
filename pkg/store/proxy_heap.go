@@ -163,24 +163,37 @@ func (d *dedupResponseHeap) At() *storepb.SeriesResponse {
 // This is O(n*logk) but can be Theta(n*logk). However,
 // tournament trees need n-1 auxiliary nodes so there
 // might not be much of a difference.
-type ProxyResponseHeap []ProxyResponseHeapNode
+type ProxyResponseHeap struct {
+	nodes        []ProxyResponseHeapNode
+	iLblsScratch labels.Labels
+	jLblsScratch labels.Labels
+}
 
 func (h *ProxyResponseHeap) Less(i, j int) bool {
-	iResp := (*h)[i].rs.At()
-	jResp := (*h)[j].rs.At()
+	iResp := h.nodes[i].rs.At()
+	jResp := h.nodes[j].rs.At()
 
 	if iResp.GetSeries() != nil && jResp.GetSeries() != nil {
 		// Response sets are sorted before adding external labels.
 		// This comparison excludes those labels to keep the same order.
-		iStoreLbls := (*h)[i].rs.StoreLabels()
-		jStoreLbls := (*h)[j].rs.StoreLabels()
+		iStoreLbls := h.nodes[i].rs.StoreLabels()
+		jStoreLbls := h.nodes[j].rs.StoreLabels()
+
 		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
 		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)
-		c := labels.Compare(rmLabels(iLbls.Copy(), iStoreLbls), rmLabels(jLbls.Copy(), jStoreLbls))
-		if c == 0 {
-			c = labels.Compare(iLbls, jLbls)
+
+		copyLabels(&h.iLblsScratch, iLbls)
+		copyLabels(&h.jLblsScratch, jLbls)
+
+		var iExtLbls, jExtLbls labels.Labels
+		h.iLblsScratch, iExtLbls = dropLabels(h.iLblsScratch, iStoreLbls)
+		h.jLblsScratch, jExtLbls = dropLabels(h.jLblsScratch, jStoreLbls)
+
+		c := labels.Compare(h.iLblsScratch, h.jLblsScratch)
+		if c != 0 {
+			return c < 0
 		}
-		return c < 0
+		return labels.Compare(iExtLbls, jExtLbls) < 0
 	} else if iResp.GetSeries() == nil && jResp.GetSeries() != nil {
 		return true
 	} else if iResp.GetSeries() != nil && jResp.GetSeries() == nil {
@@ -193,19 +206,19 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 }
 
 func (h *ProxyResponseHeap) Len() int {
-	return len(*h)
+	return len(h.nodes)
 }
 
 func (h *ProxyResponseHeap) Swap(i, j int) {
-	(*h)[i], (*h)[j] = (*h)[j], (*h)[i]
+	h.nodes[i], h.nodes[j] = h.nodes[j], h.nodes[i]
 }
 
 func (h *ProxyResponseHeap) Push(x interface{}) {
-	*h = append(*h, x.(ProxyResponseHeapNode))
+	h.nodes = append(h.nodes, x.(ProxyResponseHeapNode))
 }
 
 func (h *ProxyResponseHeap) Pop() (v interface{}) {
-	*h, v = (*h)[:h.Len()-1], (*h)[h.Len()-1]
+	h.nodes, v = h.nodes[:h.Len()-1], h.nodes[h.Len()-1]
 	return
 }
 
@@ -214,7 +227,7 @@ func (h *ProxyResponseHeap) Empty() bool {
 }
 
 func (h *ProxyResponseHeap) Min() *ProxyResponseHeapNode {
-	return &(*h)[0]
+	return &h.nodes[0]
 }
 
 type ProxyResponseHeapNode struct {
@@ -224,7 +237,9 @@ type ProxyResponseHeapNode struct {
 // NewProxyResponseHeap returns heap that k-way merge series together.
 // It's agnostic to duplicates and overlaps, it forwards all duplicated series in random order.
 func NewProxyResponseHeap(seriesSets ...respSet) *ProxyResponseHeap {
-	ret := make(ProxyResponseHeap, 0, len(seriesSets))
+	ret := ProxyResponseHeap{
+		nodes: make([]ProxyResponseHeapNode, 0, len(seriesSets)),
+	}
 
 	for _, ss := range seriesSets {
 		if ss.Empty() {
@@ -772,6 +787,34 @@ func rmLabels(l labels.Labels, labelsToRemove map[string]struct{}) labels.Labels
 		i--
 	}
 	return l
+}
+
+// dropLabels removes labels from the given label set and returns the removed labels.
+func dropLabels(l labels.Labels, labelsToDrop map[string]struct{}) (labels.Labels, labels.Labels) {
+	cutoff := len(l)
+	for i := 0; i < len(l); i++ {
+		if i == cutoff {
+			break
+		}
+		if _, ok := labelsToDrop[l[i].Name]; !ok {
+			continue
+		}
+
+		lbl := l[i]
+		l = append(append(l[:i], l[i+1:]...), lbl)
+		cutoff--
+		i--
+	}
+
+	return l[:cutoff], l[cutoff:]
+}
+
+func copyLabels(dest *labels.Labels, src labels.Labels) {
+	if len(*dest) < cap(src) {
+		*dest = make([]labels.Label, len(src))
+	}
+	*dest = (*dest)[:len(src)]
+	copy(*dest, src)
 }
 
 // sortWithoutLabels removes given labels from series and re-sorts the series responses that the same
