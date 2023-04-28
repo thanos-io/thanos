@@ -67,6 +67,10 @@ Any team running Thanos in a multi-tenant environment. For example, a team runni
 
 The Query Frontend is an optional component on any Thanos deployment, while the Querier is always present. Plus, there might be deployments with multiple Querier layers where one or more might need to apply tenant verification and enforcement. On top of this, doing it in the Querier supports future work on using the [new Thanos PromQL engine](https://github.com/thanos-community/promql-engine), which can potentially make the Query Frontend unnecessary.
 
+2. Add the tenant identification as an optional field in the Store API protobuffer spec instead of an HTTP header.
+
+This isn't the preferred solution because the Store API isn't used all the way from the topmost components (e.g. Querier and Query Frontend) to the bottommost one (e.g. Store Gateway). The Query Frontend talks to the Querier via the Query API. A Querier can talk to other Queriers using the Query API via gRPC. Finally, a Querier talks to Store Gateways using the Store API. All these APIs would have to be modified and the transmission of this information would differ depending on the component and API being used. In addition to this complication, this implementation does not enable any capability that can't be achieved with HTTP header approach.
+
 ### Alternative solutions
 
 1. Use a proxy to enforce and identify tenants in queries.
