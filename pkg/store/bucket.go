@@ -1131,7 +1131,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 
-	if in.Encoding() == chunkenc.EncXOR || in.Encoding() == chunkenc.EncHistogram {
+	if in.Encoding() == chunkenc.EncXOR || in.Encoding() == chunkenc.EncHistogram || in.Encoding() == chunkenc.EncFloatHistogram {
 		b, err := save(in.Bytes())
 		if err != nil {
 			return err
@@ -1171,7 +1171,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Sum = &storepb.Chunk{Type: chunkToStoreEncoding(x.Encoding()), Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		case storepb.Aggr_MIN:
 			x, err := ac.Get(downsample.AggrMin)
 			if err != nil {
@@ -1201,10 +1201,23 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return err
 			}
-			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
+			out.Counter = &storepb.Chunk{Type: chunkToStoreEncoding(x.Encoding()), Data: b, Hash: hashChunk(hasher, b, calculateChecksum)}
 		}
 	}
 	return nil
+}
+
+func chunkToStoreEncoding(in chunkenc.Encoding) storepb.Chunk_Encoding {
+	switch in {
+	case chunkenc.EncXOR:
+		return storepb.Chunk_XOR
+	case chunkenc.EncHistogram:
+		return storepb.Chunk_HISTOGRAM
+	case chunkenc.EncFloatHistogram:
+		return storepb.Chunk_FLOAT_HISTOGRAM
+	default:
+		panic("unknown chunk encoding")
+	}
 }
 
 func hashChunk(hasher hash.Hash64, b []byte, doHash bool) uint64 {

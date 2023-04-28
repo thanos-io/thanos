@@ -19,14 +19,15 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/types"
-	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/histogram"
+	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/prometheus/prometheus/tsdb/wlog"
 	"go.uber.org/atomic"
 
@@ -53,9 +54,11 @@ type HeadGenOptions struct {
 	ScrapeInterval           time.Duration
 
 	WithWAL       bool
+	AppendLabels  labels.Labels
 	PrependLabels labels.Labels
 	SkipChunks    bool // Skips chunks in returned slice (not in generated head!).
 	SampleType    chunkenc.ValueType
+	IncludeName   bool
 
 	Random *rand.Rand
 }
@@ -138,17 +141,15 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 	defer func() { testutil.Ok(t, ir.Close()) }()
 
 	var (
-		lset       labels.Labels
+		builder    labels.ScratchBuilder
 		chunkMetas []chunks.Meta
 		expected   = make([]*storepb.Series, 0)
 	)
 
-	var builder labels.ScratchBuilder
-
 	all := allPostings(t, ir)
 	for all.Next() {
 		testutil.Ok(t, ir.Series(all.At(), &builder, &chunkMetas))
-		lset = builder.Labels()
+		lset := builder.Labels()
 		expected = append(expected, &storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(append(extLabels.Copy(), lset...))})
 
 		if skipChunks {
@@ -180,12 +181,11 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 }
 
 func appendFloatSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
-	ref, err := app.Append(
-		0,
-		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel)),
-		int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
-		opts.Random.Float64(),
-	)
+	lblSet := labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix))
+	if opts.IncludeName {
+		lblSet = append(lblSet, labels.Label{Name: "__name__", Value: "test_float_metric"})
+	}
+	ref, err := app.Append(0, lblSet, int64(tsLabel)*opts.ScrapeInterval.Milliseconds(), opts.Random.Float64())
 	testutil.Ok(t, err)
 
 	for is := 1; is < opts.SamplesPerSeries; is++ {
@@ -195,30 +195,23 @@ func appendFloatSamples(t testing.TB, app storage.Appender, tsLabel int, opts He
 }
 
 func appendHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
-	sample := &histogram.Histogram{
-		Schema:        0,
-		Count:         9,
-		Sum:           -3.1415,
-		ZeroCount:     12,
-		ZeroThreshold: 0.001,
-		NegativeSpans: []histogram.Span{
-			{Offset: 0, Length: 4},
-			{Offset: 1, Length: 1},
-		},
-		NegativeBuckets: []int64{1, 2, -2, 1, -1},
-	}
+	histograms := tsdbutil.GenerateTestHistograms(opts.SamplesPerSeries)
 
+	lblSet := labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix))
+	if opts.IncludeName {
+		lblSet = append(lblSet, labels.Label{Name: "__name__", Value: "test_metric"})
+	}
 	ref, err := app.AppendHistogram(
 		0,
-		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel)),
+		lblSet,
 		int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
-		sample,
+		histograms[0],
 		nil,
 	)
 	testutil.Ok(t, err)
 
-	for is := 1; is < opts.SamplesPerSeries; is++ {
-		_, err := app.AppendHistogram(ref, nil, int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), sample, nil)
+	for i, h := range histograms[1:] {
+		_, err := app.AppendHistogram(ref, nil, int64(tsLabel+i+1)*opts.ScrapeInterval.Milliseconds(), h, nil)
 		testutil.Ok(t, err)
 	}
 }

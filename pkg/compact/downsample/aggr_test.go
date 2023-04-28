@@ -14,11 +14,11 @@ import (
 func TestAggrChunk(t *testing.T) {
 	var input [5][]sample
 
-	input[AggrCount] = []sample{{100, 30}, {200, 50}, {300, 60}, {400, 67}}
-	input[AggrSum] = []sample{{100, 130}, {200, 1000}, {300, 2000}, {400, 5555}}
-	input[AggrMin] = []sample{{100, 0}, {200, -10}, {300, 1000}, {400, -9.5}}
+	input[AggrCount] = []sample{{t: 100, v: 30}, {t: 200, v: 50}, {t: 300, v: 60}, {t: 400, v: 67}}
+	input[AggrSum] = []sample{{t: 100, v: 130}, {t: 200, v: 1000}, {t: 300, v: 2000}, {t: 400, v: 5555}}
+	input[AggrMin] = []sample{{t: 100}, {t: 200, v: -10}, {t: 300, v: 1000}, {t: 400, v: -9.5}}
 	// Maximum is absent.
-	input[AggrCounter] = []sample{{100, 5}, {200, 10}, {300, 10.1}, {400, 15}, {400, 3}}
+	input[AggrCounter] = []sample{{t: 100, v: 5}, {t: 200, v: 10}, {t: 300, v: 10.1}, {t: 400, v: 15}, {t: 400, v: 3}}
 
 	var chks [5]chunkenc.Chunk
 
@@ -41,7 +41,7 @@ func TestAggrChunk(t *testing.T) {
 	for _, at := range []AggrType{AggrCount, AggrSum, AggrMin, AggrMax, AggrCounter} {
 		if c, err := ac.Get(at); err != ErrAggrNotExist {
 			testutil.Ok(t, err)
-			testutil.Ok(t, expandChunkIterator(c.Iterator(nil), &res[at]))
+			testutil.Ok(t, expandXorChunkIterator(c.Iterator(nil), &res[at]))
 		}
 	}
 	testutil.Equals(t, input, res)

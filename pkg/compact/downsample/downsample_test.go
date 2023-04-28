@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -52,7 +54,7 @@ func TestDownsampleCounterBoundaryReset(t *testing.T) {
 			iter := chk.Iterator(nil)
 			for iter.Next() != chunkenc.ValNone {
 				t, v := iter.At()
-				res = append(res, sample{t, v})
+				res = append(res, sample{t: t, v: v})
 			}
 		}
 		return
@@ -131,7 +133,9 @@ func TestDownsampleCounterBoundaryReset(t *testing.T) {
 	doTest := func(t *testing.T, test *test) {
 		// Asking for more chunks than raw samples ensures that downsampleRawLoop
 		// will create chunks with samples from a single window.
-		cm := downsampleRawLoop(test.raw, test.rawAggrResolution, len(test.raw)+1)
+		numChunks := len(test.raw) + 1
+		cm := make([]chunks.Meta, 0, numChunks)
+		downsampleRawLoop(test.raw, test.rawAggrResolution, numChunks, &cm, downsampleFloatBatch)
 		testutil.Equals(t, test.expectedRawAggrChunks, len(cm))
 
 		rawAggrChunks := toAggrChunks(t, cm)
@@ -139,7 +143,7 @@ func TestDownsampleCounterBoundaryReset(t *testing.T) {
 		testutil.Equals(t, test.rawCounterIterate, counterIterate(t, rawAggrChunks))
 
 		var buf []sample
-		acm, err := downsampleAggrLoop(rawAggrChunks, &buf, test.aggrAggrResolution, test.aggrChunks)
+		acm, err := downsampleAggrLoop(rawAggrChunks, &buf, test.aggrAggrResolution, test.aggrChunks, downsampleAggrBatch)
 		testutil.Ok(t, err)
 		testutil.Equals(t, test.aggrChunks, len(acm))
 
@@ -157,15 +161,15 @@ func TestExpandChunkIterator(t *testing.T) {
 	// Same timestamps are okay since we use them for counter markers.
 	var res []sample
 	testutil.Ok(t,
-		expandChunkIterator(
+		expandXorChunkIterator(
 			newSampleIterator([]sample{
-				{100, 1}, {200, 2}, {200, 3}, {201, 4}, {200, 5},
-				{300, 6}, {400, math.Float64frombits(value.StaleNaN)}, {500, 5},
+				{t: 100, v: 1}, {t: 200, v: 2}, {t: 200, v: 3}, {t: 201, v: 4}, {t: 200, v: 5},
+				{t: 300, v: 6}, {t: 400, v: math.Float64frombits(value.StaleNaN)}, {t: 500, v: 5},
 			}), &res,
 		),
 	)
 
-	testutil.Equals(t, []sample{{100, 1}, {200, 2}, {200, 3}, {201, 4}, {300, 6}, {500, 5}}, res)
+	testutil.Equals(t, []sample{{t: 100, v: 1}, {t: 200, v: 2}, {t: 200, v: 3}, {t: 201, v: 4}, {t: 300, v: 6}, {t: 500, v: 5}}, res)
 }
 
 var (
@@ -228,26 +232,26 @@ func TestDownsample(t *testing.T) {
 		{
 			name: "single chunk",
 			inRaw: [][]sample{
-				{{20, 1}, {40, 2}, {60, 3}, {80, 1}, {100, 2}, {101, math.Float64frombits(value.StaleNaN)}, {120, 5}, {180, 10}, {250, 1}},
+				{{t: 20, v: 1}, {t: 40, v: 2}, {t: 60, v: 3}, {t: 80, v: 1}, {t: 100, v: 2}, {t: 101, v: math.Float64frombits(value.StaleNaN)}, {t: 120, v: 5}, {t: 180, v: 10}, {t: 250, v: 1}},
 			},
 			resolution: 100,
 
 			expected: []map[AggrType][]sample{
 				{
-					AggrCount:   {{99, 4}, {199, 3}, {250, 1}},
-					AggrSum:     {{99, 7}, {199, 17}, {250, 1}},
-					AggrMin:     {{99, 1}, {199, 2}, {250, 1}},
-					AggrMax:     {{99, 3}, {199, 10}, {250, 1}},
-					AggrCounter: {{20, 1}, {99, 4}, {199, 13}, {250, 14}, {250, 1}},
+					AggrCount:   {{t: 99, v: 4}, {t: 199, v: 3}, {t: 250, v: 1}},
+					AggrSum:     {{t: 99, v: 7}, {t: 199, v: 17}, {t: 250, v: 1}},
+					AggrMin:     {{t: 99, v: 1}, {t: 199, v: 2}, {t: 250, v: 1}},
+					AggrMax:     {{t: 99, v: 3}, {t: 199, v: 10}, {t: 250, v: 1}},
+					AggrCounter: {{t: 20, v: 1}, {t: 99, v: 4}, {t: 199, v: 13}, {t: 250, v: 14}, {t: 250, v: 1}},
 				},
 			},
 		},
 		{
 			name: "three chunks",
 			inRaw: [][]sample{
-				{{20, 1}, {40, 2}, {60, 3}, {80, 1}, {100, 2}, {101, math.Float64frombits(value.StaleNaN)}, {120, 5}, {180, 10}, {250, 2}},
-				{{260, 1}, {300, 10}, {340, 15}, {380, 25}, {420, 35}},
-				{{460, math.Float64frombits(value.StaleNaN)}, {500, 10}, {540, 3}},
+				{{t: 20, v: 1}, {t: 40, v: 2}, {t: 60, v: 3}, {t: 80, v: 1}, {t: 100, v: 2}, {t: 101, v: math.Float64frombits(value.StaleNaN)}, {t: 120, v: 5}, {t: 180, v: 10}, {t: 250, v: 2}},
+				{{t: 260, v: 1}, {t: 300, v: 10}, {t: 340, v: 15}, {t: 380, v: 25}, {t: 420, v: 35}},
+				{{t: 460, v: math.Float64frombits(value.StaleNaN)}, {t: 500, v: 10}, {t: 540, v: 3}},
 			},
 			resolution: 100,
 
@@ -264,10 +268,10 @@ func TestDownsample(t *testing.T) {
 		{
 			name: "four chunks, two of them overlapping",
 			inRaw: [][]sample{
-				{{20, 1}, {40, 2}, {60, 3}, {80, 1}, {100, 2}, {101, math.Float64frombits(value.StaleNaN)}, {120, 5}, {180, 10}, {250, 2}},
-				{{20, 1}, {40, 2}, {60, 3}, {80, 1}, {100, 2}, {101, math.Float64frombits(value.StaleNaN)}, {120, 5}, {180, 10}, {250, 2}},
-				{{260, 1}, {300, 10}, {340, 15}, {380, 25}, {420, 35}},
-				{{460, math.Float64frombits(value.StaleNaN)}, {500, 10}, {540, 3}},
+				{{t: 20, v: 1}, {t: 40, v: 2}, {t: 60, v: 3}, {t: 80, v: 1}, {t: 100, v: 2}, {t: 101, v: math.Float64frombits(value.StaleNaN)}, {t: 120, v: 5}, {t: 180, v: 10}, {t: 250, v: 2}},
+				{{t: 20, v: 1}, {t: 40, v: 2}, {t: 60, v: 3}, {t: 80, v: 1}, {t: 100, v: 2}, {t: 101, v: math.Float64frombits(value.StaleNaN)}, {t: 120, v: 5}, {t: 180, v: 10}, {t: 250, v: 2}},
+				{{t: 260, v: 1}, {t: 300, v: 10}, {t: 340, v: 15}, {t: 380, v: 25}, {t: 420, v: 35}},
+				{{t: 460, v: math.Float64frombits(value.StaleNaN)}, {t: 500, v: 10}, {t: 540, v: 3}},
 			},
 			resolution: 100,
 
@@ -287,14 +291,14 @@ func TestDownsample(t *testing.T) {
 			name: "single aggregated chunks",
 			inAggr: []map[AggrType][]sample{
 				{
-					AggrCount: {{199, 5}, {299, 1}, {399, 10}, {400, 3}, {499, 10}, {699, 0}, {999, 100}},
-					AggrSum:   {{199, 5}, {299, 1}, {399, 10}, {400, 3}, {499, 10}, {699, 0}, {999, 100}},
-					AggrMin:   {{199, 5}, {299, 1}, {399, 10}, {400, -3}, {499, 10}, {699, 0}, {999, 100}},
-					AggrMax:   {{199, 5}, {299, 1}, {399, 10}, {400, -3}, {499, 10}, {699, 0}, {999, 100}},
+					AggrCount: {{t: 199, v: 5}, {t: 299, v: 1}, {t: 399, v: 10}, {t: 400, v: 3}, {t: 499, v: 10}, {t: 699}, {t: 999, v: 100}},
+					AggrSum:   {{t: 199, v: 5}, {t: 299, v: 1}, {t: 399, v: 10}, {t: 400, v: 3}, {t: 499, v: 10}, {t: 699}, {t: 999, v: 100}},
+					AggrMin:   {{t: 199, v: 5}, {t: 299, v: 1}, {t: 399, v: 10}, {t: 400, v: -3}, {t: 499, v: 10}, {t: 699}, {t: 999, v: 100}},
+					AggrMax:   {{t: 199, v: 5}, {t: 299, v: 1}, {t: 399, v: 10}, {t: 400, v: -3}, {t: 499, v: 10}, {t: 699}, {t: 999, v: 100}},
 					AggrCounter: {
-						{99, 100}, {299, 150}, {499, 210}, {499, 10}, // Chunk 1.
-						{599, 20}, {799, 50}, {999, 120}, {999, 50}, // Chunk 2, no reset.
-						{1099, 40}, {1199, 80}, {1299, 110}, // Chunk 3, reset.
+						{t: 99, v: 100}, {t: 299, v: 150}, {t: 499, v: 210}, {t: 499, v: 10}, // Chunk 1.
+						{t: 599, v: 20}, {t: 799, v: 50}, {t: 999, v: 120}, {t: 999, v: 50}, // Chunk 2, no reset.
+						{t: 1099, v: 40}, {t: 1199, v: 80}, {t: 1299, v: 110}, // Chunk 3, reset.
 					},
 				},
 			},
@@ -302,22 +306,22 @@ func TestDownsample(t *testing.T) {
 
 			expected: []map[AggrType][]sample{
 				{
-					AggrCount:   {{499, 29}, {999, 100}},
-					AggrSum:     {{499, 29}, {999, 100}},
-					AggrMin:     {{499, -3}, {999, 0}},
-					AggrMax:     {{499, 10}, {999, 100}},
-					AggrCounter: {{99, 100}, {499, 210}, {999, 320}, {1299, 430}, {1299, 110}},
+					AggrCount:   {{t: 499, v: 29}, {t: 999, v: 100}},
+					AggrSum:     {{t: 499, v: 29}, {t: 999, v: 100}},
+					AggrMin:     {{t: 499, v: -3}, {t: 999}},
+					AggrMax:     {{t: 499, v: 10}, {t: 999, v: 100}},
+					AggrCounter: {{t: 99, v: 100}, {t: 499, v: 210}, {t: 999, v: 320}, {t: 1299, v: 430}, {t: 1299, v: 110}},
 				},
 			},
 		},
 		func() *downsampleTestCase {
 			downsample500resolutionChunk := []map[AggrType][]sample{
 				{
-					AggrCount:   {{499, 29}, {999, 100}},
-					AggrSum:     {{499, 29}, {999, 100}},
-					AggrMin:     {{499, -3}, {999, 0}},
-					AggrMax:     {{499, 10}, {999, 100}},
-					AggrCounter: {{99, 100}, {499, 210}, {999, 320}, {1299, 430}, {1299, 110}},
+					AggrCount:   {{t: 499, v: 29}, {t: 999, v: 100}},
+					AggrSum:     {{t: 499, v: 29}, {t: 999, v: 100}},
+					AggrMin:     {{t: 499, v: -3}, {t: 999}},
+					AggrMax:     {{t: 499, v: 10}, {t: 999, v: 100}},
+					AggrCounter: {{t: 99, v: 100}, {t: 499, v: 210}, {t: 999, v: 320}, {t: 1299, v: 430}, {t: 1299, v: 110}},
 				},
 			}
 			return &downsampleTestCase{
@@ -333,25 +337,25 @@ func TestDownsample(t *testing.T) {
 			name: "two aggregated chunks",
 			inAggr: []map[AggrType][]sample{
 				{
-					AggrCount: {{199, 5}, {299, 1}, {399, 10}, {400, 3}, {499, 10}, {699, 0}, {999, 100}},
-					AggrSum:   {{199, 5}, {299, 1}, {399, 10}, {400, 3}, {499, 10}, {699, 0}, {999, 100}},
-					AggrMin:   {{199, 5}, {299, 1}, {399, 10}, {400, -3}, {499, 10}, {699, 0}, {999, 100}},
-					AggrMax:   {{199, 5}, {299, 1}, {399, 10}, {400, -3}, {499, 10}, {699, 0}, {999, 100}},
+					AggrCount: {{t: 199, v: 5}, {t: 299, v: 1}, {t: 399, v: 10}, {t: 400, v: 3}, {t: 499, v: 10}, {t: 699}, {t: 999, v: 100}},
+					AggrSum:   {{t: 199, v: 5}, {t: 299, v: 1}, {t: 399, v: 10}, {t: 400, v: 3}, {t: 499, v: 10}, {t: 699}, {t: 999, v: 100}},
+					AggrMin:   {{t: 199, v: 5}, {t: 299, v: 1}, {t: 399, v: 10}, {t: 400, v: -3}, {t: 499, v: 10}, {t: 699}, {t: 999, v: 100}},
+					AggrMax:   {{t: 199, v: 5}, {t: 299, v: 1}, {t: 399, v: 10}, {t: 400, v: -3}, {t: 499, v: 10}, {t: 699}, {t: 999, v: 100}},
 					AggrCounter: {
-						{99, 100}, {299, 150}, {499, 210}, {499, 10}, // Chunk 1.
-						{599, 20}, {799, 50}, {999, 120}, {999, 50}, // Chunk 2, no reset.
-						{1099, 40}, {1199, 80}, {1299, 110}, // Chunk 3, reset.
+						{t: 99, v: 100}, {t: 299, v: 150}, {t: 499, v: 210}, {t: 499, v: 10}, // Chunk 1.
+						{t: 599, v: 20}, {t: 799, v: 50}, {t: 999, v: 120}, {t: 999, v: 50}, // Chunk 2, no reset.
+						{t: 1099, v: 40}, {t: 1199, v: 80}, {t: 1299, v: 110}, // Chunk 3, reset.
 					},
 				},
 				{
-					AggrCount: {{1399, 10}, {1400, 3}, {1499, 10}, {1699, 0}, {1999, 100}},
-					AggrSum:   {{1399, 10}, {1400, 3}, {1499, 10}, {1699, 0}, {1999, 100}},
-					AggrMin:   {{1399, 10}, {1400, -3}, {1499, 10}, {1699, 0}, {1999, 100}},
-					AggrMax:   {{1399, 10}, {1400, -3}, {1499, 10}, {1699, 0}, {1999, 100}},
+					AggrCount: {{t: 1399, v: 10}, {t: 1400, v: 3}, {t: 1499, v: 10}, {t: 1699}, {t: 1999, v: 100}},
+					AggrSum:   {{t: 1399, v: 10}, {t: 1400, v: 3}, {t: 1499, v: 10}, {t: 1699}, {t: 1999, v: 100}},
+					AggrMin:   {{t: 1399, v: 10}, {t: 1400, v: -3}, {t: 1499, v: 10}, {t: 1699}, {t: 1999, v: 100}},
+					AggrMax:   {{t: 1399, v: 10}, {t: 1400, v: -3}, {t: 1499, v: 10}, {t: 1699}, {t: 1999, v: 100}},
 					AggrCounter: {
-						{1499, 210}, {1499, 10}, // Chunk 1.
-						{1599, 20}, {1799, 50}, {1999, 120}, {1999, 50}, // Chunk 2, no reset.
-						{2099, 40}, {2199, 80}, {2299, 110}, // Chunk 3, reset.
+						{t: 1499, v: 210}, {t: 1499, v: 10}, // Chunk 1.
+						{t: 1599, v: 20}, {t: 1799, v: 50}, {t: 1999, v: 120}, {t: 1999, v: 50}, // Chunk 2, no reset.
+						{t: 2099, v: 40}, {t: 2199, v: 80}, {t: 2299, v: 110}, // Chunk 3, reset.
 					},
 				},
 			},
@@ -371,10 +375,10 @@ func TestDownsample(t *testing.T) {
 			name: "two aggregated, overlapping chunks",
 			inAggr: []map[AggrType][]sample{
 				{
-					AggrCount: {{199, 5}, {299, 1}, {399, 10}, {400, 3}, {499, 10}, {699, 0}, {999, 100}},
+					AggrCount: {{t: 199, v: 5}, {t: 299, v: 1}, {t: 399, v: 10}, {t: 400, v: 3}, {t: 499, v: 10}, {t: 699}, {t: 999, v: 100}},
 				},
 				{
-					AggrCount: {{199, 5}, {299, 1}, {399, 10}, {400, 3}, {499, 10}, {699, 0}, {999, 100}},
+					AggrCount: {{t: 199, v: 5}, {t: 299, v: 1}, {t: 399, v: 10}, {t: 400, v: 3}, {t: 499, v: 10}, {t: 699}, {t: 999, v: 100}},
 				},
 			},
 			resolution: 500,
@@ -403,6 +407,28 @@ func TestDownsample(t *testing.T) {
 					AggrMin:     {{t: 1587693590791, v: 75}},
 					AggrMax:     {{t: 1587693590791, v: 496544}},
 					AggrCounter: {{t: 1587690005791, v: 461968}, {t: 1587693590791, v: 511500}, {t: 1587693590791, v: 14956}},
+				},
+			},
+		},
+		{
+			name: "reproduce invalid chunk time",
+			inAggr: []map[AggrType][]sample{
+				{
+					AggrCount:   {{t: 1679688941708, v: 1}, {t: 1679689199999, v: 1}, {t: 1679689499999, v: 1}, {t: 1679689799999, v: 1}, {t: 1679689811708, v: 1}},
+					AggrSum:     {{t: 1679688941708, v: 1}, {t: 1679689199999, v: 1}, {t: 1679689499999, v: 1}, {t: 1679689799999, v: 1}, {t: 1679689811708, v: 1}},
+					AggrMin:     {{t: 1679688941708, v: 1}, {t: 1679689199999, v: 1}, {t: 1679689499999, v: 1}, {t: 1679689799999, v: 1}, {t: 1679689811708, v: 1}},
+					AggrMax:     {{t: 1679688941708, v: 1}, {t: 1679689199999, v: 1}, {t: 1679689499999, v: 1}, {t: 1679689799999, v: 1}, {t: 1679689811708, v: 1}},
+					AggrCounter: {{t: 1679688941708, v: 1}, {t: 1679689199999, v: 1}, {t: 1679689499999, v: 1}, {t: 1679689799999, v: 1}, {t: 1679689811708, v: 1}},
+				},
+			},
+			resolution: ResLevel2,
+			expected: []map[AggrType][]sample{
+				{
+					AggrCount:   {{t: 1679689811708, v: 5}},
+					AggrSum:     {{t: 1679689811708, v: 5}},
+					AggrMin:     {{t: 1679689811708, v: 1}},
+					AggrMax:     {{t: 1679689811708, v: 1}},
+					AggrCounter: {{t: 1679688941708, v: 1}, {t: 1679689811708, v: 1}, {t: 1679689811708, v: 1}},
 				},
 			},
 		},
@@ -484,6 +510,8 @@ func TestDownsample(t *testing.T) {
 			lset = builder.Labels()
 			testutil.Equals(t, labels.FromStrings("__name__", "a"), lset)
 
+			assertValidChunkTime(t, chks)
+
 			var got []map[AggrType][]sample
 			for _, c := range chks {
 				chk, err := chunkr.Chunk(c)
@@ -498,7 +526,7 @@ func TestDownsample(t *testing.T) {
 					testutil.Ok(t, err)
 
 					buf := m[at]
-					testutil.Ok(t, expandChunkIterator(c.Iterator(nil), &buf))
+					testutil.Ok(t, expandXorChunkIterator(c.Iterator(nil), &buf))
 					m[at] = buf
 				}
 				got = append(got, m)
@@ -572,11 +600,11 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 
 	expected := []map[AggrType][]sample{
 		{
-			AggrCount:   {{1587690005794, 20}, {1587690005794, 20}, {1587690005794, 21}},
-			AggrSum:     {{1587690005794, 9.276972e+06}, {1587690005794, 9.359861e+06}, {1587690005794, 255788.5}},
-			AggrMin:     {{1587690005794, 461968}, {1587690005794, 466070}, {1587690005794, 470131}, {1587690005794, 42.5}},
-			AggrMax:     {{1587690005794, 465870}, {1587690005794, 469951}, {1587690005794, 474726}},
-			AggrCounter: {{1587690005791, 461968}, {1587690599999, 469951}, {1587690599999, 469951}},
+			AggrCount:   {{t: 1587690005794, v: 20}, {t: 1587690005794, v: 20}, {t: 1587690005794, v: 21}},
+			AggrSum:     {{t: 1587690005794, v: 9.276972e+06}, {t: 1587690005794, v: 9.359861e+06}, {t: 1587690005794, v: 255788.5}},
+			AggrMin:     {{t: 1587690005794, v: 461968}, {t: 1587690005794, v: 466070}, {t: 1587690005794, v: 470131}, {t: 1587690005794, v: 42.5}},
+			AggrMax:     {{t: 1587690005794, v: 465870}, {t: 1587690005794, v: 469951}, {t: 1587690005794, v: 474726}},
+			AggrCounter: {{t: 1587690005791, v: 461968}, {t: 1587690599999, v: 469951}, {t: 1587690599999, v: 469951}},
 		},
 	}
 
@@ -619,13 +647,336 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 			testutil.Ok(t, err)
 
 			buf := m[at]
-			testutil.Ok(t, expandChunkIterator(c.Iterator(nil), &buf))
+			testutil.Ok(t, expandXorChunkIterator(c.Iterator(nil), &buf))
 			m[at] = buf
 		}
 		got = append(got, m)
 	}
 	testutil.Equals(t, expected, got)
 
+}
+
+type expectedHistogramAggregates struct {
+	count, sum, counter []sample
+}
+
+func TestDownSampleNativeHistogram(t *testing.T) {
+	tests := []struct {
+		name               string
+		samples            []sample // Samples per chunk.
+		expectedReseLevel1 []expectedHistogramAggregates
+		expectedReseLevel2 []expectedHistogramAggregates
+	}{
+		{
+			"float histogram with 30 samples with counter resets and 30s scrape interval",
+			generateFloatHistogramSamples(30_000, 0, 15, 5, 10),
+			[]expectedHistogramAggregates{
+				{
+					count: []sample{
+						{t: 299_999, v: 10}, {t: 599_999, v: 10}, {t: 870_000, v: 10},
+					},
+					counter: []sample{
+						{
+							t:  299_999,
+							fh: expectedFloatHistogramsCounter(generateFloatHistograms(10), histogram.UnknownCounterReset),
+						},
+						{
+							t:  599_999,
+							fh: expectedFloatHistogramsCounter(generateFloatHistograms(15, 5), histogram.NotCounterReset),
+						},
+						{
+							t:  870_000,
+							fh: expectedFloatHistogramsCounter(generateFloatHistograms(15, 5, 10), histogram.NotCounterReset),
+						},
+					},
+					sum: []sample{
+						{
+							t:  299_999,
+							fh: expectedFloatHistogramsSum(generateFloatHistograms(10), 0),
+						},
+						{
+							t:  599_999,
+							fh: expectedFloatHistogramsSum(generateFloatHistograms(15, 5), 10),
+						},
+						{
+							t:  870_000,
+							fh: expectedFloatHistogramsSum(generateFloatHistograms(15, 5, 10), 20),
+						},
+					},
+				},
+			},
+			[]expectedHistogramAggregates{
+				{
+					count: []sample{
+						{t: 870_000, v: 30},
+					},
+					counter: []sample{
+						{
+							t:  870_000,
+							fh: expectedFloatHistogramsCounter(generateFloatHistograms(15, 5, 10), histogram.UnknownCounterReset),
+						},
+					},
+					sum: []sample{
+						{
+							t:  870_000,
+							fh: expectedFloatHistogramsSum(generateFloatHistograms(15, 5, 10), 0),
+						},
+					},
+				},
+			},
+		},
+		{
+			"float histogram with 360 samples and 30s scrape interval",
+			generateFloatHistogramSamples(30_000, 0, 360),
+			[]expectedHistogramAggregates{},
+			[]expectedHistogramAggregates{
+				{
+					count: []sample{
+						{t: 3_599_999, v: 120}, {t: 7_199_999, v: 120}, {t: 10_770_000, v: 120},
+					},
+					counter: []sample{
+						{
+							t:  3_599_999,
+							fh: expectedFloatHistogramsCounter(generateFloatHistograms(120), histogram.UnknownCounterReset),
+						},
+						{
+							t:  7_199_999,
+							fh: expectedFloatHistogramsCounter(generateFloatHistograms(240), histogram.NotCounterReset),
+						},
+						{
+							t:  10_770_000,
+							fh: expectedFloatHistogramsCounter(generateFloatHistograms(360), histogram.NotCounterReset),
+						},
+					},
+					sum: []sample{
+						{
+							t:  3_599_999,
+							fh: expectedFloatHistogramsSum(generateFloatHistograms(120), 0),
+						},
+						{
+							t:  7_199_999,
+							fh: expectedFloatHistogramsSum(generateFloatHistograms(240), 120),
+						},
+						{
+							t:  10_770_000,
+							fh: expectedFloatHistogramsSum(generateFloatHistograms(360), 240),
+						},
+					},
+				},
+			},
+		},
+		{
+			"gauge float histogram with 30 samples and 30s scrape interval",
+			generateGaugeFlotHistogramSamples(30_000, 0, 30),
+			[]expectedHistogramAggregates{},
+			[]expectedHistogramAggregates{},
+		},
+		{
+			"stale float histogram sample",
+			append(generateFloatHistogramSamples(30_000, 0, 10), sample{
+				t: 300_000,
+				fh: &histogram.FloatHistogram{
+					Sum: math.Float64frombits(value.StaleNaN),
+				},
+			}),
+			[]expectedHistogramAggregates{
+				{
+					count: []sample{
+						{t: 270_000, v: 10},
+					},
+					counter: []sample{
+						{
+							t:  270_000,
+							fh: expectedFloatHistogramsCounter(generateFloatHistograms(10), histogram.UnknownCounterReset),
+						},
+					},
+					sum: []sample{
+						{
+							t:  270_000,
+							fh: expectedFloatHistogramsSum(generateFloatHistograms(10), 0),
+						},
+					},
+				},
+			},
+			[]expectedHistogramAggregates{},
+		},
+	}
+
+	logger := log.NewLogfmtLogger(os.Stderr)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			ser := &series{lset: labels.FromStrings("__name__", "a")}
+
+			mint := tt.samples[0].t
+			maxt := mint
+
+			chunk, app := newChunk(t, tt.samples[0].fh.CounterResetHint)
+
+			var previous *histogram.FloatHistogram
+			for i, s := range tt.samples {
+				if i > 0 && s.fh.DetectReset(previous) {
+					ser.chunks = append(ser.chunks, chunks.Meta{
+						MinTime: mint,
+						MaxTime: maxt,
+						Chunk:   chunk,
+					})
+					chunk, app = newChunk(t, s.fh.CounterResetHint)
+					mint = s.t
+				}
+				if s.t > maxt {
+					maxt = s.t
+				}
+				app.AppendFloatHistogram(s.t, s.fh)
+				previous = s.fh
+			}
+
+			ser.chunks = append(ser.chunks, chunks.Meta{
+				MinTime: math.MaxInt64,
+				MaxTime: math.MinInt64,
+				Chunk:   chunk,
+			})
+
+			mb := newMemBlock()
+			mb.addSeries(ser)
+
+			fakeMeta := &metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{
+					MinTime: tt.samples[0].t,
+					MaxTime: maxt,
+				},
+			}
+			idResLevel1, err := Downsample(logger, fakeMeta, mb, dir, ResLevel1)
+			testutil.Ok(t, err)
+
+			meta, chks := GetMetaAndChunks(t, dir, idResLevel1)
+
+			assertValidChunkTime(t, chks)
+
+			if len(tt.expectedReseLevel1) > 0 {
+				compareAggreggates(t, dir, ResLevel1, idResLevel1.String(), tt.expectedReseLevel1, chks)
+			}
+
+			blk, err := tsdb.OpenBlock(logger, filepath.Join(dir, idResLevel1.String()), NewPool())
+			testutil.Ok(t, err)
+			idResLevel2, err := Downsample(logger, meta, blk, dir, ResLevel2)
+			testutil.Ok(t, err)
+
+			_, chks = GetMetaAndChunks(t, dir, idResLevel2)
+
+			assertValidChunkTime(t, chks)
+
+			if len(tt.expectedReseLevel2) > 0 {
+				compareAggreggates(t, dir, ResLevel2, idResLevel2.String(), tt.expectedReseLevel2, chks)
+			}
+		})
+	}
+}
+
+func newChunk(t *testing.T, counterResetHint histogram.CounterResetHint) (*chunkenc.FloatHistogramChunk, chunkenc.Appender) {
+	raw := chunkenc.NewFloatHistogramChunk()
+	app, err := raw.Appender()
+	if counterResetHint == histogram.GaugeType {
+		raw.SetCounterResetHeader(chunkenc.GaugeType)
+	}
+	testutil.Ok(t, err)
+	return raw, app
+}
+
+func generateFloatHistogramSamples(scrapeInterval, startTs int64, n ...int) []sample {
+	// Generate samples for the float histogram.
+	ts := startTs
+	floatHistograms := generateFloatHistograms(n...)
+	samples := make([]sample, 0, len(floatHistograms))
+	for _, fh := range floatHistograms {
+		samples = append(samples, sample{t: ts, fh: fh})
+		ts += scrapeInterval
+	}
+	return samples
+}
+
+// generateFloatHistograms generates multiple float histograms slices that can be used
+// to simulate counter resets.
+func generateFloatHistograms(n ...int) []*histogram.FloatHistogram {
+	var floatHistograms []*histogram.FloatHistogram
+	for _, v := range n {
+		floatHistograms = append(floatHistograms, tsdbutil.GenerateTestFloatHistograms(v)...)
+	}
+	return floatHistograms
+}
+
+func generateGaugeFlotHistogramSamples(scrapeInterval, startTs int64, n int) (floatHistogramSamples []sample) {
+	samples := make([]sample, 0, n)
+	for i, fh := range tsdbutil.GenerateTestGaugeFloatHistograms(n) {
+		samples = append(samples, sample{t: startTs + int64(i)*scrapeInterval, fh: fh})
+	}
+	return samples
+}
+
+func expectedFloatHistogramsSum(floatHistograms []*histogram.FloatHistogram, fromIndex int) *histogram.FloatHistogram {
+	adjustedFloatHistograms := counterResetAdjustFloatHistograms(floatHistograms)
+	sum := adjustedFloatHistograms[fromIndex]
+	for _, s := range adjustedFloatHistograms[fromIndex+1:] {
+		sum.Add(s)
+	}
+	sum.CounterResetHint = histogram.GaugeType
+	return sum
+}
+
+func expectedFloatHistogramsCounter(floatHistograms []*histogram.FloatHistogram, hint histogram.CounterResetHint) *histogram.FloatHistogram {
+	counter := counterResetAdjustFloatHistograms(floatHistograms)[len(floatHistograms)-1]
+	counter.CounterResetHint = hint
+	return counter
+}
+
+func counterResetAdjustFloatHistograms(floatHistograms []*histogram.FloatHistogram) []*histogram.FloatHistogram {
+	var previous, counter *histogram.FloatHistogram
+	res := make([]*histogram.FloatHistogram, 0, len(floatHistograms))
+	for i, fh := range floatHistograms {
+		if i == 0 {
+			counter = fh.Copy()
+		} else {
+			if fh.DetectReset(previous) {
+				counter.Add(fh)
+			} else {
+				counter.Add(fh.Copy().Sub(previous))
+			}
+		}
+		previous = fh
+		res = append(res, counter.Copy())
+	}
+	return res
+}
+
+func compareAggreggates(t *testing.T, dir string, resLevel int64, blockID string, expected []expectedHistogramAggregates, chks []chunks.Meta) {
+	chunkr, err := chunks.NewDirReader(filepath.Join(dir, blockID, block.ChunksDirname), NewPool())
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, chunkr.Close()) }()
+
+	testUtilWithOps := testutil.WithGoCmp(
+		cmpopts.EquateApprox(0, 1e-9),
+		cmp.AllowUnexported(sample{}),
+	)
+
+	for i, c := range chks {
+		count := GetAggregateFromChunk(t, chunkr, c, AggrCount)
+		testUtilWithOps.Equals(t, expected[i].count, count, "count mismatch for chunk %d with resolution %d", i, resLevel)
+
+		counter := GetAggregateFromChunk(t, chunkr, c, AggrCounter)
+		testUtilWithOps.Equals(t, expected[i].counter, counter, "counter mismatch for chunk %d with resolution %d", i, resLevel)
+
+		sum := GetAggregateFromChunk(t, chunkr, c, AggrSum)
+		testUtilWithOps.Equals(t, expected[i].sum, sum, "sum mismatch for chunk %d with resolution %d", i, resLevel)
+	}
+}
+
+func assertValidChunkTime(t *testing.T, chks []chunks.Meta) {
+	t.Helper()
+	for _, chk := range chks {
+		testutil.Assert(t, chk.MinTime != math.MaxInt64, "chunk MinTime is not set")
+		testutil.Assert(t, chk.MaxTime >= chk.MinTime, "chunk MaxTime is not greater equal to  MinTime")
+	}
 }
 
 func chunksToSeriesIteratable(t *testing.T, inRaw [][]sample, inAggr []map[AggrType][]sample) *series {
@@ -674,17 +1025,18 @@ func encodeTestAggrSeries(v map[AggrType][]sample) chunks.Meta {
 	return b.encode()
 }
 
+// TODO(srabenhorst): Add tests for histograms.
 func TestAverageChunkIterator(t *testing.T) {
-	sum := []sample{{100, 30}, {200, 40}, {300, 5}, {400, -10}}
-	cnt := []sample{{100, 1}, {200, 5}, {300, 2}, {400, 10}}
-	exp := []sample{{100, 30}, {200, 8}, {300, 2.5}, {400, -1}}
+	sum := []sample{{t: 100, v: 30}, {t: 200, v: 40}, {t: 300, v: 5}, {t: 400, v: -10}}
+	cnt := []sample{{t: 100, v: 1}, {t: 200, v: 5}, {t: 300, v: 2}, {t: 400, v: 10}}
+	exp := []sample{{t: 100, v: 30}, {t: 200, v: 8}, {t: 300, v: 2.5}, {t: 400, v: -1}}
 
 	x := NewAverageChunkIterator(newSampleIterator(cnt), newSampleIterator(sum))
 
 	var res []sample
 	for x.Next() != chunkenc.ValNone {
 		t, v := x.At()
-		res = append(res, sample{t, v})
+		res = append(res, sample{t: t, v: v})
 	}
 	testutil.Ok(t, x.Err())
 	testutil.Equals(t, exp, res)
@@ -728,16 +1080,16 @@ func TestApplyCounterResetsIterator(t *testing.T) {
 		{
 			name: "series with stale marker",
 			chunks: [][]sample{
-				{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
-				{{500, 10}, {600, 20}, {700, 30}, {800, 40}, {800, 10}},                // No reset, just downsampling addded sample at the end.
-				{{900, 5}, {1000, 10}, {1100, 15}},                                     // Actual reset.
-				{{1200, 20}, {1250, math.Float64frombits(value.StaleNaN)}, {1300, 40}}, // No special last sample, no reset.
-				{{1400, 30}, {1500, 30}, {1600, 50}},                                   // No special last sample, reset.
+				{{t: 100, v: 10}, {t: 200, v: 20}, {t: 300, v: 10}, {t: 400, v: 20}, {t: 400, v: 5}},
+				{{t: 500, v: 10}, {t: 600, v: 20}, {t: 700, v: 30}, {t: 800, v: 40}, {t: 800, v: 10}},    // No reset, just downsampling addded sample at the end.
+				{{t: 900, v: 5}, {t: 1000, v: 10}, {t: 1100, v: 15}},                                     // Actual reset.
+				{{t: 1200, v: 20}, {t: 1250, v: math.Float64frombits(value.StaleNaN)}, {t: 1300, v: 40}}, // No special last sample, no reset.
+				{{t: 1400, v: 30}, {t: 1500, v: 30}, {t: 1600, v: 50}},                                   // No special last sample, reset.
 			},
 			expected: []sample{
-				{100, 10}, {200, 20}, {300, 30}, {400, 40}, {500, 45},
-				{600, 55}, {700, 65}, {800, 75}, {900, 80}, {1000, 85},
-				{1100, 90}, {1200, 95}, {1300, 115}, {1400, 145}, {1500, 145}, {1600, 165},
+				{t: 100, v: 10}, {t: 200, v: 20}, {t: 300, v: 30}, {t: 400, v: 40}, {t: 500, v: 45},
+				{t: 600, v: 55}, {t: 700, v: 65}, {t: 800, v: 75}, {t: 900, v: 80}, {t: 1000, v: 85},
+				{t: 1100, v: 90}, {t: 1200, v: 95}, {t: 1300, v: 115}, {t: 1400, v: 145}, {t: 1500, v: 145}, {t: 1600, v: 165},
 			},
 		},
 		{
@@ -785,7 +1137,7 @@ func TestApplyCounterResetsIterator(t *testing.T) {
 			var res []sample
 			for x.Next() != chunkenc.ValNone {
 				t, v := x.At()
-				res = append(res, sample{t, v})
+				res = append(res, sample{t: t, v: v})
 			}
 			testutil.Ok(t, x.Err())
 			testutil.Equals(t, tcase.expected, res)
@@ -857,11 +1209,11 @@ func TestApplyCounterResetsIteratorHistograms(t *testing.T) {
 
 func TestCounterSeriesIteratorSeek(t *testing.T) {
 	chunks := [][]sample{
-		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
+		{{t: 100, v: 10}, {t: 200, v: 20}, {t: 300, v: 10}, {t: 400, v: 20}, {t: 400, v: 5}},
 	}
 
 	exp := []sample{
-		{200, 20}, {300, 30}, {400, 40},
+		{t: 200, v: 20}, {t: 300, v: 30}, {t: 400, v: 40},
 	}
 
 	var its []chunkenc.Iterator
@@ -877,7 +1229,7 @@ func TestCounterSeriesIteratorSeek(t *testing.T) {
 	testutil.Ok(t, x.Err())
 	for {
 		ts, v := x.At()
-		res = append(res, sample{ts, v})
+		res = append(res, sample{t: ts, v: v})
 
 		if x.Next() == chunkenc.ValNone {
 			break
@@ -888,7 +1240,7 @@ func TestCounterSeriesIteratorSeek(t *testing.T) {
 
 func TestCounterSeriesIteratorSeekExtendTs(t *testing.T) {
 	chunks := [][]sample{
-		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
+		{{t: 100, v: 10}, {t: 200, v: 20}, {t: 300, v: 10}, {t: 400, v: 20}, {t: 400, v: 5}},
 	}
 
 	var its []chunkenc.Iterator
@@ -904,10 +1256,10 @@ func TestCounterSeriesIteratorSeekExtendTs(t *testing.T) {
 
 func TestCounterSeriesIteratorSeekAfterNext(t *testing.T) {
 	chunks := [][]sample{
-		{{100, 10}},
+		{{t: 100, v: 10}},
 	}
 	exp := []sample{
-		{100, 10},
+		{t: 100, v: 10},
 	}
 
 	var its []chunkenc.Iterator
@@ -925,7 +1277,7 @@ func TestCounterSeriesIteratorSeekAfterNext(t *testing.T) {
 	testutil.Ok(t, x.Err())
 	for {
 		ts, v := x.At()
-		res = append(res, sample{ts, v})
+		res = append(res, sample{t: ts, v: v})
 
 		if x.Next() == chunkenc.ValNone {
 			break
@@ -950,12 +1302,12 @@ func TestSamplesFromTSDBSamples(t *testing.T) {
 		{
 			name:     "one sample",
 			input:    []tsdbutil.Sample{testSample{1, 1}},
-			expected: []sample{{1, 1}},
+			expected: []sample{{t: 1, v: 1}},
 		},
 		{
 			name:     "multiple samples",
 			input:    []tsdbutil.Sample{testSample{1, 1}, testSample{2, 2}, testSample{3, 3}, testSample{4, 4}, testSample{5, 5}},
-			expected: []sample{{1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}},
+			expected: []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}, {t: 5, v: 5}},
 		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {

@@ -13,12 +13,12 @@ import (
 	"testing"
 
 	"github.com/cespare/xxhash"
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 
-	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -285,7 +285,7 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 		Random:           random,
 		SkipChunks:       true,
 	})
-	_ = createBlockFromHead(t, tmpDir, head)
+	_ = storetestutil.CreateBlockFromHead(t, tmpDir, head)
 	testutil.Ok(t, head.Close())
 
 	head, _ = storetestutil.CreateHeadWithSeries(t, 1, storetestutil.HeadGenOptions{
@@ -454,7 +454,7 @@ func TestTSDBStore_SeriesAccessWithoutDelegateClosing(t *testing.T) {
 		Random:           random,
 		SkipChunks:       true,
 	})
-	_ = createBlockFromHead(t, tmpDir, head)
+	_ = storetestutil.CreateBlockFromHead(t, tmpDir, head)
 	testutil.Ok(t, head.Close())
 
 	head, _ = storetestutil.CreateHeadWithSeries(t, 1, storetestutil.HeadGenOptions{
@@ -594,7 +594,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			resps[j] = append(resps[j], storepb.NewSeriesResponse(created[i]))
 		}
 
-		_ = createBlockFromHead(t, tmpDir, head)
+		_ = storetestutil.CreateBlockFromHead(t, tmpDir, head)
 		t.Cleanup(func() {
 			testutil.Ok(t, head.Close())
 		})
