@@ -78,3 +78,14 @@ While this could work for some of the features, like exporting per-tenant metric
 This incurs in a lot of wasted resources and demands manual work, unless a central tenant configuration is used and a controller is built around it to automatically manage the query paths.
 
 ## Action Plan
+
+1. Query Frontend
+   1. Implement the `--query-frontend.tenant-header` (default is `""`") and `--query-frontend.default-tenant` (default is `"default-tenant"`) flags. Forward the tenant header to all the configured downstream query endpoints, if it is present.
+   2. **In the UI**, add a textbox where one can type a tenant name. If the textbox has any content, that will be sent using in the configured tenant header name.
+   3. Update the metrics exported by the Query Frontend to include a tenant label with the tenant indicated by the header.
+2. Querier
+   1. Implement the `--querier.tenant-header` (default is `""`") and `--querier.default-tenant` (default is `"default-tenant"`) flags. Forward the tenant header to all the downstream API calls (gRPC or HTTP, also using headers), if it is present.
+   2. Implement the `--querier.tenant-label-name` flag. If it is not empty, verify and enforce the tenant label in the query before it is handed to the query engine. As previously mentioned by the proposal, use prom-label-proxy's [Enforce.EnforceMatchers](https://github.com/prometheus-community/prom-label-proxy/blob/main/injectproxy/enforce.go#L141).
+   3. Update the metrics exported by the Querier to include a tenant label with the tenant indicated by the header.
+3. Store Gateway
+   1. Implement the `--store.tenant-header` (default is `""`") and `--query-frontend.default-tenant` (default is `"default-tenant"`) flags. Use the tenant header to identify the tenant in the metrics exported by the Store Gateway.
