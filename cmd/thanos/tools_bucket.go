@@ -121,10 +121,11 @@ type bucketWebConfig struct {
 }
 
 type bucketReplicateConfig struct {
-	resolutions []time.Duration
-	compactions []int
-	matcherStrs string
-	singleRun   bool
+	resolutions          []time.Duration
+	compactions          []int
+	matcherStrs          string
+	singleRun            bool
+	replicateConcurrency int
 }
 
 type bucketDownsampleConfig struct {
@@ -210,6 +211,8 @@ func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.Fla
 	cmd.Flag("matcher", "blocks whose external labels match this matcher will be replicated. All Prometheus matchers are supported, including =, !=, =~ and !~.").StringVar(&tbc.matcherStrs)
 
 	cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").BoolVar(&tbc.singleRun)
+
+	cmd.Flag("replicate-concurrency", "Number of goroutines to use for replication.").Default("1").IntVar(&tbc.replicateConcurrency)
 
 	return tbc
 }
@@ -735,6 +738,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			objStoreConfig,
 			toObjStoreConfig,
 			tbc.singleRun,
+			tbc.replicateConcurrency,
 			minTime,
 			maxTime,
 			blockIDs,
