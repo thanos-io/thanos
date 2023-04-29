@@ -59,6 +59,7 @@ When using tracing with Thanos, you can obtain trace ID in multiple ways:
 * Search by labels/attributes/tags/time/component/latency e.g. using Jaeger indexing.
 * [Exemplars](https://www.bwplotka.dev/2021/correlations-exemplars/)
 * If request was sampled, response will have `X-Thanos-Trace-Id` response header with trace ID of this request as value.
+* If `X-Thanos-Trace-Id` header is present in the response, it will be shown in the query UI
 
 ![view](img/tracing.png)
 

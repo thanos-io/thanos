@@ -196,8 +196,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       credentials: 'same-origin',
       signal: abortController.signal,
     })
-      .then((resp) => resp.json())
-      .then((json) => {
+      .then((resp) => {
+        return resp.json().then((json) => {
+          return {
+            json,
+            headers: resp.headers,
+          };
+        });
+      })
+      .then(({ json, headers }) => {
         if (json.status !== 'success') {
           throw new Error(json.error || 'invalid response JSON');
         }
@@ -212,6 +219,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           }
         }
 
+        const traceID = headers.get('X-Thanos-Trace-ID');
+
         this.setState({
           error: null,
           data: json.data,
@@ -225,6 +234,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             loadTime: Date.now() - queryStart,
             resolution,
             resultSeries,
+            traceID: traceID ? traceID : '',
           },
           loading: false,
         });
