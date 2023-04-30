@@ -6,6 +6,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"net/http"
 	"os"
 	"path"
@@ -869,7 +870,9 @@ config:
 				q1.Endpoint("http"),
 				func() string { return testQuery },
 				time.Now,
-				promclient.QueryOptions{Deduplicate: true}, 0)
+				promclient.QueryOptions{Deduplicate: true, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT},
+				0,
+			)
 			if err != nil {
 				if strings.Contains(err.Error(), "expanded matching posting: get postings: bytes limit exceeded while fetching postings: limit 1 violated") {
 					return nil
@@ -885,7 +888,9 @@ config:
 				q2.Endpoint("http"),
 				func() string { return testQuery },
 				time.Now,
-				promclient.QueryOptions{Deduplicate: true}, 0)
+				promclient.QueryOptions{Deduplicate: true, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT},
+				0,
+			)
 			if err != nil {
 				if strings.Contains(err.Error(), "preload series: exceeded bytes limit while fetching series: limit 100 violated") {
 					return nil
