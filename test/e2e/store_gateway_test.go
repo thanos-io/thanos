@@ -6,7 +6,6 @@ package e2e_test
 import (
 	"context"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"net/http"
 	"os"
 	"path"
@@ -15,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
@@ -24,18 +24,17 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/model/timestamp"
-	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
-
-	"github.com/efficientgo/core/testutil"
+	"github.com/thanos-io/objstore/providers/s3"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
