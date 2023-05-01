@@ -97,6 +97,8 @@ config:
     key_file: ""
     server_name: ""
     insecure_skip_verify: false
+  sampler_name: ""
+  sampler_arg: ""
 ```
 
 ### Jaeger

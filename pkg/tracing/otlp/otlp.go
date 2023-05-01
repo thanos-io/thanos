@@ -100,7 +100,7 @@ func buildSampler(samplerName string, samplerArg string) (tracesdk.Sampler, erro
 	case NeverSample:
 		return tracesdk.ParentBased(tracesdk.NeverSample()), nil
 	case RatioBasedSample:
-		arg, err := strconv.ParseFloat(samplerArg, 1)
+		arg, err := strconv.ParseFloat(samplerArg, 64)
 		if err != nil {
 			return tracesdk.ParentBased(tracesdk.TraceIDRatioBased(1.0)), err
 		}
