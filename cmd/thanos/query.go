@@ -706,7 +706,7 @@ func runQuery(
 		// Configure Request Logging for HTTP calls.
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 
-		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil, nil, 0, 0)
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 		ui.NewQueryUI(logger, endpoints, webExternalPrefix, webPrefixHeaderName, alertQueryURL).Register(router, ins)
 

@@ -677,7 +677,7 @@ func runRule(
 			}
 		})
 
-		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil, nil, 0, 0)
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
 		// Configure Request Logging for HTTP calls.
 		logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)

@@ -20,7 +20,7 @@ type tenantInstrumentationMiddleware struct {
 func NewTenantInstrumentationMiddleware(tenantHeaderName string, reg prometheus.Registerer, durationBuckets []float64, bytesBuckets []float64, bucketFactor float64, maxBuckets uint32) InstrumentationMiddleware {
 	return &tenantInstrumentationMiddleware{
 		tenantHeaderName: tenantHeaderName,
-		metrics:          newDefaultMetrics(reg, durationBuckets, bytesBuckets, bucketFactor, maxBuckets, []string{"tenant"}),
+		metrics:          newDefaultMetrics(reg, []string{"tenant"}),
 	}
 }
 
