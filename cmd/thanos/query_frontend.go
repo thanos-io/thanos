@@ -288,7 +288,7 @@ func runQueryFrontend(
 
 	// Configure Request Logging for HTTP calls.
 	logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
-	ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
+	ins := extpromhttp.NewInstrumentationMiddleware(reg, nil, nil, 0, 0)
 
 	// Start metrics HTTP server.
 	{

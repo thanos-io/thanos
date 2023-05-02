@@ -511,7 +511,7 @@ func runCompact(
 		if !conf.disableWeb {
 			r := route.New()
 
-			ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
+			ins := extpromhttp.NewInstrumentationMiddleware(reg, nil, nil, 0, 0)
 
 			global := ui.NewBucketUI(logger, conf.webConf.externalPrefix, conf.webConf.prefixHeaderName, component)
 			global.Register(r, ins)

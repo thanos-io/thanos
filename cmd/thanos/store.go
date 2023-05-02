@@ -472,7 +472,7 @@ func runStore(
 	}
 	// Add bucket UI for loaded blocks.
 	{
-		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
+		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil, nil, 0, 0)
 
 		if !conf.disableWeb {
 			compactorView := ui.NewBucketUI(logger, conf.webConfig.externalPrefix, conf.webConfig.prefixHeaderName, conf.component)

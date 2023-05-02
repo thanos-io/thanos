@@ -17,10 +17,10 @@ type tenantInstrumentationMiddleware struct {
 // NewTenantInstrumentationMiddleware provides the same instrumentation as defaultInstrumentationMiddleware,
 // but with a tenant label fetched from the given tenantHeaderName header.
 // Passing nil as buckets uses the default buckets.
-func NewTenantInstrumentationMiddleware(tenantHeaderName string, reg prometheus.Registerer, buckets []float64) InstrumentationMiddleware {
+func NewTenantInstrumentationMiddleware(tenantHeaderName string, reg prometheus.Registerer, durationBuckets []float64, bytesBuckets []float64, bucketFactor float64, maxBuckets uint32) InstrumentationMiddleware {
 	return &tenantInstrumentationMiddleware{
 		tenantHeaderName: tenantHeaderName,
-		metrics:          newDefaultMetrics(reg, buckets, []string{"tenant"}),
+		metrics:          newDefaultMetrics(reg, durationBuckets, bytesBuckets, bucketFactor, maxBuckets, []string{"tenant"}),
 	}
 }
 

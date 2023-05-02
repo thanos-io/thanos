@@ -582,7 +582,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			router = router.WithPrefix(tbc.webRoutePrefix)
 		}
 
-		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
+		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil, nil, 0, 0)
 
 		bucketUI := ui.NewBucketUI(logger, tbc.webExternalPrefix, tbc.webPrefixHeaderName, component.Bucket)
 		bucketUI.Register(router, ins)

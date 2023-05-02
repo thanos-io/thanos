@@ -42,9 +42,9 @@ type defaultInstrumentationMiddleware struct {
 
 // NewInstrumentationMiddleware provides default InstrumentationMiddleware.
 // Passing nil as buckets uses the default buckets.
-func NewInstrumentationMiddleware(reg prometheus.Registerer, buckets []float64) InstrumentationMiddleware {
+func NewInstrumentationMiddleware(reg prometheus.Registerer, durationBuckets []float64, bytesBuckets []float64, bucketFactor float64, maxBuckets uint32) InstrumentationMiddleware {
 	return &defaultInstrumentationMiddleware{
-		metrics: newDefaultMetrics(reg, buckets, []string{}),
+		metrics: newDefaultMetrics(reg, durationBuckets, bytesBuckets, bucketFactor, maxBuckets, []string{}),
 	}
 }
 
