@@ -62,6 +62,7 @@ func SamplesFromPromqlSeries(series promql.Series) ([]Sample, []Histogram) {
 // HistogramProtoToHistogram extracts a (normal integer) Histogram from the
 // provided proto message. The caller has to make sure that the proto message
 // represents an interger histogram and not a float histogram.
+// Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L626-L645
 func HistogramProtoToHistogram(hp Histogram) *histogram.Histogram {
 	if hp.IsFloatHistogram() {
 		panic("HistogramProtoToHistogram called with a float histogram")
@@ -81,6 +82,7 @@ func HistogramProtoToHistogram(hp Histogram) *histogram.Histogram {
 }
 
 // FloatHistogramToHistogramProto converts a float histogram to a protobuf type.
+// Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L647-L667
 func FloatHistogramProtoToFloatHistogram(hp Histogram) *histogram.FloatHistogram {
 	if !hp.IsFloatHistogram() {
 		panic("FloatHistogramProtoToFloatHistogram called with an integer histogram")
@@ -102,6 +104,7 @@ func FloatHistogramProtoToFloatHistogram(hp Histogram) *histogram.FloatHistogram
 // HistogramProtoToFloatHistogram extracts a (normal integer) Histogram from the
 // provided proto message to a Float Histogram. The caller has to make sure that
 // the proto message represents an float histogram and not a integer histogram.
+// Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L669-L688
 func HistogramProtoToFloatHistogram(hp Histogram) *histogram.FloatHistogram {
 	if hp.IsFloatHistogram() {
 		panic("HistogramProtoToFloatHistogram called with a float histogram")
@@ -139,6 +142,7 @@ func deltasToCounts(deltas []int64) []float64 {
 	return counts
 }
 
+// Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L709-L723
 func HistogramToHistogramProto(timestamp int64, h *histogram.Histogram) Histogram {
 	return Histogram{
 		Count:          &Histogram_CountInt{CountInt: h.Count},
@@ -155,6 +159,7 @@ func HistogramToHistogramProto(timestamp int64, h *histogram.Histogram) Histogra
 	}
 }
 
+// Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L725-L739
 func FloatHistogramToHistogramProto(timestamp int64, fh *histogram.FloatHistogram) Histogram {
 	return Histogram{
 		Count:          &Histogram_CountFloat{CountFloat: fh.Count},
