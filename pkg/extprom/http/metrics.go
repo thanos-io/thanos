@@ -16,8 +16,11 @@ type defaultMetrics struct {
 	inflightHTTPRequests *prometheus.GaugeVec
 }
 
-func newDefaultMetrics(reg prometheus.Registerer, extraLabels []string) *defaultMetrics {
-	durationBuckets := []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720}
+func newDefaultMetrics(reg prometheus.Registerer, durationBuckets []float64, extraLabels []string) *defaultMetrics {
+	if durationBuckets == nil {
+		durationBuckets = []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720}
+	}
+
 	bytesBuckets := prometheus.ExponentialBuckets(64, 2, 10)
 	bucketFactor := 1.1
 	maxBuckets := uint32(100)
