@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -25,8 +26,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/objtesting"
-
-	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/dedup"
@@ -103,6 +102,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		garbageCollectedBlocks := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		blockMarkedForNoCompact := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
 		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(nil, nil, 48*time.Hour, fetcherConcurrency)
+		noCompactMarkerFilter := NewGatherNoCompactionMarkFilter(nil, objstore.WithNoopInstr(bkt), fetcherConcurrency)
 		sy, err := NewMetaSyncer(nil, nil, bkt, metaFetcher, duplicateBlocksFilter, ignoreDeletionMarkFilter, blocksMarkedForDeletion, garbageCollectedBlocks)
 		testutil.Ok(t, err)
 
@@ -138,7 +138,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		testutil.Ok(t, sy.GarbageCollect(ctx))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
-		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks, blockMarkedForNoCompact, metadata.NoneFunc, 10, 10)
+		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks, blockMarkedForNoCompact, metadata.NoneFunc, 10, 10, noCompactMarkerFilter)
 		groups, err := grouper.Groups(sy.Metas())
 		testutil.Ok(t, err)
 
@@ -211,7 +211,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		testutil.Ok(t, err)
 
 		planner := NewPlanner(logger, []int64{1000, 3000}, noCompactMarkerFilter)
-		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, blocksMaredForNoCompact, metadata.NoneFunc, 10, 10)
+		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, blocksMaredForNoCompact, metadata.NoneFunc, 10, 10, noCompactMarkerFilter)
 		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2, true)
 		testutil.Ok(t, err)
 
@@ -279,6 +279,12 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 					{{Name: "a", Value: "7"}},
 				},
 			},
+			{
+				numSamples: 100, mint: 6000, maxt: 7000, extLset: extLabels, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "8"}},
+				},
+			},
 			// Second group (extLabels2).
 			{
 				numSamples: 100, mint: 2000, maxt: 3000, extLset: extLabels2, res: 124,
@@ -317,7 +323,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		})
 
 		groupKey1 := metas[0].Thanos.GroupKey()
-		groupKey2 := metas[6].Thanos.GroupKey()
+		groupKey2 := metas[7].Thanos.GroupKey()
 
 		testutil.Ok(t, bComp.Compact(ctx))
 		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
@@ -409,7 +415,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 			testutil.Equals(t, uint64(5), meta.Stats.NumSeries)
 			testutil.Equals(t, uint64(2*4*100-100), meta.Stats.NumSamples)
 			testutil.Equals(t, 2, meta.Compaction.Level)
-			testutil.Equals(t, []ulid.ULID{metas[6].ULID, metas[7].ULID}, meta.Compaction.Sources)
+			testutil.Equals(t, []ulid.ULID{metas[7].ULID, metas[8].ULID}, meta.Compaction.Sources)
 
 			// Check thanos meta.
 			testutil.Assert(t, labels.Equal(extLabels2, labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")

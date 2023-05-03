@@ -534,7 +534,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-one-block-marked-for-no-compact"}},
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-one-block-marked-for-no-compact"}},
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
-		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
+		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready-one-block-marked-for-no-compact"}},
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-after-dedup"}},
 		{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-after-dedup"}},
@@ -574,7 +574,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-one-block-marked-for-no-compact"}},
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-one-block-marked-for-no-compact"}},
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "4", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
-			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
+			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "5", "case": "compaction-ready-one-block-marked-for-no-compact"}},
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "6", "case": "compaction-ready-one-block-marked-for-no-compact", "replica": "1"}},
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "2", "case": "compaction-ready-after-dedup"}},
 			{Value: 120, Metric: map[model.LabelName]model.LabelValue{"a": "1", "b": "3", "case": "compaction-ready-after-dedup"}},
@@ -697,7 +697,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Greater(0), "thanos_compact_iterations_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_blocks_cleaned_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_block_cleanup_failures_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2*4+2+2*3+2), "thanos_compact_blocks_marked_total")) // 18.
+		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2*4+2+2*3+2+1), "thanos_compact_blocks_marked_total")) // 19.
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(0), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(6), "thanos_compact_group_compactions_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(3), "thanos_compact_group_vertical_compactions_total"))
@@ -766,7 +766,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
 		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{"thanos_compact_iterations_total"}, e2emon.WaitMissingMetrics()))
-		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(18), []string{"thanos_compact_blocks_cleaned_total"}, e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(19), []string{"thanos_compact_blocks_cleaned_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_block_cleanup_failures_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_blocks_marked_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_aborted_partial_uploads_deletion_attempts_total"}, e2emon.WaitMissingMetrics()))
@@ -779,7 +779,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_downsample_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_downsample_failures_total"}, e2emon.WaitMissingMetrics()))
 
-		testutil.Ok(t, str.WaitSumMetricsWithOptions(e2emon.Equals(float64(len(rawBlockIDs)+8+6-18-2+2)), []string{"thanos_blocks_meta_synced"}, e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, str.WaitSumMetricsWithOptions(e2emon.Equals(float64(len(rawBlockIDs)+8+6-18-2+2-1)), []string{"thanos_blocks_meta_synced"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, str.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_blocks_meta_sync_failures_total"}, e2emon.WaitMissingMetrics()))
 
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_halted"}, e2emon.WaitMissingMetrics()))
@@ -802,7 +802,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		)
 
 		// Store view:
-		testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+8-18+6-2+2)), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+8-18+6-2+2-1)), "thanos_blocks_meta_synced"))
 		testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 		testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_modified"))
 	}
@@ -836,7 +836,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, str.Stop())
 		testutil.Ok(t, e2e.StartAndWaitReady(str))
 		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
-			return str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+8-18+6-2+2-1)), "thanos_blocks_meta_synced")
+			return str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+8-18+6-2+2-1-1)), "thanos_blocks_meta_synced")
 		}))
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics(), e2emon.WithLabelMatchers(
 			matchers.MustNewMatcher(matchers.MatchEqual, "store_type", "store"),

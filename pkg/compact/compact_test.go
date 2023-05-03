@@ -212,7 +212,8 @@ func TestRetentionProgressCalculate(t *testing.T) {
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
-	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1)
+	noCompactMarkerFilter := NewGatherNoCompactionMarkFilter(logger, objstore.WithNoopInstr(bkt), 2)
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1, noCompactMarkerFilter)
 
 	type groupedResult map[string]float64
 
@@ -378,7 +379,8 @@ func TestCompactProgressCalculate(t *testing.T) {
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
-	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1)
+	noCompactMarkerFilter := NewGatherNoCompactionMarkFilter(logger, objstore.WithNoopInstr(bkt), 2)
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1, noCompactMarkerFilter)
 
 	for _, tcase := range []struct {
 		testName string
@@ -500,7 +502,8 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for downsample progress tests"})
-	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1)
+	noCompactMarkerFilter := NewGatherNoCompactionMarkFilter(logger, objstore.WithNoopInstr(bkt), 2)
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1, noCompactMarkerFilter)
 
 	for _, tcase := range []struct {
 		testName string

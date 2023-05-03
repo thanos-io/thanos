@@ -232,6 +232,7 @@ type DefaultGrouper struct {
 	hashFunc                      metadata.HashFunc
 	blockFilesConcurrency         int
 	compactBlocksFetchConcurrency int
+	noCompactionMarkFilter        *GatherNoCompactionMarkFilter
 }
 
 // NewDefaultGrouper makes a new DefaultGrouper.
@@ -247,6 +248,7 @@ func NewDefaultGrouper(
 	hashFunc metadata.HashFunc,
 	blockFilesConcurrency int,
 	compactBlocksFetchConcurrency int,
+	noCompactionMarkFilter *GatherNoCompactionMarkFilter,
 ) *DefaultGrouper {
 	return &DefaultGrouper{
 		bkt:                      bkt,
@@ -279,6 +281,7 @@ func NewDefaultGrouper(
 		hashFunc:                      hashFunc,
 		blockFilesConcurrency:         blockFilesConcurrency,
 		compactBlocksFetchConcurrency: compactBlocksFetchConcurrency,
+		noCompactionMarkFilter:        noCompactionMarkFilter,
 	}
 }
 
@@ -286,7 +289,15 @@ func NewDefaultGrouper(
 // It creates all groups from the scratch on every call.
 func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Group, err error) {
 	groups := map[string]*Group{}
+	noCompactMarkedMap := g.noCompactionMarkFilter.NoCompactMarkedBlocks()
 	for _, m := range blocks {
+		if _, ok := noCompactMarkedMap[m.ULID]; ok {
+			level.Debug(g.logger).Log(
+				"msg", "groupper: skipping block marked for no compaction",
+				"ulid", m.ULID.String())
+
+			continue
+		}
 		groupKey := m.Thanos.GroupKey()
 		group, ok := groups[groupKey]
 		if !ok {
