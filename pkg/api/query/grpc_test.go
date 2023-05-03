@@ -47,7 +47,7 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		engineFactory := QueryEngineFactory{
+		engineFactory := &QueryEngineFactory{
 			prometheusEngine: test.engine,
 		}
 		api := NewGRPCAPI(time.Now, nil, queryableCreator, engineFactory, querypb.EngineType_prometheus, lookbackDeltaFunc, 0)
