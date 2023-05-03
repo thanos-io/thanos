@@ -325,16 +325,14 @@ func writeHistograms(ctx context.Context, now time.Time, name string, histograms
 	startTime := now.Add(time.Duration(len(histograms)-1) * -30 * time.Second).Truncate(30 * time.Second)
 	prompbHistograms := make([]prompb.Histogram, 0, len(histograms))
 
-	if len(floatHistograms) > 0 {
-		for i, fh := range floatHistograms {
-			ts := startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()
-			prompbHistograms = append(prompbHistograms, remote.FloatHistogramToHistogramProto(ts, fh))
-		}
-	} else {
-		for i, h := range histograms {
-			ts := startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()
-			prompbHistograms = append(prompbHistograms, remote.HistogramToHistogramProto(ts, h))
-		}
+	for i, fh := range floatHistograms {
+		ts := startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()
+		prompbHistograms = append(prompbHistograms, remote.FloatHistogramToHistogramProto(ts, fh))
+	}
+
+	for i, h := range histograms {
+		ts := startTime.Add(time.Duration(i) * 30 * time.Second).UnixMilli()
+		prompbHistograms = append(prompbHistograms, remote.HistogramToHistogramProto(ts, h))
 	}
 
 	timeSeriespb := prompb.TimeSeries{
