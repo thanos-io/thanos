@@ -246,6 +246,7 @@ func runReceive(
 		TLSConfig:         rwTLSConfig,
 		DialOpts:          dialOpts,
 		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
+		MaxBackoff:        time.Duration(*conf.maxBackoff),
 		TSDBStats:         dbs,
 		Limiter:           limiter,
 	})
@@ -781,6 +782,7 @@ type receiveConfig struct {
 	replicaHeader     string
 	replicationFactor uint64
 	forwardTimeout    *model.Duration
+	maxBackoff        *model.Duration
 	compression       string
 
 	tsdbMinBlockDuration         *model.Duration
@@ -871,6 +873,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
+
+	rc.maxBackoff = extkingpin.ModelDuration(cmd.Flag("receive-forward-max-backoff", "Maximum backoff for each forward fan-out request").Default("5s").Hidden())
 
 	rc.relabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())
 

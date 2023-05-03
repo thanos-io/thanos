@@ -101,7 +101,7 @@ config:
 
 ### Jaeger
 
-Client for https://github.com/jaegertracing/jaeger tracing. Options can be provided also via environment variables. For more details see the Jaeger [exporter specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md#jaeger-exporter).
+Client for https://github.com/jaegertracing/jaeger tracing. Options can be provided also via environment variables. For more details see the Jaeger [exporter specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/configuration/sdk-environment-variables.md#jaeger-exporter).
 
 *WARNING: Options `RPC Metrics`, `Gen128Bit` and `Disabled` are now deprecated and won't have any effect when set*
 
