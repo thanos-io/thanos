@@ -183,7 +183,7 @@ func TestQueryEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	ef := QueryEngineFactory{
+	ef := &QueryEngineFactory{
 		engineOpts: promql.EngineOpts{
 			Logger:     nil,
 			Reg:        nil,
@@ -727,7 +727,7 @@ func TestMetadataEndpoints(t *testing.T) {
 
 	now := time.Now()
 	timeout := 100 * time.Second
-	ef := QueryEngineFactory{
+	ef := &QueryEngineFactory{
 		engineOpts: promql.EngineOpts{
 			Logger:     nil,
 			Reg:        nil,

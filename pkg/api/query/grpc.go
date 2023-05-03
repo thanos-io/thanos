@@ -23,7 +23,7 @@ type GRPCAPI struct {
 	now                         func() time.Time
 	replicaLabels               []string
 	queryableCreate             query.QueryableCreator
-	engineFactory               QueryEngineFactory
+	engineFactory               *QueryEngineFactory
 	defaultEngine               querypb.EngineType
 	lookbackDeltaCreate         func(int64) time.Duration
 	defaultMaxResolutionSeconds time.Duration
@@ -33,7 +33,7 @@ func NewGRPCAPI(
 	now func() time.Time,
 	replicaLabels []string,
 	creator query.QueryableCreator,
-	engineFactory QueryEngineFactory,
+	engineFactory *QueryEngineFactory,
 	defaultEngine querypb.EngineType,
 	lookbackDeltaCreate func(int64) time.Duration,
 	defaultMaxResolutionSeconds time.Duration,
