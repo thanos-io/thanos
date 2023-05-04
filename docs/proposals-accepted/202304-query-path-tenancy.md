@@ -37,6 +37,10 @@ The current lack of tenancy awareness in Thanos' query path makes it impossible 
   * Ensure a tenant's query does not end up returning data from a different tenant, through enforcing presence of one or more tenant labels in queries.
 * Strive for being compatible with other tools, such as Cortex, as much as possible. This make adoption, migration, and collaboration between projects to become easier.
 
+### Tenancy model
+
+The tenancy model for queries differ from the one used in Thanos Receive, where the tenant indicates who owns that data. From a query perspective, the tenant will indicate who is initiating such query. Although this proposal will use this tenant to automatically enforce a tenant label matcher into the query, whenever cross-tenant querying is implemented (not part of this proposal) this behavior could likely change.
+
 ### Audience
 
 Any team running Thanos in a multi-tenant environment. For example, a team running a monitoring-as-a-service platform. For example, a team running a monitoring-as-a-service platform.
