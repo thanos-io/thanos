@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
@@ -38,6 +39,8 @@ type TSDBReader interface {
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
 type TSDBStore struct {
+	storepb.UnimplementedStoreServer
+
 	logger           log.Logger
 	db               TSDBReader
 	component        component.StoreAPI
@@ -101,7 +104,7 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 	}
 
 	res := &storepb.InfoResponse{
-		Labels:    labelpb.ZLabelsFromPromLabels(s.getExtLset()),
+		Labels:    labelpb.ProtobufLabelsFromPromLabels(s.getExtLset()),
 		StoreType: s.component.ToProto(),
 		MinTime:   minTime,
 		MaxTime:   math.MaxInt64,
@@ -109,20 +112,20 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 
 	// Until we deprecate the single labels in the reply, we just duplicate
 	// them here for migration/compatibility purposes.
-	res.LabelSets = []labelpb.ZLabelSet{}
+	res.LabelSets = []*labelpb.ZLabelSet{}
 	if len(res.Labels) > 0 {
-		res.LabelSets = append(res.LabelSets, labelpb.ZLabelSet{
+		res.LabelSets = append(res.LabelSets, &labelpb.ZLabelSet{
 			Labels: res.Labels,
 		})
 	}
 	return res, nil
 }
 
-func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
-	labels := labelpb.ZLabelsFromPromLabels(s.getExtLset())
-	labelSets := []labelpb.ZLabelSet{}
+func (s *TSDBStore) LabelSet() []*labelpb.ZLabelSet {
+	labels := labelpb.ProtobufLabelsFromPromLabels(s.getExtLset())
+	labelSets := []*labelpb.ZLabelSet{}
 	if len(labels) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{
+		labelSets = append(labelSets, &labelpb.ZLabelSet{
 			Labels: labels,
 		})
 	}
@@ -130,16 +133,16 @@ func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
 	return labelSets
 }
 
-func (p *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
+func (p *TSDBStore) TSDBInfos() []*infopb.TSDBInfo {
 	labels := p.LabelSet()
 	if len(labels) == 0 {
-		return []infopb.TSDBInfo{}
+		return []*infopb.TSDBInfo{}
 	}
 
 	mint, maxt := p.TimeRange()
-	return []infopb.TSDBInfo{
+	return []*infopb.TSDBInfo{
 		{
-			Labels: labelpb.ZLabelSet{
+			Labels: &labelpb.ZLabelSet{
 				Labels: labels[0].Labels,
 			},
 			MinTime: mint,
@@ -215,7 +218,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 			continue
 		}
 
-		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
+		storeSeries := storepb.Series{Labels: labelpb.ProtobufLabelsFromPromLabels(completeLabelset)}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
@@ -225,11 +228,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 
 		bytesLeftForChunks := s.maxBytesPerFrame
 		for _, lbl := range storeSeries.Labels {
-			bytesLeftForChunks -= lbl.Size()
+			bytesLeftForChunks -= proto.Size(lbl)
 		}
 		frameBytesLeft := bytesLeftForChunks
 
-		seriesChunks := []storepb.AggrChunk{}
+		seriesChunks := []*storepb.AggrChunk{}
 		chIter := series.Iterator(nil)
 		isNext := chIter.Next()
 		for isNext {
@@ -240,7 +243,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 
 			chunkBytes := make([]byte, len(chk.Chunk.Bytes()))
 			copy(chunkBytes, chk.Chunk.Bytes())
-			c := storepb.AggrChunk{
+			c := &storepb.AggrChunk{
 				MinTime: chk.MinTime,
 				MaxTime: chk.MaxTime,
 				Raw: &storepb.Chunk{
@@ -249,7 +252,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 					Hash: hashChunk(hasher, chunkBytes, enableChunkHashCalculation),
 				},
 			}
-			frameBytesLeft -= c.Size()
+			frameBytesLeft -= proto.Size(c)
 			seriesChunks = append(seriesChunks, c)
 
 			// We are fine with minor inaccuracy of max bytes per frame. The inaccuracy will be max of full chunk size.
@@ -263,7 +266,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 
 			if isNext {
 				frameBytesLeft = bytesLeftForChunks
-				seriesChunks = make([]storepb.AggrChunk, 0, len(seriesChunks))
+				seriesChunks = make([]*storepb.AggrChunk, 0, len(seriesChunks))
 			}
 		}
 		if err := chIter.Err(); err != nil {

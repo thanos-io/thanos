@@ -104,7 +104,7 @@ func (r remoteEngine) MinT() int64 {
 		highestMintByLabelSet = make(map[uint64]int64)
 	)
 	for _, lset := range r.infosWithoutReplicaLabels() {
-		key, _ := labelpb.ZLabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
+		key, _ := labelpb.ProtobufLabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
 		lsetMinT, ok := highestMintByLabelSet[key]
 		if !ok {
 			highestMintByLabelSet[key] = lset.MinTime
@@ -154,7 +154,7 @@ func (r remoteEngine) infosWithoutReplicaLabels() infopb.TSDBInfos {
 		infos = append(infos, infopb.NewTSDBInfo(
 			info.MinTime,
 			info.MaxTime,
-			labelpb.ZLabelsFromPromLabels(builder.Labels())),
+			labelpb.ProtobufLabelsFromPromLabels(builder.Labels())),
 		)
 	}
 
@@ -236,7 +236,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			continue
 		}
 		series := promql.Series{
-			Metric:     labelpb.ZLabelsToPromLabels(ts.Labels),
+			Metric:     labelpb.ProtobufLabelsToPromLabels(ts.Labels),
 			Floats:     make([]promql.FPoint, 0, len(ts.Samples)),
 			Histograms: make([]promql.HPoint, 0, len(ts.Histograms)),
 		}

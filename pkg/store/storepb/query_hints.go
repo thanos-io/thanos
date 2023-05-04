@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func (m *QueryHints) toPromQL(labelMatchers []LabelMatcher) string {
+func (m *QueryHints) toPromQL(labelMatchers []*LabelMatcher) string {
 	grouping := m.Grouping.toPromQL()
 	matchers := MatchersToString(labelMatchers...)
 	queryRange := m.Range.toPromQL()

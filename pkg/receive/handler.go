@@ -21,7 +21,6 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/proto"
 	"github.com/jpillora/backoff"
 	"github.com/klauspost/compress/s2"
 	"github.com/mwitkow/go-conntrack"
@@ -36,6 +35,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
@@ -111,6 +111,8 @@ type Options struct {
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
 type Handler struct {
+	storepb.UnimplementedWriteableStoreServer
+
 	logger   log.Logger
 	writer   *Writer
 	router   *route.Router
@@ -383,7 +385,7 @@ type endpointReplica struct {
 
 type trackedSeries struct {
 	seriesIDs  []int
-	timeSeries []prompb.TimeSeries
+	timeSeries []*prompb.TimeSeries
 }
 
 type writeResponse struct {
@@ -623,7 +625,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 	wreqs := make(map[endpointReplica]trackedSeries)
 	for tsID, ts := range wreq.Timeseries {
 		for _, rn := range replicas {
-			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
+			endpoint, err := h.hashring.GetN(tenant, ts, rn)
 			if err != nil {
 				h.mtx.RUnlock()
 				return err
@@ -633,7 +635,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 			if !ok {
 				writeTarget = trackedSeries{
 					seriesIDs:  make([]int, 0),
-					timeSeries: make([]prompb.TimeSeries, 0),
+					timeSeries: make([]*prompb.TimeSeries, 0),
 				}
 			}
 			writeTarget.timeSeries = append(wreqs[key].timeSeries, ts)
@@ -877,14 +879,14 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest) {
 	if len(h.options.RelabelConfigs) == 0 {
 		return
 	}
-	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
+	timeSeries := make([]*prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
 		var keep bool
-		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		lbls, keep := relabel.Process(labelpb.ProtobufLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
 		if !keep {
 			continue
 		}
-		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+		ts.Labels = labelpb.ProtobufLabelsFromPromLabels(lbls)
 		timeSeries = append(timeSeries, ts)
 	}
 	wreq.Timeseries = timeSeries

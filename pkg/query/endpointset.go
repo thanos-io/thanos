@@ -800,7 +800,7 @@ func (er *endpointRef) TimeRange() (mint, maxt int64) {
 	return er.timeRange()
 }
 
-func (er *endpointRef) TSDBInfos() []infopb.TSDBInfo {
+func (er *endpointRef) TSDBInfos() []*infopb.TSDBInfo {
 	er.mtx.RLock()
 	defer er.mtx.RUnlock()
 

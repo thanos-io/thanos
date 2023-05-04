@@ -26,10 +26,10 @@ var testLsetMap = map[string]string{
 }
 
 func TestLabelsToPromLabels_LabelsToPromLabels(t *testing.T) {
-	testutil.Equals(t, labels.FromMap(testLsetMap), ZLabelsToPromLabels(ZLabelsFromPromLabels(labels.FromMap(testLsetMap))))
+	testutil.Equals(t, labels.FromMap(testLsetMap), ProtobufLabelsToPromLabels(ProtobufLabelsFromPromLabels(labels.FromMap(testLsetMap))))
 
 	lset := labels.FromMap(testLsetMap)
-	for i := range ZLabelsFromPromLabels(lset) {
+	for i := range ProtobufLabelsFromPromLabels(lset) {
 		if lset[i].Name != "a" {
 			continue
 		}
@@ -41,16 +41,6 @@ func TestLabelsToPromLabels_LabelsToPromLabels(t *testing.T) {
 
 	m["a"] = "1"
 	testutil.Equals(t, testLsetMap, m)
-}
-
-func TestLabelMarshal_Unmarshal(t *testing.T) {
-	l := ZLabelsFromPromLabels(labels.FromStrings("aaaaaaa", "bbbbb"))[0]
-	b, err := (&l).Marshal()
-	testutil.Ok(t, err)
-
-	l2 := &ZLabel{}
-	testutil.Ok(t, l2.Unmarshal(b))
-	testutil.Equals(t, labels.FromStrings("aaaaaaa", "bbbbb"), ZLabelsToPromLabels([]ZLabel{*l2}))
 }
 
 func TestExtendLabels(t *testing.T) {
@@ -68,17 +58,17 @@ func TestExtendLabels(t *testing.T) {
 
 func TestValidateLabels(t *testing.T) {
 	testCases := []struct {
-		labelSet    []ZLabel
+		labelSet    []*Label
 		expectedErr error
 	}{
 		{
 			// No labels at all.
-			labelSet:    []ZLabel{},
+			labelSet:    []*Label{},
 			expectedErr: ErrEmptyLabels,
 		},
 		{
 			// Empty label.
-			labelSet: []ZLabel{
+			labelSet: []*Label{
 				{
 					Name:  "foo",
 					Value: "bar",
@@ -92,7 +82,7 @@ func TestValidateLabels(t *testing.T) {
 		},
 		{
 			// Empty label (first label).
-			labelSet: []ZLabel{
+			labelSet: []*Label{
 				{
 					Name:  "",
 					Value: "bar",
@@ -106,7 +96,7 @@ func TestValidateLabels(t *testing.T) {
 		},
 		{
 			// Empty label (empty value).
-			labelSet: []ZLabel{
+			labelSet: []*Label{
 				{
 					Name:  "foo",
 					Value: "bar",
@@ -120,7 +110,7 @@ func TestValidateLabels(t *testing.T) {
 		},
 		{
 			// Out-of-order and duplicate label (out-of-order comes first).
-			labelSet: []ZLabel{
+			labelSet: []*Label{
 				{
 					Name:  "foo",
 					Value: "bar",
@@ -138,7 +128,7 @@ func TestValidateLabels(t *testing.T) {
 		},
 		{
 			// Out-of-order and duplicate label (out-of-order comes first).
-			labelSet: []ZLabel{
+			labelSet: []*Label{
 				{
 					Name:  "__test__",
 					Value: "baz",
@@ -160,7 +150,7 @@ func TestValidateLabels(t *testing.T) {
 		},
 		{
 			// Empty and duplicate label (empty comes first).
-			labelSet: []ZLabel{
+			labelSet: []*Label{
 				{
 					Name:  "foo",
 					Value: "bar",
@@ -178,7 +168,7 @@ func TestValidateLabels(t *testing.T) {
 		},
 		{
 			// Wrong order.
-			labelSet: []ZLabel{
+			labelSet: []*Label{
 				{
 					Name:  "a",
 					Value: "bar",
@@ -196,7 +186,7 @@ func TestValidateLabels(t *testing.T) {
 		},
 		{
 			// Wrong order and duplicate (wrong order comes first).
-			labelSet: []ZLabel{
+			labelSet: []*Label{
 				{
 					Name:  "a",
 					Value: "bar",
@@ -214,7 +204,7 @@ func TestValidateLabels(t *testing.T) {
 		},
 		{
 			// All good.
-			labelSet: []ZLabel{
+			labelSet: []*Label{
 				{
 					Name:  "__name__",
 					Value: "test",
@@ -306,50 +296,9 @@ func testInjectExtLabels(tb testutil.TB) {
 }
 
 var (
-	zdest ZLabel
+	zdest *Label
 	dest  Label
 )
-
-func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
-	const (
-		fmtLbl = "%07daaaaaaaaaabbbbbbbbbbccccccccccdddddddddd"
-		num    = 1000000
-	)
-
-	b.Run("Label", func(b *testing.B) {
-		b.ReportAllocs()
-		lbls := LabelSet{Labels: make([]Label, 0, num)}
-		for i := 0; i < num; i++ {
-			lbls.Labels = append(lbls.Labels, Label{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
-		}
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			data, err := lbls.Marshal()
-			testutil.Ok(b, err)
-
-			dest = Label{}
-			testutil.Ok(b, (&dest).Unmarshal(data))
-		}
-	})
-
-	b.Run("ZLabel", func(b *testing.B) {
-		b.ReportAllocs()
-		lbls := ZLabelSet{Labels: make([]ZLabel, 0, num)}
-		for i := 0; i < num; i++ {
-			lbls.Labels = append(lbls.Labels, ZLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
-		}
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			data, err := lbls.Marshal()
-			testutil.Ok(b, err)
-
-			zdest = ZLabel{}
-			testutil.Ok(b, (&zdest).Unmarshal(data))
-		}
-	})
-}
 
 func BenchmarkTransformWithAndWithoutCopyWithSingleLabel(b *testing.B) {
 	benchmarkTransformWithAndWithoutCopy(b, 1)
@@ -368,29 +317,29 @@ var ret labels.Labels
 func benchmarkTransformWithAndWithoutCopy(b *testing.B, num int) {
 	const fmtLbl = "%07daaaaaaaaaabbbbbbbbbbccccccccccdddddddddd"
 
-	b.Run("ZLabelsToPromLabels", func(b *testing.B) {
+	b.Run("ProtobufLabelsToPromLabels", func(b *testing.B) {
 		b.ReportAllocs()
-		lbls := make([]ZLabel, num)
+		lbls := make([]*Label, num)
 		for i := 0; i < num; i++ {
-			lbls[i] = ZLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)}
+			lbls[i] = &Label{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)}
 		}
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			ret = ZLabelsToPromLabels(lbls)
+			ret = ProtobufLabelsToPromLabels(lbls)
 		}
 	})
-	b.Run("ZLabelsToPromLabelsWithRealloc", func(b *testing.B) {
+	b.Run("ProtobufLabelsToPromLabelsWithRealloc", func(b *testing.B) {
 		b.ReportAllocs()
-		lbls := make([]ZLabel, num)
+		lbls := make([]*Label, num)
 		for i := 0; i < num; i++ {
-			lbls[i] = ZLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)}
+			lbls[i] = &Label{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)}
 		}
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
 			ReAllocZLabelsStrings(&lbls, true)
-			ret = ZLabelsToPromLabels(lbls)
+			ret = ProtobufLabelsToPromLabels(lbls)
 		}
 	})
 }
@@ -398,7 +347,7 @@ func benchmarkTransformWithAndWithoutCopy(b *testing.B, num int) {
 func TestSortZLabelSets(t *testing.T) {
 	expectedResult := ZLabelSets{
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"__name__":    "grpc_client_handled_total",
 					"cluster":     "test",
@@ -408,7 +357,7 @@ func TestSortZLabelSets(t *testing.T) {
 			),
 		},
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"__name__":    "grpc_client_handled_total",
 					"cluster":     "test",
@@ -418,7 +367,7 @@ func TestSortZLabelSets(t *testing.T) {
 			),
 		},
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"__name__":  "grpc_client_handled_total",
 					"cluster":   "test",
@@ -432,7 +381,7 @@ func TestSortZLabelSets(t *testing.T) {
 			),
 		},
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"__name__":  "grpc_client_handled_total",
 					"cluster":   "test",
@@ -446,7 +395,7 @@ func TestSortZLabelSets(t *testing.T) {
 			),
 		},
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"__name__":    "grpc_server_handled_total",
 					"cluster":     "test",
@@ -456,7 +405,7 @@ func TestSortZLabelSets(t *testing.T) {
 			),
 		},
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"__name__": "up",
 					"instance": "localhost:10908",
@@ -467,7 +416,7 @@ func TestSortZLabelSets(t *testing.T) {
 
 	list := ZLabelSets{
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"__name__": "up",
 					"instance": "localhost:10908",
@@ -475,7 +424,7 @@ func TestSortZLabelSets(t *testing.T) {
 			),
 		},
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"__name__":    "grpc_server_handled_total",
 					"cluster":     "test",
@@ -485,7 +434,7 @@ func TestSortZLabelSets(t *testing.T) {
 			),
 		},
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"__name__":    "grpc_client_handled_total",
 					"cluster":     "test",
@@ -495,7 +444,7 @@ func TestSortZLabelSets(t *testing.T) {
 			),
 		},
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"__name__":    "grpc_client_handled_total",
 					"cluster":     "test",
@@ -505,7 +454,7 @@ func TestSortZLabelSets(t *testing.T) {
 			),
 		},
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"__name__":  "grpc_client_handled_total",
 					"cluster":   "test",
@@ -520,7 +469,7 @@ func TestSortZLabelSets(t *testing.T) {
 		},
 		// This label set is the same as the previous one, which should correctly return 0 in Less() function.
 		{
-			Labels: ZLabelsFromPromLabels(
+			Labels: ProtobufLabelsFromPromLabels(
 				labels.FromMap(map[string]string{
 					"cluster":   "test",
 					"__name__":  "grpc_client_handled_total",
@@ -540,13 +489,13 @@ func TestSortZLabelSets(t *testing.T) {
 }
 
 func TestHashWithPrefix(t *testing.T) {
-	lbls := []ZLabel{
+	lbls := []*Label{
 		{Name: "foo", Value: "bar"},
 		{Name: "baz", Value: "qux"},
 	}
 	testutil.Equals(t, HashWithPrefix("a", lbls), HashWithPrefix("a", lbls))
-	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []ZLabel{lbls[0]}))
-	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []ZLabel{lbls[1], lbls[0]}))
+	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []*Label{lbls[0]}))
+	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("a", []*Label{lbls[1], lbls[0]}))
 	testutil.Assert(t, HashWithPrefix("a", lbls) != HashWithPrefix("b", lbls))
 }
 
@@ -555,40 +504,40 @@ var benchmarkLabelsResult uint64
 func BenchmarkHasWithPrefix(b *testing.B) {
 	for _, tcase := range []struct {
 		name string
-		lbls []ZLabel
+		lbls []*Label
 	}{
 		{
 			name: "typical labels under 1KB",
-			lbls: func() []ZLabel {
-				lbls := make([]ZLabel, 10)
+			lbls: func() []*Label {
+				lbls := make([]*Label, 10)
 				for i := 0; i < len(lbls); i++ {
-					// ZLabel ~20B name, 50B value.
-					lbls[i] = ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					// *Label ~20B name, 50B value.
+					lbls[i] = &Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
 			}(),
 		},
 		{
 			name: "bigger labels over 1KB",
-			lbls: func() []ZLabel {
-				lbls := make([]ZLabel, 10)
+			lbls: func() []*Label {
+				lbls := make([]*Label, 10)
 				for i := 0; i < len(lbls); i++ {
-					//ZLabel ~50B name, 50B value.
-					lbls[i] = ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+					//*Label ~50B name, 50B value.
+					lbls[i] = &Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
 				return lbls
 			}(),
 		},
 		{
 			name: "extremely large label value 10MB",
-			lbls: func() []ZLabel {
+			lbls: func() []*Label {
 				lbl := &strings.Builder{}
 				lbl.Grow(1024 * 1024 * 10) // 10MB.
 				word := "abcdefghij"
 				for i := 0; i < lbl.Cap()/len(word); i++ {
 					_, _ = lbl.WriteString(word)
 				}
-				return []ZLabel{{Name: "__name__", Value: lbl.String()}}
+				return []*Label{{Name: "__name__", Value: lbl.String()}}
 			}(),
 		},
 	} {

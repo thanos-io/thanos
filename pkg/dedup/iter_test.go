@@ -148,7 +148,7 @@ var expectedRealSeriesWithStaleMarkerDeduplicatedForRate = []sample{
 
 type chunkedSeries struct {
 	lset   labels.Labels
-	chunks []storepb.AggrChunk
+	chunks []*storepb.AggrChunk
 }
 
 type chunkedSeriesSet struct {
@@ -172,7 +172,7 @@ func (*chunkedSeriesSet) Err() error {
 	return nil
 }
 
-func (s *chunkedSeriesSet) At() (labels.Labels, []storepb.AggrChunk) {
+func (s *chunkedSeriesSet) At() (labels.Labels, []*storepb.AggrChunk) {
 	return s.series[s.i].lset, s.series[s.i].chunks
 }
 
@@ -195,23 +195,23 @@ func TestOverlapSplitSet(t *testing.T) {
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "2_nonoverlap"}},
-			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 100}, {MinTime: 110, MaxTime: 300}},
+			chunks: []*storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 100}, {MinTime: 110, MaxTime: 300}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "3_tworeplicas"}},
-			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 0, MaxTime: 30}, {MinTime: 21, MaxTime: 50}, {MinTime: 31, MaxTime: 60}, {MinTime: 100, MaxTime: 160}},
+			chunks: []*storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 0, MaxTime: 30}, {MinTime: 21, MaxTime: 50}, {MinTime: 31, MaxTime: 60}, {MinTime: 100, MaxTime: 160}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "4_nonoverlap"}},
-			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 56, MaxTime: 100}},
+			chunks: []*storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 56, MaxTime: 100}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "5_minimaloverlap"}},
-			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 55, MaxTime: 100}},
+			chunks: []*storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 55, MaxTime: 100}},
 		},
 		{
 			lset: labels.Labels{{Name: "a", Value: "6_fourreplica"}},
-			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 0, MaxTime: 30}, {MinTime: 1, MaxTime: 15}, {MinTime: 2, MaxTime: 36}, {MinTime: 16, MaxTime: 200},
+			chunks: []*storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 0, MaxTime: 30}, {MinTime: 1, MaxTime: 15}, {MinTime: 2, MaxTime: 36}, {MinTime: 16, MaxTime: 200},
 				{MinTime: 21, MaxTime: 50}, {MinTime: 31, MaxTime: 60}, {MinTime: 100, MaxTime: 160}},
 		},
 	}
@@ -221,43 +221,43 @@ func TestOverlapSplitSet(t *testing.T) {
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "2_nonoverlap"}},
-			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 100}, {MinTime: 110, MaxTime: 300}},
+			chunks: []*storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 100}, {MinTime: 110, MaxTime: 300}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "3_tworeplicas"}},
-			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 50}, {MinTime: 100, MaxTime: 160}},
+			chunks: []*storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 50}, {MinTime: 100, MaxTime: 160}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "3_tworeplicas"}},
-			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 30}, {MinTime: 31, MaxTime: 60}},
+			chunks: []*storepb.AggrChunk{{MinTime: 0, MaxTime: 30}, {MinTime: 31, MaxTime: 60}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "4_nonoverlap"}},
-			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 56, MaxTime: 100}},
+			chunks: []*storepb.AggrChunk{{MinTime: 50, MaxTime: 55}, {MinTime: 56, MaxTime: 100}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "5_minimaloverlap"}},
-			chunks: []storepb.AggrChunk{{MinTime: 50, MaxTime: 55}},
+			chunks: []*storepb.AggrChunk{{MinTime: 50, MaxTime: 55}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "5_minimaloverlap"}},
-			chunks: []storepb.AggrChunk{{MinTime: 55, MaxTime: 100}},
+			chunks: []*storepb.AggrChunk{{MinTime: 55, MaxTime: 100}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
-			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 50}, {MinTime: 100, MaxTime: 160}},
+			chunks: []*storepb.AggrChunk{{MinTime: 0, MaxTime: 20}, {MinTime: 21, MaxTime: 50}, {MinTime: 100, MaxTime: 160}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
-			chunks: []storepb.AggrChunk{{MinTime: 0, MaxTime: 30}, {MinTime: 31, MaxTime: 60}},
+			chunks: []*storepb.AggrChunk{{MinTime: 0, MaxTime: 30}, {MinTime: 31, MaxTime: 60}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
-			chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 15}, {MinTime: 16, MaxTime: 200}},
+			chunks: []*storepb.AggrChunk{{MinTime: 1, MaxTime: 15}, {MinTime: 16, MaxTime: 200}},
 		},
 		{
 			lset:   labels.Labels{{Name: "a", Value: "6_fourreplica"}},
-			chunks: []storepb.AggrChunk{{MinTime: 2, MaxTime: 36}},
+			chunks: []*storepb.AggrChunk{{MinTime: 2, MaxTime: 36}},
 		},
 	}
 

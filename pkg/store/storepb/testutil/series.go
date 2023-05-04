@@ -17,7 +17,7 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/efficientgo/core/testutil"
-	"github.com/gogo/protobuf/types"
+	"github.com/google/go-cmp/cmp"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -27,7 +27,11 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/wlog"
 	"go.uber.org/atomic"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -36,6 +40,33 @@ import (
 const (
 	// LabelLongSuffix is a label with ~50B in size, to emulate real-world high cardinality.
 	LabelLongSuffix = "aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd"
+)
+
+func CompareProtoSlices[T proto.Message](x, y []T) bool {
+	if len(x) != len(y) {
+		return false
+	}
+	for i := 0; i < len(x); i++ {
+		if !proto.Equal(x[i], y[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func CompareProto(x, y proto.Message) bool {
+	return proto.Equal(x, y)
+}
+
+var (
+	LabelSliceComparer               = cmp.Comparer(CompareProtoSlices[*labelpb.Label])
+	AggrChunkSliceComparer           = cmp.Comparer(CompareProtoSlices[*storepb.AggrChunk])
+	SeriesSliceComparer              = cmp.Comparer(CompareProtoSlices[*storepb.Series])
+	SeriesResponseHintsSliceComparer = cmp.Comparer(CompareProtoSlices[*hintspb.SeriesResponseHints])
+	ZLabelSetSliceComparer           = cmp.Comparer(CompareProtoSlices[*labelpb.ZLabelSet])
+	BlockSliceComparer               = cmp.Comparer(CompareProtoSlices[*hintspb.Block])
+	ExemplarDataSliceComparer        = cmp.Comparer(CompareProtoSlices[*exemplarspb.ExemplarData])
+	RuleGroupSliceComparer           = cmp.Comparer(CompareProtoSlices[*rulespb.RuleGroup])
 )
 
 func allPostings(t testing.TB, ix tsdb.IndexReader) index.Postings {
@@ -134,7 +165,7 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 	for all.Next() {
 		testutil.Ok(t, ir.Series(all.At(), &builder, &chunkMetas))
 		lset = builder.Labels()
-		expected = append(expected, &storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(append(extLabels.Copy(), lset...))})
+		expected = append(expected, &storepb.Series{Labels: labelpb.ProtobufLabelsFromPromLabels(append(extLabels.Copy(), lset...))})
 
 		if skipChunks {
 			continue
@@ -149,7 +180,7 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 				c.MaxTime = c.MinTime + int64(chEnc.NumSamples()) - 1
 			}
 
-			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, storepb.AggrChunk{
+			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, &storepb.AggrChunk{
 				MinTime: c.MinTime,
 				MaxTime: c.MaxTime,
 				Raw: &storepb.Chunk{
@@ -217,9 +248,7 @@ type SeriesServer struct {
 
 	SeriesSet []*storepb.Series
 	Warnings  []string
-	HintsSet  []*types.Any
-
-	Size int64
+	HintsSet  []*anypb.Any
 }
 
 func NewSeriesServer(ctx context.Context) *SeriesServer {
@@ -227,8 +256,6 @@ func NewSeriesServer(ctx context.Context) *SeriesServer {
 }
 
 func (s *SeriesServer) Send(r *storepb.SeriesResponse) error {
-	s.Size += int64(r.Size())
-
 	if r.GetWarning() != "" {
 		s.Warnings = append(s.Warnings, r.GetWarning())
 		return nil
@@ -286,8 +313,7 @@ type SeriesCase struct {
 	// Exact expectations are checked only for tests. For benchmarks only length is assured.
 	ExpectedSeries   []*storepb.Series
 	ExpectedWarnings []string
-	ExpectedHints    []hintspb.SeriesResponseHints
-	HintsCompareFunc func(t testutil.TB, expected, actual hintspb.SeriesResponseHints)
+	ExpectedHints    []*hintspb.SeriesResponseHints
 }
 
 // TestServerSeries runs tests against given cases.
@@ -313,36 +339,29 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 					// Huge responses can produce unreadable diffs - make it more human readable.
 					if len(c.ExpectedSeries) > 4 {
 						for j := range c.ExpectedSeries {
-							testutil.Equals(t, c.ExpectedSeries[j].Labels, srv.SeriesSet[j].Labels, "%v series chunks mismatch", j)
+							testutil.WithGoCmp(LabelSliceComparer).Equals(t, c.ExpectedSeries[j].Labels, srv.SeriesSet[j].Labels, "%v series chunks mismatch", j)
 
 							// Check chunks when it is not a skip chunk query
 							if !c.Req.SkipChunks {
 								if len(c.ExpectedSeries[j].Chunks) > 20 {
-									testutil.Equals(t, len(c.ExpectedSeries[j].Chunks), len(srv.SeriesSet[j].Chunks), "%v series chunks number mismatch", j)
+									testutil.WithGoCmp(AggrChunkSliceComparer).Equals(t, len(c.ExpectedSeries[j].Chunks), len(srv.SeriesSet[j].Chunks), "%v series chunks number mismatch", j)
 								}
 								for ci := range c.ExpectedSeries[j].Chunks {
-									testutil.Equals(t, c.ExpectedSeries[j].Chunks[ci], srv.SeriesSet[j].Chunks[ci], "%v series chunks mismatch %v", j, ci)
+									testutil.WithGoCmp(cmp.Comparer(proto.Equal)).Equals(t, c.ExpectedSeries[j].Chunks[ci], srv.SeriesSet[j].Chunks[ci], "%v series chunks mismatch %v", j, ci)
 								}
 							}
 						}
 					} else {
-						testutil.Equals(t, c.ExpectedSeries, srv.SeriesSet)
+						testutil.WithGoCmp(SeriesSliceComparer).Equals(t, c.ExpectedSeries, srv.SeriesSet)
 					}
 
-					var actualHints []hintspb.SeriesResponseHints
+					var actualHints []*hintspb.SeriesResponseHints
 					for _, anyHints := range srv.HintsSet {
-						hints := hintspb.SeriesResponseHints{}
-						testutil.Ok(t, types.UnmarshalAny(anyHints, &hints))
+						hints := &hintspb.SeriesResponseHints{}
+						testutil.Ok(t, anypb.UnmarshalTo(anyHints, hints, proto.UnmarshalOptions{}))
 						actualHints = append(actualHints, hints)
 					}
-					testutil.Equals(t, len(c.ExpectedHints), len(actualHints))
-					for i, hint := range actualHints {
-						if c.HintsCompareFunc == nil {
-							testutil.Equals(t, c.ExpectedHints[i], hint)
-						} else {
-							c.HintsCompareFunc(t, c.ExpectedHints[i], hint)
-						}
-					}
+					testutil.WithGoCmp(SeriesResponseHintsSliceComparer).Equals(t, c.ExpectedHints, actualHints)
 				}
 			}
 		})

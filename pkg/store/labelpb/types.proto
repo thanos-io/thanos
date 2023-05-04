@@ -4,20 +4,7 @@
 syntax = "proto3";
 package thanos;
 
-option go_package = "labelpb";
-
-import "gogoproto/gogo.proto";
-
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-option (gogoproto.goproto_getters_all) = false;
-
-// Do not generate XXX fields to reduce memory footprint and opening a door
-// for zero-copy casts to/from prometheus data types.
-option (gogoproto.goproto_unkeyed_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.goproto_sizecache_all) = false;
+option go_package = "github.com/thanos-io/thanos/pkg/store/labelpb";
 
 message Label {
     string name  = 1;
@@ -25,9 +12,9 @@ message Label {
 }
 
 message LabelSet {
-    repeated Label labels = 1 [(gogoproto.nullable) = false];
+    repeated Label labels = 1;
 }
 
 message ZLabelSet {
-    repeated Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "ZLabel"];
+    repeated Label labels = 1;
 }

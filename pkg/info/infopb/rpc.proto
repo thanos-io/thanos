@@ -5,20 +5,8 @@ syntax = "proto3";
 package thanos.info;
 
 import "store/labelpb/types.proto";
-import "gogoproto/gogo.proto";
 
-option go_package = "infopb";
-
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-option (gogoproto.goproto_getters_all) = false;
-
-// Do not generate XXX fields to reduce memory footprint and opening a door
-// for zero-copy casts to/from prometheus data types.
-option (gogoproto.goproto_unkeyed_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.goproto_sizecache_all) = false;
+option go_package = "github.com/thanos-io/thanos/pkg/info/infopb";
 
 // Info represents the API that is responsible for gathering metadata about the all APIs supported by the component.
 service Info {
@@ -29,7 +17,7 @@ service Info {
 message InfoRequest {}
 
 message InfoResponse {
-    repeated ZLabelSet label_sets      = 1 [(gogoproto.nullable) = false];
+    repeated ZLabelSet label_sets      = 1;
     string ComponentType               = 2;
 
     // StoreInfo holds the metadata related to Store API if exposed by the component otherwise it will be null.
@@ -63,7 +51,7 @@ message StoreInfo {
     bool supports_without_replica_labels = 5;
 
     // TSDBInfos holds metadata for all TSDBs exposed by the store.
-    repeated TSDBInfo tsdb_infos = 6 [(gogoproto.nullable) = false];
+    repeated TSDBInfo tsdb_infos = 6;
 }
 
 // RulesInfo holds the metadata related to Rules API exposed by the component.
@@ -89,7 +77,7 @@ message QueryAPIInfo {
 }
 
 message TSDBInfo {
-    ZLabelSet labels = 1 [(gogoproto.nullable) = false];
+    ZLabelSet labels = 1;
 
     int64 min_time = 2;
     int64 max_time = 3;

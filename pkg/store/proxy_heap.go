@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -96,7 +97,7 @@ func (d *dedupResponseHeap) Next() bool {
 		lbls := d.bufferedSameSeries[0].GetSeries().Labels
 		atLbls := s.GetSeries().Labels
 
-		if labels.Compare(labelpb.ZLabelsToPromLabels(lbls), labelpb.ZLabelsToPromLabels(atLbls)) == 0 {
+		if labels.Compare(labelpb.ProtobufLabelsToPromLabels(lbls), labelpb.ProtobufLabelsToPromLabels(atLbls)) == 0 {
 			d.bufferedSameSeries = append(d.bufferedSameSeries, s)
 			continue
 		}
@@ -125,8 +126,7 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 				}
 
 				if _, ok := chunkDedupMap[hash]; !ok {
-					chk := chk
-					chunkDedupMap[hash] = &chk
+					chunkDedupMap[hash] = chk
 					break
 				}
 			}
@@ -138,9 +138,9 @@ func chainSeriesAndRemIdenticalChunks(series []*storepb.SeriesResponse) *storepb
 		return series[0]
 	}
 
-	finalChunks := make([]storepb.AggrChunk, 0, len(chunkDedupMap))
+	finalChunks := make([]*storepb.AggrChunk, 0, len(chunkDedupMap))
 	for _, chk := range chunkDedupMap {
-		finalChunks = append(finalChunks, *chk)
+		finalChunks = append(finalChunks, chk)
 	}
 
 	sort.Slice(finalChunks, func(i, j int) bool {
@@ -179,8 +179,8 @@ func (h *ProxyResponseHeap) Less(i, j int) bool {
 		iStoreLbls := h.nodes[i].rs.StoreLabels()
 		jStoreLbls := h.nodes[j].rs.StoreLabels()
 
-		iLbls := labelpb.ZLabelsToPromLabels(iResp.GetSeries().Labels)
-		jLbls := labelpb.ZLabelsToPromLabels(jResp.GetSeries().Labels)
+		iLbls := labelpb.ProtobufLabelsToPromLabels(iResp.GetSeries().Labels)
+		jLbls := labelpb.ProtobufLabelsToPromLabels(jResp.GetSeries().Labels)
 
 		copyLabels(&h.iLblsScratch, iLbls)
 		copyLabels(&h.jLblsScratch, jLbls)
@@ -477,9 +477,9 @@ func newLazyRespSet(
 				}
 
 				numResponses++
-				bytesProcessed += resp.Size()
+				bytesProcessed += proto.Size(resp)
 
-				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
+				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesProtobufLabels(resp.GetSeries().Labels) {
 					return true
 				}
 
@@ -741,9 +741,9 @@ func newEagerRespSet(
 				}
 
 				numResponses++
-				bytesProcessed += resp.Size()
+				bytesProcessed += proto.Size(resp)
 
-				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesZLabels(resp.GetSeries().Labels) {
+				if resp.GetSeries() != nil && applySharding && !shardMatcher.MatchesProtobufLabels(resp.GetSeries().Labels) {
 					return true
 				}
 
@@ -826,7 +826,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 			continue
 		}
 
-		ser.Labels = labelpb.ZLabelsFromPromLabels(rmLabels(labelpb.ZLabelsToPromLabels(ser.Labels), labelsToRemove))
+		ser.Labels = labelpb.ProtobufLabelsFromPromLabels(rmLabels(labelpb.ProtobufLabelsToPromLabels(ser.Labels), labelsToRemove))
 	}
 
 	// With the re-ordered label sets, re-sorting all series aligns the same series
@@ -840,7 +840,7 @@ func sortWithoutLabels(set []*storepb.SeriesResponse, labelsToRemove map[string]
 		if sj == nil {
 			return false
 		}
-		return labels.Compare(labelpb.ZLabelsToPromLabels(si.Labels), labelpb.ZLabelsToPromLabels(sj.Labels)) < 0
+		return labels.Compare(labelpb.ProtobufLabelsToPromLabels(si.Labels), labelpb.ProtobufLabelsToPromLabels(sj.Labels)) < 0
 	})
 }
 

@@ -16,6 +16,8 @@ import (
 
 // Prometheus implements rulespb.Rules gRPC that allows to fetch rules from Prometheus HTTP api/v1/rules endpoint.
 type Prometheus struct {
+	rulespb.UnimplementedRulesServer
+
 	base   *url.URL
 	client *promclient.Client
 

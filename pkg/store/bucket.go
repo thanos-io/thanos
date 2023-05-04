@@ -27,7 +27,6 @@ import (
 	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/types"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -43,6 +42,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/objstore"
 
@@ -314,6 +315,8 @@ type BlockEstimator func(meta metadata.Meta) uint64
 // This makes them smaller, but takes extra CPU and memory.
 // When used with in-memory cache, memory usage should decrease overall, thanks to postings being smaller.
 type BucketStore struct {
+	storepb.UnimplementedStoreServer
+
 	logger          log.Logger
 	reg             prometheus.Registerer // TODO(metalmatze) remove and add via BucketStoreOption
 	metrics         *bucketStoreMetrics
@@ -350,7 +353,7 @@ type BucketStore struct {
 	partitioner         Partitioner
 
 	filterConfig             *FilterConfig
-	advLabelSets             []labelpb.ZLabelSet
+	advLabelSets             []*labelpb.ZLabelSet
 	enableCompatibilityLabel bool
 
 	// Every how many posting offset entry we pool in heap memory. Default in Prometheus is 32.
@@ -603,10 +606,10 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	// Sync advertise labels.
 	var storeLabels labels.Labels
 	s.mtx.Lock()
-	s.advLabelSets = make([]labelpb.ZLabelSet, 0, len(s.advLabelSets))
+	s.advLabelSets = make([]*labelpb.ZLabelSet, 0, len(s.advLabelSets))
 	for _, bs := range s.blockSets {
 		storeLabels = storeLabels[:0]
-		s.advLabelSets = append(s.advLabelSets, labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(append(storeLabels, bs.labels...))})
+		s.advLabelSets = append(s.advLabelSets, &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(append(storeLabels, bs.labels...))})
 	}
 	sort.Slice(s.advLabelSets, func(i, j int) bool {
 		return strings.Compare(s.advLabelSets[i].String(), s.advLabelSets[j].String()) < 0
@@ -802,8 +805,8 @@ func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
 	infos := make([]infopb.TSDBInfo, 0, len(s.blocks))
 	for _, b := range s.blocks {
 		infos = append(infos, infopb.TSDBInfo{
-			Labels: labelpb.ZLabelSet{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(b.meta.Thanos.Labels)),
+			Labels: &labelpb.ZLabelSet{
+				Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(b.meta.Thanos.Labels)),
 			},
 			MinTime: b.meta.MinTime,
 			MaxTime: b.meta.MaxTime,
@@ -813,13 +816,13 @@ func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
 	return infos
 }
 
-func (s *BucketStore) LabelSet() []labelpb.ZLabelSet {
+func (s *BucketStore) LabelSet() []*labelpb.ZLabelSet {
 	s.mtx.RLock()
 	labelSets := s.advLabelSets
 	s.mtx.RUnlock()
 
 	if s.enableCompatibilityLabel && len(labelSets) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: CompatibilityTypeLabelName, Value: "store"}}})
+		labelSets = append(labelSets, &labelpb.ZLabelSet{Labels: []*labelpb.Label{{Name: CompatibilityTypeLabelName, Value: "store"}}})
 	}
 
 	return labelSets
@@ -869,7 +872,7 @@ func (s *BucketStore) limitMaxTime(maxt int64) int64 {
 type seriesEntry struct {
 	lset labels.Labels
 	refs []chunks.ChunkRef
-	chks []storepb.AggrChunk
+	chks []*storepb.AggrChunk
 }
 
 // blockSeriesClient is a storepb.Store_SeriesClient for a
@@ -1007,7 +1010,7 @@ func (b *blockSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 	b.entries = b.entries[1:]
 
 	return storepb.NewSeriesResponse(&storepb.Series{
-		Labels: labelpb.ZLabelsFromPromLabels(next.lset),
+		Labels: labelpb.ProtobufLabelsFromPromLabels(next.lset),
 		Chunks: next.chks,
 	}), nil
 }
@@ -1065,13 +1068,13 @@ func (b *blockSeriesClient) nextBatch() error {
 
 		// Schedule loading chunks.
 		s.refs = make([]chunks.ChunkRef, 0, len(b.chkMetas))
-		s.chks = make([]storepb.AggrChunk, 0, len(b.chkMetas))
+		s.chks = make([]*storepb.AggrChunk, 0, len(b.chkMetas))
 
 		for j, meta := range b.chkMetas {
 			if err := b.chunkr.addLoad(meta.Ref, len(b.entries), j); err != nil {
 				return errors.Wrap(err, "add chunk load")
 			}
-			s.chks = append(s.chks, storepb.AggrChunk{
+			s.chks = append(s.chks, &storepb.AggrChunk{
 				MinTime: meta.MinTime,
 				MaxTime: meta.MaxTime,
 			})
@@ -1257,7 +1260,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 	if req.Hints != nil {
 		reqHints := &hintspb.SeriesRequestHints{}
-		if err := types.UnmarshalAny(req.Hints, reqHints); err != nil {
+		if err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{}); err != nil {
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal series request hints").Error())
 		}
 		queryStatsEnabled = reqHints.EnableQueryStats
@@ -1449,12 +1452,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	}
 
 	if s.enableSeriesResponseHints {
-		var anyHints *types.Any
+		var anyHints *anypb.Any
 
 		if queryStatsEnabled {
 			resHints.QueryStats = stats.toHints()
 		}
-		if anyHints, err = types.MarshalAny(resHints); err != nil {
+		if anyHints, err = anypb.New(resHints); err != nil {
 			err = status.Error(codes.Unknown, errors.Wrap(err, "marshal series response hints").Error())
 			return
 		}
@@ -1468,9 +1471,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	return err
 }
 
-func chunksSize(chks []storepb.AggrChunk) (size int) {
+func chunksSize(chks []*storepb.AggrChunk) (size int) {
 	for _, chk := range chks {
-		size += chk.Size() // This gets the encoded proto size.
+		size += proto.Size(chk) // This gets the encoded proto size.
 	}
 	return size
 }
@@ -1487,7 +1490,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	var reqBlockMatchers []*labels.Matcher
 	if req.Hints != nil {
 		reqHints := &hintspb.LabelNamesRequestHints{}
-		err := types.UnmarshalAny(req.Hints, reqHints)
+		err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{})
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label names request hints").Error())
 		}
@@ -1634,7 +1637,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 		return nil, status.Error(code, err.Error())
 	}
 
-	anyHints, err := types.MarshalAny(resHints)
+	anyHints, err := anypb.New(resHints)
 	if err != nil {
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label names response hints").Error())
 	}
@@ -1677,7 +1680,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var reqBlockMatchers []*labels.Matcher
 	if req.Hints != nil {
 		reqHints := &hintspb.LabelValuesRequestHints{}
-		err := types.UnmarshalAny(req.Hints, reqHints)
+		err := anypb.UnmarshalTo(req.Hints, reqHints, proto.UnmarshalOptions{})
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label values request hints").Error())
 		}
@@ -1793,7 +1796,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 						continue
 					}
 
-					val := labelpb.ZLabelsToPromLabels(ls.GetSeries().Labels).Get(req.Label)
+					val := labelpb.ProtobufLabelsToPromLabels(ls.GetSeries().Labels).Get(req.Label)
 					if val != "" { // Should never be empty since we added labelName!="" matcher to the list of matchers.
 						values[val] = struct{}{}
 					}
@@ -1826,7 +1829,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		return nil, status.Error(code, err.Error())
 	}
 
-	anyHints, err := types.MarshalAny(resHints)
+	anyHints, err := anypb.New(resHints)
 	if err != nil {
 		return nil, status.Error(codes.Unknown, errors.Wrap(err, "marshal label values response hints").Error())
 	}
@@ -3143,7 +3146,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		// There is also crc32 after the chunk, but we ignore that.
 		chunkLen = n + 1 + int(chunkDataLen)
 		if chunkLen <= len(cb) {
-			err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk(cb[n:chunkLen]), aggrs, r.save, calculateChunkChecksum)
+			err = populateChunk(res[pIdx.seriesEntry].chks[pIdx.chunk], rawChunk(cb[n:chunkLen]), aggrs, r.save, calculateChunkChecksum)
 			if err != nil {
 				return errors.Wrap(err, "populate chunk")
 			}
@@ -3177,7 +3180,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 
 		r.stats.chunksFetchCount++
 		r.stats.ChunksFetchedSizeSum += units.Base2Bytes(len(*nb))
-		err = populateChunk(&(res[pIdx.seriesEntry].chks[pIdx.chunk]), rawChunk((*nb)[n:]), aggrs, r.save, calculateChunkChecksum)
+		err = populateChunk(res[pIdx.seriesEntry].chks[pIdx.chunk], rawChunk((*nb)[n:]), aggrs, r.save, calculateChunkChecksum)
 		if err != nil {
 			r.block.chunkPool.Put(nb)
 			return errors.Wrap(err, "populate chunk")

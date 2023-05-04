@@ -97,14 +97,14 @@ func NewMultiTSDB(
 
 type localClient struct {
 	storepb.StoreClient
-	labelSetFunc  func() []labelpb.ZLabelSet
+	labelSetFunc  func() []*labelpb.ZLabelSet
 	timeRangeFunc func() (int64, int64)
 	tsdbOpts      *tsdb.Options
 }
 
 func NewLocalClient(
 	c storepb.StoreClient,
-	labelSetFunc func() []labelpb.ZLabelSet,
+	labelSetFunc func() []*labelpb.ZLabelSet,
 	timeRangeFunc func() (int64, int64),
 	tsdbOpts *tsdb.Options,
 ) store.Client {
@@ -124,14 +124,14 @@ func (l *localClient) TimeRange() (mint int64, maxt int64) {
 	return l.timeRangeFunc()
 }
 
-func (l *localClient) TSDBInfos() []infopb.TSDBInfo {
+func (l *localClient) TSDBInfos() []*infopb.TSDBInfo {
 	labelsets := l.labelSetFunc()
 	if len(labelsets) == 0 {
-		return []infopb.TSDBInfo{}
+		return []*infopb.TSDBInfo{}
 	}
 
 	mint, maxt := l.timeRangeFunc()
-	return []infopb.TSDBInfo{
+	return []*infopb.TSDBInfo{
 		{
 			Labels:  labelsets[0],
 			MinTime: mint,

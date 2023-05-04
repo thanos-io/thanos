@@ -5,23 +5,11 @@ syntax = "proto3";
 package thanos;
 
 import "store/storepb/types.proto";
-import "gogoproto/gogo.proto";
 import "store/storepb/prompb/types.proto";
 import "store/labelpb/types.proto";
 import "google/protobuf/any.proto";
 
-option go_package = "storepb";
-
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-option (gogoproto.goproto_getters_all) = false;
-
-// Do not generate XXX fields to reduce memory footprint and opening a door
-// for zero-copy casts to/from prometheus data types.
-option (gogoproto.goproto_unkeyed_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.goproto_sizecache_all) = false;
+option go_package = "github.com/thanos-io/thanos/pkg/store/storepb";
 
 /// Store represents API against instance that stores XOR encoded values with label set metadata (e.g Prometheus metrics).
 service Store {
@@ -58,7 +46,7 @@ message WriteResponse {
 }
 
 message WriteRequest {
-  repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
+  repeated prometheus_copy.TimeSeries timeseries = 1;
   string tenant = 2;
   int64 replica = 3;
 }
@@ -81,18 +69,18 @@ enum StoreType {
 // Deprecated. Use `thanos.info` instead.
 message InfoResponse {
   // Deprecated. Use label_sets instead.
-  repeated Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/thanos-io/thanos/pkg/store/labelpb.ZLabel"];
+  repeated Label labels = 1;
   int64 min_time = 2;
   int64 max_time = 3;
   StoreType storeType = 4;
   // label_sets is an unsorted list of `ZLabelSet`s.
-  repeated ZLabelSet label_sets = 5 [(gogoproto.nullable) = false];
+  repeated ZLabelSet label_sets = 5;
 }
 
 message SeriesRequest {
   int64 min_time = 1;
   int64 max_time = 2;
-  repeated LabelMatcher matchers = 3 [(gogoproto.nullable) = false];
+  repeated LabelMatcher matchers = 3;
 
   int64 max_resolution_window = 4;
   repeated Aggr aggregates = 5;
@@ -231,7 +219,7 @@ message LabelNamesRequest {
   // implementation of a specific store.
   google.protobuf.Any hints = 5;
 
-  repeated LabelMatcher matchers = 6 [(gogoproto.nullable) = false];
+  repeated LabelMatcher matchers = 6;
 }
 
 message LabelNamesResponse {
@@ -261,7 +249,7 @@ message LabelValuesRequest {
   // implementation of a specific store.
   google.protobuf.Any hints = 6;
 
-  repeated LabelMatcher matchers = 7 [(gogoproto.nullable) = false];
+  repeated LabelMatcher matchers = 7;
 }
 
 message LabelValuesResponse {

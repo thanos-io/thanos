@@ -16,6 +16,8 @@ import (
 
 // Prometheus implements targetspb.Targets gRPC that allows to fetch targets from Prometheus HTTP api/v1/targets endpoint.
 type Prometheus struct {
+	targetspb.UnimplementedTargetsServer
+
 	base   *url.URL
 	client *promclient.Client
 

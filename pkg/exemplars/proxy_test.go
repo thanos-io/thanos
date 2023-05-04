@@ -129,7 +129,7 @@ func TestProxy(t *testing.T) {
 				{
 					ExemplarsClient: &testExemplarClient{
 						response: exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-							SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+							SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
 							Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 						}),
 					},
@@ -142,7 +142,7 @@ func TestProxy(t *testing.T) {
 			server: &testExemplarServer{},
 			wantResponses: []*exemplarspb.ExemplarsResponse{
 				exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-					SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+					SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
 					Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 				}),
 			},
@@ -157,7 +157,7 @@ func TestProxy(t *testing.T) {
 				{
 					ExemplarsClient: &testExemplarClient{
 						response: exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-							SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+							SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
 							Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 						}),
 					},
@@ -170,7 +170,7 @@ func TestProxy(t *testing.T) {
 			server: &testExemplarServer{},
 			wantResponses: []*exemplarspb.ExemplarsResponse{
 				exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-					SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+					SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
 					Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 				}),
 			},
@@ -205,7 +205,7 @@ func TestProxy(t *testing.T) {
 				{
 					ExemplarsClient: &testExemplarClient{
 						response: exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-							SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+							SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
 							Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 						}),
 					},
@@ -227,7 +227,7 @@ func TestProxy(t *testing.T) {
 				{
 					ExemplarsClient: &testExemplarClient{
 						response: exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-							SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+							SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
 							Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 						}),
 					},
@@ -238,7 +238,7 @@ func TestProxy(t *testing.T) {
 			server:         &testExemplarServer{},
 			wantResponses: []*exemplarspb.ExemplarsResponse{
 				exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-					SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
+					SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"__name__": "http_request_duration_bucket"}))},
 					Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 				}),
 			},
@@ -253,7 +253,7 @@ func TestProxy(t *testing.T) {
 				{
 					ExemplarsClient: &testExemplarClient{
 						response: exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-							SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "bar"}))},
+							SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "bar"}))},
 							Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 						}),
 					},
@@ -262,7 +262,7 @@ func TestProxy(t *testing.T) {
 				{
 					ExemplarsClient: &testExemplarClient{
 						response: exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-							SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "baz"}))},
+							SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "baz"}))},
 							Exemplars:    []*exemplarspb.Exemplar{{Value: 2}},
 						}),
 					},
@@ -272,7 +272,7 @@ func TestProxy(t *testing.T) {
 			server: &testExemplarServer{},
 			wantResponses: []*exemplarspb.ExemplarsResponse{
 				exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-					SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "bar"}))},
+					SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "bar"}))},
 					Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 				}),
 			},
@@ -287,7 +287,7 @@ func TestProxy(t *testing.T) {
 				{
 					ExemplarsClient: &testExemplarClient{
 						response: exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-							SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "bar"}))},
+							SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "bar"}))},
 							Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 						}),
 					},
@@ -296,7 +296,7 @@ func TestProxy(t *testing.T) {
 				{
 					ExemplarsClient: &testExemplarClient{
 						response: exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-							SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "baz"}))},
+							SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "baz"}))},
 							Exemplars:    []*exemplarspb.Exemplar{{Value: 2}},
 						}),
 					},
@@ -306,11 +306,11 @@ func TestProxy(t *testing.T) {
 			server: &testExemplarServer{},
 			wantResponses: []*exemplarspb.ExemplarsResponse{
 				exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-					SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "bar"}))},
+					SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "bar"}))},
 					Exemplars:    []*exemplarspb.Exemplar{{Value: 1}},
 				}),
 				exemplarspb.NewExemplarsResponse(&exemplarspb.ExemplarData{
-					SeriesLabels: labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "baz"}))},
+					SeriesLabels: &labelpb.ZLabelSet{Labels: labelpb.ProtobufLabelsFromPromLabels(labels.FromMap(map[string]string{"foo": "baz"}))},
 					Exemplars:    []*exemplarspb.Exemplar{{Value: 2}},
 				}),
 			},

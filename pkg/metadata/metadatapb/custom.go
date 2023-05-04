@@ -3,10 +3,6 @@
 
 package metadatapb
 
-import (
-	"unsafe"
-)
-
 func NewMetricMetadataResponse(metadata *MetricMetadata) *MetricMetadataResponse {
 	return &MetricMetadataResponse{
 		Result: &MetricMetadataResponse_Metadata{
@@ -23,6 +19,10 @@ func NewWarningMetadataResponse(warning error) *MetricMetadataResponse {
 	}
 }
 
-func FromMetadataMap(m map[string][]Meta) *MetricMetadata {
-	return &MetricMetadata{Metadata: *(*map[string]MetricMetadataEntry)(unsafe.Pointer(&m))}
+func FromMetadataMap(m map[string][]*Meta) *MetricMetadata {
+	res := &MetricMetadata{Metadata: make(map[string]*MetricMetadataEntry, len(m))}
+	for k, v := range m {
+		res.Metadata[k] = &MetricMetadataEntry{Metas: v}
+	}
+	return res
 }

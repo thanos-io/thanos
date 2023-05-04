@@ -23,11 +23,11 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 
 	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -619,7 +619,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 						var expected int
 						n := a.appender.(*fakeAppender).Get(lset)
 						got := uint64(len(n))
-						if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts) {
+						if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, ts) {
 							// We have len(handlers) copies of each sample because the test case
 							// is run once for each handler and they all use the same appender.
 							expected = len(handlers) * len(ts.Samples)
@@ -631,7 +631,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 						var expectedMin int
 						n := a.appender.(*fakeAppender).Get(lset)
 						got := uint64(len(n))
-						if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts) {
+						if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, ts) {
 							// We have len(handlers) copies of each sample because the test case
 							// is run once for each handler and they all use the same appender.
 							expectedMin = int((tc.replicationFactor/2)+1) * len(ts.Samples)
@@ -744,16 +744,16 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			)
 
 			wreq := &prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{},
+				Timeseries: []*prompb.TimeSeries{},
 			}
 
 			for i := 0; i < tc.amountSeries; i += 1 {
-				label := labelpb.ZLabel{Name: "foo", Value: "bar"}
-				series := prompb.TimeSeries{
-					Labels: []labelpb.ZLabel{label},
+				label := &labelpb.Label{Name: "foo", Value: "bar"}
+				series := &prompb.TimeSeries{
+					Labels: []*labelpb.Label{label},
 				}
 				for j := 0; j < tc.amountSamples; j += 1 {
-					sample := prompb.Sample{Value: float64(j), Timestamp: int64(j)}
+					sample := &prompb.Sample{Value: float64(j), Timestamp: int64(j)}
 					series.Samples = append(series.Samples, sample)
 				}
 				wreq.Timeseries = append(wreq.Timeseries, series)
@@ -887,14 +887,14 @@ func (a *tsOverrideAppender) GetRef(lset labels.Labels, hash uint64) (storage.Se
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would
 // be sent to Thanos receive.
 // It has one sample and allow passing multiple series, in same manner as typical Prometheus would batch it.
-func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byte {
-	r := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, 0, len(series))}
+func serializeSeriesWithOneSample(t testing.TB, series [][]*labelpb.Label) []byte {
+	r := &prompb.WriteRequest{Timeseries: make([]*prompb.TimeSeries, 0, len(series))}
 
 	for _, s := range series {
-		r.Timeseries = append(r.Timeseries, prompb.TimeSeries{
+		r.Timeseries = append(r.Timeseries, &prompb.TimeSeries{
 			Labels: s,
 			// Timestamp does not matter, it will be overridden.
-			Samples: []prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}},
+			Samples: []*prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}},
 		})
 	}
 	body, err := proto.Marshal(r)
@@ -902,17 +902,17 @@ func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byt
 	return snappy.Encode(nil, body)
 }
 
-func makeSeriesWithValues(numSeries int) []prompb.TimeSeries {
-	series := make([]prompb.TimeSeries, numSeries)
+func makeSeriesWithValues(numSeries int) []*prompb.TimeSeries {
+	series := make([]*prompb.TimeSeries, numSeries)
 	for i := 0; i < numSeries; i++ {
-		series[i] = prompb.TimeSeries{
-			Labels: []labelpb.ZLabel{
+		series[i] = &prompb.TimeSeries{
+			Labels: []*labelpb.Label{
 				{
 					Name:  fmt.Sprintf("pod-%d", i),
 					Value: fmt.Sprintf("nginx-%d", i),
 				},
 			},
-			Samples: []prompb.Sample{
+			Samples: []*prompb.Sample{
 				{
 					Value:     float64(i),
 					Timestamp: 10,
@@ -961,13 +961,13 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	}{
 		{
 			name: "typical labels under 1KB, 500 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
-				series := make([][]labelpb.ZLabel, 500)
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]*labelpb.Label {
+				series := make([][]*labelpb.Label, 500)
 				for s := 0; s < len(series); s++ {
-					lbls := make([]labelpb.ZLabel, 10)
+					lbls := make([]*labelpb.Label, 10)
 					for i := 0; i < len(lbls); i++ {
 						// Label ~20B name, 50B value.
-						lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+						lbls[i] = &labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 					}
 					series[s] = lbls
 				}
@@ -976,13 +976,13 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 		{
 			name: "typical labels under 1KB, 5000 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
-				series := make([][]labelpb.ZLabel, 5000)
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]*labelpb.Label {
+				series := make([][]*labelpb.Label, 5000)
 				for s := 0; s < len(series); s++ {
-					lbls := make([]labelpb.ZLabel, 10)
+					lbls := make([]*labelpb.Label, 10)
 					for i := 0; i < len(lbls); i++ {
 						// Label ~20B name, 50B value.
-						lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+						lbls[i] = &labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 					}
 					series[s] = lbls
 				}
@@ -991,13 +991,13 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 		{
 			name: "typical labels under 1KB, 20000 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
-				series := make([][]labelpb.ZLabel, 20000)
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]*labelpb.Label {
+				series := make([][]*labelpb.Label, 20000)
 				for s := 0; s < len(series); s++ {
-					lbls := make([]labelpb.ZLabel, 10)
+					lbls := make([]*labelpb.Label, 10)
 					for i := 0; i < len(lbls); i++ {
 						// Label ~20B name, 50B value.
-						lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+						lbls[i] = &labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 					}
 					series[s] = lbls
 				}
@@ -1006,8 +1006,8 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 		{
 			name: "extremely large label value 10MB, 10 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
-				series := make([][]labelpb.ZLabel, 10)
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]*labelpb.Label {
+				series := make([][]*labelpb.Label, 10)
 				for s := 0; s < len(series); s++ {
 					lbl := &strings.Builder{}
 					lbl.Grow(1024 * 1024 * 10) // 10MB.
@@ -1015,7 +1015,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 					for i := 0; i < lbl.Cap()/len(word); i++ {
 						_, _ = lbl.WriteString(word)
 					}
-					series[s] = []labelpb.ZLabel{{Name: "__name__", Value: lbl.String()}}
+					series[s] = []*labelpb.Label{{Name: "__name__", Value: lbl.String()}}
 				}
 				return series
 			}()),
@@ -1163,9 +1163,9 @@ func TestRelabel(t *testing.T) {
 		{
 			name: "empty relabel configs",
 			writeRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1175,7 +1175,7 @@ func TestRelabel(t *testing.T) {
 								Value: "bar",
 							},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
 								Value:     1,
@@ -1185,9 +1185,9 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			expectedWriteRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1197,7 +1197,7 @@ func TestRelabel(t *testing.T) {
 								Value: "bar",
 							},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
 								Value:     1,
@@ -1219,9 +1219,9 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			writeRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1231,7 +1231,7 @@ func TestRelabel(t *testing.T) {
 								Value: "bar",
 							},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
 								Value:     1,
@@ -1241,9 +1241,9 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			expectedWriteRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1253,7 +1253,7 @@ func TestRelabel(t *testing.T) {
 								Value: "bar",
 							},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
 								Value:     1,
@@ -1280,9 +1280,9 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			writeRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1292,7 +1292,7 @@ func TestRelabel(t *testing.T) {
 								Value: "bar",
 							},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
 								Value:     1,
@@ -1302,9 +1302,9 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			expectedWriteRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "foo",
@@ -1314,7 +1314,7 @@ func TestRelabel(t *testing.T) {
 								Value: "test",
 							},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
 								Value:     1,
@@ -1333,9 +1333,9 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			writeRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1345,7 +1345,7 @@ func TestRelabel(t *testing.T) {
 								Value: "bar",
 							},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
 								Value:     1,
@@ -1355,15 +1355,15 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			expectedWriteRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
 							},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
 								Value:     1,
@@ -1383,9 +1383,9 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			writeRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1395,7 +1395,7 @@ func TestRelabel(t *testing.T) {
 								Value: "bar",
 							},
 						},
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
 								Value:     1,
@@ -1405,7 +1405,7 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			expectedWriteRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{},
+				Timeseries: []*prompb.TimeSeries{},
 			},
 		},
 		{
@@ -1417,9 +1417,9 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			writeRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1429,9 +1429,9 @@ func TestRelabel(t *testing.T) {
 								Value: "bar",
 							},
 						},
-						Exemplars: []prompb.Exemplar{
+						Exemplars: []*prompb.Exemplar{
 							{
-								Labels: []labelpb.ZLabel{
+								Labels: []*labelpb.Label{
 									{
 										Name:  "traceID",
 										Value: "foo",
@@ -1445,17 +1445,17 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			expectedWriteRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
 							},
 						},
-						Exemplars: []prompb.Exemplar{
+						Exemplars: []*prompb.Exemplar{
 							{
-								Labels: []labelpb.ZLabel{
+								Labels: []*labelpb.Label{
 									{
 										Name:  "traceID",
 										Value: "foo",
@@ -1479,9 +1479,9 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			writeRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: []labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1491,9 +1491,9 @@ func TestRelabel(t *testing.T) {
 								Value: "bar",
 							},
 						},
-						Exemplars: []prompb.Exemplar{
+						Exemplars: []*prompb.Exemplar{
 							{
-								Labels: []labelpb.ZLabel{
+								Labels: []*labelpb.Label{
 									{
 										Name:  "traceID",
 										Value: "foo",
@@ -1507,7 +1507,7 @@ func TestRelabel(t *testing.T) {
 				},
 			},
 			expectedWriteRequest: prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{},
+				Timeseries: []*prompb.TimeSeries{},
 			},
 		},
 	} {
