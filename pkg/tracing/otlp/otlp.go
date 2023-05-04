@@ -63,7 +63,7 @@ func NewTracerProvider(ctx context.Context, logger log.Logger, conf []byte) (*tr
 	}
 
 	processor := tracesdk.NewBatchSpanProcessor(exporter)
-	sampler, err := buildSampler(config.SamplerName, config.SamplerArg)
+	sampler, err := getSampler(config)
 	if err != nil {
 		logger.Log(err)
 	}
@@ -93,14 +93,14 @@ func newTraceProvider(ctx context.Context, processor tracesdk.SpanProcessor, log
 	return tp
 }
 
-func buildSampler(samplerName string, samplerArg string) (tracesdk.Sampler, error) {
-	switch strings.ToLower(samplerName) {
+func getSampler(config Config) (tracesdk.Sampler, error) {
+	switch strings.ToLower(config.SamplerType) {
 	case AlwaysSample:
 		return tracesdk.ParentBased(tracesdk.AlwaysSample()), nil
 	case NeverSample:
 		return tracesdk.ParentBased(tracesdk.NeverSample()), nil
 	case RatioBasedSample:
-		arg, err := strconv.ParseFloat(samplerArg, 64)
+		arg, err := strconv.ParseFloat(config.SamplerParam, 64)
 		if err != nil {
 			return tracesdk.ParentBased(tracesdk.TraceIDRatioBased(1.0)), err
 		}
