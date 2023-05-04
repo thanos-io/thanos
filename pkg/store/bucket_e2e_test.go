@@ -919,7 +919,7 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 	})
 }
 
-func TestBucketStore_LabelValues_ChunksLimiter_e2e(t *testing.T) {
+func TestBucketStore_LabelValues_SeriesLimiter_e2e(t *testing.T) {
 	cases := map[string]struct {
 		maxSeriesLimit uint64
 		expectedErr    string
