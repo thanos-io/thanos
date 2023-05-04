@@ -37,7 +37,7 @@ The current lack of tenancy awareness in Thanos' query path makes it impossible 
 
 ### Audience
 
-Any team running Thanos in a multi-tenant environment. For example, a team running a monitoring-as-a-service platfor. For example, a team running a monitoring-as-a-service platform.
+Any team running Thanos in a multi-tenant environment. For example, a team running a monitoring-as-a-service platform. For example, a team running a monitoring-as-a-service platform.
 
 ## Non-Goals
 
