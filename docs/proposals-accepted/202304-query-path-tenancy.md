@@ -33,7 +33,9 @@ The current lack of tenancy awareness in Thanos' query path makes it impossible 
 * Allow the query path components to be configurable to identify tenants, opening the way to the implementation per-tenant features on the query path without needing to run multiple copies of the components, each dedicated to a single tenant. These features include, but aren't limited to, the following:
   * Per-tenant observability.
   * Per-tenant settings. For example, having different limits per tenant, which is a common request.
-  * Enforce presence of one or more tenant labels in queries.
+  * Per-tenant billing.
+  * Ensure a tenant's query does not end up returning data from a different tenant, through enforcing presence of one or more tenant labels in queries.
+* Strive for being compatible with other tools, such as Cortex, as much as possible. This make adoption, migration, and collaboration between projects to become easier. 
 
 ### Audience
 
@@ -46,13 +48,34 @@ Any team running Thanos in a multi-tenant environment. For example, a team runni
 
 ## How
 
-* Implement a mechanism to allow incoming requests to specify the tenant being queried using an HTTP header. This applies to all components in the query path. We follow the example of Thanos Receive, which uses the `--receive.tenant-header="THANOS-TENANT"` flag to configure the tenant header, adapting its name to each component. So in the Querier, the flag name will be `--querier.tenant-header`, in the Store Gateway it'll be `--store.tenant-header`, and so on.
-* The tenant header value from a given request should travel downstream to all the components being called, so that it can be added to their metrics, traces, and logs without requiring duplicated/extra work to re-parse the query. This also applies to gRPC calls.
-* Implement a command line argument in the Querier component that will indicate with label name that should be used to enforce tenancy. Again, we follow the example of Thanos Receive, which uses the `--receive.tenant-label-name="tenant_id"` flag to achieve this, and adapt its name just as described on the first point (changing the `receive` part to `querier`). The default behavior, when the flag as an empty string as value, is to not identify tenants.
-  * The label verification and enforcement should be done by reusing prom-label-proxy's [Enforce.EnforceMatchers](https://github.com/prometheus-community/prom-label-proxy/blob/main/injectproxy/enforce.go#L141). There's no reason to (re)implement something specific and special for Thanos.
+* Implement a mechanism to allow incoming requests to specify the tenant triggering the query using an HTTP header. This only needs to be configurable at the Query Frontend and Querier. 
+  * This is needed in the Query Frontend because it needs per-tenant observability and configuration. 
+* We follow the example of Thanos Receive, which uses the `--receive.tenant-header="THANOS-TENANT"` flag to configure the tenant header, adapting its name to each component. So in the Querier, the flag name will be `--querier.tenant-header="THANOS-TENANT` and in the Query Frontend it will be `--query-frontend.tenant-header="THANOS-TENANT"`. This ensures we have consistency across components and make adoption easier for those already using a custom header name in Receive or coming from other alternative tools, like Cortex.
+* The tenant header value from a given request should travel downstream to all the components being called, so that it can be added to their metrics, traces, and logs without requiring duplicated/extra work to re-parse the query. This applies to gRPC calls in a different fashion, where gRPC metadata should be used. 
+  * In this case, the header name should be hardcoded and standardized between the components. 
+* Implement a command line flag in the Querier component that will turn on the enforcement of a tenant label selector in queries. Name suggestion for the flag: `--querier.tenancy="false"`.
+    * The label verification and enforcement should be done by reusing prom-label-proxy's [Enforce.EnforceMatchers](https://github.com/prometheus-community/prom-label-proxy/blob/main/injectproxy/enforce.go#L141). There's no reason to (re)implement something specific and special for Thanos.
   * This behavior should be implemented as part of the base logic of both the HTTP and gRPC query APIs, before the query is handed to the query engine. This allows users managing complex Querier trees can choose where they want this logic to be enabled.
+* Implement a command line flag in the Querier component that will indicate with label name that should be used to enforce tenancy. 
+  * Following the example of Thanos Receive for consistency, and use `--query.tenant-label-name="tenant_id"` flag to identify the tenancy label. 
 * Update metrics exported by the components in the query path to include the tenant label when it's available.
 * Implement a tenant selector in the Query Frontend UI, which should communicate the tenant to Query Frontend using the HTTP header.
+
+### TL;DR:
+
+Identifying and transporting tenant information between requests: 
+
+* Happens in Query Frontend (optional component to help scale queries) and Querier.
+* Customizable header name for picking up the tenant of incoming queries. Use `THANOS-TENANT` as default value. Consistent with the behavior of Thanos Receive. 
+* Hardcoded opinionated header to carry tenant information in internal communication between components, reducing configuration flags.
+* In gRPC requests propagate tenant identification using gRPC metadata.
+
+Enforcing tenancy label in queries:
+
+* Happens in Querier only.
+* Enabled by a single configuration flag if using default values for tenant label name and tenant header name. 
+* Uses tenant identified through the header. 
+* Enforces the presence of the configured tenant label name and matches with the identified tenant. Uses `tenant_id` as default label name. Consistent with the behavior of Thanos Receive.
 
 <figure>
 <img height="80%" src="../img/query-path-tenancy-proposal-diagram.svg" width="80%"/>
@@ -69,7 +92,16 @@ The Query Frontend is an optional component on any Thanos deployment, while the 
 
 2. Add the tenant identification as an optional field in the Store API protobuffer spec instead of an HTTP header.
 
-This isn't the preferred solution because the Store API isn't used all the way from the topmost components (e.g. Querier and Query Frontend) to the bottommost one (e.g. Store Gateway). The Query Frontend talks to the Querier via the Query API. A Querier can talk to other Queriers using the Query API via gRPC. Finally, a Querier talks to Store Gateways using the Store API. All these APIs would have to be modified and the transmission of this information would differ depending on the component and API being used. In addition to this complication, this implementation does not enable any capability that can't be achieved with HTTP header approach.
+Pros:
+
+* There's no guessing where the tenant information is passed through. It would be passed always through the same field in the gRPC message.
+
+Cons:
+
+* It's still needed to identify the tenant from incoming requests sent to Query Frontend and Querier via HTTP headers.
+* Creates inconsistency between components on how the tenant information is passed through. In Receive, for example, it's passed through a header. This hurts code reusability and understanding. 
+* Creates inconsistency between APIs. We have other APIs besides the Store API. We can set the standard of an internal and hardcoded header for the HTTP requests and gRPC metadata for the gRPC requests.
+* Incompatible with other tools and projects. Using a header in the HTTP communication allows Thanos to be compatible with Cortex and other monitoring tools. This is a plus for adoption, migration, and collaboration between the projects.
 
 ### Alternative solutions
 
@@ -84,12 +116,12 @@ This incurs in a lot of wasted resources and demands manual work, unless a centr
 ## Action Plan
 
 1. Query Frontend
-   1. Implement the `--query-frontend.tenant-header` (default is `""`") and `--query-frontend.default-tenant` (default is `"default-tenant"`) flags. Forward the tenant header to all the configured downstream query endpoints, if it is present.
+   1. Implement the `--query-frontend.tenant-header="THANOS-TENANT"` flag. Forward the tenant identification from the incoming request to all the configured downstream query endpoints, when it is present. The header used in these "internal" outgoing requests will be hardcoded (not configurable by operators of Thanos). The suggested name for this internal header is `Thanos-Tenant`.
    2. **In the UI**, add a textbox where one can type a tenant name. If the textbox has any content, that will be sent using in the configured tenant header name.
    3. Update the metrics exported by the Query Frontend to include a tenant label with the tenant indicated by the header.
 2. Querier
-   1. Implement the `--querier.tenant-header` (default is `""`") and `--querier.default-tenant` (default is `"default-tenant"`) flags. Forward the tenant header to all the downstream API calls (gRPC or HTTP, also using headers), if it is present.
-   2. Implement the `--querier.tenant-label-name` flag. If it is not empty, verify and enforce the tenant label in the query before it is handed to the query engine. As previously mentioned by the proposal, use prom-label-proxy's [Enforce.EnforceMatchers](https://github.com/prometheus-community/prom-label-proxy/blob/main/injectproxy/enforce.go#L141).
-   3. Update the metrics exported by the Querier to include a tenant label with the tenant indicated by the header.
+   1. Implement the `--querier.tenant-header="THANOS-TENANT"`, `--querier.default-tenant="default-tenant"`, `--querier.tenant-label="tenant-id"` flags. Identify the tenant in the configured tenant header and forward it in all internal communications using the same hardcoded header as mentioned in the Query Frontend section, point 1.2. In the gRPC calls use the metadata feature.
+   3. Implement the `--querier.tenant-label-name` and `--querier.tenancy="false"` flags. When the tenancy is enabled, identify the tenant, verify and enforce the tenant label in the query before it is handed to the query engine. As previously mentioned by the proposal, use prom-label-proxy's [Enforce.EnforceMatchers](https://github.com/prometheus-community/prom-label-proxy/blob/main/injectproxy/enforce.go#L141).
+   4. Update the metrics exported by the Querier to include a tenant label with the tenant indicated by the header.
 3. Store Gateway
-   1. Implement the `--store.tenant-header` (default is `""`") and `--query-frontend.default-tenant` (default is `"default-tenant"`) flags. Use the tenant header to identify the tenant in the metrics exported by the Store Gateway.
+   1. Use the internal, hardcoded tenant header to identify the tenant of a given request and use it in the metrics exported by the Store Gateway.
