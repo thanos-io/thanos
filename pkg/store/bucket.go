@@ -1766,13 +1766,11 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	s.mtx.RUnlock()
 
 	if err := g.Wait(); err != nil {
-		if statusErr, ok := status.FromError(err); ok {
-			if statusErr.Code() == codes.ResourceExhausted {
-				return nil, status.Error(codes.ResourceExhausted, err.Error())
-			}
+		code := codes.Internal
+		if s, ok := status.FromError(errors.Cause(err)); ok {
+			code = s.Code()
 		}
-
-		return nil, status.Error(codes.Aborted, err.Error())
+		return nil, status.Error(code, err.Error())
 	}
 
 	anyHints, err := types.MarshalAny(resHints)
