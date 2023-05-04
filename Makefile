@@ -395,6 +395,7 @@ github.com/prometheus/client_golang/prometheus.{DefaultGatherer,DefBuckets,NewUn
 github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,\
 NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec}=github.com/prometheus/client_golang/prometheus/promauto.{NewCounter,\
 NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,NewHistorgram,NewHistogramVec,NewSummary,NewSummaryVec},\
+github.com/NYTimes/gziphandler.{GzipHandler}=github.com/klauspost/compress/gzhttp.{GzipHandler},\
 sync/atomic=go.uber.org/atomic,github.com/cortexproject/cortex=github.com/thanos-io/thanos/internal/cortex,\
 io/ioutil.{Discard,NopCloser,ReadAll,ReadDir,ReadFile,TempDir,TempFile,Writefile}" $(shell go list ./... | grep -v "internal/cortex")
 	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...

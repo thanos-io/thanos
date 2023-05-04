@@ -1574,7 +1574,11 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	s.mtx.RUnlock()
 
 	if err := g.Wait(); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		code := codes.Internal
+		if s, ok := status.FromError(errors.Cause(err)); ok {
+			code = s.Code()
+		}
+		return nil, status.Error(code, err.Error())
 	}
 
 	anyHints, err := types.MarshalAny(resHints)
@@ -1762,7 +1766,11 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	s.mtx.RUnlock()
 
 	if err := g.Wait(); err != nil {
-		return nil, status.Error(codes.Aborted, err.Error())
+		code := codes.Internal
+		if s, ok := status.FromError(errors.Cause(err)); ok {
+			code = s.Code()
+		}
+		return nil, status.Error(code, err.Error())
 	}
 
 	anyHints, err := types.MarshalAny(resHints)
