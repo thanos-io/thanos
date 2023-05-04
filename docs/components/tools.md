@@ -81,6 +81,13 @@ Subcommands:
   tools rules-check --rules=RULES
     Check if the rule files are valid or not.
 
+  tools store inspect --label=<name>="<value>" [<flags>]
+    Inspect loaded blocks in stores using label matchers. Stores are discovered
+    via DNS by using SRV records. You may pass multiple label matchers to
+    filter stores. Example: thanos store inspect --label 'replica="1"' --label
+    'cluster="eu1"' When using multiple label matchers, all matchers must match
+    for a store to be selected.
+
 
 ```
 
