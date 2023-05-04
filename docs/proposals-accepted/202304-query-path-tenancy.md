@@ -105,6 +105,7 @@ Cons:
 * It's still needed to identify the tenant from incoming requests sent to Query Frontend and Querier via HTTP headers.
 * Creates inconsistency between components on how the tenant information is passed through. In Receive, for example, it's passed through a header. This hurts code reusability and understanding.
 * Creates inconsistency between APIs. We have other APIs besides the Store API. We can set the standard of an internal and hardcoded header for the HTTP requests and gRPC metadata for the gRPC requests.
+* Even though Thanos itself doesn't implementation authentication, the query tenancy can be seen as result of authentication. Semantically, headers are often used to convey results of authentication.
 * Incompatible with other tools and projects. Using a header in the HTTP communication allows Thanos to be compatible with Cortex and other monitoring tools. This is a plus for adoption, migration, and collaboration between the projects.
 
 ### Alternative solutions
