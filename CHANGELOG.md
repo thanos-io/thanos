@@ -29,6 +29,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6222](https://github.com/thanos-io/thanos/pull/6222) mixin(Receive): Fix tenant series received charts.
 - [#6218](https://github.com/thanos-io/thanos/pull/6218) mixin(Store): handle ResourceExhausted as a non-server error. As a consequence, this error won't contribute to Store's grpc errors alerts.
 - [#6271](https://github.com/thanos-io/thanos/pull/6271) Receive: Fix segfault in `LabelValues` during head compaction.
+- [#6306](https://github.com/thanos-io/thanos/pull/6306) Tracing: tracing in OTLP utilize the OTEL_TRACES_SAMPLER env variable
+- [#6330](https://github.com/thanos-io/thanos/pull/6330) Store: Fix inconsistent error for series limits.
 
 ### Changed
 - [#6168](https://github.com/thanos-io/thanos/pull/6168) Receiver: Make ketama hashring fail early when configured with number of nodes lower than the replication factor.
@@ -42,6 +44,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6071](https://github.com/thanos-io/thanos/pull/6071) Query Frontend: *breaking :warning:* Add experimental native histogram support for which we updated and aligned with the [Prometheus common](https://github.com/prometheus/common) model, which is used for caching so a cache reset required.
 - [#6163](https://github.com/thanos-io/thanos/pull/6163) Receiver: changed max backoff from 30s to 5s for forwarding requests. Can be configured with `--receive-forward-max-backoff`.
 - [#6327](https://github.com/thanos-io/thanos/pull/6327) *: *breaking :warning:* Use histograms instead of summaries for instrumented handlers.
+- [#6322](https://github.com/thanos-io/thanos/pull/6322) Logging: Avoid expensive log.Valuer evaluation for disallowed levels.
 
 ### Removed
 

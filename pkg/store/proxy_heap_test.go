@@ -4,10 +4,12 @@
 package store
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -20,6 +22,186 @@ func TestRmLabelsCornerCases(t *testing.T) {
 	testutil.Equals(t, rmLabels(labelsFromStrings(), map[string]struct{}{
 		"aa": {},
 	}), labels.Labels{})
+}
+
+func TestProxyResponseHeapSort(t *testing.T) {
+	for _, tcase := range []struct {
+		title string
+		input []respSet
+		exp   []*storepb.SeriesResponse
+	}{
+		{
+			title: "merge sets with different series and common labels",
+			input: []respSet{
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3", "d", "4")),
+					},
+				},
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "4", "e", "5")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "d", "4")),
+					},
+				},
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3", "d", "4")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "4", "e", "5")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "d", "4")),
+			},
+		},
+		{
+			title: "merge sets with different series and labels",
+			input: []respSet{
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("b", "2", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("g", "7", "h", "8", "i", "9")),
+					},
+				},
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5")),
+						storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5", "f", "6")),
+					},
+				},
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("b", "2", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5")),
+				storeSeriesResponse(t, labelsFromStrings("d", "4", "e", "5", "f", "6")),
+				storeSeriesResponse(t, labelsFromStrings("g", "7", "h", "8", "i", "9")),
+			},
+		},
+		{
+			title: "merge duplicated sets that were ordered before adding external labels",
+			input: []respSet{
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+					},
+					storeLabels: map[string]struct{}{"c": {}},
+				},
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+					},
+					storeLabels: map[string]struct{}{"c": {}},
+				},
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+			},
+		},
+		{
+			title: "merge repeated series in stores with different external labels",
+			input: []respSet{
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
+					},
+					storeLabels: map[string]struct{}{"ext2": {}},
+				},
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
+					},
+					storeLabels: map[string]struct{}{"ext1": {}, "ext2": {}},
+				},
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
+			},
+		},
+		{
+			title: "merge series with external labels at beginning of series",
+			input: []respSet{
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "2")),
+					},
+					storeLabels: map[string]struct{}{"a": {}},
+				},
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "1", "c", "3")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+					},
+					storeLabels: map[string]struct{}{"a": {}},
+				},
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "1", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "c", "3")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "2")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "c", "3")),
+			},
+		},
+		{
+			title: "merge series in stores with external labels not present in series (e.g. stripped during dedup)",
+			input: []respSet{
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
+					},
+					storeLabels: map[string]struct{}{"ext2": {}, "replica": {}},
+				},
+				&eagerRespSet{
+					wg: &sync.WaitGroup{},
+					bufferedResponses: []*storepb.SeriesResponse{
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
+						storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
+					},
+					storeLabels: map[string]struct{}{"ext1": {}, "ext2": {}, "replica": {}},
+				},
+			},
+			exp: []*storepb.SeriesResponse{
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext1", "5", "ext2", "9")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
+				storeSeriesResponse(t, labelsFromStrings("a", "1", "b", "2", "ext2", "9")),
+			},
+		},
+	} {
+		t.Run(tcase.title, func(t *testing.T) {
+			h := NewProxyResponseHeap(tcase.input...)
+			if !h.Empty() {
+				got := []*storepb.SeriesResponse{h.At()}
+				for h.Next() {
+					got = append(got, h.At())
+				}
+				testutil.Equals(t, tcase.exp, got)
+			}
+		})
+	}
 }
 
 func TestSortWithoutLabels(t *testing.T) {
