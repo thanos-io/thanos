@@ -6,7 +6,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -1887,24 +1886,6 @@ func mustMarshalAny(pb proto.Message) *types.Any {
 		panic(err)
 	}
 	return out
-}
-
-func TestBigEndianPostingsCount(t *testing.T) {
-	const count = 1000
-	raw := make([]byte, count*4)
-
-	for ix := 0; ix < count; ix++ {
-		binary.BigEndian.PutUint32(raw[4*ix:], rand.Uint32())
-	}
-
-	p := newBigEndianPostings(raw)
-	testutil.Equals(t, count, p.length())
-
-	c := 0
-	for p.Next() {
-		c++
-	}
-	testutil.Equals(t, count, c)
 }
 
 func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Labels, blockIndex, totalSamples int, random *rand.Rand, step int64) ulid.ULID {
