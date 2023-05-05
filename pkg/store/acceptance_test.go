@@ -58,6 +58,12 @@ func testLabelAPIs(t *testing.T, startStore func(extLset labels.Labels, append f
 				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), expectErr: errors.New("rpc error: code = InvalidArgument desc = label name parameter cannot be empty")},
 				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), label: "foo"},
 				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), label: "region", expectedValues: []string{"eu-west"}}, // External labels should be visible.
+				{
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					label:    "region",
+					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "unknown", Value: "unknown"}},
+				},
 			},
 		},
 		{
@@ -72,6 +78,19 @@ func testLabelAPIs(t *testing.T, startStore func(extLset labels.Labels, append f
 			},
 			labelValuesCalls: []labelValuesCallCase{
 				{start: timestamp.FromTime(minTime), end: timestamp.FromTime(maxTime), label: "foo", expectedValues: []string{"foovalue1"}},
+				{
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					label:    "region",
+					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "unknown"}},
+				},
+				{
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					label:    "region",
+					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "foovalue1"}},
+					expectedValues: []string{"eu-west"},
+				},
 			},
 		},
 		{

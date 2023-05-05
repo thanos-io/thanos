@@ -692,12 +692,6 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	}
 
 	extLset := p.externalLabelsFn()
-
-	// First check for matching external label which has priority.
-	if l := extLset.Get(r.Label); l != "" {
-		return &storepb.LabelValuesResponse{Values: []string{l}}, nil
-	}
-
 	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -711,8 +705,12 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		vals []string
 	)
 
+	l := extLset.Get(r.Label);
 	version, parseErr := semver.Parse(p.promVersion())
 	if len(matchers) == 0 || (parseErr == nil && version.GTE(baseVer)) {
+		if l != "" {
+			return &storepb.LabelValuesResponse{Values: []string{l}}, nil
+		}
 		vals, err = p.client.LabelValuesInGRPC(ctx, p.base, r.Label, matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
@@ -721,6 +719,11 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End)
 		if err != nil {
 			return nil, err
+		}
+
+		// Check for matching external label which has priority.
+		if l != "" && len(sers) > 0 {
+			return &storepb.LabelValuesResponse{Values: []string{l}}, nil
 		}
 
 		// Using set to handle duplicate values.
