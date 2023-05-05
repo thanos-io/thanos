@@ -705,7 +705,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		vals []string
 	)
 
-	l := extLset.Get(r.Label);
+	l := extLset.Get(r.Label)
 	version, parseErr := semver.Parse(p.promVersion())
 	if len(matchers) == 0 || (parseErr == nil && version.GTE(baseVer)) {
 		if l != "" {

@@ -85,9 +85,9 @@ func testLabelAPIs(t *testing.T, startStore func(extLset labels.Labels, append f
 					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "unknown"}},
 				},
 				{
-					start:    timestamp.FromTime(minTime),
-					end:      timestamp.FromTime(maxTime),
-					label:    "region",
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					label:          "region",
 					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "foovalue1"}},
 					expectedValues: []string{"eu-west"},
 				},
