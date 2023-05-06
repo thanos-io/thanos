@@ -18,8 +18,8 @@ import (
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(
 		m,
-		// https://github.com/rueian/rueidis/blob/v0.0.90/pipe.go#L204.
-		goleak.IgnoreTopFunction("github.com/rueian/rueidis.(*pipe).backgroundPing"),
+		// https://github.com/redis/rueidis/blob/v1.0.2/pipe.go#L208.
+		goleak.IgnoreTopFunction("github.com/redis/rueidis.(*pipe).backgroundPing"),
 	)
 }
 
