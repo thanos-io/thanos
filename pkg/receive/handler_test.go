@@ -57,8 +57,8 @@ func newFakeTenantAppendable(f *fakeAppendable) *fakeTenantAppendable {
 	return &fakeTenantAppendable{f: f}
 }
 
-func (t *fakeTenantAppendable) TenantAppendable(_ string) (Appendable, error) {
-	return t.f, nil
+func (t *fakeTenantAppendable) TenantAppendables(_ string) ([]Appendable, error) {
+	return []Appendable{t.f}, nil
 }
 
 type fakeAppendable struct {
@@ -850,9 +850,16 @@ type tsOverrideTenantStorage struct {
 	interval int64
 }
 
-func (s *tsOverrideTenantStorage) TenantAppendable(tenant string) (Appendable, error) {
-	a, err := s.TenantStorage.TenantAppendable(tenant)
-	return &tsOverrideAppendable{Appendable: a, interval: s.interval}, err
+func (s *tsOverrideTenantStorage) TenantAppendables(tenant string) ([]Appendable, error) {
+	a, err := s.TenantStorage.TenantAppendables(tenant)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]Appendable, len(a))
+	for i := range a {
+		res[i] = &tsOverrideAppendable{Appendable: a[i], interval: s.interval}
+	}
+	return res, nil
 }
 
 type tsOverrideAppendable struct {
@@ -1025,19 +1032,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			handler.writer.multiTSDB = &tsOverrideTenantStorage{TenantStorage: m, interval: 1}
 
 			// It takes time to create new tenant, wait for it.
-			{
-				app, err := m.TenantAppendable(handler.options.DefaultTenantID)
-				testutil.Ok(b, err)
-
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
-
-				testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-					_, err = app.Appender(ctx)
-					return err
-				}))
-			}
-
+			testutil.Ok(b, initTenantTSDBs(m, handler.options.DefaultTenantID))
 			b.Run("OK", func(b testutil.TB) {
 				n := b.N()
 				b.ResetTimer()
@@ -1052,18 +1047,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 			handler.writer.multiTSDB = &tsOverrideTenantStorage{TenantStorage: m, interval: -1} // Timestamp can't go down, which will cause conflict error.
 
 			// It takes time to create new tenant, wait for it.
-			{
-				app, err := m.TenantAppendable(handler.options.DefaultTenantID)
-				testutil.Ok(b, err)
-
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
-
-				testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-					_, err = app.Appender(ctx)
-					return err
-				}))
-			}
+			testutil.Ok(b, initTenantTSDBs(m, handler.options.DefaultTenantID))
 
 			// First request should be fine, since we don't change timestamp, rest is wrong.
 			r := httptest.NewRecorder()

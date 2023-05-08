@@ -20,13 +20,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
-// Appendable returns an Appender.
+// Appendable returns a slice of Appender shards.
 type Appendable interface {
 	Appender(ctx context.Context) (storage.Appender, error)
 }
 
 type TenantStorage interface {
-	TenantAppendable(string) (Appendable, error)
+	TenantAppendables(string) ([]Appendable, error)
 }
 
 // Wraps storage.Appender to add validation and logging.
@@ -89,28 +89,28 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		numExemplarsLabelLength = 0
 	)
 
-	s, err := r.multiTSDB.TenantAppendable(tenantID)
+	ss, err := r.multiTSDB.TenantAppendables(tenantID)
 	if err != nil {
 		return errors.Wrap(err, "get tenant appendable")
 	}
 
-	app, err := s.Appender(ctx)
-	if err == tsdb.ErrNotReady {
-		return err
+	apps := make([]storage.Appender, len(ss))
+
+	for i := range apps {
+		app, err := ss[i].Appender(ctx)
+		if err == tsdb.ErrNotReady {
+			return err
+		}
+		if err != nil {
+			return errors.Wrap(err, "get appender")
+		}
+		apps[i] = app
 	}
-	if err != nil {
-		return errors.Wrap(err, "get appender")
-	}
-	getRef := app.(storage.GetRef)
+
 	var (
 		ref  storage.SeriesRef
 		errs writeErrors
 	)
-	app = &ReceiveAppender{
-		tLogger:        tLogger,
-		tooFarInFuture: r.opts.TooFarInFutureTimeWindow,
-		Appender:       app,
-	}
 	for _, t := range wreq.Timeseries {
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
@@ -132,11 +132,22 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 
 			continue
 		}
-
 		lset := labelpb.ZLabelsToPromLabels(t.Labels)
 
+		// TODO: generalize ketama hashring for this task
+		lsetHash := lset.Hash()
+		appShard := lsetHash % uint64(len(apps))
+		app := apps[appShard]
+
+		getRef := app.(storage.GetRef)
+		app = &ReceiveAppender{
+			tLogger:        tLogger,
+			tooFarInFuture: r.opts.TooFarInFutureTimeWindow,
+			Appender:       app,
+		}
+
 		// Check if the TSDB has cached reference for those labels.
-		ref, lset = getRef.GetRef(lset, lset.Hash())
+		ref, lset = getRef.GetRef(lset, lsetHash)
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
@@ -266,8 +277,10 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq *prompb.WriteR
 		errs.Add(errors.Wrapf(storage.ErrExemplarLabelLength, "add %d exemplars", numExemplarsLabelLength))
 	}
 
-	if err := app.Commit(); err != nil {
-		errs.Add(errors.Wrap(err, "commit samples"))
+	for _, app := range apps {
+		if err := app.Commit(); err != nil {
+			errs.Add(errors.Wrap(err, "commit samples"))
+		}
 	}
 	return errs.ErrOrNil()
 }

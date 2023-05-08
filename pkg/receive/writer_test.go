@@ -329,12 +329,15 @@ func TestWriter(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			app, err := m.TenantAppendable(DefaultTenant)
+			apps, err := m.TenantAppendables(DefaultTenant)
 			testutil.Ok(t, err)
 
 			testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-				_, err = app.Appender(context.Background())
-				return err
+				for _, app := range apps {
+					_, err = app.Appender(context.Background())
+					return err
+				}
+				return nil
 			}))
 
 			w := NewWriter(logger, m, testData.opts)
@@ -352,16 +355,24 @@ func TestWriter(t *testing.T) {
 				}
 			}
 
-			// On each expected series, assert we have a ref available.
-			a, err := app.Appender(context.Background())
-			testutil.Ok(t, err)
-			gr := a.(storage.GetRef)
-
 			for _, ts := range testData.expectedIngested {
-				l := labelpb.ZLabelsToPromLabels(ts.Labels)
-				ref, _ := gr.GetRef(l, l.Hash())
-				testutil.Assert(t, ref != 0, fmt.Sprintf("appender should have reference to series %v", ts))
+				found := false
+				for _, app := range apps {
+					// On each expected series, assert we have a ref available.
+					a, err := app.Appender(context.Background())
+					testutil.Ok(t, err)
+					gr := a.(storage.GetRef)
+
+					l := labelpb.ZLabelsToPromLabels(ts.Labels)
+					ref, _ := gr.GetRef(l, l.Hash())
+					if ref != 0 {
+						testutil.Assert(t, !found, fmt.Sprintf("series was found in multiple appenders: %v", ts))
+						found = true
+					}
+				}
+				testutil.Assert(t, found, fmt.Sprintf("appender should have reference to series %v", ts))
 			}
+
 		})
 	}
 }
@@ -418,15 +429,20 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 	testutil.Ok(b, m.Flush())
 	testutil.Ok(b, m.Open())
 
-	app, err := m.TenantAppendable("foo")
+	apps, err := m.TenantAppendables("foo")
 	testutil.Ok(b, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-		_, err = app.Appender(context.Background())
-		return err
+		for _, app := range apps {
+			_, err = app.Appender(context.Background())
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}))
 
 	timeSeries := generateLabelsAndSeries(labelsNum, seriesNum, generateHistograms)
