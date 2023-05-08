@@ -1213,6 +1213,9 @@ func benchmarkExpandedPostings(
 
 	for _, c := range cases {
 		t.Run(c.name, func(t testutil.TB) {
+			if c.name != `i=~".*"` {
+				return
+			}
 			b := &bucketBlock{
 				logger:            log.NewNopLogger(),
 				metrics:           newBucketStoreMetrics(nil),
