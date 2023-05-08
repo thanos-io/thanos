@@ -860,19 +860,12 @@ config:
 	testutil.Ok(t, store1.WaitSumMetrics(e2emon.Equals(4), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, store2.WaitSumMetrics(e2emon.Equals(4), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, store3.WaitSumMetrics(e2emon.Equals(4), "thanos_blocks_meta_synced"))
+	opts := promclient.QueryOptions{Deduplicate: true, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT}
 
 	t.Run("Series() limits", func(t *testing.T) {
 
 		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
-			_, err := simpleInstantQuery(t,
-				ctx,
-				q1.Endpoint("http"),
-				func() string { return testQuery },
-				time.Now,
-				promclient.QueryOptions{Deduplicate: true, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT},
-				0,
-			)
-			if err != nil {
+			if _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q1.Endpoint("http")), testQuery, time.Now(), opts); err != nil {
 				if strings.Contains(err.Error(), "expanded matching posting: get postings: bytes limit exceeded while fetching postings: limit 1 violated") {
 					return nil
 				}
@@ -882,15 +875,7 @@ config:
 		}))
 
 		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
-			_, err := simpleInstantQuery(t,
-				ctx,
-				q2.Endpoint("http"),
-				func() string { return testQuery },
-				time.Now,
-				promclient.QueryOptions{Deduplicate: true, PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT},
-				0,
-			)
-			if err != nil {
+			if _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q2.Endpoint("http")), testQuery, time.Now(), opts); err != nil {
 				if strings.Contains(err.Error(), "preload series: exceeded bytes limit while fetching series: limit 100 violated") {
 					return nil
 				}
@@ -900,13 +885,7 @@ config:
 		}))
 
 		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
-			_, err := simpleInstantQuery(t,
-				ctx,
-				q3.Endpoint("http"),
-				func() string { return testQuery },
-				time.Now,
-				promclient.QueryOptions{Deduplicate: true}, 0)
-			if err != nil {
+			if _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q3.Endpoint("http")), testQuery, time.Now(), opts); err != nil {
 				if strings.Contains(err.Error(), "load chunks: bytes limit exceeded while fetching chunks: limit 196627 violated") {
 					return nil
 				}
