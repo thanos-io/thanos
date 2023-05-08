@@ -351,7 +351,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 			// Regression test 1 against https://github.com/thanos-io/thanos/issues/2890.
 			name: "when switching replicas don't miss samples when set with a big enough lookback delta",
 			storeAPI: newProxyStore(func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2890-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2890-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages, storepb.NewMatchersCache())
 				testutil.Ok(t, err)
 				return s
 			}()),
@@ -484,7 +484,7 @@ func TestQuerier_Select(t *testing.T) {
 		{
 			name: "realistic data with stale marker",
 			storeEndpoints: []storepb.StoreServer{func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages, storepb.NewMatchersCache())
 				testutil.Ok(t, err)
 				return s
 			}()},
@@ -528,7 +528,7 @@ func TestQuerier_Select(t *testing.T) {
 		{
 			name: "realistic data with stale marker with 100000 step",
 			storeEndpoints: []storepb.StoreServer{func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages, storepb.NewMatchersCache())
 				testutil.Ok(t, err)
 				return s
 			}()},
@@ -579,7 +579,7 @@ func TestQuerier_Select(t *testing.T) {
 			// Thanks to @Superq and GitLab for real data reproducing this.
 			name: "realistic data with stale marker with hints rate function",
 			storeEndpoints: []storepb.StoreServer{func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages, storepb.NewMatchersCache())
 				testutil.Ok(t, err)
 				return s
 			}()},
@@ -853,6 +853,7 @@ func newProxyStore(storeAPIs ...storepb.StoreServer) *store.ProxyStore {
 		nil,
 		0,
 		store.EagerRetrieval,
+		storepb.NewMatchersCache(),
 	)
 }
 
@@ -1061,7 +1062,7 @@ func (s *mockedSeriesIterator) Err() error { return nil }
 func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 
-	s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+	s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages, storepb.NewMatchersCache())
 	testutil.Ok(t, err)
 
 	t.Run("dedup=false", func(t *testing.T) {

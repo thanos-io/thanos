@@ -5,17 +5,18 @@ package querypb
 
 import (
 	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-func StoreMatchersToLabelMatchers(matchers []StoreMatchers) ([][]*labels.Matcher, error) {
+func StoreMatchersToLabelMatchers(matchersCache *storepb.MatchersCache, matchers []StoreMatchers) ([][]*labels.Matcher, error) {
 	if len(matchers) == 0 {
 		return nil, nil
 	}
 
 	labelMatchers := make([][]*labels.Matcher, len(matchers))
 	for i, storeMatcher := range matchers {
-		storeMatchers, err := storepb.MatchersToPromMatchers(storeMatcher.LabelMatchers...)
+		storeMatchers, err := storepb.MatchersToPromMatchers(matchersCache, storeMatcher.LabelMatchers...)
 		if err != nil {
 			return nil, err
 		}

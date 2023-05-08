@@ -629,7 +629,7 @@ func TestQueryEndpoints(t *testing.T) {
 func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 	c := &storetestutil.TestClient{
 		Name:        "1",
-		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil), 0),
+		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil, storepb.NewMatchersCache()), 0),
 		MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
 	}
 
@@ -641,6 +641,7 @@ func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 		nil,
 		0,
 		store.EagerRetrieval,
+		storepb.NewMatchersCache(),
 	)
 }
 

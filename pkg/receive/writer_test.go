@@ -24,6 +24,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -320,6 +321,7 @@ func TestWriter(t *testing.T) {
 				nil,
 				false,
 				metadata.NoneFunc,
+				storepb.NewMatchersCache(),
 			)
 			t.Cleanup(func() { testutil.Ok(t, m.Close()) })
 
@@ -412,6 +414,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		nil,
 		false,
 		metadata.NoneFunc,
+		storepb.NewMatchersCache(),
 	)
 	b.Cleanup(func() { testutil.Ok(b, m.Close()) })
 

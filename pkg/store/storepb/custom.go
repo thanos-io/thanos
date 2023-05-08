@@ -376,30 +376,34 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 
 // MatchersToPromMatchers returns Prometheus matchers from proto matchers.
 // NOTE: It allocates memory.
-func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
+func MatchersToPromMatchers(cache *MatchersCache, ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for _, m := range ms {
-		var t labels.MatchType
-
-		switch m.Type {
-		case LabelMatcher_EQ:
-			t = labels.MatchEqual
-		case LabelMatcher_NEQ:
-			t = labels.MatchNotEqual
-		case LabelMatcher_RE:
-			t = labels.MatchRegexp
-		case LabelMatcher_NRE:
-			t = labels.MatchNotRegexp
-		default:
-			return nil, errors.Errorf("unrecognized label matcher type %d", m.Type)
-		}
-		m, err := labels.NewMatcher(t, m.Name, m.Value)
+		m, err := cache.GetOrSet(m, MatcherToPromMatcher)
 		if err != nil {
 			return nil, err
 		}
 		res = append(res, m)
 	}
 	return res, nil
+}
+
+func MatcherToPromMatcher(m LabelMatcher) (*labels.Matcher, error) {
+	var t labels.MatchType
+
+	switch m.Type {
+	case LabelMatcher_EQ:
+		t = labels.MatchEqual
+	case LabelMatcher_NEQ:
+		t = labels.MatchNotEqual
+	case LabelMatcher_RE:
+		t = labels.MatchRegexp
+	case LabelMatcher_NRE:
+		t = labels.MatchNotRegexp
+	default:
+		return nil, errors.Errorf("unrecognized label matcher type %d", m.Type)
+	}
+	return labels.NewMatcher(t, m.Name, m.Value)
 }
 
 // MatchersToString converts label matchers to string format.

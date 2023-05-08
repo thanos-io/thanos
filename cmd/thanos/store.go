@@ -364,6 +364,7 @@ func runStore(
 		options = append(options, store.WithDebugLogging())
 	}
 
+	matchersCache := startMatchersCache(g)
 	bs, err := store.NewBucketStore(
 		bkt,
 		metaFetcher,
@@ -378,6 +379,7 @@ func runStore(
 		false,
 		conf.lazyIndexReaderEnabled,
 		conf.lazyIndexReaderIdleTimeout,
+		matchersCache,
 		options...,
 	)
 	if err != nil {

@@ -51,6 +51,7 @@ func TestMultiTSDB(t *testing.T) {
 			nil,
 			false,
 			metadata.NoneFunc,
+			storepb.NewMatchersCache(),
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -135,6 +136,7 @@ func TestMultiTSDB(t *testing.T) {
 			nil,
 			false,
 			metadata.NoneFunc,
+			storepb.NewMatchersCache(),
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -178,6 +180,7 @@ func TestMultiTSDB(t *testing.T) {
 			nil,
 			false,
 			metadata.NoneFunc,
+			storepb.NewMatchersCache(),
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -445,6 +448,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 				test.bucket,
 				false,
 				metadata.NoneFunc,
+				storepb.NewMatchersCache(),
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -506,6 +510,7 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 		objstore.NewInMemBucket(),
 		false,
 		metadata.NoneFunc,
+		storepb.NewMatchersCache(),
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -560,6 +565,7 @@ func TestMultiTSDBStats(t *testing.T) {
 				nil,
 				false,
 				metadata.NoneFunc,
+				storepb.NewMatchersCache(),
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -589,6 +595,7 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 		nil,
 		false,
 		metadata.NoneFunc,
+		storepb.NewMatchersCache(),
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -630,6 +637,7 @@ func TestProxyLabelValues(t *testing.T) {
 		nil,
 		false,
 		metadata.NoneFunc,
+		storepb.NewMatchersCache(),
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
@@ -693,7 +701,7 @@ func queryLabelValues(ctx context.Context, m *MultiTSDB) error {
 			clients[0] = &slowClient{clients[0]}
 		}
 		return clients
-	}, component.Store, nil, 1*time.Minute, store.LazyRetrieval)
+	}, component.Store, nil, 1*time.Minute, store.LazyRetrieval, storepb.NewMatchersCache())
 
 	req := &storepb.LabelValuesRequest{
 		Label: labels.MetricName,
@@ -720,6 +728,7 @@ func BenchmarkMultiTSDB(b *testing.B) {
 		nil,
 		false,
 		metadata.NoneFunc,
+		storepb.NewMatchersCache(),
 	)
 	defer func() { testutil.Ok(b, m.Close()) }()
 

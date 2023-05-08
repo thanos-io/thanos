@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
@@ -466,6 +467,7 @@ func benchmarkMergedSeriesSet(b testutil.TB, overlappingChunks bool) {
 }
 
 func TestMatchersToString_Translate(t *testing.T) {
+	cache := NewMatchersCache()
 	for _, c := range []struct {
 		ms       []LabelMatcher
 		expected string
@@ -508,7 +510,7 @@ func TestMatchersToString_Translate(t *testing.T) {
 		t.Run(c.expected, func(t *testing.T) {
 			testutil.Equals(t, c.expected, MatchersToString(c.ms...))
 
-			promMs, err := MatchersToPromMatchers(c.ms...)
+			promMs, err := MatchersToPromMatchers(cache, c.ms...)
 			testutil.Ok(t, err)
 
 			testutil.Equals(t, c.expected, PromMatchersToString(promMs...))

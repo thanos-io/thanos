@@ -16,6 +16,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -27,6 +28,7 @@ type GRPCAPI struct {
 	defaultEngine               querypb.EngineType
 	lookbackDeltaCreate         func(int64) time.Duration
 	defaultMaxResolutionSeconds time.Duration
+	matchersCache               *storepb.MatchersCache
 }
 
 func NewGRPCAPI(
@@ -37,6 +39,7 @@ func NewGRPCAPI(
 	defaultEngine querypb.EngineType,
 	lookbackDeltaCreate func(int64) time.Duration,
 	defaultMaxResolutionSeconds time.Duration,
+	matchersCache *storepb.MatchersCache,
 ) *GRPCAPI {
 	return &GRPCAPI{
 		now:                         now,
@@ -46,6 +49,7 @@ func NewGRPCAPI(
 		defaultEngine:               defaultEngine,
 		lookbackDeltaCreate:         lookbackDeltaCreate,
 		defaultMaxResolutionSeconds: defaultMaxResolutionSeconds,
+		matchersCache:               matchersCache,
 	}
 }
 
@@ -81,7 +85,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
 	}
 
-	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(request.StoreMatchers)
+	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(g.matchersCache, request.StoreMatchers)
 	if err != nil {
 		return err
 	}
@@ -179,7 +183,7 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		lookbackDelta = time.Duration(request.LookbackDeltaSeconds) * time.Second
 	}
 
-	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(request.StoreMatchers)
+	storeMatchers, err := querypb.StoreMatchersToLabelMatchers(g.matchersCache, request.StoreMatchers)
 	if err != nil {
 		return err
 	}

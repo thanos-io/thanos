@@ -43,6 +43,7 @@ type TSDBStore struct {
 	extLset          labels.Labels
 	buffers          sync.Pool
 	maxBytesPerFrame int
+	matchersCache    *storepb.MatchersCache
 }
 
 func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*grpc.Server) {
@@ -59,7 +60,7 @@ type ReadWriteTSDBStore struct {
 
 // NewTSDBStore creates a new TSDBStore.
 // NOTE: Given lset has to be sorted.
-func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI, extLset labels.Labels) *TSDBStore {
+func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI, extLset labels.Labels, matchersCache *storepb.MatchersCache) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -73,6 +74,7 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
+		matchersCache: matchersCache,
 	}
 }
 
@@ -134,7 +136,7 @@ type CloseDelegator interface {
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLset)
+	match, matchers, err := matchesExternalLabels(s.matchersCache, r.Matchers, s.extLset)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -251,7 +253,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLset)
+	match, matchers, err := matchesExternalLabels(s.matchersCache, r.Matchers, s.extLset)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -298,7 +300,7 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
 	}
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLset)
+	match, matchers, err := matchesExternalLabels(s.matchersCache, r.Matchers, s.extLset)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

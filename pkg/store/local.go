@@ -30,8 +30,9 @@ import (
 // Inefficient implementation for quick StoreAPI view.
 // Chunk order is exactly the same as in a given file.
 type LocalStore struct {
-	logger    log.Logger
-	extLabels labels.Labels
+	logger        log.Logger
+	extLabels     labels.Labels
+	matchersCache *storepb.MatchersCache
 
 	info *storepb.InfoResponse
 	c    io.Closer
@@ -52,6 +53,7 @@ func NewLocalStoreFromJSONMmappableFile(
 	extLabels labels.Labels,
 	path string,
 	split bufio.SplitFunc,
+	matchersCache *storepb.MatchersCache,
 ) (*LocalStore, error) {
 	f, err := fileutil.OpenMmapFile(path)
 	if err != nil {
@@ -64,9 +66,10 @@ func NewLocalStoreFromJSONMmappableFile(
 	}()
 
 	s := &LocalStore{
-		logger:    logger,
-		extLabels: extLabels,
-		c:         f,
+		logger:        logger,
+		extLabels:     extLabels,
+		c:             f,
+		matchersCache: matchersCache,
 		info: &storepb.InfoResponse{
 			LabelSets: []labelpb.ZLabelSet{
 				{Labels: labelpb.ZLabelsFromPromLabels(extLabels)},
@@ -151,7 +154,7 @@ func (s *LocalStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.I
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLabels)
+	match, matchers, err := matchesExternalLabels(s.matchersCache, r.Matchers, s.extLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}

@@ -198,6 +198,8 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
+	matchersCache := startMatchersCache(g)
+
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
@@ -208,6 +210,7 @@ func runReceive(
 		bkt,
 		conf.allowOutOfOrderUpload,
 		hashFunc,
+		matchersCache,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, &receive.WriterOptions{
 		Intern:                   conf.writerInterning,
@@ -324,6 +327,7 @@ func runReceive(
 			labels.Labels{},
 			0,
 			store.LazyRetrieval,
+			matchersCache,
 			options...,
 		)
 		mts := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, conf.storeRateLimits)

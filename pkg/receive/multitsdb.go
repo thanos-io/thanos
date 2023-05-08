@@ -56,6 +56,7 @@ type MultiTSDB struct {
 	tenants               map[string]*tenant
 	allowOutOfOrderUpload bool
 	hashFunc              metadata.HashFunc
+	matchersCache         *storepb.MatchersCache
 }
 
 // NewMultiTSDB creates new MultiTSDB.
@@ -70,6 +71,7 @@ func NewMultiTSDB(
 	bucket objstore.Bucket,
 	allowOutOfOrderUpload bool,
 	hashFunc metadata.HashFunc,
+	matchersCache *storepb.MatchersCache,
 ) *MultiTSDB {
 	if l == nil {
 		l = log.NewNopLogger()
@@ -87,6 +89,7 @@ func NewMultiTSDB(
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
 		hashFunc:              hashFunc,
+		matchersCache:         matchersCache,
 	}
 }
 
@@ -571,7 +574,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			t.hashFunc,
 		)
 	}
-	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset), s, ship, exemplars.NewTSDB(s, lset))
+	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, t.matchersCache), s, ship, exemplars.NewTSDB(s, lset))
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
 }
