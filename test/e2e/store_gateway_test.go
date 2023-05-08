@@ -889,7 +889,7 @@ config:
 		testutil.Ok(t, runutil.RetryWithLog(log.NewLogfmtLogger(os.Stdout), 5*time.Second, ctx.Done(), func() error {
 			if _, _, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+q3.Endpoint("http")), testQuery, time.Now(), opts); err != nil {
 				e := err.Error()
-				if strings.Contains(e, "load chunks") && strings.Contains(e, "bytes limit exceeded while fetching chunks: limit 196627 violated") {
+				if strings.Contains(e, "load chunks") && strings.Contains(e, "exceeded bytes limit while fetching chunks: limit 196627 violated") {
 					return nil
 				}
 				return err
