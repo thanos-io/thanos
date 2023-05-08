@@ -222,6 +222,7 @@ describe('Utils', () => {
           type: PanelType.Graph,
           storeMatches: [],
           engine: 'prometheus',
+          explain: false,
         },
       },
       {
@@ -238,6 +239,7 @@ describe('Utils', () => {
           type: PanelType.Table,
           storeMatches: stores,
           engine: 'prometheus',
+          explain: false,
         },
       },
     ];
@@ -333,6 +335,7 @@ describe('Utils', () => {
               usePartialResponse: false,
               storeMatches: [],
               engine: 'prometheus',
+              explain: false,
             },
           })
         ).toEqual(

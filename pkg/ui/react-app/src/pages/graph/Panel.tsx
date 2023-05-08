@@ -6,6 +6,7 @@ import Select from 'react-select';
 import moment from 'moment-timezone';
 
 import Checkbox from '../../components/Checkbox';
+import ControlledExpandedNode, { NodeTree } from '../../components/ExpandableNode';
 import ExpressionInput from './ExpressionInput';
 import GraphControls from './GraphControls';
 import { GraphTabContent } from './GraphTabContent';
@@ -42,6 +43,7 @@ interface PanelState {
   warnings: string[] | null;
   stats: QueryStats | null;
   exprInputValue: string;
+  explanation: NodeTree | null;
 }
 
 export interface PanelOptions {
@@ -56,6 +58,7 @@ export interface PanelOptions {
   usePartialResponse: boolean;
   storeMatches: Store[];
   engine: string;
+  explain: boolean;
 }
 
 export enum PanelType {
@@ -75,6 +78,7 @@ export const PanelDefaultOptions: PanelOptions = {
   usePartialResponse: false,
   storeMatches: [],
   engine: '',
+  explain: false,
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
@@ -91,6 +95,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       error: null,
       stats: null,
       exprInputValue: props.options.expr,
+      explanation: null,
     };
 
     if (this.props.options.engine === '') {
@@ -101,6 +106,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.handleChangePartialResponse = this.handleChangePartialResponse.bind(this);
     this.handleStoreMatchChange = this.handleStoreMatchChange.bind(this);
     this.handleChangeEngine = this.handleChangeEngine.bind(this);
+    this.handleChangeExplain = this.handleChangeExplain.bind(this);
   }
 
   componentDidUpdate({ options: prevOpts }: PanelProps): void {
@@ -113,6 +119,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       useDeduplication,
       usePartialResponse,
       engine,
+      explain,
       // TODO: Add support for Store Matches
     } = this.props.options;
     if (
@@ -123,7 +130,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       prevOpts.maxSourceResolution !== maxSourceResolution ||
       prevOpts.useDeduplication !== useDeduplication ||
       prevOpts.usePartialResponse !== usePartialResponse ||
-      prevOpts.engine !== engine
+      prevOpts.engine !== engine ||
+      prevOpts.explain !== explain
       // Check store matches
     ) {
       this.executeQuery();
@@ -180,12 +188,14 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         params.append('step', resolution.toString());
         params.append('max_source_resolution', this.props.options.maxSourceResolution);
         params.append('engine', this.props.options.engine);
+        params.append('explain', this.props.options.explain.toString());
         // TODO path prefix here and elsewhere.
         break;
       case 'table':
         path = '/api/v1/query';
         params.append('time', endTime.toString());
         params.append('engine', this.props.options.engine);
+        params.append('explain', this.props.options.explain.toString());
         break;
       default:
         throw new Error('Invalid panel type "' + this.props.options.type + '"');
@@ -203,6 +213,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         }
 
         let resultSeries = 0;
+        let explanation = null;
         if (json.data) {
           const { resultType, result } = json.data;
           if (resultType === 'scalar') {
@@ -210,6 +221,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           } else if (result && result.length > 0) {
             resultSeries = result.length;
           }
+          explanation = json.data.thanosInfo.explanation;
         }
 
         this.setState({
@@ -227,6 +239,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             resultSeries,
           },
           loading: false,
+          explanation: explanation,
         });
         this.abortInFlightFetch = null;
       })
@@ -307,6 +320,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.setOptions({ engine: event.target.value });
   };
 
+  handleChangeExplain = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    this.setOptions({ explain: event.target.checked });
+  };
+
   render(): JSX.Element {
     const { pastQueries, metricNames, options, id, stores } = this.props;
     return (
@@ -348,44 +365,56 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         </Row>
         <Row>
           <Col>
-            <Checkbox
-              wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-              id={`use-deduplication-checkbox-${id}`}
-              onChange={this.handleChangeDeduplication}
-              defaultChecked={options.useDeduplication}
-            >
-              Use Deduplication
-            </Checkbox>
-            <Checkbox
-              wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
-              id={`use-partial-resp-checkbox-${id}`}
-              onChange={this.handleChangePartialResponse}
-              defaultChecked={options.usePartialResponse}
-            >
-              Use Partial Response
-            </Checkbox>
-            <Label
-              style={{ marginLeft: '10px', display: 'inline-block' }}
-              for={`select-engine=${id}`}
-              className="control-label"
-            >
-              Engine
-            </Label>
-            <Input
-              style={{
-                width: 'auto',
-                marginLeft: '10px',
-                display: 'inline-block',
-              }}
-              id={`select-engine=${id}`}
-              type="select"
-              value={options.engine}
-              onChange={this.handleChangeEngine}
-              bsSize="sm"
-            >
-              <option value="prometheus">Prometheus</option>
-              <option value="thanos">Thanos</option>
-            </Input>
+            <div className="float-left">
+              <Checkbox
+                wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+                id={`use-deduplication-checkbox-${id}`}
+                onChange={this.handleChangeDeduplication}
+                defaultChecked={options.useDeduplication}
+              >
+                Use Deduplication
+              </Checkbox>
+              <Checkbox
+                wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
+                id={`use-partial-resp-checkbox-${id}`}
+                onChange={this.handleChangePartialResponse}
+                defaultChecked={options.usePartialResponse}
+              >
+                Use Partial Response
+              </Checkbox>
+              <Label
+                style={{ marginLeft: '10px', display: 'inline-block' }}
+                for={`select-engine=${id}`}
+                className="control-label"
+              >
+                Engine
+              </Label>
+              <Input
+                style={{
+                  width: 'auto',
+                  marginLeft: '10px',
+                  display: 'inline-block',
+                }}
+                id={`select-engine=${id}`}
+                type="select"
+                value={options.engine}
+                onChange={this.handleChangeEngine}
+                bsSize="sm"
+              >
+                <option value="prometheus">Prometheus</option>
+                <option value="thanos">Thanos</option>
+              </Input>
+            </div>
+            <div className="float-right">
+              <Checkbox
+                wrapperStyles={{ marginRight: 20, display: 'inline-block' }}
+                id={`explain-${id}`}
+                onChange={this.handleChangeExplain}
+                defaultChecked={options.explain}
+              >
+                Explain
+              </Checkbox>
+            </div>
           </Col>
         </Row>
         {stores?.length > 0 && (
