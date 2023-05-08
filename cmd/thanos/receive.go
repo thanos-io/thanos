@@ -343,6 +343,7 @@ func runReceive(
 						MaxTime:                      maxTime,
 						SupportsSharding:             true,
 						SupportsWithoutReplicaLabels: true,
+						TsdbInfos:                    proxy.TSDBInfos(),
 					}
 				}
 				return nil

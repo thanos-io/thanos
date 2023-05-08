@@ -438,6 +438,7 @@ func runStore(
 					MaxTime:                      maxt,
 					SupportsSharding:             true,
 					SupportsWithoutReplicaLabels: true,
+					TsdbInfos:                    bs.TSDBInfos(),
 				}
 			}
 			return nil

@@ -61,6 +61,9 @@ message StoreInfo {
 
     // replica_aware means this store supports without_replica_labels of StoreAPI.Series.
     bool supports_without_replica_labels = 5;
+
+    // TSDBInfos holds metadata for all TSDBs exposed by the store.
+    repeated TSDBInfo tsdb_infos = 6 [(gogoproto.nullable) = false];
 }
 
 // RulesInfo holds the metadata related to Rules API exposed by the component.
@@ -83,4 +86,11 @@ message ExemplarsInfo {
 
 // QueryInfo holds the metadata related to Query API exposed by the component.
 message QueryAPIInfo {
+}
+
+message TSDBInfo {
+    ZLabelSet labels = 1 [(gogoproto.nullable) = false];
+
+    int64 min_time = 2;
+    int64 max_time = 3;
 }
