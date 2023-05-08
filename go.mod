@@ -67,7 +67,7 @@ require (
 	github.com/sony/gobreaker v0.5.0
 	github.com/stretchr/testify v1.8.2
 	github.com/thanos-community/promql-engine v0.0.0-20230417154848-c2396ed5afd9
-	github.com/thanos-io/objstore v0.0.0-20230201072718-11ffbc490204
+	github.com/thanos-io/objstore v0.0.0-20230406135154-d1711f1d2924
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/vimeo/galaxycache v0.0.0-20210323154928-b7e5d71c067a
