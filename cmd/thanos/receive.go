@@ -209,7 +209,10 @@ func runReceive(
 		conf.allowOutOfOrderUpload,
 		hashFunc,
 	)
-	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, conf.writerInterning)
+	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, &receive.WriterOptions{
+		Intern:                   conf.writerInterning,
+		TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
+	})
 
 	var limitsConfig *receive.RootLimitsConfig
 	if conf.writeLimitsConfig != nil {
@@ -243,6 +246,7 @@ func runReceive(
 		TLSConfig:         rwTLSConfig,
 		DialOpts:          dialOpts,
 		ForwardTimeout:    time.Duration(*conf.forwardTimeout),
+		MaxBackoff:        time.Duration(*conf.maxBackoff),
 		TSDBStats:         dbs,
 		Limiter:           limiter,
 	})
@@ -778,10 +782,12 @@ type receiveConfig struct {
 	replicaHeader     string
 	replicationFactor uint64
 	forwardTimeout    *model.Duration
+	maxBackoff        *model.Duration
 	compression       string
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
+	tsdbTooFarInFutureTimeWindow *model.Duration
 	tsdbOutOfOrderTimeWindow     *model.Duration
 	tsdbOutOfOrderCapMax         int64
 	tsdbAllowOverlappingBlocks   bool
@@ -868,11 +874,18 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
+	rc.maxBackoff = extkingpin.ModelDuration(cmd.Flag("receive-forward-max-backoff", "Maximum backoff for each forward fan-out request").Default("5s").Hidden())
+
 	rc.relabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 
 	rc.tsdbMaxBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
+
+	rc.tsdbTooFarInFutureTimeWindow = extkingpin.ModelDuration(cmd.Flag("tsdb.too-far-in-future.time-window",
+		"[EXPERIMENTAL] Configures the allowed time window for ingesting samples too far in the future. Disabled (0s) by default"+
+			"Please note enable this flag will reject samples in the future of receive local NTP time + configured duration due to clock skew in remote write clients.",
+	).Default("0s"))
 
 	rc.tsdbOutOfOrderTimeWindow = extkingpin.ModelDuration(cmd.Flag("tsdb.out-of-order.time-window",
 		"[EXPERIMENTAL] Configures the allowed time window for ingestion of out-of-order samples. Disabled (0s) by default"+

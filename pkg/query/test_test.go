@@ -392,14 +392,14 @@ func parseNumber(s string) (float64, error) {
 type loadCmd struct {
 	gap     time.Duration
 	metrics map[uint64]labels.Labels
-	defs    map[uint64][]promql.Point
+	defs    map[uint64][]promql.FPoint
 }
 
 func newLoadCmd(gap time.Duration) *loadCmd {
 	return &loadCmd{
 		gap:     gap,
 		metrics: map[uint64]labels.Labels{},
-		defs:    map[uint64][]promql.Point{},
+		defs:    map[uint64][]promql.FPoint{},
 	}
 }
 
@@ -411,13 +411,13 @@ func (cmd loadCmd) String() string {
 func (cmd *loadCmd) set(m labels.Labels, vals ...parser.SequenceValue) {
 	h := m.Hash()
 
-	samples := make([]promql.Point, 0, len(vals))
+	samples := make([]promql.FPoint, 0, len(vals))
 	ts := testStartTime
 	for _, v := range vals {
 		if !v.Omitted {
-			samples = append(samples, promql.Point{
+			samples = append(samples, promql.FPoint{
 				T: ts.UnixNano() / int64(time.Millisecond/time.Nanosecond),
-				V: v.Value,
+				F: v.Value,
 			})
 		}
 		ts = ts.Add(cmd.gap)
@@ -432,7 +432,7 @@ func (cmd *loadCmd) Append(a storage.Appender) error {
 		m := cmd.metrics[h]
 
 		for _, s := range smpls {
-			if _, err := a.Append(0, m, s.T, s.V); err != nil {
+			if _, err := a.Append(0, m, s.T, s.F); err != nil {
 				return err
 			}
 		}
@@ -528,8 +528,8 @@ func (ev *evalCmd) compareResult(result parser.Value) error {
 			if ev.ordered && exp.pos != pos+1 {
 				return errors.Errorf("expected metric %s with %v at position %d but was at %d", v.Metric, exp.vals, exp.pos, pos+1)
 			}
-			if !almostEqual(exp.vals[0].Value, v.V) {
-				return errors.Errorf("expected %v for %s but got %v", exp.vals[0].Value, v.Metric, v.V)
+			if !almostEqual(exp.vals[0].Value, v.F) {
+				return errors.Errorf("expected %v for %s but got %v", exp.vals[0].Value, v.Metric, v.F)
 			}
 
 			seen[fp] = true
@@ -538,7 +538,7 @@ func (ev *evalCmd) compareResult(result parser.Value) error {
 			if !seen[fp] {
 				details := fmt.Sprintln("vector result", len(val), ev.expr)
 				for _, ss := range val {
-					details += fmt.Sprintln("    ", ss.Metric, ss.Point)
+					details += fmt.Sprintln("    ", ss.Metric, ss.T, ss.F)
 				}
 				return errors.Errorf("expected metric %s with %v not found; details: %v", ev.metrics[fp], expVals, details)
 			}
@@ -596,15 +596,15 @@ func (ev *evalCmd) Eval(ctx context.Context, queryEngine *promql.Engine, queryab
 	mat := rangeRes.Value.(promql.Matrix)
 	vec := make(promql.Vector, 0, len(mat))
 	for _, series := range mat {
-		for _, point := range series.Points {
+		for _, point := range series.Floats {
 			if point.T == timeMilliseconds(ev.start) {
-				vec = append(vec, promql.Sample{Metric: series.Metric, Point: point})
+				vec = append(vec, promql.Sample{Metric: series.Metric, T: point.T, F: point.F})
 				break
 			}
 		}
 	}
 	if _, ok := res.Value.(promql.Scalar); ok {
-		err = ev.compareResult(promql.Scalar{V: vec[0].Point.V})
+		err = ev.compareResult(promql.Scalar{V: vec[0].F})
 	} else {
 		err = ev.compareResult(vec)
 	}

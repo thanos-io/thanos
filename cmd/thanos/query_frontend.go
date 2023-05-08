@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/NYTimes/gziphandler"
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/klauspost/compress/gzhttp"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -277,7 +277,7 @@ func runQueryFrontend(
 	// Create the query frontend transport.
 	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger, nil)
 	if cfg.CompressResponses {
-		handler = gziphandler.GzipHandler(handler)
+		handler = gzhttp.GzipHandler(handler)
 	}
 
 	httpProbe := prober.NewHTTP()
@@ -311,7 +311,7 @@ func runQueryFrontend(
 					logger,
 					ins.NewHandler(
 						name,
-						gziphandler.GzipHandler(
+						gzhttp.GzipHandler(
 							middleware.RequestID(
 								logMiddleware.HTTPMiddleware(name, f),
 							),

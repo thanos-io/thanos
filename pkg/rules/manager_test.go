@@ -427,11 +427,13 @@ groups:
 			return func(ctx context.Context, q string, ts time.Time) (promql.Vector, error) {
 				return []promql.Sample{
 					{
-						Point:  promql.Point{T: 0, V: 1},
+						T:      0,
+						F:      1,
 						Metric: labels.FromStrings("foo", "bar"),
 					},
 					{
-						Point:  promql.Point{T: 0, V: 1},
+						T:      0,
+						F:      1,
 						Metric: labels.FromStrings("foo1", "bar1"),
 					},
 				}, nil

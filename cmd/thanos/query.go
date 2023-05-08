@@ -27,11 +27,10 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
-	v1 "github.com/prometheus/prometheus/web/api/v1"
-
-	"github.com/thanos-community/promql-engine/engine"
+	"github.com/thanos-community/promql-engine/api"
 
 	apiv1 "github.com/thanos-io/thanos/pkg/api/query"
+	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
@@ -64,13 +63,6 @@ const (
 	promqlNegativeOffset = "promql-negative-offset"
 	promqlAtModifier     = "promql-at-modifier"
 	queryPushdown        = "query-pushdown"
-)
-
-type promqlEngineType string
-
-const (
-	promqlEnginePrometheus promqlEngineType = "prometheus"
-	promqlEngineThanos     promqlEngineType = "thanos"
 )
 
 type queryMode string
@@ -109,8 +101,8 @@ func registerQuery(app *extkingpin.App) {
 	queryTimeout := extkingpin.ModelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
 
-	promqlEngine := cmd.Flag("query.promql-engine", "PromQL engine to use.").Default(string(promqlEnginePrometheus)).
-		Enum(string(promqlEnginePrometheus), string(promqlEngineThanos))
+	defaultEngine := cmd.Flag("query.promql-engine", "Default PromQL engine to use.").Default(string(apiv1.PromqlEnginePrometheus)).
+		Enum(string(apiv1.PromqlEnginePrometheus), string(apiv1.PromqlEngineThanos))
 
 	promqlQueryMode := cmd.Flag("query.mode", "PromQL query mode. One of: local, distributed.").
 		Hidden().
@@ -342,7 +334,7 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetryDurationQuantiles,
 			*queryTelemetrySamplesQuantiles,
 			*queryTelemetrySeriesQuantiles,
-			promqlEngineType(*promqlEngine),
+			*defaultEngine,
 			storeRateLimits,
 			queryMode(*promqlQueryMode),
 		)
@@ -418,7 +410,7 @@ func runQuery(
 	queryTelemetryDurationQuantiles []float64,
 	queryTelemetrySamplesQuantiles []int64,
 	queryTelemetrySeriesQuantiles []int64,
-	promqlEngine promqlEngineType,
+	defaultEngine string,
 	storeRateLimits store.SeriesSelectLimits,
 	queryMode queryMode,
 ) error {
@@ -676,25 +668,20 @@ func runQuery(
 		engineOpts.ActiveQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logger)
 	}
 
-	var queryEngine v1.QueryEngine
-	switch promqlEngine {
-	case promqlEnginePrometheus:
-		queryEngine = promql.NewEngine(engineOpts)
-	case promqlEngineThanos:
-		if queryMode == queryModeLocal {
-			queryEngine = engine.New(engine.Opts{EngineOpts: engineOpts})
-		} else {
-			remoteEngineEndpoints := query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
-				AutoDownsample:        enableAutodownsampling,
-				ReplicaLabels:         queryReplicaLabels,
-				Timeout:               queryTimeout,
-				EnablePartialResponse: enableQueryPartialResponse,
-			})
-			queryEngine = engine.NewDistributedEngine(engine.Opts{EngineOpts: engineOpts}, remoteEngineEndpoints)
-		}
-	default:
-		return errors.Errorf("unknown query.promql-engine type %v", promqlEngine)
+	var remoteEngineEndpoints api.RemoteEndpoints
+	if queryMode != queryModeLocal {
+		remoteEngineEndpoints = query.NewRemoteEndpoints(logger, endpoints.GetQueryAPIClients, query.Opts{
+			AutoDownsample:        enableAutodownsampling,
+			ReplicaLabels:         queryReplicaLabels,
+			Timeout:               queryTimeout,
+			EnablePartialResponse: enableQueryPartialResponse,
+		})
 	}
+
+	engineFactory := apiv1.NewQueryEngineFactory(
+		engineOpts,
+		remoteEngineEndpoints,
+	)
 
 	lookbackDeltaCreator := LookbackDeltaFactory(engineOpts, dynamicLookbackDelta)
 
@@ -726,7 +713,8 @@ func runQuery(
 		api := apiv1.NewQueryAPI(
 			logger,
 			endpoints.GetEndpointStatus,
-			queryEngine,
+			engineFactory,
+			apiv1.PromqlEngineType(defaultEngine),
 			lookbackDeltaCreator,
 			queryableCreator,
 			// NOTE: Will share the same replica label as the query for now.
@@ -811,7 +799,8 @@ func runQuery(
 			info.WithQueryAPIInfoFunc(),
 		)
 
-		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, queryEngine, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
+		defaultEngineType := querypb.EngineType(querypb.EngineType_value[defaultEngine])
+		grpcAPI := apiv1.NewGRPCAPI(time.Now, queryReplicaLabels, queryableCreator, engineFactory, defaultEngineType, lookbackDeltaCreator, instantDefaultMaxSourceResolution)
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxy), reg, storeRateLimits)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, tagOpts, comp, grpcProbe,
 			grpcserver.WithServer(apiv1.RegisterQueryServer(grpcAPI)),

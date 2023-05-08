@@ -22,6 +22,12 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
+enum EngineType {
+  default    = 0;
+  prometheus = 1;
+  thanos     = 2;
+}
+
 message QueryRequest {
   string query = 1;
 
@@ -41,6 +47,7 @@ message QueryRequest {
   ShardInfo shard_info = 11;
 
   int64 lookback_delta_seconds = 12;
+  EngineType engine = 13;
 }
 
 message StoreMatchers {
@@ -78,6 +85,7 @@ message QueryRangeRequest {
 
   ShardInfo shard_info = 13;
   int64 lookback_delta_seconds = 14;
+  EngineType engine = 15;
 }
 
 message QueryRangeResponse {
