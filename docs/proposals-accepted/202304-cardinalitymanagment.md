@@ -25,13 +25,13 @@ Implement APIs exposing series cardinalities in Thanos.
 
 ### Proposal
 
-We will be Developing a new API in Thanos to calculate series cardinality through Thanos Receiver.
+We will be developing a new API in Thanos to calculate series cardinality through Thanos Receiver.
 
 #### API Design
 
 The new API will have the following endpoint-
 
-`GET /api/v1/cardinality`
+`GET,POST /api/v1/cardinality`
 
 It will retrieve the series cardinality information.
 
@@ -51,13 +51,18 @@ The API response will contain
 - `seriesCountByLabelValuePair`: List of objects containing label-value pair and its corresponding series count.
 - `labelValueCountByLabelName`: List of objects containing label name and its corresponding label value count.
 
-For example, if we have the following dataset:
+Let us take a look at the API response with some examples.
 
+Example metrics:
 ```
 {__name__="metricA", instance="A", cluster="us"}
 {__name__="metricA", instance="B", cluster="eu"}
 {__name__="metricB", instance="C", cluster="us"}
 ```
+
+Example 1: Request without any parameters.
+
+`GET,POST /api/v1/cardinality`
 
 Then, API response would be
 
@@ -65,7 +70,7 @@ Then, API response would be
   "status": "success",
   "data": {
     "totalSeries": 3,
-    "totalLabelValuePairs": 6,
+    "totalLabelValuePairs": 7,
     "seriesCountByMetricName": [
       { "name": "metricA", "value": 2 },
       { "name": "metricB", "value": 1 }
@@ -75,23 +80,93 @@ Then, API response would be
       { "name": "instance", "value": 3 }
     ],
     "seriesCountByLabelValuePair": [
+      { "name": "__name__=metricA", "value": 2 },
       { "name": "cluster=us", "value": 2 },
+      { "name": "__name__=metricB", "value": 1 }
       { "name": "cluster=eu", "value": 1 },
       { "name": "instance=A", "value": 1 },
       { "name": "instance=B", "value": 1 },
-      { "name": "instance=C", "value": 1 }
+      { "name": "instance=C", "value": 1 },
     ],
     "labelValueCountByLabelName": [
       { "name": "cluster", "value": 2 },
       { "name": "instance", "value": 3 }
     ],
-    "seriesCountByFocusLabelValue": [
-      { "name": "us", "value": 2 },
-      { "name": "eu", "value": 1 }
-    ]
+    "seriesCountByFocusLabelValue": []
   }
 }
 
+```
+
+Example 2: Request with topK=2 and focusLabel=cluster.
+
+` GET,POST /api/v1/cardinality?topK=2&focusLabel=cluster`
+
+Then, API response would be
+
+```{
+"status": "success",
+"data": {
+  "totalSeries": 3,
+  "totalLabelValuePairs": 5,
+  "seriesCountByMetricName": [
+    { "name": "metricA", "value": 2 },
+    { "name": "metricB", "value": 1 }
+  ],
+  "seriesCountByLabelName": [
+    { "name": "cluster", "value": 3 },
+    { "name": "instance", "value": 3 }
+  ],
+  "seriesCountByLabelValuePair": [
+    { "name": "__name__=metricA", "value": 2 },
+    { "name": "cluster=us", "value": 2 },
+  ],
+  "labelValueCountByLabelName": [
+    { "name": "cluster", "value": 2 },
+    { "name": "instance", "value": 3 }
+  ],
+  "seriesCountByFocusLabelValue": [
+    { "name": "us", "value": 2 },
+    { "name": "eu", "value": 1 }
+  ]
+  ]
+}
+}
+```
+
+Example 3 : Request with selector={__name__="metricA"}.
+
+`GET,POST /api/v1/cardinality?selector={__name__="metricA"}`
+
+Then, API response would be
+
+```
+{
+  "status": "success",
+  "data": {
+    "totalSeries": 2,
+    "totalLabelValuePairs": 3,
+    "seriesCountByMetricName": [
+      { "name": "metricA", "value": 2 }
+    ],
+    "seriesCountByLabelName": [
+      { "name": "cluster", "value": 2 },
+      { "name": "instance", "value": 2 }
+    ],
+    "seriesCountByLabelValuePair": [
+      { "name": "__name__=metricA", "value": 2 },
+      { "name": "cluster=us", "value": 1 },
+      { "name": "cluster=eu", "value": 1 },
+      { "name": "instance=A", "value": 1 },
+      { "name": "instance=B", "value": 1 },
+    ],
+    "labelValueCountByLabelName": [
+      { "name": "cluster", "value": 2 },
+      { "name": "instance", "value": 2 }
+    ],
+    "seriesCountByFocusLabelValue": []
+  }
+}
 ```
 
 #### Implementation
@@ -101,11 +176,11 @@ For now extending receiver, seems the best approach to use. And, exact implement
 1. We will first access and aggregate the series, labels, and label-value pairs information within the Thanos receiver by extending its functionality while processing incoming data.
 
 2. There will be a new data structure to hold the statistics. This structure should have methods to compute the required statistics.
-3. We will define a new HTTP endpoint in the Thanos receiver to expose the API,as `/api/v1/cardinality`.
+3. We will define a new HTTP endpoint in the Thanos receiver to expose the API, as `/api/v1/cardinality`.
 
 4. We will Implement a new API handler function that
 
-   - Accepts optional query parameters, such as top , for filtering and sorting the results.
+   - Accepts optional query parameters, such as top, for filtering and sorting the results.
    - Calls the data structure's methods to compute the required statistics.
    - Serializes the results into JSON format and returns it as an HTTP response.
    - Handles potential partial results by setting the isPartial field in the response and providing an appropriate error message.
@@ -118,7 +193,7 @@ For now extending receiver, seems the best approach to use. And, exact implement
 
 - We can also perform another API design, where we will have two seperate endpoints for label names cardinality and label values cardinality.Let us take a look at it.
 
-#### Label Names
+##### Label Names
 
 `GET,POST /api/v1/cardinality/label_names`
 
@@ -144,7 +219,7 @@ Response -
 }
 ```
 
-#### Label values
+##### Label values
 
 This endpoint will return the label values cardinality associated with request parameter `label_names[]`. It will return the series count per label value for each label in the request parameter `label_names[]`.
 
@@ -177,14 +252,11 @@ Request parameters:
 
 #### Pros
 
-1. It provides more granularity about series data.Also, we can get specific information that we need.Users can choose to query label names, label values, or both depending on their requirements.
+1. It provides more granularity about series data. Also, we can get specific information that we need.Users can choose to query label names, label values, or both depending on their requirements.
 2. It can be more efficient as we query only the data that we need.
 
-### Cons
+#### Cons
 
 1. It will be more complex to users as they will have to query two endpoints to get the required information.
 
-### Open Questions
 
-1. Do we need to deduplicate the series before computing the cardinality?
-2. As tenant's data is distributed across multiple receivers, how can we query cardinality information for a specific tenant?
