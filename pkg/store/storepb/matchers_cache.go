@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 )
 
@@ -32,11 +34,14 @@ func newExpiration(expiresAt time.Time) *itemExpiration {
 }
 
 type MatchersCache struct {
+	reg *prometheus.Registry
+	now func() time.Time
+
 	mu       sync.RWMutex
 	ttl      time.Duration
-	now      func() time.Time
 	itemTTLs map[LabelMatcher]*itemExpiration
 	cache    map[LabelMatcher]*labels.Matcher
+	metrics  *matcherCacheMetrics
 }
 
 type MatcherCacheOption func(*MatchersCache)
@@ -47,8 +52,15 @@ func WithNowFunc(now func() time.Time) MatcherCacheOption {
 	}
 }
 
+func WithPromRegistry(reg *prometheus.Registry) MatcherCacheOption {
+	return func(c *MatchersCache) {
+		c.reg = reg
+	}
+}
+
 func NewMatchersCache(opts ...MatcherCacheOption) *MatchersCache {
 	cache := &MatchersCache{
+		reg: prometheus.NewRegistry(),
 		now: time.Now,
 		mu:  sync.RWMutex{},
 		// This TTL should be sufficient to allow caching matchers for alerting queries.
@@ -60,14 +72,18 @@ func NewMatchersCache(opts ...MatcherCacheOption) *MatchersCache {
 	for _, opt := range opts {
 		opt(cache)
 	}
+	cache.metrics = newMatcherCacheMetrics(cache.reg)
+
 	return cache
 }
 
 func (c *MatchersCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels.Matcher, error) {
 	expirationTime := c.now().Add(c.ttl)
 
+	c.metrics.requestsTotal.Inc()
 	c.mu.RLock()
 	if item, ok := c.cache[key]; ok {
+		c.metrics.hitsTotal.Inc()
 		c.itemTTLs[key].setExpiration(expirationTime)
 		c.mu.RUnlock()
 		return item, nil
@@ -78,6 +94,7 @@ func (c *MatchersCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels
 	defer c.mu.Unlock()
 
 	if item, ok := c.cache[key]; ok {
+		c.metrics.hitsTotal.Inc()
 		c.itemTTLs[key].setExpiration(expirationTime)
 		return item, nil
 	}
@@ -88,6 +105,8 @@ func (c *MatchersCache) GetOrSet(key LabelMatcher, newItem NewItemFunc) (*labels
 	}
 	c.cache[key] = item
 	c.itemTTLs[key] = newExpiration(expirationTime)
+	c.metrics.numItems.Inc()
+
 	return item, nil
 }
 
@@ -98,8 +117,38 @@ func (c *MatchersCache) RemoveExpired() {
 	now := c.now()
 	for key, expiration := range c.itemTTLs {
 		if expiration.expiresAt.Before(now) {
+			c.metrics.numItems.Dec()
+			c.metrics.evictionsTotal.Inc()
 			delete(c.cache, key)
 			delete(c.itemTTLs, key)
 		}
+	}
+}
+
+type matcherCacheMetrics struct {
+	requestsTotal  prometheus.Counter
+	hitsTotal      prometheus.Counter
+	evictionsTotal prometheus.Counter
+	numItems       prometheus.Gauge
+}
+
+func newMatcherCacheMetrics(reg *prometheus.Registry) *matcherCacheMetrics {
+	return &matcherCacheMetrics{
+		requestsTotal: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "matchers_cache_requests_total",
+			Help: "Total number of cache requests for series matchers",
+		}),
+		hitsTotal: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "matchers_cache_hits_total",
+			Help: "Total number of cache hits for series matchers",
+		}),
+		evictionsTotal: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "matchers_cache_evictions_total",
+			Help: "Total number of cache evictions",
+		}),
+		numItems: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+			Name: "matchers_cache_items",
+			Help: "Total number of cached items",
+		}),
 	}
 }

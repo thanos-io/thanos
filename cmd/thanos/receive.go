@@ -198,7 +198,7 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
-	matchersCache := startMatchersCache(g)
+	matchersCache := startMatchersCache(g, reg)
 
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,

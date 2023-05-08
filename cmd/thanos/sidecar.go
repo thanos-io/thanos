@@ -244,7 +244,7 @@ func runSidecar(
 			cancel()
 		})
 	}
-	matchersCache := startMatchersCache(g)
+	matchersCache := startMatchersCache(g, reg)
 	{
 		c := promclient.NewWithTracingClient(logger, httpClient, httpconfig.ThanosUserAgent)
 
@@ -367,8 +367,8 @@ func runSidecar(
 	return nil
 }
 
-func startMatchersCache(g *run.Group) *storepb.MatchersCache {
-	matchersCache := storepb.NewMatchersCache()
+func startMatchersCache(g *run.Group, reg *prometheus.Registry) *storepb.MatchersCache {
+	matchersCache := storepb.NewMatchersCache(storepb.WithPromRegistry(reg))
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
