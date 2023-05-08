@@ -417,6 +417,11 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             </div>
           </Col>
         </Row>
+        <Row>
+          <Col>
+            <ControlledExpandedNode node={this.state.explanation} />
+          </Col>
+        </Row>
         {stores?.length > 0 && (
           <Row>
             <Col>

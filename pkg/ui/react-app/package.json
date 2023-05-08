@@ -33,6 +33,7 @@
     "query-string": "^6.14.0",
     "rc-slider": "^9.7.1",
     "react": "^16.14.0",
+    "react-accessible-treeview": "^2.4.0",
     "react-copy-to-clipboard": "^5.0.3",
     "react-dom": "^16.14.0",
     "react-infinite-scroll-component": "^6.1.0",
