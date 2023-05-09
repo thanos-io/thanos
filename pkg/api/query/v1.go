@@ -133,7 +133,7 @@ type QueryAPI struct {
 	gate            gate.Gate
 	queryableCreate query.QueryableCreator
 	// queryEngine returns appropriate promql.Engine for a query with a given step.
-	engineFactory       QueryEngineFactory
+	engineFactory       *QueryEngineFactory
 	defaultEngine       PromqlEngineType
 	lookbackDeltaCreate func(int64) time.Duration
 	ruleGroups          rules.UnaryClient
@@ -171,7 +171,7 @@ type seriesQueryPerformanceMetricsAggregator interface {
 func NewQueryAPI(
 	logger log.Logger,
 	endpointStatus func() []query.EndpointStatus,
-	engineFactory QueryEngineFactory,
+	engineFactory *QueryEngineFactory,
 	defaultEngine PromqlEngineType,
 	lookbackDeltaCreate func(int64) time.Duration,
 	c query.QueryableCreator,
@@ -488,6 +488,7 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 
 	var seriesStats []storepb.SeriesStatsCounter
 	qry, err := engine.NewInstantQuery(
+		ctx,
 		qapi.queryableCreate(
 			enableDedup,
 			replicaLabels,
@@ -644,6 +645,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 
 	var seriesStats []storepb.SeriesStatsCounter
 	qry, err := engine.NewRangeQuery(
+		ctx,
 		qapi.queryableCreate(
 			enableDedup,
 			replicaLabels,

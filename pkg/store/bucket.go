@@ -53,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/pool"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -767,6 +768,25 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 	maxt = s.limitMaxTime(maxt)
 
 	return mint, maxt
+}
+
+// TSDBInfos returns a list of infopb.TSDBInfos for blocks in the bucket store.
+func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	infos := make([]infopb.TSDBInfo, 0, len(s.blocks))
+	for _, b := range s.blocks {
+		infos = append(infos, infopb.TSDBInfo{
+			Labels: labelpb.ZLabelSet{
+				Labels: labelpb.ZLabelsFromPromLabels(labels.FromMap(b.meta.Thanos.Labels)),
+			},
+			MinTime: b.meta.MinTime,
+			MaxTime: b.meta.MaxTime,
+		})
+	}
+
+	return infos
 }
 
 func (s *BucketStore) LabelSet() []labelpb.ZLabelSet {
@@ -1574,7 +1594,11 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 	s.mtx.RUnlock()
 
 	if err := g.Wait(); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		code := codes.Internal
+		if s, ok := status.FromError(errors.Cause(err)); ok {
+			code = s.Code()
+		}
+		return nil, status.Error(code, err.Error())
 	}
 
 	anyHints, err := types.MarshalAny(resHints)
@@ -1762,7 +1786,11 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	s.mtx.RUnlock()
 
 	if err := g.Wait(); err != nil {
-		return nil, status.Error(codes.Aborted, err.Error())
+		code := codes.Internal
+		if s, ok := status.FromError(errors.Cause(err)); ok {
+			code = s.Code()
+		}
+		return nil, status.Error(code, err.Error())
 	}
 
 	anyHints, err := types.MarshalAny(resHints)
@@ -2321,7 +2349,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 	fromCache, _ := r.block.indexCache.FetchMultiPostings(ctx, r.block.meta.ULID, keys)
 	for _, dataFromCache := range fromCache {
 		if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
-			return nil, closeFns, errors.Wrap(err, "bytes limit exceeded while loading postings from index cache")
+			return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading postings from index cache: %s", err)
 		}
 	}
 
@@ -2394,7 +2422,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		length := int64(part.End) - start
 
 		if err := bytesLimiter.Reserve(uint64(length)); err != nil {
-			return nil, closeFns, errors.Wrap(err, "bytes limit exceeded while fetching postings")
+			return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching postings: %s", err)
 		}
 	}
 
@@ -2554,7 +2582,7 @@ func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.Ser
 	for id, b := range fromCache {
 		r.loadedSeries[id] = b
 		if err := bytesLimiter.Reserve(uint64(len(b))); err != nil {
-			return errors.Wrap(err, "exceeded bytes limit while loading series from index cache")
+			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading series from index cache: %s", err)
 		}
 	}
 
@@ -2579,7 +2607,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 
 	if bytesLimiter != nil {
 		if err := bytesLimiter.Reserve(uint64(end - start)); err != nil {
-			return errors.Wrap(err, "exceeded bytes limit while fetching series")
+			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching series: %s", err)
 		}
 	}
 
@@ -2851,7 +2879,7 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 
 		for _, p := range parts {
 			if err := bytesLimiter.Reserve(uint64(p.End - p.Start)); err != nil {
-				return errors.Wrap(err, "bytes limit exceeded while fetching chunks")
+				return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
 			}
 		}
 
@@ -2968,7 +2996,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		// Read entire chunk into new buffer.
 		// TODO: readChunkRange call could be avoided for any chunk but last in this particular part.
 		if err := bytesLimiter.Reserve(uint64(chunkLen)); err != nil {
-			return errors.Wrap(err, "bytes limit exceeded while fetching chunks")
+			return httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while fetching chunks: %s", err)
 		}
 		nb, err := r.block.readChunkRange(ctx, seq, int64(pIdx.offset), int64(chunkLen), []byteRange{{offset: 0, length: chunkLen}})
 		if err != nil {

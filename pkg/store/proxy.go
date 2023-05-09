@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
@@ -31,6 +32,9 @@ import (
 )
 
 type ctxKey int
+
+// UninitializedTSDBTime is the TSDB start time of an uninitialized TSDB instance.
+const UninitializedTSDBTime = math.MaxInt64
 
 // StoreMatcherKey is the context key for the store's allow list.
 const StoreMatcherKey = ctxKey(0)
@@ -49,6 +53,9 @@ type Client interface {
 
 	// TimeRange returns minimum and maximum time range of data in the store.
 	TimeRange() (mint int64, maxt int64)
+
+	// TSDBInfos returns metadata about each TSDB backed by the client.
+	TSDBInfos() []infopb.TSDBInfo
 
 	// SupportsSharding returns true if sharding is supported by the underlying store.
 	SupportsSharding() bool
@@ -234,6 +241,7 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 
 	return labelSets
 }
+
 func (s *ProxyStore) TimeRange() (int64, int64) {
 	stores := s.stores()
 	if len(stores) == 0 {
@@ -252,6 +260,14 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 	}
 
 	return minTime, maxTime
+}
+
+func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
+	infos := make([]infopb.TSDBInfo, 0)
+	for _, store := range s.stores() {
+		infos = append(infos, store.TSDBInfos()...)
+	}
+	return infos
 }
 
 func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
