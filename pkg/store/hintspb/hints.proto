@@ -24,11 +24,15 @@ message SeriesRequestHints {
     /// labels to filter which blocks get queried. If the list is empty, no per-block filtering
     /// is applied.
     repeated thanos.LabelMatcher block_matchers = 1 [(gogoproto.nullable) = false];
+
+    bool enable_query_stats = 2;
 }
 
 message SeriesResponseHints {
     /// queried_blocks is the list of blocks that have been queried.
     repeated Block queried_blocks = 1 [(gogoproto.nullable) = false];
+    /// query_stats contains statistics of query store gateway.
+    QueryStats query_stats = 2 [(gogoproto.nullable) = true];
 }
 
 message Block {
@@ -58,4 +62,45 @@ message LabelValuesRequestHints {
 message LabelValuesResponseHints {
     /// queried_blocks is the list of blocks that have been queried.
     repeated Block queried_blocks = 1 [(gogoproto.nullable) = false];
+}
+
+message QueryStats {
+    int64 blocks_queried = 1;
+
+    int64 postings_touched = 2;
+    int64 postings_touched_size_sum = 3;
+    int64 postings_to_fetch = 4;
+    int64 postings_fetched = 5;
+    int64 postings_fetched_size_sum = 6;
+    int64 postings_fetch_count = 7;
+    int64 postings_fetch_duration_sum = 8;
+
+    int64 cached_postings_compressions = 9;
+    int64 cached_postings_compression_errors = 10;
+    int64 cached_postings_original_size_sum = 11;
+    int64 cached_postings_compressed_size_sum = 12;
+    int64 cached_postings_compression_time_sum = 13;
+    int64 cached_postings_decompressions = 14;
+    int64 cached_postings_decompression_errors = 15;
+    int64 cached_postings_decompression_time_sum = 16;
+
+    int64 series_touched = 17;
+    int64 series_touched_size_sum = 18;
+    int64 series_fetched = 19;
+    int64 series_fetched_size_sum = 20;
+    int64 series_fetch_count = 21;
+    int64 series_fetch_duration_sum = 22;
+
+    int64 chunks_touched = 23;
+    int64 chunks_touched_size_sum = 24;
+    int64 chunks_fetched = 25;
+    int64 chunks_fetched_size_sum = 26;
+    int64 chunks_fetch_count = 27;
+    int64 chunks_fetch_duration_sum = 28;
+
+    int64 merged_series_count = 29;
+    int64 merged_chunks_count = 30;
+
+    int64 get_all_duration = 31;
+    int64 merge_duration = 32;
 }
