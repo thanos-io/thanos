@@ -119,13 +119,18 @@ require (
 )
 
 require (
+	github.com/RoaringBitmap/roaring v1.2.3
 	github.com/onsi/gomega v1.27.6
 	go.opentelemetry.io/contrib/propagators/autoprop v0.38.0
 	go4.org/intern v0.0.0-20220617035311-6925f38cc365
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
 )
 
-require go4.org/unsafe/assume-no-moving-gc v0.0.0-20230209150437-ee73d164e760 // indirect
+require (
+	github.com/bits-and-blooms/bitset v1.2.0 // indirect
+	github.com/mschoch/smat v0.2.0 // indirect
+	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230209150437-ee73d164e760 // indirect
+)
 
 require (
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
@@ -191,7 +196,7 @@ require (
 	github.com/joeshaw/multierror v0.0.0-20140124173710-69b34d4ec901 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
-	github.com/klauspost/cpuid/v2 v2.1.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lightstep/lightstep-tracer-common/golang/gogo v0.0.0-20210210170715-a8dfcb80d3a7 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect

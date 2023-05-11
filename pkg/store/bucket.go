@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/cespare/xxhash"
@@ -2205,28 +2206,65 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 	// use one incrementing index to fetch postings from returned slice.
 	postingIndex := 0
 
-	var groupAdds, groupRemovals []index.Postings
+	var groupAddsIntersected *roaring.Bitmap
+	var groupRemovalsUnion *roaring.Bitmap
+
 	for _, g := range postingGroups {
 		// We cannot add empty set to groupAdds, since they are intersected.
 		if len(g.addKeys) > 0 {
-			toMerge := make([]index.Postings, 0, len(g.addKeys))
+			toMerge := make([]indexBitmapPostings, 0, len(g.addKeys))
 			for _, l := range g.addKeys {
 				toMerge = append(toMerge, checkNilPosting(l, fetchedPostings[postingIndex]))
 				postingIndex++
 			}
 
-			groupAdds = append(groupAdds, index.Merge(toMerge...))
+			var mergedBitmaps *roaring.Bitmap
+			if len(toMerge) == 1 {
+				mergedBitmaps = toMerge[0].GetBitmap()
+			} else if len(toMerge) == 0 {
+				mergedBitmaps = roaring.NewBitmap()
+			} else {
+				bitmapsToMerge := make([]*roaring.Bitmap, 0, len(toMerge))
+				for _, p := range toMerge {
+					bitmapsToMerge = append(bitmapsToMerge, p.GetBitmap())
+				}
+				mergedBitmaps = roaring.FastOr(bitmapsToMerge...)
+			}
+
+			if groupAddsIntersected == nil {
+				groupAddsIntersected = mergedBitmaps
+			} else {
+				groupAddsIntersected.And(mergedBitmaps)
+			}
 		}
 
 		for _, l := range g.removeKeys {
-			groupRemovals = append(groupRemovals, checkNilPosting(l, fetchedPostings[postingIndex]))
+			p := checkNilPosting(l, fetchedPostings[postingIndex])
+			if groupRemovalsUnion == nil {
+				groupRemovalsUnion = p.GetBitmap()
+			} else {
+				groupRemovalsUnion.Or(p.GetBitmap())
+			}
+
 			postingIndex++
 		}
 	}
 
-	result := index.Without(index.Intersect(groupAdds...), index.Merge(groupRemovals...))
+	if groupAddsIntersected == nil {
+		groupAddsIntersected = roaring.NewBitmap()
+	}
+	if groupRemovalsUnion == nil {
+		groupRemovalsUnion = roaring.NewBitmap()
+	}
 
-	ps, err := index.ExpandPostings(result)
+	groupAddsIntersected.AndNot(groupRemovalsUnion)
+
+	intersectedBmapPostings := &bitmapPostings{
+		bmap:         groupAddsIntersected,
+		bmapIterator: groupAddsIntersected.Iterator(),
+	}
+
+	ps, err := index.ExpandPostings(intersectedBmapPostings)
 	if err != nil {
 		return nil, errors.Wrap(err, "expand")
 	}
@@ -2264,10 +2302,12 @@ func newPostingGroup(addAll bool, addKeys, removeKeys []labels.Label) *postingGr
 	}
 }
 
-func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
+func checkNilPosting(l labels.Label, p indexBitmapPostings) indexBitmapPostings {
 	if p == nil {
 		// This should not happen. Debug for https://github.com/thanos-io/thanos/issues/874.
-		return index.ErrPostings(errors.Errorf("postings is nil for %s. It was never fetched.", l))
+		return &errBitmapPostings{
+			e: errors.Errorf("postings is nil for %s. It was never fetched.", l),
+		}
 	}
 	return p
 }
@@ -2335,7 +2375,7 @@ type postingPtr struct {
 // fetchPostings fill postings requested by posting groups.
 // It returns one postings for each key, in the same order.
 // If postings for given key is not fetched, entry at given index will be nil.
-func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Label, bytesLimiter BytesLimiter) ([]index.Postings, []func(), error) {
+func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Label, bytesLimiter BytesLimiter) ([]indexBitmapPostings, []func(), error) {
 	var closeFns []func()
 
 	timer := prometheus.NewTimer(r.block.metrics.postingsFetchDuration)
@@ -2343,7 +2383,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 
 	var ptrs []postingPtr
 
-	output := make([]index.Postings, len(keys))
+	output := make([]indexBitmapPostings, len(keys))
 
 	// Fetch postings from the cache with a single call.
 	fromCache, _ := r.block.indexCache.FetchMultiPostings(ctx, r.block.meta.ULID, keys)
@@ -2358,7 +2398,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 	// Overlaps are well handled by partitioner, so we don't need to deduplicate keys.
 	for ix, key := range keys {
 		// Get postings for the given key from cache first.
-		if b, ok := fromCache[key]; ok {
+		/*if b, ok := fromCache[key]; ok {
 			r.stats.postingsTouched++
 			r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(b))
 
@@ -2389,13 +2429,13 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 
 			output[ix] = l
 			continue
-		}
+		}*/
 
 		// Cache miss; save pointer for actual posting in index stored in object store.
 		ptr, err := r.block.indexHeaderReader.PostingsOffset(key.Name, key.Value)
 		if err == indexheader.NotFoundRangeErr {
 			// This block does not have any posting for given key.
-			output[ix] = index.EmptyPostings()
+			output[ix] = &errBitmapPostings{}
 			continue
 		}
 
@@ -2434,73 +2474,38 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 		// We assume index does not have any ptrs that has 0 length.
 		length := int64(part.End) - start
 
-		// Fetch from object storage concurrently and update stats and posting list.
-		g.Go(func() error {
-			begin := time.Now()
+		rdr, err := r.block.bkt.GetRange(ctx, r.block.indexFilename(), start, length)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "get range reader")
+		}
+		defer runutil.CloseWithLogOnErr(r.block.logger, rdr, "readIndexRange close range reader")
 
-			b, err := r.block.readIndexRange(ctx, start, length)
-			if err != nil {
-				return errors.Wrap(err, "read postings range")
-			}
-			fetchTime := time.Since(begin)
-
-			r.mtx.Lock()
-			r.stats.postingsFetchCount++
-			r.stats.postingsFetched += j - i
-			r.stats.PostingsFetchDurationSum += fetchTime
-			r.stats.PostingsFetchedSizeSum += units.Base2Bytes(int(length))
-			r.mtx.Unlock()
-
-			for _, p := range ptrs[i:j] {
-				// index-header can estimate endings, which means we need to resize the endings.
-				pBytes, err := resizePostings(b[p.ptr.Start-start : p.ptr.End-start])
-				if err != nil {
-					return err
-				}
-
-				dataToCache := pBytes
-
-				compressionTime := time.Duration(0)
-				compressions, compressionErrors, compressedSize := 0, 0, 0
-
-				// Reencode postings before storing to cache. If that fails, we store original bytes.
-				// This can only fail, if postings data was somehow corrupted,
-				// and there is nothing we can do about it.
-				// Errors from corrupted postings will be reported when postings are used.
-				compressions++
-				s := time.Now()
-				bep := newBigEndianPostings(pBytes[4:])
-				data, err := diffVarintSnappyStreamedEncode(bep, bep.length())
-				compressionTime = time.Since(s)
-				if err == nil {
-					dataToCache = data
-					compressedSize = len(data)
-				} else {
-					compressionErrors = 1
-				}
-
-				r.mtx.Lock()
-				// Return postings and fill LRU cache.
-				// Truncate first 4 bytes which are length of posting.
-				output[p.keyID] = newBigEndianPostings(pBytes[4:])
-
-				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[p.keyID], dataToCache)
-
-				// If we just fetched it we still have to update the stats for touched postings.
-				r.stats.postingsTouched++
-				r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(pBytes))
-				r.stats.cachedPostingsCompressions += compressions
-				r.stats.cachedPostingsCompressionErrors += compressionErrors
-				r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(pBytes))
-				r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(compressedSize)
-				r.stats.CachedPostingsCompressionTimeSum += compressionTime
-				r.mtx.Unlock()
-			}
-			return nil
+		brdr := bufioReaderPool.Get().(*bufio.Reader)
+		brdr.Reset(rdr)
+		closeFns = append(closeFns, func() {
+			bufioReaderPool.Put(brdr)
 		})
-	}
 
+		bitmapPostingsReader := newBitmapPostingsReader(brdr, ptrs[i:j], start, length)
+		for _, p := range ptrs[i:j] {
+			if n := bitmapPostingsReader.Next(); !n {
+				if bitmapPostingsReader.Err() != nil {
+					return nil, nil, errors.Wrap(bitmapPostingsReader.Err(), "reading bitmap postings")
+				}
+				return nil, nil, fmt.Errorf("unable to read all postings")
+			}
+
+			postings := bitmapPostingsReader.At()
+			output[p.keyID] = postings
+		}
+	}
 	return output, closeFns, g.Wait()
+}
+
+var bufioReaderPool = sync.Pool{
+	New: func() any {
+		return bufio.NewReader(nil)
+	},
 }
 
 func resizePostings(b []byte) ([]byte, error) {
