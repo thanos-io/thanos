@@ -47,6 +47,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6163](https://github.com/thanos-io/thanos/pull/6163) Receiver: changed max backoff from 30s to 5s for forwarding requests. Can be configured with `--receive-forward-max-backoff`.
 - [#6327](https://github.com/thanos-io/thanos/pull/6327) *: *breaking :warning:* Use histograms instead of summaries for instrumented handlers.
 - [#6322](https://github.com/thanos-io/thanos/pull/6322) Logging: Avoid expensive log.Valuer evaluation for disallowed levels.
+- [#6358](https://github.com/thanos-io/thanos/pull/6358) Query: Add +Inf bucket to query duration metrics
 
 ### Removed
 

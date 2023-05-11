@@ -4,6 +4,7 @@
 package store
 
 import (
+	"sort"
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -17,8 +18,8 @@ import (
 type seriesStatsAggregator struct {
 	queryDuration *prometheus.HistogramVec
 
-	seriesLeBuckets  []int64
-	samplesLeBuckets []int64
+	seriesLeBuckets  []float64
+	samplesLeBuckets []float64
 	seriesStats      storepb.SeriesStatsCounter
 }
 
@@ -26,8 +27,8 @@ type seriesStatsAggregator struct {
 func NewSeriesStatsAggregator(
 	reg prometheus.Registerer,
 	durationQuantiles []float64,
-	sampleQuantiles []int64,
-	seriesQuantiles []int64,
+	sampleQuantiles []float64,
+	seriesQuantiles []float64,
 ) *seriesStatsAggregator {
 	return &seriesStatsAggregator{
 		queryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
@@ -54,11 +55,11 @@ func (s *seriesStatsAggregator) Observe(duration float64) {
 		return
 	}
 	// Bucket matching for series/labels matchSeriesBucket/matchSamplesBucket => float64, float64
-	seriesLeBucket := s.findBucket(float64(s.seriesStats.Series), s.seriesLeBuckets)
-	samplesLeBucket := s.findBucket(float64(s.seriesStats.Samples), s.samplesLeBuckets)
+	seriesLeBucket := findBucket(float64(s.seriesStats.Series), s.seriesLeBuckets)
+	samplesLeBucket := findBucket(float64(s.seriesStats.Samples), s.samplesLeBuckets)
 	s.queryDuration.With(prometheus.Labels{
-		"series_le":  strconv.Itoa(int(seriesLeBucket)),
-		"samples_le": strconv.Itoa(int(samplesLeBucket)),
+		"series_le":  seriesLeBucket,
+		"samples_le": samplesLeBucket,
 	}).Observe(duration)
 	s.reset()
 }
@@ -67,18 +68,18 @@ func (s *seriesStatsAggregator) reset() {
 	s.seriesStats = storepb.SeriesStatsCounter{}
 }
 
-func (s *seriesStatsAggregator) findBucket(value float64, quantiles []int64) int64 {
+func findBucket(value float64, quantiles []float64) string {
 	if len(quantiles) == 0 {
-		return 0
+		return "+Inf"
 	}
-	var foundBucket int64
-	for _, bucket := range quantiles {
-		foundBucket = bucket
-		if value < float64(bucket) {
-			break
-		}
+
+	// If the value is bigger than the largest bucket we return +Inf
+	if value >= float64(quantiles[len(quantiles)-1]) {
+		return "+Inf"
 	}
-	return foundBucket
+
+	// SearchFloats64s gets the appropriate index in the quantiles array based on the value
+	return strconv.FormatFloat(quantiles[sort.SearchFloat64s(quantiles, value)], 'f', -1, 64)
 }
 
 // NoopSeriesStatsAggregator is a query performance series aggregator that does nothing.

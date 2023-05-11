@@ -215,8 +215,8 @@ func registerQuery(app *extkingpin.App) {
 	grpcProxyStrategy := cmd.Flag("grpc.proxy-strategy", "Strategy to use when proxying Series requests to leaf nodes. Hidden and only used for testing, will be removed after lazy becomes the default.").Default(string(store.EagerRetrieval)).Hidden().Enum(string(store.EagerRetrieval), string(store.LazyRetrieval))
 
 	queryTelemetryDurationQuantiles := cmd.Flag("query.telemetry.request-duration-seconds-quantiles", "The quantiles for exporting metrics about the request duration quantiles.").Default("0.1", "0.25", "0.75", "1.25", "1.75", "2.5", "3", "5", "10").Float64List()
-	queryTelemetrySamplesQuantiles := cmd.Flag("query.telemetry.request-samples-quantiles", "The quantiles for exporting metrics about the samples count quantiles.").Default("100", "1000", "10000", "100000", "1000000").Int64List()
-	queryTelemetrySeriesQuantiles := cmd.Flag("query.telemetry.request-series-seconds-quantiles", "The quantiles for exporting metrics about the series count quantiles.").Default("10", "100", "1000", "10000", "100000").Int64List()
+	queryTelemetrySamplesQuantiles := cmd.Flag("query.telemetry.request-samples-quantiles", "The quantiles for exporting metrics about the samples count quantiles.").Default("100", "1000", "10000", "100000", "1000000").Float64List()
+	queryTelemetrySeriesQuantiles := cmd.Flag("query.telemetry.request-series-seconds-quantiles", "The quantiles for exporting metrics about the series count quantiles.").Default("10", "100", "1000", "10000", "100000").Float64List()
 
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
@@ -408,8 +408,8 @@ func runQuery(
 	grpcProxyStrategy string,
 	comp component.Component,
 	queryTelemetryDurationQuantiles []float64,
-	queryTelemetrySamplesQuantiles []int64,
-	queryTelemetrySeriesQuantiles []int64,
+	queryTelemetrySamplesQuantiles []float64,
+	queryTelemetrySeriesQuantiles []float64,
 	defaultEngine string,
 	storeRateLimits store.SeriesSelectLimits,
 	queryMode queryMode,
