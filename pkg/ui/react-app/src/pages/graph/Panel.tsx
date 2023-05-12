@@ -1,6 +1,19 @@
 import React, { Component } from 'react';
 
-import { UncontrolledAlert, Button, Col, Nav, NavItem, NavLink, Row, TabContent, TabPane, Input, Label } from 'reactstrap';
+import {
+  UncontrolledAlert,
+  Alert,
+  Button,
+  Col,
+  Nav,
+  NavItem,
+  NavLink,
+  Row,
+  TabContent,
+  TabPane,
+  Input,
+  Label,
+} from 'reactstrap';
 import Select from 'react-select';
 
 import moment from 'moment-timezone';
@@ -429,9 +442,11 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             </div>
           </Col>
         </Row>
-        <Row>
+        <Row hidden={!options.explain}>
           <Col>
-            <ControlledExpandedNode node={this.state.explanation} />
+            <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
+              <ControlledExpandedNode node={this.state.explanation} />
+            </Alert>
           </Col>
         </Row>
         {stores?.length > 0 && (
