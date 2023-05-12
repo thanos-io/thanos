@@ -59,6 +59,7 @@ export interface PanelOptions {
   storeMatches: Store[];
   engine: string;
   explain: boolean;
+  disableCheckbox: boolean;
 }
 
 export enum PanelType {
@@ -79,6 +80,7 @@ export const PanelDefaultOptions: PanelOptions = {
   storeMatches: [],
   engine: '',
   explain: false,
+  disableCheckbox: false,
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
@@ -101,6 +103,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     if (this.props.options.engine === '') {
       this.props.options.engine = this.props.defaultEngine;
     }
+    this.handleEngine(this.props.options.engine);
 
     this.handleChangeDeduplication = this.handleChangeDeduplication.bind(this);
     this.handleChangePartialResponse = this.handleChangePartialResponse.bind(this);
@@ -317,11 +320,19 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   };
 
   handleChangeEngine = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    this.setOptions({ engine: event.target.value });
+    this.handleEngine(event.target.value);
   };
 
   handleChangeExplain = (event: React.ChangeEvent<HTMLInputElement>): void => {
     this.setOptions({ explain: event.target.checked });
+  };
+
+  handleEngine = (engine: string): void => {
+    if (engine === 'prometheus') {
+      this.setOptions({ engine: engine, explain: false, disableCheckbox: true });
+    } else {
+      this.setOptions({ engine: engine, disableCheckbox: false });
+    }
   };
 
   render(): JSX.Element {
@@ -410,7 +421,8 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 wrapperStyles={{ marginRight: 20, display: 'inline-block' }}
                 id={`explain-${id}`}
                 onChange={this.handleChangeExplain}
-                defaultChecked={options.explain}
+                checked={options.explain}
+                disabled={options.disableCheckbox}
               >
                 Explain
               </Checkbox>
