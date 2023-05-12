@@ -2151,8 +2151,11 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 
 	// NOTE: Derived from tsdb.PostingsForMatchers.
 	for _, m := range ms {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		// Each group is separate to tell later what postings are intersecting with what.
-		pg, err := toPostingGroup(r.block.indexHeaderReader.LabelValues, m)
+		pg, err := toPostingGroup(ctx, r.block.indexHeaderReader.LabelValues, m)
 		if err != nil {
 			return nil, errors.Wrap(err, "toPostingGroup")
 		}
@@ -2226,6 +2229,9 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 
 	result := index.Without(index.Intersect(groupAdds...), index.Merge(groupRemovals...))
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	ps, err := index.ExpandPostings(result)
 	if err != nil {
 		return nil, errors.Wrap(err, "expand")
@@ -2273,7 +2279,7 @@ func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
 }
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
-func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
+func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
 	if m.Type == labels.MatchRegexp {
 		if vals := findSetMatches(m.Value); len(vals) > 0 {
 			// Sorting will improve the performance dramatically if the dataset is relatively large
@@ -2299,6 +2305,9 @@ func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Match
 
 		var toRemove []labels.Label
 		for _, val := range vals {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			if !m.Matches(val) {
 				toRemove = append(toRemove, labels.Label{Name: m.Name, Value: val})
 			}
@@ -2319,6 +2328,9 @@ func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Match
 
 	var toAdd []labels.Label
 	for _, val := range vals {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if m.Matches(val) {
 			toAdd = append(toAdd, labels.Label{Name: m.Name, Value: val})
 		}
