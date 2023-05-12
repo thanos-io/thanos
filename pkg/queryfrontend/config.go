@@ -205,6 +205,7 @@ type Config struct {
 	DownstreamURL          string
 	ForwardHeaders         []string
 	NumShards              int
+	ShardWithoutBy         bool
 }
 
 // QueryRangeConfig holds the config for query range tripperware.
