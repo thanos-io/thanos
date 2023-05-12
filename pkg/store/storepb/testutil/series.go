@@ -287,6 +287,7 @@ type SeriesCase struct {
 	ExpectedSeries   []*storepb.Series
 	ExpectedWarnings []string
 	ExpectedHints    []hintspb.SeriesResponseHints
+	HintsCompareFunc func(t testutil.TB, expected, actual hintspb.SeriesResponseHints)
 }
 
 // TestServerSeries runs tests against given cases.
@@ -334,7 +335,14 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 						testutil.Ok(t, types.UnmarshalAny(anyHints, &hints))
 						actualHints = append(actualHints, hints)
 					}
-					testutil.Equals(t, c.ExpectedHints, actualHints)
+					testutil.Equals(t, len(c.ExpectedHints), len(actualHints))
+					for i, hint := range actualHints {
+						if c.HintsCompareFunc == nil {
+							testutil.Equals(t, c.ExpectedHints[i], hint)
+						} else {
+							c.HintsCompareFunc(t, c.ExpectedHints[i], hint)
+						}
+					}
 				}
 			}
 		})
