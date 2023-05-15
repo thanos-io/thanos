@@ -4,7 +4,6 @@
 package receive
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -239,7 +238,7 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 // groups.
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
-func newMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg []HashringConfig) (Hashring, error) {
+func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg []HashringConfig) (Hashring, error) {
 	m := &multiHashring{
 		cache: make(map[string]Hashring),
 	}
@@ -266,49 +265,6 @@ func newMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		m.tenantSets = append(m.tenantSets, t)
 	}
 	return m, nil
-}
-
-// HashringFromConfigWatcher creates multi-tenant hashrings from a
-// hashring configuration file watcher.
-// The configuration file is watched for updates.
-// Hashrings are returned on the updates channel.
-// Which hashring to use for a tenant is determined
-// by the tenants field of the hashring configuration.
-// The updates chan is closed before exiting.
-func HashringFromConfigWatcher(ctx context.Context, algorithm HashringAlgorithm, replicationFactor uint64, updates chan<- Hashring, cw *ConfigWatcher) error {
-	defer close(updates)
-	go cw.Run(ctx)
-
-	for {
-		select {
-		case cfg, ok := <-cw.C():
-			if !ok {
-				return errors.New("hashring config watcher stopped unexpectedly")
-			}
-			h, err := newMultiHashring(algorithm, replicationFactor, cfg)
-			if err != nil {
-				return errors.Wrap(err, "unable to create new hashring from config")
-			}
-			updates <- h
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-}
-
-// HashringFromConfig loads raw configuration content and returns a Hashring if the given configuration is not valid.
-func HashringFromConfig(algorithm HashringAlgorithm, replicationFactor uint64, content string) (Hashring, error) {
-	config, err := parseConfig([]byte(content))
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse configuration")
-	}
-
-	// If hashring is empty, return an error.
-	if len(config) == 0 {
-		return nil, errors.Wrapf(err, "failed to load configuration")
-	}
-
-	return newMultiHashring(algorithm, replicationFactor, config)
 }
 
 func newHashring(algorithm HashringAlgorithm, endpoints []string, replicationFactor uint64, hashring string, tenants []string) (Hashring, error) {

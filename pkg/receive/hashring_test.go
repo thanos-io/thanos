@@ -136,7 +136,7 @@ func TestHashringGet(t *testing.T) {
 			},
 		},
 	} {
-		hs, err := newMultiHashring(AlgorithmHashmod, 3, tc.cfg)
+		hs, err := NewMultiHashring(AlgorithmHashmod, 3, tc.cfg)
 		require.NoError(t, err)
 
 		h, err := hs.Get(tc.tenant, ts)
