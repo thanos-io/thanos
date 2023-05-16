@@ -19,7 +19,7 @@ import Select from 'react-select';
 import moment from 'moment-timezone';
 
 import Checkbox from '../../components/Checkbox';
-import ControlledExpandedNode, { NodeTree } from '../../components/ExpandableNode';
+import ListTree, { NodeTree } from '../../components/ListTree';
 import ExpressionInput from './ExpressionInput';
 import GraphControls from './GraphControls';
 import { GraphTabContent } from './GraphTabContent';
@@ -445,7 +445,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         <Row hidden={!options.explain}>
           <Col>
             <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
-              <ControlledExpandedNode node={this.state.explanation} />
+              <ListTree id={`explain-tree-${id}`} node={this.state.explanation} />
             </Alert>
           </Col>
         </Row>
