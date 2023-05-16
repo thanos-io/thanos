@@ -336,7 +336,7 @@ describe('Utils', () => {
               storeMatches: [],
               engine: 'prometheus',
               explain: false,
-              disableCheckbox: false,
+              disableExplainCheckbox: false,
             },
           })
         ).toEqual(

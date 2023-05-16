@@ -23,7 +23,7 @@ const defaultProps: PanelProps = {
     storeMatches: [],
     engine: 'prometheus',
     explain: false,
-    disableCheckbox: false,
+    disableExplainCheckbox: false,
   },
   onOptionsChanged: (): void => {
     // Do nothing.
@@ -95,7 +95,7 @@ describe('Panel', () => {
       storeMatches: [],
       engine: 'prometheus',
       explain: false,
-      disableCheckbox: false,
+      disableExplainCheckbox: false,
     };
     const graphPanel = mount(<Panel {...defaultProps} options={options} />);
     const controls = graphPanel.find(GraphControls);

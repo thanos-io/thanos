@@ -72,7 +72,7 @@ export interface PanelOptions {
   storeMatches: Store[];
   engine: string;
   explain: boolean;
-  disableCheckbox: boolean;
+  disableExplainCheckbox: boolean;
 }
 
 export enum PanelType {
@@ -93,7 +93,7 @@ export const PanelDefaultOptions: PanelOptions = {
   storeMatches: [],
   engine: '',
   explain: false,
-  disableCheckbox: false,
+  disableExplainCheckbox: false,
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
@@ -237,7 +237,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           } else if (result && result.length > 0) {
             resultSeries = result.length;
           }
-          explanation = json.data.thanosInfo.explanation;
+          explanation = json.data.explanation;
         }
 
         this.setState({
@@ -342,9 +342,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   handleEngine = (engine: string): void => {
     if (engine === 'prometheus') {
-      this.setOptions({ engine: engine, explain: false, disableCheckbox: true });
+      this.setOptions({ engine: engine, explain: false, disableExplainCheckbox: true });
     } else {
-      this.setOptions({ engine: engine, disableCheckbox: false });
+      this.setOptions({ engine: engine, disableExplainCheckbox: false });
     }
   };
 
@@ -435,7 +435,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 id={`explain-${id}`}
                 onChange={this.handleChangeExplain}
                 checked={options.explain}
-                disabled={options.disableCheckbox}
+                disabled={options.disableExplainCheckbox}
               >
                 Explain
               </Checkbox>
