@@ -66,8 +66,10 @@ describe('Panel', () => {
       const className = tc.active ? 'active' : '';
       expect(link.prop('className')).toEqual(className);
       link.simulate('click');
-      expect(results).toHaveLength(1);
-      expect(results[0].type).toEqual(tc.panelType.toLowerCase());
+      // Panel construction updates Explain checkbox prop to disbale.
+      // Hence two results.
+      expect(results).toHaveLength(2);
+      expect(results[1].type).toEqual(tc.panelType.toLowerCase());
       results.pop();
     });
   });
