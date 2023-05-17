@@ -5,8 +5,11 @@ package receive
 
 import (
 	"fmt"
+	"math"
+	"strings"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/stretchr/testify/require"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -228,7 +231,7 @@ func TestKetamaHashringGet(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			hashRing, err := newKetamaHashring(test.nodes, 10, test.n+1)
+			hashRing, err := newKetamaHashring(test.nodes, []AZAwareEndpoint{}, 10, test.n+1)
 			require.NoError(t, err)
 
 			result, err := hashRing.GetN("tenant", test.ts, test.n)
@@ -239,7 +242,7 @@ func TestKetamaHashringGet(t *testing.T) {
 }
 
 func TestKetamaHashringBadConfigIsRejected(t *testing.T) {
-	_, err := newKetamaHashring([]string{"node-1"}, 1, 2)
+	_, err := newKetamaHashring([]string{"node-1"}, []AZAwareEndpoint{}, 1, 2)
 	require.Error(t, err)
 }
 
@@ -323,6 +326,251 @@ func TestKetamaHashringReplicationConsistency(t *testing.T) {
 	}
 }
 
+func TestKetamaHashringEvenAZSpread(t *testing.T) {
+	tenant := "default-tenant"
+	ts := &prompb.TimeSeries{
+		Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+		Samples: []prompb.Sample{{Value: 1, Timestamp: 0}},
+	}
+
+	for _, tt := range []struct {
+		nodes    []AZAwareEndpoint
+		replicas uint64
+	}{
+		{
+			nodes: []AZAwareEndpoint{
+				{address: "a", az: "1"},
+				{address: "b", az: "2"},
+				{address: "c", az: "1"},
+				{address: "d", az: "2"},
+			},
+			replicas: 1,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{address: "a", az: ""},
+				{address: "b", az: ""},
+				{address: "c", az: ""},
+				{address: "d", az: ""},
+			},
+			replicas: 1,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{address: "a", az: "1"},
+				{address: "b", az: "2"},
+				{address: "c", az: "1"},
+				{address: "d", az: "2"},
+			},
+			replicas: 2,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{address: "a", az: "1"},
+				{address: "b", az: "2"},
+				{address: "c", az: "3"},
+				{address: "d", az: "1"},
+				{address: "e", az: "2"},
+				{address: "f", az: "3"},
+			},
+			replicas: 3,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{address: "a", az: ""},
+				{address: "b", az: ""},
+				{address: "c", az: ""},
+				{address: "d", az: ""},
+				{address: "e", az: ""},
+				{address: "f", az: ""},
+			},
+			replicas: 3,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{address: "a", az: "1"},
+				{address: "b", az: "2"},
+				{address: "c", az: "3"},
+				{address: "d", az: "1"},
+				{address: "e", az: "2"},
+				{address: "f", az: "3"},
+				{address: "g", az: "4"},
+				{address: "h", az: "4"},
+				{address: "i", az: "4"},
+				{address: "j", az: "5"},
+				{address: "k", az: "5"},
+				{address: "l", az: "5"},
+			},
+			replicas: 10,
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			hashRing, err := newKetamaHashring([]string{}, tt.nodes, SectionsPerNode, tt.replicas)
+			testutil.Ok(t, err)
+
+			availableAzs := make(map[string]int64)
+			for _, n := range tt.nodes {
+				availableAzs[n.az] = 0
+			}
+
+			azSpread := make(map[string]int64)
+			for i := 0; i < int(tt.replicas); i++ {
+				r, err := hashRing.GetN(tenant, ts, uint64(i))
+				testutil.Ok(t, err)
+
+				for _, n := range tt.nodes {
+					if !strings.HasPrefix(n.address, r) {
+						continue
+					}
+					azSpread[n.az]++
+				}
+			}
+			expectedAzSpreadLength := int(tt.replicas)
+			if int(tt.replicas) > len(availableAzs) {
+				expectedAzSpreadLength = len(availableAzs)
+			}
+			testutil.Equals(t, len(azSpread), expectedAzSpreadLength)
+
+			for _, writeToAz := range azSpread {
+				minAz := getMinAz(azSpread)
+				testutil.Assert(t, math.Abs(float64(writeToAz-minAz)) <= 1.0)
+			}
+		})
+	}
+}
+
+func TestKetamaHashringEvenNodeSpread(t *testing.T) {
+	tenant := "default-tenant"
+
+	for _, tt := range []struct {
+		nodes     []AZAwareEndpoint
+		replicas  uint64
+		numSeries uint64
+	}{
+		{
+			nodes: []AZAwareEndpoint{
+				{address: "localhost:1", az: "A"},
+				{address: "localhost:2", az: "B"},
+				{address: "localhost:3", az: "A"},
+				{address: "localhost:4", az: "B"},
+			},
+			replicas:  2,
+			numSeries: 1000,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{address: "localhost:1", az: ""},
+				{address: "localhost:2", az: ""},
+				{address: "localhost:3", az: ""},
+				{address: "localhost:4", az: ""},
+			},
+			replicas:  2,
+			numSeries: 1000,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{address: "localhost:1", az: "A"},
+				{address: "localhost:2", az: "B"},
+				{address: "localhost:3", az: "C"},
+				{address: "localhost:4", az: "A"},
+				{address: "localhost:5", az: "B"},
+				{address: "localhost:6", az: "C"},
+			},
+			replicas:  3,
+			numSeries: 10000,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{address: "localhost:1", az: "A"},
+				{address: "localhost:2", az: "B"},
+				{address: "localhost:3", az: "C"},
+				{address: "localhost:4", az: "A"},
+				{address: "localhost:5", az: "B"},
+				{address: "localhost:6", az: "C"},
+				{address: "localhost:7", az: "A"},
+				{address: "localhost:8", az: "B"},
+				{address: "localhost:9", az: "C"},
+			},
+			replicas:  2,
+			numSeries: 10000,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{address: "localhost:1", az: "A"},
+				{address: "localhost:2", az: "B"},
+				{address: "localhost:3", az: "C"},
+				{address: "localhost:4", az: "A"},
+				{address: "localhost:5", az: "B"},
+				{address: "localhost:6", az: "C"},
+				{address: "localhost:7", az: "A"},
+				{address: "localhost:8", az: "B"},
+				{address: "localhost:9", az: "C"},
+			},
+			replicas:  9,
+			numSeries: 10000,
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			hashRing, err := newKetamaHashring([]string{}, tt.nodes, SectionsPerNode, tt.replicas)
+			testutil.Ok(t, err)
+			optimalSpread := int(tt.numSeries*tt.replicas) / len(tt.nodes)
+			nodeSpread := make(map[string]int)
+			for i := 0; i < int(tt.numSeries); i++ {
+				ts := &prompb.TimeSeries{
+					Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", fmt.Sprintf("%d", i))),
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 0}},
+				}
+				for j := 0; j < int(tt.replicas); j++ {
+					r, err := hashRing.GetN(tenant, ts, uint64(j))
+					testutil.Ok(t, err)
+
+					nodeSpread[r]++
+				}
+			}
+			for _, node := range nodeSpread {
+				diff := math.Abs(float64(node) - float64(optimalSpread))
+				testutil.Assert(t, diff/float64(optimalSpread) < 0.1)
+			}
+		})
+	}
+}
+
+func TestInvalidAZHashringCfg(t *testing.T) {
+	for _, tt := range []struct {
+		cfg           []HashringConfig
+		replicas      uint64
+		algorithm     HashringAlgorithm
+		expectedError string
+	}{
+		{
+			cfg: []HashringConfig{
+				{
+					Endpoints:       []string{"a", "b", "c"},
+					EndpointsWithAZ: []AZAwareEndpoint{{address: "localhost:123", az: "A"}, {address: "localhost:124", az: "B"}, {address: "localhost:125", az: "C"}},
+				},
+			},
+			replicas:      2,
+			algorithm:     AlgorithmKetama,
+			expectedError: "Hashring contains both AZ and non AZ aware endpoint configurations.",
+		},
+		{
+			cfg: []HashringConfig{
+				{
+					EndpointsWithAZ: []AZAwareEndpoint{{address: "localhost:123", az: "A"}, {address: "localhost:124", az: "B"}, {address: "localhost:125", az: "C"}},
+				},
+			},
+			replicas:      2,
+			algorithm:     AlgorithmHashmod,
+			expectedError: "Hashmod algorithm does not support AZ aware hashring configuration. Either use Ketama or remove AZ configuration.",
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			_, err := newMultiHashring(tt.algorithm, tt.replicas, tt.cfg)
+			require.EqualError(t, err, tt.expectedError)
+		})
+	}
+}
+
 func makeSeries() []prompb.TimeSeries {
 	numSeries := 10000
 	series := make([]prompb.TimeSeries, numSeries)
@@ -356,7 +604,7 @@ func assignSeries(series []prompb.TimeSeries, nodes []string) (map[string][]prom
 }
 
 func assignReplicatedSeries(series []prompb.TimeSeries, nodes []string, replicas uint64) (map[string][]prompb.TimeSeries, error) {
-	hashRing, err := newKetamaHashring(nodes, SectionsPerNode, replicas)
+	hashRing, err := newKetamaHashring(nodes, []AZAwareEndpoint{}, SectionsPerNode, replicas)
 	if err != nil {
 		return nil, err
 	}

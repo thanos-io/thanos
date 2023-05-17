@@ -37,13 +37,19 @@ const (
 	RouterIngestor ReceiverMode = "RouterIngestor"
 )
 
+type AZAwareEndpoint struct {
+	address string
+	az      string
+}
+
 // HashringConfig represents the configuration for a hashring
 // a receive node knows about.
 type HashringConfig struct {
-	Hashring  string            `json:"hashring,omitempty"`
-	Tenants   []string          `json:"tenants,omitempty"`
-	Endpoints []string          `json:"endpoints"`
-	Algorithm HashringAlgorithm `json:"algorithm,omitempty"`
+	Hashring        string            `json:"hashring,omitempty"`
+	Tenants         []string          `json:"tenants,omitempty"`
+	Endpoints       []string          `json:"endpoints"`
+	EndpointsWithAZ []AZAwareEndpoint `json:"endpoints_with_az"`
+	Algorithm       HashringAlgorithm `json:"algorithm,omitempty"`
 }
 
 // ConfigWatcher is able to watch a file containing a hashring configuration
