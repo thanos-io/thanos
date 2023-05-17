@@ -264,7 +264,7 @@ export const toQueryString = ({ key, options }: PanelMeta): string => {
     formatWithKey('max_source_resolution', maxSourceResolution),
     formatWithKey('deduplicate', useDeduplication ? 1 : 0),
     formatWithKey('partial_response', usePartialResponse ? 1 : 0),
-    formatWithKey('store_matches', JSON.stringify(storeMatches)),
+    formatWithKey('store_matches', JSON.stringify(storeMatches, ['name'])),
     formatWithKey('engine', engine),
     time ? `${formatWithKey('end_input', time)}&${formatWithKey('moment_input', time)}` : '',
     isPresent(resolution) ? formatWithKey('step_input', resolution) : '',
