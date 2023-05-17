@@ -37,6 +37,11 @@ const (
 	RouterIngestor ReceiverMode = "RouterIngestor"
 )
 
+type AZAwareEndpoint struct {
+	Address string `json:"address"`
+	AZ      string `json:"az"`
+}
+
 // HashringConfig represents the configuration for a hashring
 // a receive node knows about.
 type HashringConfig struct {
@@ -243,7 +248,12 @@ func (cw *ConfigWatcher) refresh(ctx context.Context) {
 	cw.lastSuccessTimeGauge.SetToCurrentTime()
 
 	for _, c := range config {
-		cw.hashringNodesGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Endpoints)))
+		switch v := c.Endpoints.(type) {
+		case []string:
+			cw.hashringNodesGauge.WithLabelValues(c.Hashring).Set(float64(len(v)))
+		case []AZAwareEndpoint:
+			cw.hashringNodesGauge.WithLabelValues(c.Hashring).Set(float64(len(v)))
+		}
 		cw.hashringTenantsGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Tenants)))
 	}
 

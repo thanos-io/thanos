@@ -95,6 +95,45 @@ The example content of `hashring.json`:
 
 With such configuration any receive listens for remote write on `<ip>10908/api/v1/receive` and will forward to correct one in hashring if needed for tenancy and replication.
 
+### AZ-aware Ketama hashring (experimental)
+
+In order to ensure even spread for replication over nodes in different availability-zones, you can choose to include az definition in your hashring config. If we for example have a 6 node cluster, spread over 3 different availability zones; A, B and C, we could use the following example `hashring.json`:
+
+```json
+[
+    {
+        "endpoints": [
+          {
+            "address": "127.0.0.1:10907",
+            "az": "A"
+          },
+          {
+            "address": "127.0.0.1:11907",
+            "az": "B"
+          },
+          {
+            "address": "127.0.0.1:12907",
+            "az": "C"
+          },
+          {
+            "address": "127.0.0.1:13907",
+            "az": "A"
+          },
+          {
+            "address": "127.0.0.1:14907",
+            "az": "B"
+          },
+          {
+            "address": "127.0.0.1:15907",
+            "az": "C"
+          }
+        ]
+    }
+]
+```
+
+This is only supported for the Ketama algorithm.
+
 ## Limits & gates (experimental)
 
 Thanos Receive has some limits and gates that can be configured to control resource usage. Here's the difference between limits and gates:

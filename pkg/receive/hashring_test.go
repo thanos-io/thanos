@@ -5,8 +5,11 @@ package receive
 
 import (
 	"fmt"
+	"math"
+	"strings"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/stretchr/testify/require"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -320,6 +323,243 @@ func TestKetamaHashringReplicationConsistency(t *testing.T) {
 			foundInInitialAssignment := findSeries(initialAssignments, node, ts)
 			require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
 		}
+	}
+}
+
+func TestKetamaHashringEvenAZSpread(t *testing.T) {
+	tenant := "default-tenant"
+	ts := &prompb.TimeSeries{
+		Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+		Samples: []prompb.Sample{{Value: 1, Timestamp: 0}},
+	}
+
+	for _, tt := range []struct {
+		nodes    interface{}
+		replicas uint64
+	}{
+		{
+			nodes: []AZAwareEndpoint{
+				{Address: "a", AZ: "1"},
+				{Address: "b", AZ: "2"},
+				{Address: "c", AZ: "1"},
+				{Address: "d", AZ: "2"},
+			},
+			replicas: 1,
+		},
+		{
+			nodes:    []string{"a", "b", "c", "d"},
+			replicas: 1,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{Address: "a", AZ: "1"},
+				{Address: "b", AZ: "2"},
+				{Address: "c", AZ: "1"},
+				{Address: "d", AZ: "2"},
+			},
+			replicas: 2,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{Address: "a", AZ: "1"},
+				{Address: "b", AZ: "2"},
+				{Address: "c", AZ: "3"},
+				{Address: "d", AZ: "1"},
+				{Address: "e", AZ: "2"},
+				{Address: "f", AZ: "3"},
+			},
+			replicas: 4,
+		},
+		{
+			nodes:    []string{"a", "b", "c", "d", "e", "f"},
+			replicas: 3,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{Address: "a", AZ: "1"},
+				{Address: "b", AZ: "2"},
+				{Address: "c", AZ: "3"},
+				{Address: "d", AZ: "1"},
+				{Address: "e", AZ: "2"},
+				{Address: "f", AZ: "3"},
+				{Address: "g", AZ: "4"},
+				{Address: "h", AZ: "4"},
+				{Address: "i", AZ: "4"},
+				{Address: "j", AZ: "5"},
+				{Address: "k", AZ: "5"},
+				{Address: "l", AZ: "5"},
+			},
+			replicas: 10,
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			hashRing, err := newKetamaHashring(tt.nodes, SectionsPerNode, tt.replicas)
+			testutil.Ok(t, err)
+
+			availableAzs := make(map[string]int64)
+			switch v := tt.nodes.(type) {
+			case []string:
+				availableAzs[""] = 0
+			case []AZAwareEndpoint:
+				for _, endpoint := range v {
+					availableAzs[endpoint.AZ] = 0
+				}
+			}
+
+			azSpread := make(map[string]int64)
+			for i := 0; i < int(tt.replicas); i++ {
+				r, err := hashRing.GetN(tenant, ts, uint64(i))
+				testutil.Ok(t, err)
+
+				switch v := tt.nodes.(type) {
+				case []string:
+					for _, n := range v {
+						az := ""
+						if !strings.HasPrefix(n, r) {
+							continue
+						}
+						azSpread[az]++
+					}
+				case []AZAwareEndpoint:
+					for _, n := range v {
+						if !strings.HasPrefix(n.Address, r) {
+							continue
+						}
+						azSpread[n.AZ]++
+					}
+				}
+
+			}
+
+			expectedAzSpreadLength := int(tt.replicas)
+			if int(tt.replicas) > len(availableAzs) {
+				expectedAzSpreadLength = len(availableAzs)
+			}
+			testutil.Equals(t, len(azSpread), expectedAzSpreadLength)
+
+			for _, writeToAz := range azSpread {
+				minAz := getMinAz(azSpread)
+				testutil.Assert(t, math.Abs(float64(writeToAz-minAz)) <= 1.0)
+			}
+		})
+	}
+}
+
+func TestKetamaHashringEvenNodeSpread(t *testing.T) {
+	tenant := "default-tenant"
+
+	for _, tt := range []struct {
+		nodes     interface{}
+		replicas  uint64
+		numSeries uint64
+	}{
+		{
+			nodes: []AZAwareEndpoint{
+				{Address: "a", AZ: "1"},
+				{Address: "b", AZ: "2"},
+				{Address: "c", AZ: "1"},
+				{Address: "d", AZ: "2"},
+			},
+			replicas:  2,
+			numSeries: 1000,
+		},
+		{
+			nodes:     []string{"a", "b", "c", "d"},
+			replicas:  2,
+			numSeries: 1000,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{Address: "a", AZ: "1"},
+				{Address: "b", AZ: "2"},
+				{Address: "c", AZ: "3"},
+				{Address: "d", AZ: "2"},
+				{Address: "e", AZ: "1"},
+				{Address: "f", AZ: "3"},
+			},
+			replicas:  3,
+			numSeries: 10000,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{Address: "a", AZ: "1"},
+				{Address: "b", AZ: "2"},
+				{Address: "c", AZ: "3"},
+				{Address: "d", AZ: "2"},
+				{Address: "e", AZ: "1"},
+				{Address: "f", AZ: "3"},
+				{Address: "g", AZ: "1"},
+				{Address: "h", AZ: "2"},
+				{Address: "i", AZ: "3"},
+			},
+			replicas:  2,
+			numSeries: 10000,
+		},
+		{
+			nodes: []AZAwareEndpoint{
+				{Address: "a", AZ: "1"},
+				{Address: "b", AZ: "2"},
+				{Address: "c", AZ: "3"},
+				{Address: "d", AZ: "2"},
+				{Address: "e", AZ: "1"},
+				{Address: "f", AZ: "3"},
+				{Address: "g", AZ: "1"},
+				{Address: "h", AZ: "2"},
+				{Address: "i", AZ: "3"},
+			},
+			replicas:  9,
+			numSeries: 10000,
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			hashRing, err := newKetamaHashring(tt.nodes, SectionsPerNode, tt.replicas)
+			testutil.Ok(t, err)
+			var optimalSpread int
+			switch v := tt.nodes.(type) {
+			case []string:
+				optimalSpread = int(tt.numSeries*tt.replicas) / len(v)
+			case []AZAwareEndpoint:
+				optimalSpread = int(tt.numSeries*tt.replicas) / len(v)
+			}
+			nodeSpread := make(map[string]int)
+			for i := 0; i < int(tt.numSeries); i++ {
+				ts := &prompb.TimeSeries{
+					Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", fmt.Sprintf("%d", i))),
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 0}},
+				}
+				for j := 0; j < int(tt.replicas); j++ {
+					r, err := hashRing.GetN(tenant, ts, uint64(j))
+					testutil.Ok(t, err)
+
+					nodeSpread[r]++
+				}
+			}
+			for _, node := range nodeSpread {
+				diff := math.Abs(float64(node) - float64(optimalSpread))
+				testutil.Assert(t, diff/float64(optimalSpread) < 0.1)
+			}
+		})
+	}
+}
+
+func TestInvalidAZHashringCfg(t *testing.T) {
+	for _, tt := range []struct {
+		cfg           []HashringConfig
+		replicas      uint64
+		algorithm     HashringAlgorithm
+		expectedError string
+	}{
+		{
+			cfg:           []HashringConfig{{Endpoints: []string{"a,1", "b,2", "c,1", "d,2"}}},
+			replicas:      2,
+			algorithm:     AlgorithmHashmod,
+			expectedError: "Hashmod algorithm does not support AZ aware hashring configuration. Either use Ketama or remove AZ configuration.",
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			_, err := newMultiHashring(tt.algorithm, tt.replicas, tt.cfg)
+			require.EqualError(t, err, tt.expectedError)
+		})
 	}
 }
 
