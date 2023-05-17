@@ -167,7 +167,7 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 func appendFloatSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
 	ref, err := app.Append(
 		0,
-		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix)),
+		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel)),
 		int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
 		opts.Random.Float64(),
 	)
