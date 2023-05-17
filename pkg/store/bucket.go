@@ -2345,7 +2345,7 @@ type postingPtr struct {
 }
 
 // fetchPostings fill postings requested by posting groups.
-// It returns one postings for each key, in the same order.
+// It returns one posting for each key, in the same order.
 // If postings for given key is not fetched, entry at given index will be nil.
 func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Label, bytesLimiter BytesLimiter) ([]index.Postings, []func(), error) {
 	var closeFns []func()
