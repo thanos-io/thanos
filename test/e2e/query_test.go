@@ -932,7 +932,7 @@ func TestQueryStoreDedup(t *testing.T) {
 			testutil.Ok(t, e2e.StartAndWaitReady(querier))
 
 			instantQuery(t, ctx, querier.Endpoint("http"), func() string {
-				return fmt.Sprintf("max_over_time(simple_series{instance='foo_0', block_finder='%s'}[2h])", tt.blockFinder)
+				return fmt.Sprintf("max_over_time(simple_series{block_finder='%s'}[2h])", tt.blockFinder)
 			}, time.Now, promclient.QueryOptions{
 				Deduplicate: true,
 			}, 1)
@@ -953,46 +953,33 @@ func createSimpleReplicatedBlocksInS3(
 	intReplicaLabel string,
 	blockFinder string,
 ) {
-	blockSizes := []struct {
-		samples int
-		series  int
-		name    string
-	}{
-		{samples: 1, series: 1, name: "simple_series"},
-	}
 	now := time.Now()
 	dir := filepath.Join(dockerEnv.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 	for _, replica := range replicas {
-		for _, blockSize := range blockSizes {
-			series := make([]labels.Labels, blockSize.series)
-			for i := 0; i < blockSize.series; i++ {
-				bigSeriesLabels := labels.FromStrings("__name__", blockSize.name, "instance", fmt.Sprintf("foo_%d", i), "block_finder", blockFinder)
-				if intReplicaLabel != "" {
-					bigSeriesLabels = append(bigSeriesLabels, labels.Label{Name: intReplicaLabel, Value: replica})
-				}
-				sort.Sort(bigSeriesLabels)
-				series[i] = bigSeriesLabels
-			}
-			extLabels := labels.FromStrings("prometheus", "p1")
-			if extReplicaLabel != "" {
-				extLabels = append(extLabels, labels.Label{Name: extReplicaLabel, Value: replica})
-			}
-			blockID, err := e2eutil.CreateBlockWithBlockDelay(ctx,
-				dir,
-				series,
-				blockSize.samples,
-				timestamp.FromTime(now),
-				timestamp.FromTime(now.Add(2*time.Hour)),
-				30*time.Minute,
-				extLabels,
-				0,
-				metadata.NoneFunc,
-			)
-			testutil.Ok(t, err)
-			blockPath := path.Join(dir, blockID.String())
-			testutil.Ok(t, objstore.UploadDir(ctx, logger, bucket, blockPath, blockID.String()))
+		series := labels.FromStrings("__name__", "simple_series", "block_finder", blockFinder)
+		if intReplicaLabel != "" {
+			series = append(series, labels.Label{Name: intReplicaLabel, Value: replica})
 		}
+		sort.Sort(series)
+		extLabels := labels.FromStrings("prometheus", "p1")
+		if extReplicaLabel != "" {
+			extLabels = append(extLabels, labels.Label{Name: extReplicaLabel, Value: replica})
+		}
+		blockID, err := e2eutil.CreateBlockWithBlockDelay(ctx,
+			dir,
+			[]labels.Labels{series},
+			1,
+			timestamp.FromTime(now),
+			timestamp.FromTime(now.Add(2*time.Hour)),
+			30*time.Minute,
+			extLabels,
+			0,
+			metadata.NoneFunc,
+		)
+		testutil.Ok(t, err)
+		blockPath := path.Join(dir, blockID.String())
+		testutil.Ok(t, objstore.UploadDir(ctx, logger, bucket, blockPath, blockID.String()))
 	}
 }
 
