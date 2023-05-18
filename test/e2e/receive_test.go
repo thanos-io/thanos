@@ -100,17 +100,18 @@ func TestReceive(t *testing.T) {
 			    naive HA Thanos Receive with HA Prometheus. This is used to exercise
 			    deduplication with external and "internal" TSDB block labels
 
-							 ┌──────────┐ ┌──────────┐
-							 │  Prom    │ │  Prom	 │
-							 └────┬─────┘ └────┬─────┘
-				                  │            │
-				             ┌────▼─────┐ ┌────▼─────┐
-				             │ Ingestor	│ │ Ingestor │
-				             └───────┬──┘ └──┬───────┘
-				                     │       │
-				                    ┌▼───────▼┐
-				                    │  Query  │
-				                    └─────────┘
+					 ┌──────┐  ┌──────┬──────┐
+					 │ Prom │  │      │ Prom │
+					 └─┬────┴──┼────┐ └─────┬┘
+			           │       │    │       │
+				       │       │    │       │
+				     ┌─▼───────▼┐ ┌─▼───────▼┐
+				     │ Ingestor	│ │ Ingestor │
+				     └───────┬──┘ └──┬───────┘
+				             │       │
+				            ┌▼───────▼┐
+				            │  Query  │
+				            └─────────┘
 		*/
 		t.Parallel()
 		e, err := e2e.NewDockerEnvironment("haingest-haprom")
