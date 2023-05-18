@@ -1384,19 +1384,40 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk b
 			seriesCut = expectedSamples / samplesPerSeriesPerBlock
 		}
 
-		bCases = append(bCases, &storetestutil.SeriesCase{
-			Name: fmt.Sprintf("%dof%d", expectedSamples, totalSeries*samplesPerSeries),
-			Req: &storepb.SeriesRequest{
-				MinTime: 0,
-				MaxTime: int64(expectedSamples) - 1,
-				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+		matchersCase := []*labels.Matcher{
+			labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
+			labels.MustNewMatcher(labels.MatchNotEqual, "foo", "bar"),
+			labels.MustNewMatcher(labels.MatchRegexp, "j", "(0|1)"),
+			labels.MustNewMatcher(labels.MatchRegexp, "j", "0|1"),
+			labels.MustNewMatcher(labels.MatchNotRegexp, "j", "(0|1)"),
+			labels.MustNewMatcher(labels.MatchNotRegexp, "j", "0|1"),
+		}
+
+		for _, lm := range matchersCase {
+			var expectedSeries []*storepb.Series
+			m, err := storepb.PromMatchersToMatchers(lm)
+			testutil.Ok(t, err)
+
+			// seriesCut does not cut chunks properly, but those are assured against for non benchmarks only, where we use 100% case only.
+			for _, s := range series[:seriesCut] {
+				for _, label := range s.Labels {
+					if label.Name == lm.Name && lm.Matches(label.Value) {
+						expectedSeries = append(expectedSeries, s)
+						break
+					}
+				}
+			}
+			bCases = append(bCases, &storetestutil.SeriesCase{
+				Name: fmt.Sprintf("%dof%d[%s]", expectedSamples, totalSeries*samplesPerSeries, lm.String()),
+				Req: &storepb.SeriesRequest{
+					MinTime:    0,
+					MaxTime:    int64(expectedSamples) - 1,
+					Matchers:   m,
+					SkipChunks: skipChunk,
 				},
-				SkipChunks: skipChunk,
-			},
-			// This does not cut chunks properly, but those are assured against for non benchmarks only, where we use 100% case only.
-			ExpectedSeries: series[:seriesCut],
-		})
+				ExpectedSeries: expectedSeries,
+			})
+		}
 	}
 	storetestutil.TestServerSeries(t, st, bCases...)
 
