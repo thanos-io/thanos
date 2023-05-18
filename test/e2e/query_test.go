@@ -849,6 +849,11 @@ func TestSidecarStorePushdown(t *testing.T) {
 	})
 }
 
+type seriesWithLabels struct {
+	intLabels labels.Labels
+	extLabels labels.Labels
+}
+
 func TestQueryStoreDedup(t *testing.T) {
 	t.Parallel()
 
@@ -880,49 +885,75 @@ func TestQueryStoreDedup(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(storeGW))
 
 	tests := []struct {
-		replicas    []string
-		extLabel    string
-		intLabel    string
-		desc        string
-		blockFinder string
+		extReplicaLabel  string
+		intReplicaLabel  string
+		desc             string
+		blockFinderLabel string
+		series           []seriesWithLabels
 	}{
 		{
-			desc:        "Deduplication works with external label",
-			replicas:    []string{"a", "b"},
-			extLabel:    "replica",
-			blockFinder: "dedupext",
+			desc:            "Deduplication works with external label",
+			extReplicaLabel: "replica",
+			series: []seriesWithLabels{
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("replica", "a"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("replica", "b"),
+				},
+			},
+			blockFinderLabel: "dedupext",
 		},
 		{
-			desc:        "Deduplication works with internal label",
-			replicas:    []string{"a", "b"},
-			intLabel:    "replica",
-			blockFinder: "dedupint",
+			desc:            "Deduplication works with internal label",
+			intReplicaLabel: "replica",
+			series: []seriesWithLabels{
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "a"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "b"),
+				},
+			},
+			blockFinderLabel: "dedupint",
 		},
 		{
-			desc:        "Deduplication works with both internal and external label",
-			replicas:    []string{"a", "b"},
-			intLabel:    "replica",
-			extLabel:    "receive_replica",
-			blockFinder: "dedupintext",
+			desc:            "Deduplication works with both internal and external label",
+			intReplicaLabel: "replica",
+			extReplicaLabel: "receive_replica",
+			series: []seriesWithLabels{
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "a"),
+					extLabels: labels.FromStrings("replica", "a"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "replica", "b"),
+					extLabels: labels.FromStrings("replica", "b"),
+				},
+			},
+			blockFinderLabel: "dedupintext",
 		},
 	}
 
+	// Prepare and upload all the blocks that will be used to S3.
 	var totalBlocks int
 	for _, tt := range tests {
-		createSimpleReplicatedBlocksInS3(ctx, t, e, l, bkt, tt.replicas, tt.extLabel, tt.intLabel, tt.blockFinder)
-		totalBlocks += len(tt.replicas)
+		createSimpleReplicatedBlocksInS3(ctx, t, e, l, bkt, tt.series, tt.blockFinderLabel)
+		totalBlocks += len(tt.series)
 	}
 	testutil.Ok(t, storeGW.WaitSumMetrics(e2emon.Equals(float64(totalBlocks)), "thanos_blocks_meta_synced"))
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			querierBuilder := e2ethanos.NewQuerierBuilder(e, tt.blockFinder, storeGW.InternalEndpoint("grpc")).WithProxyStrategy("lazy")
+			querierBuilder := e2ethanos.NewQuerierBuilder(e, tt.blockFinderLabel, storeGW.InternalEndpoint("grpc")).WithProxyStrategy("lazy")
 			var replicaLabels []string
-			if tt.intLabel != "" {
-				replicaLabels = append(replicaLabels, tt.intLabel)
+			if tt.intReplicaLabel != "" {
+				replicaLabels = append(replicaLabels, tt.intReplicaLabel)
 			}
-			if tt.extLabel != "" {
-				replicaLabels = append(replicaLabels, tt.extLabel)
+			if tt.extReplicaLabel != "" {
+				replicaLabels = append(replicaLabels, tt.extReplicaLabel)
 			}
 			if len(replicaLabels) > 0 {
 				sort.Strings(replicaLabels)
@@ -932,7 +963,7 @@ func TestQueryStoreDedup(t *testing.T) {
 			testutil.Ok(t, e2e.StartAndWaitReady(querier))
 
 			instantQuery(t, ctx, querier.Endpoint("http"), func() string {
-				return fmt.Sprintf("max_over_time(simple_series{block_finder='%s'}[2h])", tt.blockFinder)
+				return fmt.Sprintf("max_over_time(simple_series{block_finder='%s'}[2h])", tt.blockFinderLabel)
 			}, time.Now, promclient.QueryOptions{
 				Deduplicate: true,
 			}, 1)
@@ -942,38 +973,33 @@ func TestQueryStoreDedup(t *testing.T) {
 	}
 }
 
+// createSimpleReplicatedBlocksInS3 creates blocks in S3 with the series. If blockFinderLabel is not empty,
+// it will be added to the block's labels to easily find the blocks on with queries later.
 func createSimpleReplicatedBlocksInS3(
 	ctx context.Context,
 	t *testing.T,
 	dockerEnv *e2e.DockerEnvironment,
 	logger log.Logger,
 	bucket *s3.Bucket,
-	replicas []string,
-	extReplicaLabel string,
-	intReplicaLabel string,
-	blockFinder string,
+	series []seriesWithLabels,
+	blockFinderLabel string,
 ) {
 	now := time.Now()
 	dir := filepath.Join(dockerEnv.SharedDir(), "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
-	for _, replica := range replicas {
-		series := labels.FromStrings("__name__", "simple_series", "block_finder", blockFinder)
-		if intReplicaLabel != "" {
-			series = append(series, labels.Label{Name: intReplicaLabel, Value: replica})
-		}
-		sort.Sort(series)
-		extLabels := labels.FromStrings("prometheus", "p1")
-		if extReplicaLabel != "" {
-			extLabels = append(extLabels, labels.Label{Name: extReplicaLabel, Value: replica})
+	for _, s := range series {
+		intLabels := s.intLabels
+		if blockFinderLabel != "" {
+			intLabels = labels.NewBuilder(s.intLabels.Copy()).Set("block_finder", blockFinderLabel).Labels()
 		}
 		blockID, err := e2eutil.CreateBlockWithBlockDelay(ctx,
 			dir,
-			[]labels.Labels{series},
+			[]labels.Labels{intLabels},
 			1,
 			timestamp.FromTime(now),
 			timestamp.FromTime(now.Add(2*time.Hour)),
 			30*time.Minute,
-			extLabels,
+			s.extLabels,
 			0,
 			metadata.NoneFunc,
 		)
