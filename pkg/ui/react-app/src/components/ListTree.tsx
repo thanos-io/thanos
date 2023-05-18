@@ -17,7 +17,7 @@ const ListTree: React.FC<NodeProps> = ({ id, node }) => {
 
   const [state, setState] = useState<mapping>({});
   const toggle = (e: React.MouseEvent<HTMLDivElement>) => {
-    const el = e.target as HTMLInputElement;
+    const el = e.target as HTMLDivElement;
     const id = el.getAttribute('id');
     if (id) {
       setState({ ...state, [id]: !state[id] });
@@ -30,22 +30,18 @@ const ListTree: React.FC<NodeProps> = ({ id, node }) => {
       const item = (
         <React.Fragment>
           <ListGroupItem
-            style={{ zIndex: 0 }}
             className={`bg-transparent p-0 border-0 ${parentId ? `rounded-0 ${lvl ? 'border-bottom-0' : ''}` : ''}`}
           >
             {
-              <div
-                className={`d-flex align-items-center`}
-                style={{ paddingLeft: `${25 * lvl}px`, cursor: 'pointer' }}
-                id={id}
-                onClick={toggle}
-              >
+              <div className={`d-flex align-items-center`} style={{ paddingLeft: `${25 * lvl}px` }}>
                 {node.children && (
-                  <div className="pl-0 btn text-primary" color="link">
+                  <div className="pl-0 btn text-primary" style={{ cursor: 'inherit' }} color="link">
                     {state[id] ? '-' : '+'}
                   </div>
                 )}
-                {node.name}
+                <div id={id} style={{ cursor: `${node.children ? 'pointer' : 'inherit'}` }} onClick={toggle}>
+                  {node.name}
+                </div>
               </div>
             }
           </ListGroupItem>

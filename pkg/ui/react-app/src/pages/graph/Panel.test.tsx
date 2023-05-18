@@ -57,6 +57,9 @@ describe('Panel', () => {
       results.push(opts);
     };
     const panel = shallow(<Panel {...defaultProps} onOptionsChanged={onOptionsChanged} />);
+    // Panel construction updates Explain checkbox prop to disbale.
+    // Hence, a result is added and dropping it.
+    results.length = 0;
     const links = panel.find(NavLink);
     [
       { panelType: 'Table', active: true },
@@ -66,10 +69,8 @@ describe('Panel', () => {
       const className = tc.active ? 'active' : '';
       expect(link.prop('className')).toEqual(className);
       link.simulate('click');
-      // Panel construction updates Explain checkbox prop to disbale.
-      // Hence two results.
-      expect(results).toHaveLength(2);
-      expect(results[1].type).toEqual(tc.panelType.toLowerCase());
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toEqual(tc.panelType.toLowerCase());
       results.pop();
     });
   });
