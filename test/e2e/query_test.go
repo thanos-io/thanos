@@ -1009,6 +1009,34 @@ func createSimpleReplicatedBlocksInS3(
 	}
 }
 
+func TestSidecarQueryDedup(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("sidecar-dedup")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p1", 1, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
+
+	query1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
+		WithReplicaLabels("replica").
+		Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(query1))
+
+	queryAndAssertSeries(t, ctx, query1.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, []model.Metric{
+		{
+			"job":        "myself",
+			"prometheus": "p1",
+		},
+	})
+}
+
 func TestSidecarQueryEvaluation(t *testing.T) {
 	t.Parallel()
 
