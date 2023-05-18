@@ -1011,6 +1011,7 @@ func createSimpleReplicatedBlocksInS3(
 
 func TestSidecarQueryDedup(t *testing.T) {
 	t.Parallel()
+	timeNow := time.Now().UnixNano()
 
 	e, err := e2e.NewDockerEnvironment("sidecar-dedup")
 	testutil.Ok(t, err)
@@ -1018,20 +1019,32 @@ func TestSidecarQueryDedup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Cleanup(cancel)
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p1", 1, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p1", 1, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
+	samples := []fakeMetricSample{
+		{"instance1", 1, timeNow},
+		{"instance1", 2, timeNow},
+		{"instance2", 1, timeNow},
+		{"instance2", 2, timeNow},
+	}
+	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, samples))
+	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom2, samples))
+
 	query1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
-		WithReplicaLabels("replica").
+		WithReplicaLabels("replica", "instance").
 		Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(query1))
 
-	queryAndAssertSeries(t, ctx, query1.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+	// This returns 4 samples without deduplication.
+	queryAndAssertSeries(t, ctx, query1.Endpoint("http"), func() string {
+		return "my_fake_metric"
+	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, []model.Metric{
 		{
-			"job":        "myself",
+			"__name__":   "my_fake_metric",
 			"prometheus": "p1",
 		},
 	})
