@@ -97,7 +97,7 @@
     "sinon": "^9.2.4",
     "typescript": "^4.6.2"
   },
-  "proxy": "http://localhost:10904",
+  "proxy": "http://localhost:10902",
   "jest": {
     "snapshotSerializers": [
       "enzyme-to-json/serializer"
