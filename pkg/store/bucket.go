@@ -2292,6 +2292,7 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 	if m.Matches("") {
 		var toRemove []labels.Label
 
+		// Fast-path for MatchNotRegexp matching.
 		// Inverse of a MatchNotRegexp is MatchRegexp (double negation).
 		// Fast-path for set matching.
 		if m.Type == labels.MatchNotRegexp {
@@ -2299,6 +2300,12 @@ func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, er
 				toRemove = labelsFromSetMatchers(m.Name, vals)
 				return newPostingGroup(true, nil, toRemove), nil
 			}
+		}
+
+		// Fast-path for MatchNotEqual matching.
+		// Inverse of a MatchNotEqual is MatchEqual (double negation).
+		if m.Type == labels.MatchNotEqual {
+			return newPostingGroup(true, nil, []labels.Label{{Name: m.Name, Value: m.Value}}), nil
 		}
 
 		vals, err := lvalsFn(m.Name)
