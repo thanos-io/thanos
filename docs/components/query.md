@@ -11,8 +11,8 @@ Example command to run Querier:
 ```bash
 thanos query \
     --http-address     "0.0.0.0:9090" \
-    --store            "<store-api>:<grpc-port>" \
-    --store            "<store-api2>:<grpc-port>"
+    --endpoint         "<store-api>:<grpc-port>" \
+    --endpoint         "<store-api2>:<grpc-port>"
 ```
 
 ## Querier use cases, why do I need this component?
@@ -71,8 +71,8 @@ If we configure Querier like this:
 thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
-    --store               "<store-api>:<grpc-port>" \
-    --store               "<store-api2>:<grpc-port>" \
+    --endpoint            "<store-api>:<grpc-port>" \
+    --endpoint            "<store-api2>:<grpc-port>" \
 ```
 
 And we query for metric `up{job="prometheus",env="2"}` with this option we will get 2 results:
@@ -97,8 +97,8 @@ thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
     --query.replica-label "replicaX" \
-    --store               "<store-api>:<grpc-port>" \
-    --store               "<store-api2>:<grpc-port>" \
+    --endpoint            "<store-api>:<grpc-port>" \
+    --endpoint            "<store-api2>:<grpc-port>" \
 ```
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
