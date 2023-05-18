@@ -89,7 +89,64 @@ func TestReceive(t *testing.T) {
 				"job":        "myself",
 				"prometheus": "prom1",
 				"receive":    "receive-ingestor",
-				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+		})
+	})
+
+	t.Run("ha_ingestor_with_ha_prom", func(t *testing.T) {
+		/*
+				The ha_ingestor_with_ha_prom suite represents a configuration of a
+			    naive HA Thanos Receive with HA Prometheus. This is used to exercise
+			    deduplication with external and "internal" TSDB block labels
+
+							 ┌──────────┐ ┌──────────┐
+							 │  Prom    │ │  Prom	 │
+							 └────┬─────┘ └────┬─────┘
+				                  │            │
+				             ┌────▼─────┐ ┌────▼─────┐
+				             │ Ingestor	│ │ Ingestor │
+				             └───────┬──┘ └──┬───────┘
+				                     │       │
+				                    ┌▼───────▼┐
+				                    │  Query  │
+				                    └─────────┘
+		*/
+		t.Parallel()
+		e, err := e2e.NewDockerEnvironment("haingest-haprom")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		// Setup Receives
+		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
+		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().Init()
+
+		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2))
+
+		// Setup Prometheus
+		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom1", 1, e2ethanos.RemoteWriteEndpoint(r2.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, e2e.StartAndWaitReady(prom, prom2))
+
+		q := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).
+			// The "replica" label is added to the Prometheus instances via the e2ethanos.DefaultPromConfig.
+			// The "receive" label is added to the Receive instances via the e2ethanos.NewReceiveBuilder.
+			WithReplicaLabels("replica", "receive").
+			Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		t.Cleanup(cancel)
+
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+
+		// We expect the data from each Prometheus instance to be replicated twice across our ingesting instances
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, []model.Metric{
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
 				"tenant_id":  "default-tenant",
 			},
 		})
