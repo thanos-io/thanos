@@ -26,14 +26,14 @@ func TestCacheKey_string(t *testing.T) {
 	t.Parallel()
 
 	uid := ulid.MustNew(1, nil)
-	uidStr := uid.String()
+	ulidString := uid.String()
 
 	tests := map[string]struct {
 		key      cacheKey
 		expected string
 	}{
 		"should stringify postings cache key": {
-			key: cacheKey{uidStr, cacheKeyPostings(labels.Label{Name: "foo", Value: "bar"})},
+			key: cacheKey{ulidString, cacheKeyPostings(labels.Label{Name: "foo", Value: "bar"})},
 			expected: func() string {
 				hash := blake2b.Sum256([]byte("foo:bar"))
 				encodedHash := base64.RawURLEncoding.EncodeToString(hash[0:])
@@ -42,7 +42,7 @@ func TestCacheKey_string(t *testing.T) {
 			}(),
 		},
 		"should stringify series cache key": {
-			key:      cacheKey{uidStr, cacheKeySeries(12345)},
+			key:      cacheKey{ulidString, cacheKeySeries(12345)},
 			expected: fmt.Sprintf("S:%s:12345", uid.String()),
 		},
 	}
@@ -59,7 +59,7 @@ func TestCacheKey_string_ShouldGuaranteeReasonablyShortKeyLength(t *testing.T) {
 	t.Parallel()
 
 	uid := ulid.MustNew(1, nil)
-	uidStr := uid.String()
+	ulidString := uid.String()
 
 	tests := map[string]struct {
 		keys        []cacheKey
@@ -68,14 +68,14 @@ func TestCacheKey_string_ShouldGuaranteeReasonablyShortKeyLength(t *testing.T) {
 		"should guarantee reasonably short key length for postings": {
 			expectedLen: 72,
 			keys: []cacheKey{
-				{uidStr, cacheKeyPostings(labels.Label{Name: "a", Value: "b"})},
-				{uidStr, cacheKeyPostings(labels.Label{Name: strings.Repeat("a", 100), Value: strings.Repeat("a", 1000)})},
+				{ulidString, cacheKeyPostings(labels.Label{Name: "a", Value: "b"})},
+				{ulidString, cacheKeyPostings(labels.Label{Name: strings.Repeat("a", 100), Value: strings.Repeat("a", 1000)})},
 			},
 		},
 		"should guarantee reasonably short key length for series": {
 			expectedLen: 49,
 			keys: []cacheKey{
-				{uidStr, cacheKeySeries(math.MaxUint64)},
+				{ulidString, cacheKeySeries(math.MaxUint64)},
 			},
 		},
 	}
