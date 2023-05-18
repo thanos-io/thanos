@@ -1394,7 +1394,7 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk b
 		}
 
 		for _, lm := range matchersCase {
-			expectedSeries := make([]*storepb.Series, 0, seriesCut)
+			var expectedSeries []*storepb.Series
 			m, err := storepb.PromMatchersToMatchers(lm)
 			testutil.Ok(t, err)
 

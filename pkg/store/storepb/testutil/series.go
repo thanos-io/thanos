@@ -195,7 +195,7 @@ func appendHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opt
 
 	ref, err := app.AppendHistogram(
 		0,
-		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix)),
+		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel)),
 		int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
 		sample,
 		nil,
