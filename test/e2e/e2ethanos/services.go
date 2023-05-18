@@ -484,6 +484,14 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
 
+func RemoteWriteEndpoints(addrs ...string) string {
+	var endpoints []string
+	for _, addr := range addrs {
+		endpoints = append(endpoints, RemoteWriteEndpoint(addr))
+	}
+	return strings.Join(endpoints, ",")
+}
+
 type ReceiveBuilder struct {
 	e2e.Linkable
 
@@ -1130,13 +1138,16 @@ scrape_configs:
 	if remoteWriteEndpoint != "" {
 		config = fmt.Sprintf(`
 %s
-remote_write:
+remote_write:`, config)
+		for _, url := range strings.Split(remoteWriteEndpoint, ",") {
+			config = fmt.Sprintf(`
+%s
 - url: "%s"
   # Don't spam receiver on mistake.
   queue_config:
     min_backoff: 2s
-    max_backoff: 10s
-`, config, remoteWriteEndpoint)
+    max_backoff: 10s`, config, url)
+		}
 	}
 
 	if ruleFile != "" {

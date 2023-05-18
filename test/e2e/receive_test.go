@@ -124,8 +124,8 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2))
 
 		// Setup Prometheus
-		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom1", 1, e2ethanos.RemoteWriteEndpoint(r2.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom1", 1, e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom, prom2))
 
 		q := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).
@@ -140,7 +140,7 @@ func TestReceive(t *testing.T) {
 
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
-		// We expect the data from each Prometheus instance to be replicated twice across our ingesting instances
+		// We expect the data from each Prometheus instance to be replicated 4 times across our ingesting instances.
 		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, []model.Metric{
