@@ -129,25 +129,70 @@ func TestReceive(t *testing.T) {
 		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom1", 1, e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom, prom2))
 
-		q := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).
-			// The "replica" label is added to the Prometheus instances via the e2ethanos.DefaultPromConfig.
-			// The "receive" label is added to the Receive instances via the e2ethanos.NewReceiveBuilder.
+		// The "replica" label is added to the Prometheus instances via the e2ethanos.DefaultPromConfig.
+		// The "receive" label is added to the Receive instances via the e2ethanos.NewReceiveBuilder.
+		// Here we setup 3 queriers, one for each possible combination of replica label: internal, external, and both.
+		q1 := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).
 			WithReplicaLabels("replica", "receive").
 			Init()
-		testutil.Ok(t, e2e.StartAndWaitReady(q))
+		q2 := e2ethanos.NewQuerierBuilder(e, "2", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).
+			WithReplicaLabels("replica").
+			Init()
+		q3 := e2ethanos.NewQuerierBuilder(e, "3", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).
+			WithReplicaLabels("receive").
+			Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(q1, q2, q3))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
 
-		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, q1.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 		// We expect the data from each Prometheus instance to be replicated 4 times across our ingesting instances.
-		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+		// So 1 result when using both replica labels.
+		queryAndAssertSeries(t, ctx, q1.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, []model.Metric{
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
+				"tenant_id":  "default-tenant",
+			},
+		})
+
+		// We expect 2 results when using only the "replica" label, which is an internal label when coming from
+		// Prometheus via remote write.
+		queryAndAssertSeries(t, ctx, q2.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, []model.Metric{
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"receive":    "receive-1",
+				"tenant_id":  "default-tenant",
+			},
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"receive":    "receive-2",
+				"tenant_id":  "default-tenant",
+			},
+		})
+
+		// We expect 2 results when using only the "receive" label, which is an external label added by the Receives.
+		queryAndAssertSeries(t, ctx, q3.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, []model.Metric{
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"replica":    "1",
 				"tenant_id":  "default-tenant",
 			},
 		})
