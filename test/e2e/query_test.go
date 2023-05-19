@@ -1059,9 +1059,15 @@ func TestSidecarQueryDedup(t *testing.T) {
 	query1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
 		WithReplicaLabels("replica", "instance").
 		Init()
-	testutil.Ok(t, e2e.StartAndWaitReady(query1))
+	query2 := e2ethanos.NewQuerierBuilder(e, "2", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
+		WithReplicaLabels("replica").
+		Init()
+	query3 := e2ethanos.NewQuerierBuilder(e, "3", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
+		WithReplicaLabels("instance").
+		Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(query1, query2, query3))
 
-	// This returns 4 samples without deduplication.
+	// This returns 4 samples without deduplication. Uses both an internal and external labels as replica labels
 	queryAndAssertSeries(t, ctx, query1.Endpoint("http"), func() string {
 		return "my_fake_metric"
 	}, time.Now, promclient.QueryOptions{
@@ -1070,6 +1076,44 @@ func TestSidecarQueryDedup(t *testing.T) {
 		{
 			"__name__":   "my_fake_metric",
 			"prometheus": "p1",
+		},
+	})
+
+	// This returns 2 samples without deduplication. Uses "replica" as replica label, which is an external label when
+	// being captured by Thanos Sidecar.
+	queryAndAssertSeries(t, ctx, query2.Endpoint("http"), func() string {
+		return "my_fake_metric"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, []model.Metric{
+		{
+			"__name__":   "my_fake_metric",
+			"instance":   "instance1",
+			"prometheus": "p1",
+		},
+		{
+			"__name__":   "my_fake_metric",
+			"instance":   "instance2",
+			"prometheus": "p1",
+		},
+	})
+
+	// This returns 2 samples without deduplication. Uses "instance" as replica label, which is an internal label
+	// from the samples used.
+	queryAndAssertSeries(t, ctx, query3.Endpoint("http"), func() string {
+		return "my_fake_metric"
+	}, time.Now, promclient.QueryOptions{
+		Deduplicate: true,
+	}, []model.Metric{
+		{
+			"__name__":   "my_fake_metric",
+			"prometheus": "p1",
+			"replica":    "0",
+		},
+		{
+			"__name__":   "my_fake_metric",
+			"prometheus": "p1",
+			"replica":    "1",
 		},
 	})
 }
