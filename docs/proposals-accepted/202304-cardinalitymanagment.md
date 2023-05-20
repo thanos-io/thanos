@@ -47,13 +47,14 @@ The API response will contain
 - `totalLabelValuePairs`: Total number of label-value pairs.
 - `seriesCountByMetricName`: List of objects containing metric name and its corresponding series count.
 - `seriesCountByLabelName`: List of objects containing label name and its corresponding series count.
-- `seriesCountByFocusLabelValue`: List of objects containing focus label-value and its corresponding series count.
+- `seriesCountByFocusLabel`: List of objects containing focus label-value and its corresponding series count.
 - `seriesCountByLabelValuePair`: List of objects containing label-value pair and its corresponding series count.
 - `labelValueCountByLabelName`: List of objects containing label name and its corresponding label value count.
 
 Let us take a look at the API response with some examples.
 
 Example metrics:
+
 ```
 {__name__="metricA", instance="A", cluster="us"}
 {__name__="metricA", instance="B", cluster="eu"}
@@ -92,7 +93,7 @@ Then, API response would be
       { "name": "cluster", "value": 2 },
       { "name": "instance", "value": 3 }
     ],
-    "seriesCountByFocusLabelValue": []
+    "seriesCountByFocusLabel": []
   }
 }
 
@@ -125,10 +126,9 @@ Then, API response would be
     { "name": "cluster", "value": 2 },
     { "name": "instance", "value": 3 }
   ],
-  "seriesCountByFocusLabelValue": [
+  "seriesCountByFocusLabel": [
     { "name": "us", "value": 2 },
     { "name": "eu", "value": 1 }
-  ]
   ]
 }
 }
@@ -164,7 +164,7 @@ Then, API response would be
       { "name": "cluster", "value": 2 },
       { "name": "instance", "value": 2 }
     ],
-    "seriesCountByFocusLabelValue": []
+    "seriesCountByFocusLabel": []
   }
 }
 ```
@@ -258,5 +258,3 @@ Request parameters:
 #### Cons
 
 1. It will be more complex to users as they will have to query two endpoints to get the required information.
-
-
