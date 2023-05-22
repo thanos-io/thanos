@@ -1387,6 +1387,8 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk b
 		matchersCase := []*labels.Matcher{
 			labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
 			labels.MustNewMatcher(labels.MatchNotEqual, "foo", "bar"),
+			labels.MustNewMatcher(labels.MatchEqual, "j", "0"),
+			labels.MustNewMatcher(labels.MatchNotEqual, "j", "0"),
 			labels.MustNewMatcher(labels.MatchRegexp, "j", "(0|1)"),
 			labels.MustNewMatcher(labels.MatchRegexp, "j", "0|1"),
 			labels.MustNewMatcher(labels.MatchNotRegexp, "j", "(0|1)"),
