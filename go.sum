@@ -211,7 +211,7 @@ github.com/coreos/go-systemd/v22 v22.4.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSV
 github.com/coreos/go-systemd/v22 v22.5.0 h1:RrqgGjYQKalulkV8NGVIfkXQf6YYmOyiJKk8iXXhfZs=
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/coreos/pkg v0.0.0-20160727233714-3ac0863d7acf/go.mod h1:E3G3o1h8I7cfcXa63jLwjI0eiQQMgzzUDFVpN/nH/eA=
-github.com/cortexproject/promqlsmith v0.0.0-20230313010502-5c380a3b00b0 h1:NxAuzQ8oCBUgmBTmhC4GyKk9kBl4IoDymGib+tVdqiQ=
+github.com/cortexproject/promqlsmith v0.0.0-20230502194647-ed3e43bb7a52 h1:soTzgUC/F+qtsMbh/IWr3uGwPaXXYEUsTT3zYiXP0yM=
 github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d/go.mod h1:maD7wRr/U5Z6m/iR4s+kqSMx2CaBsrgA7czyZG/E6dU=
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
@@ -893,8 +893,8 @@ github.com/tencentyun/cos-go-sdk-v5 v0.7.40 h1:W6vDGKCHe4wBACI1d2UgE6+50sJFhRWU4
 github.com/tencentyun/cos-go-sdk-v5 v0.7.40/go.mod h1:4dCEtLHGh8QPxHEkgq+nFaky7yZxQuYwgSJM87icDaw=
 github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e h1:f1Zsv7OAU9iQhZwigp50Yl38W10g/vd5NC8Rdk1Jzng=
 github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e/go.mod h1:jXcofnrSln/cLI6/dhlBxPQZEEQHVPCcFaH75M+nSzM=
-github.com/thanos-community/promql-engine v0.0.0-20230505104016-5124a98eee24 h1:UvZpeeWoiu54gd6ZW8lzJZWhQLekfF/vmccgOMQssYU=
-github.com/thanos-community/promql-engine v0.0.0-20230505104016-5124a98eee24/go.mod h1:PbimG7ocz5JmFRLlQ7yMcewnkunNBmvMyVgAoNmyvDw=
+github.com/thanos-community/promql-engine v0.0.0-20230517140820-97f42f67eaf5 h1:S+5/eRDfEwDLj7PxcIBLNckB5xGd/vrPLzPyO2LgzAk=
+github.com/thanos-community/promql-engine v0.0.0-20230517140820-97f42f67eaf5/go.mod h1:ifUU+eb28dKRho/a4ipv27T4yEaNYaXkd7bing4ovUg=
 github.com/thanos-io/objstore v0.0.0-20230201072718-11ffbc490204 h1:W4w5Iph7j32Sf1QFWLJDCqvO0WgZS0jHGID+qnq3wV0=
 github.com/thanos-io/objstore v0.0.0-20230201072718-11ffbc490204/go.mod h1:STSgpY8M6EKF2G/raUFdbIMf2U9GgYlEjAEHJxjvpAo=
 github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab h1:7ZR3hmisBWw77ZpO1/o86g+JV3VKlk3d48jopJxzTjU=
