@@ -19,7 +19,7 @@ import Select from 'react-select';
 import moment from 'moment-timezone';
 
 import Checkbox from '../../components/Checkbox';
-import ListTree, { NodeTree } from '../../components/ListTree';
+import ListTree, { QueryTree } from '../../components/ListTree';
 import ExpressionInput from './ExpressionInput';
 import GraphControls from './GraphControls';
 import { GraphTabContent } from './GraphTabContent';
@@ -56,7 +56,7 @@ interface PanelState {
   warnings: string[] | null;
   stats: QueryStats | null;
   exprInputValue: string;
-  explanation: NodeTree | null;
+  explanation: QueryTree | null;
 }
 
 export interface PanelOptions {
@@ -442,7 +442,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
             </div>
           </Col>
         </Row>
-        <Row hidden={!options.explain}>
+        <Row hidden={!(options.explain && this.state.explanation)}>
           <Col>
             <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
               <ListTree id={`explain-tree-${id}`} node={this.state.explanation} />
