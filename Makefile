@@ -151,7 +151,8 @@ react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 build: ## Builds Thanos binary using `promu`.
 build: check-git deps $(PROMU)
 	@echo ">> building Thanos binary in $(PREFIX)"
-	@$(PROMU) build --prefix $(PREFIX)
+	go build -o thanos ./cmd/thanos
+	mv thanos $(PREFIX)
 
 GIT_BRANCH=$(shell $(GIT) rev-parse --abbrev-ref HEAD)
 .PHONY: crossbuild
@@ -194,16 +195,12 @@ internal/cortex: ## Ensures the latest packages from 'cortex' are synced.
 
 .PHONY: docker
 docker: ## Builds 'thanos' docker with no tag.
-ifeq ($(OS)_$(ARCH), linux_x86_64)
 docker: build
 	@echo ">> copying Thanos from $(PREFIX) to ./thanos_tmp_for_docker"
 	@cp $(PREFIX)/thanos ./thanos_tmp_for_docker
 	@echo ">> building docker image 'thanos'"
 	@docker build -t "thanos" --build-arg BASE_DOCKER_SHA=$(BASE_DOCKER_SHA) .
 	@rm ./thanos_tmp_for_docker
-else
-docker: docker-multi-stage
-endif
 
 .PHONY: docker-multi-stage
 docker-multi-stage: ## Builds 'thanos' docker image using multi-stage.
