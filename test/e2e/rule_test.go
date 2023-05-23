@@ -27,8 +27,8 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/alert"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/queryconfig"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -323,8 +323,8 @@ func TestRule(t *testing.T) {
 
 	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
-			EndpointsConfig: httpconfig.EndpointsConfig{
-				FileSDConfigs: []httpconfig.FileSDConfig{
+			EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+				FileSDConfigs: []queryconfig.HTTPFileSDConfig{
 					{
 						// FileSD which will be used to register discover dynamically am1.
 						Files:           []string{filepath.Join(rFuture.InternalDir(), amTargetsSubDir, "*.yaml")},
@@ -339,18 +339,20 @@ func TestRule(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}).InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+	}).InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []queryconfig.Config{
 		{
-			EndpointsConfig: httpconfig.EndpointsConfig{
-				// We test Statically Addressed queries in other tests. Focus on FileSD here.
-				FileSDConfigs: []httpconfig.FileSDConfig{
-					{
-						// FileSD which will be used to register discover dynamically q.
-						Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
-						RefreshInterval: model.Duration(time.Second),
+			HTTPConfig: queryconfig.HTTPConfig{
+				EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+					// We test Statically Addressed queries in other tests. Focus on FileSD here.
+					FileSDConfigs: []queryconfig.HTTPFileSDConfig{
+						{
+							// FileSD which will be used to register discover dynamically q.
+							Files:           []string{filepath.Join(rFuture.InternalDir(), queryTargetsSubDir, "*.yaml")},
+							RefreshInterval: model.Duration(time.Second),
+						},
 					},
+					Scheme: "http",
 				},
-				Scheme: "http",
 			},
 		},
 	})
@@ -666,7 +668,7 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 
 	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 		{
-			EndpointsConfig: httpconfig.EndpointsConfig{
+			EndpointsConfig: queryconfig.HTTPEndpointsConfig{
 				StaticAddresses: []string{
 					am.InternalEndpoint("http"),
 				},
@@ -675,13 +677,15 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 			Timeout:    amTimeout,
 			APIVersion: alert.APIv1,
 		},
-	}).InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+	}).InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []queryconfig.Config{
 		{
-			EndpointsConfig: httpconfig.EndpointsConfig{
-				StaticAddresses: []string{
-					q.InternalEndpoint("http"),
+			HTTPConfig: queryconfig.HTTPConfig{
+				EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+					StaticAddresses: []string{
+						q.InternalEndpoint("http"),
+					},
+					Scheme: "http",
 				},
-				Scheme: "http",
 			},
 		},
 	}, []*config.RemoteWriteConfig{
@@ -747,7 +751,7 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 		}
 		r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
 			{
-				EndpointsConfig: httpconfig.EndpointsConfig{
+				EndpointsConfig: queryconfig.HTTPEndpointsConfig{
 					StaticAddresses: []string{
 						am.InternalEndpoint("http"),
 					},
@@ -758,13 +762,15 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 			},
 		}).WithForGracePeriod("500ms").
 			WithRestoreIgnoredLabels("tenant_id").
-			InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []httpconfig.Config{
+			InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []queryconfig.Config{
 				{
-					EndpointsConfig: httpconfig.EndpointsConfig{
-						StaticAddresses: []string{
-							q.InternalEndpoint("http"),
+					HTTPConfig: queryconfig.HTTPConfig{
+						EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+							StaticAddresses: []string{
+								q.InternalEndpoint("http"),
+							},
+							Scheme: "http",
 						},
-						Scheme: "http",
 					},
 				},
 			}, []*config.RemoteWriteConfig{

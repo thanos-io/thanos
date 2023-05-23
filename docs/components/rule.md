@@ -330,6 +330,11 @@ Flags:
                                  from other components.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
+      --grpc-query-endpoint=<endpoint> ...
+                                 Addresses of Thanos gRPC query API servers
+                                 (repeatable). The scheme may be prefixed
+                                 with 'dns+' or 'dnssrv+' to detect Thanos API
+                                 servers through respective DNS lookups.
       --grpc-server-max-connection-age=60m
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
@@ -576,4 +581,6 @@ The configuration format is the following:
     refresh_interval: 0s
   scheme: http
   path_prefix: ""
+  grpc_config:
+    endpoint_addresses: []
 ```

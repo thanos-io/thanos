@@ -20,8 +20,8 @@ import (
 	"github.com/prometheus/prometheus/rules"
 
 	"github.com/efficientgo/core/testutil"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/queryconfig"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -67,11 +67,13 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
-	queryCfg := []httpconfig.Config{
+	queryCfg := []queryconfig.Config{
 		{
-			EndpointsConfig: httpconfig.EndpointsConfig{
-				StaticAddresses: []string{qBuilder.InternalEndpoint("http")},
-				Scheme:          "http",
+			HTTPConfig: queryconfig.HTTPConfig{
+				EndpointsConfig: queryconfig.HTTPEndpointsConfig{
+					StaticAddresses: []string{qBuilder.InternalEndpoint("http")},
+					Scheme:          "http",
+				},
 			},
 		},
 	}

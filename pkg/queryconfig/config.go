@@ -1,30 +1,34 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package httpconfig
+package queryconfig
 
 import (
 	"fmt"
 	"net/url"
 	"strings"
 
-	"gopkg.in/yaml.v2"
-
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 )
 
-// Config is a structure that allows pointing to various HTTP endpoint, e.g ruler connecting to queriers.
+// Config is a structure that allows pointing to various HTTP and GRCP query endpoints, e.g ruler connecting to queriers.
 type Config struct {
-	HTTPClientConfig ClientConfig    `yaml:"http_config"`
-	EndpointsConfig  EndpointsConfig `yaml:",inline"`
+	HTTPConfig HTTPConfig  `yaml:",inline"`
+	GRPCConfig *GRPCConfig `yaml:"grpc_config"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		EndpointsConfig: EndpointsConfig{
-			Scheme:          "http",
-			StaticAddresses: []string{},
-			FileSDConfigs:   []FileSDConfig{},
+		HTTPConfig: HTTPConfig{
+			EndpointsConfig: HTTPEndpointsConfig{
+				Scheme:          "http",
+				StaticAddresses: []string{},
+				FileSDConfigs:   []HTTPFileSDConfig{},
+			},
+		},
+		GRPCConfig: &GRPCConfig{
+			EndpointAddrs: []string{},
 		},
 	}
 }
@@ -45,8 +49,8 @@ func LoadConfigs(confYAML []byte) ([]Config, error) {
 	return queryCfg, nil
 }
 
-// BuildConfig returns a configuration from a static addresses.
-func BuildConfig(addrs []string) ([]Config, error) {
+// BuildHTTPConfig returns a configuration from a static addresses.
+func BuildConfigFromHTTPAddresses(addrs []string) ([]Config, error) {
 	configs := make([]Config, 0, len(addrs))
 	for i, addr := range addrs {
 		if addr == "" {
@@ -64,10 +68,28 @@ func BuildConfig(addrs []string) ([]Config, error) {
 			return nil, errors.Errorf("%q is not supported scheme for address", u.Scheme)
 		}
 		configs = append(configs, Config{
-			EndpointsConfig: EndpointsConfig{
-				Scheme:          u.Scheme,
-				StaticAddresses: []string{u.Host},
-				PathPrefix:      u.Path,
+			HTTPConfig: HTTPConfig{
+				EndpointsConfig: HTTPEndpointsConfig{
+					Scheme:          u.Scheme,
+					StaticAddresses: []string{u.Host},
+					PathPrefix:      u.Path,
+				},
+			},
+		})
+	}
+	return configs, nil
+}
+
+// BuildConfigFromGRPCAddresses returns a configuration from a static addresses.
+func BuildConfigFromGRPCAddresses(addrs []string) ([]Config, error) {
+	configs := make([]Config, 0, len(addrs))
+	for i, addr := range addrs {
+		if addr == "" {
+			return nil, errors.Errorf("static address cannot be empty at index %d", i)
+		}
+		configs = append(configs, Config{
+			GRPCConfig: &GRPCConfig{
+				EndpointAddrs: []string{addr},
 			},
 		})
 	}

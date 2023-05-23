@@ -20,8 +20,8 @@ import (
 	"github.com/prometheus/prometheus/util/annotations"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/series"
-	"github.com/thanos-io/thanos/pkg/httpconfig"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/queryconfig"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -31,7 +31,7 @@ type promClientsQueryable struct {
 
 	logger            log.Logger
 	promClients       []*promclient.Client
-	queryClients      []*httpconfig.Client
+	queryClients      []*queryconfig.HTTPClient
 	ignoredLabelNames []string
 
 	duplicatedQuery prometheus.Counter
@@ -43,7 +43,7 @@ type promClientsQuerier struct {
 
 	logger              log.Logger
 	promClients         []*promclient.Client
-	queryClients        []*httpconfig.Client
+	queryClients        []*queryconfig.HTTPClient
 	restoreIgnoreLabels []string
 
 	// We use a dummy counter here because the duplicated
@@ -52,7 +52,7 @@ type promClientsQuerier struct {
 }
 
 // NewPromClientsQueryable creates a queryable that queries queriers from Prometheus clients.
-func NewPromClientsQueryable(logger log.Logger, queryClients []*httpconfig.Client, promClients []*promclient.Client,
+func NewPromClientsQueryable(logger log.Logger, queryClients []*queryconfig.HTTPClient, promClients []*promclient.Client,
 	httpMethod string, step time.Duration, ignoredLabelNames []string) *promClientsQueryable {
 	return &promClientsQueryable{
 		logger:            logger,
