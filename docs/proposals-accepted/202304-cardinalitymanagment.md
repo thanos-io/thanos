@@ -17,7 +17,7 @@ At present, multiple product teams send their metrics to Thanos. However, when p
 
 ### Pitfalls of current solutions
 
-Currently, Thanos receiver supports the TSDB stats API on remote write addresses, which provides information about series cardinality. However, this API can only return a limited number of results per query, typically no more than 10. This limitation makes it difficult to track arbitrary metrics and may lead to incomplete or inaccurate cardinality data. To address this issue, there should be some Top-K selector that can return the stats of the top K entries, allowing teams to more effectively monitor cardinality and identify potential issues.
+Currently, Thanos receiver supports the TSDB stats API on remote write addresses, which provides information about series cardinality. However, this API some limitations, it does not provide series count for a specific label and cardinality information for particular matcher.
 
 ### Goals
 
@@ -38,7 +38,7 @@ It will retrieve the series cardinality information.
 The API will accept the following query parameters:
 
 - topK : (optional) An integer specifying the top K results to return for each category. Default is 10.
-- selector : (optional) A PromQL selector that will be used to filter series that must be analyzed.
+- matcher : (optional) A matcher that will be used to filter series that must be analyzed.
 - focusLabel : (optional) A string representing the label name for which you want to retrieve the series count by its unique values. When provided, the API response will include the `seriesCountByFocusLabelValue` field, containing the unique values for the specified label and their corresponding series counts.
 
 The API response will contain
@@ -134,9 +134,9 @@ Then, API response would be
 }
 ```
 
-Example 3 : Request with selector={__name__="metricA"}.
+Example 3 : Request with matcher={__name__="metricA"}.
 
-`GET,POST /api/v1/cardinality?selector={__name__="metricA"}`
+`GET,POST /api/v1/cardinality?matcher={__name__="metricA"}`
 
 Then, API response would be
 
@@ -173,19 +173,51 @@ Then, API response would be
 
 For now extending receiver, seems the best approach to use. And, exact implementation can change while implementing the proposed API design.
 
-1. We will first access and aggregate the series, labels, and label-value pairs information within the Thanos receiver by extending its functionality while processing incoming data.
+1. Define & Initialize CardinalityStats Structure <br>
+   Create a structure named CardinalityStats to hold the cardinality statistics and initialize it using the NewCardinalityStats function.
 
-2. There will be a new data structure to hold the statistics. This structure should have methods to compute the required statistics.
-3. We will define a new HTTP endpoint in the Thanos receiver to expose the API, as `/api/v1/cardinality`.
+2. Update and Calculate Statistics for Each Series <br>
+   In this step, we update the statistics for each series and calculate the cardinality. We use the UpdateStats method, which takes a set of labels and a focus label as input. For each label in the set, it increments the count of the corresponding series, label name, and label-value pair. If the label name matches the focus label, it also increments the count of the focus label value. The total number of series and total label-value pairs are also incremented.
 
-4. We will Implement a new API handler function that
+Here's a simplified pseudo-code representation of the UpdateStats method:
 
-   - Accepts optional query parameters, such as top, for filtering and sorting the results.
-   - Calls the data structure's methods to compute the required statistics.
-   - Serializes the results into JSON format and returns it as an HTTP response.
-   - Handles potential partial results by setting the isPartial field in the response and providing an appropriate error message.
+```
+function UpdateStats(lbls, focusLabel):
+  increment totalSeries
 
-5. (Optional)We can add a flag to the Thanos receiver, allowing users to enable or disable the API.
+  for each label in lbls:
+      increment seriesCountByLabelName[label.Name]
+      increment seriesCountByLabelValuePair[label.Name+":"+label.Value]
+
+      if label.Name equals focusLabel:
+          increment seriesCountByFocusLabelValue[label.Value]
+
+      if label.Name equals "__name__":
+          increment seriesCountByMetricName[label.Value]
+
+      increment totalLabelValuePairs
+      increment labelValueCountByLabelName[label.Name]
+```
+
+This method is called for each series in the CalculateCardinalityStats method, which iterates over the series using an index reader, applies any matchers to filter the series, and then updates the statistics for each series.
+
+Here's a simplified pseudo-code representation of the CalculateCardinalityStats method:
+
+```
+function CalculateCardinalityStats(indexReader, focusLabel, matchers):
+    get postings from indexReader
+
+    for each posting in postings:
+        get series from indexReader
+        get labels from series
+
+        for each matcher in matchers:
+            if matcher matches label value:
+                call UpdateStats with labels and focusLabel
+```
+
+3. Define endpoints and implement the API handler function <br>
+   We define the new endpoint and implement a new API handler function that accepts optional query parameters, computes the required statistics, and serializes the results into JSON format.
 
 ### Alternatives
 
