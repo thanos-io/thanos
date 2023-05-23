@@ -89,7 +89,6 @@ func TestReceive(t *testing.T) {
 				"job":        "myself",
 				"prometheus": "prom1",
 				"receive":    "receive-ingestor",
-				"tenant_id":  "default-tenant",
 			},
 		})
 	})
