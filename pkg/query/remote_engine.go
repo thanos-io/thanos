@@ -13,7 +13,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -265,17 +264,9 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			})
 		}
 		for _, hp := range ts.Histograms {
-			var fh *histogram.FloatHistogram
-
-			if hp.IsFloatHistogram() {
-				fh = prompb.FloatHistogramProtoToFloatHistogram(hp)
-			} else {
-				fh = prompb.HistogramProtoToFloatHistogram(hp)
-			}
-
 			series.Histograms = append(series.Histograms, promql.HPoint{
 				T: hp.Timestamp,
-				H: fh,
+				H: prompb.FloatHistogramProtoToFloatHistogram(hp),
 			})
 		}
 		result = append(result, series)
