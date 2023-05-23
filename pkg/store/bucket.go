@@ -2151,8 +2151,11 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 
 	// NOTE: Derived from tsdb.PostingsForMatchers.
 	for _, m := range ms {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		// Each group is separate to tell later what postings are intersecting with what.
-		pg, err := toPostingGroup(r.block.indexHeaderReader.LabelValues, m)
+		pg, err := toPostingGroup(ctx, r.block.indexHeaderReader.LabelValues, m)
 		if err != nil {
 			return nil, errors.Wrap(err, "toPostingGroup")
 		}
@@ -2226,6 +2229,9 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 
 	result := index.Without(index.Intersect(groupAdds...), index.Merge(groupRemovals...))
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	ps, err := index.ExpandPostings(result)
 	if err != nil {
 		return nil, errors.Wrap(err, "expand")
@@ -2273,18 +2279,10 @@ func checkNilPosting(l labels.Label, p index.Postings) index.Postings {
 }
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
-func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
+func toPostingGroup(ctx context.Context, lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
 	if m.Type == labels.MatchRegexp {
 		if vals := findSetMatches(m.Value); len(vals) > 0 {
-			// Sorting will improve the performance dramatically if the dataset is relatively large
-			// since entries in the postings offset table was sorted by label name and value,
-			// the sequential reading is much faster.
-			sort.Strings(vals)
-			toAdd := make([]labels.Label, 0, len(vals))
-			for _, val := range vals {
-				toAdd = append(toAdd, labels.Label{Name: m.Name, Value: val})
-			}
-			return newPostingGroup(false, toAdd, nil), nil
+			return newPostingGroup(false, labelsFromSetMatchers(m.Name, vals), nil), nil
 		}
 	}
 
@@ -2292,13 +2290,33 @@ func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Match
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
 	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
 	if m.Matches("") {
+		var toRemove []labels.Label
+
+		// Fast-path for MatchNotRegexp matching.
+		// Inverse of a MatchNotRegexp is MatchRegexp (double negation).
+		// Fast-path for set matching.
+		if m.Type == labels.MatchNotRegexp {
+			if vals := findSetMatches(m.Value); len(vals) > 0 {
+				toRemove = labelsFromSetMatchers(m.Name, vals)
+				return newPostingGroup(true, nil, toRemove), nil
+			}
+		}
+
+		// Fast-path for MatchNotEqual matching.
+		// Inverse of a MatchNotEqual is MatchEqual (double negation).
+		if m.Type == labels.MatchNotEqual {
+			return newPostingGroup(true, nil, []labels.Label{{Name: m.Name, Value: m.Value}}), nil
+		}
+
 		vals, err := lvalsFn(m.Name)
 		if err != nil {
 			return nil, err
 		}
 
-		var toRemove []labels.Label
 		for _, val := range vals {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			if !m.Matches(val) {
 				toRemove = append(toRemove, labels.Label{Name: m.Name, Value: val})
 			}
@@ -2319,6 +2337,9 @@ func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Match
 
 	var toAdd []labels.Label
 	for _, val := range vals {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if m.Matches(val) {
 			toAdd = append(toAdd, labels.Label{Name: m.Name, Value: val})
 		}
@@ -2327,13 +2348,25 @@ func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Match
 	return newPostingGroup(false, toAdd, nil), nil
 }
 
+func labelsFromSetMatchers(name string, vals []string) []labels.Label {
+	// Sorting will improve the performance dramatically if the dataset is relatively large
+	// since entries in the postings offset table was sorted by label name and value,
+	// the sequential reading is much faster.
+	sort.Strings(vals)
+	toAdd := make([]labels.Label, 0, len(vals))
+	for _, val := range vals {
+		toAdd = append(toAdd, labels.Label{Name: name, Value: val})
+	}
+	return toAdd
+}
+
 type postingPtr struct {
 	keyID int
 	ptr   index.Range
 }
 
 // fetchPostings fill postings requested by posting groups.
-// It returns one postings for each key, in the same order.
+// It returns one posting for each key, in the same order.
 // If postings for given key is not fetched, entry at given index will be nil.
 func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Label, bytesLimiter BytesLimiter) ([]index.Postings, []func(), error) {
 	var closeFns []func()
