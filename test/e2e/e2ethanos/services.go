@@ -91,6 +91,8 @@ func defaultPromHttpConfig() string {
 `
 }
 
+const nginxImage = "docker.io/nginx:1.21.1-alpine"
+
 func NewStaticMetricsServer(e e2e.Environment, name string, metrics []byte) *e2emon.InstrumentedRunnable {
 	f := e.Runnable(name).WithPorts(map[string]int{"http": 80}).Future()
 	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
@@ -103,7 +105,7 @@ func NewStaticMetricsServer(e e2e.Environment, name string, metrics []byte) *e2e
 	probe := e2e.NewHTTPReadinessProbe("http", "/metrics", 200, 200)
 	return e2emon.AsInstrumented(
 		f.Init(e2e.StartOptions{
-			Image:     "docker.io/nginx:1.21.1-alpine",
+			Image:     nginxImage,
 			Volumes:   []string{metricsFilePath + ":/usr/share/nginx/html/metrics:ro"},
 			Readiness: probe,
 		}),
@@ -1024,7 +1026,7 @@ http {
 	}
 
 	return e2emon.AsInstrumented(f.Init(e2e.StartOptions{
-		Image:            "docker.io/nginx:1.21.1-alpine",
+		Image:            nginxImage,
 		Volumes:          []string{filepath.Join(f.Dir(), "/nginx.conf") + ":/etc/nginx/nginx.conf:ro"},
 		WaitReadyBackoff: &defaultBackoffConfig,
 	}), "http")
