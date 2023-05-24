@@ -910,6 +910,30 @@ func TestQueryStoreDedup(t *testing.T) {
 			expectedSeries:   1,
 		},
 		{
+			desc:            "Deduplication works on external label with resorting required",
+			intReplicaLabel: "a",
+			series: []seriesWithLabels{
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("a", "1", "b", "1"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("a", "1", "b", "2"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("a", "2", "b", "1"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series"),
+					extLabels: labels.FromStrings("a", "2", "b", "2"),
+				},
+			},
+			blockFinderLabel: "dedupextresort",
+			expectedSeries:   2,
+		},
+		{
 			desc:            "Deduplication works with internal label",
 			intReplicaLabel: "replica",
 			series: []seriesWithLabels{
@@ -922,6 +946,29 @@ func TestQueryStoreDedup(t *testing.T) {
 			},
 			blockFinderLabel: "dedupint",
 			expectedSeries:   1,
+			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
+			// is fixed. This means that it will return double the expected series until then.
+			expectedDedupBug: true,
+		},
+		{
+			desc:            "Deduplication works on internal label with resorting required",
+			intReplicaLabel: "a",
+			series: []seriesWithLabels{
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "a", "1", "b", "1"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "a", "1", "b", "2"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "a", "2", "b", "1"),
+				},
+				{
+					intLabels: labels.FromStrings("__name__", "simple_series", "a", "2", "b", "2"),
+				},
+			},
+			blockFinderLabel: "dedupintresort",
+			expectedSeries:   2,
 			// This test is expected to fail until the bug outlined in https://github.com/thanos-io/thanos/issues/6257
 			// is fixed. This means that it will return double the expected series until then.
 			expectedDedupBug: true,
