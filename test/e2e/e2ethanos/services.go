@@ -99,7 +99,7 @@ func NewStaticMetricsServer(e e2e.Environment, name string, metrics []byte) *e2e
 		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create static metrics dir"))}
 	}
 	metricsFilePath := filepath.Join(f.Dir(), "metrics.txt")
-	if err := os.WriteFile(metricsFilePath, metrics, 0600); err != nil {
+	if err := os.WriteFile(metricsFilePath, metrics, 0644); err != nil {
 		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating static metrics file"))}
 	}
 	probe := e2e.NewHTTPReadinessProbe("http", "/metrics", 200, 200)
