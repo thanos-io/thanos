@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1096,26 +1097,43 @@ func createSimpleReplicatedBlocksInS3(
 
 func TestSidecarQueryDedup(t *testing.T) {
 	t.Parallel()
-	timeNow := time.Now().UnixNano()
 
 	e, err := e2e.NewDockerEnvironment("sidecar-dedup")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	t.Cleanup(cancel)
 
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
 	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p1", 1, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
-	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
+	prom3, sidecar3 := e2ethanos.NewPrometheusWithSidecar(e, "p3", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "", "remote-write-receiver")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
 
-	samples := []fakeMetricSample{
-		{"instance1", 1, timeNow},
-		{"instance1", 2, timeNow},
-		{"instance2", 1, timeNow},
-		{"instance2", 2, timeNow},
+	{
+		samples := []seriesWithLabels{
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "1", "instance", "1")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "2", "instance", "1")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "1", "instance", "1")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "2", "instance", "1")},
+			// Now replicating based on the "instance" label.
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "1", "instance", "2")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "2", "instance", "2")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "1", "instance", "2")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "2", "instance", "2")},
+		}
+		testutil.Ok(t, remoteWriteSeriesWithLabels(ctx, prom1, samples))
+		testutil.Ok(t, remoteWriteSeriesWithLabels(ctx, prom2, samples))
 	}
-	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, samples))
-	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom2, samples))
+
+	{
+		samples := []seriesWithLabels{
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "1")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "1", "b", "2")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "1")},
+			{intLabels: labels.FromStrings("__name__", "my_fake_metric", "a", "2", "b", "2")},
+		}
+		testutil.Ok(t, remoteWriteSeriesWithLabels(ctx, prom3, samples))
+	}
 
 	query1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
 		WithReplicaLabels("replica", "instance").
@@ -1126,56 +1144,47 @@ func TestSidecarQueryDedup(t *testing.T) {
 	query3 := e2ethanos.NewQuerierBuilder(e, "3", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
 		WithReplicaLabels("instance").
 		Init()
-	testutil.Ok(t, e2e.StartAndWaitReady(query1, query2, query3))
+	query4 := e2ethanos.NewQuerierBuilder(e, "4", sidecar3.InternalEndpoint("grpc")).
+		WithReplicaLabels("a").
+		Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(query1, query2, query3, query4))
 
-	// This returns 4 samples without deduplication. Uses both an internal and external labels as replica labels
-	queryAndAssertSeries(t, ctx, query1.Endpoint("http"), func() string {
-		return "my_fake_metric"
-	}, time.Now, promclient.QueryOptions{
-		Deduplicate: true,
-	}, []model.Metric{
-		{
-			"__name__":   "my_fake_metric",
-			"prometheus": "p1",
-		},
+	t.Run("deduplication on internal and external labels", func(t *testing.T) {
+		// Uses both an internal and external labels as replica labels
+		instantQuery(t, ctx, query1.Endpoint("http"), func() string {
+			return "my_fake_metric"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 4)
 	})
 
-	// This returns 2 samples without deduplication. Uses "replica" as replica label, which is an external label when
-	// being captured by Thanos Sidecar.
-	queryAndAssertSeries(t, ctx, query2.Endpoint("http"), func() string {
-		return "my_fake_metric"
-	}, time.Now, promclient.QueryOptions{
-		Deduplicate: true,
-	}, []model.Metric{
-		{
-			"__name__":   "my_fake_metric",
-			"instance":   "instance1",
-			"prometheus": "p1",
-		},
-		{
-			"__name__":   "my_fake_metric",
-			"instance":   "instance2",
-			"prometheus": "p1",
-		},
+	t.Run("deduplication on external label", func(t *testing.T) {
+		// Uses "replica" as replica label, which is an external label when being captured by Thanos Sidecar.
+		instantQuery(t, ctx, query2.Endpoint("http"), func() string {
+			return "my_fake_metric"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 8)
 	})
 
-	// This returns 2 samples without deduplication. Uses "instance" as replica label, which is an internal label
-	// from the samples used.
-	queryAndAssertSeries(t, ctx, query3.Endpoint("http"), func() string {
-		return "my_fake_metric"
-	}, time.Now, promclient.QueryOptions{
-		Deduplicate: true,
-	}, []model.Metric{
-		{
-			"__name__":   "my_fake_metric",
-			"prometheus": "p1",
-			"replica":    "0",
-		},
-		{
-			"__name__":   "my_fake_metric",
-			"prometheus": "p1",
-			"replica":    "1",
-		},
+	t.Run("deduplication on internal label", func(t *testing.T) {
+		// Uses "instance" as replica label, which is an internal label from the samples used.
+		instantQuery(t, ctx, query3.Endpoint("http"), func() string {
+			return "my_fake_metric"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 8)
+	})
+
+	t.Run("deduplication on internal label with reorder", func(t *testing.T) {
+		// Uses "a" as replica label, which is an internal label from the samples used.
+		// Should return 4 samples as long as the bug described by https://github.com/thanos-io/thanos/issues/6257#issuecomment-1544023978
+		// is not fixed. When it is fixed, it should return 2 samples.
+		instantQuery(t, ctx, query4.Endpoint("http"), func() string {
+			return "my_fake_metric"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 4)
 	})
 }
 
@@ -1581,6 +1590,37 @@ func synthesizeSamples(ctx context.Context, prometheus *e2emon.InstrumentedRunna
 				{
 					Value:     float64(sample.Value),
 					Timestamp: sample.Timestamp.Time().Unix() * 1000,
+				},
+			},
+		})
+	}
+
+	writeRequest := &prompb.WriteRequest{
+		Timeseries: samplespb,
+	}
+
+	return storeWriteRequest(ctx, rawRemoteWriteURL, writeRequest)
+}
+
+func remoteWriteSeriesWithLabels(ctx context.Context, prometheus *e2emon.InstrumentedRunnable, series []seriesWithLabels) error {
+	rawRemoteWriteURL := "http://" + prometheus.Endpoint("http") + "/api/v1/write"
+
+	samplespb := make([]prompb.TimeSeries, 0, len(series))
+	r := rand.New(rand.NewSource(int64(len(series))))
+	for _, serie := range series {
+		labelspb := make([]prompb.Label, 0, len(serie.intLabels))
+		for labelKey, labelValue := range serie.intLabels.Map() {
+			labelspb = append(labelspb, prompb.Label{
+				Name:  labelKey,
+				Value: labelValue,
+			})
+		}
+		samplespb = append(samplespb, prompb.TimeSeries{
+			Labels: labelspb,
+			Samples: []prompb.Sample{
+				{
+					Value:     r.Float64(),
+					Timestamp: time.Now().Unix() * 1000,
 				},
 			},
 		})
