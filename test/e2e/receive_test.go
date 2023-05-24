@@ -122,16 +122,47 @@ func TestReceive(t *testing.T) {
 		// Setup Receives
 		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().Init()
+		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled().Init()
 
-		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2))
+		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2, r3))
+
+		// These static metrics help reproduce issue https://github.com/thanos-io/thanos/issues/6257 in Receive.
+		metrics := []byte(`
+# HELP test_metric A test metric
+# TYPE test_metric counter
+test_metric{a="1", b="1"} 1
+test_metric{a="1", b="2"} 1
+test_metric{a="2", b="1"} 1
+test_metric{a="2", b="2"} 1`)
+		static := e2ethanos.NewStaticMetricsServer(e, "static", metrics)
+		testutil.Ok(t, e2e.StartAndWaitReady(static))
 
 		// Setup Prometheus
-		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom1", 1, e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		testutil.Ok(t, e2e.StartAndWaitReady(prom, prom2))
+		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig(
+			"prom1",
+			0,
+			e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")),
+			"",
+			e2ethanos.LocalPrometheusTarget,
+		), "", e2ethanos.DefaultPrometheusImage())
+		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig(
+			"prom1",
+			1,
+			e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")),
+			"",
+			e2ethanos.LocalPrometheusTarget,
+		), "", e2ethanos.DefaultPrometheusImage())
+		promStatic := e2ethanos.NewPrometheus(e, "3", e2ethanos.DefaultPromConfig(
+			"prom-static",
+			0,
+			e2ethanos.RemoteWriteEndpoints(r3.InternalEndpoint("remote-write")),
+			"",
+			static.InternalEndpoint("http"),
+		), "", e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, e2e.StartAndWaitReady(prom, prom2, promStatic))
 
-		// The "replica" label is added to the Prometheus instances via the e2ethanos.DefaultPromConfig.
-		// The "receive" label is added to the Receive instances via the e2ethanos.NewReceiveBuilder.
+		// The "replica" label is added to the Prometheus instances via the e2ethanos.DefaultPromConfig. It is a block label.
+		// The "receive" label is added to the Receive instances via the e2ethanos.NewReceiveBuilder. It is an external label.
 		// Here we setup 3 queriers, one for each possible combination of replica label: internal, external, and both.
 		q1 := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).
 			WithReplicaLabels("replica", "receive").
@@ -142,7 +173,10 @@ func TestReceive(t *testing.T) {
 		q3 := e2ethanos.NewQuerierBuilder(e, "3", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).
 			WithReplicaLabels("receive").
 			Init()
-		testutil.Ok(t, e2e.StartAndWaitReady(q1, q2, q3))
+		qStatic := e2ethanos.NewQuerierBuilder(e, "static", r3.InternalEndpoint("grpc")).
+			WithReplicaLabels("a").
+			Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(q1, q2, q3, qStatic))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
@@ -150,7 +184,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, q1.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
 		// We expect the data from each Prometheus instance to be replicated 4 times across our ingesting instances.
-		// So 1 result when using both replica labels.
+		// So 2 results when using both replica labels, one for each Prometheus instance.
 		queryAndAssertSeries(t, ctx, q1.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, []model.Metric{
@@ -197,6 +231,14 @@ func TestReceive(t *testing.T) {
 				"tenant_id":  "default-tenant",
 			},
 		})
+
+		// This should've returned only 2 series, but is returning 4 until the problem reported in
+		// https://github.com/thanos-io/thanos/issues/6257 is fixed
+		instantQuery(t, ctx, qStatic.Endpoint("http"), func() string {
+			return "test_metric"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 4)
 	})
 
 	t.Run("router_replication", func(t *testing.T) {
