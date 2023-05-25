@@ -39,7 +39,11 @@ func noAllocBytes(buf string) []byte {
 // ZLabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.
 // It reuses the same memory. Caller should abort using passed labels.Labels.
 func ZLabelsFromPromLabels(lset labels.Labels) []ZLabel {
-	return *(*[]ZLabel)(unsafe.Pointer(&lset))
+	zlabels := make([]ZLabel, 0, lset.Len())
+	lset.Range(func(lbl labels.Label) {
+		zlabels = append(zlabels, ZLabel{Name: lbl.Name, Value: lbl.Value})
+	})
+	return zlabels
 }
 
 // ZLabelsToPromLabels convert slice of labelpb.ZLabel to Prometheus labels in type unsafe manner.
@@ -47,7 +51,11 @@ func ZLabelsFromPromLabels(lset labels.Labels) []ZLabel {
 // NOTE: Use with care. ZLabels holds memory from the whole protobuf unmarshal, so the returned
 // Prometheus Labels will hold this memory as well.
 func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
-	return *(*labels.Labels)(unsafe.Pointer(&lset))
+	builder := labels.NewScratchBuilder(len(lset))
+	for _, lbl := range lset {
+		builder.Add(lbl.Name, lbl.Value)
+	}
+	return builder.Labels()
 }
 
 // ReAllocAndInternZLabelsStrings re-allocates all underlying bytes for string, detaching it from bigger memory pool.
@@ -97,14 +105,14 @@ func ZLabelSetsFromPromLabels(lss ...labels.Labels) []ZLabelSet {
 	sets := make([]ZLabelSet, 0, len(lss))
 	for _, ls := range lss {
 		set := ZLabelSet{
-			Labels: make([]ZLabel, 0, len(ls)),
+			Labels: make([]ZLabel, 0, ls.Len()),
 		}
-		for _, lbl := range ls {
+		ls.Range(func(lbl labels.Label) {
 			set.Labels = append(set.Labels, ZLabel{
 				Name:  lbl.Name,
 				Value: lbl.Value,
 			})
-		}
+		})
 		sets = append(sets, set)
 	}
 
@@ -292,29 +300,31 @@ func (m *ZLabel) Compare(other ZLabel) int {
 //
 // In case of existing labels already present in given label set, it will be overwritten by external one.
 // NOTE: Labels and extend has to be sorted.
-func ExtendSortedLabels(lset, extend labels.Labels) labels.Labels {
-	ret := make(labels.Labels, 0, len(lset)+len(extend))
+func ExtendSortedLabels(lset, extend labels.Labels) []ZLabel {
+	zlset := ZLabelsFromPromLabels(lset)
+	zextend := ZLabelsFromPromLabels(extend)
+	ret := make([]ZLabel, 0, len(zlset)+len(zextend))
 
 	// Inject external labels in place.
-	for len(lset) > 0 && len(extend) > 0 {
-		d := strings.Compare(lset[0].Name, extend[0].Name)
+	for len(zlset) > 0 && len(zextend) > 0 {
+		d := strings.Compare(zlset[0].Name, zextend[0].Name)
 		if d == 0 {
 			// Duplicate, prefer external labels.
 			// NOTE(fabxc): Maybe move it to a prefixed version to still ensure uniqueness of series?
-			ret = append(ret, extend[0])
-			lset, extend = lset[1:], extend[1:]
+			ret = append(ret, zextend[0])
+			zlset, zextend = zlset[1:], zextend[1:]
 		} else if d < 0 {
-			ret = append(ret, lset[0])
-			lset = lset[1:]
+			ret = append(ret, zlset[0])
+			zlset = zlset[1:]
 		} else if d > 0 {
-			ret = append(ret, extend[0])
-			extend = extend[1:]
+			ret = append(ret, zextend[0])
+			zextend = zextend[1:]
 		}
 	}
 
 	// Append all remaining elements.
-	ret = append(ret, lset...)
-	ret = append(ret, extend...)
+	ret = append(ret, zlset...)
+	ret = append(ret, zextend...)
 	return ret
 }
 
@@ -332,9 +342,12 @@ func (m *ZLabelSet) UnmarshalJSON(entry []byte) error {
 	if err := lbls.UnmarshalJSON(entry); err != nil {
 		return errors.Wrapf(err, "labels: labels field unmarshal: %v", string(entry))
 	}
-	sort.Sort(lbls)
 	m.Labels = ZLabelsFromPromLabels(lbls)
 	return nil
+}
+
+func (m *ZLabelSet) Hash() uint64 {
+	return HashWithPrefix("", m.Labels)
 }
 
 func (m *ZLabelSet) MarshalJSON() ([]byte, error) {
@@ -441,4 +454,30 @@ func (z ZLabelSets) Less(i, j int) bool {
 	}
 
 	return l == lenI
+}
+
+// Compare compares the two ZLabel sets.
+// The result will be 0 if a==b, <0 if a < b, and >0 if a > b.
+func Compare(a, b []ZLabel) int {
+	l := len(a)
+	if len(b) < l {
+		l = len(b)
+	}
+
+	for i := 0; i < l; i++ {
+		if a[i].Name != b[i].Name {
+			if a[i].Name < b[i].Name {
+				return -1
+			}
+			return 1
+		}
+		if a[i].Value != b[i].Value {
+			if a[i].Value < b[i].Value {
+				return -1
+			}
+			return 1
+		}
+	}
+	// If all labels so far were in common, the set with fewer labels comes first.
+	return len(a) - len(b)
 }

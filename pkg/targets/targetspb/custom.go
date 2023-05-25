@@ -99,31 +99,31 @@ func (t1 *DroppedTarget) Compare(t2 *DroppedTarget) int {
 	return 0
 }
 
-func (t *ActiveTarget) SetLabels(ls labels.Labels) {
+func (t *ActiveTarget) SetLabels(ls []labelpb.ZLabel) {
 	var result labelpb.ZLabelSet
 
 	if len(ls) > 0 {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
+		result = labelpb.ZLabelSet{Labels: ls}
 	}
 
 	t.Labels = result
 }
 
-func (t *ActiveTarget) SetDiscoveredLabels(ls labels.Labels) {
+func (t *ActiveTarget) SetDiscoveredLabels(ls []labelpb.ZLabel) {
 	var result labelpb.ZLabelSet
 
 	if len(ls) > 0 {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
+		result = labelpb.ZLabelSet{Labels: ls}
 	}
 
 	t.DiscoveredLabels = result
 }
 
-func (t *DroppedTarget) SetDiscoveredLabels(ls labels.Labels) {
+func (t *DroppedTarget) SetDiscoveredLabels(ls []labelpb.ZLabel) {
 	var result labelpb.ZLabelSet
 
 	if len(ls) > 0 {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
+		result = labelpb.ZLabelSet{Labels: ls}
 	}
 
 	t.DiscoveredLabels = result

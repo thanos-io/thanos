@@ -275,7 +275,7 @@ func testInjectExtLabels(tb testutil.TB) {
 	)
 	tb.ResetTimer()
 	for i := 0; i < tb.N(); i++ {
-		x = ExtendSortedLabels(in, extLset)
+		x = ZLabelsToPromLabels(ExtendSortedLabels(in, extLset))
 
 		if !tb.IsBenchmark() {
 			testutil.Equals(tb, labels.FromStrings(

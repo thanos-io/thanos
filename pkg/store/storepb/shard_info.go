@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/cespare/xxhash/v2"
-	"github.com/prometheus/prometheus/model/labels"
+
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
@@ -52,10 +52,6 @@ func (s *ShardMatcher) MatchesZLabels(zLabels []labelpb.ZLabel) bool {
 
 	hash := xxhash.Sum64(*s.buf)
 	return hash%uint64(s.totalShards) == uint64(s.shardIndex)
-}
-
-func (s *ShardMatcher) MatchesLabels(lbls labels.Labels) bool {
-	return s.MatchesZLabels(labelpb.ZLabelsFromPromLabels(lbls))
 }
 
 func shardByLabel(labelSet map[string]struct{}, zlabel labelpb.ZLabel, groupingBy bool) bool {
