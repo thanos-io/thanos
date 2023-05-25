@@ -47,7 +47,7 @@ func TestHashringGet(t *testing.T) {
 			name: "simple",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 				},
 			},
 			nodes: map[string]struct{}{"node1": {}},
@@ -56,11 +56,11 @@ func TestHashringGet(t *testing.T) {
 			name: "specific",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node2"},
+					Endpoints: []Endpoint{{Address: "node2"}},
 					Tenants:   []string{"tenant2"},
 				},
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 				},
 			},
 			nodes:  map[string]struct{}{"node2": {}},
@@ -70,15 +70,15 @@ func TestHashringGet(t *testing.T) {
 			name: "many tenants",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1"},
 				},
 				{
-					Endpoints: []string{"node2"},
+					Endpoints: []Endpoint{{Address: "node2"}},
 					Tenants:   []string{"tenant2"},
 				},
 				{
-					Endpoints: []string{"node3"},
+					Endpoints: []Endpoint{{Address: "node3"}},
 					Tenants:   []string{"tenant3"},
 				},
 			},
@@ -89,15 +89,15 @@ func TestHashringGet(t *testing.T) {
 			name: "many tenants error",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1"},
 				},
 				{
-					Endpoints: []string{"node2"},
+					Endpoints: []Endpoint{{Address: "node2"}},
 					Tenants:   []string{"tenant2"},
 				},
 				{
-					Endpoints: []string{"node3"},
+					Endpoints: []Endpoint{{Address: "node3"}},
 					Tenants:   []string{"tenant3"},
 				},
 			},
@@ -107,11 +107,11 @@ func TestHashringGet(t *testing.T) {
 			name: "many nodes",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1", "node2", "node3"},
+					Endpoints: []Endpoint{{Address: "node1"}, {Address: "node2"}, {Address: "node3"}},
 					Tenants:   []string{"tenant1"},
 				},
 				{
-					Endpoints: []string{"node4", "node5", "node6"},
+					Endpoints: []Endpoint{{Address: "node4"}, {Address: "node5"}, {Address: "node6"}},
 				},
 			},
 			nodes: map[string]struct{}{
@@ -125,11 +125,11 @@ func TestHashringGet(t *testing.T) {
 			name: "many nodes default",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1", "node2", "node3"},
+					Endpoints: []Endpoint{{Address: "node1"}, {Address: "node2"}, {Address: "node3"}},
 					Tenants:   []string{"tenant1"},
 				},
 				{
-					Endpoints: []string{"node4", "node5", "node6"},
+					Endpoints: []Endpoint{{Address: "node4"}, {Address: "node5"}, {Address: "node6"}},
 				},
 			},
 			nodes: map[string]struct{}{
@@ -170,53 +170,53 @@ func TestKetamaHashringGet(t *testing.T) {
 	}
 	tests := []struct {
 		name         string
-		nodes        []string
+		endpoints    []Endpoint
 		expectedNode string
 		ts           *prompb.TimeSeries
 		n            uint64
 	}{
 		{
 			name:         "base case",
-			nodes:        []string{"node-1", "node-2", "node-3"},
+			endpoints:    []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}},
 			ts:           baseTS,
 			expectedNode: "node-2",
 		},
 		{
 			name:         "base case with replication",
-			nodes:        []string{"node-1", "node-2", "node-3"},
+			endpoints:    []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}},
 			ts:           baseTS,
 			n:            1,
 			expectedNode: "node-1",
 		},
 		{
 			name:         "base case with replication",
-			nodes:        []string{"node-1", "node-2", "node-3"},
+			endpoints:    []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}},
 			ts:           baseTS,
 			n:            2,
 			expectedNode: "node-3",
 		},
 		{
 			name:         "base case with replication and reordered nodes",
-			nodes:        []string{"node-1", "node-3", "node-2"},
+			endpoints:    []Endpoint{{Address: "node-1"}, {Address: "node-3"}, {Address: "node-2"}},
 			ts:           baseTS,
 			n:            2,
 			expectedNode: "node-3",
 		},
 		{
 			name:         "base case with new node at beginning of ring",
-			nodes:        []string{"node-0", "node-1", "node-2", "node-3"},
+			endpoints:    []Endpoint{{Address: "node-0"}, {Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}},
 			ts:           baseTS,
 			expectedNode: "node-2",
 		},
 		{
 			name:         "base case with new node at end of ring",
-			nodes:        []string{"node-1", "node-2", "node-3", "node-4"},
+			endpoints:    []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}, {Address: "node-4"}},
 			ts:           baseTS,
 			expectedNode: "node-2",
 		},
 		{
-			name:  "base case with different timeseries",
-			nodes: []string{"node-1", "node-2", "node-3"},
+			name:      "base case with different timeseries",
+			endpoints: []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}},
 			ts: &prompb.TimeSeries{
 				Labels: []labelpb.ZLabel{
 					{
@@ -231,7 +231,7 @@ func TestKetamaHashringGet(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			hashRing, err := newKetamaHashring(test.nodes, 10, test.n+1)
+			hashRing, err := newKetamaHashring(test.endpoints, 10, test.n+1)
 			require.NoError(t, err)
 
 			result, err := hashRing.GetN("tenant", test.ts, test.n)
@@ -242,18 +242,18 @@ func TestKetamaHashringGet(t *testing.T) {
 }
 
 func TestKetamaHashringBadConfigIsRejected(t *testing.T) {
-	_, err := newKetamaHashring([]string{"node-1"}, 1, 2)
+	_, err := newKetamaHashring([]Endpoint{{Address: "node-1"}}, 1, 2)
 	require.Error(t, err)
 }
 
 func TestKetamaHashringConsistency(t *testing.T) {
 	series := makeSeries()
 
-	ringA := []string{"node-1", "node-2", "node-3"}
+	ringA := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}}
 	a1, err := assignSeries(series, ringA)
 	require.NoError(t, err)
 
-	ringB := []string{"node-1", "node-2", "node-3"}
+	ringB := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}}
 	a2, err := assignSeries(series, ringB)
 	require.NoError(t, err)
 
@@ -269,18 +269,18 @@ func TestKetamaHashringConsistency(t *testing.T) {
 func TestKetamaHashringIncreaseAtEnd(t *testing.T) {
 	series := makeSeries()
 
-	initialRing := []string{"node-1", "node-2", "node-3"}
+	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}}
 	initialAssignments, err := assignSeries(series, initialRing)
 	require.NoError(t, err)
 
-	resizedRing := []string{"node-1", "node-2", "node-3", "node-4", "node-5"}
+	resizedRing := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}, {Address: "node-4"}, {Address: "node-5"}}
 	reassignments, err := assignSeries(series, resizedRing)
 	require.NoError(t, err)
 
 	// Assert that the initial nodes have no new keys after increasing the ring size
 	for _, node := range initialRing {
-		for _, ts := range reassignments[node] {
-			foundInInitialAssignment := findSeries(initialAssignments, node, ts)
+		for _, ts := range reassignments[node.Address] {
+			foundInInitialAssignment := findSeries(initialAssignments, node.Address, ts)
 			require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
 		}
 	}
@@ -289,18 +289,18 @@ func TestKetamaHashringIncreaseAtEnd(t *testing.T) {
 func TestKetamaHashringIncreaseInMiddle(t *testing.T) {
 	series := makeSeries()
 
-	initialRing := []string{"node-1", "node-3"}
+	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-3"}}
 	initialAssignments, err := assignSeries(series, initialRing)
 	require.NoError(t, err)
 
-	resizedRing := []string{"node-1", "node-2", "node-3"}
+	resizedRing := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}}
 	reassignments, err := assignSeries(series, resizedRing)
 	require.NoError(t, err)
 
 	// Assert that the initial nodes have no new keys after increasing the ring size
 	for _, node := range initialRing {
-		for _, ts := range reassignments[node] {
-			foundInInitialAssignment := findSeries(initialAssignments, node, ts)
+		for _, ts := range reassignments[node.Address] {
+			foundInInitialAssignment := findSeries(initialAssignments, node.Address, ts)
 			require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
 		}
 	}
@@ -309,23 +309,22 @@ func TestKetamaHashringIncreaseInMiddle(t *testing.T) {
 func TestKetamaHashringReplicationConsistency(t *testing.T) {
 	series := makeSeries()
 
-	initialRing := []string{"node-1", "node-4", "node-5"}
+	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-4"}, {Address: "node-5"}}
 	initialAssignments, err := assignReplicatedSeries(series, initialRing, 2)
 	require.NoError(t, err)
 
-	resizedRing := []string{"node-4", "node-3", "node-1", "node-2", "node-5"}
+	resizedRing := []Endpoint{{Address: "node-4"}, {Address: "node-3"}, {Address: "node-1"}, {Address: "node-2"}, {Address: "node-5"}}
 	reassignments, err := assignReplicatedSeries(series, resizedRing, 2)
 	require.NoError(t, err)
 
 	// Assert that the initial nodes have no new keys after increasing the ring size
 	for _, node := range initialRing {
-		for _, ts := range reassignments[node] {
-			foundInInitialAssignment := findSeries(initialAssignments, node, ts)
+		for _, ts := range reassignments[node.Address] {
+			foundInInitialAssignment := findSeries(initialAssignments, node.Address, ts)
 			require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
 		}
 	}
 }
-
 func TestKetamaHashringEvenAZSpread(t *testing.T) {
 	tenant := "default-tenant"
 	ts := &prompb.TimeSeries{
@@ -334,11 +333,11 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 	}
 
 	for _, tt := range []struct {
-		nodes    interface{}
+		nodes    []Endpoint
 		replicas uint64
 	}{
 		{
-			nodes: []AZAwareEndpoint{
+			nodes: []Endpoint{
 				{Address: "a", AZ: "1"},
 				{Address: "b", AZ: "2"},
 				{Address: "c", AZ: "1"},
@@ -347,11 +346,11 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 			replicas: 1,
 		},
 		{
-			nodes:    []string{"a", "b", "c", "d"},
+			nodes:    []Endpoint{{Address: "a"}, {Address: "b"}, {Address: "c"}, {Address: "d"}},
 			replicas: 1,
 		},
 		{
-			nodes: []AZAwareEndpoint{
+			nodes: []Endpoint{
 				{Address: "a", AZ: "1"},
 				{Address: "b", AZ: "2"},
 				{Address: "c", AZ: "1"},
@@ -360,7 +359,7 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 			replicas: 2,
 		},
 		{
-			nodes: []AZAwareEndpoint{
+			nodes: []Endpoint{
 				{Address: "a", AZ: "1"},
 				{Address: "b", AZ: "2"},
 				{Address: "c", AZ: "3"},
@@ -368,14 +367,14 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 				{Address: "e", AZ: "2"},
 				{Address: "f", AZ: "3"},
 			},
-			replicas: 4,
-		},
-		{
-			nodes:    []string{"a", "b", "c", "d", "e", "f"},
 			replicas: 3,
 		},
 		{
-			nodes: []AZAwareEndpoint{
+			nodes:    []Endpoint{{Address: "a"}, {Address: "b"}, {Address: "c"}, {Address: "d"}, {Address: "e"}, {Address: "f"}, {Address: "g"}},
+			replicas: 3,
+		},
+		{
+			nodes: []Endpoint{
 				{Address: "a", AZ: "1"},
 				{Address: "b", AZ: "2"},
 				{Address: "c", AZ: "3"},
@@ -397,13 +396,8 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 			testutil.Ok(t, err)
 
 			availableAzs := make(map[string]int64)
-			switch v := tt.nodes.(type) {
-			case []string:
-				availableAzs[""] = 0
-			case []AZAwareEndpoint:
-				for _, endpoint := range v {
-					availableAzs[endpoint.AZ] = 0
-				}
+			for _, endpoint := range tt.nodes {
+				availableAzs[endpoint.AZ] = 0
 			}
 
 			azSpread := make(map[string]int64)
@@ -411,22 +405,11 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 				r, err := hashRing.GetN(tenant, ts, uint64(i))
 				testutil.Ok(t, err)
 
-				switch v := tt.nodes.(type) {
-				case []string:
-					for _, n := range v {
-						az := ""
-						if !strings.HasPrefix(n, r) {
-							continue
-						}
-						azSpread[az]++
+				for _, n := range tt.nodes {
+					if !strings.HasPrefix(n.Address, r) {
+						continue
 					}
-				case []AZAwareEndpoint:
-					for _, n := range v {
-						if !strings.HasPrefix(n.Address, r) {
-							continue
-						}
-						azSpread[n.AZ]++
-					}
+					azSpread[n.AZ]++
 				}
 
 			}
@@ -449,12 +432,12 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 	tenant := "default-tenant"
 
 	for _, tt := range []struct {
-		nodes     interface{}
+		nodes     []Endpoint
 		replicas  uint64
 		numSeries uint64
 	}{
 		{
-			nodes: []AZAwareEndpoint{
+			nodes: []Endpoint{
 				{Address: "a", AZ: "1"},
 				{Address: "b", AZ: "2"},
 				{Address: "c", AZ: "1"},
@@ -464,12 +447,12 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 			numSeries: 1000,
 		},
 		{
-			nodes:     []string{"a", "b", "c", "d"},
+			nodes:     []Endpoint{{Address: "a"}, {Address: "b"}, {Address: "c"}, {Address: "d"}},
 			replicas:  2,
 			numSeries: 1000,
 		},
 		{
-			nodes: []AZAwareEndpoint{
+			nodes: []Endpoint{
 				{Address: "a", AZ: "1"},
 				{Address: "b", AZ: "2"},
 				{Address: "c", AZ: "3"},
@@ -481,7 +464,7 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 			numSeries: 10000,
 		},
 		{
-			nodes: []AZAwareEndpoint{
+			nodes: []Endpoint{
 				{Address: "a", AZ: "1"},
 				{Address: "b", AZ: "2"},
 				{Address: "c", AZ: "3"},
@@ -496,7 +479,7 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 			numSeries: 10000,
 		},
 		{
-			nodes: []AZAwareEndpoint{
+			nodes: []Endpoint{
 				{Address: "a", AZ: "1"},
 				{Address: "b", AZ: "2"},
 				{Address: "c", AZ: "3"},
@@ -514,13 +497,7 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			hashRing, err := newKetamaHashring(tt.nodes, SectionsPerNode, tt.replicas)
 			testutil.Ok(t, err)
-			var optimalSpread int
-			switch v := tt.nodes.(type) {
-			case []string:
-				optimalSpread = int(tt.numSeries*tt.replicas) / len(v)
-			case []AZAwareEndpoint:
-				optimalSpread = int(tt.numSeries*tt.replicas) / len(v)
-			}
+			optimalSpread := int(tt.numSeries*tt.replicas) / len(tt.nodes)
 			nodeSpread := make(map[string]int)
 			for i := 0; i < int(tt.numSeries); i++ {
 				ts := &prompb.TimeSeries{
@@ -550,14 +527,13 @@ func TestInvalidAZHashringCfg(t *testing.T) {
 		expectedError string
 	}{
 		{
-			cfg:           []HashringConfig{{Endpoints: []string{"a,1", "b,2", "c,1", "d,2"}}},
+			cfg:           []HashringConfig{{Endpoints: []Endpoint{{Address: "a", AZ: "1"}, {Address: "b", AZ: "2"}}}},
 			replicas:      2,
-			algorithm:     AlgorithmHashmod,
 			expectedError: "Hashmod algorithm does not support AZ aware hashring configuration. Either use Ketama or remove AZ configuration.",
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			_, err := newMultiHashring(tt.algorithm, tt.replicas, tt.cfg)
+			_, err := NewMultiHashring(tt.algorithm, tt.replicas, tt.cfg)
 			require.EqualError(t, err, tt.expectedError)
 		})
 	}
@@ -591,11 +567,11 @@ func findSeries(initialAssignments map[string][]prompb.TimeSeries, node string, 
 	return false
 }
 
-func assignSeries(series []prompb.TimeSeries, nodes []string) (map[string][]prompb.TimeSeries, error) {
+func assignSeries(series []prompb.TimeSeries, nodes []Endpoint) (map[string][]prompb.TimeSeries, error) {
 	return assignReplicatedSeries(series, nodes, 0)
 }
 
-func assignReplicatedSeries(series []prompb.TimeSeries, nodes []string, replicas uint64) (map[string][]prompb.TimeSeries, error) {
+func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replicas uint64) (map[string][]prompb.TimeSeries, error) {
 	hashRing, err := newKetamaHashring(nodes, SectionsPerNode, replicas)
 	if err != nil {
 		return nil, err

@@ -106,9 +106,9 @@ func TestWriteNativeHistograms(t *testing.T) {
 	ingestor1 := e2ethanos.NewReceiveBuilder(e, "ingestor1").WithIngestionEnabled().WithNativeHistograms().Init()
 
 	h := receive.HashringConfig{
-		Endpoints: []string{
-			ingestor0.InternalEndpoint("grpc"),
-			ingestor1.InternalEndpoint("grpc"),
+		Endpoints: []receive.Endpoint{
+			{Address: ingestor0.InternalEndpoint("grpc")},
+			{Address: ingestor1.InternalEndpoint("grpc")},
 		},
 	}
 

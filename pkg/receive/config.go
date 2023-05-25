@@ -37,9 +37,27 @@ const (
 	RouterIngestor ReceiverMode = "RouterIngestor"
 )
 
-type AZAwareEndpoint struct {
+type Endpoint struct {
 	Address string `json:"address"`
 	AZ      string `json:"az"`
+}
+
+func (e *Endpoint) UnmarshalJSON(data []byte) error {
+	// First try to unmarshal as a string.
+	err := json.Unmarshal(data, &e.Address)
+	if err == nil {
+		return nil
+	}
+
+	// If that fails, try to unmarshal as an endpoint object.
+	type endpointAlias Endpoint
+	var configEndpoint endpointAlias
+	err = json.Unmarshal(data, &configEndpoint)
+	if err == nil {
+		e.Address = configEndpoint.Address
+		e.AZ = configEndpoint.AZ
+	}
+	return err
 }
 
 // HashringConfig represents the configuration for a hashring
@@ -47,7 +65,7 @@ type AZAwareEndpoint struct {
 type HashringConfig struct {
 	Hashring       string            `json:"hashring,omitempty"`
 	Tenants        []string          `json:"tenants,omitempty"`
-	Endpoints      []string          `json:"endpoints"`
+	Endpoints      []Endpoint        `json:"endpoints"`
 	Algorithm      HashringAlgorithm `json:"algorithm,omitempty"`
 	ExternalLabels map[string]string `json:"external_labels,omitempty"`
 }
@@ -248,12 +266,7 @@ func (cw *ConfigWatcher) refresh(ctx context.Context) {
 	cw.lastSuccessTimeGauge.SetToCurrentTime()
 
 	for _, c := range config {
-		switch v := c.Endpoints.(type) {
-		case []string:
-			cw.hashringNodesGauge.WithLabelValues(c.Hashring).Set(float64(len(v)))
-		case []AZAwareEndpoint:
-			cw.hashringNodesGauge.WithLabelValues(c.Hashring).Set(float64(len(v)))
-		}
+		cw.hashringNodesGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Endpoints)))
 		cw.hashringTenantsGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Tenants)))
 	}
 
