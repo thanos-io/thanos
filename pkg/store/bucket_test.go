@@ -1672,7 +1672,8 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 					},
 				},
 			},
-		}, {
+		},
+		{
 			Name: "querying a range containing multiple blocks should return multiple blocks in the response hints",
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
@@ -1690,7 +1691,8 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 					},
 				},
 			},
-		}, {
+		},
+		{
 			Name: "querying a range containing multiple blocks but filtering a specific block should query only the requested block",
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
@@ -1711,6 +1713,53 @@ func TestSeries_RequestAndResponseHints(t *testing.T) {
 						{Id: block1.String()},
 					},
 				},
+			},
+		},
+		{
+			Name: "Query Stats Enabled",
+			Req: &storepb.SeriesRequest{
+				MinTime: 0,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+				},
+				Hints: mustMarshalAny(&hintspb.SeriesRequestHints{
+					BlockMatchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_EQ, Name: block.BlockIDLabel, Value: block1.String()},
+					},
+					EnableQueryStats: true,
+				}),
+			},
+			ExpectedSeries: seriesSet1,
+			ExpectedHints: []hintspb.SeriesResponseHints{
+				{
+					QueriedBlocks: []hintspb.Block{
+						{Id: block1.String()},
+					},
+					QueryStats: &hintspb.QueryStats{
+						BlocksQueried:     1,
+						PostingsTouched:   1,
+						PostingsFetched:   1,
+						SeriesTouched:     2,
+						SeriesFetched:     2,
+						ChunksTouched:     2,
+						ChunksFetched:     2,
+						MergedSeriesCount: 2,
+						MergedChunksCount: 2,
+					},
+				},
+			},
+			HintsCompareFunc: func(t testutil.TB, expected, actual hintspb.SeriesResponseHints) {
+				testutil.Equals(t, expected.QueriedBlocks, actual.QueriedBlocks)
+				testutil.Equals(t, expected.QueryStats.BlocksQueried, actual.QueryStats.BlocksQueried)
+				testutil.Equals(t, expected.QueryStats.PostingsTouched, actual.QueryStats.PostingsTouched)
+				testutil.Equals(t, expected.QueryStats.PostingsFetched, actual.QueryStats.PostingsFetched)
+				testutil.Equals(t, expected.QueryStats.SeriesTouched, actual.QueryStats.SeriesTouched)
+				testutil.Equals(t, expected.QueryStats.SeriesFetched, actual.QueryStats.SeriesFetched)
+				testutil.Equals(t, expected.QueryStats.ChunksTouched, actual.QueryStats.ChunksTouched)
+				testutil.Equals(t, expected.QueryStats.ChunksFetched, actual.QueryStats.ChunksFetched)
+				testutil.Equals(t, expected.QueryStats.MergedSeriesCount, actual.QueryStats.MergedSeriesCount)
+				testutil.Equals(t, expected.QueryStats.MergedChunksCount, actual.QueryStats.MergedChunksCount)
 			},
 		},
 	}
