@@ -1013,6 +1013,9 @@ func (b *blockSeriesClient) nextBatch() error {
 
 	b.entries = b.entries[:0]
 	for i := 0; i < len(postingsBatch); i++ {
+		if err := b.ctx.Err(); err != nil {
+			return err
+		}
 		ok, err := b.indexr.LoadSeriesForTime(postingsBatch[i], &b.symbolizedLset, &b.chkMetas, b.skipChunks, b.mint, b.maxt)
 		if err != nil {
 			return errors.Wrap(err, "read series")
