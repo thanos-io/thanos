@@ -69,7 +69,7 @@ var xxx_messageInfo_SeriesRequestHints proto.InternalMessageInfo
 type SeriesResponseHints struct {
 	/// queried_blocks is the list of blocks that have been queried.
 	QueriedBlocks []Block `protobuf:"bytes,1,rep,name=queried_blocks,json=queriedBlocks,proto3" json:"queried_blocks"`
-	/// query_stats contains statistics of query store gateway.
+	/// query_stats contains statistics of querying store gateway.
 	QueryStats *QueryStats `protobuf:"bytes,2,opt,name=query_stats,json=queryStats,proto3" json:"query_stats,omitempty"`
 }
 
@@ -299,6 +299,7 @@ func (m *LabelValuesResponseHints) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelValuesResponseHints proto.InternalMessageInfo
 
+/// QueryStats fields are unstable and might change in the future.
 type QueryStats struct {
 	BlocksQueried          int64 `protobuf:"varint,1,opt,name=blocks_queried,json=blocksQueried,proto3" json:"blocks_queried,omitempty"`
 	MergedSeriesCount      int64 `protobuf:"varint,2,opt,name=merged_series_count,json=mergedSeriesCount,proto3" json:"merged_series_count,omitempty"`

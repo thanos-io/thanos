@@ -31,7 +31,7 @@ message SeriesRequestHints {
 message SeriesResponseHints {
     /// queried_blocks is the list of blocks that have been queried.
     repeated Block queried_blocks = 1 [(gogoproto.nullable) = false];
-    /// query_stats contains statistics of query store gateway.
+    /// query_stats contains statistics of querying store gateway.
     QueryStats query_stats = 2 [(gogoproto.nullable) = true];
 }
 
@@ -64,6 +64,7 @@ message LabelValuesResponseHints {
     repeated Block queried_blocks = 1 [(gogoproto.nullable) = false];
 }
 
+/// QueryStats fields are unstable and might change in the future.
 message QueryStats {
     int64 blocks_queried = 1;
     int64 merged_series_count = 2;
