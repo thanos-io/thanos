@@ -299,7 +299,7 @@ func (m *LabelValuesResponseHints) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LabelValuesResponseHints proto.InternalMessageInfo
 
-/// QueryStats fields are unstable and might change in the future.
+// / QueryStats fields are unstable and might change in the future.
 type QueryStats struct {
 	BlocksQueried          int64 `protobuf:"varint,1,opt,name=blocks_queried,json=blocksQueried,proto3" json:"blocks_queried,omitempty"`
 	MergedSeriesCount      int64 `protobuf:"varint,2,opt,name=merged_series_count,json=mergedSeriesCount,proto3" json:"merged_series_count,omitempty"`
