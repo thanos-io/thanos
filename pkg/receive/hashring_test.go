@@ -325,6 +325,59 @@ func TestKetamaHashringReplicationConsistency(t *testing.T) {
 		}
 	}
 }
+
+func TestKetamaHashringReplicationConsistencyWithAZs(t *testing.T) {
+	for _, tt := range []struct {
+		initialRing []Endpoint
+		resizedRing []Endpoint
+		replicas    uint64
+	}{
+		{
+			initialRing: []Endpoint{{Address: "a", AZ: "1"}, {Address: "b", AZ: "2"}, {Address: "c", AZ: "3"}},
+			resizedRing: []Endpoint{{Address: "b", AZ: "2"}, {Address: "c", AZ: "3"}, {Address: "a", AZ: "1"}, {Address: "d", AZ: "2"}, {Address: "e", AZ: "4"}},
+			replicas:    3,
+		},
+		{
+			initialRing: []Endpoint{{Address: "a", AZ: "1"}, {Address: "b", AZ: "2"}, {Address: "c", AZ: "3"}},
+			resizedRing: []Endpoint{{Address: "a", AZ: "1"}, {Address: "b", AZ: "2"}, {Address: "c", AZ: "3"}, {Address: "d", AZ: "1"}, {Address: "e", AZ: "2"}, {Address: "f", AZ: "3"}},
+			replicas:    3,
+		},
+		{
+			initialRing: []Endpoint{{Address: "a", AZ: "1"}, {Address: "b", AZ: "2"}, {Address: "c", AZ: "3"}},
+			resizedRing: []Endpoint{{Address: "a", AZ: "1"}, {Address: "b", AZ: "2"}, {Address: "c", AZ: "3"}, {Address: "d", AZ: "4"}, {Address: "e", AZ: "5"}, {Address: "f", AZ: "6"}},
+			replicas:    3,
+		},
+		{
+			initialRing: []Endpoint{{Address: "a", AZ: "1"}, {Address: "b", AZ: "2"}, {Address: "c", AZ: "3"}},
+			resizedRing: []Endpoint{{Address: "a", AZ: "1"}, {Address: "b", AZ: "2"}, {Address: "c", AZ: "3"}, {Address: "d", AZ: "4"}, {Address: "e", AZ: "5"}, {Address: "f", AZ: "6"}},
+			replicas:    2,
+		},
+		{
+			initialRing: []Endpoint{{Address: "a", AZ: "1"}, {Address: "c", AZ: "2"}, {Address: "f", AZ: "3"}},
+			resizedRing: []Endpoint{{Address: "a", AZ: "1"}, {Address: "b", AZ: "1"}, {Address: "c", AZ: "2"}, {Address: "d", AZ: "2"}, {Address: "f", AZ: "3"}},
+			replicas:    2,
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			series := makeSeries()
+
+			initialAssignments, err := assignReplicatedSeries(series, tt.initialRing, tt.replicas)
+			require.NoError(t, err)
+
+			reassignments, err := assignReplicatedSeries(series, tt.resizedRing, tt.replicas)
+			require.NoError(t, err)
+
+			// Assert that the initial nodes have no new keys after increasing the ring size
+			for _, node := range tt.initialRing {
+				for _, ts := range reassignments[node.Address] {
+					foundInInitialAssignment := findSeries(initialAssignments, node.Address, ts)
+					require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
+				}
+			}
+		})
+	}
+}
+
 func TestKetamaHashringEvenAZSpread(t *testing.T) {
 	tenant := "default-tenant"
 	ts := &prompb.TimeSeries{
@@ -421,7 +474,7 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 			testutil.Equals(t, len(azSpread), expectedAzSpreadLength)
 
 			for _, writeToAz := range azSpread {
-				minAz := getMinAz(azSpread)
+				minAz := sizeOfLeastOccupiedAZ(azSpread)
 				testutil.Assert(t, math.Abs(float64(writeToAz-minAz)) <= 1.0)
 			}
 		})

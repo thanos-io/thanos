@@ -157,9 +157,9 @@ func newKetamaHashring(endpoints []Endpoint, sectionsPerNode int, replicationFac
 	}, nil
 }
 
-func getMinAz(m map[string]int64) int64 {
+func sizeOfLeastOccupiedAZ(azSpread map[string]int64) int64 {
 	minValue := int64(math.MaxInt64)
-	for _, value := range m {
+	for _, value := range azSpread {
 		if value < minValue {
 			minValue = value
 		}
@@ -184,7 +184,7 @@ func calculateSectionReplicas(ringSections sections, replicationFactor uint64, a
 			if _, ok := replicas[rep.endpointIndex]; ok {
 				continue
 			}
-			if len(azSpread) > 1 && azSpread[rep.az] > 0 && azSpread[rep.az] > getMinAz(azSpread) {
+			if len(azSpread) > 1 && azSpread[rep.az] > 0 && azSpread[rep.az] > sizeOfLeastOccupiedAZ(azSpread) {
 				// We want to ensure even AZ spread before we add more replicas within the same AZ
 				continue
 			}
