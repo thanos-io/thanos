@@ -134,6 +134,8 @@ In order to ensure even spread for replication over nodes in different availabil
 
 This is only supported for the Ketama algorithm.
 
+**NOTE:** This feature is made available from v0.32 onwards. Receive can still operate with `endpoints` set to an array of IP strings in ketama mode. But to use AZ-aware hashring, you would need to migrate your existing hashring (and surrounding automation) to the new JSON structure mentioned above.
+
 ## Limits & gates (experimental)
 
 Thanos Receive has some limits and gates that can be configured to control resource usage. Here's the difference between limits and gates:
