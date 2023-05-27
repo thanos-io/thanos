@@ -38,7 +38,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 			name: "One tenant - No labels",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1"},
 				},
 			},
@@ -50,7 +50,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 			name: "One tenant - One label",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1"},
 					ExternalLabels: map[string]string{
 						"name1": "value1",
@@ -65,7 +65,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 			name: "One tenant - Multiple labels",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1"},
 					ExternalLabels: map[string]string{
 						"name1": "value1",
@@ -83,7 +83,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 			name: "Multiple tenants - No labels",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 				},
 			},
@@ -97,7 +97,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 			name: "Multiple tenants - One label",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 					ExternalLabels: map[string]string{
 						"name1": "value1",
@@ -114,7 +114,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 			name: "Multiple tenants - Multiple labels",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 					ExternalLabels: map[string]string{
 						"name3": "value3",
@@ -136,7 +136,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 			name: "Multiple hashrings - No repeated tenants",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 					ExternalLabels: map[string]string{
 						"name1": "value1",
@@ -145,7 +145,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 					},
 				},
 				{
-					Endpoints: []string{"node2"},
+					Endpoints: []Endpoint{{Address: "node2"}},
 					Tenants:   []string{"tenant4", "tenant5", "tenant6"},
 					ExternalLabels: map[string]string{
 						"name6": "value6",
@@ -173,7 +173,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 			name: "Multiple hashrings - One repeated tenant",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 					ExternalLabels: map[string]string{
 						"name3": "value3",
@@ -182,7 +182,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 					},
 				},
 				{
-					Endpoints: []string{"node2"},
+					Endpoints: []Endpoint{{Address: "node2"}},
 					Tenants:   []string{"tenant4", "tenant5", "tenant1"},
 					ExternalLabels: map[string]string{
 						"name4": "value4",
@@ -245,7 +245,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 func TestLabelSetsOfTenantsWhenAddingTenants(t *testing.T) {
 	initialConfig := []HashringConfig{
 		{
-			Endpoints: []string{"node1"},
+			Endpoints: []Endpoint{{Address: "node1"}},
 			Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 			ExternalLabels: map[string]string{
 				"name1": "value1",
@@ -265,7 +265,7 @@ func TestLabelSetsOfTenantsWhenAddingTenants(t *testing.T) {
 
 	changedConfig := []HashringConfig{
 		{
-			Endpoints: []string{"node1"},
+			Endpoints: []Endpoint{{Address: "node1"}},
 			Tenants:   []string{"tenant1", "tenant2", "tenant3", "tenant4", "tenant5"},
 			ExternalLabels: map[string]string{
 				"name1": "value1",
@@ -354,7 +354,7 @@ func TestLabelSetsOfTenantsWhenAddingTenants(t *testing.T) {
 func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 	initialConfig := []HashringConfig{
 		{
-			Endpoints: []string{"node1"},
+			Endpoints: []Endpoint{{Address: "node1"}},
 			Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 			ExternalLabels: map[string]string{
 				"name1": "value1",
@@ -363,7 +363,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 			},
 		},
 		{
-			Endpoints: []string{"node2"},
+			Endpoints: []Endpoint{{Address: "node2"}},
 			Tenants:   []string{"tenant4", "tenant5", "tenant6"},
 			ExternalLabels: map[string]string{
 				"name6": "value6",
@@ -396,7 +396,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 			name: "Adding labels",
 			changedConfig: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 					ExternalLabels: map[string]string{
 						"name1": "value1",
@@ -406,7 +406,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 					},
 				},
 				{
-					Endpoints: []string{"node2"},
+					Endpoints: []Endpoint{{Address: "node2"}},
 					Tenants:   []string{"tenant4", "tenant5", "tenant6"},
 					ExternalLabels: map[string]string{
 						"name4": "value4",
@@ -435,7 +435,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 			name: "Deleting some labels",
 			changedConfig: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 					ExternalLabels: map[string]string{
 						"name1": "value1",
@@ -443,7 +443,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 					},
 				},
 				{
-					Endpoints: []string{"node2"},
+					Endpoints: []Endpoint{{Address: "node2"}},
 					Tenants:   []string{"tenant4", "tenant5", "tenant6"},
 					ExternalLabels: map[string]string{
 						"name4": "value4",
@@ -470,11 +470,11 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 			name: "Deleting all labels",
 			changedConfig: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 				},
 				{
-					Endpoints: []string{"node2"},
+					Endpoints: []Endpoint{{Address: "node2"}},
 					Tenants:   []string{"tenant4", "tenant5", "tenant6"},
 				},
 			},
@@ -491,7 +491,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 			name: "Changing values of some labels",
 			changedConfig: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 					ExternalLabels: map[string]string{
 						"name1": "value3",
@@ -500,7 +500,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 					},
 				},
 				{
-					Endpoints: []string{"node2"},
+					Endpoints: []Endpoint{{Address: "node2"}},
 					Tenants:   []string{"tenant4", "tenant5", "tenant6"},
 					ExternalLabels: map[string]string{
 						"name4": "value6",
@@ -584,7 +584,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 	initialConfig := []HashringConfig{
 		{
-			Endpoints: []string{"node1"},
+			Endpoints: []Endpoint{{Address: "node1"}},
 			Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 			ExternalLabels: map[string]string{
 				"name3": "value3",
@@ -593,7 +593,7 @@ func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 			},
 		},
 		{
-			Endpoints: []string{"node2"},
+			Endpoints: []Endpoint{{Address: "node2"}},
 			Tenants:   []string{"tenant4", "tenant5", "tenant1"},
 			ExternalLabels: map[string]string{
 				"name4": "value4",
@@ -624,7 +624,7 @@ func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 			name: "Adding labels in first hashring that tenant appears",
 			changedConfig: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 					ExternalLabels: map[string]string{
 						"name1": "value1",
@@ -634,7 +634,7 @@ func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 					},
 				},
 				{
-					Endpoints: []string{"node2"},
+					Endpoints: []Endpoint{{Address: "node2"}},
 					Tenants:   []string{"tenant4", "tenant5", "tenant1"},
 					ExternalLabels: map[string]string{
 						"name4": "value4",
@@ -660,7 +660,7 @@ func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 			name: "Adding labels in second hashring that tenant appears",
 			changedConfig: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 					Tenants:   []string{"tenant1", "tenant2", "tenant3"},
 					ExternalLabels: map[string]string{
 						"name1": "value1",
@@ -669,7 +669,7 @@ func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 					},
 				},
 				{
-					Endpoints: []string{"node2"},
+					Endpoints: []Endpoint{{Address: "node2"}},
 					Tenants:   []string{"tenant4", "tenant5", "tenant1"},
 					ExternalLabels: map[string]string{
 						"name4": "value4",
@@ -752,7 +752,7 @@ func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 func TestReceiverLabelsNotOverwrittenByExternalLabels(t *testing.T) {
 	cfg := []HashringConfig{
 		{
-			Endpoints: []string{"node1"},
+			Endpoints: []Endpoint{{Address: "node1"}},
 			Tenants:   []string{"tenant1"},
 			ExternalLabels: map[string]string{
 				"replica":   "0",
