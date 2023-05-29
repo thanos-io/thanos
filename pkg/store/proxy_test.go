@@ -29,7 +29,9 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/efficientgo/core/testutil"
+
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
@@ -74,6 +76,34 @@ func TestProxyStore_Info(t *testing.T) {
 	testutil.Equals(t, storepb.StoreType_QUERY, resp.StoreType)
 	testutil.Equals(t, int64(0), resp.MinTime)
 	testutil.Equals(t, int64(0), resp.MaxTime)
+}
+
+func TestProxyStore_TSDBInfos(t *testing.T) {
+	stores := []Client{
+		&storetestutil.TestClient{
+			StoreTSDBInfos: nil,
+		},
+		&storetestutil.TestClient{
+			StoreTSDBInfos: []infopb.TSDBInfo{
+				infopb.NewTSDBInfo(0, 10, []labelpb.ZLabel{{Name: "lbl", Value: "val1"}}),
+			},
+		},
+		&storetestutil.TestClient{
+			StoreTSDBInfos: []infopb.TSDBInfo{
+				infopb.NewTSDBInfo(0, 20, []labelpb.ZLabel{{Name: "lbl", Value: "val2"}}),
+			},
+		},
+	}
+	q := NewProxyStore(nil, nil,
+		func() []Client { return stores },
+		component.Query, nil, 0*time.Second, EagerRetrieval,
+	)
+
+	expected := []infopb.TSDBInfo{
+		infopb.NewTSDBInfo(0, 10, []labelpb.ZLabel{{Name: "lbl", Value: "val1"}}),
+		infopb.NewTSDBInfo(0, 20, []labelpb.ZLabel{{Name: "lbl", Value: "val2"}}),
+	}
+	testutil.Equals(t, expected, q.TSDBInfos())
 }
 
 func TestProxyStore_Series(t *testing.T) {
@@ -1689,7 +1719,7 @@ func TestStoreMatches(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			ok, reason := storeMatches(context.TODO(), c.s, c.mint, c.maxt, c.ms...)
+			ok, reason := storeMatches(context.TODO(), c.s, true, c.mint, c.maxt, c.ms...)
 			testutil.Equals(t, c.expectedMatch, ok)
 			testutil.Equals(t, c.expectedReason, reason)
 

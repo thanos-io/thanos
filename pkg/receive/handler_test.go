@@ -195,7 +195,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		h.peers = peers
 		addr := ag.newAddr()
 		h.options.Endpoint = addr
-		cfg[0].Endpoints = append(cfg[0].Endpoints, h.options.Endpoint)
+		cfg[0].Endpoints = append(cfg[0].Endpoints, Endpoint{Address: h.options.Endpoint})
 		peers.cache[addr] = &fakeRemoteWriteGRPCServer{h: h}
 	}
 	// Use hashmod as default.
@@ -203,7 +203,7 @@ func newTestHandlerHashring(appendables []*fakeAppendable, replicationFactor uin
 		hashringAlgo = AlgorithmHashmod
 	}
 
-	hashring, err := newMultiHashring(hashringAlgo, replicationFactor, cfg)
+	hashring, err := NewMultiHashring(hashringAlgo, replicationFactor, cfg)
 	if err != nil {
 		return nil, nil, err
 	}

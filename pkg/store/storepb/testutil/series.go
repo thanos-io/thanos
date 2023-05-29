@@ -167,7 +167,7 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 func appendFloatSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
 	ref, err := app.Append(
 		0,
-		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix)),
+		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel)),
 		int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
 		opts.Random.Float64(),
 	)
@@ -195,7 +195,7 @@ func appendHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opt
 
 	ref, err := app.AppendHistogram(
 		0,
-		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix)),
+		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel)),
 		int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
 		sample,
 		nil,
@@ -287,6 +287,7 @@ type SeriesCase struct {
 	ExpectedSeries   []*storepb.Series
 	ExpectedWarnings []string
 	ExpectedHints    []hintspb.SeriesResponseHints
+	HintsCompareFunc func(t testutil.TB, expected, actual hintspb.SeriesResponseHints)
 }
 
 // TestServerSeries runs tests against given cases.
@@ -334,7 +335,14 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 						testutil.Ok(t, types.UnmarshalAny(anyHints, &hints))
 						actualHints = append(actualHints, hints)
 					}
-					testutil.Equals(t, c.ExpectedHints, actualHints)
+					testutil.Equals(t, len(c.ExpectedHints), len(actualHints))
+					for i, hint := range actualHints {
+						if c.HintsCompareFunc == nil {
+							testutil.Equals(t, c.ExpectedHints[i], hint)
+						} else {
+							c.HintsCompareFunc(t, c.ExpectedHints[i], hint)
+						}
+					}
 				}
 			}
 		})

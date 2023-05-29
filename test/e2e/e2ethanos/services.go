@@ -260,6 +260,10 @@ type QuerierBuilder struct {
 	replicaLabels []string
 	tracingConfig string
 
+	telemetryDurationQuantiles []float64
+	telemetrySamplesQuantiles  []float64
+	telemetrySeriesQuantiles   []float64
+
 	e2e.Linkable
 	f e2e.FutureRunnable
 }
@@ -369,6 +373,13 @@ func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithTelemetryQuantiles(duration []float64, samples []float64, series []float64) *QuerierBuilder {
+	q.telemetryDurationQuantiles = duration
+	q.telemetrySamplesQuantiles = samples
+	q.telemetrySeriesQuantiles = series
+	return q
+}
+
 func (q *QuerierBuilder) Init() *e2emon.InstrumentedRunnable {
 	args, err := q.collectArgs()
 	if err != nil {
@@ -458,6 +469,15 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	if q.tracingConfig != "" {
 		args = append(args, "--tracing.config="+q.tracingConfig)
+	}
+	for _, bucket := range q.telemetryDurationQuantiles {
+		args = append(args, "--query.telemetry.request-duration-seconds-quantiles="+strconv.FormatFloat(bucket, 'f', -1, 64))
+	}
+	for _, bucket := range q.telemetrySamplesQuantiles {
+		args = append(args, "--query.telemetry.request-samples-quantiles="+strconv.FormatFloat(bucket, 'f', -1, 64))
+	}
+	for _, bucket := range q.telemetrySeriesQuantiles {
+		args = append(args, "--query.telemetry.request-series-seconds-quantiles="+strconv.FormatFloat(bucket, 'f', -1, 64))
 	}
 	return args, nil
 }
