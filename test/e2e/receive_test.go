@@ -97,22 +97,23 @@ func TestReceive(t *testing.T) {
 
 	t.Run("ha_ingestor_with_ha_prom", func(t *testing.T) {
 		/*
-				The ha_ingestor_with_ha_prom suite represents a configuration of a
-			    naive HA Thanos Receive with HA Prometheus. This is used to exercise
-			    deduplication with external and "internal" TSDB block labels
+			The ha_ingestor_with_ha_prom suite represents a configuration of a
+			naive HA Thanos Receive with HA Prometheus. This is used to exercise
+			deduplication with external and "internal" TSDB block labels
 
-					 ┌──────┐  ┌──────┬──────┐
-					 │ Prom │  │      │ Prom │
-					 └─┬────┴──┼────┐ └─────┬┘
-			           │       │    │       │
-				       │       │    │       │
-				     ┌─▼───────▼┐ ┌─▼───────▼┐
-				     │ Ingestor	│ │ Ingestor │
-				     └───────┬──┘ └──┬───────┘
-				             │       │
-				            ┌▼───────▼┐
-				            │  Query  │
-				            └─────────┘
+			 ┌──────┐  ┌──────┬──────┐
+			 │ Prom │  │      │ Prom │
+			 └─┬────┴──┼────┐ └─────┬┘
+			   │       │    │       │
+			   │       │    │       │
+			 ┌─▼───────▼┐ ┌─▼───────▼┐
+			 │ Ingestor	│ │ Ingestor │
+			 └───────┬──┘ └──┬───────┘
+			         │       │
+			        ┌▼───────▼┐
+			        │  Query  │
+			        └─────────┘
+			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
 		*/
 		t.Parallel()
 		e, err := e2e.NewDockerEnvironment("haingest-haprom")
