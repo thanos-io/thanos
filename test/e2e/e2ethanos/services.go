@@ -91,28 +91,6 @@ func defaultPromHttpConfig() string {
 `
 }
 
-const nginxImage = "docker.io/nginx:1.21.1-alpine"
-
-func NewStaticMetricsServer(e e2e.Environment, name string, metrics []byte) *e2emon.InstrumentedRunnable {
-	f := e.Runnable(name).WithPorts(map[string]int{"http": 80}).Future()
-	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "create static metrics dir"))}
-	}
-	metricsFilePath := filepath.Join(f.Dir(), "metrics.txt")
-	if err := os.WriteFile(metricsFilePath, metrics, 0644); err != nil {
-		return &e2emon.InstrumentedRunnable{Runnable: e2e.NewFailedRunnable(name, errors.Wrap(err, "creating static metrics file"))}
-	}
-	probe := e2e.NewHTTPReadinessProbe("http", "/metrics", 200, 200)
-	return e2emon.AsInstrumented(
-		f.Init(e2e.StartOptions{
-			Image:     nginxImage,
-			Volumes:   []string{metricsFilePath + ":/usr/share/nginx/html/metrics:ro"},
-			Readiness: probe,
-		}),
-		"http",
-	)
-}
-
 func NewPrometheus(e e2e.Environment, name, promConfig, webConfig, promImage string, enableFeatures ...string) *e2emon.InstrumentedRunnable {
 	f := e.Runnable(name).WithPorts(map[string]int{"http": 9090}).Future()
 	if err := os.MkdirAll(f.Dir(), 0750); err != nil {
@@ -1026,7 +1004,7 @@ http {
 	}
 
 	return e2emon.AsInstrumented(f.Init(e2e.StartOptions{
-		Image:            nginxImage,
+		Image:            "docker.io/nginx:1.21.1-alpine",
 		Volumes:          []string{filepath.Join(f.Dir(), "/nginx.conf") + ":/etc/nginx/nginx.conf:ro"},
 		WaitReadyBackoff: &defaultBackoffConfig,
 	}), "http")

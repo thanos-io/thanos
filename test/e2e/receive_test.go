@@ -135,7 +135,7 @@ test_metric{a="1", b="1"} 1
 test_metric{a="1", b="2"} 1
 test_metric{a="2", b="1"} 1
 test_metric{a="2", b="2"} 1`)
-		static := e2ethanos.NewStaticMetricsServer(e, "static", metrics)
+		static := e2emon.NewStaticMetricsServer(e, "static", metrics)
 		testutil.Ok(t, e2e.StartAndWaitReady(static))
 
 		// Setup Prometheus
