@@ -41,9 +41,11 @@ type TSDBStore struct {
 	logger           log.Logger
 	db               TSDBReader
 	component        component.StoreAPI
-	extLset          labels.Labels
 	buffers          sync.Pool
 	maxBytesPerFrame int
+
+	extLset labels.Labels
+	mtx     sync.RWMutex
 }
 
 func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*grpc.Server) {
@@ -77,6 +79,20 @@ func NewTSDBStore(logger log.Logger, db TSDBReader, component component.StoreAPI
 	}
 }
 
+func (s *TSDBStore) SetExtLset(extLset labels.Labels) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.extLset = extLset
+}
+
+func (s *TSDBStore) getExtLset() labels.Labels {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	return s.extLset
+}
+
 // Info returns store information about the Prometheus instance.
 func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	minTime, err := s.db.StartTime()
@@ -85,7 +101,7 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 	}
 
 	res := &storepb.InfoResponse{
-		Labels:    labelpb.ZLabelsFromPromLabels(s.extLset),
+		Labels:    labelpb.ZLabelsFromPromLabels(s.getExtLset()),
 		StoreType: s.component.ToProto(),
 		MinTime:   minTime,
 		MaxTime:   math.MaxInt64,
@@ -103,7 +119,7 @@ func (s *TSDBStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.In
 }
 
 func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
-	labels := labelpb.ZLabelsFromPromLabels(s.extLset)
+	labels := labelpb.ZLabelsFromPromLabels(s.getExtLset())
 	labelSets := []labelpb.ZLabelSet{}
 	if len(labels) > 0 {
 		labelSets = append(labelSets, labelpb.ZLabelSet{
@@ -153,7 +169,7 @@ type CloseDelegator interface {
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLset)
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -270,7 +286,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLset)
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -291,7 +307,7 @@ func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest
 	}
 
 	if len(res) > 0 {
-		for _, lbl := range s.extLset {
+		for _, lbl := range s.getExtLset() {
 			res = append(res, lbl.Name)
 		}
 		sort.Strings(res)
@@ -317,7 +333,7 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
 	}
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLset)
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -326,7 +342,7 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		return &storepb.LabelValuesResponse{Values: nil}, nil
 	}
 
-	if v := s.extLset.Get(r.Label); v != "" {
+	if v := s.getExtLset().Get(r.Label); v != "" {
 		return &storepb.LabelValuesResponse{Values: []string{v}}, nil
 	}
 

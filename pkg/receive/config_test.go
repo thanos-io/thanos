@@ -38,7 +38,7 @@ func TestValidateConfig(t *testing.T) {
 			name: "valid config",
 			cfg: []HashringConfig{
 				{
-					Endpoints: []string{"node1"},
+					Endpoints: []Endpoint{{Address: "node1"}},
 				},
 			},
 			err: nil, // means it's valid.
@@ -70,4 +70,17 @@ func TestValidateConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUnmarshalEndpointSlice(t *testing.T) {
+	t.Run("Endpoints as string slice", func(t *testing.T) {
+		var endpoints []Endpoint
+		testutil.Ok(t, json.Unmarshal([]byte(`["node-1"]`), &endpoints))
+		testutil.Equals(t, endpoints, []Endpoint{{Address: "node-1"}})
+	})
+	t.Run("Endpoints as endpoints slice", func(t *testing.T) {
+		var endpoints []Endpoint
+		testutil.Ok(t, json.Unmarshal([]byte(`[{"address": "node-1", "az": "az-1"}]`), &endpoints))
+		testutil.Equals(t, endpoints, []Endpoint{{Address: "node-1", AZ: "az-1"}})
+	})
 }
