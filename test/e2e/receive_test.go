@@ -95,6 +95,153 @@ func TestReceive(t *testing.T) {
 		})
 	})
 
+	t.Run("ha_ingestor_with_ha_prom", func(t *testing.T) {
+		/*
+			The ha_ingestor_with_ha_prom suite represents a configuration of a
+			naive HA Thanos Receive with HA Prometheus. This is used to exercise
+			deduplication with external and "internal" TSDB block labels
+
+			 ┌──────┐  ┌──────┬──────┐
+			 │ Prom │  │      │ Prom │
+			 └─┬────┴──┼────┐ └─────┬┘
+			   │       │    │       │
+			   │       │    │       │
+			 ┌─▼───────▼┐ ┌─▼───────▼┐
+			 │ Ingestor	│ │ Ingestor │
+			 └───────┬──┘ └──┬───────┘
+			         │       │
+			        ┌▼───────▼┐
+			        │  Query  │
+			        └─────────┘
+			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
+		*/
+		t.Parallel()
+		e, err := e2e.NewDockerEnvironment("haingest-haprom")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		// Setup Receives
+		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
+		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().Init()
+		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled().Init()
+
+		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2, r3))
+
+		// These static metrics help reproduce issue https://github.com/thanos-io/thanos/issues/6257 in Receive.
+		metrics := []byte(`
+# HELP test_metric A test metric
+# TYPE test_metric counter
+test_metric{a="1", b="1"} 1
+test_metric{a="1", b="2"} 1
+test_metric{a="2", b="1"} 1
+test_metric{a="2", b="2"} 1`)
+		static := e2emon.NewStaticMetricsServer(e, "static", metrics)
+		testutil.Ok(t, e2e.StartAndWaitReady(static))
+
+		// Setup Prometheus
+		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig(
+			"prom1",
+			0,
+			e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")),
+			"",
+			e2ethanos.LocalPrometheusTarget,
+		), "", e2ethanos.DefaultPrometheusImage())
+		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig(
+			"prom1",
+			1,
+			e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")),
+			"",
+			e2ethanos.LocalPrometheusTarget,
+		), "", e2ethanos.DefaultPrometheusImage())
+		promStatic := e2ethanos.NewPrometheus(e, "3", e2ethanos.DefaultPromConfig(
+			"prom-static",
+			0,
+			e2ethanos.RemoteWriteEndpoints(r3.InternalEndpoint("remote-write")),
+			"",
+			static.InternalEndpoint("http"),
+		), "", e2ethanos.DefaultPrometheusImage())
+		testutil.Ok(t, e2e.StartAndWaitReady(prom, prom2, promStatic))
+
+		// The "replica" label is added to the Prometheus instances via the e2ethanos.DefaultPromConfig. It is a block label.
+		// The "receive" label is added to the Receive instances via the e2ethanos.NewReceiveBuilder. It is an external label.
+		// Here we setup 3 queriers, one for each possible combination of replica label: internal, external, and both.
+		q1 := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).
+			WithReplicaLabels("replica", "receive").
+			Init()
+		q2 := e2ethanos.NewQuerierBuilder(e, "2", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).
+			WithReplicaLabels("replica").
+			Init()
+		q3 := e2ethanos.NewQuerierBuilder(e, "3", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).
+			WithReplicaLabels("receive").
+			Init()
+		qStatic := e2ethanos.NewQuerierBuilder(e, "static", r3.InternalEndpoint("grpc")).
+			WithReplicaLabels("a").
+			Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(q1, q2, q3, qStatic))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		t.Cleanup(cancel)
+
+		testutil.Ok(t, q1.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+
+		// We expect the data from each Prometheus instance to be replicated 4 times across our ingesting instances.
+		// So 2 results when using both replica labels, one for each Prometheus instance.
+		queryAndAssertSeries(t, ctx, q1.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, []model.Metric{
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"tenant_id":  "default-tenant",
+			},
+		})
+
+		// We expect 2 results when using only the "replica" label, which is an internal label when coming from
+		// Prometheus via remote write.
+		queryAndAssertSeries(t, ctx, q2.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, []model.Metric{
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"receive":    "receive-1",
+				"tenant_id":  "default-tenant",
+			},
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"receive":    "receive-2",
+				"tenant_id":  "default-tenant",
+			},
+		})
+
+		// We expect 2 results when using only the "receive" label, which is an external label added by the Receives.
+		queryAndAssertSeries(t, ctx, q3.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, []model.Metric{
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"replica":    "0",
+				"tenant_id":  "default-tenant",
+			},
+			{
+				"job":        "myself",
+				"prometheus": "prom1",
+				"replica":    "1",
+				"tenant_id":  "default-tenant",
+			},
+		})
+
+		// This should've returned only 2 series, but is returning 4 until the problem reported in
+		// https://github.com/thanos-io/thanos/issues/6257 is fixed
+		instantQuery(t, ctx, qStatic.Endpoint("http"), func() string {
+			return "test_metric"
+		}, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, 4)
+	})
+
 	t.Run("router_replication", func(t *testing.T) {
 		/*
 			The router_replication suite configures separate routing and ingesting components.

@@ -484,6 +484,14 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 
 func RemoteWriteEndpoint(addr string) string { return fmt.Sprintf("http://%s/api/v1/receive", addr) }
 
+func RemoteWriteEndpoints(addrs ...string) string {
+	var endpoints []string
+	for _, addr := range addrs {
+		endpoints = append(endpoints, RemoteWriteEndpoint(addr))
+	}
+	return strings.Join(endpoints, ",")
+}
+
 type ReceiveBuilder struct {
 	e2e.Linkable
 
@@ -499,6 +507,7 @@ type ReceiveBuilder struct {
 	replication         int
 	image               string
 	nativeHistograms    bool
+	labels              []string
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -526,6 +535,11 @@ func (r *ReceiveBuilder) WithExemplarsInMemStorage(maxExemplars int) *ReceiveBui
 
 func (r *ReceiveBuilder) WithIngestionEnabled() *ReceiveBuilder {
 	r.ingestion = true
+	return r
+}
+
+func (r *ReceiveBuilder) WithLabel(name, value string) *ReceiveBuilder {
+	r.labels = append(r.labels, fmt.Sprintf(`%s="%s"`, name, value))
 	return r
 }
 
@@ -573,6 +587,10 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 		"--tsdb.path":            filepath.Join(r.InternalDir(), "data"),
 		"--log.level":            infoLogLevel,
 		"--tsdb.max-exemplars":   fmt.Sprintf("%v", r.maxExemplars),
+	}
+
+	if len(r.labels) > 0 {
+		args["--label"] = fmt.Sprintf("%s,%s", args["--label"], strings.Join(r.labels, ","))
 	}
 
 	hashring := r.hashringConfigs
@@ -638,7 +656,7 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 
 	return e2emon.AsInstrumented(r.f.Init(wrapWithDefaults(e2e.StartOptions{
 		Image:     r.image,
-		Command:   e2e.NewCommand("receive", e2e.BuildArgs(args)...),
+		Command:   e2e.NewCommand("receive", e2e.BuildKingpinArgs(args)...),
 		Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
 	})), "http")
 }
@@ -1085,7 +1103,7 @@ const LocalPrometheusTarget = "localhost:9090"
 
 // DefaultPromConfig returns Prometheus config that sets Prometheus to:
 // * expose 2 external labels, source and replica.
-// * optionallly scrape self. This will produce up == 0 metric which we can assert on.
+// * optionally scrape self. This will produce up == 0 metric which we can assert on.
 // * optionally remote write endpoint to write into.
 func DefaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string, scrapeTargets ...string) string {
 	var targets string
@@ -1112,7 +1130,7 @@ scrape_configs:
   - targets: [%s]
   relabel_configs:
   - source_labels: ['__address__']
-    regex: '^.+:80$'
+    regex: '^localhost:80$'
     action: drop
 `, config, targets)
 	}
@@ -1120,13 +1138,16 @@ scrape_configs:
 	if remoteWriteEndpoint != "" {
 		config = fmt.Sprintf(`
 %s
-remote_write:
+remote_write:`, config)
+		for _, url := range strings.Split(remoteWriteEndpoint, ",") {
+			config = fmt.Sprintf(`
+%s
 - url: "%s"
   # Don't spam receiver on mistake.
   queue_config:
     min_backoff: 2s
-    max_backoff: 10s
-`, config, remoteWriteEndpoint)
+    max_backoff: 10s`, config, url)
+		}
 	}
 
 	if ruleFile != "" {
