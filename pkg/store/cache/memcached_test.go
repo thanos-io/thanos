@@ -92,11 +92,11 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			// Store the postings expected before running the test.
 			ctx := context.Background()
 			for _, p := range testData.setup {
-				c.StorePostings(p.block, p.label, p.value)
+				c.StorePostings(p.block, p.label, p.value, CodecHeaderStreamedSnappy)
 			}
 
 			// Fetch postings from cached and assert on it.
-			hits, misses := c.FetchMultiPostings(ctx, testData.fetchBlockID, testData.fetchLabels)
+			hits, misses := c.FetchMultiPostings(ctx, testData.fetchBlockID, testData.fetchLabels, CodecHeaderStreamedSnappy)
 			testutil.Equals(t, testData.expectedHits, hits)
 			testutil.Equals(t, testData.expectedMisses, misses)
 
