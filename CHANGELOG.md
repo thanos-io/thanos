@@ -53,6 +53,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6322](https://github.com/thanos-io/thanos/pull/6322) Logging: Avoid expensive log.Valuer evaluation for disallowed levels.
 - [#6358](https://github.com/thanos-io/thanos/pull/6358) Query: Add +Inf bucket to query duration metrics
 - [#6363](https://github.com/thanos-io/thanos/pull/6363) Store: Check context error when expanding postings.
+- [#6405](https://github.com/thanos-io/thanos/pull/6405) Store/Index Cache: Add codec header as part of the postings cache key.
 
 ### Removed
 
