@@ -241,7 +241,7 @@ Under `global`:
 - `meta_monitoring_http_client`: Optional YAML field specifying HTTP client config for meta-monitoring.
 
 Under `default` and per `tenant`:
-- `head_series_limit`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive.
+- `head_series_limit`: Specifies the total number of active (head) series for any tenant, across all replicas (including data replication), allowed by Thanos Receive. Set to 0 for unlimited.
 
 NOTE:
 - It is possible that Receive ingests more active series than the specified limit, as it relies on meta-monitoring, which may not have the latest data for current number of active series of a tenant at all times.
