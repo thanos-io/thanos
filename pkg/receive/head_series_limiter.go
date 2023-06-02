@@ -155,6 +155,11 @@ func (h *headSeriesLimit) isUnderLimit(tenant string) (bool, error) {
 		limit = h.defaultLimit
 	}
 
+	// If tenant limit is 0 we treat it as unlimited.
+	if limit == 0 {
+		return true, nil
+	}
+
 	if v >= float64(limit) {
 		level.Error(h.logger).Log("msg", "tenant above limit", "tenant", tenant, "currentSeries", v, "limit", limit)
 		h.limitedRequests.WithLabelValues(tenant).Inc()

@@ -500,6 +500,7 @@ type ReceiveBuilder struct {
 	maxExemplars        int
 	ingestion           bool
 	limit               int
+	tenantsLimits       receive.TenantsWriteLimitsConfig
 	metaMonitoring      string
 	metaMonitoringQuery string
 	hashringConfigs     []receive.HashringConfig
@@ -554,9 +555,10 @@ func (r *ReceiveBuilder) WithRelabelConfigs(relabelConfigs []*relabel.Config) *R
 	return r
 }
 
-func (r *ReceiveBuilder) WithValidationEnabled(limit int, metaMonitoring string, query ...string) *ReceiveBuilder {
+func (r *ReceiveBuilder) WithValidationEnabled(limit int, metaMonitoring string, tenantsLimits receive.TenantsWriteLimitsConfig, query ...string) *ReceiveBuilder {
 	r.limit = limit
 	r.metaMonitoring = metaMonitoring
+	r.tenantsLimits = tenantsLimits
 	if len(query) > 0 {
 		r.metaMonitoringQuery = query[0]
 	}
@@ -609,6 +611,10 @@ func (r *ReceiveBuilder) Init() *e2emon.InstrumentedRunnable {
 					HeadSeriesLimit: uint64(r.limit),
 				},
 			},
+		}
+
+		if r.tenantsLimits != nil {
+			cfg.WriteLimits.TenantsLimits = r.tenantsLimits
 		}
 
 		b, err := yaml.Marshal(cfg)
