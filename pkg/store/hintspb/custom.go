@@ -27,6 +27,7 @@ func (m *QueryStats) Merge(other *QueryStats) {
 	m.BlocksQueried += other.BlocksQueried
 	m.MergedSeriesCount += other.MergedSeriesCount
 	m.MergedChunksCount += other.MergedChunksCount
+	m.DataDownloadedSizeSum += other.DataDownloadedSizeSum
 
 	m.PostingsFetched += other.PostingsFetched
 	m.PostingsToFetch += other.PostingsToFetch
