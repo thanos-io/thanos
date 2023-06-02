@@ -369,8 +369,8 @@ func (s *BucketStore) validate() error {
 
 type noopCache struct{}
 
-func (noopCache) StorePostings(ulid.ULID, labels.Label, []byte, storecache.PostingsCodec) {}
-func (noopCache) FetchMultiPostings(_ context.Context, _ ulid.ULID, keys []labels.Label, _ storecache.PostingsCodec) (map[labels.Label][]byte, []labels.Label) {
+func (noopCache) StorePostings(ulid.ULID, labels.Label, []byte) {}
+func (noopCache) FetchMultiPostings(_ context.Context, _ ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
 	return map[labels.Label][]byte{}, keys
 }
 
@@ -2388,7 +2388,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 	output := make([]index.Postings, len(keys))
 
 	// Fetch postings from the cache with a single call.
-	fromCache, _ := r.block.indexCache.FetchMultiPostings(ctx, r.block.meta.ULID, keys, storecache.CodecHeaderStreamedSnappy)
+	fromCache, _ := r.block.indexCache.FetchMultiPostings(ctx, r.block.meta.ULID, keys)
 	for _, dataFromCache := range fromCache {
 		if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
 			return nil, closeFns, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading postings from index cache: %s", err)
@@ -2528,7 +2528,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 				// Truncate first 4 bytes which are length of posting.
 				output[p.keyID] = newBigEndianPostings(pBytes[4:])
 
-				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[p.keyID], dataToCache, storecache.CodecHeaderStreamedSnappy)
+				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[p.keyID], dataToCache)
 
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++

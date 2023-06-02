@@ -289,13 +289,13 @@ func copyToKey(l labels.Label) cacheKeyPostings {
 
 // StorePostings sets the postings identified by the ulid and label to the value v,
 // if the postings already exists in the cache it is not mutated.
-func (c *InMemoryIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, _ PostingsCodec) {
+func (c *InMemoryIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
 	c.set(cacheTypePostings, cacheKey{block: blockID.String(), key: copyToKey(l)}, v)
 }
 
 // FetchMultiPostings fetches multiple postings - each identified by a label -
 // and returns a map containing cache hits, along with a list of missing keys.
-func (c *InMemoryIndexCache) FetchMultiPostings(_ context.Context, blockID ulid.ULID, keys []labels.Label, _ PostingsCodec) (hits map[labels.Label][]byte, misses []labels.Label) {
+func (c *InMemoryIndexCache) FetchMultiPostings(_ context.Context, blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
 	hits = map[labels.Label][]byte{}
 
 	blockIDKey := blockID.String()

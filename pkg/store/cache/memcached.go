@@ -63,11 +63,8 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 // StorePostings sets the postings identified by the ulid and label to the value v.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
-func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, codec PostingsCodec) {
+func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
 	key := cacheKey{blockID.String(), cacheKeyPostings(l)}.string()
-	if codec == CodecHeaderStreamedSnappy {
-		key += ":" + string(codec)
-	}
 
 	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache postings in memcached", "err", err)
@@ -77,16 +74,12 @@ func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []
 // FetchMultiPostings fetches multiple postings - each identified by a label -
 // and returns a map containing cache hits, along with a list of missing keys.
 // In case of error, it logs and return an empty cache hits map.
-func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, lbls []labels.Label, codec PostingsCodec) (hits map[labels.Label][]byte, misses []labels.Label) {
+func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, lbls []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
 	keys := make([]string, 0, len(lbls))
 
 	blockIDKey := blockID.String()
-	suffix := ""
-	if codec == CodecHeaderStreamedSnappy {
-		suffix = ":" + string(codec)
-	}
 	for _, lbl := range lbls {
-		key := cacheKey{blockIDKey, cacheKeyPostings(lbl)}.string() + suffix
+		key := cacheKey{blockIDKey, cacheKeyPostings(lbl)}.string()
 		keys = append(keys, key)
 	}
 

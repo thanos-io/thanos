@@ -17,7 +17,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/index"
 	extsnappy "github.com/thanos-io/thanos/pkg/extgrpc/snappy"
-	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 )
 
 // This file implements encoding and decoding of postings using diff (or delta) + varint
@@ -28,6 +27,11 @@ import (
 // and Varint is very efficient at encoding small values (values < 128 are encoded as
 // single byte, values < 16384 are encoded as two bytes). Diff + varint reduces postings size
 // significantly (to about 20% of original), snappy then halves it to ~10% of the original.
+
+const (
+	codecHeaderSnappy         = "dvs" // As in "diff+varint+snappy".
+	codecHeaderStreamedSnappy = "dss" // As in "diffvarint+streamed snappy".
+)
 
 func decodePostings(input []byte) (closeablePostings, error) {
 	var df func([]byte) (closeablePostings, error)
@@ -46,12 +50,12 @@ func decodePostings(input []byte) (closeablePostings, error) {
 
 // isDiffVarintSnappyEncodedPostings returns true, if input looks like it has been encoded by diff+varint+snappy codec.
 func isDiffVarintSnappyEncodedPostings(input []byte) bool {
-	return bytes.HasPrefix(input, []byte(storecache.CodecHeaderSnappy))
+	return bytes.HasPrefix(input, []byte(codecHeaderSnappy))
 }
 
 // isDiffVarintSnappyStreamedEncodedPostings returns true, if input looks like it has been encoded by diff+varint+snappy streamed codec.
 func isDiffVarintSnappyStreamedEncodedPostings(input []byte) bool {
-	return bytes.HasPrefix(input, []byte(storecache.CodecHeaderStreamedSnappy))
+	return bytes.HasPrefix(input, []byte(codecHeaderStreamedSnappy))
 }
 
 // estimateSnappyStreamSize estimates the number of bytes
@@ -65,7 +69,7 @@ func estimateSnappyStreamSize(length int) int {
 	// Each encoded (or uncompressed) chunk needs tag (chunk type 1B + chunk len 3B) + checksum 4B.
 
 	// Mark for encoded data.
-	ret := len(storecache.CodecHeaderStreamedSnappy)
+	ret := len(codecHeaderStreamedSnappy)
 	// Magic snappy stream start.
 	ret += 10
 
@@ -86,9 +90,9 @@ func estimateSnappyStreamSize(length int) int {
 
 func diffVarintSnappyStreamedEncode(p index.Postings, length int) ([]byte, error) {
 	compressedBuf := bytes.NewBuffer(make([]byte, 0, estimateSnappyStreamSize(length)))
-	if n, err := compressedBuf.WriteString(string(storecache.CodecHeaderStreamedSnappy)); err != nil {
+	if n, err := compressedBuf.WriteString(string(codecHeaderStreamedSnappy)); err != nil {
 		return nil, fmt.Errorf("writing streamed snappy header")
-	} else if n != len(storecache.CodecHeaderStreamedSnappy) {
+	} else if n != len(codecHeaderStreamedSnappy) {
 		return nil, fmt.Errorf("short-write streamed snappy header")
 	}
 
@@ -130,7 +134,7 @@ func diffVarintSnappyStreamedDecode(input []byte) (closeablePostings, error) {
 		return nil, errors.New("header not found")
 	}
 
-	return newStreamedDiffVarintPostings(input[len(storecache.CodecHeaderStreamedSnappy):])
+	return newStreamedDiffVarintPostings(input[len(codecHeaderStreamedSnappy):])
 }
 
 type streamedDiffVarintPostings struct {
@@ -191,7 +195,7 @@ func (it *streamedDiffVarintPostings) Seek(x storage.SeriesRef) bool {
 
 // diffVarintSnappyEncode encodes postings into diff+varint representation,
 // and applies snappy compression on the result.
-// Returned byte slice starts with storecache.CodecHeaderSnappy header.
+// Returned byte slice starts with codecHeaderSnappy header.
 // Length argument is expected number of postings, used for preallocating buffer.
 // TODO(GiedriusS): remove for v1.0.
 func diffVarintSnappyEncode(p index.Postings, length int) ([]byte, error) {
@@ -201,13 +205,13 @@ func diffVarintSnappyEncode(p index.Postings, length int) ([]byte, error) {
 	}
 
 	// Make result buffer large enough to hold our header and compressed block.
-	result := make([]byte, len(storecache.CodecHeaderSnappy)+snappy.MaxEncodedLen(len(buf)))
-	copy(result, storecache.CodecHeaderSnappy)
+	result := make([]byte, len(codecHeaderSnappy)+snappy.MaxEncodedLen(len(buf)))
+	copy(result, codecHeaderSnappy)
 
-	compressed := snappy.Encode(result[len(storecache.CodecHeaderSnappy):], buf)
+	compressed := snappy.Encode(result[len(codecHeaderSnappy):], buf)
 
 	// Slice result buffer based on compressed size.
-	result = result[:len(storecache.CodecHeaderSnappy)+len(compressed)]
+	result = result[:len(codecHeaderSnappy)+len(compressed)]
 	return result, nil
 }
 
@@ -269,7 +273,7 @@ func diffVarintSnappyDecode(input []byte) (closeablePostings, error) {
 		toFree = append(toFree, dstBuf)
 	}
 
-	raw, err := s2.Decode(dstBuf, input[len(storecache.CodecHeaderSnappy):])
+	raw, err := s2.Decode(dstBuf, input[len(codecHeaderSnappy):])
 	if err != nil {
 		return nil, errors.Wrap(err, "snappy decode")
 	}

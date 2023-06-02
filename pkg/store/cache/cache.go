@@ -39,11 +39,11 @@ const (
 // (potentially with a deadline) as in the original user's request.
 type IndexCache interface {
 	// StorePostings stores postings for a single series.
-	StorePostings(blockID ulid.ULID, l labels.Label, v []byte, codec PostingsCodec)
+	StorePostings(blockID ulid.ULID, l labels.Label, v []byte)
 
 	// FetchMultiPostings fetches multiple postings - each identified by a label -
 	// and returns a map containing cache hits, along with a list of missing keys.
-	FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label, codec PostingsCodec) (hits map[labels.Label][]byte, misses []labels.Label)
+	FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label)
 
 	// StoreSeries stores a single series.
 	StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte)
