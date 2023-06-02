@@ -813,9 +813,13 @@ test_metric{a="2", b="2"} 1`)
 			},
 		}
 
-		i1Runnable := ingestor1.WithRouting(1, h).WithValidationEnabled(10, "http://"+meta.GetMonitoringRunnable().InternalEndpoint(e2edb.AccessPortName)).Init()
-		i2Runnable := ingestor2.WithRouting(1, h).WithValidationEnabled(10, "http://"+meta.GetMonitoringRunnable().InternalEndpoint(e2edb.AccessPortName)).Init()
-		i3Runnable := ingestor3.WithRouting(1, h).WithValidationEnabled(10, "http://"+meta.GetMonitoringRunnable().InternalEndpoint(e2edb.AccessPortName)).Init()
+		tenantsLimits := receive.TenantsWriteLimitsConfig{
+			"unlimited-tenant": receive.NewEmptyWriteLimitConfig().SetHeadSeriesLimit(0),
+		}
+
+		i1Runnable := ingestor1.WithRouting(1, h).WithValidationEnabled(10, "http://"+meta.GetMonitoringRunnable().InternalEndpoint(e2edb.AccessPortName), tenantsLimits).Init()
+		i2Runnable := ingestor2.WithRouting(1, h).WithValidationEnabled(10, "http://"+meta.GetMonitoringRunnable().InternalEndpoint(e2edb.AccessPortName), tenantsLimits).Init()
+		i3Runnable := ingestor3.WithRouting(1, h).WithValidationEnabled(10, "http://"+meta.GetMonitoringRunnable().InternalEndpoint(e2edb.AccessPortName), tenantsLimits).Init()
 
 		testutil.Ok(t, e2e.StartAndWaitReady(i1Runnable, i2Runnable, i3Runnable))
 
@@ -824,7 +828,7 @@ test_metric{a="2", b="2"} 1`)
 
 		testutil.Ok(t, querier.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
-		// We run two avalanches, one tenant which exceeds the limit, and one tenant which remains under it.
+		// We run three avalanches, one tenant which exceeds the limit, one tenant which remains under it, and one for the unlimited tenant.
 
 		// Avalanche in this configuration, would send 5 requests each with 10 new timeseries.
 		// One request always fails due to TSDB not being ready for new tenant.
@@ -864,7 +868,26 @@ test_metric{a="2", b="2"} 1`)
 				TenantID: "under-tenant",
 			})
 
-		testutil.Ok(t, e2e.StartAndWaitReady(avalanche1, avalanche2))
+		// Avalanche in this configuration, would send 5 requests each with 10 new timeseries.
+		// One request always fails due to TSDB not being ready for new tenant.
+		// So without limiting we end up with 40 timeseries and 40 samples.
+		avalanche3 := e2ethanos.NewAvalanche(e, "avalanche-3",
+			e2ethanos.AvalancheOptions{
+				MetricCount:    "10",
+				SeriesCount:    "1",
+				MetricInterval: "30",
+				SeriesInterval: "3600",
+				ValueInterval:  "3600",
+
+				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
+				RemoteWriteInterval: "30s",
+				RemoteBatchSize:     "10",
+				RemoteRequestCount:  "5",
+
+				TenantID: "unlimited-tenant",
+			})
+
+		testutil.Ok(t, e2e.StartAndWaitReady(avalanche1, avalanche2, avalanche3))
 
 		// Here, 3/5 requests are failed due to limiting, as one request fails due to TSDB readiness and we ingest one initial request.
 		// 3 limited requests belong to the exceed-tenant.
@@ -876,7 +899,7 @@ test_metric{a="2", b="2"} 1`)
 		ingestor1Name := e.Name() + "-" + ingestor1.Name()
 		// Here for exceed-tenant we go above limit by 10, which results in 0 value.
 		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-			return fmt.Sprintf("sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"}) - on() thanos_receive_head_series_limit{instance=\"%s:8080\", job=\"receive-i1\"}", ingestor1Name)
+			return fmt.Sprintf("sum(prometheus_tsdb_head_series{tenant=\"exceed-tenant\"}) - on() thanos_receive_head_series_limit{instance=\"%s:8080\", job=\"receive-i1\", tenant=\"\"}", ingestor1Name)
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
@@ -888,7 +911,7 @@ test_metric{a="2", b="2"} 1`)
 
 		// For under-tenant we stay at -5, as we have only pushed 5 series.
 		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
-			return fmt.Sprintf("sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"}) - on() thanos_receive_head_series_limit{instance=\"%s:8080\", job=\"receive-i1\"}", ingestor1Name)
+			return fmt.Sprintf("sum(prometheus_tsdb_head_series{tenant=\"under-tenant\"}) - on() thanos_receive_head_series_limit{instance=\"%s:8080\", job=\"receive-i1\", tenant=\"\"}", ingestor1Name)
 		}, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{
@@ -915,6 +938,18 @@ test_metric{a="2", b="2"} 1`)
 			&model.Sample{
 				Metric: model.Metric{},
 				Value:  model.SampleValue(5),
+			},
+		})
+
+		// Query meta-monitoring solution to assert that we have ingested some number of timeseries.
+		// Avalanche sometimes misses some requests due to TSDB readiness etc. In this case, as the
+		// limit is set to `0` we just want to make sure some timeseries are ingested.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "sum(prometheus_tsdb_head_series{tenant=\"unlimited-tenant\"}) >=bool 10" }, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{},
+				Value:  model.SampleValue(1),
 			},
 		})
 
