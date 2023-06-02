@@ -25,13 +25,6 @@ var (
 	ulidSize = uint64(len(ulid.ULID{}))
 )
 
-type PostingsCodec string
-
-const (
-	CodecHeaderSnappy         PostingsCodec = "dvs" // As in "diff+varint+snappy".
-	CodecHeaderStreamedSnappy PostingsCodec = "dss" // As in "diffvarint+streamed snappy".
-)
-
 // IndexCache is the interface exported by index cache backends.
 // Store operations do not support context.Context, deadlines need to be
 // supported by the backends themselves. This is because Set operations are
@@ -86,7 +79,8 @@ func (c cacheKey) string() string {
 		// which would end up in wrong query results.
 		lbl := c.key.(cacheKeyPostings)
 		lblHash := blake2b.Sum256([]byte(lbl.Name + ":" + lbl.Value))
-		return "P:" + c.block + ":" + base64.RawURLEncoding.EncodeToString(lblHash[0:])
+		// Add : at the end to force using a new cache key for postings.
+		return "P:" + c.block + ":" + base64.RawURLEncoding.EncodeToString(lblHash[0:]) + ":"
 	case cacheKeySeries:
 		return "S:" + c.block + ":" + strconv.FormatUint(uint64(c.key.(cacheKeySeries)), 10)
 	default:

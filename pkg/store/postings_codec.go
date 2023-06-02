@@ -90,7 +90,7 @@ func estimateSnappyStreamSize(length int) int {
 
 func diffVarintSnappyStreamedEncode(p index.Postings, length int) ([]byte, error) {
 	compressedBuf := bytes.NewBuffer(make([]byte, 0, estimateSnappyStreamSize(length)))
-	if n, err := compressedBuf.WriteString(string(codecHeaderStreamedSnappy)); err != nil {
+	if n, err := compressedBuf.WriteString(codecHeaderStreamedSnappy); err != nil {
 		return nil, fmt.Errorf("writing streamed snappy header")
 	} else if n != len(codecHeaderStreamedSnappy) {
 		return nil, fmt.Errorf("short-write streamed snappy header")
