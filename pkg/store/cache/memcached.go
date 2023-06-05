@@ -22,10 +22,16 @@ const (
 	memcachedDefaultTTL = 24 * time.Hour
 )
 
+const (
+	compressionSchemeStreamedSnappy = "dvs"
+)
+
 // RemoteIndexCache is a memcached-based index cache.
 type RemoteIndexCache struct {
 	logger    log.Logger
 	memcached cacheutil.RemoteCacheClient
+
+	compressionScheme string
 
 	// Metrics.
 	postingRequests prometheus.Counter
@@ -37,8 +43,9 @@ type RemoteIndexCache struct {
 // NewRemoteIndexCache makes a new RemoteIndexCache.
 func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheClient, reg prometheus.Registerer) (*RemoteIndexCache, error) {
 	c := &RemoteIndexCache{
-		logger:    logger,
-		memcached: cacheClient,
+		logger:            logger,
+		memcached:         cacheClient,
+		compressionScheme: compressionSchemeStreamedSnappy, // Hardcode it for now. Expose it once we supporter different types of compressions.
 	}
 
 	requests := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -65,6 +72,9 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 // asynchronously stored in the cache.
 func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
 	key := cacheKey{blockID.String(), cacheKeyPostings(l)}.string()
+	if len(c.compressionScheme) > 0 {
+		key += ":" + c.compressionScheme
+	}
 
 	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache postings in memcached", "err", err)
@@ -78,8 +88,12 @@ func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.
 	keys := make([]string, 0, len(lbls))
 
 	blockIDKey := blockID.String()
+	suffix := ""
+	if len(c.compressionScheme) > 0 {
+		suffix += ":" + c.compressionScheme
+	}
 	for _, lbl := range lbls {
-		key := cacheKey{blockIDKey, cacheKeyPostings(lbl)}.string()
+		key := cacheKey{blockIDKey, cacheKeyPostings(lbl)}.string() + suffix
 		keys = append(keys, key)
 	}
 

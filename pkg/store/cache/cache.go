@@ -80,7 +80,7 @@ func (c cacheKey) string() string {
 		lbl := c.key.(cacheKeyPostings)
 		lblHash := blake2b.Sum256([]byte(lbl.Name + ":" + lbl.Value))
 		// Add : at the end to force using a new cache key for postings.
-		return "P:" + c.block + ":" + base64.RawURLEncoding.EncodeToString(lblHash[0:]) + ":"
+		return "P:" + c.block + ":" + base64.RawURLEncoding.EncodeToString(lblHash[0:])
 	case cacheKeySeries:
 		return "S:" + c.block + ":" + strconv.FormatUint(uint64(c.key.(cacheKeySeries)), 10)
 	default:
