@@ -34,10 +34,12 @@ type RemoteIndexCache struct {
 	compressionScheme string
 
 	// Metrics.
-	postingRequests prometheus.Counter
-	seriesRequests  prometheus.Counter
-	postingHits     prometheus.Counter
-	seriesHits      prometheus.Counter
+	postingRequests         prometheus.Counter
+	seriesRequests          prometheus.Counter
+	expandedPostingRequests prometheus.Counter
+	postingHits             prometheus.Counter
+	seriesHits              prometheus.Counter
+	expandedPostingHits     prometheus.Counter
 }
 
 // NewRemoteIndexCache makes a new RemoteIndexCache.
@@ -54,6 +56,7 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 	}, []string{"item_type"})
 	c.postingRequests = requests.WithLabelValues(cacheTypePostings)
 	c.seriesRequests = requests.WithLabelValues(cacheTypeSeries)
+	c.expandedPostingRequests = requests.WithLabelValues(cacheTypeExpandedPostings)
 
 	hits := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_hits_total",
@@ -61,6 +64,7 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 	}, []string{"item_type"})
 	c.postingHits = hits.WithLabelValues(cacheTypePostings)
 	c.seriesHits = hits.WithLabelValues(cacheTypeSeries)
+	c.expandedPostingHits = hits.WithLabelValues(cacheTypeExpandedPostings)
 
 	level.Info(logger).Log("msg", "created index cache")
 
@@ -113,6 +117,36 @@ func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.
 
 	c.postingHits.Add(float64(len(hits)))
 	return hits, misses
+}
+
+// StoreExpandedPostings sets the postings identified by the ulid and label to the value v.
+// The function enqueues the request and returns immediately: the entry will be
+// asynchronously stored in the cache.
+func (c *RemoteIndexCache) StoreExpandedPostings(blockID ulid.ULID, keys []*labels.Matcher, v []byte) {
+	key := cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(keys))}.string()
+
+	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
+		level.Error(c.logger).Log("msg", "failed to cache expanded postings in memcached", "err", err)
+	}
+}
+
+// FetchExpandedPostings fetches multiple postings - each identified by a label -
+// and returns a map containing cache hits, along with a list of missing keys.
+// In case of error, it logs and return an empty cache hits map.
+func (c *RemoteIndexCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, lbls []*labels.Matcher) ([]byte, bool) {
+	key := cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(lbls))}.string()
+
+	// Fetch the keys from memcached in a single request.
+	c.expandedPostingRequests.Add(1)
+	results := c.memcached.GetMulti(ctx, []string{key})
+	if len(results) == 0 {
+		return nil, false
+	}
+	if res, ok := results[key]; ok {
+		c.expandedPostingHits.Add(1)
+		return res, true
+	}
+	return nil, false
 }
 
 // StoreSeries sets the series identified by the ulid and id to the value v.

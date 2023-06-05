@@ -66,6 +66,15 @@ func (c *swappableCache) FetchMultiPostings(ctx context.Context, blockID ulid.UL
 	return c.ptr.FetchMultiPostings(ctx, blockID, keys)
 }
 
+func (c *swappableCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte) {
+	c.ptr.StoreExpandedPostings(blockID, matchers, v)
+}
+
+// FetchExpandedPostings fetches expanded postings.
+func (c *swappableCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers []*labels.Matcher) ([]byte, bool) {
+	return c.ptr.FetchExpandedPostings(ctx, blockID, matchers)
+}
+
 func (c *swappableCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte) {
 	c.ptr.StoreSeries(blockID, id, v)
 }

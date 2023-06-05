@@ -374,6 +374,11 @@ func (noopCache) FetchMultiPostings(_ context.Context, _ ulid.ULID, keys []label
 	return map[labels.Label][]byte{}, keys
 }
 
+func (noopCache) StoreExpandedPostings(_ ulid.ULID, _ []*labels.Matcher, _ []byte) {}
+func (noopCache) FetchExpandedPostings(_ context.Context, _ ulid.ULID, _ []*labels.Matcher) ([]byte, bool) {
+	return []byte{}, false
+}
+
 func (noopCache) StoreSeries(ulid.ULID, storage.SeriesRef, []byte) {}
 func (noopCache) FetchMultiSeries(_ context.Context, _ ulid.ULID, ids []storage.SeriesRef) (map[storage.SeriesRef][]byte, []storage.SeriesRef) {
 	return map[storage.SeriesRef][]byte{}, ids
@@ -2151,6 +2156,39 @@ func (r *bucketIndexReader) reset() {
 // chunk where the series contains the matching label-value pair for a given block of data. Postings can be fetched by
 // single label name=value.
 func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.Matcher, bytesLimiter BytesLimiter) ([]storage.SeriesRef, error) {
+	// Sort matchers to make sure we generate the same cache key.
+	sort.Slice(ms, func(i, j int) bool {
+		if ms[i].Type == ms[j].Type {
+			if ms[i].Name == ms[j].Name {
+				return ms[i].Value == ms[j].Value
+			}
+			return ms[i].Name < ms[j].Name
+		}
+		return ms[i].Type < ms[j].Type
+	})
+	dataFromCache, hit := r.block.indexCache.FetchExpandedPostings(ctx, r.block.meta.ULID, ms)
+	if hit {
+		if err := bytesLimiter.Reserve(uint64(len(dataFromCache))); err != nil {
+			return nil, httpgrpc.Errorf(int(codes.ResourceExhausted), "exceeded bytes limit while loading expanded postings from index cache: %s", err)
+		}
+		r.stats.DataDownloadedSizeSum += units.Base2Bytes(len(dataFromCache))
+		r.stats.postingsTouched++
+		r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(dataFromCache))
+		p, closeFns, err := r.decodeCachedPostings(dataFromCache)
+		defer func() {
+			for _, closeFn := range closeFns {
+				closeFn()
+			}
+		}()
+		if err == nil {
+			ps, err := index.ExpandPostings(p)
+			if err != nil {
+				return nil, errors.Wrap(err, "expand")
+			}
+			return ps, nil
+		}
+		// If failed to decode cached postings, try to expand postings again.
+	}
 	var (
 		postingGroups []*postingGroup
 		allRequested  = false
@@ -2257,7 +2295,14 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 			ps[i] = id * 16
 		}
 	}
-
+	// Encode postings to cache.
+	dataToCache, compressionDuration, compressionErrors, compressedSize := r.encodePostingsToCache(index.NewListPostings(ps), len(ps))
+	r.stats.cachedPostingsCompressions++
+	r.stats.cachedPostingsCompressionErrors += compressionErrors
+	r.stats.CachedPostingsCompressionTimeSum += compressionDuration
+	r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(compressedSize)
+	r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(ps) * 4) // Estimate the posting list size.
+	r.block.indexCache.StoreExpandedPostings(r.block.meta.ULID, ms, dataToCache)
 	return ps, nil
 }
 
@@ -2405,32 +2450,12 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 			r.stats.postingsTouched++
 			r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(b))
 
-			// Even if this instance is not using compression, there may be compressed
-			// entries in the cache written by other stores.
-			var (
-				l   index.Postings
-				err error
-			)
-			if isDiffVarintSnappyEncodedPostings(b) || isDiffVarintSnappyStreamedEncodedPostings(b) {
-				s := time.Now()
-				clPostings, err := decodePostings(b)
-				r.stats.cachedPostingsDecompressions += 1
-				r.stats.CachedPostingsDecompressionTimeSum += time.Since(s)
-				if err != nil {
-					r.stats.cachedPostingsDecompressionErrors += 1
-				} else {
-					closeFns = append(closeFns, clPostings.close)
-					l = clPostings
-				}
-			} else {
-				_, l, err = r.dec.Postings(b)
-			}
-
+			l, closer, err := r.decodeCachedPostings(b)
 			if err != nil {
-				return nil, closeFns, errors.Wrap(err, "decode postings")
-			}
 
+			}
 			output[ix] = l
+			closeFns = append(closeFns, closer...)
 			continue
 		}
 
@@ -2504,25 +2529,12 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 
 				dataToCache := pBytes
 
-				compressionTime := time.Duration(0)
-				compressions, compressionErrors, compressedSize := 0, 0, 0
-
 				// Reencode postings before storing to cache. If that fails, we store original bytes.
 				// This can only fail, if postings data was somehow corrupted,
 				// and there is nothing we can do about it.
 				// Errors from corrupted postings will be reported when postings are used.
-				compressions++
-				s := time.Now()
 				bep := newBigEndianPostings(pBytes[4:])
-				data, err := diffVarintSnappyStreamedEncode(bep, bep.length())
-				compressionTime = time.Since(s)
-				if err == nil {
-					dataToCache = data
-					compressedSize = len(data)
-				} else {
-					compressionErrors = 1
-				}
-
+				dataToCache, compressionTime, compressionErrors, compressedSize := r.encodePostingsToCache(bep, bep.length())
 				r.mtx.Lock()
 				// Return postings and fill LRU cache.
 				// Truncate first 4 bytes which are length of posting.
@@ -2533,7 +2545,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
 				r.stats.PostingsTouchedSizeSum += units.Base2Bytes(len(pBytes))
-				r.stats.cachedPostingsCompressions += compressions
+				r.stats.cachedPostingsCompressions += 1
 				r.stats.cachedPostingsCompressionErrors += compressionErrors
 				r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(pBytes))
 				r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(compressedSize)
@@ -2545,6 +2557,47 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 	}
 
 	return output, closeFns, g.Wait()
+}
+
+func (r *bucketIndexReader) decodeCachedPostings(b []byte) (index.Postings, []func(), error) {
+	// Even if this instance is not using compression, there may be compressed
+	// entries in the cache written by other stores.
+	var (
+		l        index.Postings
+		err      error
+		closeFns []func()
+	)
+	if isDiffVarintSnappyEncodedPostings(b) || isDiffVarintSnappyStreamedEncodedPostings(b) {
+		s := time.Now()
+		clPostings, err := decodePostings(b)
+		r.stats.cachedPostingsDecompressions += 1
+		r.stats.CachedPostingsDecompressionTimeSum += time.Since(s)
+		if err != nil {
+			r.stats.cachedPostingsDecompressionErrors += 1
+		} else {
+			closeFns = append(closeFns, clPostings.close)
+			l = clPostings
+		}
+	} else {
+		_, l, err = r.dec.Postings(b)
+	}
+	return l, closeFns, err
+}
+
+func (r *bucketIndexReader) encodePostingsToCache(p index.Postings, length int) ([]byte, time.Duration, int, int) {
+	var dataToCache []byte
+	compressionTime := time.Duration(0)
+	compressionErrors, compressedSize := 0, 0
+	s := time.Now()
+	data, err := diffVarintSnappyStreamedEncode(p, length)
+	compressionTime = time.Since(s)
+	if err == nil {
+		dataToCache = data
+		compressedSize = len(data)
+	} else {
+		compressionErrors = 1
+	}
+	return dataToCache, compressionTime, compressionErrors, compressedSize
 }
 
 func resizePostings(b []byte) ([]byte, error) {
