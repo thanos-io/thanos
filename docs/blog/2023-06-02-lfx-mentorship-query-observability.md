@@ -1,4 +1,8 @@
-# LFX Mentorship: Thanos Query Observability
+---
+title: 'LFX Mentorship: Thanos Query Observability'
+date: "2023-06-06"
+author: Pradyumna Krishna
+---
 
 Hello everyone, my name is  Pradyumna Krishna and I was contributing to Thanos as a part of the LFX mentorship programme. I was working on adding Query Execution Observability to the Thanos PromQL engine and Thanos project itself. I am going to share my experience and provide insights into the project.
 
