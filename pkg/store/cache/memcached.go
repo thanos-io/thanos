@@ -23,7 +23,7 @@ const (
 )
 
 const (
-	compressionSchemeStreamedSnappy = "dvs"
+	compressionSchemeStreamedSnappy = "dss"
 )
 
 // RemoteIndexCache is a memcached-based index cache.
