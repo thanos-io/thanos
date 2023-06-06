@@ -326,7 +326,7 @@ func (c *InMemoryIndexCache) StoreExpandedPostings(blockID ulid.ULID, matchers [
 
 // FetchExpandedPostings fetches expanded postings.
 func (c *InMemoryIndexCache) FetchExpandedPostings(_ context.Context, blockID ulid.ULID, matchers []*labels.Matcher) ([]byte, bool) {
-	if b, ok := c.get(cacheTypePostings, cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(matchers))}); ok {
+	if b, ok := c.get(cacheTypeExpandedPostings, cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(matchers))}); ok {
 		return b, true
 	}
 	return nil, false

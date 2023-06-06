@@ -2160,7 +2160,7 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 	sort.Slice(ms, func(i, j int) bool {
 		if ms[i].Type == ms[j].Type {
 			if ms[i].Name == ms[j].Name {
-				return ms[i].Value == ms[j].Value
+				return ms[i].Value < ms[j].Value
 			}
 			return ms[i].Name < ms[j].Name
 		}
@@ -2184,6 +2184,20 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 			ps, err := index.ExpandPostings(p)
 			if err != nil {
 				return nil, errors.Wrap(err, "expand")
+			}
+
+			if len(ps) > 0 {
+				// As of version two all series entries are 16 byte padded. All references
+				// we get have to account for that to get the correct offset.
+				version, err := r.block.indexHeaderReader.IndexVersion()
+				if err != nil {
+					return nil, errors.Wrap(err, "get index version")
+				}
+				if version >= 2 {
+					for i, id := range ps {
+						ps[i] = id * 16
+					}
+				}
 			}
 			return ps, nil
 		}
@@ -2284,18 +2298,8 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 		return nil, errors.Wrap(err, "expand")
 	}
 
-	// As of version two all series entries are 16 byte padded. All references
-	// we get have to account for that to get the correct offset.
-	version, err := r.block.indexHeaderReader.IndexVersion()
-	if err != nil {
-		return nil, errors.Wrap(err, "get index version")
-	}
-	if version >= 2 {
-		for i, id := range ps {
-			ps[i] = id * 16
-		}
-	}
-	// Encode postings to cache.
+	// Encode postings to cache. We compress and cache postings before adding
+	// 16 bytes padding in order to make compressed size smaller.
 	dataToCache, compressionDuration, compressionErrors, compressedSize := r.encodePostingsToCache(index.NewListPostings(ps), len(ps))
 	r.stats.cachedPostingsCompressions++
 	r.stats.cachedPostingsCompressionErrors += compressionErrors
@@ -2303,6 +2307,20 @@ func (r *bucketIndexReader) ExpandedPostings(ctx context.Context, ms []*labels.M
 	r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(compressedSize)
 	r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(len(ps) * 4) // Estimate the posting list size.
 	r.block.indexCache.StoreExpandedPostings(r.block.meta.ULID, ms, dataToCache)
+
+	if len(ps) > 0 {
+		// As of version two all series entries are 16 byte padded. All references
+		// we get have to account for that to get the correct offset.
+		version, err := r.block.indexHeaderReader.IndexVersion()
+		if err != nil {
+			return nil, errors.Wrap(err, "get index version")
+		}
+		if version >= 2 {
+			for i, id := range ps {
+				ps[i] = id * 16
+			}
+		}
+	}
 	return ps, nil
 }
 
@@ -2452,7 +2470,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 
 			l, closer, err := r.decodeCachedPostings(b)
 			if err != nil {
-
+				return nil, closeFns, errors.Wrap(err, "decode postings")
 			}
 			output[ix] = l
 			closeFns = append(closeFns, closer...)
