@@ -70,7 +70,6 @@ func (c *swappableCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*la
 	c.ptr.StoreExpandedPostings(blockID, matchers, v)
 }
 
-// FetchExpandedPostings fetches expanded postings.
 func (c *swappableCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers []*labels.Matcher) ([]byte, bool) {
 	return c.ptr.FetchExpandedPostings(ctx, blockID, matchers)
 }

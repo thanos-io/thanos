@@ -2545,8 +2545,6 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 					return err
 				}
 
-				dataToCache := pBytes
-
 				// Reencode postings before storing to cache. If that fails, we store original bytes.
 				// This can only fail, if postings data was somehow corrupted,
 				// and there is nothing we can do about it.
