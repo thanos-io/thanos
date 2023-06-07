@@ -74,8 +74,8 @@ const (
 	// Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
 	MaxSamplesPerChunk = 120
 	// EstimatedMaxChunkSize is average max of chunk size. This can be exceeded though in very rare (valid) cases.
-	EstimatedMaxChunkSize = 16000
-	maxSeriesSize         = 64 * 1024
+	EstimatedMaxChunkSize  = 16000
+	EstimatedMaxSeriesSize = 64 * 1024
 	// Relatively large in order to reduce memory waste, yet small enough to avoid excessive allocations.
 	chunkBytesPoolMinSize = 64 * 1024        // 64 KiB
 	chunkBytesPoolMaxSize = 64 * 1024 * 1024 // 64 MiB
@@ -241,7 +241,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	}, []string{"reason"})
 	m.seriesRefetches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_series_refetches_total",
-		Help: fmt.Sprintf("Total number of cases where %v bytes was not enough was to fetch series from index, resulting in refetch.", maxSeriesSize),
+		Help: fmt.Sprintf("Total number of cases where configured estimated series bytes was not enough was to fetch series from index, resulting in refetch."),
 	})
 
 	m.cachedPostingsCompressions = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -305,6 +305,8 @@ type FilterConfig struct {
 	MinTime, MaxTime model.TimeOrDurationValue
 }
 
+type BlockEstimator func(meta metadata.Meta) uint64
+
 // BucketStore implements the store API backed by a bucket. It loads all index
 // files to local disk.
 //
@@ -358,6 +360,9 @@ type BucketStore struct {
 	enableSeriesResponseHints bool
 
 	enableChunkHashCalculation bool
+
+	blockEstimatedMaxSeriesFunc BlockEstimator
+	blockEstimatedMaxChunkFunc  BlockEstimator
 }
 
 func (s *BucketStore) validate() error {
@@ -440,6 +445,18 @@ func WithChunkHashCalculation(enableChunkHashCalculation bool) BucketStoreOption
 func WithSeriesBatchSize(seriesBatchSize int) BucketStoreOption {
 	return func(s *BucketStore) {
 		s.seriesBatchSize = seriesBatchSize
+	}
+}
+
+func WithBlockEstimatedMaxSeriesFunc(f BlockEstimator) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.blockEstimatedMaxSeriesFunc = f
+	}
+}
+
+func WithBlockEstimatedMaxChunkFunc(f BlockEstimator) BucketStoreOption {
+	return func(s *BucketStore) {
+		s.blockEstimatedMaxChunkFunc = f
 	}
 }
 
@@ -690,6 +707,8 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 		s.chunkPool,
 		indexHeaderReader,
 		s.partitioner,
+		s.blockEstimatedMaxSeriesFunc,
+		s.blockEstimatedMaxChunkFunc,
 	)
 	if err != nil {
 		return errors.Wrap(err, "new bucket block")
@@ -1971,6 +1990,9 @@ type bucketBlock struct {
 	// Block's labels used by block-level matchers to filter blocks to query. These are used to select blocks using
 	// request hints' BlockMatchers.
 	relabelLabels labels.Labels
+
+	estimatedMaxChunkSize  int
+	estimatedMaxSeriesSize int
 }
 
 func newBucketBlock(
@@ -1984,6 +2006,8 @@ func newBucketBlock(
 	chunkPool pool.Bytes,
 	indexHeadReader indexheader.Reader,
 	p Partitioner,
+	maxSeriesSizeFunc BlockEstimator,
+	maxChunkSizeFunc BlockEstimator,
 ) (b *bucketBlock, err error) {
 	b = &bucketBlock{
 		logger:            logger,
@@ -2002,6 +2026,8 @@ func newBucketBlock(
 			Name:  block.BlockIDLabel,
 			Value: meta.ULID.String(),
 		}),
+		estimatedMaxSeriesSize: int(maxSeriesSizeFunc(*meta)),
+		estimatedMaxChunkSize:  int(maxChunkSizeFunc(*meta)),
 	}
 	sort.Sort(b.extLset)
 	sort.Sort(b.relabelLabels)
@@ -2632,7 +2658,7 @@ func (r *bucketIndexReader) PreloadSeries(ctx context.Context, ids []storage.Ser
 	}
 
 	parts := r.block.partitioner.Partition(len(ids), func(i int) (start, end uint64) {
-		return uint64(ids[i]), uint64(ids[i] + maxSeriesSize)
+		return uint64(ids[i]), uint64(ids[i]) + uint64(r.block.estimatedMaxSeriesSize)
 	})
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -2683,7 +2709,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 
 			// Inefficient, but should be rare.
 			r.block.metrics.seriesRefetches.Inc()
-			level.Warn(r.block.logger).Log("msg", "series size exceeded expected size; refetching", "id", id, "series length", n+int(l), "maxSeriesSize", maxSeriesSize)
+			level.Warn(r.block.logger).Log("msg", "series size exceeded expected size; refetching", "id", id, "series length", n+int(l), "maxSeriesSize", r.block.estimatedMaxSeriesSize)
 
 			// Fetch plus to get the size of next one if exists.
 			return r.loadSeries(ctx, ids[i:], true, uint64(id), uint64(id)+uint64(n+int(l)+1), bytesLimiter)
@@ -2920,7 +2946,7 @@ func (r *bucketChunkReader) load(ctx context.Context, res []seriesEntry, aggrs [
 			return pIdxs[i].offset < pIdxs[j].offset
 		})
 		parts := r.block.partitioner.Partition(len(pIdxs), func(i int) (start, end uint64) {
-			return uint64(pIdxs[i].offset), uint64(pIdxs[i].offset) + EstimatedMaxChunkSize
+			return uint64(pIdxs[i].offset), uint64(pIdxs[i].offset) + uint64(r.block.estimatedMaxChunkSize)
 		})
 
 		for _, p := range parts {
@@ -2956,7 +2982,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		return errors.Wrap(err, "get range reader")
 	}
 	defer runutil.CloseWithLogOnErr(r.block.logger, reader, "readChunkRange close range reader")
-	bufReader := bufio.NewReaderSize(reader, EstimatedMaxChunkSize)
+	bufReader := bufio.NewReaderSize(reader, r.block.estimatedMaxChunkSize)
 
 	locked := true
 	r.mtx.Lock()
@@ -2982,11 +3008,11 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		n        int
 	)
 
-	bufPooled, err := r.block.chunkPool.Get(EstimatedMaxChunkSize)
+	bufPooled, err := r.block.chunkPool.Get(r.block.estimatedMaxChunkSize)
 	if err == nil {
 		buf = *bufPooled
 	} else {
-		buf = make([]byte, EstimatedMaxChunkSize)
+		buf = make([]byte, r.block.estimatedMaxChunkSize)
 	}
 	defer r.block.chunkPool.Put(&buf)
 
@@ -3002,7 +3028,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, res []seriesEntry, a
 		// Presume chunk length to be reasonably large for common use cases.
 		// However, declaration for EstimatedMaxChunkSize warns us some chunks could be larger in some rare cases.
 		// This is handled further down below.
-		chunkLen = EstimatedMaxChunkSize
+		chunkLen = r.block.estimatedMaxChunkSize
 		if i+1 < len(pIdxs) {
 			if diff = pIdxs[i+1].offset - pIdx.offset; int(diff) < chunkLen {
 				chunkLen = int(diff)
