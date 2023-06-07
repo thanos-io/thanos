@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"strconv"
+	"strings"
 
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/model/labels"
@@ -102,7 +103,11 @@ func (c cacheKey) string() string {
 		// which would end up in wrong query results.
 		matchers := c.key.(cacheKeyExpandedPostings)
 		matchersHash := blake2b.Sum256([]byte(matchers))
-		return "EP:" + c.block + ":" + base64.RawURLEncoding.EncodeToString(matchersHash[0:])
+		key := "EP:" + c.block + ":" + base64.RawURLEncoding.EncodeToString(matchersHash[0:])
+		if len(c.compression) > 0 {
+			key += ":" + c.compression
+		}
+		return key
 	case cacheKeySeries:
 		return "S:" + c.block + ":" + strconv.FormatUint(uint64(c.key.(cacheKeySeries)), 10)
 	default:
@@ -111,16 +116,16 @@ func (c cacheKey) string() string {
 }
 
 func labelMatchersToString(matchers []*labels.Matcher) string {
-	matchersString := ""
+	sb := strings.Builder{}
 	for i, lbl := range matchers {
-		matchersString += lbl.String()
+		sb.WriteString(lbl.String())
 		if i < len(matchers)-1 {
-			matchersString += ";"
+			sb.WriteRune(';')
 		}
 	}
-	return matchersString
+	return sb.String()
 }
 
 type cacheKeyPostings labels.Label
-type cacheKeyExpandedPostings string
+type cacheKeyExpandedPostings string // We don't use []*labels.Matcher because it is not a hashable type so fail at inmemory cache.
 type cacheKeySeries uint64

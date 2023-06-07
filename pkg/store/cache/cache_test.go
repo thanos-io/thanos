@@ -43,12 +43,21 @@ func TestCacheKey_string(t *testing.T) {
 				return fmt.Sprintf("P:%s:%s", uid.String(), encodedHash)
 			}(),
 		},
+		"postings cache key includes compression scheme": {
+			key: cacheKey{ulidString, cacheKeyPostings(labels.Label{Name: "foo", Value: "bar"}), compressionSchemeStreamedSnappy},
+			expected: func() string {
+				hash := blake2b.Sum256([]byte("foo:bar"))
+				encodedHash := base64.RawURLEncoding.EncodeToString(hash[0:])
+
+				return fmt.Sprintf("P:%s:%s:%s", uid.String(), encodedHash, compressionSchemeStreamedSnappy)
+			}(),
+		},
 		"should stringify series cache key": {
 			key:      cacheKey{ulidString, cacheKeySeries(12345), ""},
 			expected: fmt.Sprintf("S:%s:12345", uid.String()),
 		},
 		"should stringify expanded postings cache key": {
-			key: cacheKey{ulidString, cacheKeyExpandedPostings(labelMatchersToString([]*labels.Matcher{matcher}))},
+			key: cacheKey{ulidString, cacheKeyExpandedPostings(labelMatchersToString([]*labels.Matcher{matcher})), ""},
 			expected: func() string {
 				hash := blake2b.Sum256([]byte(matcher.String()))
 				encodedHash := base64.RawURLEncoding.EncodeToString(hash[0:])
@@ -57,12 +66,21 @@ func TestCacheKey_string(t *testing.T) {
 			}(),
 		},
 		"should stringify expanded postings cache key when multiple matchers": {
-			key: cacheKey{ulidString, cacheKeyExpandedPostings(labelMatchersToString([]*labels.Matcher{matcher, matcher2}))},
+			key: cacheKey{ulidString, cacheKeyExpandedPostings(labelMatchersToString([]*labels.Matcher{matcher, matcher2})), ""},
 			expected: func() string {
 				hash := blake2b.Sum256([]byte(fmt.Sprintf("%s;%s", matcher.String(), matcher2.String())))
 				encodedHash := base64.RawURLEncoding.EncodeToString(hash[0:])
 
 				return fmt.Sprintf("EP:%s:%s", uid.String(), encodedHash)
+			}(),
+		},
+		"expanded postings cache key includes compression scheme": {
+			key: cacheKey{ulidString, cacheKeyExpandedPostings(labelMatchersToString([]*labels.Matcher{matcher})), compressionSchemeStreamedSnappy},
+			expected: func() string {
+				hash := blake2b.Sum256([]byte(matcher.String()))
+				encodedHash := base64.RawURLEncoding.EncodeToString(hash[0:])
+
+				return fmt.Sprintf("EP:%s:%s:%s", uid.String(), encodedHash, compressionSchemeStreamedSnappy)
 			}(),
 		},
 	}
@@ -110,7 +128,7 @@ func TestCacheKey_string_ShouldGuaranteeReasonablyShortKeyLength(t *testing.T) {
 						matchers = append(matchers, labels.MustNewMatcher(t, name, value))
 					}
 					return cacheKeyExpandedPostings(labelMatchersToString(matchers))
-				}()},
+				}(), ""},
 			},
 		},
 	}

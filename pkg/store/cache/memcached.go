@@ -123,7 +123,7 @@ func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
 func (c *RemoteIndexCache) StoreExpandedPostings(blockID ulid.ULID, keys []*labels.Matcher, v []byte) {
-	key := cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(keys))}.string()
+	key := cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(keys)), ""}.string()
 
 	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache expanded postings in memcached", "err", err)
@@ -134,7 +134,7 @@ func (c *RemoteIndexCache) StoreExpandedPostings(blockID ulid.ULID, keys []*labe
 // and returns a map containing cache hits, along with a list of missing keys.
 // In case of error, it logs and return an empty cache hits map.
 func (c *RemoteIndexCache) FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, lbls []*labels.Matcher) ([]byte, bool) {
-	key := cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(lbls))}.string()
+	key := cacheKey{blockID.String(), cacheKeyExpandedPostings(labelMatchersToString(lbls)), ""}.string()
 
 	// Fetch the keys from memcached in a single request.
 	c.expandedPostingRequests.Add(1)
