@@ -34,7 +34,7 @@ Thanos needs to specify which engine to utilize to execute the promql queries. A
 
 Here is the sketch of how the engine switch should look (made by Giedrius):
 
-<img src="img/giedrius-sketch.png" alt="Giedrius's Sketch" width="800"/>
+<img src="img/giedrius-sketch.png" alt="Giedrius&#39;s Sketch" width="800"/>
 
 I looked into Thanos and made changes in Thanos components from the API to the UI to implement this engine switch. I tried to make the UI as close as possible to the sketch.
 
