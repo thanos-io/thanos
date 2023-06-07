@@ -49,6 +49,8 @@ type IndexCache interface {
 type cacheKey struct {
 	block string
 	key   interface{}
+
+	compression string
 }
 
 func (c cacheKey) keyType() string {
@@ -79,7 +81,11 @@ func (c cacheKey) string() string {
 		// which would end up in wrong query results.
 		lbl := c.key.(cacheKeyPostings)
 		lblHash := blake2b.Sum256([]byte(lbl.Name + ":" + lbl.Value))
-		return "P:" + c.block + ":" + base64.RawURLEncoding.EncodeToString(lblHash[0:])
+		key := "P:" + c.block + ":" + base64.RawURLEncoding.EncodeToString(lblHash[0:])
+		if len(c.compression) > 0 {
+			key += ":" + c.compression
+		}
+		return key
 	case cacheKeySeries:
 		return "S:" + c.block + ":" + strconv.FormatUint(uint64(c.key.(cacheKeySeries)), 10)
 	default:

@@ -300,7 +300,7 @@ func (c *InMemoryIndexCache) FetchMultiPostings(_ context.Context, blockID ulid.
 
 	blockIDKey := blockID.String()
 	for _, key := range keys {
-		if b, ok := c.get(cacheTypePostings, cacheKey{blockIDKey, cacheKeyPostings(key)}); ok {
+		if b, ok := c.get(cacheTypePostings, cacheKey{blockIDKey, cacheKeyPostings(key), ""}); ok {
 			hits[key] = b
 			continue
 		}
@@ -314,7 +314,7 @@ func (c *InMemoryIndexCache) FetchMultiPostings(_ context.Context, blockID ulid.
 // StoreSeries sets the series identified by the ulid and id to the value v,
 // if the series already exists in the cache it is not mutated.
 func (c *InMemoryIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte) {
-	c.set(cacheTypeSeries, cacheKey{blockID.String(), cacheKeySeries(id)}, v)
+	c.set(cacheTypeSeries, cacheKey{blockID.String(), cacheKeySeries(id), ""}, v)
 }
 
 // FetchMultiSeries fetches multiple series - each identified by ID - from the cache
@@ -324,7 +324,7 @@ func (c *InMemoryIndexCache) FetchMultiSeries(_ context.Context, blockID ulid.UL
 
 	blockIDKey := blockID.String()
 	for _, id := range ids {
-		if b, ok := c.get(cacheTypeSeries, cacheKey{blockIDKey, cacheKeySeries(id)}); ok {
+		if b, ok := c.get(cacheTypeSeries, cacheKey{blockIDKey, cacheKeySeries(id), ""}); ok {
 			hits[id] = b
 			continue
 		}

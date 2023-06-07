@@ -22,10 +22,16 @@ const (
 	memcachedDefaultTTL = 24 * time.Hour
 )
 
+const (
+	compressionSchemeStreamedSnappy = "dss"
+)
+
 // RemoteIndexCache is a memcached-based index cache.
 type RemoteIndexCache struct {
 	logger    log.Logger
 	memcached cacheutil.RemoteCacheClient
+
+	compressionScheme string
 
 	// Metrics.
 	postingRequests prometheus.Counter
@@ -37,8 +43,9 @@ type RemoteIndexCache struct {
 // NewRemoteIndexCache makes a new RemoteIndexCache.
 func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheClient, reg prometheus.Registerer) (*RemoteIndexCache, error) {
 	c := &RemoteIndexCache{
-		logger:    logger,
-		memcached: cacheClient,
+		logger:            logger,
+		memcached:         cacheClient,
+		compressionScheme: compressionSchemeStreamedSnappy, // Hardcode it for now. Expose it once we support different types of compressions.
 	}
 
 	requests := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
@@ -64,8 +71,7 @@ func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheCli
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
 func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
-	key := cacheKey{blockID.String(), cacheKeyPostings(l)}.string()
-
+	key := cacheKey{blockID.String(), cacheKeyPostings(l), c.compressionScheme}.string()
 	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache postings in memcached", "err", err)
 	}
@@ -79,7 +85,7 @@ func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.
 
 	blockIDKey := blockID.String()
 	for _, lbl := range lbls {
-		key := cacheKey{blockIDKey, cacheKeyPostings(lbl)}.string()
+		key := cacheKey{blockIDKey, cacheKeyPostings(lbl), c.compressionScheme}.string()
 		keys = append(keys, key)
 	}
 
@@ -113,7 +119,7 @@ func (c *RemoteIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.
 // The function enqueues the request and returns immediately: the entry will be
 // asynchronously stored in the cache.
 func (c *RemoteIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte) {
-	key := cacheKey{blockID.String(), cacheKeySeries(id)}.string()
+	key := cacheKey{blockID.String(), cacheKeySeries(id), ""}.string()
 
 	if err := c.memcached.SetAsync(key, v, memcachedDefaultTTL); err != nil {
 		level.Error(c.logger).Log("msg", "failed to cache series in memcached", "err", err)
@@ -128,7 +134,7 @@ func (c *RemoteIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.UL
 
 	blockIDKey := blockID.String()
 	for _, id := range ids {
-		key := cacheKey{blockIDKey, cacheKeySeries(id)}.string()
+		key := cacheKey{blockIDKey, cacheKeySeries(id), ""}.string()
 		keys = append(keys, key)
 	}
 
