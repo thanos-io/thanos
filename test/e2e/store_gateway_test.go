@@ -949,7 +949,7 @@ func TestStoreGatewayMemcachedIndexCacheExpandedPostings(t *testing.T) {
 config:
   addresses: [%s]
   max_async_concurrency: 10
-  max_async_concurrency: 10
+  dns_provider_update_interval: 1s
   auto_discovery: false`, memcached.InternalEndpoint("memcached"))
 
 	s1 := e2ethanos.NewStoreGW(
