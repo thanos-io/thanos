@@ -707,12 +707,12 @@ func startTSDBAndUpload(g *run.Group,
 					case <-uploadC:
 						// Upload on demand.
 						if err := upload(ctx); err != nil {
-							level.Warn(logger).Log("msg", "on demand upload failed", "err", err)
+							level.Error(logger).Log("msg", "on demand upload failed", "err", err)
 						}
 						uploadDone <- struct{}{}
 					case <-tick.C:
 						if err := upload(ctx); err != nil {
-							level.Warn(logger).Log("msg", "recurring upload failed", "err", err)
+							level.Error(logger).Log("msg", "recurring upload failed", "err", err)
 						}
 					}
 				}
